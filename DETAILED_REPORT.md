@@ -14,6 +14,11 @@
 4. [MOB Animation System](#4-mob-animation-system)
 5. [Data Tables Catalog](#5-data-tables-catalog)
 6. [Corrections to Initial REPORT.md](#6-corrections-to-initial-reportmd)
+7. [Maze Object Placement](#7-maze-object-placement-maze_place_object-0x45e40)
+8. [Monster Movement Handler Dispatch](#8-monster-movement-handler-dispatch)
+9. [Forcefield Segment Table Format](#9-forcefield-segment-table-format)
+10. [Complete Maze Catalog](#10-complete-maze-catalog)
+11. [Function Calling Convention](#11-function-calling-convention)
 
 ---
 
@@ -501,32 +506,85 @@ When the player stops moving, the animation counter continues running but only t
 
 The fighting animation has a special end condition: when the counter reaches a threshold stored in a table at `0x58090` (per player × 2), the attack sequence ends and the shooting flag is cleared.
 
-### 4.4 Monster Animation
+### 4.4 Monster Animation — Direct Tile Lookup Tables
 
-Monster animation follows a similar pattern to players but is simpler. Each monster type has a fixed arrangement of animation tiles in the graphics ROM, organized as:
+**Correction:** The initial report assumed monsters use computed tile offsets. In fact, monster animation uses **direct tile lookup tables** identical in mechanism to player animation — each monster type has a 128-byte word table (64 entries) that maps `(counter, direction)` to an exact tile number.
 
+#### Animation Tile Lookup Mechanism
+
+At `0x414A4–0x414B8` in `monsters_everything`:
+
+```asm
+lea.l   (0x40DB2).l, a0         ; pointer table base (idle animation)
+movea.l (a0, d6.w), a0          ; load animation table for this monster type
+move.b  (a6, d2.w), d0          ; high byte of mob_anim[mob]
+andi.w  #$FC, d0                ; mask to counter(3 bits) + direction(3 bits)
+lsr.w   #1, d0                  ; make word index
+move.w  (a0, d0.w), (a2, d2.w)  ; write tile number to mob_picture
 ```
-base_tile + (direction × frames_per_direction × tiles_per_frame) + (frame × tiles_per_frame)
-```
 
-Where `tiles_per_frame` = width × height of the monster sprite (e.g., 9 for a 3×3 monster like ghosts).
+The index computation: `index = (anim_counter × 8 + direction) × 2` — a word table indexed by the 6-bit combination of counter and direction.
 
-For example, ghost animation tiles (from python-gex cross-reference):
+#### Animation Pointer Tables
 
-| Direction | Frame 0 | Frame 1 | Frame 2 | Frame 3 |
-|-----------|---------|---------|---------|---------|
-| Down (4) | 2048 | 2057 | 2066 | 2075 |
-| Down-Right (3) | 2084 | 2093 | 2102 | 2111 |
-| Right (2) | 2120 | 2129 | 2138 | 2147 |
-| Up-Right (1) | 2156 | 2165 | 2174 | 2183 |
-| Up (0) | 2192 | 2201 | 2210 | 2219 |
-| Up-Left (5) | 2228 | 2237 | 2246 | 2255 |
-| Left (6) | 2264 | 2273 | 2282 | 2291 |
-| Down-Left (7) | 2304 | 2313 | 2322 | 2331 |
+Two pointer tables select animation tables based on monster state:
 
-Note: The tiles in ROM are arranged in a different order than the software direction enum. The direction-to-tile mapping is handled by the animation update code within `monsters_everything`, which reads the direction from `mob_anim` bits 12-10 and the frame counter from bits 15-13, then computes the tile number and writes it to `mob_picture`.
+**Idle/Stationary Table (0x40DB2)** — 10 longword pointers, used when the monster is not actively moving:
 
-The monster animation counter (bits 15-13 of mob_anim) is typically incremented within the per-monster-type movement handlers. Different monster types may advance their animation at different rates by incrementing only on certain frames (using the frame counter modulo a speed value).
+| Index | Monster Type | Table Address |
+|-------|-------------|---------------|
+| 0 | Ghost | 0x058F26 |
+| 1 | Grunt | 0x058FA6 |
+| 2 | Demon | 0x0590A6 |
+| 3 | Lobber | 0x0591A6 |
+| 4 | Sorcerer | 0x058C0A |
+| 5 | Aux Grunt | 0x058FA6 (shared with Grunt) |
+| 6 | Death | 0x0592A6 |
+| 7 | Acid | 0x059336 |
+| 8 | Super Sorc | 0x058C0A (shared with Sorcerer) |
+| 9 | IT | 0x059436 |
+
+**Moving/Chasing Table (0x40DDA)** — 10 longword pointers, used when the monster has bit 5 of mob_hpos set (actively moving):
+
+| Index | Monster Type | Table Address | Notes |
+|-------|-------------|---------------|-------|
+| 0 | Ghost | 0x00000000 | NULL — ghosts use idle table even when moving |
+| 1 | Grunt | 0x00000000 | NULL — same |
+| 2 | Demon | 0x059026 | Separate moving animation |
+| 3 | Lobber | 0x059126 | Separate moving animation |
+| 4 | Sorcerer | 0x00000000 | NULL — sorcerers don't visually move |
+| 5 | Aux Grunt | 0x059226 | Has moving animation |
+| 6 | Death | 0x059026 | Shares with Demon moving table |
+| 7 | Acid | 0x00000000 | NULL |
+| 8 | Super Sorc | 0x059436 | Has moving animation |
+| 9 | IT | 0x00000000 | NULL |
+
+Monsters with NULL moving table pointers go through a different code path that uses the idle table for all states.
+
+#### Table Format (Verified Against python-gex)
+
+Each animation table has 64 word entries: 8 counter values × 8 directions. The tables encode animation timing by **repeating tile values** across multiple counter values.
+
+**Ghost table (0x58F26) — verified:**
+
+| Counter | UP (0) | UPRT (1) | RT (2) | DNRT (3) | DN (4) | DNLT (5) | LT (6) | UPLT (7) |
+|---------|--------|----------|--------|----------|--------|----------|--------|----------|
+| 0–4 | 2192 | 2156 | 2120 | 2084 | 2048 | 2304 | 2264 | 2228 |
+| 5 | 2201 | 2165 | 2129 | 2093 | 2057 | 2313 | 2273 | 2237 |
+| 6 | 2210 | 2174 | 2138 | 2102 | 2066 | 2322 | 2282 | 2246 |
+| 7 | 2219 | 2183 | 2147 | 2111 | 2075 | 2331 | 2291 | 2255 |
+
+*All values match python-gex ghost walk animation data exactly.* Ghosts show frame 0 for 5 ticks, then frames 1, 2, 3 each for 1 tick, producing a 0-0-0-0-0-1-2-3 cycle.
+
+**Grunt table (0x58FA6) — verified:**
+
+Counter pattern: 0-0-0-1-2-2-3-0 — a bounce/ping-pong walk cycle. All tile numbers verified against python-gex (grunt down frame 0 = 2529).
+
+#### Counter Advancement
+
+The counter (bits 15-13 of mob_anim) is incremented by `addi.w #$2000, (a6, d2.w)` — adding 0x2000 advances the 3-bit counter by 1. This happens once per monster processing frame, gated by frame-parity flags (even/odd frame skipping for speed control). The 3-bit counter wraps naturally from 7 → 0.
+
+When the counter wraps (carry flag set from the add), the code optionally adjusts the direction for odd-angle monsters using the direction-adjust table at `0x40E1E`.
 
 ### 4.5 Tile Visibility Pulsing (Invisibility)
 
@@ -562,29 +620,98 @@ This creates the flickering invisibility effect by alternating between drawing a
 | 0x58A4A | 64B | anim_table_idle | Idle/standing tiles: 4 chars × 8 dirs × 1 frame |
 | 0x58A8A | 256B | anim_table_walking | Walking animation tiles: 4 chars × 8 dirs × 4 frames |
 
-### 5.2 Monster Data Tables
+### 5.2 Master Object Parameter Tables (ROM)
+
+The maze object placement function at `0x45E40` looks up creation parameters for each MAZEOBJ type from four parallel ROM tables. These tables are the **authoritative source** for tile numbers, palettes, sizes, and position offsets for every placeable object:
+
+| Address | Size | Entry Size | Name | Description |
+|---------|------|-----------|------|-------------|
+| **0x5868C** | 128B | Word (2B) | **base_tile_table** | Base tile number per MAZEOBJ type (64 entries) |
+| **0x5864C** | 64B | Byte (1B) | **palette_table** | MOB palette number per MAZEOBJ type (64 entries) |
+| **0x5858C** | 128B | Word (2B) | **hpos_offset_table** | Horizontal position offset per type (64 entries) |
+| **0x5860C** | 64B | Byte (1B) | **vpos_size_table** | Vertical position + sprite size byte per type (64 entries) |
+
+The placement function reads these as:
+```
+tile    = base_tile_table[type]       ; word at 0x5868C + type×2
+palette = palette_table[type]         ; byte at 0x5864C + type
+h_off   = hpos_offset_table[type]     ; word at 0x5858C + type×2
+vsize   = vpos_size_table[type]       ; byte at 0x5860C + type
+```
+
+**Verified base tile values (all confirmed against python-gex data):**
+
+| MAZEOBJ | Type ID | Base Tile (hex) | Base Tile (dec) | Palette | Notes |
+|---------|---------|----------------|-----------------|---------|-------|
+| Ghost | 18 | 0x0800 | 2048 | 0x00 | |
+| Grunt | 19 | 0x09E1 | 2529 | 0x04 | |
+| Demon | 20 | 0x183F | 6207 | 0x08 | |
+| Lobber | 21 | 0x1B57 | 6999 | 0x0B | |
+| Sorcerer | 22 | 0x13A2 | 5026 | 0x0B | |
+| Aux Grunt | 23 | 0x09E1 | 2529 | 0x04 | Shares tiles with Grunt |
+| Death | 24 | 0x1A75 | 6773 | 0x00 | |
+| Acid | 25 | 0x2300 | 8960 | 0x01 | |
+| Super Sorc | 26 | 0x13A2 | 5026 | 0x0B | Shares tiles with Sorcerer |
+| IT | 27 | 0x2600 | 9728 | 0x08 | |
+| Ghost Gen 1 | 28 | 0x09AB | 2475 | 0x05 | |
+| Ghost Gen 2 | 29 | 0x09B4 | 2484 | 0x05 | |
+| Ghost Gen 3 | 30 | 0x09BD | 2493 | 0x05 | |
+| Grunt Gen 1 | 31 | 0x09C6 | 2502 | 0x05 | |
+| Grunt Gen 2 | 32 | 0x09CF | 2511 | 0x05 | |
+| Grunt Gen 3 | 33 | 0x09D8 | 2520 | 0x05 | |
+| Demon Gen 1-3 | 34-36 | 0x09C6-D8 | 2502-2520 | 0x05 | All non-ghost gens share tiles |
+| Lobber Gen 1-3 | 37-39 | 0x09C6-D8 | 2502-2520 | 0x05 | |
+| Sorc Gen 1-3 | 40-42 | 0x09C6-D8 | 2502-2520 | 0x05 | |
+| AuxGrunt Gen 1-3 | 43-45 | 0x09C6-D8 | 2502-2520 | 0x05 | |
+| Treasure | 46 | 0x0987 | 2439 | 0x01 | |
+| Treasure Locked | 47 | 0x25E4 | 9700 | 0x01 | |
+| Gold Bag | 48 | 0x09A2 | 2466 | 0x01 | |
+| Food (destr) | 49 | 0x0963 | 2403 | 0x01 | |
+| Food (invuln) | 50 | 0x096C | 2412 | 0x01 | Random variant from table at 0x58F20 |
+| Potion (destr) | 51 | 0x88FC | 2300+flag | 0x01 | Bit 15 = software flag |
+| Potion (invuln) | 52 | 0x89FC | 2556+flag | 0x01 | |
+| Key | 53 | 0x8AFC | 2812+flag | 0x01 | |
+| Invisibility | 54 | 0x1700 | 5888 | 0x01 | |
+| Repulsiveness | 55 | 0x26FC | 9980 | 0x01 | |
+| Reflect | 56 | 0x24FC | 9468 | 0x01 | |
+| Transport | 57 | 0x23FC | 9212 | 0x01 | |
+| Super Shot | 58 | 0x2788 | 10120 | 0x01 | |
+| Invulnerability | 59 | 0x2784 | 10116 | 0x01 | |
+| Dragon | 60 | 0xA740 | 10048+flag | 0x08 | Bit 15 = flag; uses different tiles than overview |
+| Hidden Potion | 61 | 0x0BFC | 3068 | 0x01 | |
+| Transporter | 62 | 0x8001 | marker | 0x00 | Handled specially |
+| Forcefield Hub | 63 | 0x0C3F | 3135 | 0x00 | |
+
+### 5.2b Monster Animation Tables
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x40E02 | 28B | monster_speed_override | 7 longword speed values for monster types, used with fast-monster flags |
+| 0x40DB2 | 40B | monster_anim_idle_ptrs | 10 longword pointers to idle animation tile tables |
+| 0x40DDA | 40B | monster_anim_moving_ptrs | 10 longword pointers to moving animation tile tables (NULL = use idle) |
+| 0x40E1E | 40B | monster_oddangle_table | Per-type direction adjustment bytes for odd-angle movement |
+| 0x58C0A | 128B | anim_tiles_sorcerer | Sorcerer/Super Sorc animation: 64 words (8 counters × 8 dirs) |
+| 0x58F26 | 128B | anim_tiles_ghost | Ghost animation: 64 words |
+| 0x58FA6 | 128B | anim_tiles_grunt | Grunt/Aux Grunt animation: 64 words |
+| 0x590A6 | 128B | anim_tiles_demon | Demon animation: 64 words |
+| 0x591A6 | 128B | anim_tiles_lobber | Lobber animation: 64 words |
+| 0x592A6 | 128B | anim_tiles_death | Death animation: 64 words |
+| 0x59336 | 128B | anim_tiles_acid | Acid animation: 64 words |
+| 0x59436 | 128B | anim_tiles_it | IT animation: 64 words |
+| 0x59026 | 128B | anim_tiles_demon_moving | Demon moving animation |
+| 0x59126 | 128B | anim_tiles_lobber_moving | Lobber moving animation |
+| 0x59226 | 128B | anim_tiles_auxgrunt_moving | Aux Grunt moving animation |
+
+### 5.2c Other Monster Data Tables
+
+| Address | Size | Name | Description |
+|---------|------|------|-------------|
+| 0x40E02 | 28B | monster_speed_override | 7 longword speed values for fast-monster level flags |
 | 0x40E46 | ~32B | monster_count_table | Max monster count by difficulty + active player count |
 | 0x4A4FA | ~64B | stun_input_remap | Input modification table for stunned players |
-
-Monster tile numbers are assigned during maze object setup based on the MAZEOBJ type and are computed from base tile numbers. The specific base tiles for each monster type, cross-referenced with the python-gex data:
-
-| Monster Type | MAZEOBJ ID | Base Tile | Size | Palette |
-|-------------|-----------|-----------|------|---------|
-| Ghost | 0x12 (18) | 2048 | 3×3 | 0 (or 4) |
-| Grunt | 0x13 (19) | 2529 | 3×3 | 4 |
-| Demon | 0x14 (20) | 6207 | 3×3 | 8 |
-| Lobber | 0x15 (21) | 6999 | 3×2 | 11 |
-| Sorcerer | 0x16 (22) | 5026 | 3×3 | 11 |
-| Aux Grunt | 0x17 (23) | 2529 | 3×3 | 4 |
-| Death | 0x18 (24) | 6773 | 3×3 | 0 |
-| Acid | 0x19 (25) | 8960 | 3×3 | 1 |
-| Super Sorc | 0x1A (26) | 5026 | 3×3 | 11 |
-| IT | 0x1B (27) | 9728 | 3×3 | 8 |
-| Dragon | 0x3C (60) | 8448 | 4×4 | 8 |
+| 0x58F20 | 8B | food_invuln_variants | 4 word tile numbers for random invulnerable food variants |
+| 0x594B6 | 128B | anim_tiles_it_special | IT special animation table (used for IT chase state) |
+| 0x59536 | 128B | anim_tiles_generic_chase | Generic monster chase animation |
+| 0x595B6 | 128B | anim_tiles_lobber_throw | Lobber throwing animation |
 
 ### 5.3 Item/Pickup Data Tables
 
@@ -702,19 +829,417 @@ Generator levels 1/2/3 have progressively more "damaged" sprites. Ghost generato
 
 ---
 
-## Areas Requiring Further Analysis
+## 7. Maze Object Placement (`maze_place_object`, 0x45E40)
 
-The following areas were identified but not fully traced in this analysis pass:
+### 7.1 Overview
 
-1. **Monster animation tile computation**: The exact mechanism by which monster types select their animation tiles was not fully traced through `monsters_everything`. The tile numbers are likely computed from base tile + direction/frame offsets rather than looked up from explicit tables (unlike player animation which uses direct table lookups).
+`maze_decode` (0x4c1bc) calls `0x45E40` for each object token in the compressed maze data, passing `(slot_position, object_type, count)`. This function is the central dispatcher that creates all maze objects — walls, monsters, items, and special objects.
 
-2. **Maze object placement**: The function(s) that scan the decoded maze data and call `mob_create` for each monster, item, and special object were not fully identified. This likely occurs within `maze_decode` (0x4c1bc) or a post-decode scan.
+### 7.2 Dispatch by Object Type
 
-3. **Complete monster type parameter table**: While tile numbers and sizes are known from the python-gex cross-reference, the ROM location of the master table that maps MAZEOBJ type IDs to (tile, size, palette, speed, health, damage) was not found. This table likely exists in the 0x56000–0x58000 range based on nearby data tables.
+The function categorizes objects into groups:
 
-4. **Per-monster movement handlers**: The `monsters_everything` function dispatches to type-specific movement handlers based on the MAZEOBJ type in mob_link bits 15-10. The dispatch mechanism and individual handler addresses were not fully cataloged.
+**Marker types** (written to mob_picture as special values for later processing):
+- Types 2, 4, 5, 7, 8, 9 (walls), 0x3F (forcefield hub) → mob_picture = `0x8000`
+- Type 5 (destructible wall) with specific wall patterns → mob_picture = `0x8003`
+- Types 0xA–0xC (traps), 0x3E (transporter), 0x10–0x11 (exits), 1 (stun) → mob_picture = `0x8001`
+- These markers are processed by the post-decode scan at `0x5F2C0` which calls `0x5EAB8` to render the actual playfield tiles.
 
-5. **Force field segment table construction**: The function at 0x53398 builds the forcefield segment table at 0x910780 by scanning for FORCEFIELDHUB objects, but the complete segment format was not fully decoded.
+**Dragon (type 0x3C):** Special multi-slot handling — the dragon occupies a 2×2 block of maze cells. Calls `0x5496E` (dragon setup) and `0x462AE` for each adjacent cell.
+
+**Invulnerable food (type 0x32):** Random variant selection using `getrandom(3)` from a 4-entry table at `0x58F20` containing tile numbers `[0x096C, 0x0975, 0x097E, 0x0890]` (food variants 2412, 2421, 2430, and a 4th variant at 2192).
+
+**All other types (monsters, items, generators, etc.):** Standard placement using the master parameter tables (Section 5.2):
+1. Look up base tile from `base_tile_table[type]` (0x5868C)
+2. Look up palette from `palette_table[type]` (0x5864C)
+3. Compute pixel H position from slot index, subtract `hpos_offset_table[type]` (0x5858C)
+4. Compute pixel V position from slot index, add `vpos_size_table[type]` (0x5860C)
+5. For monster types 18–27: set initial direction = 4 (DOWN)
+6. For super sorcerers (type 26) in non-attract mode: set tile to `0x1709` (invisible) and add flag `0x10` to hpos
+7. Call `mob_create(slot, tile, hpos, vpos, type, direction)` at 0x5DC58
+
+---
+
+## 8. Monster Movement Handler Dispatch
+
+### 8.1 Structure
+
+`monsters_everything` (0x40E6A) does NOT use a jump table for per-type handlers. Instead, it uses a single shared handler at `0x4119A` with conditional branches for types needing special behavior.
+
+The dispatch flow within the per-monster iteration:
+
+```
+1. Extract type from mob_link bits 15-10
+2. Check: type == generator (types 28-45)?
+   YES → generator spawning code (0x41026ff)
+3. Check: type == super sorcerer (26)?
+   YES → special sorcerer placement/teleport handler (0x4106A)
+4. ALL other monster types (18-25, 27) → shared handler at 0x4119A
+```
+
+### 8.2 Shared Monster Handler (0x4119A)
+
+The shared handler uses mob_hpos flag bits to determine monster state:
+
+| Bit 5 | Bit 4 | State | Behavior |
+|-------|-------|-------|----------|
+| 1 | x | Moving | Advance animation counter, check collisions, continue movement |
+| 0 | 1 | Chasing | Move toward target player, check for shooting opportunity |
+| 0 | 0 | Idle | Find nearest player (call `monster_find_and_shoot` at 0x41750), start chasing |
+
+Within the chasing state, specific types get special handling:
+- **Sorcerer (d6=0x10):** Skips physical movement, only animates and shoots — sorcerers attack from a distance without moving
+- **Acid (d6=0x1C):** Uses fixed direction advance value of 0x1E; acid puddles move in a fixed pattern
+- **IT (d6=0x24):** Direction adjusted from the odd-angle table; IT creatures move erratically
+
+All other monsters use the general chasing behavior: call `monster_find_and_shoot` to pick a target, then physically move toward it using the collision-checked movement functions at `0x5E10C` and `0x5E1D8`.
+
+---
+
+## 9. Forcefield Segment Table Format
+
+### 9.1 Construction (0x53398)
+
+The function at `0x53398` scans all maze slots for FORCEFIELDHUB objects (type 0x3F). For each hub, it traces connected forcefield segments in the +slot direction (horizontally along the row), building entries in the segment table at `0x910780`.
+
+### 9.2 Segment Entry Format
+
+Each entry in the table at `0x910780` is a 16-bit word, terminated by a zero entry:
+
+| Bits | Field | Description |
+|------|-------|-------------|
+| 15 | direction | 1 = horizontal segment (extends along row), 0 = vertical segment (extends down column) |
+| 14 | wrap | 1 = segment wraps around maze edge |
+| 13-10 | length_m1 | Segment length minus 1 (0-15 → 1-16 tiles beyond hub) |
+| 9-0 | hub_slot | Slot position (row × 32 + col) of the forcefield hub |
+
+### 9.3 Collision Check (`pf_isff`, 0x5FC5E)
+
+The reader iterates through the segment table:
+1. Extract `hub_slot` from bits 9-0; compute `delta = query_slot - hub_slot`
+2. Extract `length` from bits 13-10 + 1
+3. If bit 14 (wrap): adjust delta for maze edge wrapping
+4. If delta <= 0: query is at or before hub → no hit
+5. If bit 15 (horizontal): check `delta < length` → hit if within range
+6. If bit 15 clear (vertical): check same column (`(query XOR entry) & 0x1F == 0`), then check `delta/32 < length` → hit if within row range
+
+---
+
+## 10. Complete Maze Catalog
+
+### 10.1 How Maze Lookup Works
+
+`find_maze` (0x40C78) maps a maze number to a data pointer and slapstic bank:
+
+1. Reads a **bank lookup table** at hardware address 0x39FE0 (slapstic bank 3, file offset 0x7FE0). Each byte packs four 2-bit bank numbers (one per maze, LSB first).
+2. Reads the **pointer table** starting at the address stored at 0x38000 (which is 0x3800C). Each entry is a longword pointing to the maze data within the 32KB slapstic ROM address space (0x38000–0x3FFFF).
+
+The slapstic ROM (row10.bin, 32KB) is divided into 4 banks of 8KB:
+
+| Bank | File Offset | Address Range | Maze Range |
+|------|------------|---------------|------------|
+| 0 | 0x0000 | 0x38000–0x39FFF | Mazes 0–32 |
+| 1 | 0x2000 | 0x3A000–0x3BFFF | Mazes 33–62 |
+| 2 | 0x4000 | 0x3C000–0x3DFFF | Mazes 63–88 |
+| 3 | 0x6000 | 0x3E000–0x3FFFF | Mazes 89–115 + bank table |
+
+### 10.2 Maze Number Ranges
+
+| Range | Count | Purpose |
+|-------|-------|---------|
+| 0–4 | 5 | Unused/placeholder |
+| 5–101 | 97 | Gameplay levels (Level N = Maze N+4) |
+| 102 | 1 | Demo level (attract mode) |
+| 103 | 1 | Legend/high-scores screen |
+| 104–114 | 11 | Treasure rooms |
+| 115 | 1 | Secret room |
+
+### 10.3 Flag Randomization Note
+
+The flags listed below are the **base flags** stored in each maze's header. At runtime, `maze_load_pickup_config` (0x436FE) **randomly adds additional flags** based on the current level number (from `ram.os_flag`) and a frame-count seed. Higher levels get progressively more aggressive random modifiers — fast monsters, odd-angle movement, invisible walls, etc. — layered on top of the base flags. This means late-game levels can have nearly any combination of flags active regardless of what's in the maze header.
+
+### 10.4 Flag Key
+
+| Abbreviation | Meaning |
+|-------------|---------|
+| OddX | Monster type X moves at odd angles |
+| FastX | Monster type X moves at double speed |
+| InvisTrap | Trap walls are invisible |
+| InvisWalls | All walls invisible |
+| CyclicWalls | Walls cycle open/closed |
+| DelWalls1/2 | Destructible walls (two tiers) |
+| ExitMoves | Exit relocates periodically |
+| Exit1of | Only one exit of several is real |
+| ShotStun | Player shots stun other players |
+| ShotHurt | Player shots damage other players |
+| TrapLocal/Rand | Trap behavior variants |
+| WrapV/H | Maze wraps vertically/horizontally |
+| FakeExit | One or more exits are fake |
+| Offscreen | Players can go off-screen |
+| RndFood | Count of random food items placed (0–7) |
+
+### 10.5 Complete Maze Table
+
+Every gameplay level (Levels 1–97) has a secret trick — there are no levels without one.
+
+| Maze | Level | Bank | Offset | Secret Trick | RndFood | Base Flags |
+|-----:|------:|-----:|-------:|:-------------|--------:|:-----------|
+| 0 | — | 0 | 0x01E0 | *(unused)* | 0 | (none) |
+| 1 | — | 0 | 0x0262 | *(unused)* | 0 | (none) |
+| 2 | — | 0 | 0x02F4 | *(unused)* | 2 | (none) |
+| 3 | — | 0 | 0x037E | *(unused)* | 2 | FastGhost, FastDeath, ExitMoves |
+| 4 | — | 0 | 0x0404 | *(unused)* | 0 | CyclicWalls |
+| 5 | 1 | 0 | 0x04CC | WatchShoot2 (walls) | 0 | InvisWalls |
+| 6 | 2 | 0 | 0x0555 | No Greedy (treasure) | 0 | WrapH |
+| 7 | 3 | 0 | 0x0631 | No Greedy (treasure) | 4 | Exit1of, TrapLocal |
+| 8 | 4 | 0 | 0x07AB | Be Pushy | 0 | DelWalls1 |
+| 9 | 5 | 0 | 0x0858 | Transport3 (into exit) | 0 | (none) |
+| 10 | 6 | 0 | 0x08D5 | Transport3 (into exit) | 4 | OddGhost, FastGrunt, CyclicWalls, Exit1of |
+| 11 | 7 | 0 | 0x097E | WatchShoot1 (food) | 0 | Exit1of |
+| 12 | 8 | 0 | 0x0A76 | No Invulnerability | 6 | FastGrunt, FastDeath, Exit1of |
+| 13 | 9 | 0 | 0x0B48 | No Hit (dragon) | 0 | (none) |
+| 14 | 10 | 0 | 0x0CA0 | No Invulnerability | 2 | OddGrunt, OddAuxGrunt, FastGrunt, CyclicWalls |
+| 15 | 11 | 0 | 0x0D6F | Don't Be Fooled | 0 | OddGhost, FastGrunt, Exit1of, TrapLocal, WrapH, FakeExit |
+| 16 | 12 | 0 | 0x0EB8 | Transport2 (onto death) | 2 | ExitMoves, ShotStun, TrapLocal, WrapH |
+| 17 | 13 | 0 | 0x1011 | Transport4 (into exit) | 3 | WrapH |
+| 18 | 14 | 0 | 0x10D0 | No Greedy (keys/pots) | 6 | CyclicWalls, ExitMoves |
+| 19 | 15 | 0 | 0x11A0 | Diet (no food) | 0 | (none) |
+| 20 | 16 | 0 | 0x12B3 | Save Super Shots | 5 | CyclicWalls |
+| 21 | 17 | 0 | 0x13A6 | No Hurt Friends | 2 | Exit1of |
+| 22 | 18 | 0 | 0x14FC | Transport2 (onto death) | 1 | InvisWalls, Exit1of |
+| 23 | 19 | 0 | 0x15A4 | Transport3 (into exit) | 0 | CyclicWalls, WrapH |
+| 24 | 20 | 0 | 0x1689 | WatchShoot1 (food) | 3 | DelWalls1 |
+| 25 | 21 | 0 | 0x1789 | No Greedy (keys/pots) | 0 | ExitMoves, WrapH |
+| 26 | 22 | 0 | 0x1895 | WatchShoot1 (food) | 2 | DelWalls1, Exit1of |
+| 27 | 23 | 0 | 0x197D | Save Super Shots | 0 | WrapH |
+| 28 | 24 | 0 | 0x1A88 | No Invulnerability | 3 | ShotStun |
+| 29 | 25 | 0 | 0x1B3A | Transport2 (onto death) | 0 | WrapH |
+| 30 | 26 | 0 | 0x1C21 | Be Pushy | 2 | (none) |
+| 31 | 27 | 0 | 0x1D25 | No Hurt Friends | 0 | TrapLocal |
+| 32 | 28 | 0 | 0x1E9B | Transport3 (into exit) | 0 | WrapH |
+| 33 | 29 | 1 | 0x2000 | Don't Be Fooled | 2 | Exit1of, ShotHurt, FakeExit |
+| 34 | 30 | 1 | 0x20B2 | WatchShoot1 (food) | 0 | (none) |
+| 35 | 31 | 1 | 0x21FF | IT Could Be Nice | 0 | (none) |
+| 36 | 32 | 1 | 0x22C1 | No Hurt Friends | 0 | WrapH |
+| 37 | 33 | 1 | 0x2447 | IT Could Be Nice | 5 | Exit1of |
+| 38 | 34 | 1 | 0x24FC | Push a Wall | 0 | (none) |
+| 39 | 35 | 1 | 0x262D | Don't Be Fooled | 4 | FastDemon, Exit1of, ShotHurt, FakeExit |
+| 40 | 36 | 1 | 0x2706 | Push a Wall | 0 | Exit1of, WrapH |
+| 41 | 37 | 1 | 0x282D | No Hit (dragon) | 4 | (none) |
+| 42 | 38 | 1 | 0x2906 | No Hurt Friends | 0 | DelWalls1, Exit1of, WrapV, WrapH |
+| 43 | 39 | 1 | 0x2A90 | Transport4 (into exit) | 0 | OddAuxGrunt, WrapH |
+| 44 | 40 | 1 | 0x2C0D | No Greedy (treasure) | 0 | WrapH |
+| 45 | 41 | 1 | 0x2D6C | Diet (no food) | 2 | ShotHurt, WrapH |
+| 46 | 42 | 1 | 0x2E39 | IT Could Be Nice | 0 | OddGhost, OddGrunt, OddDeath, FastGhost, FastSorc |
+| 47 | 43 | 1 | 0x2F57 | No Hurt Friends | 1 | OddAuxGrunt, DelWalls1, Exit1of |
+| 48 | 44 | 1 | 0x30A9 | WatchShoot1 (food) | 0 | (none) |
+| 49 | 45 | 1 | 0x31DA | Save Super Shots | 0 | OddGrunt, OddAuxGrunt, Exit1of, ShotStun |
+| 50 | 46 | 1 | 0x328B | IT Could Be Nice | 0 | WrapH |
+| 51 | 47 | 1 | 0x337F | Push a Wall | 0 | FastGhost, FastGrunt, Exit1of |
+| 52 | 48 | 1 | 0x342D | Diet (no food) | 0 | Exit1of, WrapH, FakeExit |
+| 53 | 49 | 1 | 0x3530 | No Hurt Friends | 0 | OddAuxGrunt |
+| 54 | 50 | 1 | 0x361B | No Invulnerability | 5 | (none) |
+| 55 | 51 | 1 | 0x37F3 | Be Pushy | 1 | FastGrunt, FastDemon |
+| 56 | 52 | 1 | 0x388C | Transport1 (onto demon) | 0 | (none) |
+| 57 | 53 | 1 | 0x3966 | No Hurt Friends | 0 | Exit1of, ShotHurt |
+| 58 | 54 | 1 | 0x3A55 | Transport1 (onto demon) | 0 | DelWalls1 |
+| 59 | 55 | 1 | 0x3B4F | Transport1 (onto demon) | 0 | OddGrunt |
+| 60 | 56 | 1 | 0x3C63 | Don't Be Fooled | 0 | FastSorc, Exit1of, FakeExit |
+| 61 | 57 | 1 | 0x3D90 | No Greedy (keys/pots) | 0 | Exit1of, WrapH |
+| 62 | 58 | 1 | 0x3EB9 | Push a Wall | 0 | WrapH |
+| 63 | 59 | 2 | 0x4000 | No Greedy (keys/pots) | 0 | (none) |
+| 64 | 60 | 2 | 0x417C | Transport4 (into exit) | 0 | FastAuxGrunt, FastDeath, CyclicWalls, Exit1of |
+| 65 | 61 | 2 | 0x4294 | Transport2 (onto death) | 0 | (none) |
+| 66 | 62 | 2 | 0x4382 | No Greedy (treasure) | 0 | ShotHurt, TrapLocal |
+| 67 | 63 | 2 | 0x44DB | No Hit (dragon) | 0 | FastAuxGrunt |
+| 68 | 64 | 2 | 0x45B9 | Transport3 (into exit) | 0 | WrapH |
+| 69 | 65 | 2 | 0x46E1 | Don't Be Fooled | 0 | Exit1of, TrapRand, WrapV, WrapH, FakeExit |
+| 70 | 66 | 2 | 0x47CB | WatchShoot2 (walls) | 0 | WrapH |
+| 71 | 67 | 2 | 0x4932 | WatchShoot2 (walls) | 0 | Exit1of, FakeExit |
+| 72 | 68 | 2 | 0x4A45 | Transport1 (onto demon) | 0 | FastAuxGrunt |
+| 73 | 69 | 2 | 0x4B68 | Transport4 (into exit) | 0 | TrapLocal |
+| 74 | 70 | 2 | 0x4D14 | Save Super Shots | 0 | ExitMoves, WrapV, WrapH |
+| 75 | 71 | 2 | 0x4EB5 | Transport1 (onto demon) | 0 | WrapV, WrapH |
+| 76 | 72 | 2 | 0x4FDD | No Greedy (treasure) | 0 | TrapRand, WrapH |
+| 77 | 73 | 2 | 0x50F7 | Don't Be Fooled | 3 | FastGhost–FastDeath (all), CyclicWalls, Exit1of, FakeExit |
+| 78 | 74 | 2 | 0x5254 | No Hit (dragon) | 0 | OddGhost, FastGrunt, FastLobber, FastSorc, TrapLocal |
+| 79 | 75 | 2 | 0x535B | Push a Wall | 0 | TrapRand, WrapH |
+| 80 | 76 | 2 | 0x546C | Transport2 (onto death) | 0 | ShotHurt, TrapLocal, WrapH |
+| 81 | 77 | 2 | 0x55F7 | No Greedy (keys/pots) | 0 | WrapH |
+| 82 | 78 | 2 | 0x5789 | Save Super Shots | 0 | WrapH |
+| 83 | 79 | 2 | 0x5917 | Transport1 (onto demon) | 0 | FastGrunt, FastSorc |
+| 84 | 80 | 2 | 0x5A2F | No Invulnerability | 0 | FastGhost, TrapRand |
+| 85 | 81 | 2 | 0x5B41 | Save Super Shots | 0 | FastGrunt |
+| 86 | 82 | 2 | 0x5C36 | Transport3 (into exit) | 0 | (none) |
+| 87 | 83 | 2 | 0x5D73 | IT Could Be Nice | 0 | WrapH |
+| 88 | 84 | 2 | 0x5EAD | No Invulnerability | 1 | DelWalls1 |
+| 89 | 85 | 3 | 0x6000 | Be Pushy | 0 | (none) |
+| 90 | 86 | 3 | 0x612E | No Hit (dragon) | 0 | DelWalls2 |
+| 91 | 87 | 3 | 0x6291 | Push a Wall | 0 | FastAuxGrunt, CyclicWalls |
+| 92 | 88 | 3 | 0x63A0 | No Greedy (keys/pots) | 0 | OddAuxGrunt, FastAuxGrunt, FastDeath, DelWalls2, Exit1of, ShotHurt |
+| 93 | 89 | 3 | 0x64B7 | Push a Wall | 0 | InvisTrap, WrapV, WrapH |
+| 94 | 90 | 3 | 0x65A6 | IT Could Be Nice | 4 | DelWalls1, ExitMoves |
+| 95 | 91 | 3 | 0x669B | Transport2 (onto death) | 0 | ShotStun, TrapRand, WrapH |
+| 96 | 92 | 3 | 0x6786 | No Greedy (treasure) | 4 | InvisTrap, ShotStun, TrapLocal |
+| 97 | 93 | 3 | 0x68A3 | No Greedy (keys/pots) | 0 | ShotHurt |
+| 98 | 94 | 3 | 0x69F4 | Diet (no food) | 0 | WrapH |
+| 99 | 95 | 3 | 0x6B16 | No Hit (dragon) | 0 | OddGhost, WrapH |
+| 100 | 96 | 3 | 0x6C3F | WatchShoot1 (food) | 0 | InvisTrap, InvisWalls |
+| 101 | 97 | 3 | 0x6D35 | Transport4 (into exit) | 4 | Exit1of |
+| | | | | | | |
+| 102 | — | 3 | 0x6DF2 | **Demo Level** | 0 | OddGrunt, OddAuxGrunt, FastAuxGrunt |
+| 103 | — | 3 | 0x6E6C | **Legend/Scores** | 0 | (none) |
+| | | | | | | |
+| 104 | T1 | 3 | 0x6ED1 | Diet (no food) | 0 | CyclicWalls, Exit1of, WrapH |
+| 105 | T2 | 3 | 0x6FAA | Be Pushy | 0 | CyclicWalls, Exit1of |
+| 106 | T3 | 3 | 0x7081 | WatchShoot2 (walls) | 0 | ExitMoves |
+| 107 | T4 | 3 | 0x715B | Diet (no food) | 0 | DelWalls1, Exit1of |
+| 108 | T5 | 3 | 0x7231 | Be Pushy | 1 | Exit1of, TrapLocal, WrapH |
+| 109 | T6 | 3 | 0x7424 | Diet (no food) | 0 | DelWalls2, Exit1of |
+| 110 | T7 | 3 | 0x7590 | WatchShoot2 (walls) | 0 | Exit1of, WrapH |
+| 111 | T8 | 3 | 0x7715 | Be Pushy | 0 | Exit1of, WrapH |
+| 112 | T9 | 3 | 0x7886 | WatchShoot2 (walls) | 0 | CyclicWalls, Exit1of |
+| 113 | T10 | 3 | 0x79EF | WatchShoot2 (walls) | 0 | Exit1of |
+| 114 | T11 | 3 | 0x7BC9 | Diet (no food) | 0 | InvisTrap, Exit1of, TrapLocal |
+| | | | | | | |
+| 115 | — | 3 | 0x7D29 | **Secret Room** | 0 | (none) |
+
+### 10.6 Secret Trick Distribution
+
+Every gameplay level has a secret trick. Distribution across Levels 1–97:
+
+| Secret Trick | Count | Description |
+|:-------------|------:|:------------|
+| Transport1 (onto demon) | 6 | Use Transportability power-up to teleport onto a demon |
+| Transport2 (onto death) | 6 | Teleport onto Death |
+| Transport3 (into exit) | 6 | Teleport into the exit |
+| Transport4 (into exit) | 5 | Teleport into the exit (variant) |
+| WatchShoot1 (food) | 6 | Avoid shooting food items |
+| WatchShoot2 (walls) | 3 | Shoot secret/destructible walls to find secrets |
+| Save Super Shots | 6 | Don't waste super shot power-ups |
+| No Invulnerability | 6 | Complete the level without using invulnerability |
+| No Hit (dragon) | 6 | Kill the dragon without getting hit |
+| Push a Wall | 7 | Try pushing a movable wall |
+| Don't Be Fooled | 6 | Avoid fake exits |
+| No Greedy (keys/pots) | 7 | Complete without collecting keys or potions |
+| No Greedy (treasure) | 6 | Complete without collecting treasure |
+| Diet (no food) | 4 | Complete without eating food |
+| Be Pushy | 4 | Push movable walls aggressively |
+| IT Could Be Nice | 6 | Use the IT mechanic strategically |
+| No Hurt Friends | 7 | Don't damage other players |
+
+---
+
+## 11. Function Calling Convention
+
+The majority of the Game ROM is compiled C. The calling convention is a standard **stack-based, caller-cleanup convention** consistent with the Green Hills C compiler that Atari Games used for 68000-family targets in this era. A small number of leaf functions (notably `input_debounce` at 0x40644 and parts of the Slapstic bank-switch trampoline) are hand-written assembly and do not follow this convention.
+
+### 11.1 Prologue / Epilogue
+
+Compiled functions follow this pattern:
+
+```
+; ── Prologue ──
+link.w  a6, #-N             ; save old a6, set frame pointer, allocate N bytes of locals
+movem.l <reg-list>, -(a7)   ; save callee-saved registers used by this function
+
+; ── Epilogue ──
+movem.l -offset(a6), <reg-list>   ; restore saved registers
+unlk    a6                         ; restore old a6 and deallocate locals
+rts
+```
+
+`a6` is always the frame pointer. Local variables live at negative offsets from `a6`; arguments live at positive offsets.
+
+A few heavily-used functions (e.g. `mob_create` at 0x5dc58) omit the `link`/`unlk` and access arguments relative to `a7` instead, saving a few cycles. This is likely a hand-optimization or aggressive compiler flag rather than a different convention — the argument layout on the stack is identical.
+
+### 11.2 Argument Passing
+
+All arguments are pushed **right-to-left** (last argument pushed first) as **32-bit longwords**, even when the logical type is 16-bit. Values are sign- or zero-extended to 32 bits before the push. Common push idioms:
+
+| Instruction | Effect |
+|-------------|--------|
+| `move.l dN, -(a7)` | Push a register (already extended to long) |
+| `pea.l <ea>` | Push an effective address (pointer arg) |
+| `clr.l -(a7)` | Push a zero argument |
+| `pea.l 0x20.w` | Push an immediate constant as a longword |
+
+Because the 68010 is **big-endian**, the low (meaningful) 16 bits of each longword slot sit at +2 within the slot. Functions that consume `int`-sized (16-bit) arguments therefore read them with a word-sized load at the +2 offset:
+
+```
+; Frame-pointer form (most functions):
+;   a6+0  = saved old a6
+;   a6+4  = return address
+;   a6+8  = arg 1 longword  → low word at a6+0x0A
+;   a6+C  = arg 2 longword  → low word at a6+0x0E
+;   a6+10 = arg 3 longword  → low word at a6+0x12
+;   ...
+move.w  0xa(a6), d6      ; read arg 1 as a word
+move.w  0xe(a6), d3      ; read arg 2 as a word
+```
+
+### 11.3 Caller Cleanup
+
+The **caller** removes arguments from the stack after the call returns, typically with `lea`:
+
+```
+; Example: call mob_create with 6 longword args (24 bytes)
+move.l  d0, -(a7)          ; arg 6
+move.l  d0, -(a7)          ; arg 5
+move.l  d0, -(a7)          ; arg 4
+move.l  d0, -(a7)          ; arg 3
+move.l  d0, -(a7)          ; arg 2
+move.l  d0, -(a7)          ; arg 1
+jsr     mob_create
+lea     0x18(a7), a7       ; pop 24 bytes (6 × 4)
+```
+
+This is the cdecl convention: the caller knows how many arguments it pushed and cleans them up. No `rts #N` or callee-side stack adjustment is used anywhere in the ROM.
+
+### 11.4 Return Values
+
+Return values are passed in **d0**. Word-sized results use `d0.w`; longword/pointer results use `d0.l`. Functions that return void simply leave d0 undefined.
+
+```
+jsr     0x24e               ; OS API: allocate display list
+move.w  d0, d2              ; capture 16-bit return value
+```
+
+### 11.5 Register Classes
+
+| Registers | Role | Convention |
+|-----------|------|-----------|
+| d0–d1 | Scratch / temporaries | **Caller-saved** — any call may destroy these |
+| d2–d7 | General purpose | **Callee-saved** — must be preserved across calls |
+| a0–a1 | Scratch / pointer temps | **Caller-saved** — any call may destroy these |
+| a2–a5 | General purpose pointers | **Callee-saved** — must be preserved across calls |
+| a6 | Frame pointer | Saved/restored by `link`/`unlk` |
+| a7 | Stack pointer | Managed implicitly |
+
+Functions save only the callee-saved registers they actually use. For example, `main_handle_potions` (0x46fea) saves `d2/a2-a3`, while `mob_create` (0x5dc58) saves the full set `d2-d7/a2-a6`.
+
+### 11.6 Identifying Hand-Written Assembly
+
+A handful of functions are hand-written assembly rather than compiler output. Telltale signs:
+
+- **No `link`/`unlk`** and **no `movem` save** — the function only uses scratch registers (d0-d1, a0-a1)
+- **No stack-based arguments** — inputs arrive in registers or at fixed memory addresses
+- **Unusual instruction sequences** not typical of compiler output (e.g. `roxl` for bit-serial I/O debouncing at 0x40644)
+- **Inline within the Slapstic trampoline** — bank-switch helpers at 0x56E58/0x56E6E operate outside normal calling convention
+
+---
+
+## Remaining Unknowns
+
+The following areas have not been fully analyzed:
+
+1. **Monster health/damage tables**: The per-type health values (how many hits a monster takes) and damage values (how much health a monster removes from players) were not located as ROM tables. These may be hardcoded in the per-type collision handlers or stored in tables not yet identified.
+
+2. **Monster speed tables**: While the speed override table at 0x40E02 (for fast-monster level flags) was found, the base speed values per monster type (used for normal-speed monsters) were not located as a separate table. Speed may be controlled by the frame-parity gating in the movement code rather than a per-type speed value.
+
+3. **Dragon animation tables**: The dragon's animation system was not traced. The dragon uses a different code path (0x54454, `main_handle_dragon`) with its own state machine, and the dragon's tile number in the master table (0xA740 = 10048 with flag) doesn't match the python-gex overview tile (8448). The dragon likely has separate animation tables for its multi-segment body, head, and fire breath.
+
+4. **Complete attract mode screen setup**: The function at `0x44414` that sets up individual attract screens (title, scores, legend) was identified but not fully disassembled.
 
 ---
 
