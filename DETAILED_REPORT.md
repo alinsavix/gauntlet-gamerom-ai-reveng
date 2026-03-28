@@ -1229,18 +1229,41 @@ A handful of functions are hand-written assembly rather than compiler output. Te
 
 ---
 
+## Previously Listed Unknowns — Now Resolved
+
+The following items from the original analysis have been fully resolved by the complete function analysis (see FUNCTIONS_PLAN.md):
+
+1. ~~**Monster health/damage tables**~~ — **RESOLVED.** Damage multiplier tables found at 0x5B7D4 (8 words, indexed by player_class × enemy_type, values 1–3) and 0x5B7E4 (12 words, special attack damage, values 0–4). Monster shot damage values at 0x596CE. Health is accumulated per-mob at RAM 0x904B3A; player is killed when accumulator exceeds 200, handled by `accumulate_hit_damage` (0x49A3C). Per-monster hit points are not in a separate table — they are encoded in the high bits of the MOB link word at 0x904066[mob*2] (bits 15-10), set during mob creation.
+
+2. ~~**Monster speed tables**~~ — **RESOLVED.** All monster types share a base speed of 0x80, built on the stack in `monster_loop_core` (0x40E6A). The speed override table at 0x40E02 (7 longwords) overrides specific types to 0x100 (double speed) when fast-monster level flags are set in 0x90491D. Movement frequency is controlled probabilistically: each frame, `random(32)` is compared against the speed value — higher speed means higher chance of moving. There is no per-type base speed ROM table.
+
+3. ~~**Dragon animation tables**~~ — **RESOLVED.** Fully traced in `main_handle_dragon` (0x54454). Dragon head sprites at ROM 0x5D508, fire-breath tiles at 0x5D568, body segment tile lookup at 0x5D4B8, X/Y position offsets at 0x5D528/0x5D478, 128-step circular body path at 0x5D578. The master table entry 0xA740 has bit 15 set as a software flag; actual display tiles are selected from the path table based on animation counter and segment index. Dragon health tracked at RAM 0x90488C; death sequence at 0x53D10.
+
+4. ~~**Attract mode screen setup**~~ — **RESOLVED.** `start_attract_screen` (0x44414) fully disassembled. Dispatches on game_mode argument: -2 (TITLE) → timer 0x5DD, calls 0x4438E + 0x4DA3E, refreshes EEPROM every 13 cycles. -1 (SCORES) → timer 0x258, calls 0x4A124. -3 (DEMO) → timer 0x1C20, calls 0x449D4 (init demo level), clears frame counter. -4 (LEGEND) → timer 0x258, clears playfield, draws legend art, loads demo level.
+
 ## Remaining Unknowns
 
-The following areas have not been fully analyzed:
+After complete analysis of all 170 functions and ~99% of ROM data tables, the following items remain not fully decoded:
 
-1. **Monster health/damage tables**: The per-type health values (how many hits a monster takes) and damage values (how much health a monster removes from players) were not located as ROM tables. These may be hardcoded in the per-type collision handlers or stored in tables not yet identified.
+1. **Dragon path table internal bit fields** (ROM 0x5D578, ~2 KB): The 128-step circular path table has 16 bytes per entry. Bit 0 of the control byte is the fire-trigger flag (confirmed by disassembly). The remaining 7 bits of the control byte and the purpose of the other 15 bytes per entry (which control body segment shape, curvature, and inter-segment spacing) have not been individually mapped. The general mechanism is understood — `main_handle_dragon` reads path entries indexed by `(animation_counter >> 3) * 16 + path_index * 16` — but the per-byte semantics within each 16-byte record are unknown.
 
-2. **Monster speed tables**: While the speed override table at 0x40E02 (for fast-monster level flags) was found, the base speed values per monster type (used for normal-speed monsters) were not located as a separate table. Speed may be controlled by the frame-parity gating in the movement code rather than a per-type speed value.
+2. **EEPROM game settings bit map** (RAM 0x904A24, 16 bits): Read from EEPROM slot 0xC at boot. Known bit assignments:
+   - Bits 0–4: COINHEALTH setting (indexes `health_per_coin` table at 0x57862)
+   - Bits 5–7: **Unknown** (read but purpose not identified)
+   - Bits 8–9: Difficulty level (0–3)
+   - Bit 10: 2-player mode flag
+   - Bit 11: Sound mute flag
+   - Bit 12: ROM version flag (cleared after first boot)
+   - Bit 13: **Unknown**
+   - Bit 14: Music/attract sound enable
+   - Bit 15: Settings dirty flag (triggers player state reset in `init_monster_system`)
 
-3. **Dragon animation tables**: The dragon's animation system was not traced. The dragon uses a different code path (0x54454, `main_handle_dragon`) with its own state machine, and the dragon's tile number in the master table (0xA740 = 10048 with flag) doesn't match the python-gex overview tile (8448). The dragon likely has separate animation tables for its multi-segment body, head, and fire breath.
+3. **~600 bytes at 0x5825E–0x584F0**: Between the end of demo input streams and the start of the in-game tip strings. Partially covered by the 12-entry dialog tip pointer table at 0x58154 (which points into this range) and the tip display records themselves (3-pointer + 3-string groups like "PUSH / MOVABLE / WALLS"). The records that these pointers reference are readable ASCII, but the exact boundaries and count of all tip record groups hasn't been exhaustively listed.
 
-4. **Complete attract mode screen setup**: The function at `0x44414` that sets up individual attract screens (title, scores, legend) was identified but not fully disassembled.
+4. **Tile pattern index mapping**: The ~450 tile sprite descriptors at 0x5BAE0–0x5C88F are organized as 32-entry blocks per tileset. The entry format is known (4 words = 2×2 tile, order TL/BL/TR/BR). However, the mapping from the maze header's `wallpattern` (0–15) and `floorpattern` (0–15) bytes to specific descriptor block indices has not been worked out. The code in `refresh_tile_visual` (0x5F5A0) selects tables via pointer indirection, making the mapping non-obvious without tracing specific wallpattern/floorpattern values through the lookup chain.
 
 ---
 
 *Analysis performed via radare2 disassembly of row9.bin (0x0), row76.bin (0x40000), and row10.bin (0x38000). Cross-referenced with python-gex tile data, soundcmds.csv, OS_ROM.md, HW_WRITEUP.md, and GAME_ROM_KNOWN.md.*
+
+*Complete function analysis covering all 29 main-loop phases, 170 compiled functions, and ~120 KB of ROM data is documented in FUNCTIONS_PLAN.md and ROM_COVERAGE.md.*
