@@ -1,0 +1,6 @@
+{
+  "enabledMcpjsonServers": [
+    "r2mcp"
+  ],
+  "enableAllProjectMcpServers": true
+}
