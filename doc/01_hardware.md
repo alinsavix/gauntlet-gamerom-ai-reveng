@@ -54,14 +54,14 @@
 
 ## 3. Hardware I/O Ports
 
+> **Note on input addressing:** The hardware data is at odd byte addresses (0x803001, 0x803003 etc.). The `input_debounce` routine (0x40644) reads these as 16-bit words from the corresponding even addresses (`0x803000 + player*2`), giving word-sized results where the meaningful data is in the low byte. Both addressing conventions refer to the same hardware.
+
 | Address | R/W | Description |
 |---------|-----|-------------|
 | `0x803001` | R | Player 1 inputs (odd byte) |
 | `0x803003` | R | Player 2 inputs (odd byte) |
 | `0x803005` | R | Player 3 inputs (odd byte) |
 | `0x803007` | R | Player 4 inputs (odd byte) |
-
-> **Note on input addressing:** The hardware data is at odd byte addresses (0x803001, 0x803003 etc.). The `input_debounce` routine (0x40644) reads these as 16-bit words from the corresponding even addresses (`0x803000 + player*2`), giving word-sized results where the meaningful data is in the low byte. Both addressing conventions refer to the same hardware.
 | `0x803009` | R | VBLANK status / SoundIOFull / Self-test switch |
 | `0x80300E` | R | Read from sound processor (OS ROM address) |
 | `0x80300F` | R | Read from sound processor (game ROM address) |
