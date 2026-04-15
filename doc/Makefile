@@ -4,7 +4,7 @@ SOURCES = INDEX.md 01_hardware.md 02_os_rom.md 03_game_rom_structure.md \
 
 OUTPUT = gauntlet2_docs.pdf
 
-$(OUTPUT): $(SOURCES) pdf-header.tex
+$(OUTPUT): $(SOURCES) pdf-header.tex Makefile
 	pandoc $(SOURCES) \
 		--pdf-engine=xelatex \
 		--toc --toc-depth=2 \
