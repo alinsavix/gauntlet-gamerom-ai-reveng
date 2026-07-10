@@ -298,17 +298,26 @@ The following major data areas were unlabeled but have since been decoded:
 | Demo/level config (0x57BD8–0x5858C) | ~2.5 KB | Level object placement, default high scores, demo streams, tip strings |
 | Atari contest strings (0x5D9E8–0x5DAA0) | ~136 B | "SEND CONTEST ENTRY FORM TO ATARI GAMES CORP. CONTEST ENDS 12/19/86" |
 
-### 4.4 Remaining Unknowns (~1% of ROM)
+### 4.4 Remaining Unknowns
 
-See `08_known_issues.md` for full details. Summary:
-1. Dragon path table bit fields (ROM 0x5D578, ~2 KB) — only fire-trigger bit decoded
-2. Dialog tip record exact boundaries (ROM 0x5825E–0x584F0, ~600 B)
-3. Tile pattern → descriptor index mapping (logic in `refresh_tile_visual`, 0x5F5A0)
-4. EEPROM settings `0x904A24` bits 5–7 and 13
+The four unknowns formerly listed here (dragon path table format, dialog tip boundaries, tile pattern → descriptor mapping, EEPROM bits 5–7/13) have all been resolved by disassembly — see `05_data_reference.md` (data formats, §3.19 bytecodes, §5 ROM tables) and `04_game_subsystems.md` (§8 dragon, §30 shot resolution). The dragon path table turned out to be 5×16 bytes at 0x5D578, with the rest of its formerly claimed 2 KB being playfield palettes and contest strings.
+
+For the current list of open questions, see `08_known_issues.md`.
 
 ### 4.5 Unused ROM Space
 
 The 6,196-byte block of solid 0xFF between address 0x55620 and 0x56E53 is genuinely unused ROM space. This represents ~4.8% of the ROM — typical of 1980s arcade ROMs where compiled code didn't fill the entire EPROM chip.
+
+### 4.6 Disassembly Note — `movea.l` Immediate Mode
+
+Several radare2 disassembly listings display `movea.l 0x9XXXXX, an`, which **appears** to be a memory dereference but is often **IMMEDIATE mode** (loading the address literal into the register). Always confirm via raw byte inspection:
+
+| Encoding | Instruction | Effect |
+|----------|-------------|--------|
+| `2X7C nnnnnnnn` (X = register) | `MOVEA.L #imm.l, aX` | Load address literal into aX (e.g., `207C` → a0, `227C` → a1, `247C` → a2, `267C` → a3) |
+| `2X79 nnnnnnnn` | `MOVEA.L (abs.l), aX` | Load the longword *stored at* the address |
+
+This affects any analysis that assumed these instructions were dereferencing pointers. For example, the dragon RAM locations at `0x904890–0x904894` are **direct word values** (not pointers), confirmed by raw byte checks.
 
 ---
 

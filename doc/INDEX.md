@@ -67,7 +67,7 @@ Assembled from 4 chips (interleave A-chips as even bytes, B-chips as odd; concat
 | [05_data_reference.md](05_data_reference.md) | RAM variable map, enums and constants, data structures, ROM data tables catalog |
 | [06_maze_catalog.md](06_maze_catalog.md) | Complete 116-maze table (mazes 0–115, levels 1–97 plus treasure rooms and special mazes) |
 | [07_function_index.md](07_function_index.md) | Consolidated index of all ~170 documented functions with addresses, names, and descriptions |
-| [08_known_issues.md](08_known_issues.md) | FIXME items, name conflicts, remaining unknowns, and partially-decoded areas |
+| [08_known_issues.md](08_known_issues.md) | Remaining open questions and unresolved name conflicts (resolved items have been folded into docs 03–07) |
 
 ---
 
@@ -79,4 +79,13 @@ The radare2 project state is saved in `gauntlet.r2` and `gauntlet_r2_database.tx
 r2 -i gauntlet.r2 row76.bin
 ```
 
-This loads all function names, flags, comments, and type definitions into radare2 for interactive analysis.
+This loads all function names, flags, comments, and type definitions into radare2 for interactive analysis. All annotations — the base set plus the corrections and additions from the 2026-07-09 analysis session — are embedded directly in `gauntlet.r2`.
+
+Note that the project file does not set up memory maps. For correct addresses across all three ROMs, open them mapped first:
+
+```bash
+r2 -n row9.bin
+> o row10.bin 0x38000 r-x ; o row76.bin 0x40000 r-x
+> e asm.arch=m68k ; e asm.cpu=68010 ; e asm.bits=32
+> . gauntlet.r2
+```

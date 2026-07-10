@@ -330,20 +330,27 @@ ROM: row9.bin (+ row10.bin, row76.bin via slapstic bank switching)
              result to 0x2 if maze bit2 flag set and result==0x80.
 
 0x000436FE  maze_load_pickup_config
-             Reads maze pickup config bytes from maze data pointer (arg), assembles into 32-bit value, stores to
-             ram.maze_pickup_config. Randomly modifies bits based on os_flag (level) and vblank_occurred (frame
-             count). Calls get_random_maze_flags for feature flags.
+             Assembles maze header bytes 1-4 (level_flags_1..4) big-endian into the level-flags long at
+             0x90491C ("ram.maze_pickup_config" IS that long; see LFLAG enums). Then randomizes: XORs bits
+             26-27 (LFLAG1 bits 2-3) with getrandom(4) every level; on deep levels (level%400 > 103/200/297
+             for mazes 5-101, level%160 for treasure mazes 104-114) ORs in get_random_maze_flags() plus 0x30
+             (wraps) or 0xB0 (wraps+offscreen), inhibited by LFLAG4 bit 2 (TRAPS_LOCAL).
 
 0x00043826  slapstic_cmd_bitwise
 
 0x000438AE  maze_new_level_setup
              New level setup: resets thief/dragon state, calls slapstic_cmd_bitwise+maze_setupnew, calls
-             maze_food_mob_consume to find start slot, scroll_to_slot, clears tport/exit pos tables, scans
-             mob_link to populate tport_pos_table and exit_pos_table.
+             maze_scan_objects to find start slot / choose the exit, scroll_to_slot, clears tport/exit pos
+             tables, scans mob_link to populate tport_pos_table and exit_pos_table. Also resets
+             secret_room_player (0x904063=0xFF) and, when secret_possible_counter==0, loads the secret-room
+             config byte from maze data into 0x904065; clears dialog_once_flags bit 0.
 
-0x00043D8C  maze_food_mob_consume
-             Removes a random food/treasure mob from active mob_link list. arg=0:food type 0x10, arg=0xffff:food
-             type 0xf (stores result slot in ram.food_slot_result 0x9049e0, replaces tile with empty), arg
+0x00043D8C  maze_scan_objects
+             (renamed from maze_food_mob_consume - old description was wrong.) Multi-mode scanner over all
+             0x400 mob_link tiles. arg=0: count EXIT tiles (0x10) and implement EXIT_CHOOSEONE - keeps one
+             random exit (slot -> 0x904A0A), marks the others fake (hpos|=0x10) when LFLAG4 bit6 EXIT_FAKE,
+             else pf_replace to floor; clears LFLAG3 bit6 EXIT_MOVES when only one exit exists. arg=0xffff:
+             count PLAYERSTART tiles (0xF). arg>=1: count food (0x31/0x32) for the has-food logic.
 
 0x00043F68  maze_addrandompickups
              maze_addrandompickups: arg=maze_ptr. Skips if game_mode(os_flag) not normal. Checks 0x904b7e
@@ -463,10 +470,11 @@ ROM: row9.bin (+ row10.bin, row76.bin via slapstic bank switching)
 
 0x00047CFE  handle_tport
 
-0x00047DAE  _x0100
-             "Per-frame tport cycling update. Args: (tport_coord 0xa, tport_type 0xe). Advances animation frames
-             (0x924-0x95a range). Finds free display slot (MOBs 0xd-0x10). Calls mob_place_tport_anim when
-             animation advances. Clears tport_active_flags[slot] when done."
+0x00047DAE  shot_impact_spawn
+             (renamed from _x0100.) Spawns an impact/explosion effect at the target position using effect MOB
+             slots 0xD-0xF (free slot found via 0x90201A/1C/1E). Called throughout resolve_shot_hit for shot
+             impacts and kill effects; also used for tport-style animation effects (frames 0x924-0x95a),
+             which is what the old description covered.
 
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -679,16 +687,19 @@ ROM: row9.bin (+ row10.bin, row76.bin via slapstic bank switching)
 
 0x0004D461  [hit3_21]
 
-0x0004D476  fcn_4d476
-             main_thief_move: full thief state machine. Per-frame: handles JUMPJUMP anim, STEALING animation
-             with treasure theft (steals keys/potions/powers), FLEE state, timer countdown, pos updates. Calls
-             secret_check at end. NOTE: GAME_ROM_KNOWN.md had wrong address 0x4d8dc (that is the tail code
-             inside this function).
+0x0004D476  show_continue_screen
+             (renamed from fcn_4d476; the old "thief state machine" description was wrong - that behavior
+             belongs to thief_jumpjump_anim at 0x4E8DC.) All-players-dead continue screen: plays sounds
+             0x39/0x41/0x3C, calls check_coin_eligibility (0x4D1A4), resets 0x904B9E/0x904BA4/0x904BC0,
+             setup_infopanel(-1), clears the alpha screen, shows the continue countdown. Calls
+             player_activecount (0x4D900), remove_dying_player_sprites (0x489B8), secret_getname (0x54EC6,
+             at 0x4D7E0). Epilogue at 0x4D8DC: jsr secret_check, maze# <- maze_next, levelnum <- level_next.
              xrefs: hit5_8, hit7_10
 
 0x0004D8C7  [hit3_22]
 
-0x0004D8DC  main_thief_move
+0x0004D8DC  (not a function - epilogue inside show_continue_screen; GAME_ROM_KNOWN.md's
+             "main_thief_move 0x4D8DC" was a typo for 0x4E8DC)
 
 0x0004D900  player_activecount
              player_activecount: no args. Counts players where player_state(0x9049a0[player]) is in
@@ -859,7 +870,10 @@ ROM: row9.bin (+ row10.bin, row76.bin via slapstic bank switching)
              0x5d508/5d568/5d578/5d528/5d438/5d478 for dragon frames/dirs. Calls 0x540e8 (attack check), 0x54748
              (fire attack), 0x53e4a (movement update), 0x53d10 (direction change)."
 
-0x00054748  _x100
+0x00054748  dragon_fire_setup
+             (renamed from _x100.) Fires one dragon fireball: sets dragon_fire_cooldown (0x90487C) = 8;
+             origin segment MOB = dragon_seg_mob_ids[0x904894 + int8(tbl 0x5D4B8[pose + facing*2])*2];
+             stores segment mob id -> 0x9048C8[shot_slot] and dragon_facing -> 0x9049C4[shot_slot].
 
 0x000549EA  dragon_player_proximity
              "Check if a player (arg: x 0xa, y 0xe) is within dragon's aggro range. Reads dragon_mob_id
@@ -960,7 +974,13 @@ ROM: row9.bin (+ row10.bin, row76.bin via slapstic bank switching)
 
 0x0005F7FA  pf_door_update_surrounding
 
-0x0005F880  fcn_5f880
+0x0005F880  pf_door_draw
+             (renamed from fcn_5f880.) Door tile graphic updater, 860 bytes. Args (x, y, doortype from
+             pf_isdoor); register-args entry pf_door_draw_xy at 0x5F876 (a0=x, a1=y, d0=type). Type 1: 4-bit
+             adjacent-door mask (L=2, down=4, R=8, up=0x10) -> picture from door_gfx_by_neighbors (0x5F9CE);
+             writes vram picture/hpos/vpos; stores mask in bits 10-13 of 0x904066[tile]. Isolated type 2/3
+             doors oriented by surrounding plain floor (pf_isblankfloor 0x5EA2E); type-2 table 0x5FACA,
+             type-3 vpos offsets 0x5FBEE/0x5FC00. Called by maze_doors_setup and pf_door_update_surrounding.
 
 0x0005FC46  getrandom_r
 
@@ -993,3 +1013,169 @@ ROM: row9.bin (+ row10.bin, row76.bin via slapstic bank switching)
 
 0x0005FDE0  supersorc_place
 
+
+
+========================================================================================================================
+  ADDENDUM — 2026-07-09 analysis session (all flags/comments below are embedded in gauntlet.r2; details in doc/)
+========================================================================================================================
+
+--- New / renamed functions ---------------------------------------------------------------------------------------
+
+0x0004AEA0  shot_onscreen_check
+             (slot, dx, dy): visibility/range check vs scroll registers 0x904026/28; gates door reactions
+             to shots (called with 0x2C0,0x2C0 from the door handler in resolve_shot_hit).
+
+0x0004AF50  resolve_shot_hit
+             Full combat resolution, ~0xED4 bytes. (target, shooter) -> d0: 0 = shot survives
+             (pierce/reflect/pass), -1 = shot consumed (mob_unlink(shooter) + paired picture cleared).
+             target = MOB slot or 0x400-0x7FF playfield tile; shooter = 0-3 player / >=4 monster class.
+             Dispatch on mob_link>>10 via 62-entry word jump table at 0x4B336 (base 0x4B338).
+             Player shot damage: shot_damage_base_tbl 0x596B6[char (+8 w/shot-power)], +rand(2) for classes
+             2/8 (0x596C2); supershot (0x905F68) forces 3. Player victims (hpos&0xF >= 0xC): LFLAG4 bit0
+             stun (+0x28 stundelay clamp 0x5A), bit1 -2 HP; supershot -10 HP; monster shots use
+             monstshot_damage_tbl 0x596CE[char+4*armor+tier+8*(class>=8)]. Monsters: health = own hpos low
+             nibble, tier base = mazeobj_tier_base_tbl 0x5864C[type]; outside [base-2,base] -> destroyed;
+             score = damage * mult (ghost 10, grunt-class 5). Sorcs immune while blinking (hpos bit12)
+             unless supershot; supershot pierces monsters except Death/IT. Death: death_hits++ only, real
+             damage via death_damagetrack w/supershot. Generators: tier1 dies, tier2/3 need dmg>=2/3 else
+             degrade (mob_link -= dmg<<10). Movable wall: 25 hits (0x904066 += 0x400 -> 0x6400) then tport
+             dissolve. Secret wall: reveal + random prize (rand(16) < players*2+2: 0-1 DEATH, 2-3 treasure
+             bag, 4/8 invuln potion, 5/7 invuln food, else hidden potion). Destructible wall -> wall_crumble.
+             Poison food/pot variants by PICTURE (0x25ED food / 0x20FC pot) -> poison_timer 0x258/0x4B0.
+             Treasure/invuln items need supershot. Dragon -> dragon_shot_hit. Reflect power (powers bit10):
+             direction from shot_reflect_calc, shot bounces. Max-tier shots (shot hpos&0x30==0x30) pass
+             through walls. Secret trick hooks (0x904065 = trick id): 5 shoot food, 9 hit by strong shot,
+             0x11 shoot player, 0x5A supershot treasure.
+
+0x0004B336  resolve_shot_hit_jumptbl
+             62 word displacements indexed by maze object type, base 0x4B338.
+
+0x00053818  shot_reflect_calc
+             (rawtarget, shooter): computes reflected shot direction for the reflect power; result stored
+             to 0x9049C4[player].
+
+0x0005303A  wall_crumble
+             (target, damage): applies shot damage to a destructible wall (reads level-flags long for
+             WALLS_DELETABLE bits).
+
+0x00054112  dragon_shot_hit
+             (rawtarget, shooter): dragon damage handler. Hits only count while the current path byte's
+             fire bit is set (mouth open) and dragon not sleeping/turning; sound 0x3A; dragon_hits++
+             (9th = death at 0x54232); on hit picks new random path getrandom(5) and fast-forwards to the
+             byte matching the current pose. Non-damaging hits -> shot_impact only.
+
+0x0005E888  pf_floor_draw_xy
+             Register-args entry (d0=x, d1=y) into pf_floor_update (0x5E892). Floor descriptor words from
+             floor_desc_base 0x5BAE0 (+ wall-proximity variant); final tile code += floorpattern(0x904B5C)
+             * 0x30 + palette attr; writes TL/BL/TR/BR at vram.playfield + y*256 + x*4.
+
+0x0005EAB8  pf_wall_draw_xy   (stack-args entry pf_wall_draw at 0x5EAC2)
+             Wall tile draw: 8-neighbor connectivity mask (neighbor = pic != 0x8000 or link type 0x3F) ->
+             variant byte from wall_conn_variant_tbl 0x5EE24 (0x5EF24 for wallpatterns 6/0xB). Descriptor
+             base by wallpattern(0x904B5E): 0-5 -> wall_desc_blocks 0x5BBE0 + wall_pattern_offsets
+             0x5EDD4[pat]; 6 -> 0x5D2F8; destructible type-5 w/pat>=6 -> 0x5D3D0; 7-0xA/0xC+ -> random of
+             six descriptor-set pointers at 0x5EDF4 (+0x18 group for pat 7). Descriptor = base + variant*8;
+             writes 4 words +0x7000. Invisible when LFLAG2 bit7 (all) / LFLAG1 bit7 (trap walls) except
+             level 9999.
+
+0x0005EA2E  pf_isblankfloor
+             (d0=x, d1=y): returns 0 iff vram.mob_picture[tile] == 0x8000 AND (mob_link[tile]>>2) == 0x3F
+             (plain floor); else -1.
+
+0x0005F7F0  pf_door_update_surrounding_xy
+             Register-args entry (d0=x, d1=y) into pf_door_update_surrounding (0x5F7FA).
+
+--- New data tables -----------------------------------------------------------------------------------------------
+
+0x00040E46  monster_count_table
+             Max monsters processed per frame: 8 rows (EEPROM 0x904A24 bits 5-7 "extra monsters" value 0-7)
+             x 4 cols (players-1). Index = ((settings&0xE0)>>3) + players-1. v0: 4,11,15,18 ... v7:
+             18,25,29,32. Added to int8(0x90405F); capped at level*2 (except level 1); 0 on frame_overflow.
+
+0x0005815C  dialog_tip_ptrs
+             12 longword pointers to tip records (NOT 0x58154 - that includes 2 unrelated longs 5,3).
+
+0x0005828C  dialog_tip_records
+             12 records 0x5828C-0x5850C; each = 3 longword string ptrs (null = unused line) + inline
+             strings. 0 BLUE/SELECTED/ELF (join banner template); 1 PUSH MOVABLE WALLS; 2 SOME TREASURE
+             REQUIRES KEYS; 3 THERE CAN BE MORE THAN ONE TRAP; 4 ACID PUDDLES MOVE RANDOMLY; 5 SOME WALLS
+             CAN BE SHOT AND TURN INTO GOOD OR BAD; 6 DEATH DIES AFTER TAKING UP TO 200 HEALTH; 7 HAVE
+             FRIENDS JOIN IN ANY TIME; 8 MONSTERS FOLLOW PLAYER WHO IS IT; 9 SOME WALLS MOVE RANDOMLY;
+             10 MONSTERS MAY MOVE DIFFERENTLY; 11 TAG YOU'RE IT.
+
+0x0005860C  mazeobj_spawn_param_tbl    byte per object type: spawn position/link parameter
+0x0005864C  mazeobj_tier_base_tbl      byte per object type: hpos-low-nibble tier base (monster kill
+                                       threshold): ghost/grunt/aux 4, demon 8, lobber/sorc/supersorc 0xB,
+                                       IT 8, acid 1, generators 5, items 1, dragon 8
+0x0005868C  mazeobj_spawn_pics_tbl     word per object type: spawn picture
+0x000596B6  shot_damage_base_tbl       12 bytes: player shot base damage by class (W=2,V/Wiz/E=1, 8-11
+                                       powered=2)
+0x000596C2  shot_damage_rand_tbl       12 bytes: nonzero -> class gets +getrandom(2) damage (classes 2,8)
+0x000596CE  monstshot_damage_tbl       monster-shot-vs-player damage [char + 4*armor + tier(0x10/0x18/
+                                       0x20 from shot hpos bits 4-5) + 8*(class>=8)]
+0x000596F6  speech_charname_tbl        4x4 longword speech ids: character-name samples per player; used by
+                                       player_it_set ("... is IT") and shot-the-food speech
+0x00059B54  maze_decomp_type_ptrs      4 pointers [&HT1 0x904866, &VT1 0x90486A, &HT2 0x904868,
+                                       &VT2 0x90486C] for maze_decode bytecodes 0x40-0x7F
+0x0005BAE0  floor_desc_base            floor tile descriptor base block
+0x0005BBE0  wall_desc_blocks           wall descriptor blocks for wallpatterns 0-5 (stride 0x44 units via
+                                       wall_pattern_offsets)
+0x0005D2F8  wall_desc_pattern6         wall descriptor block for wallpattern 6
+0x0005D3D0  wall_desc_destructible     descriptor block for destructible walls with wallpattern >= 6
+0x0005D438  dragon_head_hdelta         head hpos deltas [pose + facing*4]
+0x0005D478  dragon_head_vdelta         head vpos deltas [pose + facing*4]
+0x0005D4B8  dragon_fire_segment_tbl    signed byte [pose + facing*2]: fire-origin segment index into
+                                       dragon_seg_mob_ids
+0x0005D528  dragon_head_pics           head picture words [pose + facing*4]
+0x0005D578  dragon_path_programs       5 path programs x 16 bytes (NOT 128x16). byte = (pose<<1)|fire;
+                                       phase = anim_ctr>>3 (8 frames/phase, wraps at 128)
+0x0005EDD4  wall_pattern_offsets       16 words: per-wallpattern offset into wall_desc_blocks
+0x0005EDF4  wall_random_desc_ptrs      2 groups of 6 pointers: random wall descriptor sets (patterns 7+)
+0x0005EE24  wall_conn_variant_tbl      256 bytes: 8-neighbor connectivity mask -> wall variant
+0x0005EF24  wall_conn_variant_tbl6     alternate variant table for wallpatterns 6 and 0xB
+0x0005F9CE  door_gfx_by_neighbors      16 words: door picture by 4-bit adjacent-door mask
+0x0005FACA  door_gfx_type2             type-2 door pictures (isolated-door orientation)
+0x0005FBEE  door_vpos_sub3             type-3 door vpos subtract offsets
+0x0005FC00  door_vpos_add3             type-3 door vpos add offsets
+
+--- New / corrected RAM -------------------------------------------------------------------------------------------
+
+0x00904002  ram.vblank_semaphore       (the old ram.vblank_occurred flag at 0x904004 was wrong; 0x904004 =
+                                       levelnum_current)
+0x0090487C  ram.dragon_fire_cooldown   set to 8 on fire, decremented per frame; holds path counter during
+                                       locked-in sustained fire ("dragon_stun_timer" was imprecise)
+0x0090487E  ram.dialog_once_flags      WORD bitfield of dialog shown-once flags; bit 0 = dragon first
+                                       encounter (covers old item_dlg_flags + power_dlg_flags bytes)
+0x00904882  ram.dragon_head_hpos       dragon HEAD position (mob pos + pose/facing delta), not target player
+0x00904884  ram.dragon_head_vpos
+0x00904886  ram.dragon_path_num        current path program 0-4 (was "dragon_rand_dir")
+0x00904894  ram.dragon_seg_mob_ids     4 words: [0] head/main MOB id, [1..3] body segment MOB ids
+                                       (0x904896/98/9A previously undocumented)
+0x0090491C  ram.level_flags            level-flags long = maze header bytes 1-4 = "maze_pickup_config";
+                                       bytes at 1C/1D/1E/1F = level_flags_1..4 (see LFLAG enums)
+0x009049DC  ram.it_player              current IT player (0xFFFF = none)
+0x00904B5C  ram.floorpattern           floor tile-set number (tile code offset = pattern * 0x30)
+0x00904B5E  ram.wallpattern            wall tile-set number (selects descriptor block; 7+ = random walls)
+0x00905F68  ram.player_supershot       per-player supershot state: shots do 3 dmg to monsters / 10 to
+                                       players, pierce monsters (except Death/IT), hit blinking sorcs,
+                                       break invulnerable items, damage Death via death_damagetrack
+
+--- Follow-up: region freed by the dragon path table correction (0x5D5C8-0x5DA15) ---------------------------------
+
+0x0005D5C8  playfield_palettes
+             16 x 32-byte (16 IRGB words) playfield palettes, indexed by maze header playfield_colors
+             (0-15). Copied to color RAM 0x910500 by the palette-setup function ~0x43490 (index*32; the
+             word at entry+16 is also stored to 0x904020/0x90401E separately).
+
+0x0005D7C8  playfield_palette_alt1
+0x0005D7E8  playfield_palette_alt2
+             Two special palettes used when the palette index is >= 0x10 (references at 0x43526/0x43510).
+
+0x0005D808  aux_palettes
+             15 x 32-byte palette entries (12 colors + 4 zero words each), 0x5D808-0x5D9E7. One reference
+             from monster-region code at 0x41666 lands at 0x5D978 (mid-entry) - the indexing scheme for
+             this group is NOT yet traced (open item).
+
+0x0005D9E8  secretcode_text_recs
+             Text records (same {x,y,ptr} format as the ENTER YOUR records at 0x5DA16): "SECRET CODE" and
+             "REMEMBER YOUR" - the secret-room password display, referenced from code at 0x552EA.

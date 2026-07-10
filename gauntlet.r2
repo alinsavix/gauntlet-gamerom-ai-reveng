@@ -1,8 +1,15 @@
-- 4 fd: 6 +0x00000000 0x00038000 - 0x0003ffff rwx
-* 3 fd: 5 +0x00000000 0x00000000 - 0x0000ffff rwx
-- 2 fd: 4 +0x00000000 0x00000000 - 0x0001ffff r--
-- 1 fd: 3 +0x00000000 0x00000000 - 0x0001ffff r--
+# - 4 fd: 6 +0x00000000 0x00038000 - 0x0003ffff rwx
+# * 3 fd: 5 +0x00000000 0x00000000 - 0x0000ffff rwx
+# - 2 fd: 4 +0x00000000 0x00000000 - 0x0001ffff r--
+# - 1 fd: 3 +0x00000000 0x00000000 - 0x0001ffff r--
 # r2 rdb project file
+# Merged 2026-07-09: base annotations (ex gauntlet.r2.bak) + database flags
+# + analysis-session updates (ex gauntlet_updates.r2) are embedded below.
+#
+# NOTE: this project file does not set up memory maps. For correct addresses
+# open the ROMs mapped like this before (or instead of) r2 -i:
+#   r2 -n row9.bin   then:  o row10.bin 0x38000 r-x ; o row76.bin 0x40000 r-x
+#   e asm.arch=m68k ; e asm.cpu=68010 ; e asm.bits=32 ; . gauntlet.r2
 # eval
 'e anal.arch = m68k
 'e anal.autoname = false
@@ -27,7 +34,7 @@
 'e anal.from = 0xffffffffffffffff
 'e anal.gp = 0
 'e anal.graph_depth = 256
-'e anal.hasnext = true
+'e anal.hasnext = false
 'e anal.hpskip = false
 'e anal.icods = true
 'e anal.ignbithints = false
@@ -46,7 +53,7 @@
 'e anal.loads = false
 'e anal.mask = false
 'e anal.nonull = 0
-'e anal.nopskip = true
+'e anal.nopskip = false
 'e anal.noret = true
 'e anal.noret.refs = false
 'e anal.norevisit = false
@@ -123,7 +130,7 @@
 'e asm.cmt.user = false
 'e asm.cmt.wrap = true
 'e asm.comments = true
-'e asm.cpu = arm
+'e asm.cpu = 68010
 'e asm.cycles = false
 'e asm.cyclespace = false
 'e asm.decode = false
@@ -716,6 +723,85 @@ o=6
 tcc d0 m68k (stack_rev);
 tcc a0 reg (a0, a1, a2, a3);
 # functions
+af+ 0x0300 exception_handler
+af+ 0x0314 irq1_handler
+af+ 0x0326 irq2_handler
+af+ 0x0338 irq3_handler
+af+ 0x034a irq4_vblank_handler
+af+ 0x036c irq6_handler
+af+ 0x05e2 reset_entry
+af+ 0x03a0 normal_boot
+af+ 0x061e selftest_boot
+af+ 0x070c main_init_cont
+af+ 0x0a2c mem_test_thorough
+af+ 0x0a6a mem_test_quick
+af+ 0x0c52 error_display_string
+af+ 0x0c98 error_display_ram
+af+ 0x0cc0 rom_checksum_display
+af+ 0x0e14 os_vblank_mode_entry
+af+ 0x0e5e os_vblank_handler
+af+ 0x129a os_main_loop
+af+ 0x2918 format_number
+af+ 0x2a5e format_hex
+af+ 0x2abe format_decimal
+af+ 0x2e36 display_text
+af+ 0x2f04 draw_string
+af+ 0x2eb4 display_decimal_value
+af+ 0x2eea display_hex_value
+af+ 0x3044 write_alpha_char
+af+ 0x2ce4 calc_alpha_address
+af+ 0x3522 init_alpha_display
+af+ 0x3586 write_alpha_word
+af+ 0x3162 start_scroll_text
+af+ 0x3168 start_scroll_type1
+af+ 0x316c start_scroll_type3
+af+ 0x3156 start_scroll_type4
+af+ 0x3122 start_scroll_updown
+af+ 0x30f4 stop_text_effect
+af+ 0x3130 init_scroll_system
+af+ 0x2b3c process_text_effects
+af+ 0x31d2 display_large_text
+af+ 0x3346 display_large_char_styled
+af+ 0x32bc display_large_char_at
+af+ 0x32a0 display_large_char_raw
+af+ 0x35b2 set_text_position
+af+ 0x332a large_char_lookup
+af+ 0x32da large_char_data
+af+ 0x3310 large_char_render
+af+ 0x359a wait_vblanks
+af+ 0x4184 send_sound_command
+af+ 0x41fa process_sound
+af+ 0x42c8 read_sound_data
+af+ 0x427a send_sound_immediate
+af+ 0x42f8 reset_sound_cpu
+af+ 0x41c8 disable_interrupts
+af+ 0x41cc enable_interrupts
+af+ 0x432e eeprom_process
+af+ 0x44e8 eeprom_init
+af+ 0x47a8 eeprom_request_write
+af+ 0x4802 eeprom_check_busy
+af+ 0x4822 eeprom_read_block
+af+ 0x35c4 process_coins
+af+ 0x3706 get_coin_multiplier
+af+ 0x3740 calc_health_per_coin
+af+ 0x37c2 check_and_deduct_coin
+af+ 0x3804 check_credits
+af+ 0x3860 read_eeprom_setting
+af+ 0x38c0 read_game_config
+af+ 0x39b0 read_high_score_entry
+af+ 0x3a7e write_high_score_entry
+af+ 0x3be8 get_eeprom_base
+af+ 0x3cf6 write_eeprom_setting
+af+ 0x3f68 read_eeprom_config
+af+ 0x401a write_eeprom_config
+af+ 0x4038 process_coin_stats
+af+ 0x5454 run_self_test
+af+ 0x58c6 display_attract_screen
+af+ 0x1632 display_init_clear
+af+ 0x17d4 display_init_text
+af+ 0x0fca display_init_palette
+af+ 0x1b20 display_attract_setup
+af+ 0x21a0 eeprom_validate
 fs functions
 # registers
 fs+registers
@@ -813,7 +899,423 @@ aer fpcr = 0x00000000
 aer fpsr = 0x00000000
 aer fpiar = 0x00000000
 # flags
+fs functions
+'f exception_handler 1 0x00000300 
+'f irq1_handler 1 0x00000314 
+'f irq2_handler 1 0x00000326 
+'f irq3_handler 1 0x00000338 
+'f irq4_vblank_handler 1 0x0000034a 
+'f irq6_handler 1 0x0000036c 
+'f normal_boot 1 0x000003a0 
+'f reset_entry 1 0x000005e2 
+'f selftest_boot 1 0x0000061e 
+'f main_init_cont 1 0x0000070c 
+'f mem_test_thorough 1 0x00000a2c 
+'f mem_test_quick 1 0x00000a6a 
+'f error_display_string 1 0x00000c52 
+'f error_display_ram 1 0x00000c98 
+'f rom_checksum_display 1 0x00000cc0 
+'f os_vblank_mode_entry 1 0x00000e14 
+'f os_vblank_handler 1 0x00000e5e 
+'f display_init_palette 1 0x00000fca 
+'f os_main_loop 1 0x0000129a 
+'f display_init_clear 1 0x00001632 
+'f display_init_text 1 0x000017d4 
+'f display_attract_setup 1 0x00001b20 
+'f eeprom_validate 1 0x000021a0 
+'f format_number 1 0x00002918 
+'f format_hex 1 0x00002a5e 
+'f format_decimal 1 0x00002abe 
+'f process_text_effects 1 0x00002b3c 
+'f calc_alpha_address 1 0x00002ce4 
+'f display_text 1 0x00002e36 
+'f display_decimal_value 1 0x00002eb4 
+'f display_hex_value 1 0x00002eea 
+'f draw_string 1 0x00002f04 
+'f write_alpha_char 1 0x00003044 
+'f stop_text_effect 1 0x000030f4 
+'f start_scroll_updown 1 0x00003122 
+'f init_scroll_system 1 0x00003130 
+'f start_scroll_type4 1 0x00003156 
+'f start_scroll_text 1 0x00003162 
+'f start_scroll_type1 1 0x00003168 
+'f start_scroll_type3 1 0x0000316c 
+'f display_large_text 1 0x000031d2 
+'f display_large_char_raw 1 0x000032a0 
+'f display_large_char_at 1 0x000032bc 
+'f large_char_data 1 0x000032da 
+'f large_char_render 1 0x00003310 
+'f large_char_lookup 1 0x0000332a 
+'f display_large_char_styled 1 0x00003346 
+'f init_alpha_display 1 0x00003522 
+'f write_alpha_word 1 0x00003586 
+'f wait_vblanks 1 0x0000359a 
+'f set_text_position 1 0x000035b2 
+'f process_coins 1 0x000035c4 
+'f get_coin_multiplier 1 0x00003706 
+'f calc_health_per_coin 1 0x00003740 
+'f check_and_deduct_coin 1 0x000037c2 
+'f check_credits 1 0x00003804 
+'f read_eeprom_setting 1 0x00003860 
+'f read_game_config 1 0x000038c0 
+'f read_high_score_entry 1 0x000039b0 
+'f write_high_score_entry 1 0x00003a7e 
+'f get_eeprom_base 1 0x00003be8 
+'f write_eeprom_setting 1 0x00003cf6 
+'f read_eeprom_config 1 0x00003f68 
+'f write_eeprom_config 1 0x0000401a 
+'f process_coin_stats 1 0x00004038 
+'f send_sound_command 1 0x00004184 
+'f disable_interrupts 1 0x000041c8 
+'f enable_interrupts 1 0x000041cc 
+'f process_sound 1 0x000041fa 
+'f send_sound_immediate 1 0x0000427a 
+'f read_sound_data 1 0x000042c8 
+'f reset_sound_cpu 1 0x000042f8 
+'f eeprom_process 1 0x0000432e 
+'f eeprom_init 1 0x000044e8 
+'f eeprom_request_write 1 0x000047a8 
+'f eeprom_check_busy 1 0x00004802 
+'f eeprom_read_block 1 0x00004822 
+'f run_self_test 1 0x00005454 
+'f display_attract_screen 1 0x000058c6 
+fs *
+'f game.start 1 0x00040000 
+'f game.vblank_handler 1 0x00040006 
+'f game.irq1_handler 1 0x0004000c 
+'f game.irq3_handler 1 0x00040012 
+'f game.irq2_handler 1 0x00040018 
+'f game.irq6_handler 1 0x0004001e 
+'f game.exception_handler 1 0x00040024 
+'f game.startup_hook2 1 0x0004002a 
+'f game.playfield_init 1 0x00040030 
+'f game.startup_hook1 1 0x00040036 
+'f game.startup_hook3 1 0x0004003c 
+'f game.vblank_hook 1 0x00040042 
+'f game.attract_handler 1 0x00040048 
+'f game.post_attract_hook 1 0x0004004e 
+'f game.eeprom_config 1 0x00040054 
+'f game.mob_fill_value 1 0x00040060 
+'f game.pf_fill_value 1 0x00040062 
+'f game.eeprom_start 1 0x0004006d 
+'f game.difficulty_byte 1 0x0004006f 
+'f game.screen_mode 1 0x00040070 
+'f game.rom_type_flag 1 0x00040072 
+'f game.button0_label_ptr 1 0x00040074 
+'f game.button1_label_ptr 1 0x00040078 
+'f game.joystick_label_ptr 1 0x0004007c 
+'f game.checksum_table 1 0x00040080 
+'f game_start 1 0x0004014c 
+'f game_vblank 1 0x0004017e 
+'f main_cycle_tport_and_ffield 1 0x00040528 
+'f calc_score_per_coin 1 0x00040628 
+'f input_debounce 1 0x00040644 
+'f find_maze 1 0x00040c78 
+'f monster_count_table 1 0x00040e46 
+'f monsters_everything 1 0x00040e6a 
+'f monster_find_and_shoot 1 0x00041750 
+'f find_unused_shot 1 0x00041b16 
+'f m2mainloop 1 0x00042a66 
+'f coincheck 1 0x00042b6a 
+'f main_sound_response 1 0x00042d0a 
+'f sound_timeout_reset 1 0x00042dc8 
+'f pick_character 1 0x00042df4 
+'f maze_randomplace 1 0x00042e9a 
+'f eeprom_periodic_write 1 0x000431ee 
+'f game_init_settings 1 0x0004327a 
+'f player_resetcounters 1 0x00043360 
+'f player_resetall 1 0x0004341e 
+'f get_random_maze_flags 1 0x000436cc 
+'f maze_load_pickup_config 1 0x000436fe 
+'f slapstic_cmd_bitwise 1 0x00043826 
+'f maze_new_level_setup 1 0x000438ae 
+'f maze_scan_objects 1 0x00043d8c 
+'f maze_addrandompickups 1 0x00043f68 
+'f game_new_setup 1 0x00044204 
+'f main_attract 1 0x00044562 
+'f fcn_449d4 1 0x000449d4 
+'f maze_setupnew 1 0x00044ac2 
+'f update_maze_player_count 1 0x00044c7e 
+'f maze_show 1 0x0004526a 
+'f maze_hide 1 0x0004529a 
+'f setup_infopanel 1 0x000452d0 
+'f main_score_display 1 0x000457c0 
+'f player_it_set 1 0x00045866 
+'f player_it_unset 1 0x0004590e 
+'f player_inv_update 1 0x00045aca 
+'f stridx 1 0x00045be8 
+'f main_open_doors 1 0x00045c00 
+'f maze_tile_write 1 0x00045e40 
+'f maze_tile_write_at 1 0x0004631c 
+'f main_handle_death 1 0x0004664c 
+'f main_health_countdown 1 0x000466f6 
+'f scroll_to_slot 1 0x00046c5e 
+'f main_scroll_playfield 1 0x00046caa 
+'f set_scroll_pos 1 0x00046f56 
+'f main_handle_potions 1 0x00046fea 
+'f main_score_update 1 0x0004715e 
+'f main_handle_shots 1 0x000474f6 
+'f tport_cycle_start 1 0x00047c0e 
+'f handle_tport 1 0x00047cfe 
+'f shot_impact_spawn 1 0x00047dae 
+'f main_start_game 1 0x0004800c 
+'f secret_check 1 0x000486fe 
+'f speech_welcome 1 0x00048754 
+'f player_lowhealth 1 0x000487ca 
+'f player_coindrop 1 0x000488ca 
+'f player_join2 1 0x00048a36 
+'f player_join 1 0x00048bb6 
+'f player_join_setup 1 0x00048bec 
+'f traversable_check 1 0x00048f12 
+'f main_move_monsters 1 0x00049034 
+'f monster_create_shot 1 0x000490dc 
+'f handle_generate 1 0x000492c0 
+'f death_potion 1 0x00049446 
+'f playfield_showscore 1 0x00049498 
+'f monster_playerhit 1 0x000495a6 
+'f death_damagetrack 1 0x00049a3c 
+'f sound_player_hurt 1 0x00049a98 
+'f highscore_check 1 0x00049d0e 
+'f attract_highscores 1 0x0004a124 
+'f main_move_players 1 0x0004a53a 
+'f sound_speech_play 1 0x0004ad4e 
+'f sound_play 1 0x0004ad76 
+'f sound_init 1 0x0004adae 
+'f main_update_sound 1 0x0004ae20 
+'f shot_onscreen_check 1 0x0004aea0 
+'f resolve_shot_hit 1 0x0004af50 
+'f resolve_shot_hit_jumptbl 1 0x0004b336 
+'f level_splash 1 0x0004be24 
+'f maze_decode 1 0x0004c1bc 
+'f dialog_first_encounter 1 0x0004c440 
+'f dialog_clear_message 1 0x0004c70a 
+'f player_give_item_with_message 1 0x0004c72a 
+'f dialog_position_box 1 0x0004cb50 
+'f main_msgbox_countdown 1 0x0004ccbc 
+'f main_treasure_timer 1 0x0004d29e 
+'f show_continue_screen 1 0x0004d476 
+'f player_activecount 1 0x0004d900 
+'f main_logo_updcolors 1 0x0004dcba 
+'f main_start_thief 1 0x0004deb8 
+'f thief_target_calc 1 0x0004dff6 
+'f thief_exit 1 0x0004e122 
+'f thief_setup 1 0x0004e432 
+'f thief_timer_set 1 0x0004e4d8 
+'f tport_find_id 1 0x0004e7c0 
+'f thief_jumpjump_anim 1 0x0004e8dc 
+'f thief_steal_effect 1 0x0004f912 
+'f player_tport 1 0x00050224 
+'f tport_player_flash 1 0x00050616 
+'f tport_player_move 1 0x00050662 
+'f tport_check_dest 1 0x00050ade 
+'f calc_direction 1 0x000510fc 
+'f player_tile_interact 1 0x000511ac 
+'f player_add_score_with_mult 1 0x0005214c 
+'f main_exit_move 1 0x0005287c 
+'f exit_get_id 1 0x00052b06 
+'f player_exit_sequence 1 0x00052b40 
+'f maze_checknum 1 0x00052eca 
+'f maze_forcefield_setup 1 0x00052f26 
+'f wall_crumble 1 0x0005303a 
+'f maze_objects_setup 1 0x00053398 
+'f shot_reflect_calc 1 0x00053818 
+'f dragon_shot_hit 1 0x00054112 
+'f main_handle_dragon 1 0x00054454 
+'f dragon_fire_setup 1 0x00054748 
+'f dragon_player_proximity 1 0x000549ea 
+'f secret_getname 1 0x00054ec6 
+'f slapstic_cmd_bank0 1 0x00056e58 
+'f slapstic_cmd_bank3 1 0x00056e6e 
+'f slapstic_cmd_bankX 1 0x00056e84 
+'f slapstic_verify 1 0x00056eaa 
+'f dialog_tip_ptrs 1 0x0005815c 
+'f dialog_tip_records 1 0x0005828c 
+'f mazeobj_spawn_param_tbl 1 0x0005860c 
+'f mazeobj_tier_base_tbl 1 0x0005864c 
+'f mazeobj_spawn_pics_tbl 1 0x0005868c 
+'f shot_damage_base_tbl 1 0x000596b6 
+'f shot_damage_rand_tbl 1 0x000596c2 
+'f monstshot_damage_tbl 1 0x000596ce 
+'f speech_charname_tbl 1 0x000596f6 
+'f maze_decomp_type_ptrs 1 0x00059b54 
+'f floor_desc_base 1 0x0005bae0 
+'f wall_desc_blocks 1 0x0005bbe0 
+'f wall_desc_pattern6 1 0x0005d2f8 
+'f wall_desc_destructible 1 0x0005d3d0 
+'f dragon_head_hdelta 1 0x0005d438 
+'f dragon_head_vdelta 1 0x0005d478 
+'f dragon_fire_segment_tbl 1 0x0005d4b8 
+'f dragon_head_pics 1 0x0005d528 
+'f dragon_path_programs 1 0x0005d578 
+'f playfield_palettes 1 0x0005d5c8 
+'f playfield_palette_alt1 1 0x0005d7c8 
+'f playfield_palette_alt2 1 0x0005d7e8 
+'f aux_palettes 1 0x0005d808 
+'f secretcode_text_recs 1 0x0005d9e8 
+'f mob_create 1 0x0005dc58 
+'f moblist_insert 1 0x0005dcbc 
+'f moblist_replace 1 0x0005dd72 
+'f moblist_remove 1 0x0005dda8 
+'f moblist_remove_and_clear 1 0x0005ddda 
+'f mob_update_slot 1 0x0005de0a 
+'f mob_update_slot_cont 1 0x0005de44 
+'f mob_place_tport_anim 1 0x0005df5a 
+'f mob_place_shot 1 0x0005df68 
+'f mob_place_anim 1 0x0005df72 
+'f exit_create_player_anim 1 0x0005df80 
+'f tport_create_splodey 1 0x0005df8e 
+'f mob_place_explosion 1 0x0005df9c 
+'f mob_unlink 1 0x0005e064 
+'f mob_check_up 1 0x0005e10c 
+'f mob_check_down 1 0x0005e1d8 
+'f mob_check_left 1 0x0005e2a2 
+'f mob_check_right 1 0x0005e35e 
+'f main_walls_random_move 1 0x0005e41a 
+'f pf_stamp_update 1 0x0005e536 
+'f pos_onscreen 1 0x0005e584 
+'f main_walls_cyclic_move 1 0x0005e62a 
+'f maze_special_floor 1 0x0005e868 
+'f pf_floor_draw_xy 1 0x0005e888 
+'f pf_floor_update 1 0x0005e892 
+'f maze_floor_decor 1 0x0005ea00 
+'f pf_isblankfloor 1 0x0005ea2e 
+'f pf_wall_draw_xy 1 0x0005eab8 
+'f pf_wall_draw 1 0x0005eac2 
+'f wall_pattern_offsets 1 0x0005edd4 
+'f wall_random_desc_ptrs 1 0x0005edf4 
+'f wall_conn_variant_tbl 1 0x0005ee24 
+'f wall_conn_variant_tbl6 1 0x0005ef24 
+'f maze_init_walls 1 0x0005f2c0 
+'f pf_replace 1 0x0005f31e 
+'f refresh_tile_visual 1 0x0005f5a0 
+'f pf_isdoor 1 0x0005f77a 
+'f maze_doors_setup 1 0x0005f7c0 
+'f pf_door_update_surrounding_xy 1 0x0005f7f0 
+'f pf_door_update_surrounding 1 0x0005f7fa 
+'f pf_door_draw_xy 1 0x0005f876 
+'f pf_door_draw 1 0x0005f880 
+'f door_gfx_by_neighbors 1 0x0005f9ce 
+'f door_gfx_type2 1 0x0005faca 
+'f door_vpos_sub3 1 0x0005fbee 
+'f door_vpos_add3 1 0x0005fc00 
+'f getrandom_r 1 0x0005fc46 
+'f getrandom 1 0x0005fc4e 
+'f pf_isff 1 0x0005fc5e 
+'f pf_palette_clear 1 0x0005fcce 
+'f memclear 1 0x0005fd58 
+'f memcpy 1 0x0005fd6a 
+'f palette_fade_copy 1 0x0005fd80 
+'f fcn.0005fdac 1 0x0005fdac 
+'f supersorc_place 1 0x0005fde0 
+'f hw.eeprom 1 0x00802001 
+'f hw.player1_input 1 0x00803001 
+'f hw.player2_input 1 0x00803003 
+'f hw.player3_input 1 0x00803005 
+'f hw.player4_input 1 0x00803007 
+'f hw.vblank_selftest 1 0x00803009 
+'f hw.sound_read 1 0x0080300f 
+'f hw.watchdog 1 0x00803100 
+'f hw.led1 1 0x00803121 
+'f hw.led2 1 0x00803123 
+'f hw.led3 1 0x00803125 
+'f hw.led4 1 0x00803127 
+'f hw.aux_latch 1 0x0080312f 
+'f hw.sound_reset 1 0x0080312f 
+'f hw.vblank_ack 1 0x00803140 
+'f hw.eeprom_unlock 1 0x00803150 
+'f hw.sound_write 1 0x00803171 
+'f vram.playfield 1 0x00900000 
+'f vram.mob_picture 1 0x00902000 
+'f vram.mob_hpos 1 0x00902800 
+'f vram.mob_vpos 1 0x00903000 
+'f vram.mob_link 1 0x00903800 
+'f ram.os_flag 1 0x00904000 
+'f vram.spare 1 0x00904000 
+'f ram.vblank_semaphore 1 0x00904002 
+'f ram.levelnum_current 1 0x00904004 
+'f ram.pf_vscroll_hi 1 0x00904006 
+'f ram.pf_hscroll 1 0x00904008 
+'f ram.pf_vscroll_lo 1 0x0090400a 
+'f ram.timer_countdown 1 0x0090400c 
+'f ram.sound_data_recv 1 0x0090400e 
+'f ram.sound_data_flag 1 0x00904010 
+'f ram.game_hook_flag 1 0x00904014 
+'f ram.dragon_fire_cooldown 1 0x0090487c 
+'f ram.dialog_once_flags 1 0x0090487e 
+'f ram.dragon_hits 1 0x00904880 
+'f ram.dragon_head_hpos 1 0x00904882 
+'f ram.dragon_head_vpos 1 0x00904884 
+'f ram.dragon_path_num 1 0x00904886 
+'f ram.dragon_move_state 1 0x0090488c 
+'f ram.dragon_facing 1 0x0090488e 
+'f ram.dragon_state 1 0x00904890 
+'f ram.dragon_anim_ctr 1 0x00904892 
+'f ram.dragon_seg_mob_ids 1 0x00904894 
+'f ram.level_flags 1 0x0090491c 
+'f ram.level_flags_2 1 0x0090491d 
+'f ram.level_flags_3 1 0x0090491e 
+'f ram.level_flags_4 1 0x0090491f 
+'f ram.it_player 1 0x009049dc 
+'f ram.floorpattern 1 0x00904b5c 
+'f ram.wallpattern 1 0x00904b5e 
+'f ram.scroll_speed 1 0x00904f02 
+'f ram.scroll_direction 1 0x00904f06 
+'f ram.os_vblank_active 1 0x00904f0c 
+'f ram.display_mode 1 0x00904f0e 
+'f ram.text_effect_slots 1 0x00904f18 
+'f ram.player_inputs_snapshot 1 0x00904f8a 
+'f ram.sound_queue 1 0x00904f8e 
+'f ram.eeprom_work 1 0x00904fa8 
+'f ram.error_count 1 0x00904fc0 
+'f ram.coin_counters 1 0x00904fec 
+'f ram.coin_totals 1 0x00904ff0 
+'f ram.coin_pending 1 0x00904ff4 
+'f ram.vblank_counter 1 0x00904ff8 
+'f ram.eeprom_dirty_flag 1 0x00904ffa 
+'f ram.eeprom_config_ptr 1 0x00904ffc 
+'f vram.alpha 1 0x00905000 
+'f ram.player_supershot 1 0x00905f68 
+'f vram.pf_vscroll_reg 1 0x00905f6e 
+'f vram.color_alpha 1 0x00910000 
+'f vram.color_mob 1 0x00910200 
+'f vram.color_pf_shadow 1 0x00910400 
+'f vram.color_pf 1 0x00910500 
+'f vram.color_spare 1 0x00910600 
+'f vram.pf_hscroll_reg 1 0x00930000 
+fs *
 # meta
+CCu base64:TTY4MDEwIFZlY3RvciBUYWJsZSAtIFNTUD0weDkwNGYwMCwgUEM9MHg1ZTI= @ 0x00000000
+CCu base64:T1MgQVBJIEp1bXAgVGFibGUgKEpNUCBpbnN0cnVjdGlvbnMgdG8gQVBJIGZ1bmN0aW9ucyk= @ 0x00000100
+CCu base64:RGF0YSB0YWJsZTogUkFNL2hhcmR3YXJlIGFkZHJlc3MgcG9pbnRlcnMgKG5vdCBKTVAgZW50cmllcyk= @ 0x000001d8
+CCu base64:Q2hlY2tzIGdhbWUgUk9NIGZvciBKTVAgYXQgMHg0MDAyNCwgZGlzcGF0Y2hlcyBpZiBwcmVzZW50 @ 0x00000300
+CCu base64:R2FtZSBJUlExIGhvb2sgLSBjaGVja3MgMHg0MDAwYw== @ 0x00000314
+CCu base64:R2FtZSBJUlEyIGhvb2sgLSBjaGVja3MgMHg0MDAxOA== @ 0x00000326
+CCu base64:R2FtZSBJUlEzIGhvb2sgLSBjaGVja3MgMHg0MDAxMg== @ 0x00000338
+CCu base64:VkJMQU5LOiBpZiBvc192YmxhbmtfYWN0aXZlIGdvdG8gb3NfdmJsYW5rX2hhbmRsZXIsIGVsc2UgZ2FtZSBob29r @ 0x0000034a
+CCu base64:U291bmQvc2VsZi10ZXN0IElSUTogcmVhZHMgc291bmQgZGF0YSBvciBkaXNwYXRjaGVzIHRvIGdhbWU= @ 0x0000036c
+CCu base64:VGVzdHMgVmlkZW8gUkFNIFNwYXJlLCBDb2xvciBSQU0sIFBsYXlmaWVsZCwgQWxwaGEsIE1PQiBSQU0= @ 0x000003a0
+CCu base64:RGlzYWJsZSBpbnRlcnJ1cHRzLCByZXNldCBoYXJkd2FyZSwgY2hlY2sgc2VsZi10ZXN0IHN3aXRjaA== @ 0x000005e2
+CCu base64:U2VsZi10ZXN0IG1vZGU6IHRob3JvdWdoIFJBTSB0ZXN0cyBiZWZvcmUgZW50ZXJpbmcgZGlhZ25vc3RpY3M= @ 0x0000061e
+CCu base64:Q2xlYXIgUkFNLCBpbml0IGNvbG9ycywgUk9NIGNoZWNrc3VtLCBkZXRlY3QgZ2FtZSBST00sIGVudGVyIGdhbWUvT1M= @ 0x0000070c
+CCu base64:U2V0cyBvc192YmxhbmtfYWN0aXZlLCBlbmFibGVzIElSUXMsIHJ1bnMgT1MgbWFpbiBsb29wIGNhbGxiYWNr @ 0x00000e14
+CCu base64:QWNrIFZCTEFOSywgcGV0IHdhdGNoZG9nLCB1cGRhdGUgc2Nyb2xsIHJlZ3MsIHNuYXBzaG90IGlucHV0cw== @ 0x00000e5e
+CCu base64:T1MgbWFpbiBsb29wOiBhdHRyYWN0IG1vZGUsIGNvaW4gaGFuZGxpbmcsIHNlbGYtdGVzdCBkaXNwYXRjaA== @ 0x0000129a
+CCu base64:SG9vazogZ2FtZV9zdGFydHVwX2hvb2sxICgweDQwMDM2KSAtIGFmdGVyIGF0dHJhY3QgZGlzcGxheSBpbml0 @ 0x00001426
+CCu base64:SG9vazogZ2FtZV9zdGFydHVwX2hvb2syICgweDQwMDJhKSAtIGFmdGVyIGNvaW4vdGV4dCBkaXNwbGF5IGluaXQ= @ 0x0000143e
+CCu base64:SG9vazogZ2FtZV9zdGFydHVwX2hvb2szICgweDQwMDNjKSAtIGFmdGVyIHBhbGV0dGUgaW5pdA== @ 0x00001456
+CCu base64:Q2xlYXJzIGFscGhhIFJBTSAoMHg5MDUwMDAtMHg5MDVGRkUpLCBmaWxscyBNT0IgUkFNIHdpdGggZ2FtZV9tb2JfZmlsbF92YWx1ZQ== @ 0x00001632
+CCu base64:SG9vazogZ2FtZV9lZXByb21fY29uZmlnICgweDQwMDU0KSAtIHJldHVybnMgRUVQUk9NIGxheW91dCBjb25maWcgaW4gZDA= @ 0x000021a0
+CCu base64:RUVQUk9NIHNldHRpbmdzIGJpdHMgNS03IHRhYmxlOiBtYXggbW9uc3RlcnMgcHJvY2Vzc2VkIHBlciBmcmFtZS4gOCByb3dzICh2YWx1ZSAwLTcpIHggNCBjb2xzIChwbGF5ZXJzLTEpLiBJbmRleCA9ICgoMHg5MDRBMjQmMHhFMCk+PjMpICsgcGxheWVycy0xLiBBZGRlZCB0byBiYXNlIDB4OTA0MDVGOyBjYXBwZWQgYXQgbGV2ZWwqMiAoZXhjZXB0IGx2bCAxKTsgZm9yY2VkIDAgb24gZnJhbWVfb3ZlcmZsb3coMHg5MDQ5MTYpLg== @ 0x00040e46
+CCu base64:TGV2ZWwtdHJhbnNpdGlvbiBzZWNyZXQgcm9vbSBib29ra2VlcGluZy4gSWYgc2VjcmV0IHJvb20gd2FzIGFjdGl2ZSAoMHg5MDQwNjUpOiBwbGF5ZXIgZW50ZXJlZCAoMHg5MDQwNjM9MC0zKSAtPiBzZWNyZXRfcHJldl9tYXplKDB4OTA0ODcwKT1tYXplIywgc3RhcnQoMHg5MDQ4N0EpICs9IDE1IChtYXggNDApOyBub2JvZHkgZW50ZXJlZCAtPiBzdGFydCAtPSAyIChtaW4gNCkuIENvdW50ZG93bigweDkwNDg3OCkgPSBzdGFydC4gQ2FsbGVkIGZyb20gbWFpbl9zdGFydF9nYW1lKDB4NDgwRUMpIGFuZCBzaG93X2NvbnRpbnVlX3NjcmVlbiBlcGlsb2d1ZSgweDREOERDKS4gTmFtZSB2ZXJpZmllZCBieSBkaXNhc3NlbWJseTsgdXBkYXRlX2JnbV92b2x1bWUgcmVmdXRlZC4= @ 0x000486fe
+CCu base64:cmVzb2x2ZV9zaG90X2hpdCh0YXJnZXQsIHNob290ZXIpIC0+IDAgPSBzaG90IGNvbnRpbnVlcyAocGllcmNlL3JlZmxlY3QpLCAtMSA9IHNob3QgY29uc3VtZWQuIHRhcmdldDogTU9CIHNsb3QsIG9yIDB4NDAwLTB4N0ZGID0gcGxheWZpZWxkIHRpbGUgKHdhbGwgYm91bmNlIHBhdGggMHg0QjQ5QSkuIHNob290ZXI6IDAtMyBwbGF5ZXIsID49NCBtb25zdGVyIHNob3QgY2xhc3MuIERhbWFnZTogcGxheWVyID0gdGJsIDB4NTk2QjZbY2hhcmFjdGVyICgrOCBpZiBwb3dlcnMgYml0MTIgc2hvdC1wb3dlcildICgrZ2V0cmFuZG9tKDIpIGlmIHRibCAweDU5NkMyKSwgc3VwZXJzaG90ICgweDkwNUY2OFtwXT4wKSBmb3JjZXMgMy4gVGFyZ2V0IHR5cGUgPSBtb2JfbGluaz4+MTAsIGRpc3BhdGNoIHZpYSBqdW1wIHRhYmxlIDB4NEIzMzYgKGJhc2UgMHg0QjMzOCkuIFBsYXllciB2aWN0aW1zIChocG9zJjB4Rj49MHhDLCB2aWN0aW0jID0gMHg5MDQwNjZbc2xvdF0+PjEwKTogbGV2ZWxfZmxhZ3NfNCBiaXQwID0gc2hvdHMgc3R1biAoKzB4Mjggc3R1bmRlbGF5IGNsYW1wIDB4NUEpLCBiaXQxID0gc2hvdHMgZGFtYWdlICgtMiBIUCk7IHN1cGVyc2hvdCBzaG9vdGVyIC0xMCBIUDsgbW9uc3RlciBzaG90cyB1c2UgZG1nIHRibCAweDU5NkNFW2NoYXIrNCphcm1vcit0aWVyKHNob3QgaHBvcyBiaXRzNC01KSs4KihjbGFzcz49OCldLiBNb25zdGVyczogaGVhbHRoID0gaHBvcyBsb3cgbmliYmxlLCB0aWVyIGJhc2UgdGJsIDB4NTg2NENbdHlwZV0sIG91dCBvZiBbYmFzZS0yLGJhc2VdID0gZGVzdHJveWVkIChpbXBhY3QgZnggMHg0N0RBRSArIG1vYmxpc3RfcmVtb3ZlKTsgc2NvcmUgPSBkYW1hZ2UgKiBtdWx0IChnaG9zdCAxMCwgZ3J1bnQtY2xhc3MgNSkgdmlhIHBsYXllcl9hZGRfc2NvcmVfd2l0aF9tdWx0OyBzb3JjL3N1cGVyc29yYyBpbW11bmUgd2hpbGUgYmxpbmtpbmcgKGhwb3MgYml0MTIpIHVubGVzcyBzdXBlcnNob3Q7IHN1cGVyc2hvdCBwaWVyY2VzIChyZXQgMCkgZXhjZXB0IERlYXRoL0lULiBEZWF0aDogZGVhdGhfaGl0cysrICgweDkwNEE1QyksIGRtZyBvbmx5IHZpYSBkZWF0aF9kYW1hZ2V0cmFjayB3L3N1cGVyc2hvdC4gR2VuZXJhdG9yczogdGllcjEgZGllcywgdGllcjIvMyBuZWVkIGRtZz49Mi8zIGVsc2UgZGVncmFkZSAobW9iX2xpbmsgLT0gZG1nPDwxMCArIHBpYyB1cGRhdGUpLiBNb3ZhYmxlIHdhbGw6IDI1IHBsYXllciBoaXRzICgweDkwNDA2NiArPSAweDQwMCB0byAweDY0MDApIHRoZW4gdHBvcnQgZGlzc29sdmUuIFNlY3JldCB3YWxsOiBzb3VuZCAweDMwLCByZXZlYWwgKyByYW5kb20gcHJpemUgZDY9cmFuZCgxNikgaWYgPCBwbGF5ZXJzKjIrMjogMC0xIERFQVRILCAyLTMgdHJlYXN1cmUgYmFnLCA0LzggaW52dWxuIHBvdGlvbiwgNS83IGludnVsbiBmb29kLCBlbHNlIGhpZGRlbiBwb3Rpb24gKHBpY3MgdGJsIDB4NTg2OEMsIHNwYXduIHRibCAweDU4NjBDKS4gRGVzdHJ1Y3RpYmxlIHdhbGw6IGNydW1ibGUgdmlhIDB4NTMwM0EodGFyZ2V0LGRtZykuIERvb3JzOiByZWFjdCBvbmx5IGlmIG9uLXNjcmVlbiAoMHg0QUVBMCkuIEZvb2QvcG90czogZGVzdHJveWVkICsgc3BlZWNoOyBwb2lzb24gdmFyaWFudHMgKHBpYyAweDI1RUQgZm9vZC8weDIwRkMgcG90KSBzZXQgcG9pc29uX3RpbWVyIDB4OTA0OEIyID0gMHgyNTgvMHg0QjAuIFRyZWFzdXJlL2ludnVsbiBpdGVtcyBuZWVkIHN1cGVyc2hvdC4gRHJhZ29uIC0+IGRyYWdvbl9zaG90X2hpdCAweDU0MTEyLiBSZWZsZWN0IHBvd2VyIChwb3dlcnMgYml0MTApOiBuZXcgZGlyIHZpYSAweDUzODE4IC0+IHNob3QgYm91bmNlcyBvZmYgd2FsbHMuIE1heC10aWVyIHNob3RzIChzaG90IGhwb3MmMHgzMD09MHgzMCkgcGFzcyB0aHJvdWdoIHdhbGxzLiBTZWNyZXQgdHJpY2tzICgweDkwNDA2NSk6IDU9c2hvb3QgZm9vZCwgOT1oaXQgYnkgc3Ryb25nIHNob3QsIDB4MTE9c2hvb3QgcGxheWVyLCAweDVBPXN1cGVyc2hvdCB0cmVhc3VyZSAtPiBwcm9ncmVzcyBpbiAweDkwNDg3MltwXS4gZXNjYXBlX3RpbWVyICsgaWRsZV90aW1lciByZXNldCBvbiBraWxscy4= @ 0x0004af50
+CCu base64:TWF6ZSBSTEUgZGVjb2RlciwgYXJnID0gbWF6ZSBkYXRhIHB0ci4gQ29waWVzIGhlYWRlciBIVDEvSFQyL1ZUMS9WVDIgKG9mZnNldHMgNyw4LDksMHhBKSB0byAweDkwNDg2Ni82OC82QS82Qy4gbGFzdF90eXBlIGluaXQgPSBIVDIuIEN1cnNvciBzdGFydHMgc2xvdCAweDIwLCBkYXRhIGF0ICsweEIsIGxvb3AgdW50aWwgY3Vyc29yID49IDB4NDAwLiBCeXRlY29kZSBiLCBuNT1iJjB4MUYsIG40PWImMHhGOiAwMC0zRiBhZGQgZWxlbWVudCBiJjB4M0Ygb25jZSwgbGFzdD1iLiA0MC03Rjogc2VsPShiPj40KSYzIC0+IHB0ciB0YWJsZSAweDU5QjU0IFtIVDEsVlQxLEhUMixWVDJdLCB0PWhlYWRlciBieXRlLCBsYXN0PXQsIE49bjQrMTsgdCYweEMwOiAwMD13cml0ZSBOIG9mIHQmMHgzRiAodmVydGljYWwgd3JpdGVyIGlmIGIgYml0NCBzZXQpLCA0MD1OIHNraXBzIHRoZW4gMSBvZiB0LCA4MD0xIG9mIHQgdGhlbiBOIHNraXBzLCBDMD1OIHdhbGxzKHR5cGUyKSB0aGVuIDEgb2YgdC4gODAtOUYgcmVwZWF0IGxhc3QgbjUrMSAoMS0zMikgaG9yaXouIEEwLUFGIGhvcml6IHdhbGwgcnVuIG40KzEuIEIwLUJGIHZlcnQgd2FsbCBydW4gbjQrMS4gQzAtREYgc2tpcCBuNSsxIChOTyB3YWxsIC0gZG9jIHdhcyB3cm9uZykuIEUwLUZGIHNraXAgbjUrMSB0aGVuIDEgd2FsbC4gV3JpdGVyczogbWF6ZV90aWxlX3dyaXRlKHNsb3QsdHlwZSxjb3VudCk9aG9yaXpvbnRhbCBjb25zZWN1dGl2ZSwgcmV0dXJucyBuZXh0IHNsb3QsIHR5cGUwPWFkdmFuY2Ugb25seSwgc3VwcHJlc3NlcyBlbGVtZW50IDB4M0MgKERSQUdPTikgd2hlbiBnYW1lX21vZGU9MCBhbmQgbGV2ZWw8MTI7IG1hemVfdGlsZV93cml0ZV9hdD12ZXJ0aWNhbCwgc3RyaWRlIDMyICgzMSBpZiBvZGQtYW5nbGU6IGZsYWdzIGxvbmcgMHg5MDQ5MUMgYml0MjYgKyBmbGFnc180IGJpdDUpLCByZXR1cm5zIHNsb3QrMS4= @ 0x0004c1bc
+CCu base64:U2VjcmV0IHJvb20gd2lubmVyIG5hbWUtZW50cnkgc2V0dXAuIElmIEVFUFJPTSBzZXR0aW5ncygweDkwNEEyNCkgYml0MTMgc2V0OiBuYW1lIGJ1ZmZlciAweDkwNEFBNCA9ICdBJysyOCBzcGFjZXMsIHBsYXllcl9zdGF0dXMoMHg5MDQ5QTArcCk9MHgyMCAoZW50ZXJpbmcgbmFtZSksIGRlbGF5KDB4OTA0QTRFKT0weEE4RCwgZHJhd3MgRU5URVIgWU9VUiAvICdMQVNULU5BTUUgRklSU1QtTkFNRScgdmlhIE9TIGNhbGxzLiBCaXQxMyBjbGVhcjogcGxheWVyX3N0YXR1cz0yLCBkZWxheT0weDM4NSwgc2VjcmV0X3Jvb21fcGxheWVyKDB4OTA0MDYzKT0weEZGLiBOYW1lIHZlcmlmaWVkIGJ5IGRpc2Fzc2VtYmx5OyByZXNldF9hdHRyYWN0X3BsYXllciByZWZ1dGVkLg== @ 0x00054ec6
+CCu base64:MTIgdGlwIHJlY29yZHMsIGVhY2ggPSAzIGxvbmd3b3JkIHN0cmluZyBwdHJzIChudWxsID0gdW51c2VkIGxpbmUpICsgaW5saW5lIHN0cmluZ3MuIFB0ciB0YWJsZSBhdCAweDU4MTVDICgxMiBsb25nczsga25vd25faXNzdWVzIHNhaWQgMHg1ODE1NCB3aGljaCBpbmNsdWRlcyAyIHVucmVsYXRlZCBsb25ncyA1LDMpLiBSZWNvcmRzIHNwYW4gMHg1ODI4Qy0weDU4NTBDLiAwOiBCTFVFL1NFTEVDVEVELS9FTEYgKGpvaW4gYmFubmVyIHRlbXBsYXRlKSwgMTogUFVTSCBNT1ZBQkxFIFdBTExTLCAyOiBTT01FIFRSRUFTVVJFIFJFUVVJUkVTIEtFWVMsIDM6IFRIRVJFIENBTiBCRSBNT1JFIFRIQU4gT05FIFRSQVAsIDQ6IEFDSUQgUFVERExFUyBNT1ZFIFJBTkRPTUxZLCA1OiBTT01FIFdBTExTIENBTiBCRSBTSE9UIEFORCBUVVJOIElOVE8gR09PRCBPUiBCQUQsIDY6IERFQVRIIERJRVMgQUZURVIgVEFLSU5HIFVQIFRPIDIwMCBIRUFMVEgsIDc6IEhBVkUgRlJJRU5EUyBKT0lOIElOIEFOWSBUSU1FLCA4OiBNT05TVEVSUyBGT0xMT1cgUExBWUVSIFdITyBJUyBJVCwgOTogU09NRSBXQUxMUyBNT1ZFIFJBTkRPTUxZLCAxMDogTU9OU1RFUlMgTUFZIE1PVkUgRElGRkVSRU5UTFksIDExOiBUQUcgWU9VUkUgSVQuIDB4NTgyNUUtMHg1ODI4QiA9IHNlcGFyYXRlIHVuaWRlbnRpZmllZCB3b3JkIHRhYmxlLg== @ 0x0005828c
+CCu base64:RHJhZ29uIHBhdGggcHJvZ3JhbXM6IDUgcm93cyB4IDE2IGJ5dGVzIChOT1QgMTI4eDE2KS4gUm93IHNlbGVjdGVkIGJ5IHJhbS5kcmFnb25fcGF0aF9udW0gKDB4OTA0ODg2LCAwLTQ7IHJhbmRvbSAwLTQgb24gZWFjaCBoaXQpLiBCeXRlIGluZGV4ID0gZHJhZ29uX2FuaW1fY3RyKDB4OTA0ODkyKT4+MyAocGhhc2UgYWR2YW5jZXMgZXZlcnkgOCBmcmFtZXMsIGN0ciB3cmFwcyBhdCAxMjgpLiBCeXRlIGZvcm1hdDogYml0MCA9IGZpcmUgdHJpZ2dlciwgYml0cyAzLTEgKGJ5dGU+PjEpID0gaGVhZCBwb3NlIDAtMy4gSGVhZCBkcmF3OiBpZHggPSBieXRlICsgZmFjaW5nKjQgLT4gcGljcyAweDVENTI4LCBocG9zIGRlbHRhIDB4NUQ0MzgsIHZwb3MgZGVsdGEgMHg1RDQ3OCAoYWRkZWQgdG8gZHJhZ29uIE1PQiBwb3MgLT4gaGVhZCBwb3MgMHg5MDQ4ODIvODQpLiBGaXJlOiB3aGVuIGJpdDAgc2V0LCBjb29sZG93biAweDkwNDg3Qz09MCwgKDB4OTA0ODhDJjB4Rik8NDogYWxsb2Mgc2hvdCAweDU0MEU4IHRoZW4gZHJhZ29uX2ZpcmVfc2V0dXAoMHg1NDc0OCk6IGNvb2xkb3duPTgsIHNwYXduIHNlZ21lbnQgPSB3b3JkWzB4OTA0ODk0ICsgdGJsXzB4NUQ0QjhbcG9zZStmYWNpbmcqMl0qMl0sIHNob3QgZGlyID0gZmFjaW5nLiBXaGlsZSBsb2NrZWQtaW4gKHN0YXRlIGJpdDMpLCBmaXJlIGJ5dGVzIGhvbGQgdGhlIGNvdW50ZXIgdW50aWwgY29vbGRvd24gZXhwaXJlcy4gRHJhZ29uIG9ubHkgdGFrZXMgaGl0cyB3aGlsZSBmaXJlIGJpdCBzZXQgYW5kIG5vdCBzbGVlcGluZy90dXJuaW5nOyA5IGhpdHMgPSBkZWF0aDsgb24gaGl0IG5ldyByYW5kb20gcGF0aCBmYXN0LWZvcndhcmRlZCB0byBtYXRjaGluZyBieXRlIGZvciBwb3NlIGNvbnRpbnVpdHku @ 0x0005d578
+CCu base64:cmVmcmVzaF90aWxlX3Zpc3VhbChkMD1zbG90LCBkMT1vYmp0eXBlKTogcmVkcmF3cyBvbmUgcGxheWZpZWxkIHRpbGUuIEZpeGVkIGRlc2NyaXB0b3JzOiB0cmFuc3BvcnRlcigweDNFKS0+MHg1Q0FBOCBhdHRyIDB4NDAwMCwgZXhpdCgweDEwKS0+MHg1QzhBMCwgZXhpdHRvNigweDExKS0+MHg1QzhBOCwgZm9yY2VmaWVsZCBodWIoMHgzRiktPiBwdHIgdGJsIDB4NUJBNzBbKDB4OTA0MDY2W3Nsb3RdPj4yKSYweEZdLiBGbG9vci90cmFwcyAoMCwweEEtMHhDLDEpIC0+IHBmX2Zsb29yX2RyYXcgKDB4NUU4ODggcmVnLzB4NUU4OTIgc3RhY2spOiBkZXNjcmlwdG9yIHdvcmRzIGZyb20gZmxvb3JfZGVzY19iYXNlIDB4NUJBRTAgKCt2YXJpYW50IGZyb20gd2FsbCBwcm94aW1pdHkpLCBmaW5hbCB0aWxlIGNvZGUgKz0gZmxvb3JwYXR0ZXJuKDB4OTA0QjVDKSoweDMwICsgYXR0ci4gV2FsbHMgKDIrKSAtPiBwZl93YWxsX2RyYXcgKDB4NUVBQjggcmVnLzB4NUVBQzIgc3RhY2spOiBidWlsZHMgOC1uZWlnaGJvciBjb25uZWN0aXZpdHkgbWFzayAobmVpZ2hib3IgPSBwaWMhPTB4ODAwMCBvciBsaW5rIHR5cGUgMHgzRiksIHZhcmlhbnQgYnl0ZSA9IHdhbGxfY29ubl92YXJpYW50X3RibCAweDVFRTI0IChvciAweDVFRjI0IGZvciBwYXR0ZXJucyA2LzB4Qik7IGRlc2NyaXB0b3IgYmFzZSBieSB3YWxscGF0dGVybigweDkwNEI1RSk6IDw2IC0+IHdhbGxfZGVzY19ibG9ja3MgMHg1QkJFMCArIHdhbGxfcGF0dGVybl9vZmZzZXRzIDB4NUVERDRbcGF0XSAoMHg0NC11bml0IHN0cmlkZSksIDYgLT4gMHg1RDJGOCwgZGVzdHJ1Y3RpYmxlIHR5cGU1IHcvcGF0Pj02IC0+IDB4NUQzRDAsIDctMHhBLzB4QysgLT4gcmFuZG9tIG9mIDYgcHRyIHNldHMgYXQgMHg1RURGNCAoKzB4MTggZm9yIHBhdCA3KTsgZGVzY3JpcHRvciA9IGJhc2UgKyB2YXJpYW50Kjg7IHdyaXRlcyBUTC9CTC9UUi9CUiB3b3JkcyArMHg3MDAwIHRvIHZyYW0ucGxheWZpZWxkICsgeSoyNTYgKyB4KjQuIEludmlzaWJsZSB3YWxsczogc2tpcHBlZCB3aGVuIExGTEFHMiBiaXQ3IChhbGwpIG9yIExGTEFHMSBiaXQ3ICh0cmFwIHdhbGxzLCB0eXBlcyA3LTkpIHVubGVzcyBsZXZlbCA5OTk5LiBUaGVuIHVwZGF0ZXMgbmVpZ2hib3JpbmcgZG9vcnMgKyB3YWxscy4= @ 0x0005f5a0
+CCu base64:RG9vciB0aWxlIGdyYXBoaWMgdXBkYXRlci4gQXJncyAoeCx5LGRvb3J0eXBlIGZyb20gcGZfaXNkb29yKS4gVHlwZSAxIChwaWNzIDB4OUQxOC0weDlEMzgpOiBidWlsZHMgNC1iaXQgYWRqYWNlbnQtZG9vciBtYXNrIChMPTIsZG93bj00LFI9OCx1cD0weDEwKSB2aWEgcGZfaXNkb29yLCBwaWN0dXJlID0gZG9vcl9nZnhfYnlfbmVpZ2hib3JzW21hc2tdICgweDVGOUNFKSwgd3JpdGVzIHZyYW0gcGljdHVyZS9ocG9zL3Zwb3MgZm9yIHRpbGUsIHN0b3JlcyBtYXNrIGluIGJpdHMgMTAtMTMgb2YgMHg5MDQwNjZbdGlsZV0gKGxvdyAxMCBiaXRzIGtlcHQpLiBUeXBlcyAyLzMgd2l0aCBubyBkb29yIG5laWdoYm9yOiBvcmllbnRhdGlvbiBmcm9tIHN1cnJvdW5kaW5nIHBsYWluLWZsb29yIHRpbGVzIChwZl9pc2JsYW5rZmxvb3IgMHg1RUEyRSksIHR5cGUtMiB0YWJsZSAweDVGQUNBLCB0eXBlLTMgdnBvcyBvZmZzZXQgdGFibGVzIDB4NUZCRUUvMHg1RkMwMC4gRW50cnkgMHg1Rjg3NiB0YWtlcyBhMD14LGExPXksZDA9dHlwZS4gQ2FsbGVkIGJ5IG1hemVfZG9vcnNfc2V0dXAgKGFsbCB0aWxlcykgYW5kIHBmX2Rvb3JfdXBkYXRlX3N1cnJvdW5kaW5nICg0IG5laWdoYm9ycyBvZiBjaGFuZ2VkIHRpbGUpLg== @ 0x0005f880
+CCu base64:RGlhbG9nICJzaG93biBvbmNlIiBXT1JEIGJpdGZpZWxkIChjb3ZlcnMgR1JLJ3MgaXRlbV9kbGdfZmxhZ3MrcG93ZXJfZGxnX2ZsYWdzIGJ5dGVzKS4gQml0IHRlc3RlZC9zZXQgYnkgZGlhbG9nX2ZpcnN0X2VuY291bnRlciBjb2RlICgweDRDNDgyIG9yaSAjMSA9IGRyYWdvbiBlbmNvdW50ZXIgZGlhbG9nIC0gUkVQT1JUJ3MgImRyYWdvbl9lbmNvdW50ZXJfZmxhZyIgYml0KS4gQ2xlYXJlZCBieSBtYXplX25ld19sZXZlbF9zZXR1cCAoMHg0MzhFMCwgYml0IDAgb25seSkgYW5kIGZ1bGx5IGF0IDB4NDQyM0MvMHg0NDlFRS4= @ 0x0090487e
+CCu base64:bGV2ZWxfZmxhZ3MgbG9uZyAoPSAibWF6ZV9waWNrdXBfY29uZmlnIikgPSBtYXplIGhlYWRlciBieXRlcyAxLTQgYXNzZW1ibGVkIGJ5IG1hemVfbG9hZF9waWNrdXBfY29uZmlnLiBCeXRlIDA9TEZMQUcxIChvZGQtYW5nbGUgYml0czAtNiwgYml0NyBpbnZpcyB0cmFwd2FsbHMpLCAxPUxGTEFHMiAoZmFzdCBiaXRzMC02LCBiaXQ3IGludmlzIGFsbCB3YWxscyksIDI9TEZMQUczIChiaXRzMC0yIHJhbmRvbSBmb29kIGNvdW50LCBiaXQzIGN5Y2xpYyB3YWxscywgYml0czQtNSBkZWxldGFibGUgd2FsbHMsIGJpdDYgZXhpdCBtb3ZlcywgYml0NyBleGl0IGNob29zZS1vbmUpLCAzPUxGTEFHNCAoYml0MCBzaG90cyBzdHVuLCBiaXQxIHNob3RzIGh1cnQsIGJpdDIgdHJhcHMgbG9jYWwsIGJpdDMgdHJhcHMgcmFuZG9tLCBiaXQ0IHdyYXAtViwgYml0NSB3cmFwLUgsIGJpdDYgZmFrZSBleGl0cywgYml0NyBvZmZzY3JlZW4pLiBSYW5kb21pemVkIHBlciBsZXZlbDogYml0cyAyNi0yNyBYT1IgcmFuZCg0KTsgZGVlcCBsZXZlbHMgT1IgZ2V0X3JhbmRvbV9tYXplX2ZsYWdzICsgMHgzMC8weEIwIHVubGVzcyBMRkxBRzQgYml0Mi4gRVhJVF9NT1ZFUyBjbGVhcmVkIGJ5IG1hemVfc2Nhbl9vYmplY3RzIHdoZW4gb25seSAxIGV4aXQgKE5PVCAiaGFzIGZvb2QiIC0ga25vd25faXNzdWVzIDQuNSB3YXMgd3JvbmcpLg== @ 0x0090491c
 # types
 'tk *aligned_alloc=func
 'tk FILE=type

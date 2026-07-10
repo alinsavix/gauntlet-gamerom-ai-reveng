@@ -60,7 +60,7 @@
 | 0x41750 | `monster_find_and_shoot` | Find nearest player, set direction, maybe shoot |
 | 0x41B16 | `find_unused_shot` | Find empty shot MOB slot |
 | 0x490DC | `monster_create_shot` | Create a monster shot MOB at monster's position |
-| 0x492C0 | `monster_generic_handler` | Core AI/movement handler for standard monster types (ghosts, grunts, demons, lobbers, death). **Not** `handle_generate` — see `08_known_issues.md` item 1.1 |
+| 0x492C0 | `monster_generic_handler` | Core AI/movement handler for standard monster types (ghosts, grunts, demons, lobbers, death); args (mob_id, monster_type_index, speed). **Not** `handle_generate` — generator spawning is inline in `monster_loop_core` (0x41026) |
 | 0x49446 | `death_potion` | Handles Death being killed by a potion; AOE damage |
 | 0x49498 | `playfield_showscore` | Displays floating score popup over dying monster |
 | 0x495A6 | `monster_playerhit` | Monster overlapping player: apply damage, play sounds |
@@ -77,9 +77,9 @@
 |---------|------|-------------------|
 | 0x43360 | `player_resetcounters` | Reset one player's counters (health, score unchanged, power-ups cleared) |
 | 0x4341E | `player_resetall` | Reset all four player slots |
-| 0x45866 | `player_it_set` | Set player as IT; copy IT punishment from ROM table |
-| 0x4590E | `player_it_unset` | Clear IT status and restore normal attack params |
-| 0x45ACA | `player_inv_update` | Update right-side inventory panel for all active players |
+| 0x45866 | `player_it_set` | Set player as IT (verified): draws "IT" chars (0x49/0x54) in the player's HUD column, plays per-character "you're IT" speech (table 0x596F6) + sound 0xD4/0xD3; IT player tracked at 0x9049DC |
+| 0x4590E | `player_it_unset` | Clear the IT label (verified): writes two blank tiles over "IT" in the HUD |
+| 0x45ACA | `player_inv_update` | Draw the 12-slot inventory icon row in the player HUD (verified): key icons × `player_keysnum`, potion icons × `player_potionsnum`, blanks for the rest; VRAM row from pointer table [0x5FC12][p] |
 | 0x48754 | `speech_welcome` | Play "welcome <character>" speech for joining player |
 | 0x487CA | `player_lowhealth` / `player_sound_sprite_update` | Plays heartbeat sound below health threshold; manages animation state |
 | 0x488CA | `player_coindrop` / `player_init_for_coin` | Initialize player slot when a coin is inserted |
@@ -210,9 +210,9 @@
 | 0x4C70A | `dialog_clear_message` / `fill_buffer_spaces` | Fill dialog message buffer with spaces then null terminator |
 | 0x4C72A | `player_give_item_with_message` | Give power-up item; display associated dialog message |
 | 0x4CB50 | `dialog_position_box` / `compute_screen_coords` | Position dialog box near player or at center |
-| 0x4D476 | `show_continue_screen` | "PRESS START WITHIN X SECONDS TO CONTINUE" — shown when all players die. **Correction:** Not `fcn_4d476` or "treasure room" — see `08_known_issues.md` item 1.3 |
+| 0x4D476 | `show_continue_screen` | "PRESS START WITHIN X SECONDS TO CONTINUE" — shown when all players die (verified: clears alpha screen, coin-eligibility check 0x4D1A4, calls `player_activecount`, `secret_getname`; epilogue at 0x4D8DC calls `secret_check` and advances maze/level). GAME_ROM_KNOWN.md's "treasure room exit" description was wrong |
 | 0x4A124 | `attract_highscores` | Shows 4-way-split high-score-per-coin attract screen |
-| 0x44C7E | `update_maze_player_count` | Decrement active player count; trigger all-dead state. **Not** `show_continue_screen` — see `08_known_issues.md` item 1.2 |
+| 0x44C7E | `update_maze_player_count` | Decrement active player count (0x904928); trigger all-dead state; called from `player_death_sequence` (0x49DE6). **Not** `show_continue_screen` (that is 0x4D476) |
 
 ---
 
@@ -220,8 +220,8 @@
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x486FE | `secret_check` **(RESOLVED)** | Level-transition secret-room bookkeeping: if a player entered the secret room, `secret_prev_maze` = maze# and interval 0x90487A += 15 (max 40); if nobody did, −2 (min 4); countdown 0x904878 reloaded. Called from `main_start_game` (0x480EC) and the `show_continue_screen` epilogue (0x4D8DC). `update_bgm_volume` refuted — see `08_known_issues.md` 2.1. |
-| 0x54EC6 | `secret_getname` **(RESOLVED)** | Secret-room winner name-entry setup, gated by EEPROM settings bit 13: name buffer 0x904AA4 = 'A'+spaces, `player_status` = 0x20, draws "ENTER YOUR" / "'LAST-NAME FIRST-NAME'"; bit clear → status 2, short delay. `reset_attract_player` refuted — see `08_known_issues.md` 2.2. |
+| 0x486FE | `secret_check` **(RESOLVED)** | Level-transition secret-room bookkeeping: if a player entered the secret room, `secret_prev_maze` = maze# and interval 0x90487A += 15 (max 40); if nobody did, −2 (min 4); countdown 0x904878 reloaded. Called from `main_start_game` (0x480EC) and the `show_continue_screen` epilogue (0x4D8DC). `update_bgm_volume` refuted (no sound state touched) |
+| 0x54EC6 | `secret_getname` **(RESOLVED)** | Secret-room winner name-entry setup, gated by EEPROM settings bit 13: name buffer 0x904AA4 = 'A'+spaces, `player_status` = 0x20, draws "ENTER YOUR" / "'LAST-NAME FIRST-NAME'"; bit clear → status 2, short delay. `reset_attract_player` refuted |
 
 ---
 
@@ -251,7 +251,7 @@
 | 0x5E536 | `pf_stamp_update` | Update a 2×2 stamp on playfield (e.g., exit open/close animation) |
 | 0x5F77A | `pf_isdoor` | Returns door class from picture word: 1 = connectable segment (pics 0x9D18–0x9D3B), 2 = pics 0x9D3C–0x9D7B, 3 = pics 0x9D7C–0x9DAC, 0 = not a door (column x=0 always 0) |
 | 0x5F7FA | `pf_door_update_surrounding` | Redraws the 4 neighbors of a changed tile if they are doors (register-args entry at 0x5F7F0 = `pf_door_update_surrounding_xy`) |
-| 0x5F5A0 | `refresh_tile_visual` | Dispatch on tile type → select descriptor → write to VRAM (fully traced — see `04_game_subsystems.md` and `08_known_issues.md` 5.3) |
+| 0x5F5A0 | `refresh_tile_visual` | Dispatch on tile type → select descriptor → write to VRAM (fully traced — see `05_data_reference.md` §5 descriptor tables; floors offset tile codes by floorpattern×0x30, walls use per-pattern blocks + 8-neighbor connectivity) |
 | 0x5E542 | `write_tile_descriptor` / `pf_stamp_update` | Write 4-word 2×2 tile descriptor to playfield VRAM |
 | 0x5F876 | `pf_door_draw_xy` | Register-args entry (a0=x, a1=y, d0=door type) into `pf_door_draw` |
 | 0x5F880 | `pf_door_draw` | Door tile graphic updater (860 B, was `fcn_5F880`): adjacent-door mask → picture table 0x5F9CE; isolated type-2/3 doors oriented by surrounding floor; stores mask in bits 10–13 of `0x904066[tile]` |
@@ -383,8 +383,8 @@ These functions are called from multiple top-level subsystems:
 | 0x4E172 | `abort_theft` | Abort current theft sequence |
 | 0x43192 | `eeprom_write` | Copy 6 monitored values to write buffer; flush via OS 0x24E |
 | 0x4ADAE | `sound_queue_reset` | Fill ring buffer with 0xFF; zero read/write heads |
-| 0x45940 | `flash_score_display` / `draw_player_name` | **Conflict:** Phase 24 analysis calls this `flash_score_display` (draws score digits with flash attribute via OS 0x260); Phase 8 sub-call tree calls it `draw_player_name` (draws character name tile in HUD). Same address, different described behaviors — see `08_known_issues.md`. |
-| 0x459A2 | `update_health_bar` / `draw_player_lives` | **Conflict:** Phase 24 calls this `update_health_bar` (draws health bar MOBs); Phase 8 sub-call tree calls it `draw_player_lives` (draws life-counter icons). See `08_known_issues.md`. |
+| 0x45940 | `flash_score_display` | **Resolved by disassembly:** draws the player's 7-digit SCORE (`player_score` 0x904990[p]) via OS `display_decimal_value` (0x260) at row p*5+9, attribute from flash table 0x57350[p]; clears `player_redraw` bit 0. A more precise name would be `draw_player_score`. The Phase-8 name `draw_player_name` is refuted. |
+| 0x459A2 | `update_health_bar` | **Resolved by disassembly:** numeric, not a bar — draws the bonus multiplier "×N" (`player_bonusmult` 0x90490E[p], when >1) above the score row, then the 5-digit HEALTH value (`player_health` 0x904980[p], longword) at column 0x25; palette shifted −0x1000 (warning via 0x904A26) or −0x2000 (acid-slowed); clears `player_redraw` bit 1. Precise name: `draw_player_health`. `draw_player_lives` is refuted (Gauntlet has no lives). |
 | 0x4A2CA | `draw_player_game_over` | Renders "GAME OVER" banner with class graphic; called from `player_cleanup_slot` |
 | 0x54AF8 | `check_player_proximity` | Check if a player is nearby; used by `main_handle_potions` for proximity-based invulnerability |
 | 0x4D1A4 | `check_coin_eligibility` | Check DIP switches and player state to determine if player can continue; called from `show_continue_screen` |

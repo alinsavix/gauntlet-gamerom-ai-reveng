@@ -118,7 +118,7 @@ Uses `mob_hpos` flag bits to determine monster state:
 
 When the loop encounters a generator type (28–45), it checks `ram.monster_count` against the level cap. If conditions are met, spawns a new monster MOB at the generator position using the maze-encoded monster type, respecting the max-monsters-per-type cap.
 
-> **Correction:** REPORT.md misidentified `0x492C0` as the generator handler. `0x492C0` is actually `monster_generic_handler` — the per-monster AI handler for standard types. See `08_known_issues.md` item 1.1.
+> **Correction:** REPORT.md misidentified `0x492C0` as the generator handler (`handle_generate`). `0x492C0` is actually `monster_generic_handler` — the per-monster AI handler for standard types (args: mob_id, monster_type_index, speed). Generator spawning is handled inline within `monster_loop_core` (0x41026).
 
 ### 3.5 Monster Find and Shoot (`monster_find_and_shoot`, 0x41750)
 
@@ -165,7 +165,7 @@ The core collision-checked movement function. Handles:
 
 ### 4.3 Player Health
 
-> **Correction:** Player health is a **32-bit longword** at `0x904980` (stride 4, 4 players), not a 16-bit word. See `08_known_issues.md` item 1.5.
+> **Correction:** Player health is a **32-bit longword** at `0x904980` (stride 4, 4 players), not a 16-bit word as REPORT.md claimed (verified — e.g., the acid damage path reads/writes `0x904980 + player*4` as longwords).
 
 Health drain is handled by `main_health_countdown` (0x466F6): automatic per-frame health reduction. `player_lowhealth` (0x487CA): plays heartbeat sound below threshold; sets dying flag when health reaches 0.
 
@@ -177,9 +177,9 @@ When coins are inserted for an active player (`coincheck`): adds health from tab
 
 ### 4.5 IT Mechanic
 
-`player_it_set` (0x45866): copies a random "IT punishment" from a ROM table to the target player, plays IT sound (0x35), updates IT display.
+`player_it_set` (0x45866, verified by disassembly): if the player is not already IT (`0x9049DC`), draws the letters "IT" (chars 0x49/0x54, palette `0xB000 | p<<10`) into the player's HUD column at `0x905048 + (p*5+8)*128`, plays the per-character "you're IT" speech from `speech_charname_tbl` (0x596F6), then sound 0xD4 (first IT of the game, `0x9049DC` == 0xFFFF) or 0xD3 (IT transferred).
 
-`player_it_unset` (0x4590E): clears IT status and restores normal attack parameters.
+`player_it_unset` (0x4590E, verified): erases the "IT" label by writing two blank tiles (`0xD000 | p<<10`) over it.
 
 The IT player variable is at `0x9049DC` (0xFFFF = nobody is IT).
 
@@ -234,18 +234,18 @@ Called when transitioning to a new level:
 9. Clears tport/exit position tables (`0x910700` / `ram.exit_pos_table`)
 10. Scans all mob_link slots to repopulate tport and exit tables
 
-### 5.3 Maze Decode (`maze_decode`, 0x4C1BC)
+### 5.3 Maze Decode (`maze_decode`, 0x4C1BC) — fully traced
 
-Decompresses maze data from the slapstic ROM into playfield RAM. RLE format: each bytecode specifies a tile type (or repeat/skip operation). See `05_data_reference.md` section 3.19 for bytecode encoding.
+Decompresses maze data from the slapstic ROM into playfield RAM. See `05_data_reference.md` §3.19 for the verified bytecode encoding (note: 0xC0–0xDF skip *without* adding a wall; only 0xE0–0xFF add one).
 
-> **Note:** The exact RLE byte format has been partially documented via enum; full tracing of the decoder not completed. See `08_known_issues.md` item 4.1.
+Verified decoder mechanics: header bytes 7/8/9/0xA (HT1/HT2/VT1/VT2) are copied to 0x904866/68/6A/6C; the "last type" register initializes to **HT2**; the tile cursor starts at slot 0x20 (row 0 is never written); compressed data begins at maze+0xB and decoding loops until the cursor reaches 0x400 (there is no terminator byte). For bytecodes 0x40–0x7F, `(b>>4)&3` selects HT1/VT1/HT2/VT2 via the pointer table at 0x59B54; the run count always comes from the bytecode's low nibble (+1); the H/V type byte contributes the mode (top 2 bits, §3.20) and the element (low 6 bits). Horizontal runs use `maze_tile_write` (consecutive slots, returns next cursor); vertical runs use `maze_tile_write_at` (stride 32 down, or 31 on odd-angle mazes via the level-flags long; cursor advances by 1).
 
 ### 5.4 Maze Object Placement (`maze_place_object`, 0x45E40)
 
 Central dispatcher called by `maze_decode` for each object token. Creates MOBs for:
 
 - **Marker types** (walls, traps, forcefields): writes `mob_picture = 0x8000/0x8001/0x8003`. Post-decode scan renders actual playfield tiles.
-- **Dragon (type 0x3C):** Special multi-slot handling — occupies 2×2 maze cells. Calls dragon setup at 0x5496E.
+- **Dragon (type 0x3C):** Special multi-slot handling — occupies 2×2 maze cells. Calls dragon setup at 0x5496E. **Suppressed** (written as empty) when `game_mode` == 0 and `levelnum_current` < 12 (and level ≠ 9999) — dragons never spawn from maze data before level 12 in a normal game.
 - **Invulnerable food (type 0x32):** Random variant selection via `getrandom(3)` from 4-entry table at 0x58F20.
 - **All other types:** Standard placement using master parameter tables (0x5858C–0x5868C):
   1. Look up base tile from `base_tile_table[type]`
@@ -253,11 +253,13 @@ Central dispatcher called by `maze_decode` for each object token. Creates MOBs f
   3. Compute pixel H/V positions
   4. Call `mob_create(slot, tile, hpos, vpos, type, direction)`
 
-### 5.5 Random Pickup Flags (`maze_load_pickup_config`, 0x436FE)
+### 5.5 Level Flags Load & Randomization (`maze_load_pickup_config`, 0x436FE)
 
-Reads 4 pickup-config bytes from maze data, assembles into 32-bit `ram.maze_pickup_config`. Then randomly XORs and ORs feature flags based on current game level and frame count via `getrandom`. Higher levels get more aggressive random modifiers.
+Assembles maze header bytes 1–4 (`level_flags_1..4`) big-endian into the **level-flags longword at 0x90491C** — the variable historically called `ram.maze_pickup_config` *is* this long (byte 0 = LFLAG1 at 0x90491C, byte 1 = LFLAG2, byte 2 = LFLAG3, byte 3 = LFLAG4; see the §3.12 enums in `05_data_reference.md`, all verified reader-by-reader).
 
-`get_random_maze_flags` (0x436CC): selects a random entry from a 13-entry ROM table at 0x57012. If maze config bit 2 is set and the result is 0x80, overrides to 0x2.
+Then randomizes: LFLAG1 bits 2–3 (long bits 26–27) are XOR'd with `getrandom(4)` every level. On deep levels the game ORs in extra hazards: mazes 5–101 with level%400 > 297 → `get_random_maze_flags()` + 0x30 (WrapV|WrapH) unless LFLAG4 bit 2 (TrapsLocal); > 200 → random flags only; > 103 → 0x30 only. Treasure mazes 104–114 use level%160 with 0xB0 (wraps + offscreen).
+
+`get_random_maze_flags` (0x436CC): selects a random entry from a 13-entry ROM table at 0x57012. If LFLAG4 bit 2 (TrapsLocal) is set and the result is 0x80, overrides to 0x2.
 
 ### 5.6 Slapstic Bank Switching (`slapstic_cmd_bitwise`, 0x43826)
 
@@ -380,7 +382,7 @@ The path table at 0x5D578 is **5 path programs × 16 bytes** (0x5D578–0x5D5C7)
 | 0x5D528 | `dragon_head_pics` — head picture words, indexed by pose + facing*4 |
 | 0x5D578 | `dragon_path_programs` — 5 × 16-byte path programs (see 8.3) |
 
-The dragon data ends at 0x5D5C7. The region 0x5D5C8–0x5DA15, formerly misattributed to the dragon path table, contains the 16-entry playfield palette table, special palettes/color ramps, and the "SECRET CODE" contest strings — see `05_data_reference.md` §5 and `08_known_issues.md` 5.1.
+The dragon data ends at 0x5D5C7. The region 0x5D5C8–0x5DA15, formerly misattributed to the dragon path table, contains the 16-entry playfield palette table, special palettes/color ramps, and the "SECRET CODE" contest strings — see `05_data_reference.md` §5.
 
 ---
 
@@ -388,7 +390,7 @@ The dragon data ends at 0x5D5C7. The region 0x5D5C8–0x5DA15, formerly misattri
 
 ### 9.1 Thief State Machine (`main_thief_anim`, 0x4E8DC)
 
-> **Correction from GAME_ROM_KNOWN.md:** The main loop calls `0x4E8DC`, not `0x4D8DC`. See `08_known_issues.md` section 6.
+> **Correction from GAME_ROM_KNOWN.md:** The main loop calls `0x4E8DC`, not `0x4D8DC` — the GRK address was a typo. 0x4D8DC is not a function entry at all: it is the epilogue of `show_continue_screen` (0x4D476), which calls `secret_check` and advances the maze/level numbers.
 
 States (in `ram.thief_mode`, `0x904BA0`):
 
@@ -438,7 +440,7 @@ Uses `ram.encounter_seen_flags` (`0x9049E4`) as a 32-bit bitmask. On first encou
 
 ### 10.5 Continue Screen (`show_continue_screen`, 0x4D476)
 
-> **Correction from REPORT.md and GAME_ROM_KNOWN.md:** This function is at `0x4D476`, NOT `0x44C7E`. `0x44C7E` is `update_maze_player_count`. See `08_known_issues.md` items 1.2 and 1.3.
+> **Correction from REPORT.md and GAME_ROM_KNOWN.md:** This function is at `0x4D476`, NOT `0x44C7E` (which is `update_maze_player_count` — decrements the active player count at 0x904928 and triggers the all-dead state; called from `player_death_sequence` 0x49DE6). GAME_ROM_KNOWN.md's "treasure room exit" description of 0x4D476 was also incorrect — verified by disassembly: the function clears the alpha screen, checks coin eligibility (0x4D1A4), and shows the continue countdown.
 
 Displayed when all players have died. Sub-calls:
 - `check_coin_eligibility` (0x4D1A4): checks DIP switches and player state for continue eligibility
@@ -456,11 +458,14 @@ AT THIS LEVEL
 
 Sound 0x3B ("Gauntlet II Theme Song") plays when shown. Gate variable `0x904B7C` must be ≠ 0xFFFF to show.
 
-### 10.6 Secret Room
+### 10.6 Secret Room (verified by disassembly)
 
-The secret room system tracks whether a player has met the conditions for a secret room entry on the current level. `secret_check` (0x486FE) reads the secret room monster type from maze data byte 0, tracks the player score in the secret room via `ram.secret_score_ctr` (max 0x28, min 4).
+Secret-room availability is paced by a pair of level counters (the old "score counter/threshold" description was wrong):
 
-> **CONFLICT:** The function at `0x486FE` is identified as `secret_check` in GAME_ROM_KNOWN.md and REPORT.md, but as `update_bgm_volume` in FUNCTIONS_PLAN.md (found in the `show_continue_screen` call tree). See `08_known_issues.md` item 2.1.
+- `secret_possible_counter` (0x904878) counts down **once per level** (decrement site 0x4A748); both it and `secret_possible_start` (0x90487A) initialize to 20 at game init (0x43312). When the countdown reaches 0, `maze_new_level_setup` may activate a secret room by loading the maze's secret-room config byte into `0x904065` (which also serves as the trick-type id — see the §3.17 Secret Tricks enum in `05_data_reference.md`).
+- `secret_check` (0x486FE) runs at level transitions (from `main_start_game` at 0x480EC when the between-level delay `0x904A4E` expires, and from the `show_continue_screen` epilogue at 0x4D8DC). If a secret room was active (`0x904065` ≠ 0): when a valid player (0–3) is in `0x904063`, it records the maze number into `secret_prev_maze` (0x904870) and adds 15 to the start value (clamped at 40) — secret rooms become rarer after a win; when nobody entered, it subtracts 2 (floor 4) — they come sooner. Either way the countdown reloads from the start value. (The `update_bgm_volume` name from FUNCTIONS_PLAN.md is refuted — the function touches no sound state.)
+- `secret_getname` (0x54EC6) handles the winner: with EEPROM settings bit 13 set it opens the name-entry screen (buffer 0x904AA4 = 'A' + spaces, `player_status` = 0x20, "ENTER YOUR" / "'LAST-NAME FIRST-NAME'" prompts); otherwise `player_status` = 2 and a short between-level delay.
+- Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872); observed hooks in `resolve_shot_hit`: trick 5 (shoot foods) increments on food shot, trick 9 ("don't get hit") and trick 17 ("don't hurt friends") record violations, and a check against value 0x5A (not in the trick enum) marks supershot-on-treasure.
 
 ---
 

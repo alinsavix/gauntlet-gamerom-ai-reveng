@@ -6,7 +6,7 @@
 
 ## 1. Game RAM Variables (`0x904000–0x904FFF`)
 
-*Note: `0x904908` is `player_redraw`, NOT `player_state`. Player status is at `0x9049A0`. Player health is a 32-bit longword at `0x904980`. See `08_known_issues.md` items 1.4 and 1.5.*
+*Note: `0x904908` is `player_redraw`, NOT `player_state` (a REPORT.md error). Player status is at `0x9049A0`. Player health is a 32-bit longword at `0x904980`.*
 
 ### 1.1 Core Game State
 
@@ -62,9 +62,9 @@
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x904063 | 1 B | `trick_player` | Which player completed the secret trick |
+| 0x904063 | 1 B | `trick_player` | Which player completed the secret trick / is in the secret room (a.k.a. `secret_room_player`; 0–3, 0xFF = none; reset each level by `maze_new_level_setup`) |
 | 0x904064 | 1 B | `trick_last` | Last secret trick completed |
-| 0x904065 | 1 B | `trick_tasknum` | Trick task number / `secret_room_active` flag |
+| 0x904065 | 1 B | `trick_tasknum` | Trick task number / `secret_room_active` flag (non-zero = secret room active this level; value = trick id per §3.17). Loaded from the maze's secret-room config byte by `maze_new_level_setup` when `secret_possible_counter` hits 0. Hooks in `resolve_shot_hit` record trick events in `secret_tricks_flags` for ids 5, 9, 17 (and one check against 0x5A — not in the enum, unexplained) |
 
 ### 1.4 Maze Decompression
 
@@ -123,21 +123,21 @@
 | 0x9048F0 | 2 B × 4 | `player_joystick` | Per-player last joystick direction |
 | 0x9048F8 | 2 B × 4 | `lobber_shot_vec_h` | Horizontal component for lobber shots |
 | 0x904900 | 2 B × 4 | `lobber_shot_vec_v` | Vertical component for lobber shots |
-| **0x904908** | **1 B × 4** | **`player_redraw`** | **Per-player redraw flags. NOT player_state — see `08_known_issues.md` item 1.4** |
+| **0x904908** | **1 B × 4** | **`player_redraw`** | **Per-player redraw flags (bit 0 = score needs redraw, cleared by `flash_score_display`; bit 1 = health, set on damage, cleared by `update_health_bar`). NOT player_state — that array is `player_status` at 0x9049A0** |
 | 0x90490C | 2 B | `idle_timer` | Counts up if nothing happening; at 0xFFFF, doors have timed out |
 | 0x90490E | 2 B × 4 | `player_bonusmult` | Per-player current bonus multiplier |
 | 0x904876 | 2 B | `current_player` | Index (0–3) of the player currently being processed by `main_move_players`; written each iteration of the per-player loop |
 | 0x904916 | 2 B | `frame_overflow` | Non-zero if frame took too long to render |
 | 0x904918 | 2 B | `game_mode` | Game mode (see Game Modes enum) |
 | 0x90491A | 2 B | `attract_legend` | Current legend screen number |
-| 0x90491C | 4 B | `level_flags` | Flags for current level |
+| 0x90491C | 4 B | `level_flags` | Level-flags longword = maze header bytes 1–4 big-endian (byte 0 = `level_flags_1` at 0x90491C, byte 1 = `level_flags_2`, byte 2 = `level_flags_3`, byte 3 = `level_flags_4`; see §3.12 enums, verified reader-by-reader). This IS the variable historically called `ram.maze_pickup_config`. Assembled and per-level randomized by `maze_load_pickup_config` (0x436FE); LFLAG3 bit 6 (ExitMoves) is cleared by `maze_scan_objects` when only one exit exists |
 | 0x904920 | 2 B × 4 | `player_input_raw` | Per-player raw joystick input word |
 | 0x904928 | 2 B | `level_players_active` | Number of active players on a level |
 | 0x90492A | 2 B × 8 | `shot_timer_next` | Time until next demon/lobber shot |
 | 0x904942 | 2 B × ? | *(unknown)* | Might be shot positions (0x0=upper left, 0x3FF=lower right) |
 | 0x904B02 | 2 B | `shot_wall_stuck` | Wall-stuck counter for shot projectiles; checked by `main_handle_shots` |
 | 0x90497C | 1 B × 4 | *(unknown)* | Related to explosion animation |
-| **0x904980** | **4 B × 4** | **`player_health`** | **Per-player health (32-bit longwords). NOT 16-bit — see `08_known_issues.md` item 1.5** |
+| **0x904980** | **4 B × 4** | **`player_health`** | **Per-player health (32-bit longwords, stride 4). NOT 16-bit — verified, e.g. the acid damage path reads/writes `0x904980 + player*4` as longwords** |
 | 0x904990 | 4 B × 4 | `player_score` | Per-player current score (32-bit longwords) |
 | 0x9049A0 | 1 B × 4 | `player_status` | Per-player status: 0x01=alive here, 0x02=alive next, 0x04=entering initials, 0x08=exiting, 0x10=selecting character, 0x20=entering, 0x04=dying |
 | 0x9049A4 | 2 B × 4 | `player_facing_dir` | Per-player facing direction (0=up, 1=up-right, 2=right, 3=down-right, 4=down, 5=down-left, 6=left, 7=up-left) |
@@ -197,12 +197,12 @@
 | Bits | Meaning |
 |------|---------|
 | 0–4 | COINHEALTH setting (indexes health_per_coin table at 0x57862) |
-| **5–7** | **Unknown** |
+| 5–7 | "Extra monsters" difficulty tuning (0–7): selects the row of `monster_count_table` (0x40E46) for the per-frame monster cap; also scales the solo-play Warrior/Wizard random-pickup reduction in `maze_addrandompickups` (verified — all 35 read sites of 0x904A24 examined) |
 | 8–9 | Difficulty level (0–3) |
 | 10 | 2-player mode flag |
 | 11 | Sound mute flag |
 | 12 | ROM version flag (cleared after first boot) |
-| **13** | **Unknown** |
+| 13 | Secret-room winner name-entry enable: gates the ENTER-YOUR-NAME flow in `secret_getname` (0x54EC6); when clear, winners get `player_status` = 2 and a short between-level delay (verified — sole reader) |
 | 14 | Music/attract sound enable |
 | 15 | Settings dirty flag |
 
@@ -892,7 +892,7 @@ Four parallel 64-entry tables (one entry per maze object type, indexed 0–63):
 | 0x5BA70 | 32 B | Pointer table 1 into floor connectivity descriptors |
 | 0x5BA90 | 32 B | Pointer table 2 into floor connectivity descriptors |
 | 0x5BAD0 | 16 B | Null tile IDs: 0x0045, 0x0047, 0x0046, 0x0048 |
-| 0x5BAE0 | ~3.6 KB | Floor tile descriptors (32 entries × 4 tilesets × 8 bytes each) |
+| 0x5BAE0 | ~3.6 KB | `floor_desc_base` — floor/wall tile descriptor region. Verified usage (`pf_floor_draw`/`pf_wall_draw`): floors read descriptors from the base block at 0x5BAE0 (variant by wall proximity) and the **floor pattern offsets the tile codes by pattern × 0x30** rather than selecting a block; wall descriptor blocks start at `wall_desc_blocks` 0x5BBE0 with per-pattern offsets from 0x5EDD4 (patterns 0–5, stride 0x44 units ≈ 17 × 8-byte descriptors), pattern 6 at 0x5D2F8, destructible ≥ 6 at 0x5D3D0, patterns 7+ random via pointer sets at 0x5EDF4 |
 | 0x5C8A0 | 520 B | Wall tile IDs for type 0x10 tiles |
 | 0x5C8A8 | — | Wall tile IDs for type 0x11 tiles |
 | 0x5CAA8 | 128 B | Floor connectivity descriptors (16 × 8B, 8 sub-entries each) |
@@ -903,7 +903,7 @@ Four parallel 64-entry tables (one entry per maze object type, indexed 0–63):
 | 0x5D478 | 64 B | `dragon_head_vdelta` — head vpos deltas, same indexing (verified) |
 | 0x5D4B8 | ~112 B | `dragon_fire_segment_tbl` — signed byte per (pose + facing×2): which segment MOB in `dragon_seg_mob_ids` (0x904894) the fireball spawns from (verified) |
 | 0x5D528 | 80 B | `dragon_head_pics` — head picture words, indexed by path byte + facing×4 (verified; the old "0x5D508 head sprites"/"0x5D568 fire-breath tiles" rows described parts of this range) |
-| 0x5D578 | 80 B | `dragon_path_programs` — **5 path programs × 16 bytes** (NOT 128×16/2 KB; see `08_known_issues.md` 4.2/5.1). Byte = (pose<<1)\|fire-bit; one byte per 8-frame phase |
+| 0x5D578 | 80 B | `dragon_path_programs` — **5 path programs × 16 bytes** (NOT 128×16/2 KB; see `04_game_subsystems.md` §8.3). Byte = (pose<<1)\|fire-bit; one byte per 8-frame phase |
 | 0x5D5C8 | 512 B | `playfield_palettes` — **16 × 32-byte (16 IRGB words) playfield palettes, indexed by maze header `playfield_colors` (0–15)**; copied to color RAM 0x910500 by the palette-setup function ~0x43490 (entry = index×32; the word at entry+16 is also stored to 0x904020/0x90401E). Previously misattributed to the dragon path table |
 | 0x5D7C8 | 32 B | `playfield_palette_alt1` — special palette used when palette index ≥ 0x10 (reference at 0x43526) |
 | 0x5B20E | var | `palette_cycle_player0` — Player 0 hurt flash palette cycling data |
@@ -919,9 +919,15 @@ Four parallel 64-entry tables (one entry per maze object type, indexed 0–63):
 | 0x5D848 | ~412 B | Palette color ramps (13 blocks × 32 bytes, 12 colors + 4 zero words each, one per tileset environment). *Open item: code at 0x41666 (monster region) references 0x5D978, which is mid-block if the stride is 32 — the indexing scheme is untraced.* |
 | 0x5D9E8 | ~46 B | `secretcode_text_recs` — contest strings in {x, y, string-ptr} record format (same as the ENTER-YOUR records at 0x5DA16): "SECRET CODE", "REMEMBER YOUR"; referenced from code at 0x552EA (contest ended 12/19/86) |
 | 0x5DAA0 | ~136 B | Wall neighbor connectivity state table (16 rows × 8 bytes) |
-| 0x5F9CE | 64 B | Straight-wall connectivity lookup (16 × 4B) |
-| 0x5FACA | 18 B | Corner-wall connectivity lookup (9 × 2B) |
-| 0x5FBDC | 16 B | Junction-wall connectivity lookup (9 × 2B) |
+| 0x5EDD4 | 32 B | `wall_pattern_offsets` — 16 words: per-wallpattern offset into `wall_desc_blocks` (verified) |
+| 0x5EDF4 | 48 B | `wall_random_desc_ptrs` — two groups of 6 descriptor-set pointers for random-wall patterns 7+ (verified) |
+| 0x5EE24 | 256 B | `wall_conn_variant_tbl` — 8-neighbor connectivity mask → wall variant byte (verified) |
+| 0x5EF24 | 256 B | `wall_conn_variant_tbl6` — alternate variant table for wallpatterns 6 and 0xB (verified) |
+| 0x5F9CE | 32 B | `door_gfx_by_neighbors` — 16 words: door picture by 4-bit adjacent-door mask (verified in `pf_door_draw`; formerly "straight-wall connectivity") |
+| 0x5FACA | ~32 B | `door_gfx_type2` — type-2 door pictures for isolated-door orientation (verified; formerly "corner-wall connectivity") |
+| 0x5FBDC | 18 B | Door lookup data preceding the vpos tables (formerly "junction-wall connectivity"; exact use untraced) |
+| 0x5FBEE | 18 B | `door_vpos_sub3` — type-3 door vpos subtract offsets (verified) |
+| 0x5FC00 | 16 B | `door_vpos_add3` — type-3 door vpos add offsets (verified) |
 | 0x5FC10 | 16 B | Playfield VRAM base addresses (4 longwords) |
 
 ### 5.6 String / Dialog Data
@@ -936,6 +942,8 @@ Four parallel 64-entry tables (one entry per maze object type, indexed 0–63):
 | 0x57392 | ~260 B | Secret room trigger text table (10-byte records + strings) |
 | 0x574BC | ~88 B | Character glyph/sprite tile mapping table |
 | 0x57520 | ~88 B | UI strings: "SELECT HERO", "PRESS START", "ADD COIN", "INSERT COIN", "GAME OVER", "ON LEVEL:" |
+| 0x5815C | 48 B | `dialog_tip_ptrs` — 12 longword pointers to the between-level tip records (note: not 0x58154; the two preceding longs are unrelated) |
+| 0x5828C | ~641 B | `dialog_tip_records` (0x5828C–0x5850C) — 12 records, each 3 longword string pointers (NULL = unused line) + inline strings: 0 "BLUE / SELECTED / ELF" (join-banner template); 1 PUSH MOVABLE WALLS; 2 SOME TREASURE REQUIRES KEYS; 3 THERE CAN BE MORE THAN ONE TRAP; 4 ACID PUDDLES MOVE RANDOMLY; 5 SOME WALLS CAN BE SHOT AND TURN INTO GOOD OR BAD; 6 DEATH DIES AFTER TAKING UP TO 200 HEALTH; 7 HAVE FRIENDS JOIN IN ANY TIME; 8 MONSTERS FOLLOW PLAYER WHO IS IT; 9 SOME WALLS MOVE RANDOMLY; 10 MONSTERS MAY MOVE DIFFERENTLY; 11 TAG, YOU'RE IT. (Bytes 0x5825E–0x5828B are a separate, unidentified word table.) |
 | 0x57578 | ~190 B | DIP switch display records |
 | 0x57638 | ~110 B | Continue screen strings: "LEVEL:", "PRESS START", "WITHIN    SECONDS", "TO CONTINUE GAME", "AT THIS LEVEL" |
 | 0x57644 | var | `continue_screen_text1` — "PRESS START..." line 1 |
