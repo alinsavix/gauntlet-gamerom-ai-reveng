@@ -136,7 +136,7 @@
 | 0x438AE | `maze_new_level_setup` | New level initialization hub (reset thief, switch slapstic bank, setup maze, etc.) |
 | 0x436FE | `maze_load_pickup_config` | Read pickup-config bytes, assemble into `maze_pickup_config`, apply random flags |
 | 0x436CC | `get_random_maze_flags` | Select random entry from 13-entry ROM table (0x57012) for level randomization |
-| 0x43D8C | `maze_food_mob_consume` | Remove random food/treasure mob from active list |
+| 0x43D8C | `maze_scan_objects` | Multi-mode maze object scanner (formerly `maze_food_mob_consume`): counts exits / player starts / food, implements EXIT_CHOOSEONE + fake-exit marking, clears EXIT_MOVES when one exit remains |
 | 0x43826 | `slapstic_cmd_bitwise` | Issue bank-switch command sequence to Slapstic chip |
 | 0x56E58 | `slapstic_cmd_bank0` | Switch to slapstic bank 0 |
 | 0x56E6E | `slapstic_cmd_bank3` | Switch to slapstic bank 3 |
@@ -153,7 +153,7 @@
 |---------|------|-------------------|
 | 0x47CFE | `handle_tport` | Player touching transporter: create explosion anim, hide player |
 | 0x47C0E | `tport_cycle_start` / `spawn_passage_marker` | Initialize transporter animation MOB at frame 0x924 |
-| 0x47DAE | `tport_cycle_update` / `spawn_explosion` | Per-frame transporter animation cycling (frames 0x924–0x95A); also used to spawn explosion animations |
+| 0x47DAE | `shot_impact_spawn` | Spawns a shot-impact/explosion effect at the target's position using effect MOB slots 0xD–0xF (free slot found via 0x90201A/1C/1E). Called throughout `resolve_shot_hit`. (Formerly listed as `tport_cycle_update`/`spawn_explosion`.) |
 | 0x4E7C0 | `tport_find_id` | Search tport_pos_table for entry matching given maze position |
 | 0x50ADE | `tport_check_dest` | Validate potential transport destination |
 | 0x5DF8E | `tport_create_splodey` | Create sparkle/explosion animation at teleport destination |
@@ -170,7 +170,7 @@
 |---------|------|-------------------|
 | 0x54454 | `main_handle_dragon` | Dragon state machine (sleeping/awake/stunned/turning/fire) |
 | 0x549EA | `dragon_player_proximity` | Check if any player is in aggro range; start wake animation |
-| 0x54748 | `dragon_fire_attack` | Execute fire breath attack; create fire MOBs along attack vector |
+| 0x54748 | `dragon_fire_setup` | Fires one dragon fireball: sets fire cooldown (0x90487C) = 8, picks the origin segment MOB via table 0x5D4B8[pose+facing*2] from `dragon_seg_mob_ids` (0x904894), stores shot direction = facing |
 | 0x53E4A | `dragon_move_update` | Update dragon position per frame; call `dragon_change_dir` if blocked |
 | 0x53D10 | `dragon_change_dir` | Pick new dragon movement direction |
 | 0x540E8 | `dragon_attack_check` | Decide whether dragon should fire this frame |
@@ -220,8 +220,8 @@
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x486FE | `secret_check` **(CONFLICT)** | **GAME_ROM_KNOWN.md:** Check if we should enter secret room. **FUNCTIONS_PLAN.md:** `update_bgm_volume`. See `08_known_issues.md` item 2.1. |
-| 0x54EC6 | `secret_getname` **(CONFLICT)** | **GAME_ROM_KNOWN.md:** Set up name entry for secret room winner. **FUNCTIONS_PLAN.md:** `reset_attract_player`. See `08_known_issues.md` item 2.2. |
+| 0x486FE | `secret_check` **(RESOLVED)** | Level-transition secret-room bookkeeping: if a player entered the secret room, `secret_prev_maze` = maze# and interval 0x90487A += 15 (max 40); if nobody did, −2 (min 4); countdown 0x904878 reloaded. Called from `main_start_game` (0x480EC) and the `show_continue_screen` epilogue (0x4D8DC). `update_bgm_volume` refuted — see `08_known_issues.md` 2.1. |
+| 0x54EC6 | `secret_getname` **(RESOLVED)** | Secret-room winner name-entry setup, gated by EEPROM settings bit 13: name buffer 0x904AA4 = 'A'+spaces, `player_status` = 0x20, draws "ENTER YOUR" / "'LAST-NAME FIRST-NAME'"; bit clear → status 2, short delay. `reset_attract_player` refuted — see `08_known_issues.md` 2.2. |
 
 ---
 
@@ -249,12 +249,14 @@
 | 0x5F31E | `pf_replace` | Replace tile at given slot with new type; handle MOB/graphics update |
 | 0x5E892 | `pf_floor_update` | Update floor/wall tile graphics at given position |
 | 0x5E536 | `pf_stamp_update` | Update a 2×2 stamp on playfield (e.g., exit open/close animation) |
-| 0x5F77A | `pf_isdoor` | Returns 0=not door, 1=intersection, 2=horiz door, 3=vert door |
-| 0x5F7FA | `pf_door_update_surrounding` | Check surrounding positions for doors; update door graphics |
-| 0x5F5A0 | `refresh_tile_visual` | Dispatch on tile type → select descriptor → write to VRAM |
+| 0x5F77A | `pf_isdoor` | Returns door class from picture word: 1 = connectable segment (pics 0x9D18–0x9D3B), 2 = pics 0x9D3C–0x9D7B, 3 = pics 0x9D7C–0x9DAC, 0 = not a door (column x=0 always 0) |
+| 0x5F7FA | `pf_door_update_surrounding` | Redraws the 4 neighbors of a changed tile if they are doors (register-args entry at 0x5F7F0 = `pf_door_update_surrounding_xy`) |
+| 0x5F5A0 | `refresh_tile_visual` | Dispatch on tile type → select descriptor → write to VRAM (fully traced — see `04_game_subsystems.md` and `08_known_issues.md` 5.3) |
 | 0x5E542 | `write_tile_descriptor` / `pf_stamp_update` | Write 4-word 2×2 tile descriptor to playfield VRAM |
-| 0x5F7F0 | `update_neighbor_tiles` | Iterate 4 neighbors; call `update_wall_connection` for each wall |
-| 0x5F876 | `update_wall_connection` | 4-bit connectivity bitmask → lookup tables → wall graphic |
+| 0x5F876 | `pf_door_draw_xy` | Register-args entry (a0=x, a1=y, d0=door type) into `pf_door_draw` |
+| 0x5F880 | `pf_door_draw` | Door tile graphic updater (860 B, was `fcn_5F880`): adjacent-door mask → picture table 0x5F9CE; isolated type-2/3 doors oriented by surrounding floor; stores mask in bits 10–13 of `0x904066[tile]` |
+| 0x5EA2E | `pf_isblankfloor` | Returns 0 iff tile picture == 0x8000 AND link type == 0x3F (plain floor) |
+| 0x5E888 | `pf_floor_draw_xy` | Register-args entry into `pf_floor_update` (0x5E892); floor descriptor from 0x5BAE0, tile code += floorpattern×0x30 |
 | 0x5F024 | `wall_place_playfield_update` | Place wall tile; compute 2×2 descriptor; propagate to neighbors |
 | 0x5F310 | `mob_place_tile` | Place tile; remove old MOB; update visuals |
 
@@ -294,9 +296,14 @@
 | 0x41B16 | `find_unused_shot` | Scan shot MOB array for slot with mob_picture == 0 |
 | 0x490DC | `monster_create_shot` | Create a monster shot MOB; link into shot list |
 | 0x53666 | `player_create_shot` | Create a player shot MOB |
-| 0x4AF50 | `resolve_shot_hit` | Large dispatcher (~500 B): handle combat resolution for all target types |
+| 0x4AF50 | `resolve_shot_hit` | Full combat resolution for all target types (~0xED4 B, fully analyzed — see `04_game_subsystems.md` §30): `(target, shooter) → 0` shot survives / `-1` shot consumed; jump table 0x4B336; damage tables 0x596B6/0x596C2/0x596CE; monster tier system, generator degradation, secret-wall prizes, supershot/reflect |
 | 0x40906 | `shot_mob_collision` | Bounding-box collision test for shot projectiles |
 | 0x52192 | `mob_collision_test` | Bounding-box overlap + type dispatch for combat/pickup/warp |
+| 0x47DAE | `shot_impact_spawn` | Spawns impact/explosion effect at target position in effect MOB slots 0xD–0xF |
+| 0x4AEA0 | `shot_onscreen_check` | Range/visibility check vs scroll registers 0x904026/28; gates door reactions to shots |
+| 0x53818 | `shot_reflect_calc` | Computes the reflected direction when a reflect-power shot hits a wall (result → `0x9049C4[player]`) |
+| 0x5303A | `wall_crumble` | Applies shot damage to a destructible wall (called from `resolve_shot_hit` with (target, damage)) |
+| 0x54112 | `dragon_shot_hit` | Dragon damage handler: hit counts only while breathing fire and not sleeping/turning; 9th hit kills; on hit picks a new random path program with pose-matched fast-forward |
 
 ---
 
@@ -394,7 +401,7 @@ These functions are called from multiple top-level subsystems:
 | 0x53D10 | `dragon_death` | Dragon death sequence |
 | 0x5DF68 | `spawn_fireball_projectile` | Spawn dragon fireball projectile MOB |
 | 0x5E888 | `wall_remove_playfield_update` / `refresh_floor_visual` | Refresh floor visual after wall removal |
-| 0x5EAB8 | `refresh_wall_visual` | Refresh wall visual (called from refresh_tile_visual for wall-type tiles) |
+| 0x5EAB8 | `pf_wall_draw` (aka `refresh_wall_visual`) | Draws a wall tile: 8-neighbor connectivity mask → variant table 0x5EE24 (0x5EF24 for patterns 6/0xB); descriptor base by `wallpattern` (0–5: 0x5BBE0 + offsets 0x5EDD4; 6: 0x5D2F8; destructible ≥6: 0x5D3D0; 7+: random of 6 sets at 0x5EDF4); register entry 0x5EAB8, stack entry 0x5EAC2 |
 | 0x4ADD6 | `enqueue_sound` | Low-level sound ID enqueue into ring buffer at 0x90404B; called by play_sound |
 | 0x40CC4 | *(maze cleanup)* | Called from start_attract_to_game with arg 0; clears maze state |
 
@@ -458,9 +465,9 @@ Calls `pf_stamp_update` (0x5E542) to write tile data to VRAM.
 
 Args: d0.w = packed tile position (bits 9:5 = column, bits 4:0 = row); a0 = pointer to 4-word sprite descriptor; a1.w = palette base. Computes VRAM address at 0x900000 for a 2×2 tile block. The sprite table at 0x900000 is **128 columns × 256 rows** of 2-byte entries. Writes 4 words from template at: `[slot+0]`, `[slot+0x80]`, `[slot+2]`, `[slot+0x82]`.
 
-### `maze_food_mob_consume` — 0x43D8C
+### `maze_scan_objects` — 0x43D8C *(formerly `maze_food_mob_consume` — corrected)*
 
-Three calling modes based on argument:
-- **arg=0:** Scan for tile type 0x10 (food), call `pf_replace(slot, 0)` and `moblist_remove_and_clear`
-- **arg=0xFFFF:** Scan for tile type 0xF (food variant), remove it, store its slot index in `ram.level_start_slot` (0x9049E0)
-- **arg=N (N≥1):** Remove N random treasure mobs (types 0x31/0x32), iterating until N consumed
+Multi-mode maze object scanner over all 0x400 `mob_link` tiles. Modes by argument (object types are the §3.14 Maze Object IDs, not the old "food" readings):
+- **arg=0:** count **EXIT** tiles (type 0x10). Implements EXIT_CHOOSEONE: keeps one randomly chosen exit (slot → 0x904A0A); the others become fake exits (hpos |= 0x10) when LFLAG4 bit 6 (EXIT_FAKE) is set, otherwise are replaced with floor via `pf_replace`. When only one exit exists, clears LFLAG3 bit 6 (EXIT_MOVES, long bit 14 of 0x90491C).
+- **arg=0xFFFF:** count **PLAYERSTART** tiles (type 0xF).
+- **arg=N (N≥1):** count **food** (types 0x31 FOOD_DESTRUCTABLE / 0x32 FOOD_INVULN) — used by the has-food logic. (This food-counting mode is what led to the original misnaming.)

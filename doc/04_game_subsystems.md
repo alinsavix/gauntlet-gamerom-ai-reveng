@@ -356,20 +356,31 @@ Dragon state is encoded in `ram.dragon_state` (`0x904890`) as a bitmask:
 
 `dragon_move_update` (0x53E4A): Updates dragon position per frame based on `ram.dragon_facing`. Calls collision detection. Calls `dragon_change_dir` (0x53D10) if blocked.
 
-`dragon_fire_attack` (0x54748): Creates fire MOBs at intervals along the attack vector toward `ram.dragon_target_hpos`/`ram.dragon_target_vpos`.
+`dragon_fire_setup` (0x54748, formerly `_x100`/`dragon_fire_attack`): fires one fireball. Sets `dragon_fire_cooldown` (0x90487C) = 8; the fireball's origin segment is `dragon_seg_mob_ids[tbl_0x5D4B8[pose + facing*2]]` (a signed-byte index into the 4-word segment MOB-id array at 0x904894); the shot direction array `0x9049C4[shot_slot]` receives `dragon_facing`.
 
-`dragon_attack_check` (0x540E8): Determines whether dragon should fire. Checks player distance and `ram.dragon_anim_ctr` timing.
+`dragon_attack_check` (0x540E8): allocates the fireball shot slot; called when the current path byte's fire bit is set, `dragon_fire_cooldown` == 0, and `(dragon_move_state & 0xF) < 4`.
 
-### 8.3 Dragon ROM Data
+### 8.3 Dragon Path System (fully decoded)
+
+The path table at 0x5D578 is **5 path programs × 16 bytes** (0x5D578–0x5D5C7), *not* 128×16. The current program is `dragon_path_num` (0x904886, 0–4); the byte index is `dragon_anim_ctr` (0x904892) >> 3, so the path phase advances every 8 frames and wraps at 128.
+
+**Path byte format:** bit 0 = fire trigger; the byte value (0–7) is the head pose. Head rendering per phase boundary: `idx = byte + facing*4` → picture from 0x5D528, hpos delta from 0x5D438, vpos delta from 0x5D478 (deltas are added to the dragon MOB position and produce `dragon_head_hpos/vpos` 0x904882/84).
+
+**Sustained fire:** while locked-in (state bit 3), a fire byte at a phase boundary holds the counter until the fire cooldown expires (continuous flame), otherwise the counter advances mod 128.
+
+**Damage rules** (`dragon_shot_hit`, 0x54112, called from `resolve_shot_hit`): hits only count when the fire bit is active (mouth open) and the dragon is not sleeping/turning; each hit plays sound 0x3A, increments `dragon_hits` (0x904880) — the 9th kills the dragon — and switches to a new random path (getrandom(5)), fast-forwarded to the first byte matching the current pose so the animation stays continuous.
+
+### 8.4 Dragon ROM Data
 
 | ROM Address | Content |
 |-------------|---------|
-| 0x5D508 | Dragon head sprites |
-| 0x5D568 | Fire-breath tiles |
-| 0x5D4B8 | Body segment tile lookup |
-| 0x5D478 | X/Y position offsets |
-| 0x5D528 | Dragon X position offsets per path step |
-| 0x5D578 | 128-step circular body path (~2 KB, 16 bytes per step; only fire-trigger bit decoded — see `08_known_issues.md` item 4.2) |
+| 0x5D438 | `dragon_head_hdelta` — head hpos deltas, indexed by pose + facing*4 |
+| 0x5D478 | `dragon_head_vdelta` — head vpos deltas |
+| 0x5D4B8 | `dragon_fire_segment_tbl` — signed byte: which segment MOB the fireball spawns from, indexed by pose + facing*2 |
+| 0x5D528 | `dragon_head_pics` — head picture words, indexed by pose + facing*4 |
+| 0x5D578 | `dragon_path_programs` — 5 × 16-byte path programs (see 8.3) |
+
+The dragon data ends at 0x5D5C7. The region 0x5D5C8–0x5DA15, formerly misattributed to the dragon path table, contains the 16-entry playfield palette table, special palettes/color ramps, and the "SECRET CODE" contest strings — see `05_data_reference.md` §5 and `08_known_issues.md` 5.1.
 
 ---
 
@@ -894,6 +905,34 @@ Three loops per frame:
 
 Skips in TITLE (0xFFFE) or SCORES (0xFFFF) modes. Selects one player per frame using `frame_counter & 3`. Per selected player:
 
-- Bit 2 of `0x904007` AND bit 0 of update flags → calls `flash_score_display` (0x45940): draws score digits with flash attribute via OS 0x260
-- Bit 1 of update flags OR health < 0xC8 → calls `update_health_bar` (0x459A2): draws health bar MOBs, adjusts tile base for poison/powered states using `0x904A26` and `0x905F40`
-- Calls `display_score_for_player` (0x45866) to update character portrait and score digits in HUD MOB table at `0x905048`
+- Bit 2 of `0x904007` AND bit 0 of update flags → calls `flash_score_display` (0x45940): draws the player's 7-digit score (`player_score` 0x904990) via OS `display_decimal_value` (0x260) with the flash attribute from table 0x57350; clears redraw bit 0
+- Bit 1 of update flags OR health < 0xC8 → calls `update_health_bar` (0x459A2): draws the bonus multiplier "×N" (when `player_bonusmult` > 1) and the 5-digit health value (`player_health` 0x904980, longword) at column 0x25; palette shifted −0x1000 (warning via `0x904A26`) or −0x2000 (acid via `0x905F40`); clears redraw bit 1
+- *(Correction: 0x45866 is `player_it_set` — it draws the "IT" label, not a character portrait; see §4.5.)*
+
+## 30. Shot Hit Resolution (`resolve_shot_hit`, 0x4AF50)
+
+`resolve_shot_hit(target, shooter) → d0`: 0 = the shot survives (pierce/reflect/no effect), −1 = the shot is consumed (`mob_unlink(shooter)` + paired picture cleared). `target` is a MOB slot, or 0x400–0x7FF for a playfield tile (generic wall path). `shooter` is 0–3 for players, ≥ 4 for monster shot classes.
+
+**Player shot damage:** base = `shot_damage_base_tbl` (0x596B6)[class] where class = `player_character` (+8 with the shot-power upgrade, `player_powers` byte 1 bit 4): Warrior 2, others 1, upgraded 2; classes 2 and 8 add getrandom(2) (`shot_damage_rand_tbl` 0x596C2). Supershot (`player_supershot` 0x905F68) forces damage 3.
+
+**Dispatch:** target object type = `mob_link >> 10`, dispatched through the 62-entry word-displacement jump table at 0x4B336 (base 0x4B338).
+
+**Player victims** (target hpos & 0xF ≥ 0xC; victim = `0x904066[slot] >> 10`): LFLAG4 bit 0 (ShotStun) → `player_stundelay` += 0x28 (clamp 0x5A), fighting dir cleared, `hurt_cooldown` = 0x12; LFLAG4 bit 1 (ShotHurt) → −2 HP; a supershot shooter does −10 HP; acid-slowed victims are immune. Monster shots use `monstshot_damage_tbl` (0x596CE)[character + 4×armor + shot-tier (shot hpos bits 4–5: +0x10/+0x18/+0x20) + 8×(class ≥ 8)] — per-character defense (Valkyrie best, Wizard worst).
+
+**Monsters:** health/tier = the target's own **hpos low nibble**; per-type tier bases in `mazeobj_tier_base_tbl` (0x5864C: ghost/grunt/aux 4, demon 8, lobber/sorc/supersorc 0xB, generators 5). Damage is subtracted from hpos; if the nibble leaves [base−2, base] the monster is destroyed (`shot_impact_spawn` 0x47DAE sparkle + `moblist_remove_and_clear`), otherwise it survives as a weaker tier. Score = damage × class multiplier (ghost 10, grunt-class 5, Death/IT 1) via `player_add_score_with_mult`. Sorcerers are immune while blinking (hpos bit 12) unless supershot. Supershot pierces monsters (returns 0) except Death and IT.
+
+**Death:** `death_hits` (0x904A5C)++ per shot; real damage only from supershot via `death_damagetrack` (matches the "DEATH DIES AFTER TAKING UP TO 200 HEALTH" tip).
+
+**Generators:** tier 1 destroyed by any hit; tiers 2/3 need damage ≥ 2/3, else they degrade: `mob_link -= damage << 10` (becomes the next weaker generator) with a picture update.
+
+**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures from `mazeobj_spawn_pics_tbl` 0x5868C. Destructible walls crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces.
+
+**Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
+
+**Food/potions:** destroyed with per-character speech ("<name> … shot the food", table 0x596F6 + suffix 0x9A) and one-time dialogs (ids 2/0x40/0x80). Poison variants are identified **by picture**: food pic 0x25ED → `poison_timer` (0x9048B2) = 0x258; potion pic 0x20FC → 0x4B0; sound 0x37. Treasure and invulnerable food/potions break only with supershot.
+
+**Dragon:** player shots route to `dragon_shot_hit` (0x54112, see §8.3); monster shots just despawn.
+
+**Secret trick hooks** (trick id in 0x904065, progress in `secret_tricks_flags` 0x904872): 5 = shoot food, 9 = get hit by a strong monster shot, 0x11 = shoot another player, 0x5A = supershot the treasure.
+
+`escape_timer` (0x9048C6) and `idle_timer` (0x90490C) reset on kills/destruction.

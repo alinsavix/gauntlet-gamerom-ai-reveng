@@ -84,18 +84,17 @@
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x90487C | 2 B | `dragon_stun_timer` | Countdown while dragon is stunned |
-| 0x90487E | 1 B | `dragon_encounter_flag` | Bit 0 = encounter triggered this level |
-| 0x90487F | 1 B | *(unknown)* | Possibly power dialog flags |
-| 0x904880 | 2 B | `dragon_hits` | Number of hits on the dragon |
-| 0x904882 | 2 B | `dragon_target_hpos` | Horizontal position of current target player |
-| 0x904884 | 2 B | `dragon_target_vpos` | Vertical position of current target player |
-| 0x904886 | 2 B | `dragon_rand_dir` | Random direction preference for dragon movement |
-| 0x90488C | 2 B | `dragon_move_state` | Dragon health tracking / movement sub-state |
-| 0x90488E | 2 B | `dragon_facing` | Current facing direction (0–3 or 0–7) |
+| 0x90487C | 2 B | `dragon_fire_cooldown` | Fire cooldown/hold timer: set to 8 by `dragon_fire_setup` (0x54748), decremented per frame in `main_handle_dragon`, gates fireball rate and holds the path counter during locked-in sustained fire. *(Formerly `dragon_stun_timer` — verified uses are fire pacing.)* |
+| 0x90487E | 2 B | `dialog_once_flags` | WORD bitfield of "dialog shown once" flags (one bit per dialog id; tested/set by `dialog_first_encounter` code). **Bit 0 = dragon first-encounter dialog** (the old `dragon_encounter_flag`); bit 0 cleared per level by `maze_new_level_setup`, whole word cleared at game init. Covers GRK's `item_dlg_flags` (0x90487E) + `power_dlg_flags` (0x90487F) bytes. |
+| 0x904880 | 2 B | `dragon_hits` | Number of hits on the dragon (9th hit = death) |
+| 0x904882 | 2 B | `dragon_head_hpos` | Horizontal position of the dragon's HEAD: mob hpos + pose/facing delta from table 0x5D438, masked 0xFF80. *(Not the target player — GRK's "head position" guess was right.)* |
+| 0x904884 | 2 B | `dragon_head_vpos` | Vertical position of the dragon's head (delta table 0x5D478) |
+| 0x904886 | 2 B | `dragon_path_num` | Current path program number 0–4 (row into `dragon_path_programs` 0x5D578); re-randomized via getrandom(5) on every hit. *(Formerly `dragon_rand_dir`.)* |
+| 0x90488C | 2 B | `dragon_move_state` | Dragon movement sub-state; low nibble also limits simultaneous fireballs (< 4 to fire) |
+| 0x90488E | 2 B | `dragon_facing` | Current facing direction (0–3; used as ×4 stride into head pose tables) |
 | 0x904890 | 2 B | `dragon_state` | State bitmask (see Dragon Activity enum) |
-| 0x904892 | 2 B | `dragon_anim_ctr` | Animation counter (negative = waking, positive = active) |
-| 0x904894 | 2 B | `dragon_mob_id` | Dragon's MOB slot ID (direct word value, not a pointer) |
+| 0x904892 | 2 B | `dragon_anim_ctr` | Animation counter 0–127 (wraps); path phase = ctr >> 3 (advances every 8 frames) |
+| 0x904894 | 2 B × 4 | `dragon_seg_mob_ids` | Dragon segment MOB slot IDs: [0] = head/main MOB (used by `main_handle_dragon`), [1..3] = body segments (0x904896/98/9A, previously undocumented); fireballs spawn from the segment selected by table 0x5D4B8[pose + facing*2] |
 | 0x90489C | 4 B | `ptr_exit_openclose_anim` | Pointer to exit open/close animation for current tileset |
 
 ### 1.6 Wall Randomizer
@@ -232,7 +231,7 @@
 | 0x904A9E | 2 B | `dialog_timer` | Active timer for dialog display; non-zero skips gameplay in main loop |
 | 0x904AA0 | 2 B | `ptr_dialog_box_x` | Dialog X position pointer |
 | 0x904AA2 | 2 B | `ptr_dialog_box_y` | Dialog Y position pointer |
-| 0x904AA4 | 30 B | `ptr_dialog_msg` | Buffer for dialog message string |
+| 0x904AA4 | 30 B | `dialog_msg_buf` | Buffer for dialog/name-entry message string (the buffer itself, not a pointer — `secret_getname` fills it with 'A' + 28 spaces + NUL directly) |
 
 ### 1.13 Player Death / Respawn
 
@@ -331,6 +330,7 @@
 | 0x905F50 | 2 B × 4 | `invis_timer` | Per-player invisibility countdown |
 | 0x905F58 | 2 B × 4 | `debounce_shift_a` | Per-player bit-0 joystick debounce shift register |
 | 0x905F60 | 2 B × 4 | `debounce_shift_b` | Per-player bit-1 joystick debounce shift register |
+| 0x905F68 | 1 B × 4 | `player_supershot` | Per-player supershot state (POWER_SUPERSHOT pickup): while > 0, shots do 3 damage to monsters (10 to players), pierce through monsters (except Death/IT), hit blinking sorcerers, break treasure/invulnerable items, and damage Death via `death_damagetrack` |
 | 0x905F80 | 2 B | `mob_list_heads` | Head of the current Y-bucket MOB linked list (single word, first bucket) |
 | 0x905F82 | 2 B × 64 | `priority_bucket_array` | Base of the 64-word Y-bucket array; `main_move_monsters` indexes this by current Y scroll position to find the starting MOB for iteration |
 | 0x910700 | 2 B × 32 | `tport_pos_table` | Maze slot index for each transporter |
@@ -718,15 +718,18 @@ See `02_os_rom.md` section 9 for full OS RAM variable map (`0x904F00–0x904FFF`
 
 | Range | Description |
 |-------|-------------|
-| 0x00–0x3F | Add one of this kind (from element list) (mask 0x3F) |
-| 0x40–0x4F | Use HT1 (horizontal type 1) with N = 1..16 |
+| 0x00–0x3F | Add one of this kind (from element list) (mask 0x3F); becomes the "last type" |
+| 0x40–0x4F | Use HT1 (horizontal type 1) with N = 1..16 (low nibble + 1) |
 | 0x50–0x5F | Use VT1 (vertical type 1) with N = 1..16 |
 | 0x60–0x6F | Use HT2 (horizontal type 2) with N = 1..16 |
 | 0x70–0x7F | Use VT2 (vertical type 2) with N = 1..16 |
-| 0x80–0x9F | Repeat last type 1 to 32 times |
+| 0x80–0x9F | Repeat last type 1 to 32 times (low 5 bits + 1). Note: "last type" initializes to HT2 before any bytecode |
 | 0xA0–0xAF | Repeat wall horizontally 1 to 16 times |
 | 0xB0–0xBF | Repeat wall vertically 1 to 16 times |
-| 0xC0–0xFF | Skip 1 to 32 times then add wall |
+| 0xC0–0xDF | Skip 1 to 32 times (**no wall added** — verified in decoder; earlier docs merged this with the next row) |
+| 0xE0–0xFF | Skip 1 to 32 times then add one wall |
+
+*Decoder verified (`maze_decode` 0x4C1BC): the 0x40–0x7F selector is `(byte>>4)&3` via the pointer table at 0x59B54 = [&HT1, &VT1, &HT2, &VT2]; run count always comes from the bytecode's low nibble; the H/V type byte contributes the §3.20 mode (top 2 bits) and element (low 6 bits). Vertical runs are drawn downward with stride 32 (31 on odd-angle mazes) and advance the cursor by 1.*
 
 ### 3.20 Maze Horizontal and Vertical Types (encoded in HT1/HT2/VT1/VT2 header bytes)
 
@@ -751,7 +754,7 @@ See `02_os_rom.md` section 9 for full OS RAM variable map (`0x904F00–0x904FFF`
 | 0x03 | 1 B | `level_flags_3` | Random food count + cyclic/destructible walls + exit behavior |
 | 0x04 | 1 B | `level_flags_4` | Shot behavior + traps + wrap + fake exit + offscreen |
 | 0x05 | 1 B | `playfield_patterns` | Wall/floor pattern index (selects visual tile set) |
-| 0x06 | 1 B | `playfield_colors` | Color palette index |
+| 0x06 | 1 B | `playfield_colors` | Color palette index (0–15, selects a 32-byte entry in `playfield_palettes` at ROM 0x5D5C8) |
 | 0x07 | 1 B | `horizontal_type_1` | RLE H-span type 1 |
 | 0x08 | 1 B | `horizontal_type_2` | RLE H-span type 2 |
 | 0x09 | 1 B | `vertical_type_1` | RLE V-span type 1 |
@@ -821,7 +824,7 @@ struct text_desc {
 | 0x405C8 | ~16 B | `palette_offset_by_walltype` — playfield palette offset indexed by wall pattern |
 | 0x405D8 | ~16 B | `palette_offset2_by_walltype` — second palette offset table |
 | 0x40E02 | 28 B | Monster speed override table (7 longwords): base speed=0x80, fast speed=0x100 |
-| 0x40E46 | ~32 B | `monster_count_table` — max monsters to process per frame, indexed by `(difficulty_setting << 3) + active_player_count - 1`. Count increased by `0x90405F` per-level bonus. Capped at `level_number * 2`. If `frame_overflow` (0x904916) non-zero: forced to 0. |
+| 0x40E46 | 32 B | `monster_count_table` — max monsters to process per frame: 8 rows (EEPROM settings 0x904A24 **bits 5–7**, the "extra monsters" tuning 0–7 — *not* the difficulty bits 8–9) × 4 columns (players−1). Index = `((settings & 0xE0) >> 3) + players − 1`. Values: v0 = 4,11,15,18 up to v7 = 18,25,29,32. Added to `int8(0x90405F)` per-level bonus. Capped at `level_number * 2` (except level 1). If `frame_overflow` (0x904916) non-zero: forced to 0. |
 | 0x4A4FA | ~30 B | Stun direction remap table (garbles joystick direction cyclically) |
 | 0x4A86A | 12 B | Direction-from-input nibble lookup table |
 | 0x4A920 | ~10 B | Player speed table (indexed by character type × 2) |
@@ -895,13 +898,14 @@ Four parallel 64-entry tables (one entry per maze object type, indexed 0–63):
 | 0x5CAA8 | 128 B | Floor connectivity descriptors (16 × 8B, 8 sub-entries each) |
 | 0x5CB48 | ~504 B | Sparse object tile table: tile IDs for transporters, traps, doors, exits, forcefields |
 | 0x5CD40 | ~1.7 KB | Dense animation frame table: sequential tile IDs for special object animations |
-| 0x5D3E8 | ~152 B | Dragon path motion vectors (signed word pairs, ~38 entries) |
-| 0x5D4B8 | — | Dragon body segment tile lookup |
-| 0x5D478 | — | Dragon X/Y position offsets |
-| 0x5D508 | — | Dragon head sprites |
-| 0x5D528 | — | Dragon X position offsets per path step |
-| 0x5D568 | — | Dragon fire-breath tiles |
-| 0x5D578 | ~2 KB | Dragon 128-step circular body path table (16 bytes per entry; see `08_known_issues.md`) |
+| 0x5D3E8 | ~80 B | Dragon path motion vectors (signed word pairs; runs up to `dragon_head_hdelta`) |
+| 0x5D438 | 64 B | `dragon_head_hdelta` — head hpos deltas, indexed by path byte + facing×4 (verified) |
+| 0x5D478 | 64 B | `dragon_head_vdelta` — head vpos deltas, same indexing (verified) |
+| 0x5D4B8 | ~112 B | `dragon_fire_segment_tbl` — signed byte per (pose + facing×2): which segment MOB in `dragon_seg_mob_ids` (0x904894) the fireball spawns from (verified) |
+| 0x5D528 | 80 B | `dragon_head_pics` — head picture words, indexed by path byte + facing×4 (verified; the old "0x5D508 head sprites"/"0x5D568 fire-breath tiles" rows described parts of this range) |
+| 0x5D578 | 80 B | `dragon_path_programs` — **5 path programs × 16 bytes** (NOT 128×16/2 KB; see `08_known_issues.md` 4.2/5.1). Byte = (pose<<1)\|fire-bit; one byte per 8-frame phase |
+| 0x5D5C8 | 512 B | `playfield_palettes` — **16 × 32-byte (16 IRGB words) playfield palettes, indexed by maze header `playfield_colors` (0–15)**; copied to color RAM 0x910500 by the palette-setup function ~0x43490 (entry = index×32; the word at entry+16 is also stored to 0x904020/0x90401E). Previously misattributed to the dragon path table |
+| 0x5D7C8 | 32 B | `playfield_palette_alt1` — special palette used when palette index ≥ 0x10 (reference at 0x43526) |
 | 0x5B20E | var | `palette_cycle_player0` — Player 0 hurt flash palette cycling data |
 | 0x5B256 | var | `palette_cycle_player1` — Player 1 hurt flash palette cycling data |
 | 0x5B29E | var | `palette_cycle_player2` — Player 2 hurt flash palette cycling data |
@@ -909,10 +913,11 @@ Four parallel 64-entry tables (one entry per maze object type, indexed 0–63):
 | 0x5B3EE | var | `palette_cycle_player0_alt` — Alternate cycling (poison/invuln) for player 0 |
 | 0x5B4AE | var | `palette_cycle_player2_alt` — Alternate cycling for player 2 |
 | 0x5B81C | var | `exit_anim_table` — Exit open/close animation data, indexed by wall pattern × 64 |
-| 0x5D7E8 | — | Playfield palette A (for level_flags wall pattern < 6) |
-| 0x5D828 | — | Playfield palette B (for level_flags wall pattern ≥ 6) |
-| 0x5D848 | ~412 B | Palette color ramps (13 blocks × 32 bytes, one per tileset environment) |
-| 0x5D9E8 | ~136 B | Contest strings: "SECRET CODE", "REMEMBER YOUR CODE", etc. (contest ended 12/19/86) |
+| 0x5D7E8 | 32 B | `playfield_palette_alt2` — Playfield palette A (wall pattern < 6 / palette index ≥ 0x10 path; reference at 0x43510) |
+| 0x5D808 | 32 B | Additional 32-byte palette entry (12 colors + 4 zero words; between palette A and B) |
+| 0x5D828 | 32 B | Playfield palette B (for level_flags wall pattern ≥ 6) |
+| 0x5D848 | ~412 B | Palette color ramps (13 blocks × 32 bytes, 12 colors + 4 zero words each, one per tileset environment). *Open item: code at 0x41666 (monster region) references 0x5D978, which is mid-block if the stride is 32 — the indexing scheme is untraced.* |
+| 0x5D9E8 | ~46 B | `secretcode_text_recs` — contest strings in {x, y, string-ptr} record format (same as the ENTER-YOUR records at 0x5DA16): "SECRET CODE", "REMEMBER YOUR"; referenced from code at 0x552EA (contest ended 12/19/86) |
 | 0x5DAA0 | ~136 B | Wall neighbor connectivity state table (16 rows × 8 bytes) |
 | 0x5F9CE | 64 B | Straight-wall connectivity lookup (16 × 4B) |
 | 0x5FACA | 18 B | Corner-wall connectivity lookup (9 × 2B) |
