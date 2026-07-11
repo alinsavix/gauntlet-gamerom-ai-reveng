@@ -36,7 +36,7 @@ Assembled from 4 chips (interleave A-chips as even bytes, B-chips as odd; concat
 
 **Combined:** `row76.bin`, 128 kB, sha1 `decbe6438b3a2618bd7fe79d14be034efadd7ff4`
 
-### OS ROM (`row10.bin`, 32 KB)
+### Slapstic/Level Data ROM (`row10.bin`, 32 KB)
 
 | Part Number | Location | Size | sha1sum |
 |-------------|----------|------|---------|
@@ -45,7 +45,7 @@ Assembled from 4 chips (interleave A-chips as even bytes, B-chips as odd; concat
 
 **Combined:** `row10.bin`, 32 kB, sha1 `e4a36380f4a6394ad5cfb5aff5d7c8b352232d3d`
 
-### Slapstic/Level Data ROM (`row9.bin`, 64 KB)
+### OS ROM (`row9.bin`, 64 KB)
 
 | Part Number | Location | Size | sha1sum |
 |-------------|----------|------|---------|
@@ -67,7 +67,7 @@ Assembled from 4 chips (interleave A-chips as even bytes, B-chips as odd; concat
 | [05_data_reference.md](05_data_reference.md) | RAM variable map, enums and constants, data structures, ROM data tables catalog |
 | [06_maze_catalog.md](06_maze_catalog.md) | Complete 116-maze table (mazes 0–115, levels 1–97 plus treasure rooms and special mazes) |
 | [07_function_index.md](07_function_index.md) | Consolidated index of all ~170 documented functions with addresses, names, and descriptions |
-| [08_known_issues.md](08_known_issues.md) | Remaining open questions and unresolved name conflicts (resolved items have been folded into docs 03–07) |
+| [08_known_issues.md](08_known_issues.md) | Resolution status; currently no known unresolved correctness issues |
 
 ---
 

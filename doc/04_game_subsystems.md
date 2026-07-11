@@ -21,7 +21,7 @@ Plus one software-only parallel array:
 
 | Array | Base Address | Per-MOB offset | Contents |
 |-------|-------------|---------------|----------|
-| `mob_anim` | `0x904066` | id × 2 | Anim counter (bits 15-13), direction (bits 12-10), back-link (bits 9-0) |
+| `mob_state_link` (`mob_anim`) | `0x904066` | id × 2 | Object-specific auxiliary state (bits 15–10) plus universal backward link (bits 9–0) |
 
 ### 1.2 MOB ID Assignments
 
@@ -50,15 +50,19 @@ Plus one software-only parallel array:
 
 ## 2. MOB Animation System
 
-### 2.1 Animation State in `mob_anim` (`0x904066`)
+### 2.1 Multiplexed MOB State/Back-Link (`0x904066`)
 
-Each MOB's animation state is encoded in a word at `0x904066 + mob_id × 2`:
+Each slot has a word at `0x904066 + mob_id × 2`. The old name `mob_anim` describes ordinary monsters but not the array's general role:
 
-| Bits | Field |
-|------|-------|
-| 15–13 | Animation frame counter (0–7) |
-| 12–10 | Direction of travel (0–7 = 8 compass directions) |
-| 9–0 | Back-link (previous MOB ID in depth-sorted chain) |
+| Object/use | Bits 15–10 |
+|------------|------------|
+| Ordinary monster | Bits 15–13 animation counter; bits 12–10 direction |
+| Player MOB | Player number, recovered with `state >> 10` by shot-hit handling |
+| Door tile | Four-bit adjacent-door/shape mask in bits 13–10 |
+| Forcefield hub (type 0x3F) | Segment/graphic variant; `pf_floor_update` selects table 0x5BA70 from the upper state bits |
+| Movable wall | Hit accumulator in units of 0x400; dissolves at 0x6400 (25 hits) |
+
+Bits 9–0 always hold the previous MOB ID in the software depth-sorted list. A precise general name is therefore `mob_state_link`; documentation retains `mob_anim` as a historical alias where discussing monster animation.
 
 ### 2.2 Player Animation Modes
 
@@ -118,7 +122,7 @@ Uses `mob_hpos` flag bits to determine monster state:
 
 When the loop encounters a generator type (28–45), it checks `ram.monster_count` against the level cap. If conditions are met, spawns a new monster MOB at the generator position using the maze-encoded monster type, respecting the max-monsters-per-type cap.
 
-> **Correction:** REPORT.md misidentified `0x492C0` as the generator handler (`handle_generate`). `0x492C0` is actually `monster_generic_handler` — the per-monster AI handler for standard types (args: mob_id, monster_type_index, speed). Generator spawning is handled inline within `monster_loop_core` (0x41026).
+`handle_generate` (0x492C0) is the generator spawn routine called from the type->0x24 branch of `monster_loop_core` (0x41026). Its arguments are the generator's maze/MOB slot, generated monster type index, and spawn probability. On success it chooses a random starting cardinal direction, scans as many as eight neighboring cells using the padded tables at 0x57B50/0x57B68/0x57B80, requires a traversable empty cell, and creates the appropriate tiered monster there. In the special negative game state, `monster_generation_retry_timer` replaces the random probability gate.
 
 ### 3.5 Monster Find and Shoot (`monster_find_and_shoot`, 0x41750)
 
@@ -132,7 +136,7 @@ AOE damage: scans all active monster MOBs within screen bounds. Reduces each mon
 
 ### 3.7 Player Hit (`monster_playerhit`, 0x495A6)
 
-Called when a monster occupies the same tile as a player. Applies monster-type damage from `shothit_dist` tables to player health. Checks player invincibility flags. Triggers `sound_player_hurt` and heartbeat sounds at low health.
+Called when a monster occupies the same tile as a player. Applies monster-type damage from `shothit_dist` tables to player health, checks player invincibility flags, and triggers hurt/low-health audio as appropriate.
 
 ---
 
@@ -167,7 +171,7 @@ The core collision-checked movement function. Handles:
 
 > **Correction:** Player health is a **32-bit longword** at `0x904980` (stride 4, 4 players), not a 16-bit word as REPORT.md claimed (verified — e.g., the acid damage path reads/writes `0x904980 + player*4` as longwords).
 
-Health drain is handled by `main_health_countdown` (0x466F6): automatic per-frame health reduction. `player_lowhealth` (0x487CA): plays heartbeat sound below threshold; sets dying flag when health reaches 0.
+Health drain is handled by `main_health_countdown` (0x466F6): automatic per-frame health reduction plus the low-health warning cadence. Below 200 health, it increments `player_state_timer` (`0x904A26[player]`) modulo 0x8000. A seven-word mask table at 0x576A8, selected by `health >> 5`, makes the heartbeat progressively more frequent as health falls; the health-number renderer uses the timer's low nibble for an 8-frames-dim/8-frames-normal pulse. At 200 health or above, the timer is reset to `0xFFFF` (disabled). The same RAM words are reused as death/name-entry countdowns when the player is no longer active; see §10.3.
 
 When coins are inserted for an active player (`coincheck`): adds health from table at 0x57862 indexed by `(game_settings & 0x1F)`.
 
@@ -246,11 +250,11 @@ Central dispatcher called by `maze_decode` for each object token. Creates MOBs f
 
 - **Marker types** (walls, traps, forcefields): writes `mob_picture = 0x8000/0x8001/0x8003`. Post-decode scan renders actual playfield tiles.
 - **Dragon (type 0x3C):** Special multi-slot handling — occupies 2×2 maze cells. Calls dragon setup at 0x5496E. **Suppressed** (written as empty) when `game_mode` == 0 and `levelnum_current` < 12 (and level ≠ 9999) — dragons never spawn from maze data before level 12 in a normal game.
-- **Invulnerable food (type 0x32):** Random variant selection via `getrandom(3)` from 4-entry table at 0x58F20.
+- **Invulnerable food (type 0x32):** Random variant selection via `getrandom(3)` from the three-word table at 0x58F20.
 - **All other types:** Standard placement using master parameter tables (0x5858C–0x5868C):
-  1. Look up base tile from `base_tile_table[type]`
-  2. Look up palette from `palette_table[type]`
-  3. Compute pixel H/V positions
+  1. Look up the base picture from `mazeobj_base_picture_tbl[type]`
+  2. Load the low-nibble horizontal size/monster tier from `mazeobj_hsize_tier_tbl[type]`
+  3. Compute H/V positions using `mazeobj_hpos_correction_tbl[type]` and `mazeobj_vpos_offset_tbl[type]`
   4. Call `mob_create(slot, tile, hpos, vpos, type, direction)`
 
 ### 5.5 Level Flags Load & Randomization (`maze_load_pickup_config`, 0x436FE)
@@ -304,6 +308,7 @@ Transporter position table: `tport_pos_table` at `0x910700` (word array[32]), po
 When a player touches a transporter:
 1. `player_tport` (0x50224) → `tport_player_flash` (0x50616): saves player MOB picture, sets picture to 0x1709 (flash frame)
 2. `tport_player_move` (0x50662): finds valid destination via `tport_check_dest` (0x50ADE), handles IT/thief handoff, plays transport sound (0x28), calls `handle_tport` at destination
+3. `tport_restore_player_picture` (0x50B88) is the one-argument completion leaf used when the per-player movement state reaches 0x10. It maps the player index through `active_mob_ids`, then restores that MOB's picture word from `tport_saved_picture[player]` and returns.
 3. `handle_tport` (0x47CFE): copies player position to animation slot, creates `tport_create_splodey` explosion animation, triggers transport
 4. Player MOB picture is restored after transition
 
@@ -378,9 +383,12 @@ The path table at 0x5D578 is **5 path programs × 16 bytes** (0x5D578–0x5D5C7)
 |-------------|---------|
 | 0x5D438 | `dragon_head_hdelta` — head hpos deltas, indexed by pose + facing*4 |
 | 0x5D478 | `dragon_head_vdelta` — head vpos deltas |
-| 0x5D4B8 | `dragon_fire_segment_tbl` — signed byte: which segment MOB the fireball spawns from, indexed by pose + facing*2 |
+| 0x5D4B8 | `dragon_fire_segment_tbl` — 16 signed bytes: which segment MOB the fireball spawns from, indexed by pose plus facing offset |
+| 0x5D4C8/0x5D4E8 | `dragon_pose_hdelta` / `dragon_pose_vdelta` — 16 pose/facing position words per axis |
+| 0x5D508 | `dragon_body_pics` — 16 animation/facing picture words |
 | 0x5D528 | `dragon_head_pics` — head picture words, indexed by pose + facing*4 |
 | 0x5D578 | `dragon_path_programs` — 5 × 16-byte path programs (see 8.3) |
+| 0x54BD6 | `dragon_head_hitbox_offsets` — five padded words forming four overlapping H/V pairs for the cardinal head hitbox |
 
 The dragon data ends at 0x5D5C7. The region 0x5D5C8–0x5DA15, formerly misattributed to the dragon path table, contains the 16-entry playfield palette table, special palettes/color ramps, and the "SECRET CODE" contest strings — see `05_data_reference.md` §5.
 
@@ -403,7 +411,7 @@ States (in `ram.thief_mode`, `0x904BA0`):
 | THIEF_ENTER_OK (16) | Entering the level |
 | THIEF_IS_MUGGER (128) | Mugger variant |
 
-When overlapping target player: steals item (calls `thief_steal_effect`), plays "thief" speech (0x62–0x65 by player). Exit when thief reaches maze edge calls `thief_exit` (0x4E122).
+When overlapping target player: steals an item or health (calls `thief_steal_from_player`, 0x4E1FE), then plays the player-specific “thief” speech (0x62–0x65). Exit when thief reaches the maze edge calls `thief_exit` (0x4E122).
 
 ### 9.2 Thief Targeting (`thief_target_calc`, 0x4DFF6)
 
@@ -434,6 +442,8 @@ Displays a floating score popup over a killed monster or picked-up item. Scans `
 
 Calls OS `read_high_score_entry` (0x1AE) with the player's current score. If the score ranks in the top 10, stores the rank in `ram.player_highscore_rank` (`0x904A4A`) and sets `ram.player_status = 0x04` (name entry mode).
 
+It also initializes `player_state_timer` (`0x904A26[player]`): a qualifying score gets 0x0A8C (2700 frames, 45 seconds) for initials entry, while a non-qualifying score gets 0x0258 (600 frames, 10 seconds) for the GAME OVER display. `player_death_sequence` and the per-player loop decrement this timer. This is the death-state reuse of the live player's low-health warning counter.
+
 ### 10.4 First-Encounter Dialogs (`dialog_first_encounter`, 0x4C440)
 
 Uses `ram.encounter_seen_flags` (`0x9049E4`) as a 32-bit bitmask. On first encounter (bit not set): looks up the message string from tables at 0x5A200 (message index) and 0x5A300 (message strings). Plays sound 0x1C ("Message Appears on Screen").
@@ -456,16 +466,18 @@ TO CONTINUE GAME
 AT THIS LEVEL
 ```
 
-Sound 0x3B ("Gauntlet II Theme Song") plays when shown. Gate variable `0x904B7C` must be ≠ 0xFFFF to show.
+Sound 0x3B ("Gauntlet II Theme Song") plays when shown. The shared attract/display timer `0x904B7C` must not contain its disabled sentinel (`0xFFFF`) for this path to show the continue prompt.
 
 ### 10.6 Secret Room (verified by disassembly)
 
 Secret-room availability is paced by a pair of level counters (the old "score counter/threshold" description was wrong):
 
-- `secret_possible_counter` (0x904878) counts down **once per level** (decrement site 0x4A748); both it and `secret_possible_start` (0x90487A) initialize to 20 at game init (0x43312). When the countdown reaches 0, `maze_new_level_setup` may activate a secret room by loading the maze's secret-room config byte into `0x904065` (which also serves as the trick-type id — see the §3.17 Secret Tricks enum in `05_data_reference.md`).
+- `secret_possible_counter` (0x904878) counts down **once per level** (decrement site 0x4A748); both it and `secret_possible_start` (0x90487A) initialize to 20 at game init (0x43312). When the countdown reaches 0, `maze_new_level_setup` may activate a secret room by loading the maze's secret-room config byte into `0x904065` (the ordinary 0x01–0x11 trick ID; see §3.17 in `05_data_reference.md`).
 - `secret_check` (0x486FE) runs at level transitions (from `main_start_game` at 0x480EC when the between-level delay `0x904A4E` expires, and from the `show_continue_screen` epilogue at 0x4D8DC). If a secret room was active (`0x904065` ≠ 0): when a valid player (0–3) is in `0x904063`, it records the maze number into `secret_prev_maze` (0x904870) and adds 15 to the start value (clamped at 40) — secret rooms become rarer after a win; when nobody entered, it subtracts 2 (floor 4) — they come sooner. Either way the countdown reloads from the start value. (The `update_bgm_volume` name from FUNCTIONS_PLAN.md is refuted — the function touches no sound state.)
 - `secret_getname` (0x54EC6) handles the winner: with EEPROM settings bit 13 set it opens the name-entry screen (buffer 0x904AA4 = 'A' + spaces, `player_status` = 0x20, "ENTER YOUR" / "'LAST-NAME FIRST-NAME'" prompts); otherwise `player_status` = 2 and a short between-level delay.
-- Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872); observed hooks in `resolve_shot_hit`: trick 5 (shoot foods) increments on food shot, trick 9 ("don't get hit") and trick 17 ("don't hurt friends") record violations, and a check against value 0x5A (not in the trick enum) marks supershot-on-treasure.
+- After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-character `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
+- After a player earns the secret challenge, `show_level_start_screen` (0x44DB4; formerly misnamed `spawn_enemies_attract`) saves the maze trick in `0x904064`, replaces `0x904065` with a random task code 0x50–0x5D, selects a time limit from tables at 0x57360/0x5737C, and displays the optional task qualifier from the 14-record table at 0x573D4. Code 0x5A is therefore valid: its qualifier is “AFTER REMOVING ALL TREASURE,” and a supershot hit on ordinary treasure increments the player's progress.
+- Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872). Ordinary-maze hooks in `resolve_shot_hit` include trick 5 (shoot food), trick 9 (get hit), and trick 17 (hurt another player); the same array is reused for challenge codes 0x50–0x5D.
 
 ---
 
@@ -562,7 +574,7 @@ Each tile descriptor is 8 bytes = 4 words, written to VRAM positions for a 2×2 
 `update_wall_connection` (0x5F876): builds a 4-bit connectivity bitmask (left/right/up/down) by examining orthogonal neighbors via `get_wall_type` (0x5F77A). Indexes lookup tables:
 - `0x5F9CE`: straight walls (16 entries)
 - `0x5FACA`: corner walls (9 entries)
-- `0x5FBDC`: junction walls (9 entries)
+- `0x5FBDC`: `door_gfx_type3`, a 3×3 table for isolated type-3 door orientation (9 entries)
 
 Writes tile type, scroll attributes, and shape index to `0x902000/0x902800/0x903000/0x904066`.
 
@@ -579,6 +591,8 @@ Sets up the right-side info panel: player name tags, health bars, and inventory 
 Displays all active player scores via OS `display_decimal_value` (0x260). Called every frame.
 
 ### 14.3 Logo Color Cycling (`main_logo_updcolors`, 0x4DCBA)
+
+`title_logo_init` (0x4DA3E) is the separate no-argument initializer called only by the TITLE branch of `start_attract_screen`. It initializes the brightness sequence and timers, clears ten MOB-color words, then constructs the multi-row logo from MOB slots beginning at 0x21 by writing picture, H/V position, and link arrays. It selects the full or short four-byte motion program at 0x5AC2E/0x5AC4E from `title_intro_state`, backs the pointer up one record for the update routine's pre-increment convention, and starts the logo off-screen with `scroll_apply(-128, 0)`. The routine has its own frame and returns at 0x4DCB8; it is not a tail of `scroll_apply`.
 
 **SCORES mode:** Calls `score_screen_color_cycle` (0x4DE76): every 16th frame, shifts 11 color RAM entries one slot, creating a scrolling rainbow effect on the high-score text.
 
@@ -609,10 +623,11 @@ The shift registers accumulate 16 consecutive frames of each input bit. ANDing m
 Handles the treasure room countdown. When the player enters a treasure room:
 - Displays "YOU HAVE X SECONDS TO COLLECT TREASURES"
 - Counts down the timer (stored at `ram.treasure_timer`, `0x9049E8`)
-- At 10 seconds remaining: randomly selects exit door via `getrandom` if conditions met
-- Seconds 6–10 with active state: awards items from ROM table at 0x5ABE0 (per-second award function pointers), plays sounds
-- On OS 0x272 each full second: displays countdown number
-- At 0: calls end-of-treasure-room handler (0x4D476, see `show_continue_screen`), plays final jingle, disables thief, clears playfield alpha region, sets transition timer to 300 frames
+- On each full second, displays the numeric countdown through OS 0x272 and normally speaks the matching ZERO–TEN sound from the 11-longword table at 0x5AB64
+- At 10 seconds on levels above 30, a 1-in-16 gate may choose one of four fake spoken countdowns. The pointer table at 0x5ABE0 selects a five-number sequence at 0x5AB90–0x5ABDF for displayed seconds 10–6; at 6 it follows with JUST KIDDING or FOOLED YOU from 0x5ABF0
+- Without a fake countdown, displayed second 6 has a 1-in-4 chance to play one of four warning lines from 0x5AC08, with a parallel 1/2-second suppression count from 0x5AC18
+- At 0, selects a timeout line from 0x5ABF8 (settings bit 11 forces ZERO; otherwise random among ZERO, BETTER LUCK NEXT TIME, ZERO, and LOOKS LIKE YOU LOSE)
+- When the timer reaches zero and at least one player remains, calls `show_continue_screen` (0x4D476)
 
 Sub-function 0x4D900 (`count_active_players`): counts players with status 1/2/8/0x10.
 
@@ -659,6 +674,11 @@ Every 64th tile: clears VBLANK semaphore at `0x904002` to yield to display syste
 
 Post-processing: calls `wall_remove_playfield_update` (0x5E888) or `wall_place_playfield_update` (0x5F024) for each modified tile.
 
+Two independent leaf routines follow this function in ROM and must not be treated as cyclic-wall tail blocks:
+
+- `maze_place_object_types` (0x5E7A6) takes one longword stack argument whose low byte is an object type. It scans MOB slots 0x20–0x3FF, accepts `mob_link >> 10` equal to either that type or `type - 3`, optionally rejects off-screen tiles when level-flags byte 4 bit 2 is set, and calls `mob_place_tile(slot, 0)` for each match. It returns 1 if any matching slot was found, otherwise 0. Maze setup calls it for types 0x0A–0x0D according to level flags; `player_tile_interact` calls it again after replacing the relevant maze object.
+- `maze_convert_walls_to_exits` (0x5E80C) takes no arguments and scans the same MOB-slot range. It converts picture 0x20F6 and generic wall markers (`mob_picture == 0x8000`) other than forcefields (type 0x3F) by calling `mob_place_tile(slot, 0x10)`. It returns 1 if it converted at least one slot. `main_move_players` calls it when `escape_timer` reaches 0x5208 (21,000 frames), producing the documented all-walls-become-exits escape behavior.
+
 ---
 
 ## 19. Random Wall System (`main_walls_random_move`, 0x5E41A)
@@ -673,6 +693,8 @@ Manages randomly appearing/disappearing walls (WALL_RANDOM type = 6). Each proce
 - `0x9048A2`: random wall target index
 - `0x9048A4`: random wall current index
 - `0x9048A0`: random wall low water mark
+
+Maze setup establishes these bounds while scanning `mob_link`: object type `0x06` is `MAZEOBJ_WALL_RANDOM`, and the first such tile initializes both `0x9048A0` and `0x9048A2`. It is not a player-start or trapped-area marker.
 
 ---
 
@@ -717,7 +739,7 @@ Called every frame. Uses a countdown timer to write game settings to EEPROM appr
 | 0x90400E (word) | 0x904B8F (byte) | Stats byte 2 |
 | 0x904018 (word) | 0x904B90 (byte) | Stats byte 3 |
 | 0x904016 (word) | 0x904B91 (byte) | Stats byte 4 |
-| 0x904B86 (word) | 0x904B92 (word) | Game stats word |
+| 0x904B86 `games_played_counter` (word) | 0x904B92 (word) | Persistent completed-game/statistics counter |
 | 0x904A24 (word) | 0x904B94 (word) | Game settings |
 
 If ALL match: no write. If ANY differ: calls `eeprom_write` (0x43192) to copy all 6 values to write buffer at `0x904B8E` and flush via OS 0x24E.
@@ -794,7 +816,7 @@ Example: `0xF3` = 1111_0011 → No input. Player stands idle.
 | Player 0 | 0x5818C | ~86 B | Available but not active in standard demo |
 | Player 1 | 0x581C4 | ~150 B | **Active in standard demo** (Elf character) |
 | Player 2 | 0x5825A | ~2 B | Minimal / end-of-stream only |
-| Player 3 | 0x5825C | ~2 B | Minimal / end-of-stream only |
+| Player 3 | 0x5825C | 48 B | Final 24 command pairs through 0x5828B |
 
 Initial pointer table at ROM `0x58098` (4 longwords).
 
@@ -888,7 +910,7 @@ pf_offset = (col × 2) × 64 + (row × 2)   ; top-left 8×8 tile
 
 MOBs are organized into forward-linked lists by vertical band. The 64 list heads are at `0x905F80` (one per 8-pixel vertical band). Each list chains MOBs through mob_link bits 9-0.
 
-A software backward-link is maintained in mob_anim (`0x904066`) bits 9-0 and separately in a table at `0x904940`, enabling O(1) removal from the doubly-linked list.
+A software backward-link is maintained in `mob_state_link` (`0x904066`) bits 9–0 and separately in a table at `0x904940`, enabling O(1) removal from the doubly-linked list.
 
 ---
 
@@ -910,8 +932,8 @@ Three loops per frame:
 
 Skips in TITLE (0xFFFE) or SCORES (0xFFFF) modes. Selects one player per frame using `frame_counter & 3`. Per selected player:
 
-- Bit 2 of `0x904007` AND bit 0 of update flags → calls `flash_score_display` (0x45940): draws the player's 7-digit score (`player_score` 0x904990) via OS `display_decimal_value` (0x260) with the flash attribute from table 0x57350; clears redraw bit 0
-- Bit 1 of update flags OR health < 0xC8 → calls `update_health_bar` (0x459A2): draws the bonus multiplier "×N" (when `player_bonusmult` > 1) and the 5-digit health value (`player_health` 0x904980, longword) at column 0x25; palette shifted −0x1000 (warning via `0x904A26`) or −0x2000 (acid via `0x905F40`); clears redraw bit 1
+- Bit 2 of `0x904007` AND bit 0 of update flags → calls `draw_player_score` (0x45940): draws the player's 7-digit score (`player_score` 0x904990) via OS `display_decimal_value` (0x260) with the flash attribute from table 0x57350; clears redraw bit 0
+- Bit 1 of update flags OR health < 0xC8 → calls `draw_player_health` (0x459A2): draws the bonus multiplier "×N" (when `player_bonusmult` > 1) and the 5-digit health value (`player_health` 0x904980, longword) at column 0x25; palette shifted −0x1000 during the dim half of the low-health pulse (`player_state_timer` 0x904A26 low nibble < 8, excluding the 0xFFFF sentinel) or −0x2000 when acid-slowed (`0x905F40`); clears redraw bit 1
 - *(Correction: 0x45866 is `player_it_set` — it draws the "IT" label, not a character portrait; see §4.5.)*
 
 ## 30. Shot Hit Resolution (`resolve_shot_hit`, 0x4AF50)
@@ -920,17 +942,17 @@ Skips in TITLE (0xFFFE) or SCORES (0xFFFF) modes. Selects one player per frame u
 
 **Player shot damage:** base = `shot_damage_base_tbl` (0x596B6)[class] where class = `player_character` (+8 with the shot-power upgrade, `player_powers` byte 1 bit 4): Warrior 2, others 1, upgraded 2; classes 2 and 8 add getrandom(2) (`shot_damage_rand_tbl` 0x596C2). Supershot (`player_supershot` 0x905F68) forces damage 3.
 
-**Dispatch:** target object type = `mob_link >> 10`, dispatched through the 62-entry word-displacement jump table at 0x4B336 (base 0x4B338).
+**Dispatch:** target object type = `mob_link >> 10`. The computed JMP is at 0x4B336; its 62-entry signed-word displacement table occupies 0x4B338–0x4BB3 and uses 0x4B338 as the branch base.
 
 **Player victims** (target hpos & 0xF ≥ 0xC; victim = `0x904066[slot] >> 10`): LFLAG4 bit 0 (ShotStun) → `player_stundelay` += 0x28 (clamp 0x5A), fighting dir cleared, `hurt_cooldown` = 0x12; LFLAG4 bit 1 (ShotHurt) → −2 HP; a supershot shooter does −10 HP; acid-slowed victims are immune. Monster shots use `monstshot_damage_tbl` (0x596CE)[character + 4×armor + shot-tier (shot hpos bits 4–5: +0x10/+0x18/+0x20) + 8×(class ≥ 8)] — per-character defense (Valkyrie best, Wizard worst).
 
-**Monsters:** health/tier = the target's own **hpos low nibble**; per-type tier bases in `mazeobj_tier_base_tbl` (0x5864C: ghost/grunt/aux 4, demon 8, lobber/sorc/supersorc 0xB, generators 5). Damage is subtracted from hpos; if the nibble leaves [base−2, base] the monster is destroyed (`shot_impact_spawn` 0x47DAE sparkle + `moblist_remove_and_clear`), otherwise it survives as a weaker tier. Score = damage × class multiplier (ghost 10, grunt-class 5, Death/IT 1) via `player_add_score_with_mult`. Sorcerers are immune while blinking (hpos bit 12) unless supershot. Supershot pierces monsters (returns 0) except Death and IT.
+**Monsters:** health/tier = the target's own **hpos low nibble**; per-type horizontal-size/tier bases are in `mazeobj_hsize_tier_tbl` (0x5864C: ghost/grunt/aux 4, demon 8, lobber/sorc/supersorc 0xB, generators 5). Damage is subtracted from hpos; if the nibble leaves [base−2, base] the monster is destroyed (`shot_impact_spawn` 0x47DAE sparkle + `moblist_remove_and_clear`), otherwise it survives as a weaker tier. Score = damage × class multiplier (ghost 10, grunt-class 5, Death/IT 1) via `player_add_score_with_mult`. Sorcerers are immune while blinking (hpos bit 12) unless supershot. Supershot pierces monsters (returns 0) except Death and IT.
 
 **Death:** `death_hits` (0x904A5C)++ per shot; real damage only from supershot via `death_damagetrack` (matches the "DEATH DIES AFTER TAKING UP TO 200 HEALTH" tip).
 
 **Generators:** tier 1 destroyed by any hit; tiers 2/3 need damage ≥ 2/3, else they degrade: `mob_link -= damage << 10` (becomes the next weaker generator) with a picture update.
 
-**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures from `mazeobj_spawn_pics_tbl` 0x5868C. Destructible walls crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces.
+**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces.
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 
@@ -938,6 +960,6 @@ Skips in TITLE (0xFFFE) or SCORES (0xFFFF) modes. Selects one player per frame u
 
 **Dragon:** player shots route to `dragon_shot_hit` (0x54112, see §8.3); monster shots just despawn.
 
-**Secret trick hooks** (trick id in 0x904065, progress in `secret_tricks_flags` 0x904872): 5 = shoot food, 9 = get hit by a strong monster shot, 0x11 = shoot another player, 0x5A = supershot the treasure.
+**Secret-objective hooks** (`0x904065`, progress in `secret_tricks_flags` 0x904872): ordinary trick 5 = shoot food, 9 = get hit by a strong monster shot, and 0x11 = shoot another player. Challenge code 0x5A (“AFTER REMOVING ALL TREASURE”) increments progress when a player's supershot hits ordinary treasure (type 0x2E). The 0x50–0x5D challenge namespace is installed by `show_level_start_screen`, so 0x5A is not an out-of-range maze trick.
 
 `escape_timer` (0x9048C6) and `idle_timer` (0x90490C) reset on kills/destruction.

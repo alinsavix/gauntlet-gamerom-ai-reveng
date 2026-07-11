@@ -125,7 +125,7 @@ The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolu
 
 ---
 
-## 4. Game ROM Hook Vector Table (`0x40000–0x400FF`)
+## 4. Game ROM Header and Hook Tables (`0x40000–0x4013F`)
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
@@ -136,9 +136,13 @@ The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolu
 | `0x40018` | 6 B | `game_irq2` | JMP to game IRQ2 handler |
 | `0x4001E` | 6 B | `game_irq6` | JMP to game IRQ6 handler |
 | `0x40024` | 6 B | `game_exception` | JMP to game exception handler |
-| `0x40030` | 6 B | `game_pf_init` | JMP to playfield initialization |
-| `0x40042` | 6 B | `game_vblank_hook` | JMP to supplemental VBLANK handler (input reading) |
+| `0x4002A` | 6 B | `game_startup_hook2_slot` | Optional post coin/text-display initialization hook tested by the OS. All six bytes are zero in Gauntlet II, so the OS skips it. |
+| `0x40030` | 6 B | `game_playfield_init` | Optional game playfield-initialization hook. `os_main_loop` verifies the slot begins with JMP, then calls it indirectly through A0; Gauntlet II targets 0x44A82. If absent, the OS clears 0x1000 playfield words itself. |
+| `0x40036` | 6 B | `game_startup_hook1_slot` | Optional post-attract-display initialization hook; zero-filled and therefore skipped in Gauntlet II. |
+| `0x4003C` | 6 B | `game_startup_hook3_slot` | Optional post-palette initialization hook; zero-filled and therefore skipped in Gauntlet II. |
+| `0x40042` | 6 B | `game_vblank_hook_slot` | Optional supplemental VBLANK hook. The OS calls it only when its first word is JMP opcode 0x4EF9; Gauntlet II ships six zero bytes here, so input remains handled by the ordinary OS/game VBL paths. |
 | `0x40048` | 6 B | `game_attract` | JMP to game attract mode handler |
+| `0x4004E` | 6 B | `game_post_attract_hook_slot` | Optional post-attract hook tested by the OS; zero-filled and skipped in Gauntlet II. |
 | `0x40054` | 6 B | `game_eeprom_config` | Optional JMP to EEPROM configuration provider. Returns D0: bit 16 = EEPROM layout flag, bits 8-15 = high config byte, bits 0-7 = low config byte. In Gauntlet: JMP `0x56EAA`. |
 | `0x40060` | 2 B | `game_mob_fill_value` | Default fill value for MOB RAM during display init. In Gauntlet: `0x0000`. |
 | `0x40062` | 2 B | `game_pf_fill_value` | Playfield RAM fill value during startup. In Gauntlet: `0x0010` (background tile). |
@@ -149,7 +153,18 @@ The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolu
 | `0x40074` | 4 B | `game_button0_label_ptr` | Pointer to button 0 label string for self-test. |
 | `0x40078` | 4 B | `game_button1_label_ptr` | Pointer to button 1 label string for self-test. |
 | `0x4007C` | 4 B | `game_joystick_label_ptr` | Pointer to joystick label string for self-test. |
-| `0x40080` | var | `game_checksum_tbl` | ROM checksum validation table. |
+| `0x40080` | 24 B | `game_checksum_tbl` | One 16-byte descriptor `{start=0x40000, end=0x5FFFF, chunk_count=0x8000, enabled=1}`, followed by the 8-byte zero terminator. The OS reads start/end first and stops when the terminator's end is zero. |
+| `0x40098` | 16 B | `game_unreferenced_header_words` | Four unreferenced longwords; not consumed by either checksum-parser path. No runtime meaning assigned. |
+| `0x400A8` | 54 B | `game_header_ff_pad` | 0xFF fill ending at 0x400DD. |
+| `0x400DE` | 6 B | `game_scroll_to_slot_trampoline` | JMP to `scroll_to_slot` (0x46C5E). |
+| `0x400E4` | 6 B | `game_init_display_trampoline` | JMP to `init_display` (0x43486). |
+| `0x400EA` | 6 B | `game_maze_setup_trampoline` | JMP to `maze_setupnew` (0x44AC2). |
+| `0x400F0` | 6 B | `game_pf_replace_trampoline` | JMP to `pf_replace` (0x5F31E). |
+| `0x400F6` | 6 B | `game_mob_clear_trampoline` | JMP to `moblist_remove_and_clear` (0x5DDDA). |
+| `0x400FC` | 6 B | `game_unreferenced_ram_value_pair` | Longword 0x00904894 followed by word 0x872E. No static OS/game consumer; retained as an unassigned header constant pair. |
+| `0x40102` | 17 B | `game_joystick_label` | NUL-terminated “WARRIOR joystick”. |
+| `0x40113` | 22 B | `game_fire_label` | NUL-terminated “WARRIOR <FIRE> button”. |
+| `0x40129` | 23 B | `game_magic_label` | NUL-terminated “WARRIOR <MAGIC> button”; ends at 0x4013F immediately before game code. |
 
 ---
 

@@ -235,7 +235,7 @@ Each maze in the slapstic ROM has this header format:
 | 0x03 | 1 B | `level_flags_3` | Random food count + cyclic/destructible walls + exit behavior |
 | 0x04 | 1 B | `level_flags_4` | Shot behavior + trap behavior + wrap + fake exit + offscreen |
 | 0x05 | 1 B | `playfield_patterns` | Wall and floor pattern index for visual style |
-| 0x06 | 1 B | `playfield_colors` | Color palette index |
+| 0x06 | 1 B | `playfield_colors` | Packed palette selectors: high nibble = main playfield palette index; low nibble = special-palette variant |
 | 0x07 | 1 B | `horizontal_type_1` | RLE horizontal span type 1 (see Maze Compression Bytecodes enum) |
 | 0x08 | 1 B | `horizontal_type_2` | RLE horizontal span type 2 |
 | 0x09 | 1 B | `vertical_type_1` | RLE vertical span type 1 |

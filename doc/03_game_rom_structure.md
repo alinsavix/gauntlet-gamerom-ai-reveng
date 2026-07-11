@@ -23,7 +23,7 @@
 
 ### 1.2 Jump Table (`0x40000–0x40054`)
 
-Ten JMP entries at fixed offsets, called from the OS ROM:
+Fifteen six-byte hook slots occupy 0x40000–0x40059. Ten slots contain active absolute JMP entries or interrupt self-loops; five optional slots are all zero and are skipped because the OS tests for opcode 0x4EF9 before calling them:
 
 | Address | Target | Function |
 |---------|--------|----------|
@@ -34,9 +34,13 @@ Ten JMP entries at fixed offsets, called from the OS ROM:
 | `0x40018` | — | `game_irq2` handler |
 | `0x4001E` | — | `game_irq6` handler |
 | `0x40024` | — | `game_exception` handler |
-| `0x40030` | — | `game_pf_init` — playfield initialization |
-| `0x40042` | — | `game_vblank_hook` — supplemental VBLANK (input reading) |
+| `0x4002A` | zero | Optional startup hook 2 slot (post coin/text initialization); absent in this ROM |
+| `0x40030` | `0x44A82` | `game_playfield_init` — OS-called playfield initialization hook |
+| `0x40036` | zero | Optional startup hook 1 slot (post attract-display initialization); absent |
+| `0x4003C` | zero | Optional startup hook 3 slot (post palette initialization); absent |
+| `0x40042` | zero | Optional supplemental VBLANK hook slot; absent, not a callable entry |
 | `0x40048` | — | `game_attract` — attract mode handler |
+| `0x4004E` | zero | Optional post-attract hook slot; absent |
 | `0x40054` | `0x56EAA` | `game_eeprom_config` — EEPROM config provider |
 
 ---
@@ -278,8 +282,8 @@ Telltale signs of non-compiler-generated code:
 
 ### 4.2 Data Tables Coverage
 
-- **103 named data tables** documented in DETAILED_REPORT.md and FUNCTIONS_PLAN.md
-- ~37 KB data region, ~99% understood
+- The current authoritative catalog is `05_data_reference.md` §5, mirrored by exact-range flags in `gauntlet.r2`; legacy table counts in root-level reports are no longer used as a completeness measure.
+- Live table starts, indexed bases, overlapping views, padding, and runtime-dead blocks have been reconciled across the full game ROM.
 
 ### 4.3 Previously Undocumented Areas — Now Decoded
 
@@ -287,20 +291,22 @@ The following major data areas were unlabeled but have since been decoded:
 
 | Area | Size | Content |
 |------|------|---------|
-| Tile sprite descriptors (0x5BA90–0x5C88F) | ~3.6 KB | 8-byte 2×2-tile descriptors for floor/wall rendering |
-| Special object tiles (0x5CB48–0x5D478) | ~2.4 KB | Sparse object tile index table + dense animation frame table |
+| Tile sprite descriptors (0x5BAE0–0x5C89F) | 3,520 B | 8-byte 2×2-tile descriptors for floor/wall rendering |
+| Special object tiles (overlapping views 0x5CB48–0x5D2F7) | 1,968 B | Sparse object tile index table + dense animation frame table within the attract tile stream |
 | Tile pattern data + embedded code (0x5D848–0x5F9CE) | ~8.6 KB | Palette ramps, contest strings, connectivity table + tile rendering code |
-| Wall connectivity tables (0x5F9CE–0x5FFFF) | ~1.6 KB | 16+9+9 entries for wall segment graphic selection |
-| Speech/dialog strings (0x59716–0x5A200) | ~2.8 KB | Hint records, speech IDs, gameplay tips |
-| In-game message strings (0x5A320–0x5AB1A) | ~2.0 KB | Power-up names, monster names, credits, bonus scoring |
+| Wall/door connectivity and correction tables (0x5EDD4–0x5FC11, interleaved with renderer code) | — | Wall connectivity variants, random descriptor pointers, and exact 3×3 door graphic/position tables |
+| Speech/dialog strings and first-encounter data (0x59736–0x5A37F) | 2,634 B | Hint/tip records, power-up masks/speech, 32 message records, two pointer views, and parallel speech IDs |
+| In-game message/audio data (0x5A380–0x5AC1F) | 2,208 B | Power-up names, monster names, credits, bonus scoring, and treasure-room countdown speech tables |
 | Palette cycling data (0x5B22E–0x5B64A) | ~1.1 KB | Hurt flash, poison shimmer, invulnerability shimmer |
-| Character display config (0x570B4–0x57370) | ~700 B | Portrait offsets, sprite pointers, input bitmasks, auto-repeat timing |
-| Demo/level config (0x57BD8–0x5858C) | ~2.5 KB | Level object placement, default high scores, demo streams, tip strings |
-| Atari contest strings (0x5D9E8–0x5DAA0) | ~136 B | "SEND CONTEST ENTRY FORM TO ATARI GAMES CORP. CONTEST ENDS 12/19/86" |
+| Challenge/character display config (0x57056–0x57370) | 795 B | Challenge target types, linked instruction text, split portrait word/destination arrays, joystick masks, and floor-palette indices |
+| Attract/high-score/demo data (0x57BD8–0x5858B) | 2,484 B | Unreferenced 369-word 0x1Exx tile block, 40 factory high-score records, display strings/configuration, demo streams, and tip strings |
+| Atari contest strings (0x5D9E8–0x5DA97) | 176 B | "SEND CONTEST ENTRY FORM TO ATARI GAMES CORP. CONTEST ENDS 12/19/86" |
 
-### 4.4 Remaining Unknowns
+### 4.4 Resolved Former Unknowns
 
 The four unknowns formerly listed here (dragon path table format, dialog tip boundaries, tile pattern → descriptor mapping, EEPROM bits 5–7/13) have all been resolved by disassembly — see `05_data_reference.md` (data formats, §3.19 bytecodes, §5 ROM tables) and `04_game_subsystems.md` (§8 dragon, §30 shot resolution). The dragon path table turned out to be 5×16 bytes at 0x5D578, with the rest of its formerly claimed 2 KB being playfield palettes and contest strings.
+
+Pointerless blocks are classified as runtime-dead ROM residue rather than unknown live tables. The two large blocks are 0x57BD8–0x57EB9 and 0x5C8B0–0x5CAA7; the completeness pass also isolated the smaller dead blocks at 0x571D8–0x571F9, 0x57332–0x5733F, 0x57358–0x5735F, and 0x5870C–0x58749. Whole-ROM encoded-pointer searches, xrefs, exact-range immediate searches, and surrounding-page immediate searches found no consumer. Their original editor/build-time purpose is not recoverable from runtime code, so apparent geometric layouts are not assigned semantics; `05_data_reference.md` records exact contents and boundaries.
 
 For the current list of open questions, see `08_known_issues.md`.
 
@@ -330,6 +336,6 @@ Called once from the main loop before the first VBLANK wait. Performs full game 
 3. **Initialize display** — calls `init_display` (0x43486) with args (0, 0)
 4. **Read hardware config** — calls OS 0x236 (DIP switches → `0x9049E2`), OS 0x1A8 slot 0xC (game settings → `0x904A24`), OS 0x1A8 slot 0xB (game options, sanitizes via OS 0x1C0)
 5. **ROM version check** — checks bit 12 of settings; if set, reads from ROM 0x40070 and updates EEPROM
-6. **Initialize subsystems** — calls `init_display_list` (0x42F86), `init_monster_system` (0x49BD0), OS 0x14E (hardware init)
+6. **Initialize persistent state/subsystems** — calls `eeprom_load_config` (0x42F86), `highscore_table_init` (0x49BD0), and OS 0x14E (hardware init)
 7. **Initialize RAM variables** — sets timers, clears state variables, sets default character types {0,1,2,3}
 8. **Start attract mode** — calls `start_attract_screen` (0x44414) with arg -2 (GAMEMODE_TITLE)

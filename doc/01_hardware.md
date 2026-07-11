@@ -217,13 +217,12 @@ T+W, T+W+1, ..., T+2W-1
 - Each band's list contains MOBs whose Y position falls in that scanline range
 - Used by **software** for collision detection; uncertain if hardware follows these lists
 
-### 8.5 MOB Backward Link / Animation (`0x904066`, software only)
+### 8.5 MOB Backward Link / Object State (`0x904066`, software only)
 
 | Bits | Meaning |
 |------|---------|
-| 15–13 | Animation counter (0–7) |
-| 12–10 | Direction of travel (0–7 = 8 compass directions) |
-| 9–0 | Back-link (previous MOB ID in depth-sorted chain) |
+| 15–10 | Object-specific auxiliary state. For ordinary monsters: animation counter (15–13) and direction (12–10). Other slot types reuse these bits for player identity, door/forcefield variants, or movable-wall damage. |
+| 9–0 | Back-link (previous MOB ID in depth-sorted chain), common to all uses |
 
 ### 8.6 MOB Pixel Special Cases
 
