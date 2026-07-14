@@ -1,0 +1,6 @@
+start,end_inclusive,size_bytes,kind,description,confidence
+0x40000,0x5561F,87584,mixed_code_inline_data,Compiled C/assembly plus inline tables,Verified
+0x55620,0x56E53,6196,erased_padding,Solid 0xFF gap,Verified
+0x56E54,0x5FFB1,37214,mixed_code_data,"Slapstic helpers, later routines, and ROM tables",Verified
+0x5FFB2,0x5FFFD,76,erased_padding,Solid 0xFF end pad,Verified
+0x5FFFE,0x5FFFF,2,checksum_trailer,Final big-endian word 0xE19E,Verified

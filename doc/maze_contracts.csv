@@ -1,0 +1,31 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x40C78,find_maze,maze number in wrapper caller's first longword,D1.w bank offset; ptr_maze_data side effect,frameless shared-stack helper; reads 8(A7) after wrapper JSR,0x40CC4;0x40CF2;0x40D24;0x40D4E,Verified
+0x40CC4,maze_select_alt_bank,uint32 maze_number,void,frameless wrapper; argument is consumed by find_maze,0x4421A;0x44EC4;0x48518;0x48618,Verified
+0x40CF2,maze_init,uint32 maze_number,void,frameless wrapper; argument is consumed by find_maze,0x4810A,Verified
+0x40D24,load_level_tileset,uint32 maze_number,void,frameless wrapper; argument is consumed by find_maze,0x44A00;0x4A140;0x4CD36,Verified
+0x40D4E,maze_select_bank_special,uint32 maze_number,void,frameless wrapper; argument is consumed by find_maze,0x44E3E;0x481FE,Verified
+0x44AC2,maze_setupnew,const uint8_t *maze_record,void,,0x400EA;0x43910,Verified
+0x4C1BC,maze_decode,const uint8_t *maze_record,void,,0x44B94,Verified
+0x45E40,maze_place_object,"uint16 slot_or_offset, uint16 object_type, uint16 scan_base",void,,0x44C18,Strong inference
+0x43F68,maze_addrandompickups,uint16 enable_random_pickups,void,,0x48358;0x48590;0x48672,Verified
+0x42E9A,maze_randomplace,uint16 object_type,uint16 packed_slot in D0.l,,,Verified
+0x4526A,maze_show,void,void,,0x48364;0x48596;0x4868C,Verified
+0x4529A,maze_hide,void,void,,0x442A6;0x44536;0x447B8;0x448E6;0x449D8,Verified
+0x452D0,setup_infopanel,int16 player_selector (-1 = whole panel),void,,0x42CA4;0x42E7E;0x44542;0x447C4;0x448F2;0x449E4;0x44F3E;0x46AD0;0x48278;0x4833A;0x48524;0x489A8;0x48B3A;0x49DD6;0x4A10A;0x4ACC2;0x4D4E4;0x4E392;0x4E3F8,Verified
+0x462AE,dragon_reserve_footprint_cell,uint16 packed_slot,void,,0x46218;0x46238;0x46248;0x5F560;0x5F578;0x5F582,Verified
+0x4631C,maze_tile_write_at,"uint16 packed_slot, uint16 object_type, uint16 span_length",void,,0x4C2E8;0x4C3A2,Verified
+0x52ECA,maze_checknum,void,void,,0x52E10;0x52E50,Verified
+0x4BE24,level_splash,void,void,,0x45222,Verified
+0x438AE,maze_new_level_setup,void,void,,0x442B2;0x44A06;0x48156;0x4820A;0x4855C;0x4863C;0x4A146;0x4CD60,Verified
+0x436FE,maze_load_pickup_config,const uint8_t *maze_record,void,,0x44B46;0x4521C;0x48556;0x48636,Verified
+0x436CC,get_random_maze_flags,void,uint32 level_flags in D0.l,,0x4379E;0x437BA,Verified
+0x43D8C,maze_scan_objects,int16 scan_mode,void,,0x43964;0x43B76;0x4414C,Verified
+0x43826,slapstic_cmd_bitwise,void,void,,0x43716;0x43904,Verified
+0x56E58,slapstic_cmd_bank0,void,void,clobbers D0; saves/restores SR,0x40CA0;0x40CAC;0x42FFC;0x52EE4,Verified
+0x56E6E,slapstic_cmd_bank3,void,void,clobbers D0; saves/restores SR,0x40C78,Verified
+0x56E84,slapstic_cmd_bankX,"D0.w selector offset, A0 bank-select base",void,register arguments,0x40CDC;0x40D3C,Verified
+0x56E90,slapstic_cmd_maze_init,"A0 source, A1 destination; D0 dummy bus value",void,register arguments; branches to shared 0x56E54 tail,0x40D0E,Verified
+0x56E98,slapstic_cmd_bankX_special,"D0.w selector offset, A0 bank-select base",void,register arguments,0x40D66,Verified
+0x56EAA,slapstic_verify,void,uint32 packed status/sums in D0.l; success 0x0001FFFE,,0x40054,Verified
+0x46C5E,scroll_to_slot,uint16 packed_slot,void,,0x400DE;0x43974,Verified
+0x46F56,set_scroll_pos,"int16 horizontal, int16 vertical",void,,0x46C9A;0x46F44,Verified

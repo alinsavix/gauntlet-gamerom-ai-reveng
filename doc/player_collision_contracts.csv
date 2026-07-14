@@ -1,0 +1,27 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x41BF0,player_try_move,"uint16 player_index, int16 delta, uint16 movement_flags",D0.w movement result; 0x00F0 = no movement,frameless wrapper saves D2-D7/A2-A6 before reading three normal stack arguments,0x4AA1E,Verified
+0x41C30,player_try_move_core,"D0.w doubled player index, D6.w delta, D7.w flags; A2/A3/A4 MOB arrays",D0.w movement result,internal register-state entry; recursively reentered by BSR,0x41C28;0x41E76;0x4207E;0x422B2;0x424BE,Verified
+0x42648,tile_lookup_core,"D1.w candidate offset, D2.w current offset, D3/D4 coordinates; A2/A3/A4 MOB arrays",carry set when occupied and within collision bounds; D1 retained,BSR-only register entry,0x425E6;0x425F8;0x42624;0x42636;0x426E4;0x426F4;0x4271C;0x4272C,Verified
+0x425D0,probe_up,"D2.w current offset, D3/D4 coordinates; A2/A3/A4 MOB arrays",D1.w candidate offset; carry = blocked,register entry; may tail-branch to tile_lookup_core,0x41D1E;0x422E4,Verified
+0x4260C,probe_down,"D2.w current offset, D3/D4 coordinates; A2/A3/A4 MOB arrays",D1.w candidate offset; carry = blocked,register entry; may tail-branch to tile_lookup_core,0x41D68;0x420B0,Verified
+0x426D4,probe_left,"D2.w current offset, D3/D4 coordinates; A2/A3/A4 MOB arrays",D1.w candidate offset; carry = blocked,BSR-only register entry,0x41EA8;0x421A4,Verified
+0x4270C,probe_right,"D2.w current offset, D3/D4 coordinates; A2/A3/A4 MOB arrays",D1.w candidate offset; carry = blocked,BSR-only register entry,0x41C70;0x4215A,Verified
+0x42744,squeeze_through_check,"D1.w candidate offset, D2.w current offset, D5.w doubled player index; A3 H-position array",D0.l boolean; Z reflects result,register entry,0x41C78;0x41EB0;0x420B8;0x422EC,Verified
+0x4FEB2,corner_squeeze_geometry,"uint16 packed_slot, uint16 player_index",D0.l boolean,,0x427A4;0x4E8C2,Verified
+0x406B6,mob_probe_up,uint16 mob_slot,"D0.w blocking slot, -1 none, or 0x0400 boundary sentinel",frameless stack leaf,,Verified
+0x40732,mob_probe_down,uint16 mob_slot,"D0.w blocking slot, -1 none, or 0x0400 boundary sentinel",frameless stack leaf,,Verified
+0x4083A,mob_probe_left,uint16 mob_slot,D0.w blocking slot or -1,frameless stack leaf,,Verified
+0x408A0,mob_probe_right,uint16 mob_slot,D0.w blocking slot or -1,frameless stack leaf,,Verified
+0x407A6,mob_probe_candidate,"D1.w candidate offset, D2.w current offset; A0/A1/A2 V/H/picture arrays",carry set for blocking candidate; distance scratch updated,BSR-only register entry,0x406F2;0x40706;0x4071A;0x4076C;0x4077E;0x40790;0x40866;0x40876;0x40888;0x408CC;0x408DC;0x408EE,Verified
+0x52192,mob_collision_test,"uint16 candidate_slot, uint16 player_index",D0.l boolean collision/interaction result,,0x425A6;0x425C2,Verified
+0x42598,mob_collision_test_preserve_d1_a,"D1.w candidate offset, D5.w doubled player index",D0.l boolean; Z reflects result; D1 preserved,register wrapper,0x41D8E;0x41F96;0x42162;0x421AC,Verified
+0x425B4,mob_collision_test_preserve_d1_b,"D1.w candidate offset, D5.w doubled player index",D0.l boolean; Z reflects result; D1 preserved,register wrapper,0x41D26;0x41D70;0x421CA;0x423D6,Verified
+0x4280E,door_traverse_right,D2.w current offset; A2/A3/A4 MOB arrays; saved D5 coordinate at 0x0A(A7),D0.w status; caller consumes Z (zero = path handled),register/shared-caller-stack entry,0x41C92;0x420F2;0x42326,Strong inference
+0x428A4,door_traverse_left,D2.w current offset; A2/A3/A4 MOB arrays; saved D5 coordinate at 0x0A(A7),D0.w status; caller consumes Z (zero = path handled),register/shared-caller-stack entry,0x41ECA;0x420E4;0x42318,Strong inference
+0x4293A,door_traverse_up,D2.w current offset; A2/A3/A4 MOB arrays; saved D5 coordinate at 0x0A(A7),D0.w status; caller consumes Z (zero = path handled),register/shared-caller-stack entry,0x41CA4;0x41EDC;0x420D2,Strong inference
+0x429D0,door_traverse_down,D2.w current offset; A2/A3/A4 MOB arrays; saved D5 coordinate at 0x0A(A7),D0.w status; caller consumes Z (zero = path handled),register/shared-caller-stack entry,0x41CB2;0x41EEA;0x42306,Strong inference
+0x427B4,failed_door_post,"D2.w current offset, D4/D5 coordinates, D6/D7 state; A2/A3/A4 MOB arrays",void,BSR-only register entry,0x4289C;0x42932;0x429C8;0x42A5E,Verified
+0x5E35E,ray_march_right,"D2.w current offset, D3.w clearance, D4/D5 coordinates; A2/A3/A4 MOB arrays",D1.w candidate offset or -1; N signals failure; failure sets D2 bit 31,register entry,0x41316;0x4281E,Verified
+0x5E2A2,ray_march_left,"D2.w current offset, D3.w clearance, D4/D5 coordinates; A2/A3/A4 MOB arrays",D1.w candidate offset or -1; N signals failure; failure sets D2 bit 31,register entry,0x412E6;0x428B4,Verified
+0x5E1D8,ray_march_up,"D2.w current offset, D3.w clearance, D4/D5 coordinates; A2/A3/A4 MOB arrays",D1.w candidate offset or -1; N signals failure; failure sets D2 bit 31,register entry,0x412B6;0x4294A,Verified
+0x5E10C,ray_march_down,"D2.w current offset, D3.w clearance, D4/D5 coordinates; A2/A3/A4 MOB arrays",D1.w candidate offset or -1; N signals failure; failure sets D2 bit 31,register entry,0x4128A;0x429E0,Verified

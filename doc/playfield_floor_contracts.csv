@@ -1,0 +1,16 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x5E536,pf_stamp_update,"uint16 packed_position, const uint16 *descriptor4, uint16 addend",void,frameless normal-stack leaf,0x529F6;0x52A46;0x52A8A;0x52AD8;0x52AF6;0x53124;0x534F0;0x535E2;0x5363C,Verified
+0x5E542,pf_stamp_update_regs,"D0.w = packed position, A0 = four-word descriptor, A1.w = addend",void,register entry shared by floor/wall/tile renderers,0x5E920;0x5EB26;0x5F612,Verified
+0x5E57E,tile_on_screen_d4,D4.w = packed maze position,"D0.l = -1 when on screen, else 0",register wrapper; tail-branches into shared saved-register body,0x5FE8C,Verified
+0x5E584,tile_on_screen_test,uint16 packed_maze_position,"D0.l = -1 when on screen, else 0",normal-stack wrapper sharing body with 0x5E57E,0x48C62;0x500B2;0x502D8;0x50466;0x50778,Verified
+0x5E5D2,tile_near_screen_d4,D4.w = packed maze position,"D0.l = -1 when near the screen, else 0",register wrapper; tail-branches into shared saved-register body,0x5E7EC,Verified
+0x5E5D8,tile_near_screen_test,uint16 packed_maze_position,"D0.l = -1 when near the screen, else 0",normal-stack wrapper; called indirectly through A2 by dragon visibility code,,Verified
+0x5E7A6,maze_place_object_types,uint8 object_type,"D0.l = 1 when any matching type or type-3 slot exists, else 0",frameless; reads low byte of first stack slot at A7+0x1B after saving registers,0x43BC4;0x43BF4;0x43C14;0x51260,Verified
+0x5E80C,maze_convert_walls_to_exits,void,"D0.l = 1 when any eligible wall was converted, else 0",,0x4AD16,Verified
+0x5E868,maze_special_floor,void,void,,0x44C68,Verified
+0x5E888,pf_floor_draw_xy,"D0.w = x, D1.w = y",void,register wrapper; branches past the normal-stack argument loads in 0x5E892,0x5E786;0x5EA0C;0x5F63E;0x5F6A2;0x5F6D2;0x5F710,Verified
+0x5E892,pf_floor_update,"uint16 x, uint16 y",void,normal-stack entry to shared floor-rendering body,0x52AA4,Verified
+0x5EA00,maze_floor_decor,void,void,32x32 loop calling register entry 0x5E888,0x44C46,Verified
+0x5EA26,pf_isblankfloor_stack,"uint16 x, uint16 y","D0.l = -1 for eligible blank floor, else 0",unreferenced stack wrapper; falls through into register body 0x5EA2E,,Verified
+0x5EA2E,pf_isblankfloor,"D0.w = x, D1.w = y","D0.l = -1 iff x is nonzero, picture is 0x8000, and object type is not 0x3F; else 0",register body; also entered by fall-through from 0x5EA26,,Verified
+0x5EA66,pf_is_connectable_floor_xy,"D0.w = x, D1.w = y","D0.l = -1 for a connectable floor neighbor, else 0",register entry sharing the -1/0 return leaves at 0x5EA5E/0x5EA62,0x5E986;0x5E998;0x5E9A8,Verified

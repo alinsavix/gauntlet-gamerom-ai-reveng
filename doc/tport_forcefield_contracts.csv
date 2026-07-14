@@ -1,0 +1,21 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x47C0E,tport_cycle_start,"uint16 source_mob_slot, uint16 animation_channel",void,,0x4286E;0x42904;0x4299A;0x42A30;0x4691C;0x48E26;0x49A7C;0x4B484;0x4DF84;0x4EC20;0x4F650;0x5266C;0x54274,Verified
+0x47CFE,handle_tport,"uint16 source_mob_slot, uint16 animation_channel",void,,0x47226;0x4FC1E;0x50152;0x5050A;0x509DE;0x50ABE,Verified
+0x4E684,tport_route_connect,"uint16 source_pos, uint16 destination_pos, uint16 approach_pos",void,,0x5087A,Verified
+0x4E73A,tport_route_connect_if_empty,"uint16 source_pos, uint16 destination_pos, uint16 approach_pos",void,,0x4FBD8,Verified
+0x4E7C0,tport_find_id,uint16 packed_maze_pos,D0.l = one-based transporter ID; level_tport_count + 1 when absent,,0x4E69E;0x4E6AC;0x4E754;0x4E762;0x4FAEC;0x50278;0x509FE,Verified
+0x50224,player_tport,"uint16 transporter_pos, uint16 player_index",void,,0x513CE,Verified
+0x50616,tport_player_flash,uint16 player_index,void,,0x47310,Verified
+0x50662,tport_player_move,uint16 player_index,void,,0x47324,Verified
+0x50ADE,tport_check_dest,"uint16 destination_mob_slot, uint16 player_index",D0.l = 1 blocked or 0 usable,,0x50480;0x507F6,Verified
+0x50B88,tport_restore_player_picture,uint16 player_index,void,,0x47338,Verified
+0x5107A,tport_route_write_pair,"uint16 forward_id, uint16 reverse_id, uint32 forward_reverse_words",void,frameless leaf; the two halves of the third argument supply the forward and reverse words,0x4E72A;0x4E7B0,Verified
+0x510BC,tport_route_read_pair,"uint16 forward_id, uint16 reverse_id",D0.l = forward word in bits 31-16 and reverse word in bits 15-0; absent halves are zero,frameless leaf,0x4E6C0;0x4E776,Verified
+0x52F26,maze_forcefield_setup,void,void,four calls to consume_forcefield_code are indirect through A2,0x44C40,Verified
+0x52FBE,consume_forcefield_code,uint16 marker_mob_slot,"D0.l = forcefield code 1-3, or 0 for a non-marker",,,Verified
+0x53346,check_forcefield_collision,uint16 packed_maze_pos,D0.l = 1 on a forcefield tile or 0 otherwise,,0x4AA68,Verified
+0x53398,forcefield_segments_setup,void,void,,0x44C1E,Verified
+0x5DF5A,mob_place_tport_anim,"uint16 source_mob_slot, uint16 animation_channel",void,"frameless shared-body entry; saves D3-D7/A5-A6, adds 0x0D to the channel, then branches to insert_mob_depth_sorted",0x47CE0;0x47F90,Verified
+0x5DF8E,tport_create_splodey,"uint16 source_mob_slot, uint16 animation_channel",void,"frameless shared-body entry; saves D3-D7/A5-A6, adds 0x19 to the channel, then branches to insert_mob_depth_sorted",0x47D9E,Verified
+0x5FC56,pf_isff_d0,D0.w packed_maze_pos,D0.l = 1 when the coordinate belongs to a forcefield segment or 0 otherwise,register-argument entry sharing the pf_isff body,0x5E946,Verified
+0x5FC5E,pf_isff,uint16 packed_maze_pos,D0.l = 1 when the coordinate belongs to a forcefield segment or 0 otherwise,frameless stack-argument entry eight bytes after pf_isff_d0; establishes its own saved-register frame and shares the body at 0x5FC66,,Verified

@@ -1,0 +1,17 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x5EAB8,pf_wall_draw,"D0.w = x, D1.w = y",void,register wrapper; branches past stack loads into body shared with 0x5EAC2,0x5F2F6;0x5F662;0x5F682;0x5F696;0x5F6C4;0x5F6E6;0x5F704;0x5F732;0x5F746;0x5F768,Verified
+0x5EAC2,pf_wall_draw_stack,"uint16 x, uint16 y",void,shipped normal-stack entry with no discovered direct control site; shares body with 0x5EAB8,,Verified
+0x5F024,wall_place_playfield_update,"D0.w = x, D1.w = y",void,register entry,0x5E78C,Verified
+0x5F2C0,maze_init_walls,void,void,32x32 initialization pass,0x44C4C,Verified
+0x5F310,mob_place_tile,"D0.w = packed maze slot, D1.w = new object type",void,register wrapper; branches past stack loads into body shared with pf_replace,0x5E7F8;0x5E852,Verified
+0x5F31E,pf_replace,"uint16 packed_maze_slot, uint16 new_object_type",void,normal-stack entry to body shared with mob_place_tile,0x400F0;0x43D08;0x43E7E;0x43EBC;0x4B53C;0x507E2;0x51254;0x512C4;0x53106,Verified
+0x5F598,refresh_tile_visual_stack,"uint16 packed maze slot, uint16 object type",void,frameless normal-stack wrapper falling through to refresh_tile_visual,,Verified
+0x5F5A0,refresh_tile_visual,"D0.w = packed maze slot, D1.w = object type",void,register dispatcher; calls pf_isblankfloor indirectly through fixed A2=0x5EA2E,0x5E4D2;0x5F38C;0x5F436;0x5F4D2,Verified
+0x5F644,refresh_tile_visual_legacy,"D0.w = packed maze slot, D1.w = object type",void,unreferenced shipped register entry; legacy two-way type-2 wall versus floor dispatcher sharing the main redraw epilogue,,Strong inference
+0x5F772,pf_isdoor_stack,"uint16 x, uint16 y","D0.l = door class 1, 2, or 3; 0 when not a door",frameless stack wrapper falling through to register body,0x51FE0;0x52030;0x520AE;0x52100,Verified
+0x5F77A,pf_isdoor,"D0.w = x, D1.w = y","D0.l = door class 1, 2, or 3; 0 when not a door",register body,0x5F7CC;0x5F818;0x5F830;0x5F848;0x5F860,Verified
+0x5F7C0,maze_doors_setup,void,void,32x31 initial draw pass; x begins at 1,0x44C6E,Verified
+0x5F7F0,pf_door_update_surrounding_xy,"D0.w = x, D1.w = y",void,register wrapper; branches past stack loads into body shared with 0x5F7FA,0x5F376;0x5F3E8;0x5F498;0x5F58E;0x5F66A;0x5F6AC;0x5F6F0;0x5F71A;0x5F750,Verified
+0x5F7FA,pf_door_update_surrounding,"uint16 x, uint16 y",void,normal-stack entry to shared four-neighbor redraw body,,Verified
+0x5F876,pf_door_draw_xy,"A0.w = x, A1.w = y, D0.w = door class",void,register wrapper; branches past stack loads into body shared with 0x5F880,0x5F54E;0x5F7D6;0x5F826;0x5F83E;0x5F856;0x5F86C,Verified
+0x5F880,pf_door_draw,"uint16 x, uint16 y, uint16 door_class",void,normal-stack entry; calls pf_isdoor indirectly through fixed A2=0x5F77A,,Verified

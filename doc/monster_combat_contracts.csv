@@ -1,0 +1,21 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x40E6A,monsters_everything,uint16 first_mob_offset,void,frameless wrapper saves D2-D7/A2-A6 before reading the normal first stack argument,0x490CC,Verified
+0x40FAE,monster_loop_core,D2.w current doubled MOB offset; A2-A6 MOB arrays; outer local stack frame,no independent return; continues the outer iteration/epilogue,interior branch entry in monsters_everything,0x40FA4;0x414D4;0x414FA,Verified
+0x4119A,monster_special_handler,"D2.w current doubled MOB offset, D4/D5 H/V state, D6.w monster type; A2-A6 MOB arrays; caller-pushed type word",no independent return; continues the outer iteration/epilogue,interior branch entry sharing monsters_everything registers and stack,0x41066,Verified
+0x414A4,monster_update_anim_tile,"D2.w current doubled MOB offset, D6.w animation-table selector; A2 picture array, A6 state array",no independent return; continues the outer iteration/epilogue,interior branch entry sharing monsters_everything registers and stack,0x413D8;0x4142C;0x41434;0x41498,Verified
+0x41750,monster_find_and_shoot,"D2.w current doubled MOB offset; A2/A3/A4 picture/H/V arrays, A6 state array; caller-pushed monster type word",void,BSR-only shared-stack entry; reads the type word at 8(A6) after LINK,0x41252,Verified
+0x41B16,find_unused_shot,D4.w initial doubled shot offset; A2 picture array,D4.w selected doubled shot offset; Z set when the slot is free,BSR-only register entry,0x41146;0x41970;0x41A3A,Verified
+0x41B52,monster_shooter_in_view,"D4.b horizontal coordinate, D5.b vertical coordinate",D4.l = -1 in view or 0 outside; Z reflects result,BSR-only register entry,0x41964;0x41A2E,Verified
+0x41B7E,apply_direction_from_delta,"D2.w current offset, D3.w target offset, D4/D5 current H/V; A3/A4 H/V arrays, A6 state array",void; writes direction bits in the current MOB state,BSR-only register entry,0x413CC,Verified
+0x490DC,monster_create_shot,"uint16 monster_slot, uint16 direction, uint16 shot_slot",void,,0x4116E;0x419DA;0x41AFA,Verified
+0x492C0,handle_generate,"uint16 generator_slot, uint16 generated_type, uint16 spawn_probability",void,,0x41050,Verified
+0x495A6,monster_playerhit,"uint16 player_slot, uint16 monster_slot",void,,0x413BC;0x52322,Verified
+0x40906,shot_mob_collision,"uint16 shot_mob_slot, uint16 shooter_id",D0.w target slot or -1 when no collision,frameless leaf reads both normal stack arguments before saving D2-D7/A2-A3,0x47592,Verified
+0x40A78,shot_collision_candidate_core,"D0.w candidate offset, D1.w doubled shooter offset, D3.w axis limit, D4.w self offset, D5.w sum limit, D6/D7 shot H/V; A0/A1/A2 H/V/picture arrays",D0.w retained/tagged candidate offset; D2.w candidate type/result or -1; N signals rejection,BSR-only register entry,0x409BE;0x409F4;0x40A04;0x40A12;0x40A20;0x40A2E,Verified
+0x4AF50,resolve_shot_hit,"uint16 target_slot_or_playfield_code, uint16 shooter_id",D0.l = 0 shot survives or -1 shot consumed,,0x475AA,Verified
+0x4AEA0,shot_onscreen_check,"uint16 target_slot, uint16 horizontal_limit, uint16 vertical_limit",D0.l = -1 in range or 0 outside,,0x4B424;0x522E6,Verified
+0x53818,shot_reflect_calc,"uint16 target_slot_or_playfield_code, uint16 shooter_id",D0.w reflected direction,computed-dispatch body; standard stack entry,0x4B4D0,Verified
+0x5303A,wall_crumble,"uint16 packed_slot, uint16 damage",D0.l = -1 wall destroyed or 0 wall remains,,0x4B716,Verified
+0x54112,dragon_shot_hit,"uint16 target_slot, uint16 shooter_id",void,,0x4B40C,Verified
+0x54B68,dragon_shot_hitbox_adjust,"D0.w candidate offset, D3.w axis limit, D5.w sum limit, D6/D7 shot H/V","D0.w candidate offset, plus 0x1000 on head overlap",register-argument leaf called only by shot_mob_collision; clobbers D2/D6/A3,0x40A6A,Verified
+0x47DAE,shot_impact_spawn,"uint16 target_slot, uint16 shooter_slot",void,,0x47826;0x4B3C6;0x4B43E;0x4B4FC;0x4B54E;0x4B72C;0x4B876;0x4B8D0;0x4BA0A;0x4BBF8;0x4BCC4;0x4BDF2;0x4F8C0;0x52348;0x5244A;0x5253C;0x5416E,Verified

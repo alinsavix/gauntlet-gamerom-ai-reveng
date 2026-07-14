@@ -6,6 +6,9 @@
 
 ## 1. Overview
 
+**Confidence: Verified** for vector values, ROM size, initial state, and the
+service categories directly exercised by the game ROM.
+
 The OS ROM provides:
 - Complete hardware bootstrap (memory tests, ROM checksum validation)
 - Diagnostic/self-test mode
@@ -22,6 +25,8 @@ The OS ROM provides:
 ---
 
 ## 2. M68010 Vector Table (`0x000000–0x0000FF`)
+
+**Confidence: Verified** by byte-exact vector decoding.
 
 | Offset | Vector | Value | Target |
 |--------|--------|-------|--------|
@@ -41,6 +46,10 @@ The OS ROM provides:
 ---
 
 ## 3. OS API Jump Table
+
+**Confidence: Verified** for every entry address and JMP destination.
+Function names/categories are **Strong inference** from implementation and
+game callers except where a detailed contract below is explicitly Verified.
 
 The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolute>.l` instructions (6 bytes each). Game code calls through these fixed addresses to access OS services, allowing the OS implementation to be relocated without changing the game ROM.
 
@@ -81,7 +90,7 @@ The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolu
 | `0x1B4` | `0x3A7E` | `write_high_score_entry` | High Scores |
 | `0x1BA` | `0x3BE8` | `get_eeprom_base` | EEPROM |
 | `0x1C0` | `0x3CF6` | `write_eeprom_setting` | Config |
-| `0x1C6` | `0x3F68` | `read_eeprom_config` | Config |
+| `0x1C6` | `0x3F68` | `rank_high_score` | High Scores |
 | `0x1CC` | `0x401A` | `write_eeprom_config` | Config |
 | `0x1D2` | `0x5454` | `run_self_test` | Diagnostics |
 
@@ -95,7 +104,7 @@ The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolu
 | `0x1E4` | `0x00904004` | `ram.vblank_occurred` |
 | `0x1E8` | `0x0090400C` | `ram.timer_countdown` |
 | `0x1EC` | `0x0080300E` | `hw.sound_read` |
-| `0x1F0` | `0x00803170` | `hw.interrupt_control` |
+| `0x1F0` | `0x00803170` | `hw.sound_command_word` |
 | `0x1F4` | `0x0090400A` | `ram.pf_vscroll_lo` |
 
 ### 3.3 Jump Table Entries (`0x200–0x278`)
@@ -111,8 +120,8 @@ The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolu
 | `0x224` | `0x2CE4` | `calc_alpha_address` | Alpha Display |
 | `0x230` | `0x3804` | `check_credits` | Coin/Credit |
 | `0x236` | `0x3706` | `get_coin_multiplier` | Coin/Credit |
-| `0x23C` | `0x41C8` | `disable_interrupts` | Interrupt Control |
-| `0x242` | `0x41CC` | `enable_interrupts` | Interrupt Control |
+| `0x23C` | `0x41C8` | `send_sound_command_wait` | Sound |
+| `0x242` | `0x41CC` | `try_send_sound_command` | Sound |
 | `0x248` | `0x58C6` | `display_attract_screen` | Game Display |
 | `0x24E` | `0x4822` | `eeprom_read_block` | EEPROM |
 | `0x254` | `0x42F8` | `reset_sound_cpu` | Sound |
@@ -127,40 +136,50 @@ The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolu
 
 ## 4. Game ROM Header and Hook Tables (`0x40000–0x4013F`)
 
+**Confidence: Verified** for bytes, ranges, OS consumers, and active JMP
+targets. Rows explicitly described as unreferenced remain **Unknown** in
+original build-time purpose and are unresolvable from the supplied runtime
+artifacts; their bytes, boundaries, and lack of runtime consumers are
+Verified, and no meaning is inferred from their values.
+
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| `0x40000` | 6 B | `game_start` | JMP to game entry point (must be `0x4EF9` + address) |
-| `0x40006` | 6 B | `game_vblank` | JMP to game VBLANK handler |
-| `0x4000C` | 6 B | `game_irq1` | JMP to game IRQ1 handler |
-| `0x40012` | 6 B | `game_irq3` | JMP to game IRQ3 handler |
-| `0x40018` | 6 B | `game_irq2` | JMP to game IRQ2 handler |
-| `0x4001E` | 6 B | `game_irq6` | JMP to game IRQ6 handler |
-| `0x40024` | 6 B | `game_exception` | JMP to game exception handler |
+| `0x40000` | 6 B | `game_start_veneer` | JMP to game entry point (must be `0x4EF9` + address) |
+| `0x40006` | 6 B | `game_vblank_veneer` | JMP to game VBLANK handler |
+| `0x4000C` | 6 B | `game_irq1_watchdog_trap` | Self-JMP trap; leaves the watchdog unserviced |
+| `0x40012` | 6 B | `game_irq3_watchdog_trap` | Self-JMP trap; leaves the watchdog unserviced |
+| `0x40018` | 6 B | `game_irq2_watchdog_trap` | Self-JMP trap; leaves the watchdog unserviced |
+| `0x4001E` | 6 B | `game_irq6_sound_veneer` | JMP through OS API 0x17E to the sound receive IRQ body |
+| `0x40024` | 6 B | `game_exception_veneer` | JMP to `game_exception_abort` at 0x40140 |
 | `0x4002A` | 6 B | `game_startup_hook2_slot` | Optional post coin/text-display initialization hook tested by the OS. All six bytes are zero in Gauntlet II, so the OS skips it. |
-| `0x40030` | 6 B | `game_playfield_init` | Optional game playfield-initialization hook. `os_main_loop` verifies the slot begins with JMP, then calls it indirectly through A0; Gauntlet II targets 0x44A82. If absent, the OS clears 0x1000 playfield words itself. |
+| `0x40030` | 6 B | `game_playfield_init_veneer` | Optional game playfield-initialization hook. `os_main_loop` verifies the slot begins with JMP, then calls it indirectly through A0; Gauntlet II targets 0x44A82. If absent, the OS clears 0x1000 playfield words itself. |
 | `0x40036` | 6 B | `game_startup_hook1_slot` | Optional post-attract-display initialization hook; zero-filled and therefore skipped in Gauntlet II. |
 | `0x4003C` | 6 B | `game_startup_hook3_slot` | Optional post-palette initialization hook; zero-filled and therefore skipped in Gauntlet II. |
 | `0x40042` | 6 B | `game_vblank_hook_slot` | Optional supplemental VBLANK hook. The OS calls it only when its first word is JMP opcode 0x4EF9; Gauntlet II ships six zero bytes here, so input remains handled by the ordinary OS/game VBL paths. |
-| `0x40048` | 6 B | `game_attract` | JMP to game attract mode handler |
+| `0x40048` | 6 B | `game_options_veneer` | JMP to the game-specific options/configuration display at 0x5317C; the former `game_attract` name was **Contradicted** by the target body and descriptor strings. |
 | `0x4004E` | 6 B | `game_post_attract_hook_slot` | Optional post-attract hook tested by the OS; zero-filled and skipped in Gauntlet II. |
-| `0x40054` | 6 B | `game_eeprom_config` | Optional JMP to EEPROM configuration provider. Returns D0: bit 16 = EEPROM layout flag, bits 8-15 = high config byte, bits 0-7 = low config byte. In Gauntlet: JMP `0x56EAA`. |
+| `0x40054` | 6 B | `game_eeprom_config_veneer` | Optional JMP to EEPROM configuration provider. Returns D0: bit 16 = EEPROM layout flag, bits 8-15 = high config byte, bits 0-7 = low config byte. In Gauntlet: JMP `0x56EAA`. |
+| `0x4005A` | 6 B | `game_header_ff_pad_4005a` | Solid 0xFF padding between the final hook and scalar header values. |
 | `0x40060` | 2 B | `game_mob_fill_value` | Default fill value for MOB RAM during display init. In Gauntlet: `0x0000`. |
 | `0x40062` | 2 B | `game_pf_fill_value` | Playfield RAM fill value during startup. In Gauntlet: `0x0010` (background tile). |
+| `0x40064` | 9 B | `game_reserved_header_40064` | Bytes `00 01 00 02 00 03 00 00 00`; no OS/game runtime consumer found. |
 | `0x4006D` | 1 B | `game_eeprom_start` | EEPROM game-section start index. In Gauntlet: `0x01`. |
+| `0x4006E` | 1 B | `game_reserved_header_4006e` | Zero reserved byte; no runtime consumer found. |
 | `0x4006F` | 1 B | `game_difficulty` | Difficulty/config byte (masked to 0-7). In Gauntlet: `0x2C` (effective difficulty 4). |
 | `0x40070` | 2 B | `game_screen_mode` | Screen mode word. In Gauntlet: `0xE090`. |
 | `0x40072` | 1 B | `game_rom_type` | ROM type flag (non-zero = Gauntlet scrolling mode). In Gauntlet: `0x00`. |
+| `0x40073` | 1 B | `game_reserved_header_40073` | Value 1; no runtime consumer found. |
 | `0x40074` | 4 B | `game_button0_label_ptr` | Pointer to button 0 label string for self-test. |
 | `0x40078` | 4 B | `game_button1_label_ptr` | Pointer to button 1 label string for self-test. |
 | `0x4007C` | 4 B | `game_joystick_label_ptr` | Pointer to joystick label string for self-test. |
 | `0x40080` | 24 B | `game_checksum_tbl` | One 16-byte descriptor `{start=0x40000, end=0x5FFFF, chunk_count=0x8000, enabled=1}`, followed by the 8-byte zero terminator. The OS reads start/end first and stops when the terminator's end is zero. |
 | `0x40098` | 16 B | `game_unreferenced_header_words` | Four unreferenced longwords; not consumed by either checksum-parser path. No runtime meaning assigned. |
 | `0x400A8` | 54 B | `game_header_ff_pad` | 0xFF fill ending at 0x400DD. |
-| `0x400DE` | 6 B | `game_scroll_to_slot_trampoline` | JMP to `scroll_to_slot` (0x46C5E). |
-| `0x400E4` | 6 B | `game_init_display_trampoline` | JMP to `init_display` (0x43486). |
-| `0x400EA` | 6 B | `game_maze_setup_trampoline` | JMP to `maze_setupnew` (0x44AC2). |
-| `0x400F0` | 6 B | `game_pf_replace_trampoline` | JMP to `pf_replace` (0x5F31E). |
-| `0x400F6` | 6 B | `game_mob_clear_trampoline` | JMP to `moblist_remove_and_clear` (0x5DDDA). |
+| `0x400DE` | 6 B | `scroll_to_slot_veneer` | JMP to `scroll_to_slot` (0x46C5E). |
+| `0x400E4` | 6 B | `init_display_veneer` | JMP to `init_display` (0x43486). |
+| `0x400EA` | 6 B | `maze_setup_veneer` | JMP to `maze_setupnew` (0x44AC2). |
+| `0x400F0` | 6 B | `pf_replace_veneer` | JMP to `pf_replace` (0x5F31E). |
+| `0x400F6` | 6 B | `mob_clear_veneer` | JMP to `moblist_remove_and_clear` (0x5DDDA). |
 | `0x400FC` | 6 B | `game_unreferenced_ram_value_pair` | Longword 0x00904894 followed by word 0x872E. No static OS/game consumer; retained as an unassigned header constant pair. |
 | `0x40102` | 17 B | `game_joystick_label` | NUL-terminated “WARRIOR joystick”. |
 | `0x40113` | 22 B | `game_fire_label` | NUL-terminated “WARRIOR <FIRE> button”. |
@@ -169,6 +188,10 @@ The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolu
 ---
 
 ## 5. Boot Sequence
+
+**Confidence: Verified** for control flow, hardware writes, test ranges, and
+checksum comparisons. Higher-level intent labels such as “enable board” are
+**Strong inference** from the write sequence and hardware reference.
 
 ### 5.1 Reset Entry (`0x5E2`)
 
@@ -237,6 +260,9 @@ Same tests as normal boot but uses `mem_test_thorough` (0xA2C). Also initializes
 
 ## 6. Interrupt System
 
+**Confidence: Verified** for dispatch tests, hook addresses, register/memory
+effects, and RTE/tail-JMP behavior.
+
 ### 6.1 Architecture
 
 All interrupt handlers follow the same pattern: check if the game ROM has installed a handler (by testing for a `JMP` instruction = opcode `0x4EF9` at the expected hook address), and if so dispatch to it. If no game handler is installed, return via `RTE`.
@@ -292,6 +318,8 @@ if (bit3(hw.vblank_selftest)) {   // self-test switch active?
 ---
 
 ## 7. OS VBLANK System
+
+**Confidence: Verified** for the shown control flow and state updates.
 
 ### 7.1 OS VBLANK Mode Entry (`0xE14`)
 
@@ -349,6 +377,10 @@ RTE;
 ---
 
 ## 8. Detailed OS Function Reference
+
+**Confidence: Verified** for addresses and observable effects unless a
+subsection says otherwise. Concise purpose names and semantic parameter labels
+are **Strong inference** from the bodies and their Gauntlet II callers.
 
 ### 8.1 Number Formatting
 
@@ -503,13 +535,21 @@ Sends a sound command bypassing the queue.
 #### `reset_sound_cpu` (`0x42F8`, API `0x254`)
 Resets the sound processor: asserts reset via `0x80312E`, clears pending data, releases reset, clears sound queue state.
 
-### 8.8 Interrupt Control
+### 8.8 Sound-Latch Submission
 
-#### `disable_interrupts` (`0x41C8`, API `0x23C`)
-Writes 0 to interrupt control register (`0x803170`).
+#### `send_sound_command_wait` (`0x41C8`, API `0x23C`)
 
-#### `enable_interrupts` (`0x41CC`, API `0x242`)
-Writes non-zero to `0x803170`. Both functions temporarily raise interrupt priority to level 5 during the operation.
+**Confidence: Verified.** Takes a sound-command word at stack offset +6,
+temporarily raises the interrupt mask, and retries while SoundIOFull is set.
+Once the latch is available it writes the command to `0x803170` and returns
+1. The former `disable_interrupts` name was contradicted by the body.
+
+#### `try_send_sound_command` (`0x41CC`, API `0x242`)
+
+**Confidence: Verified.** Has the same command-word input and hardware write,
+but makes one attempt: `D0.l = 1` when accepted and `D0.l = 0` when the sound
+latch is busy. The former `enable_interrupts` name was contradicted by both
+the body and the game-ROM callers.
 
 ### 8.9 EEPROM Management
 
@@ -599,7 +639,13 @@ Returns base pointer for a given EEPROM data section.
 
 #### `write_eeprom_setting` (`0x3CF6`, API `0x1C0`) — Writes a game setting value to EEPROM.
 
-#### `read_eeprom_config` (`0x3F68`, API `0x1C6`) — Reads an EEPROM configuration block.
+#### `rank_high_score` (`0x3F68`, API `0x1C6`)
+
+**Confidence: Verified.** Takes a character-class index and a 24-bit score
+value, compares it with that class's ten EEPROM high-score entries, and
+returns rank 0–9, 10 when it does not rank, or -1 when the value does not fit
+the three-byte score format. The former `read_eeprom_config` label was
+contradicted by the implementation.
 
 #### `write_eeprom_config` (`0x401A`, API `0x1CC`) — Writes an EEPROM configuration block.
 
@@ -633,6 +679,10 @@ Displays an attract mode or configuration screen. Calls `init_alpha_display`, in
 ---
 
 ## 9. OS RAM Variable Map
+
+**Confidence: Verified** for address, access width, and directly observed
+read/write behavior. Generic names such as `os_flag` retain **Strong
+inference** semantics where several OS paths reuse the storage.
 
 ### 9.1 Video RAM Spare — OS Working Area (`0x904000–0x904FFF`)
 
@@ -678,6 +728,9 @@ Displays an attract mode or configuration screen. Calls `init_alpha_display`, in
 
 ## 10. ROM Code Layout
 
+**Confidence: Strong inference.** Boundaries are byte-exact annotations, but
+the broad prose category assigned to a range may combine code and local data.
+
 | Address Range | Size | Description |
 |---------------|------|-------------|
 | `0x0000–0x00FF` | 256 B | M68010 vector table |
@@ -711,6 +764,10 @@ Displays an attract mode or configuration screen. Calls `init_alpha_display`, in
 
 ## 11. Key Architectural Notes
 
+**Confidence: Verified** for the API/hook/VBLANK mechanisms and watchdog write
+sites; “separation pattern” and “callback-based design” are architectural
+summaries of those observations.
+
 ### OS/Game Separation Pattern
 
 1. **Fixed API entry points** (jump table at 0x100) — game code never calls OS internals directly
@@ -732,6 +789,10 @@ loop:
 ---
 
 ## 12. Game-Related Strings in OS ROM
+
+**Confidence: Verified** as NUL-terminated ROM text. The subsection titles
+describe their call-site use where traced; strings alone are not proof that
+every phrase is reachable in this game revision.
 
 The OS ROM data section contains extensive game text:
 
@@ -789,6 +850,10 @@ Developer initials in the factory-default high score table: HAL, KEN, BOB, MEA, 
 ---
 
 ## 13. Loading the radare2 Annotations
+
+**Confidence: Verified** for the supported three-ROM loader described in
+`INDEX.md`; the older one-ROM command below is retained only as historical
+project context.
 
 The OS ROM analysis was performed with a separate radare2 project. To load into radare2:
 

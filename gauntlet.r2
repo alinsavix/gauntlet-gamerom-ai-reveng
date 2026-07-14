@@ -79,7 +79,7 @@
 'e arch.bits = 0x00004020
 'e arch.codealign = 4
 'e arch.decoder = null
-'e arch.endian = little
+'e arch.endian = big
 'e arch.platform =
 'e asm.abi =
 'e asm.addr = true
@@ -94,7 +94,7 @@
 'e asm.arch = m68k
 'e asm.assembler =
 'e asm.bbmiddle = true
-'e asm.bits = 64
+'e asm.bits = 32
 'e asm.bytes = true
 'e asm.bytes.align = false
 'e asm.bytes.asbits = false
@@ -977,23 +977,23 @@ fs functions
 'f run_self_test 1 0x00005454
 'f display_attract_screen 1 0x000058c6
 fs *
-'f game.start 1 0x00040000
+'f game_start_veneer 6 0x00040000
 fs *
-'f game.vblank_handler 1 0x00040006
+'f game_vblank_veneer 6 0x00040006
 fs *
-'f game.irq1_handler 1 0x0004000c
+'f game_irq1_watchdog_trap 6 0x0004000c
 fs *
-'f game.irq3_handler 1 0x00040012
+'f game_irq3_watchdog_trap 6 0x00040012
 fs *
-'f game.irq2_handler 1 0x00040018
+'f game_irq2_watchdog_trap 6 0x00040018
 fs *
-'f game.irq6_handler 1 0x0004001e
+'f game_irq6_sound_veneer 6 0x0004001e
 fs *
-'f game.exception_handler 1 0x00040024
+'f game_exception_veneer 6 0x00040024
 fs *
 'f game.startup_hook2_slot 6 0x0004002a
 fs *
-'f game.playfield_init 1 0x00040030
+'f game_playfield_init_veneer 6 0x00040030
 fs *
 'f game.startup_hook1_slot 6 0x00040036
 fs *
@@ -1001,23 +1001,31 @@ fs *
 fs *
 'f game.vblank_hook_slot 6 0x00040042
 fs *
-'f game.attract_handler 1 0x00040048
+'f game_options_veneer 6 0x00040048
 fs *
 'f game.post_attract_hook_slot 6 0x0004004e
 fs *
-'f game.eeprom_config 1 0x00040054
+'f game_eeprom_config_veneer 6 0x00040054
+fs *
+'f game.header_ff_pad_4005a 6 0x0004005a
 fs *
 'f game.mob_fill_value 2 0x00040060
 fs *
 'f game.pf_fill_value 2 0x00040062
 fs *
+'f game.reserved_header_40064 9 0x00040064
+fs *
 'f game.eeprom_start 1 0x0004006d
+fs *
+'f game.reserved_header_4006e 1 0x0004006e
 fs *
 'f game.difficulty_byte 1 0x0004006f
 fs *
 'f game.screen_mode 2 0x00040070
 fs *
 'f game.rom_type_flag 1 0x00040072
+fs *
+'f game.reserved_header_40073 1 0x00040073
 fs *
 'f game.button0_label_ptr 4 0x00040074
 fs *
@@ -1031,15 +1039,15 @@ fs *
 fs *
 'f game.header_ff_pad 54 0x000400a8
 fs *
-'f game.scroll_to_slot_trampoline 6 0x000400de
+'f scroll_to_slot_veneer 6 0x000400de
 fs *
-'f game.init_display_trampoline 6 0x000400e4
+'f init_display_veneer 6 0x000400e4
 fs *
-'f game.maze_setup_trampoline 6 0x000400ea
+'f maze_setup_veneer 6 0x000400ea
 fs *
-'f game.pf_replace_trampoline 6 0x000400f0
+'f pf_replace_veneer 6 0x000400f0
 fs *
-'f game.mob_clear_trampoline 6 0x000400f6
+'f mob_clear_veneer 6 0x000400f6
 fs *
 'f game.unreferenced_ram_value_pair 6 0x000400fc
 fs *
@@ -1049,9 +1057,27 @@ fs *
 fs *
 'f game.magic_label 23 0x00040129
 fs *
+'f game_exception_abort 12 0x00040140
+fs *
 'f game_start 1 0x0004014c
 fs *
 'f game_vblank 1 0x0004017e
+fs *
+'f palette_power_warrior 14 0x000404a0
+fs *
+'f palette_hurt_warrior 14 0x000404ae
+fs *
+'f palette_power_valkyrie 20 0x000404bc
+fs *
+'f palette_hurt_valkyrie 20 0x000404d0
+fs *
+'f palette_power_wizard 20 0x000404e4
+fs *
+'f palette_hurt_wizard 20 0x000404f8
+fs *
+'f palette_power_elf 14 0x0004050c
+fs *
+'f palette_hurt_elf 14 0x0004051a
 fs *
 'f main_cycle_tport_and_ffield 1 0x00040528
 fs *
@@ -1060,6 +1086,8 @@ fs *
 'f palette_offset_by_walltype 16 0x000405c8
 fs *
 'f palette_offset2_by_walltype 16 0x000405d8
+fs *
+'f vscroll_alpha_gradient 64 0x000405e8
 fs *
 'f calc_score_per_coin 1 0x00040628
 fs *
@@ -1079,6 +1107,18 @@ fs *
 fs *
 'f shot_collision_candidate_core 1 0x00040a78
 fs *
+'f mob_collision_type_filter 64 0x00040b58
+fs *
+'f shot_collision_width 24 0x00040b98
+fs *
+'f shot_collision_height 24 0x00040bb0
+fs *
+'f dragon_shot_collision_width 8 0x00040bc8
+fs *
+'f dragon_shot_collision_height 8 0x00040bd0
+fs *
+'f shot_collision_probe_offsets 160 0x00040bd8
+fs *
 'f find_maze 1 0x00040c78
 fs *
 'f maze_select_alt_bank 1 0x00040cc4
@@ -1088,6 +1128,10 @@ fs *
 'f load_level_tileset 1 0x00040d24
 fs *
 'f maze_select_bank_special 1 0x00040d4e
+fs *
+'f monster_kill_score_by_multiplier 18 0x00040d78
+fs *
+'f monster_shoot_axis_thresholds 40 0x00040d8a
 fs *
 'f monster_anim_idle_ptrs 40 0x00040db2
 fs *
@@ -1099,7 +1143,11 @@ fs *
 fs *
 'f monster_count_table 32 0x00040e46
 fs *
+'f dead_monster_count_tail_words 4 0x00040e66
+fs *
 'f monsters_everything 1 0x00040e6a
+fs *
+'f monster_loop_core 1 0x00040fae
 fs *
 'f monster_special_handler 1 0x0004119a
 fs *
@@ -1112,6 +1160,8 @@ fs *
 'f monster_shooter_in_view 1 0x00041b52
 fs *
 'f apply_direction_from_delta 1 0x00041b7e
+fs *
+'f player_character_collision_block_matrix 32 0x00041bd0
 fs *
 'f player_try_move 1 0x00041bf0
 fs *
@@ -1289,7 +1339,7 @@ fs *
 fs *
 'f monster_playerhit 1 0x000495a6
 fs *
-'f monster_playerhit_jumptbl 56 0x000495fc
+'f monster_playerhit_jumptbl 20 0x00049620
 fs *
 'f death_damagetrack 1 0x00049a3c
 fs *
@@ -1377,9 +1427,9 @@ fs *
 fs *
 'f thief_exit 1 0x0004e122
 fs *
-'f abort_theft 1 0x0004e172
+'f thief_end_dodge 1 0x0004e172
 fs *
-'f mark_item_stolen 1 0x0004e1b8
+'f thief_begin_dodge 1 0x0004e1b8
 fs *
 'f thief_steal_from_player 1 0x0004e1fe
 fs *
@@ -1387,7 +1437,7 @@ fs *
 fs *
 'f thief_timer_set 1 0x0004e4d8
 fs *
-'f erase_mob_old_pos 1 0x0004e630
+'f thief_track_victim_move 1 0x0004e630
 fs *
 'f tport_route_connect 1 0x0004e684
 fs *
@@ -1413,7 +1463,7 @@ fs *
 fs *
 'f thief_start_tport_anim 1 0x0004fbfc
 fs *
-'f find_richest_player 1 0x0004fcf0
+'f thief_find_aligned_shooter 1 0x0004fcf0
 fs *
 'f richest_player_tie_jumptbl 16 0x0004fe08
 fs *
@@ -1467,6 +1517,8 @@ fs *
 fs *
 'f mob_collision_object_jumptbl 94 0x00052210
 fs *
+'f dead_mob_collision_jump_tail 12 0x0005226e
+fs *
 'f main_exit_move 1 0x0005287c
 fs *
 'f exit_get_id 1 0x00052b06
@@ -1480,6 +1532,10 @@ fs *
 'f consume_forcefield_code 1 0x00052fbe
 fs *
 'f wall_crumble 1 0x0005303a
+fs *
+'f game_options_display 1 0x0005317c
+fs *
+'f game_options_descriptor_stream 442 0x0005318c
 fs *
 'f check_forcefield_collision 1 0x00053346
 fs *
@@ -1535,6 +1591,8 @@ fs *
 fs *
 'f schedule_sprite_update 1 0x000554b6
 fs *
+'f dead_name_entry_epilogue_fragments 60 0x00055512
+fs *
 'f name_entry_step_char 1 0x0005554e
 fs *
 'f name_entry_draw_char 1 0x000555c4
@@ -1550,6 +1608,10 @@ fs *
 'f slapstic_cmd_bankX_special 1 0x00056e98
 fs *
 'f slapstic_verify 1 0x00056eaa
+fs *
+'f dead_slapstic_verify_suffix 76 0x00056f5c
+fs *
+'f pad_56fa8 90 0x00056fa8
 fs *
 'f character_announcement_speech_ptrs 16 0x00057002
 fs *
@@ -1579,9 +1641,11 @@ fs *
 fs *
 'f service_instruction_text_chain 96 0x00057178
 fs *
-'f dead_control_word_block 34 0x000571d8
+'f forcefield_delay_alignment 2 0x000571d8
 fs *
-'f forcefield_color_table 16 0x000571fa
+'f forcefield_cycle_delay_profiles 32 0x000571da
+fs *
+'f forcefield_cycle_delay_ptrs 16 0x000571fa
 fs *
 'f secret_player_palette_words 8 0x0005720a
 fs *
@@ -1689,7 +1753,7 @@ fs *
 fs *
 'f death_potion_score_table 16 0x000579d2
 fs *
-'f death_potion_random_table 16 0x000579e2
+'f death_potion_popup_type_table 16 0x000579e2
 fs *
 'f score_popup_picture_table 60 0x000579f2
 fs *
@@ -1931,15 +1995,15 @@ fs *
 fs *
 'f fixed_playfield_palette_bank 192 0x0005ac5e
 fs *
-'f alpha_palette_init 132 0x0005ad1e
+'f alpha_palette_init 128 0x0005ad1e
 fs *
-'f mob_palette_init 132 0x0005ad9e
+'f mob_palette_init 128 0x0005ad9e
 fs *
-'f mob_palette_extended 388 0x0005ae1e
+'f mob_palette_extended 384 0x0005ae1e
 fs *
 'f character_palette_ptrs 16 0x0005af9e
 fs *
-'f aux_palette_init 132 0x0005afa6
+'f aux_palette_init 128 0x0005afa6
 fs *
 'f tport_palette_cycle_blocks 96 0x0005afae
 fs *
@@ -2185,7 +2249,11 @@ fs *
 fs *
 'f pf_replace 1 0x0005f31e
 fs *
+'f refresh_tile_visual_stack 1 0x0005f598
+fs *
 'f refresh_tile_visual 1 0x0005f5a0
+fs *
+'f refresh_tile_visual_legacy 1 0x0005f644
 fs *
 'f pf_isdoor_stack 1 0x0005f772
 fs *
@@ -2217,6 +2285,12 @@ fs *
 fs *
 'f player_inventory_vram_ptrs 16 0x0005fc12
 fs *
+'f random_seeded 1 0x0005fc22
+fs *
+'f random_bound_stack_core 1 0x0005fc26
+fs *
+'f random_core 1 0x0005fc2c
+fs *
 'f getrandom_r 1 0x0005fc46
 fs *
 'f getrandom 1 0x0005fc4e
@@ -2244,6 +2318,8 @@ fs *
 'f supersorc_place_helper 1 0x0005fdb8
 fs *
 'f supersorc_place 1 0x0005fde0
+fs *
+'f dead_truncated_supersorc_epilogues 26 0x0005ff98
 fs *
 'f hw.eeprom 1 0x00802001
 fs *
@@ -2355,7 +2431,7 @@ fs *
 fs *
 'f ram.ptr_playfield_color3 4 0x0090403e
 fs *
-'f ram.ptr_ff_color 4 0x00904042
+'f ram.ptr_ff_cycle_delay 4 0x00904042
 fs *
 'f ram.forcefield_color 2 0x00904046
 fs *
@@ -2498,6 +2574,8 @@ fs *
 'f ram.score_display_timer 8 0x0090493a
 fs *
 'f ram.mob_depth_key 64 0x00904940
+fs *
+'f ram.mob_effect_anim_counter 4 0x0090497c
 fs *
 'f ram.player_health 16 0x00904980
 fs *
@@ -2761,7 +2839,7 @@ fs *
 fs *
 'f ram.random_seed 2 0x00904bfc
 fs *
-'f ram.vblank_palette_inhibit 2 0x00904c00
+'f ram.vblank_abort_guard 2 0x00904c00
 fs *
 'f ram.player_hurt_palette_stubs 24 0x00905f00
 fs *
@@ -2825,7 +2903,7 @@ fs *
 fs *
 'f ram.continue_saved_supershot 1 0x00905f6d
 fs *
-'f vram.pf_vscroll_reg 1 0x00905f6e
+'f vram.pf_vscroll_reg 2 0x00905f6e
 fs *
 'f ram.mob_list_heads 2 0x00905f80
 fs *

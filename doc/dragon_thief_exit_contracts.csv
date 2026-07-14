@@ -1,0 +1,27 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x54454,main_handle_dragon,void,void,,0x42ADE,Verified
+0x549EA,dragon_player_proximity,"uint16 previous_pos, uint16 current_pos",void,,0x42536;0x4B196;0x4B3F8;0x4B6C8;0x4B74E;0x4B77A;0x4B800;0x4B952;0x4BB1E;0x4BD74;0x512AE;0x51E48,Verified
+0x5496E,dragon_setup_segments,uint16 primary_dragon_mob_slot,void,,0x46256,Verified
+0x54748,dragon_fire_setup,"uint16 shot_mob_slot, uint16 variant_flag",void,,0x546EC,Verified
+0x53E4A,dragon_choose_move_direction,void,void,,0x546F2,Verified
+0x53D10,dragon_update_segments,void,void,,0x54732,Verified
+0x540E8,dragon_find_free_shot_slot,void,"D0.l = free dragon-shot subslot 1-4, or 0 when full",,0x546CA,Verified
+0x54AF8,dragon_any_segment_near_screen,void,"D0.l = -1 when any segment is near the screen, or 0 otherwise",calls tile_near_screen_test four times indirectly through A2,0x470D2,Verified
+0x4DFF6,thief_target_calc,void,void,,0x4E498,Verified
+0x4E122,thief_exit,void,void,,0x46B78;0x4E224;0x52C58,Verified
+0x4E1FE,thief_steal_from_player,uint16 player_index,"D0.l = 1 when theft/mugger damage is applied, or 0 when suppressed",,0x4F03A;0x4F1B0;0x4F31C;0x4F48E,Verified
+0x4E432,thief_setup,void,void,,0x4835E,Verified
+0x4E4D8,thief_timer_set,void,void,,0x4E4C8;0x4EC50;0x4F732,Verified
+0x4E7FC,thief_test_move_tile,"uint16 candidate_pos, uint16 object_type","D0.l = nonzero when a transporter/corner path handles the move, or 0 otherwise",,0x4F88A,Verified
+0x4E8DC,main_thief_anim,void,void,,0x42AE4,Verified
+0x4EE0A,thief_probe_axis,"int32 (*probe)(uint16 thief_slot), uint32 position_array_base, int16 coordinate_delta","D0.l = candidate MOB slot, or -1 when blocked/rejected",calls the supplied probe callback indirectly through A0,0x4EEFA;0x4EF86;0x4EFD4;0x4F070;0x4F0FC;0x4F14A;0x4F1E4;0x4F268;0x4F2B6;0x4F358;0x4F3DC;0x4F428,Verified
+0x4EE7A,thief_move_engine,"uint16 move_flags, uint16 horizontal_delta_bias, uint16 vertical_delta_bias",D0.l = thief_collision_direction_code plus the blocked-axis flag,,0x4ECF4,Verified
+0x4F5C8,thief_remove_and_drop_loot,"int16 score_player_or_minus1, uint16 replacement_mob_slot_or_zero",void,,0x4B7E8;0x50CCE;0x52290;0x5297E,Verified
+0x4F742,thief_handle_tile_collision,uint16 candidate_mob_slot,"D0.l = -1 when handled/blocked, or 0 when clear",,0x4EE3A,Verified
+0x4F912,thief_compute_path,void,void,,0x47286;0x4DFBA;0x4E152;0x4E1A2;0x4E1E8;0x4EC5A,Verified
+0x4FAD4,thief_enter_tport,uint16 transporter_pos,"D0.l = -1 when a transition starts, or 0 when rejected",four route-pair reads are indirect through A2,0x4E824,Verified
+0x4FBFC,thief_start_tport_anim,uint16 destination_pos,void,,0x4FBE4;0x5020E,Verified
+0x5287C,main_exit_move,void,void,,0x42B02,Verified
+0x52B06,exit_get_id,uint16 packed_exit_pos,"D0.l = zero-based exit index, or level_exit_count when absent",,0x528D0,Verified
+0x52B40,player_exit_sequence,"uint16 player_index, uint16 exit_mob_slot, uint16 exit_type",void,,0x5143C;0x52958,Verified
+0x5DF80,exit_create_player_anim,"uint16 source_mob_slot, uint16 animation_channel",void,"frameless shared-body entry; saves D3-D7/A5-A6, adds 0x15 to the channel, then branches to insert_mob_depth_sorted",0x52D38,Verified

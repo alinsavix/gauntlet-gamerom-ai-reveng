@@ -1,0 +1,20 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x45866,player_it_label_set,uint16 player_index,void,presentation helper only; caller owns ram.it_player,0x41DC8;0x41FD0;0x42204;0x42410;0x496A6,Verified
+0x4590E,player_it_label_clear,uint16 player_index,void,presentation helper only; caller owns ram.it_player,0x41DBC;0x41FC4;0x421F8;0x42404;0x469D2;0x4969A,Verified
+0x45ACA,player_inv_update,uint16 player_index,void,,0x45522;0x470BA;0x515E4;0x51610;0x51786;0x5197E;0x51DC2;0x51E0E;0x5263E,Verified
+0x45BE8,string_length,const char *string,D0.l = byte length excluding the NUL terminator,,0x4BFDC;0x4C014;0x4C0EA;0x4C16C;0x4C19A;0x4C558;0x4CA06;0x4CDEC;0x4D076,Verified
+0x47FAC,open_timed_doors,void,void,,0x4ACFC,Verified
+0x487CA,player_lowhealth,uint16 player_index,void,,0x46794;0x50EC6,Verified
+0x49446,death_potion_score,uint16 doubled_death_mob_offset,D0.l = score selected from death_potion_score_table,,0x41614,Verified
+0x49A3C,death_damage_accumulate,"uint16 player_index, uint16 death_mob_slot, uint32 damage",void,,0x497C8;0x4BC3C,Verified
+0x49A98,player_hurt_speech_timer,uint16 player_index,void,,0x498D0,Verified
+0x49B44,ascii_to_alpha_glyph,uint8 ascii_char,D0.l = alpha-layer glyph index,reads the low byte of the first normal stack slot at A6+0xB,0x4A4DE,Verified
+0x4A44A,name_entry_draw_large_char,"uint16 column, uint16 row, uint8 character, uint16 color",void,uses fixed OS services 0x224 and 0x20C,0x49F14;0x49FF2;0x4A05C;0x4A42E;0x553E8,Verified
+0x50E34,player_damage_sample_update,uint16 player_index,void,,0x4A7D6,Verified
+0x511AC,player_tile_interact,"uint16 tile_mob_slot, uint16 player_index","D0.l = -1 when handled/consumed, or 0 when unhandled",calls sound_play indirectly through fixed A2 = 0x4AD76,0x4254C;0x50C96;0x522FC,Verified
+0x53666,player_create_shot,uint16 player_index,void,,0x4ABE8,Verified
+0x54FE8,secret_name_entry_update,void,void,uses ram.secret_player as the player selector,0x4A61E,Verified
+0x55440,name_entry_step_char,"uint8 current_char, int16 direction, uint8 allow_backspace",D0.l = wrapped next character,reads byte arguments from the low bytes at A6+0xB and A6+0x13,0x49ED0;0x550C0,Verified
+0x554B6,name_entry_draw_char,"uint16 column, uint16 row, uint8 character, uint16 color",void,uses fixed OS service 0x218,0x550FC;0x551E8;0x5523E,Verified
+0x5554E,name_entry_step_char_copy,"uint8 current_char, int16 direction, uint8 allow_backspace",D0.l = wrapped next character,byte-identical duplicate of 0x55440; no discovered direct control site,,Verified
+0x555C4,name_entry_draw_char_copy,"uint16 column, uint16 row, uint8 character, uint16 color",void,byte-identical duplicate of 0x554B6; uses fixed OS service 0x218; no discovered direct control site,,Verified

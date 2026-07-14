@@ -6,22 +6,30 @@
 
 ## 1. CPU
 
+**Confidence: Verified** from the board/software reference and ROM decoding.
+
 - **Main CPU:** Motorola 68010 (32-bit, big-endian)
 - **Sound CPU:** MOS 6502 (accessed via shared RAM; protocol is software-defined)
 - **Clock:** ~7.159 MHz (NTSC)
-- **SLAPSTIC chip:** Performs bank switching for the level-data ROM (row9.bin), triggered by CPU accessing special address sequences.
+- **SLAPSTIC chip:** Performs bank switching for the level-data ROM (`row10.bin`), triggered by CPU accesses to special address sequences. **Confidence: Verified.**
 
 ---
 
 ## 2. Memory Map (Main CPU)
+
+**Confidence: Verified** for populated ranges and hardware/RAM windows;
+decoded-but-unpopulated ROM apertures are **Strong inference** as qualified
+under the table.
 
 ### 2.1 Address Space Layout
 
 | Region | Address Range | Size | Description |
 |--------|--------------|------|-------------|
 | **OS ROM** | `0x000000–0x00FFFF` | 64 KB | Bootstrap, OS, diagnostics, game support |
+| **Unpopulated OS-ROM decode** | `0x010000–0x037FFF` | 160 KB | No supplied ROM bytes; included in MAME's schematic-verified ROM decode, not an OS mirror |
 | **Slapstic ROM** | `0x038000–0x03FFFF` | 32 KB | Level data (bank-switched, 4 × 8 KB banks) |
-| **Game ROM** | `0x040000–0x07FFFF` | 256 KB | Main game program |
+| **Game ROM image** | `0x040000–0x05FFFF` | 128 KB | Populated `row76.bin` main-game image |
+| **Unpopulated main-ROM decode** | `0x060000–0x07FFFF` | 128 KB | Decoded main-program ROM aperture with no bytes in this Gauntlet II set; not a mirror |
 | **Main RAM** | `0x800000–0x801FFF` | 8 KB | General-purpose RAM |
 | **EEPROM** | `0x802001–0x802FFF` | ~4 KB | High scores, settings, statistics (odd bytes only) |
 | **Hardware I/O** | `0x803000–0x8031FF` | 512 B | Input ports, watchdog, sound, LEDs |
@@ -33,7 +41,21 @@
 | **PF H-Scroll** | `0x930000–0x930001` | 2 B | Playfield horizontal scroll register |
 | **PF V-Scroll** | `0x905F6E–0x905F6F` | 2 B | Playfield vertical scroll register |
 
+**Confidence: Verified** for the populated file ranges. The decoded ROM
+apertures are **Strong inference** from Atari's
+[hardware/OS memory map](https://arcarc.xmission.com/Web%20Archives/Andys%20Arcade%20%28Sep-09-2003%29/arc/atari/gauntlet/gauntlet_memos.pdf)
+and MAME's explicitly
+[schematic-verified address map](https://github.com/mamedev/mame/blob/master/src/mame/atari/gauntlet.cpp#L3083-L3096).
+Both sources map the full `0x040000–0x07FFFF` main-ROM aperture, while this
+set supplies bytes only through `0x05FFFF`; neither describes a mirror.
+MAME also decodes `0x000000–0x037FFF` as ROM, although Atari's software map
+labels only the populated `0x000000–0x00FFFF` OS portion. Exact electrical
+data returned by an empty socket is board-state dependent and is not modeled
+as a separate device response.
+
 ### 2.2 Video RAM Sub-Regions
+
+**Confidence: Verified** by the hardware map and game/OS access widths.
 
 | Address Range | Description |
 |---------------|-------------|
@@ -53,6 +75,10 @@
 ---
 
 ## 3. Hardware I/O Ports
+
+**Confidence: Verified** for the addresses, lanes, and read/write direction
+from the OS/game access sites. Names describing higher-level latch purpose are
+limited to behavior actually exercised by the software.
 
 > **Note on input addressing:** The hardware data is at odd byte addresses (0x803001, 0x803003 etc.). The `input_debounce` routine (0x40644) reads these as 16-bit words from the corresponding even addresses (`0x803000 + player*2`), giving word-sized results where the meaningful data is in the low byte. Both addressing conventions refer to the same hardware.
 
@@ -75,11 +101,14 @@
 | `0x80312F` | W | Sound processor reset/control (game ROM) |
 | `0x803140` | W | VBLANK acknowledge |
 | `0x803150` | W | EEPROM unlock |
-| `0x803170` | W | Interrupt control register |
-| `0x803171` | W | Write to sound processor |
-| `0x905F6F` | RW | Playfield ROM bank select |
+| `0x803170–0x803171` | W | Sound-command latch, normally written as a word at the even base; the command byte is on the odd lane (`0x803171`) |
+| `0x905F6E–0x905F6F` | W | Playfield vertical-scroll register (one 16-bit word; `0x905F6F` is its low byte) |
 
 ### 3.1 Status Register Bits (`0x803009`)
+
+**Confidence: Verified.** The former `0x803170` “interrupt control” label is
+contradicted by the OS implementations at 0x41C8/0x41CC: both take a command
+word, test SoundIOFull, and write that word to 0x803170.
 
 | Bit | Description |
 |-----|-------------|
@@ -91,6 +120,9 @@
 ---
 
 ## 4. Display Overview
+
+**Confidence: Verified** for dimensions, refresh, scroll registers, and layer
+ordering.
 
 - **Resolution:** 336×240, 60 Hz
 - **Playfield (maze):** 512×512 pixels; only ~240×240 is visible at once
@@ -113,6 +145,9 @@
 
 ## 5. Tiles
 
+**Confidence: Verified** by the graphics-ROM exporter and rendered reference
+corpus.
+
 - Each tile is **8×8 pixels**, **4 bits per pixel** (16 colors per tile)
 - Tile data is stored in graphics ROMs, split across 4 ROM chips (one per color bit plane: PLANE 0–3)
 - Tile color indices index into palette RAM at `0x910000`
@@ -120,6 +155,10 @@
 ---
 
 ## 6. Palette / Color RAM (`0x910000`)
+
+**Confidence: Verified** for entry format, region boundaries, and lookup
+formulas. The analog phrase “actual output level” is a model of the intensity
+and channel nibbles rather than a calibrated monitor voltage.
 
 Each color entry is **2 bytes** (16-bit word): **4 bits each for I (Intensity), R, G, B**. Actual output level = I × channel (0–255 range).
 
@@ -157,6 +196,10 @@ Total: **768 color entries** × 2 bytes = 1,536 bytes.
 
 ## 7. Playfield RAM (`0x900000`)
 
+**Confidence: Verified** for geometry, storage order, palette bits, and tile
+index. **Confidence: Strong inference** that bit 15 is unused by shipped game
+logic; no consumer assigning it a distinct playfield meaning was found.
+
 Layout: **64×64 grid** of 16-bit words, stored **column-first**:
 - Index = `column × 64 + row`
 
@@ -164,13 +207,16 @@ Each word:
 
 | Bits | Meaning |
 |------|---------|
-| 15 | Horizontal flip (apparently unused in Gauntlet) |
+| 15 | Horizontal flip field; no shipped Gauntlet use found (**Strong inference**) |
 | 14–12 | Palette number (0–7, indexes into Playfield palettes starting at color 640) |
 | 11–0 | Tile number (must be in first 4096 tiles) |
 
 ---
 
 ## 8. MOBs (Motion Objects / Sprites) — 1024 total
+
+**Confidence: Verified** for the four hardware arrays, software state/link
+overlay, pixel behavior, and shipped fixed-slot assignments.
 
 Each MOB is described by 4 parallel arrays in video RAM. MOB `n` is at offset `n × 2` in each array.
 
@@ -215,7 +261,11 @@ T+W, T+W+1, ..., T+2W-1
 
 - Linked list heads: 64 words at `0x905F80`, one per 8-pixel vertical band of the playfield
 - Each band's list contains MOBs whose Y position falls in that scanline range
-- Used by **software** for collision detection; uncertain if hardware follows these lists
+- Used by **software** for collision detection and by the motion-object
+  hardware for display traversal. **Confidence: Verified** by MAME's
+  [schematic-backed Gauntlet motion-object configuration](https://github.com/mamedev/mame/blob/master/src/mame/atari/gauntlet.cpp#L2668-L2707),
+  which marks entries linked, selects the fourth word's 10-bit link field, and
+  uses one 8-pixel SLIP head per band.
 
 ### 8.5 MOB Backward Link / Object State (`0x904066`, software only)
 
@@ -253,6 +303,9 @@ Dynamic maze objects use slots 30–1023.
 
 ## 9. Alphanumeric (Text) RAM (`0x905000`)
 
+**Confidence: Verified** for geometry, word fields, character-ROM layout, and
+the opaque-space blanking behavior.
+
 - Screen grid: **64×30 characters** (only left 42 columns are displayed)
 - 1 word per character, 128 bytes per row (64 words)
 
@@ -276,6 +329,9 @@ Bitplane 1:  ABCDEFGH
 
 ### 9.1 Display Modes
 
+**Confidence: Verified** from the OS address calculation and the game-mode
+selection path.
+
 The OS ROM supports two alpha overlay modes (controlled by `ram.display_mode` at `0x904F0E`):
 
 | Mode | Description |
@@ -286,6 +342,9 @@ The OS ROM supports two alpha overlay modes (controlled by `ram.display_mode` at
 ---
 
 ## 10. Scroll Registers
+
+**Confidence: Verified** from direct game/OS accesses. The vertical register
+overlays the last alpha-RAM word by hardware design.
 
 | Address | Description |
 |---------|-------------|
@@ -301,6 +360,10 @@ Shadow copies maintained in RAM by the OS VBLANK handler:
 
 ## 11. Software Notes
 
-- The **SLAPSTIC chip** performs bank switching for the level-data ROM (row9.bin). Bank switching is triggered by the CPU performing a specific read-write sequence to special addresses in the 0x38000–0x3FFFF range. Three slapstic helper functions at 0x56E58, 0x56E6E, and 0x56E84 manage this.
-- The **6502 sound CPU** is accessed via shared RAM. The communication protocol is software-defined: the game writes command bytes to `0x803171`, reads responses from `0x80300F` (or `0x80300E`). The OS ROM manages a send queue and receive ring buffer.
-- **EEPROM** is at odd byte addresses in `0x802001–0x802FFF`. Each write requires a hardware unlock sequence via `0x803150`. The OS ROM manages queued writes (one byte per VBLANK) with XOR checksums and retry logic.
+- The **SLAPSTIC chip** performs bank switching for the level-data ROM (`row10.bin`). Bank switching is triggered by the CPU performing a specific read-write sequence to special addresses in the 0x38000–0x3FFFF range. Three slapstic helper functions at 0x56E58, 0x56E6E, and 0x56E84 manage this. **Confidence: Verified.**
+- **Verified:** the **6502 sound CPU** interface is software-managed: the game
+  writes command bytes to `0x803171`, reads responses from `0x80300F` (or the
+  OS lane at `0x80300E`), and the OS maintains send/receive queues.
+- **Verified:** **EEPROM** occupies odd byte addresses in
+  `0x802001–0x802FFF`; writes use the `0x803150` unlock, and the OS queues one
+  byte per VBLANK with XOR checksums and retry logic.

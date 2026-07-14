@@ -6,20 +6,31 @@
 
 ## 1. Game ROM Overview
 
+**Confidence: Verified** for image range, callable count, and C/assembly
+mixture; compiler-vendor attribution remains **Strong inference**.
+
 - **File:** `row76.bin`
-- **Address:** `0x040000–0x05FFFF` (128 KB, note: game ROM maps 0x040000–0x07FFFF as 256 KB but code/data fits in 128 KB)
-- **Language:** C (Green Hills C compiler for 68000-family), plus hand-written assembly for a few leaf functions
-- **Functions:** ~170 compiled C functions, all fully documented
+- **Address:** `0x040000–0x05FFFF` (128 KB populated image; the OS accepts game entry targets through `0x07FFFF`)
+- **Language:** C plus hand-written assembly leaves; Green Hills C compiler
+  attribution is **Strong inference** from code-generation patterns.
+- **Callable entries:** **Verified** 321 unique shipped entry points, each
+  reconciled to a checked purpose/argument/return/convention contract.
 
 ### 1.1 ROM Layout
 
 | Region | Address Range | Size | Content |
 |--------|--------------|------|---------|
-| Code | 0x40000–0x5561F | ~87 KB | All 170 compiled C functions + hand-written asm |
-| Padding | 0x55620–0x56E53 | ~6 KB | Unused 0xFF (erased EPROM space) |
-| Slapstic Trampolines | 0x56E54–0x56F00 | ~170 B | Bank-switch helper code (3 small functions) |
-| Data Tables | 0x56F00–0x5FFB1 | ~37 KB | ROM tables, strings, palettes, animation data, tile descriptors |
-| End Padding | 0x5FFB2–0x5FFFE | 76 B | Unused 0xFF |
+| Main mixed executable region | 0x40000–0x5561F | 87,584 B | Compiled C/assembly plus inline dispatch and lookup tables |
+| Erased padding | 0x55620–0x56E53 | 6,196 B | Solid 0xFF gap |
+| Late mixed code/data region | 0x56E54–0x5FFB1 | 37,214 B | Slapstic helpers, later MOB/wall/placement routines, strings, palettes, animation data, and tile descriptors |
+| End padding | 0x5FFB2–0x5FFFD | 76 B | Solid 0xFF |
+| Checksum trailer | 0x5FFFE–0x5FFFF | 2 B | Final big-endian word 0xE19E |
+
+**Confidence: Verified** for these physical boundaries and contents.  The
+former classification of 0x56F00–0x5FFB1 as a pure data-table region was
+**Contradicted**: executable routines are interleaved throughout it.  The
+hash-guarded, gap-free union is generated as
+[`rom_regions.csv`](rom_regions.csv) by `generate_rom_regions.py`.
 
 ### 1.2 Jump Table (`0x40000–0x40054`)
 
@@ -27,25 +38,34 @@ Fifteen six-byte hook slots occupy 0x40000–0x40059. Ten slots contain active a
 
 | Address | Target | Function |
 |---------|--------|----------|
-| `0x40000` | `0x4014C` | `game_start` — entry point from OS |
-| `0x40006` | — | `game_vblank` — VBLANK handler |
-| `0x4000C` | — | `game_irq1` handler |
-| `0x40012` | — | `game_irq3` handler |
-| `0x40018` | — | `game_irq2` handler |
-| `0x4001E` | — | `game_irq6` handler |
-| `0x40024` | — | `game_exception` handler |
+| `0x40000` | `0x4014C` | `game_start_veneer` — entry point from OS |
+| `0x40006` | `0x4017E` | `game_vblank_veneer` — VBLANK interrupt veneer |
+| `0x4000C` | `0x4000C` | `game_irq1_watchdog_trap` — self-JMP trap |
+| `0x40012` | `0x40012` | `game_irq3_watchdog_trap` — self-JMP trap |
+| `0x40018` | `0x40018` | `game_irq2_watchdog_trap` — self-JMP trap |
+| `0x4001E` | `0x0017E` | `game_irq6_sound_veneer` — OS sound IRQ tail veneer |
+| `0x40024` | `0x40140` | `game_exception_veneer` — exception-abort veneer |
 | `0x4002A` | zero | Optional startup hook 2 slot (post coin/text initialization); absent in this ROM |
-| `0x40030` | `0x44A82` | `game_playfield_init` — OS-called playfield initialization hook |
+| `0x40030` | `0x44A82` | `game_playfield_init_veneer` — OS-called playfield initialization hook |
 | `0x40036` | zero | Optional startup hook 1 slot (post attract-display initialization); absent |
 | `0x4003C` | zero | Optional startup hook 3 slot (post palette initialization); absent |
 | `0x40042` | zero | Optional supplemental VBLANK hook slot; absent, not a callable entry |
-| `0x40048` | — | `game_attract` — attract mode handler |
+| `0x40048` | `0x5317C` | `game_options_veneer` — game-specific operator-options/configuration display hook; the former attract-handler name was contradicted |
 | `0x4004E` | zero | Optional post-attract hook slot; absent |
-| `0x40054` | `0x56EAA` | `game_eeprom_config` — EEPROM config provider |
+| `0x40054` | `0x56EAA` | `game_eeprom_config_veneer` — EEPROM config provider |
+
+**Confidence: Verified.** The ten active hook veneers and five later
+trampolines at 0x400DE–0x400FB are callable entries with the same ABI as their
+tail targets. IRQ1/IRQ2/IRQ3 deliberately self-jump and therefore become
+watchdog traps if those unexpected sources fire; IRQ6 tail-jumps through OS
+0x17E to the sound receive interrupt body, which exits with `RTE`.
 
 ---
 
 ## 2. Main Loop Structure
+
+**Confidence: Verified** by the checked 29-entry main-loop contract generator
+and whole-ROM direct-call reconciliation.
 
 ### 2.1 Verified Main Loop Call Sequence (`m2mainloop`, 0x42A66)
 
@@ -97,7 +117,7 @@ VBLANK_WAIT (0x42a7e):
 SKIP_GAMEPLAY (0x42b14):
     ── ALWAYS CALLED (every frame, all modes) ──────────────
     jsr main_msgbox_countdown       (0x4ccbc)
-    jsr pick_character              (0x42df4)
+    jsr character_select_input_update (0x42df4)
     jsr main_start_game             (0x4800c)
     jsr main_score_update           (0x4715e)
     jsr main_score_display          (0x457c0)
@@ -119,9 +139,19 @@ SKIP_GAMEPLAY (0x42b14):
 
 The game's VBLANK handler implementation is at **`0x4017E`**, reached via the jump table entry at `0x40006`. The VBLANK semaphore is at `0x904002` (word). The OS VBLANK handler sets it each field. The main loop spins on it, clears it after processing, and detects frame drops via `0x904916` (set to 8 if a second VBLANK occurred before processing finished).
 
+**Confidence: Verified.** The reset veneer at 0x40000 reaches `game_start`
+(0x4014C). That entry installs three initial playfield-color pointers at
+0x904036/3A/3E, installs forcefield delay profile 0 (ROM 0x571DA) at
+0x904042, writes SR=0x2300, and tail-jumps to the non-returning
+`m2mainloop`. The interrupt veneer at 0x40006 reaches `game_vblank`, which
+saves D0-D1/A0-A2 and exits with `RTE` unless it takes one of the separately
+documented abort/reset-vector paths.
+
 > **Correction from REPORT.md:** The semaphore is at `0x904002`, not in `ram.os_flag` at `0x904000`. `0x904000` is the maze number.
 
 ### 2.3 Game Mode Variable
+
+**Confidence: Verified** for stored values and their tested branches.
 
 > **Correction from REPORT.md:** The game mode variable is `game_mode` at `0x904918`, **not** `ram.os_flag`. REPORT.md's description of "values below 0x5 are pre-game, 0x5–0x72 are normal gameplay" referred to the maze number, not game mode.
 
@@ -136,7 +166,10 @@ Game mode values:
 | `0xFFFD` (GAMEMODE_DEMO) | Demo gameplay attract |
 | `0xFFFC` (GAMEMODE_LEGEND) | Legend screen attract |
 
-### 2.3 What Runs When — Complete Function Execution Matrix
+### 2.4 What Runs When — Complete Function Execution Matrix
+
+**Confidence: Verified** for the main-loop dialog gate and each callee's
+mode/player gates represented below.
 
 | Function | Normal | TreasExit | Demo | Title/Scores/Legend | Dialog Active |
 |----------|--------|-----------|------|---------------------|---------------|
@@ -160,7 +193,7 @@ Game mode values:
 | `main_walls_cyclic_move` | YES | YES | YES | YES | **NO** |
 | `main_walls_random_move` | YES | YES | YES | YES | **NO** |
 | `main_msgbox_countdown` | YES | YES | YES | YES | YES |
-| `pick_character` | YES | YES | YES | YES | YES |
+| `character_select_input_update` | YES | YES | YES | YES | YES |
 | `main_start_game` | YES | YES | YES | YES | YES |
 | `main_score_update` | YES | YES | YES | YES | YES |
 | `main_score_display` | YES | YES | YES | YES | YES |
@@ -169,19 +202,19 @@ Game mode values:
 | `sound_response` | YES | YES | YES | YES | YES |
 | `main_update_sound` | YES | YES | YES | YES | YES |
 
-### 2.4 Attract Mode State Machine (`main_attract`, 0x44562)
+### 2.5 Attract Mode State Machine (`main_attract`, 0x44562)
 
 The attract mode cycles through four screens:
 ```
 SCORES → TITLE → DEMO → LEGEND → SCORES → ...
 ```
 
-Timers (frames at 60 Hz):
+Loaded screen timers (frames at 60 Hz; **Confidence: Verified** at `start_attract_screen` 0x44414):
 | Screen | Timer | Seconds |
 |--------|-------|---------|
 | TITLE | 0x5DD | ~25 sec |
 | SCORES | 0x258 | ~10 sec |
-| DEMO | 0x1C20 | ~119 sec |
+| DEMO | 0x1C20 | 120 sec |
 | LEGEND | 0x258 | ~10 sec |
 
 Every 13th TITLE cycle: refreshes EEPROM settings. If attract sounds are enabled (bit 14 of settings) and the music counter is zero: plays theme 0x3B ("Gauntlet II Theme Song").
@@ -191,6 +224,10 @@ Every 13th TITLE cycle: refreshes EEPROM settings. If attract sounds are enabled
 ## 3. Calling Convention
 
 The game ROM is compiled C using a **stack-based, caller-cleanup convention** (cdecl) typical of the Green Hills C compiler for 68000 targets.
+
+**Confidence: Verified** as the normal convention across the 321-entry
+contract audit. Every register/shared-stack/tail-entry exception is stated in
+`07_function_index.md` and the generated contract catalogs.
 
 ### 3.1 Prologue / Epilogue
 
@@ -273,19 +310,38 @@ Telltale signs of non-compiler-generated code:
 
 ## 4. ROM Coverage
 
+**Confidence: Verified** by the generated physical-region, callable-contract,
+control-target, detailed byte-range, and RAM-operand reports.
+
 ### 4.1 Code Coverage
 
-- **170 functions** found via `link a6` prologue search
-- **0 undocumented functions** with standard prologues
-- ~87 KB of code documented at function granularity
-- All 29 main-loop top-level functions: **status DONE**
+- **Verified:** the standard `link a6` prologue sweep and direct-target naming cover the known compiled-C entries.
+- **Verified:** the detailed byte report identifies 93,722 analyzed instruction
+  bytes across 34 executable ranges, and all 29 main-loop top-level entries
+  have checked purpose/ABI descriptions.
+- **Verified:** `callable_contract_coverage.csv` reconciles all 321 indexed
+  entries to body-checked catalogs that state purpose, arguments, return
+  behavior, and every discovered convention exception. Naming alone was not
+  accepted as contract evidence.
 
 ### 4.2 Data Tables Coverage
 
-- The current authoritative catalog is `05_data_reference.md` §5, mirrored by exact-range flags in `gauntlet.r2`; legacy table counts in root-level reports are no longer used as a completeness measure.
-- Live table starts, indexed bases, overlapping views, padding, and runtime-dead blocks have been reconciled across the full game ROM.
+- **Verified:** `rom_regions.csv` provides a checked, contiguous physical union
+  of every byte from 0x40000 through 0x5FFFF, including the two erased pads and
+  final checksum word.
+- **Verified:** `rom_byte_coverage.csv` classifies every byte in both mixed
+  code/data regions as analyzed instructions or a named ROM range;
+  `rom_catalog_reconciliation.csv` gives every §5 row an exact matching flag,
+  `rom_flag_reconciliation.csv` gives all 351 non-code ROM flags an exact §5
+  or header-table row, and `rom_range_overlaps.csv` records the 21 intentional
+  nested/alternate table views. No mixed-region byte or analysis failure
+  remains unclassified.
 
 ### 4.3 Previously Undocumented Areas — Now Decoded
+
+**Confidence: Verified** for the byte ranges and live consumers; concise
+editorial group names are **Strong inference** where several adjacent tables
+are summarized together.
 
 The following major data areas were unlabeled but have since been decoded:
 
@@ -304,17 +360,29 @@ The following major data areas were unlabeled but have since been decoded:
 
 ### 4.4 Resolved Former Unknowns
 
+**Confidence: Verified** for live/dead reachability within the shipped ROM.
+The original build-time intent of unreachable residue remains **Unknown** and
+is unresolvable from the supplied runtime artifacts; this does not leave its
+ROM range, runtime status, or contents unaccounted.
+
 The four unknowns formerly listed here (dragon path table format, dialog tip boundaries, tile pattern → descriptor mapping, EEPROM bits 5–7/13) have all been resolved by disassembly — see `05_data_reference.md` (data formats, §3.19 bytecodes, §5 ROM tables) and `04_game_subsystems.md` (§8 dragon, §30 shot resolution). The dragon path table turned out to be 5×16 bytes at 0x5D578, with the rest of its formerly claimed 2 KB being playfield palettes and contest strings.
 
-Pointerless blocks are classified as runtime-dead ROM residue rather than unknown live tables. The two large blocks are 0x57BD8–0x57EB9 and 0x5C8B0–0x5CAA7; the completeness pass also isolated the smaller dead blocks at 0x571D8–0x571F9, 0x57332–0x5733F, 0x57358–0x5735F, and 0x5870C–0x58749. Whole-ROM encoded-pointer searches, xrefs, exact-range immediate searches, and surrounding-page immediate searches found no consumer. Their original editor/build-time purpose is not recoverable from runtime code, so apparent geometric layouts are not assigned semantics; `05_data_reference.md` records exact contents and boundaries.
+Pointerless blocks are classified as runtime-dead ROM residue rather than unknown live tables. The two large blocks are 0x57BD8–0x57EB9 and 0x5C8B0–0x5CAA7; the completeness pass also isolated the smaller dead blocks at 0x571D8–0x571D9, 0x57332–0x5733F, 0x57358–0x5735F, and 0x5870C–0x58749. Whole-ROM encoded-pointer searches, xrefs, exact-range immediate searches, and surrounding-page immediate searches found no consumer. Their original editor/build-time purpose is not recoverable from runtime code, so apparent geometric layouts are not assigned semantics; `05_data_reference.md` records exact contents and boundaries. The adjacent 0x571DA–0x571F9 bytes are **Verified** live forcefield cycle-delay profiles and are not part of this residue.
 
 For the current list of open questions, see `08_known_issues.md`.
 
 ### 4.5 Unused ROM Space
 
-The 6,196-byte block of solid 0xFF between address 0x55620 and 0x56E53 is genuinely unused ROM space. This represents ~4.8% of the ROM — typical of 1980s arcade ROMs where compiled code didn't fill the entire EPROM chip.
+**Confidence: Verified** for the solid-0xFF bytes, absence from all analyzed
+instruction/table ranges, and lack of runtime significance. The image contains
+no evidence from which to recover a production-time reason for the gap, so no
+such explanation is asserted.
+
+The 6,196-byte block of solid 0xFF between address 0x55620 and 0x56E53 is genuinely unused ROM space. This represents ~4.8% of the ROM; the image does not encode a production-time reason for the gap.
 
 ### 4.6 Disassembly Note — `movea.l` Immediate Mode
+
+**Confidence: Verified** from instruction encoding and raw bytes.
 
 Several radare2 disassembly listings display `movea.l 0x9XXXXX, an`, which **appears** to be a memory dereference but is often **IMMEDIATE mode** (loading the address literal into the register). Always confirm via raw byte inspection:
 
@@ -328,6 +396,8 @@ This affects any analysis that assumed these instructions were dereferencing poi
 ---
 
 ## 5. `one_time_init` (0x4327A) — Initialization Before First Frame
+
+**Confidence: Verified** for call order, arguments, and state writes.
 
 Called once from the main loop before the first VBLANK wait. Performs full game initialization:
 

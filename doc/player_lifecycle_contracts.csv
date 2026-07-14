@@ -1,0 +1,20 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x42DF4,character_select_input_update,void,void,,0x42B1A,Verified
+0x42F86,eeprom_load_config,void,void,uses fixed OS EEPROM services 0x184 and 0x24E,0x43300,Verified
+0x43192,eeprom_write,void,void,uses fixed OS EEPROM service 0x24E,0x43270,Verified
+0x431EE,eeprom_periodic_write,void,void,,0x42B38,Verified
+0x43360,player_resetcounters,uint16 player_index,void,,0x4342E;0x4699A,Verified
+0x4341E,player_resetall,void,void,,0x44254;0x4446E;0x44846;0x4488C;0x480C0,Verified
+0x44C7E,show_continue_prompt,void,void,calls fixed draw_string through A2 = 0x25A,0x42CDE;0x46B6A;0x4A110,Verified
+0x452D0,setup_infopanel,int16 player_selector (-1 = whole panel),void,calls fixed draw_string/copy services through A2 = 0x25A and A3 = 0x142,0x42CA4;0x42E7E;0x44542;0x447C4;0x448F2;0x449E4;0x44F3E;0x46AD0;0x48278;0x4833A;0x48524;0x489A8;0x48B3A;0x49DD6;0x4A10A;0x4ACC2;0x4D4E4;0x4E392;0x4E3F8,Verified
+0x48754,speech_welcome,uint16 player_index,void,,0x48B46,Verified
+0x488CA,player_coindrop,uint16 player_index,void,,0x42CEA;0x484C4;0x484FE;0x485EA;0x486D4;0x48A6A,Verified
+0x489B8,remove_dying_player_sprites,uint16 player_index,void,,0x4D6A6;0x4D6F2;0x4D7C0;0x4D816;0x4D846,Verified
+0x48A36,player_join_finalize,uint16 player_index,void,,0x485C2;0x486B4;0x486E2;0x48BDC,Verified
+0x48BB6,player_join,uint8 player_index,void,reads the low byte of the first normal stack slot at A6+0xB,0x44A32;0x48582;0x485B4;0x48662;0x48684;0x486A6;0x4A5C4,Verified
+0x48BEC,player_start_inner,uint16 player_index,"D0.l = -1 when placement and MOB initialization succeed, or 0 when no usable spawn position exists",,0x48252;0x482CA;0x48BCA,Verified
+0x49DE6,player_death_sequence,uint16 player_index,void,,0x4A632,Verified
+0x4A2CA,draw_player_initials_entry,uint16 player_index,void,,0x45542,Verified
+0x4D1A4,secret_bonus_earned,void,"D0.l = -1 when the current secret-task/progress state earns the secret-room coin bonus, else 0",,0x4D4B0,Verified
+0x4D476,show_level_end_bonus_screen,void,void,calls fixed draw_string through A3 = 0x25A,0x4A78C;0x4D466,Verified
+0x4D900,player_activecount,void,"D0.l = count (0..4) of player statuses 1, 2, 8, or 0x10",,0x44F1A;0x4837E;0x4D516,Verified

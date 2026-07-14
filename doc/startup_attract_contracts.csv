@@ -1,0 +1,20 @@
+address,name,arguments,return,exceptional_convention,direct_control_sites,confidence
+0x4327A,one_time_init,void,void,,0x42A74,Verified
+0x43486,init_display,"uint16 main_palette_index, uint16 special_palette_variant",void,calls the fixed copy_longwords body indirectly through A2 = 0x5FD6A,0x400E4;0x43298;0x44360;0x44402;0x44A20;0x48170;0x48224;0x48576;0x48656;0x4A160;0x4CD88,Verified
+0x44204,start_attract_to_game,void,void,,0x42BE2;0x448CE;0x484B8,Verified
+0x4438E,load_attract_display_tilemap,void,void,,0x444CC;0x44A86,Verified
+0x44414,start_attract_screen,int16 screen_mode,void,,0x43350;0x447D0;0x44834;0x44914,Verified
+0x44562,main_attract,void,void,,0x42B32,Verified
+0x449CC,attract_noop_hook,void,void,,0x449BC,Verified
+0x449D4,attract_demo_init,void,void,,0x4451E,Verified
+0x44A82,game_playfield_init,void,void,OS invokes this callback through the JMP veneer at game-ROM 0x40030,0x40030,Verified
+0x44DB4,show_level_start_screen,void,void,calls fixed draw_string service indirectly through A3 = 0x25A,0x442AC;0x4813A;0x48204,Verified
+0x4800C,main_start_game,void,void,,0x42B20,Verified
+0x4C9A2,demo_speech_cmd,"uint16 player_index, uint16 message_index",void,,0x4A5A8,Verified
+0x4CD1C,load_legend_page,uint16 page_selector,void,,0x44552;0x44856;0x4489C,Verified
+0x4CDB8,draw_legend_monsters_page,void,void,calls fixed draw_string service indirectly through A3 = 0x25A,0x4CDA8,Verified
+0x4CFAE,draw_legend_overview_page,void,void,,0x4CD94,Verified
+0x4CFDA,draw_legend_rules_page,void,void,calls alpha_clear_rect indirectly through A2 = 0x4D12E,0x4CDA0,Verified
+0x4D956,scroll_apply,"int16 horizontal_delta, int16 vertical_delta","D0.l = -1 for the zero/zero anchor-reset path, or 0 after a nonzero scroll",,0x4DCA8;0x4DE5C,Verified
+0x4DA3E,title_logo_init,void,void,,0x444D2,Verified
+0x4DCBA,main_logo_updcolors,void,void,,0x42A98,Verified
