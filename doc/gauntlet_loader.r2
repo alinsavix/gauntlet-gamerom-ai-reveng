@@ -19,14 +19,14 @@ af+ 0x05e2 reset_entry
 af+ 0x03a0 normal_boot
 af+ 0x061e selftest_boot
 af+ 0x070c main_init_cont
-af+ 0x0a2c mem_test_thorough
-af+ 0x0a6a mem_test_quick
-af+ 0x0c52 error_display_string
+af+ 0xa2c mem_test_short
+af+ 0xa6a mem_test_full
+af+ 0xc52 display_working_ram_error
 af+ 0x0c98 error_display_ram
 af+ 0x0cc0 rom_checksum_display
 af+ 0x0e14 os_vblank_mode_entry
 af+ 0x0e5e os_vblank_handler
-af+ 0x129a os_main_loop
+af+ 0x129a os_selftest_loop
 af+ 0x2918 format_number
 af+ 0x2a5e format_hex
 af+ 0x2abe format_decimal
@@ -38,27 +38,27 @@ af+ 0x3044 write_alpha_char
 af+ 0x2ce4 calc_alpha_address
 af+ 0x3522 init_alpha_display
 af+ 0x3586 write_alpha_word
-af+ 0x3162 start_scroll_text
-af+ 0x3168 start_scroll_type1
-af+ 0x316c start_scroll_type3
-af+ 0x3156 start_scroll_type4
-af+ 0x3122 start_scroll_updown
+af+ 0x3162 start_blink_text
+af+ 0x3168 start_timed_text
+af+ 0x316c start_progressive_text
+af+ 0x3156 start_progressive_text_clear
+af+ 0x3122 start_text_line_rotation
 af+ 0x30f4 stop_text_effect
-af+ 0x3130 init_scroll_system
+af+ 0x3130 init_fullscreen_text_scroll
 af+ 0x2b3c process_text_effects
 af+ 0x31d2 display_large_text
-af+ 0x3346 display_large_char_styled
+af+ 0x3346 clear_large_text
 af+ 0x32bc display_large_char_at
 af+ 0x32a0 display_large_char_raw
 af+ 0x35b2 set_text_position
-af+ 0x332a large_char_lookup
-af+ 0x32da large_char_data
-af+ 0x3310 large_char_render
+af+ 0x332a display_large_text_at
+af+ 0x32da display_large_decimal_value
+af+ 0x3310 display_large_hex_value
 af+ 0x359a wait_vblanks
 af+ 0x4184 send_sound_command
 af+ 0x41fa process_sound
 af+ 0x42c8 read_sound_data
-af+ 0x427a send_sound_immediate
+af+ 0x427a sound_receive_irq_body
 af+ 0x42f8 reset_sound_cpu
 af+ 0x41c8 send_sound_command_wait
 af+ 0x41cc try_send_sound_command
@@ -71,23 +71,138 @@ af+ 0x35c4 process_coins
 af+ 0x3706 get_coin_multiplier
 af+ 0x3740 calc_health_per_coin
 af+ 0x37c2 check_and_deduct_coin
-af+ 0x3804 check_credits
+af+ 0x3804 check_and_deduct_credits
 af+ 0x3860 read_eeprom_setting
 af+ 0x38c0 read_game_config
 af+ 0x39b0 read_high_score_entry
 af+ 0x3a7e write_high_score_entry
-af+ 0x3be8 get_eeprom_base
+af+ 0x3be8 update_active_player_time_stats
 af+ 0x3cf6 write_eeprom_setting
 af+ 0x3f68 rank_high_score
-af+ 0x401a write_eeprom_config
-af+ 0x4038 process_coin_stats
-af+ 0x5454 run_self_test
-af+ 0x58c6 display_attract_screen
+af+ 0x401a activate_player_time_tracking
+af+ 0x4038 record_player_session_histogram
+af+ 0x5454 run_statistics_screens
+af+ 0x58c6 run_game_options
 af+ 0x1632 display_init_clear
-af+ 0x17d4 display_init_text
-af+ 0x0fca display_init_palette
-af+ 0x1b20 display_attract_setup
-af+ 0x21a0 eeprom_validate
+af+ 0x17d4 run_alpha_test
+af+ 0xfca run_color_test
+af+ 0x1b20 run_motion_object_test
+af+ 0x21a0 validate_game_rom
+af+ 0x03b6 normal_boot_spare_test_done
+af+ 0x03c4 normal_boot_spare_error_ack
+af+ 0x0424 normal_boot_color_test_done
+af+ 0x04a4 normal_boot_playfield_test_done
+af+ 0x0512 normal_boot_alpha_test_done
+af+ 0x0582 normal_boot_mob_test_done
+af+ 0x0652 selftest_spare_test_done
+af+ 0x0660 selftest_spare_error_ack
+af+ 0x067c selftest_color_test_done
+af+ 0x06a6 selftest_playfield_test_done
+af+ 0x06d0 selftest_alpha_test_done
+af+ 0x06fc selftest_mob_test_done
+af+ 0x08ec boot_postcheck_dispatch
+af+ 0x0a42 mem_test_short_walk_ones
+af+ 0x0a52 mem_test_short_walk_zeroes
+af+ 0x0a62 mem_test_short_done
+af+ 0x0a7a mem_test_full_walk_ones_highbit
+af+ 0x0a84 mem_test_full_walk_zeroes_highbit
+af+ 0x0a8e mem_test_full_walk_ones_lowbit
+af+ 0x0a98 mem_test_full_walk_zeroes_lowbit
+af+ 0x0aa2 mem_test_full_restore_ones_highbit
+af+ 0x0aac mem_test_full_restore_ones_lowbit
+af+ 0x0ab6 mem_test_full_fill_ones
+af+ 0x0ac2 mem_test_full_restore_zeroes_highbit
+af+ 0x0acc mem_test_full_restore_zeroes_lowbit
+af+ 0x0ad6 mem_test_full_toggle_words
+af+ 0x0ae0 mem_test_full_done
+af+ 0x0d26 game_descriptor_ram_test
+af+ 0x0d3a game_descriptor_ram_test_done
+af+ 0x0d7a game_rom_checksum_error
+af+ 0x0eee selftest_watchdog_reset_trap
+af+ 0x0f04 playfield_add_word_test_range
+af+ 0x0f7e copy_test_tile_rows_to_alpha
+af+ 0x113e read_debounced_input
+af+ 0x11fc color_test_palette_init
+af+ 0x1228 selftest_load_control_labels
+af+ 0x169c load_color_test_palettes
+af+ 0x16f6 copy_cstring
+af+ 0x1704 reset_sound_test_interface
+af+ 0x1732 fill_incrementing_words
+af+ 0x1758 display_standard_large_glyph_range
+af+ 0x179e display_rotated_large_glyph_range
+af+ 0x1a34 run_switch_test
+af+ 0x2190 wait_os_vblank
+af+ 0x226a display_next_test_prompt
+af+ 0x229c run_sound_test
+af+ 0x27ac send_sound_test_command_wait
+af+ 0x27f4 wait_sound_test_delay_or_abort
+af+ 0x2828 display_ram_error_detail
+af+ 0x28ca display_two_byte_hex_pair
+af+ 0x2d14 rotate_text_line_forward
+af+ 0x2d18 rotate_text_line_forward_register
+af+ 0x2d74 rotate_text_line_reverse
+af+ 0x2d78 rotate_text_line_reverse_register
+af+ 0x2dde scroll_alpha_surface_one_step
+af+ 0x2e3e display_text_register
+af+ 0x2f3c draw_string_register
+af+ 0x2fb2 draw_text_effect_next_char_stack_veneer
+af+ 0x2fbe draw_text_effect_next_char
+af+ 0x3018 clear_text_effect_next_char_stack_veneer
+af+ 0x3020 clear_text_effect_next_char
+af+ 0x304e write_alpha_char_register
+af+ 0x3088 clear_text_descriptor_chain_stack_veneer
+af+ 0x308c clear_text_descriptor_chain
+af+ 0x3166 unused_text_effect_noop
+af+ 0x3172 allocate_text_effect
+af+ 0x324e render_large_glyph_register
+af+ 0x355c reset_text_effects
+af+ 0x3d18 write_game_config
+af+ 0x4198 send_sound_command_register
+af+ 0x4674 eeprom_decode_block
+af+ 0x467c eeprom_decode_block_to
+af+ 0x4770 eeprom_clear_statistics
+af+ 0x4784 eeprom_clear_configuration
+af+ 0x47ac eeprom_request_write_register
+af+ 0x47b8 eeprom_clear_difficulty_rows
+af+ 0x4896 wait_vblank_counter_ticks
+af+ 0x48b8 display_text_set_cursor
+af+ 0x4912 display_text_at_cursor
+af+ 0x493c display_decimal_at_cursor
+af+ 0x4966 display_decimal_set_cursor
+af+ 0x49c8 option_record_present
+af+ 0x49e8 find_option_record
+af+ 0x4a44 render_option_record
+af+ 0x4b66 render_option_record_page
+af+ 0x4be6 display_next_screen_prompt
+af+ 0x4c38 init_operator_mob_display
+af+ 0x4c66 run_statistics_histograms
+af+ 0x4fa0 display_statistics_play_time
+af+ 0x5098 run_statistics_summary
+af+ 0x522a run_game_settings_bit_editor
+af+ 0x5392 draw_game_settings_bits
+af+ 0x5476 run_option_descriptor_editor
+af+ 0x593c run_coin_options
+af+ 0x8000 legacy_monster_object_update
+af+ 0x8702 legacy_monster_choose_direction
+af+ 0x89aa legacy_four_cell_occupied_test
+af+ 0x89e6 legacy_position_in_active_bounds
+af+ 0x8a12 legacy_set_direction_from_delta
+af+ 0x8ae8 legacy_moblist_insert
+af+ 0x8c36 legacy_move_mob_slot
+af+ 0x8c70 legacy_moblist_remove_and_clear
+af+ 0x8d00 legacy_moblist_unlink
+af+ 0x8f38 legacy_probe_up
+af+ 0x9006 legacy_probe_down
+af+ 0x90d2 legacy_probe_left
+af+ 0x9192 legacy_probe_right
+af+ 0x9284 legacy_recursive_path_move
+af+ 0x9864 legacy_test_actor_contact_a
+af+ 0x9880 legacy_test_actor_contact_b
+af+ 0x989c legacy_probe_vertical_triplet_up
+af+ 0x98d8 legacy_probe_vertical_triplet_down
+af+ 0x9914 legacy_test_cell_proximity
+af+ 0x99a0 legacy_probe_horizontal_triplet_left
+af+ 0x99d8 legacy_probe_horizontal_triplet_right
 af+ 0x40000 game_start_veneer
 af+ 0x40006 game_vblank_veneer
 af+ 0x4000c game_irq1_watchdog_trap
@@ -97,7 +212,7 @@ af+ 0x4001e game_irq6_sound_veneer
 af+ 0x40024 game_exception_veneer
 af+ 0x40030 game_playfield_init_veneer
 af+ 0x40048 game_options_veneer
-af+ 0x40054 game_eeprom_config_veneer
+af+ 0x40054 game_rom_verify_veneer
 af+ 0x400de scroll_to_slot_veneer
 af+ 0x400e4 init_display_veneer
 af+ 0x400ea maze_setup_veneer
@@ -419,19 +534,19 @@ f normal_boot 1 0x000003a0
 f reset_entry 1 0x000005e2
 f selftest_boot 1 0x0000061e
 f main_init_cont 1 0x0000070c
-f mem_test_thorough 1 0x00000a2c
-f mem_test_quick 1 0x00000a6a
-f error_display_string 1 0x00000c52
+f mem_test_short 1 0x00000a2c
+f mem_test_full 1 0x00000a6a
+f display_working_ram_error 1 0x00000c52
 f error_display_ram 1 0x00000c98
 f rom_checksum_display 1 0x00000cc0
 f os_vblank_mode_entry 1 0x00000e14
 f os_vblank_handler 1 0x00000e5e
-f display_init_palette 1 0x00000fca
-f os_main_loop 1 0x0000129a
+f run_color_test 1 0x00000fca
+f os_selftest_loop 1 0x0000129a
 f display_init_clear 1 0x00001632
-f display_init_text 1 0x000017d4
-f display_attract_setup 1 0x00001b20
-f eeprom_validate 1 0x000021a0
+f run_alpha_test 1 0x000017d4
+f run_motion_object_test 1 0x00001b20
+f validate_game_rom 1 0x000021a0
 f format_number 1 0x00002918
 f format_hex 1 0x00002a5e
 f format_decimal 1 0x00002abe
@@ -443,19 +558,19 @@ f display_hex_value 1 0x00002eea
 f draw_string 1 0x00002f04
 f write_alpha_char 1 0x00003044
 f stop_text_effect 1 0x000030f4
-f start_scroll_updown 1 0x00003122
-f init_scroll_system 1 0x00003130
-f start_scroll_type4 1 0x00003156
-f start_scroll_text 1 0x00003162
-f start_scroll_type1 1 0x00003168
-f start_scroll_type3 1 0x0000316c
+f start_text_line_rotation 1 0x00003122
+f init_fullscreen_text_scroll 1 0x00003130
+f start_progressive_text_clear 1 0x00003156
+f start_blink_text 1 0x00003162
+f start_timed_text 1 0x00003168
+f start_progressive_text 1 0x0000316c
 f display_large_text 1 0x000031d2
 f display_large_char_raw 1 0x000032a0
 f display_large_char_at 1 0x000032bc
-f large_char_data 1 0x000032da
-f large_char_render 1 0x00003310
-f large_char_lookup 1 0x0000332a
-f display_large_char_styled 1 0x00003346
+f display_large_decimal_value 1 0x000032da
+f display_large_hex_value 1 0x00003310
+f display_large_text_at 1 0x0000332a
+f clear_large_text 1 0x00003346
 f init_alpha_display 1 0x00003522
 f write_alpha_word 1 0x00003586
 f wait_vblanks 1 0x0000359a
@@ -464,21 +579,21 @@ f process_coins 1 0x000035c4
 f get_coin_multiplier 1 0x00003706
 f calc_health_per_coin 1 0x00003740
 f check_and_deduct_coin 1 0x000037c2
-f check_credits 1 0x00003804
+f check_and_deduct_credits 1 0x00003804
 f read_eeprom_setting 1 0x00003860
 f read_game_config 1 0x000038c0
 f read_high_score_entry 1 0x000039b0
 f write_high_score_entry 1 0x00003a7e
-f get_eeprom_base 1 0x00003be8
+f update_active_player_time_stats 1 0x00003be8
 f write_eeprom_setting 1 0x00003cf6
 f rank_high_score 1 0x00003f68
-f write_eeprom_config 1 0x0000401a
-f process_coin_stats 1 0x00004038
+f activate_player_time_tracking 1 0x0000401a
+f record_player_session_histogram 1 0x00004038
 f send_sound_command 1 0x00004184
 f send_sound_command_wait 1 0x000041c8
 f try_send_sound_command 1 0x000041cc
 f process_sound 1 0x000041fa
-f send_sound_immediate 1 0x0000427a
+f sound_receive_irq_body 1 0x0000427a
 f read_sound_data 1 0x000042c8
 f reset_sound_cpu 1 0x000042f8
 f eeprom_process 1 0x0000432e
@@ -486,8 +601,8 @@ f eeprom_init 1 0x000044e8
 f eeprom_request_write 1 0x000047a8
 f eeprom_check_busy 1 0x00004802
 f eeprom_read_block 1 0x00004822
-f run_self_test 1 0x00005454
-f display_attract_screen 1 0x000058c6
+f run_statistics_screens 1 0x00005454
+f run_game_options 1 0x000058c6
 f game_start_veneer 6 0x00040000
 f game_vblank_veneer 6 0x00040006
 f game_irq1_watchdog_trap 6 0x0004000c
@@ -502,7 +617,7 @@ f game.startup_hook3_slot 6 0x0004003c
 f game.vblank_hook_slot 6 0x00040042
 f game_options_veneer 6 0x00040048
 f game.post_attract_hook_slot 6 0x0004004e
-f game_eeprom_config_veneer 6 0x00040054
+f game_rom_verify_veneer 6 0x00040054
 f game.header_ff_pad_4005a 6 0x0004005a
 f game.mob_fill_value 2 0x00040060
 f game.pf_fill_value 2 0x00040062
@@ -510,7 +625,7 @@ f game.reserved_header_40064 9 0x00040064
 f game.eeprom_start 1 0x0004006d
 f game.reserved_header_4006e 1 0x0004006e
 f game.difficulty_byte 1 0x0004006f
-f game.screen_mode 2 0x00040070
+f game.default_settings 2 0x00040070
 f game.rom_type_flag 1 0x00040072
 f game.reserved_header_40073 1 0x00040073
 f game.button0_label_ptr 4 0x00040074
@@ -1422,20 +1537,20 @@ f ram.random_seed 2 0x00904bfc
 f ram.vblank_abort_guard 2 0x00904c00
 f ram.player_hurt_palette_stubs 24 0x00905f00
 f ram.player_power_palette_stubs 24 0x00905f18
-f ram.scroll_speed 1 0x00904f02
-f ram.scroll_direction 1 0x00904f06
+f ram.fullscreen_scroll_active 1 0x00904f02
+f ram.fullscreen_scroll_offset 1 0x00904f06
 f ram.os_vblank_active 1 0x00904f0c
 f ram.display_mode 1 0x00904f0e
 f ram.text_effect_slots 1 0x00904f18
-f ram.player_inputs_snapshot 1 0x00904f8a
+f ram.input_source_ptr 1 0x00904f8a
 f ram.sound_queue 1 0x00904f8e
 f ram.eeprom_work 1 0x00904fa8
-f ram.error_count 1 0x00904fc0
+f ram.eeprom_error_count 1 0x00904fc0
 f ram.coin_counters 1 0x00904fec
 f ram.coin_totals 1 0x00904ff0
 f ram.coin_pending 1 0x00904ff4
 f ram.vblank_counter 1 0x00904ff8
-f ram.eeprom_dirty_flag 1 0x00904ffa
+f ram.eeprom_init_timeout_counter_byte 1 0x00904ffa
 f ram.eeprom_config_ptr 1 0x00904ffc
 f vram.alpha 2048 0x00905000
 f ram.hud_mob_table 3072 0x00905048
@@ -1464,5 +1579,88 @@ f vram.color_spare 1 0x00910600
 f ram.tport_pos_table 64 0x00910700
 f ram.ff_segment_table 128 0x00910780
 f vram.pf_hscroll_reg 1 0x00930000
+f osdata.working_ram_error_text 18 0x00000c86
+f osdata.rom_error_descriptor_pointer_tables 98 0x00000f1c
+f osdata.number_format_bit_masks 22 0x00002a48
+f osdata.text_effect_dispatch_offsets 12 0x00002c16
+f osdata.large_character_tile_quads 208 0x000033d2
+f osdata.large_character_clear_maps 128 0x000034a2
+f osdata.eeprom_redundancy_probe_order 12 0x000044be
+f osdata.eeprom_bit_index_map 16 0x00004736
+f osdata.motion_test_lookup_tables 128 0x0000599a
+f osdata.diagnostic_pointer_and_endpoint_tables 48 0x00005a1a
+f osdata.selftest_descriptor_and_string_stream 1738 0x00005a4a
+f osdata.color_name_pointer_table 32 0x00006114
+f osdata.display_test_selection_tables 64 0x00006134
+f osdata.display_test_palette_words 16 0x00006174
+f osdata.color_test_palette_source_prefix 1184 0x00006184
+f osdata.palette_and_rom_error_descriptor_overlap 352 0x00006624
+f osdata.rom_error_descriptor_stream 514 0x00006784
+f osdata.coin_counter_decode_table 8 0x00006986
+f osdata.game_config_descriptor_table 26 0x0000698e
+f osdata.session_difficulty_factors 4 0x000069a8
+f osdata.statistics_prompt_strings 154 0x000069ac
+f osdata.statistics_summary_table 210 0x00006a46
+f osdata.statistics_error_and_navigation_descriptors 78 0x00006b18
+f osdata.operator_more_marker_variants 36 0x00006b66
+f osdata.operator_ui_palette 16 0x00006b8a
+f osdata.operator_option_descriptor_stream 416 0x00006b9a
+f osdata.built_in_coin_option_stream 110 0x00006d3a
+f legacydata.object_motion_tables 246 0x0000860c
+f legacydata.direction_route_tables 132 0x00008a64
+f legacydata.mob_bucket_tables 152 0x00008b9e
+f legacydata.path_probe_tables 434 0x00008d86
+f legacydata.recursive_move_tables 50 0x00009252
+f legacydata.game_option_stream 456 0x00009a10
+f legacydata.level_display_tables 324 0x00009bd8
+f legacydata.status_text_descriptors 772 0x00009d1c
+f legacydata.gameplay_numeric_tables_a 7452 0x0000a020
+f legacydata.factory_high_scores 320 0x0000bd3c
+f legacydata.high_score_text 122 0x0000be7c
+f legacydata.name_entry_and_gameplay_tables 586 0x0000bef6
+f legacydata.tutorial_descriptor_stream 656 0x0000c140
+f legacydata.gameplay_numeric_tables_b 4250 0x0000c3d0
+f legacydata.hint_and_legend_stream 3100 0x0000d46a
+f legacydata.legend_and_credit_text 970 0x0000e086
+f legacydata.descriptor_and_tile_tables 3312 0x0000e450
+f legacydata.palette_and_graphics_tables 2234 0x0000f140
+f hw.input_word_array 8 0x00803000
+f hw.sound_response_word 2 0x0080300e
+f hw.board_enable_latch 2 0x00803120
+f hw.sound_reset_control 2 0x0080312e
+f hw.sound_command_word 2 0x00803170
+f vram.playfield_last_word 2 0x00901ffe
+f vram.mob_last_word 2 0x00903ffe
+f ram.os_vblank_occurred 2 0x00904004
+f ram.sound_test_status_value 2 0x00904012
+f ram.selftest_button0_label 26 0x0090403e
+f ram.selftest_button1_label 26 0x00904058
+f ram.selftest_joystick_label 26 0x00904072
+f ram.motion_test_object_index 2 0x0090408c
+f ram.motion_test_pattern 2 0x0090408e
+f ram.text_repeat_bias 2 0x00904f00
+f ram.vblank_sync 2 0x00904f04
+f ram.fullscreen_scroll_interval 2 0x00904f0a
+f ram.highscore_work_buffer 7 0x00904f44
+f ram.active_player_time_mask 1 0x00904f4b
+f ram.player_time_last_vblank 4 0x00904f4c
+f ram.operator_cursor0 1 0x00904f78
+f ram.operator_cursor1 1 0x00904f79
+f ram.input_previous_raw 8 0x00904f7a
+f ram.input_debounced 8 0x00904f82
+f ram.sound_status_poll_busy_count 1 0x00904feb
+f vram.spare_last_word 2 0x00904ffe
+f vram.alpha_color_test_bottom_row 74 0x00905e80
+f vram.alpha_last_word 2 0x00905ffe
+f diag.working_ram_error_text 34 0x00906d00
+f vram.color_alpha_entry1 2 0x00910002
+f vram.color_alpha_entry2 2 0x00910004
+f vram.color_alpha_entry3 2 0x00910006
+f vram.color_alpha_entry4 2 0x00910008
+f vram.color_alpha_entry5 2 0x0091000a
+f vram.color_alpha_entry6 2 0x0091000c
+f vram.color_alpha_entry7 2 0x0091000e
+f vram.color_pf_entry15 2 0x0091051e
+f vram.color_last_word 2 0x009107fe
 fs *
 s 0x040000

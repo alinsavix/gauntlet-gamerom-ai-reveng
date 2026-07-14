@@ -11,6 +11,37 @@
 1. Reads a **bank lookup table** at hardware address `0x39FE0` (slapstic bank 3, file offset 0x7FE0). Each byte packs four 2-bit bank numbers (one per maze, LSB first).
 2. Reads the **pointer table** starting at the address stored at `0x38000` (which points to `0x3800C`). In the raw split Slapstic chips, each entry is an address in the selected bank's `0x38000–0x39FFF` CPU aperture; an offline extractor must normalize it as `raw_pointer + bank × 0x2000` before indexing the interleaved 32 KB image. The supplied normalized `row10.bin` has those 2-bit bank offsets already folded into the pointer high bytes, so its entries 0–115 are linear addresses in `0x38000–0x3FFFF` and must not be adjusted again. Raw entry 116 is the end sentinel in bank 3; its normalized value is `0x3FE48`, not another maze. **Confidence: Verified.**
 
+The lookup result drives both the Slapstic selection and the record decoder.
+Header bytes configure level behavior and presentation, while the compressed
+stream produces logical objects that are materialized as MOB state and 2×2
+playfield graphics.
+
+```mermaid
+flowchart TD
+    maze["Maze number 0–115"] --> find["find_maze<br/>(0x40C78)"]
+    find --> banktbl["2-bit bank lookup<br/>0x39FE0"]
+    find --> ptrtbl["117-entry pointer table<br/>base 0x3800C"]
+    banktbl --> bank["Bank 0–3"]
+    ptrtbl --> ptr["Record pointer<br/>adjacent entries bound records offline"]
+    bank --> latch["slapstic_cmd_bitwise<br/>select 8 KiB bank"]
+    latch --> aperture["Selected 0x38000–0x39FFF<br/>CPU aperture"]
+    ptr --> record["Maze record"]
+    aperture --> record
+
+    record --> header["Bytes 0x00–0x0A<br/>trick · flags · patterns · colors · H/V types"]
+    record --> stream["Byte 0x0B onward<br/>compressed maze stream"]
+    header --> config["Load level flags, palettes,<br/>wall/floor patterns, decode contexts"]
+    stream --> decode["maze_decode<br/>(0x4C1BC)<br/>cursor 0x20–0x3FF"]
+    config --> decode
+    decode --> place["maze_place_object<br/>(0x45E40)"]
+    place --> mobs["Create MOB/object state<br/>monsters, items, dragon, markers"]
+    place --> logical["Logical wall/floor/door state"]
+    logical --> render["Descriptor selection and<br/>2×2 playfield writes"]
+    mobs --> scan["Post-decode scans rebuild<br/>transporter and exit tables"]
+    render --> game["Initialized level in video/work RAM"]
+    scan --> game
+```
+
 ---
 
 ## 2. Slapstic ROM Bank Layout

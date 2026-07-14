@@ -1,0 +1,9 @@
+address,name,purpose,arguments,return,exceptional_convention,confidence
+0x4184,send_sound_command,Submit a sound command with a direct response destination and byte count,command word; response destination pointer; response byte count word,"D0.l = 1 when accepted, 0 when latch or direct-response channel is busy",normal stack wrapper over 0x4198 register body,Verified
+0x4198,send_sound_command_register,Submit the packed command/direct-response request already loaded in registers,D0.l = response count in high word and command in low word; A0 = response destination; A1 = sound state base,"D0.l = 1 when accepted, 0 when busy",register entry shared with the 0x4184 wrapper,Verified
+0x41C8,send_sound_command_wait,Wait until the sound latch is available and submit one command,command word,D0.l = 1,normal stack veneer; D0=0 selects retry in shared body 0x41CE,Verified
+0x41CC,try_send_sound_command,Attempt one sound-latch submission without waiting,command word,"D0.l = 1 when accepted, 0 when busy",normal stack veneer; D0=1 selects one attempt in shared body 0x41CE,Verified
+0x41FA,process_sound,"Advance sound-status polling, coin-status delivery, EEPROM processing, and command-3 response polling",void,void,normal stack ABI,Verified
+0x427A,sound_receive_irq_body,Receive one sound byte into the active direct destination or the 15-byte ring,CPU interrupt frame,no scalar result,interrupt entry; saves D0/A0/A1 and returns with RTE,Verified
+0x42C8,read_sound_data,Pop one byte from the 15-byte sound receive ring,void,"D0.l = next byte, or -1 when empty",normal stack ABI,Verified
+0x42F8,reset_sound_cpu,"Assert sound reset, emit a startup command, clear queue/direct-response state, and release reset",sound control word; startup command word,void,normal two-slot stack ABI,Verified

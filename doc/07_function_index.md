@@ -125,7 +125,7 @@ slots remain data rather than callable entries.
 | 0x40024 | `game_exception_veneer` | D0.w action (OS supplies zero) | does not return | Tail veneer to 0x40140 |
 | 0x40030 | `game_playfield_init_veneer` | void | void | Tail veneer to 0x44A82 |
 | 0x40048 | `game_options_veneer` | void | void | Tail veneer to 0x5317C |
-| 0x40054 | `game_eeprom_config_veneer` | void | D0.l packed verification/config result | Tail veneer to 0x56EAA |
+| 0x40054 | `game_rom_verify_veneer` | void | D0.l packed ROM/Slapstic verification result | Tail veneer to 0x56EAA |
 | 0x400DE | `scroll_to_slot_veneer` | `uint16 packed_slot` | void | Preserves target stack ABI |
 | 0x400E4 | `init_display_veneer` | `uint16 main_palette_index, uint16 special_palette_variant` | void | Preserves target stack ABI |
 | 0x400EA | `maze_setup_veneer` | `const uint8_t *maze_record` | void | Preserves target stack ABI |
@@ -990,44 +990,59 @@ See `02_os_rom.md` for full descriptions. Summary table:
 
 | API Address | Name | Args | Return |
 |-------------|------|------|--------|
-| 0x100 | `start_scroll_text` | (text_desc_ptr, speed, color) | d0 = 1 if started |
-| 0x106 | `format_decimal` | (value, buf_ptr, width, leading_zeros) | void |
-| 0x10C | `format_hex` | (value, buf_ptr, width, uppercase) | void |
-| 0x112 | `format_number` | (buf_ptr, format_char, ...) | void |
+| 0x100 | `start_blink_text` | (text_desc_ptr, color, interval) | d0 = 1 allocated, 0 full |
+| 0x106 | `format_decimal` | (value, buf_ptr, width, pad_mode) | void |
+| 0x10C | `format_hex` | (value, buf_ptr, width, pad_mode) | void |
+| 0x112 | `format_number` | (value, buf_ptr, format_char, format_mode, width) | void |
+| 0x118 | `stop_text_effect` | (text_desc_ptr) | void |
+| 0x11E | `start_progressive_text_clear` | (text_desc_ptr, interval) | d0 = 1 allocated, 0 full |
+| 0x124 | `start_text_line_rotation` | (text_desc_ptr, color, signed_interval) | d0 = 1 allocated, 0 full |
+| 0x12A | `start_timed_text` | (text_desc_ptr, color, interval) | d0 = 1 allocated, 0 full |
+| 0x130 | `start_progressive_text` | (text_desc_ptr, color, interval) | d0 = 1 allocated, 0 full |
+| 0x136 | `init_fullscreen_text_scroll` | (text_desc_ptr, color, interval) | d0 = 1 allocated, 0 full |
+| 0x13C | `set_text_position` | (text_desc_ptr, coordinate0, coordinate1) | void; also clears descriptor byte 6 |
+| 0x142 | `display_text` | (text_desc_ptr, color) | void |
+| 0x148 | `process_text_effects` | () | void |
 | 0x14E | `init_alpha_display` | () | void |
 | 0x154 | `wait_vblanks` | (count: word) | void |
 | 0x15A | `process_sound` | () | void |
 | 0x160 | `calc_health_per_coin` | (player_index: long) | d0 = health value |
 | 0x166 | `check_and_deduct_coin` | (player_index: long) | d0 = 1 if success |
-| 0x16C | `process_coins` | (coin_byte1, coin_byte2) | void |
-| 0x172 | `send_sound_command` | (cmd: word, callback, param: byte) | d0 = 1 if sent |
-| 0x17E | `send_sound_immediate` | () | void |
+| 0x16C | `process_coins` | (previous packed counters, current packed counters) | void |
+| 0x172 | `send_sound_command` | (cmd: word, response_dest, response_count: word) | d0 = 1 accepted, 0 busy |
+| 0x178 | `read_sound_data` | () | next ring byte, or -1 empty |
+| 0x17E | `sound_receive_irq_body` | interrupt frame only | no value; exits with `RTE` |
 | 0x184 | `eeprom_check_busy` | () | d0 = 1 if busy |
 | 0x18A | `eeprom_process` | () | void (called every VBLANK) |
-| 0x190 | `eeprom_init` | () | void |
-| 0x196 | `eeprom_request_write` | (region_index: long) | void |
-| 0x19C | `process_coin_stats` | (player_index: word, stat: word) | void |
-| 0x1A2 | `read_eeprom_setting` | (category: long, index: long) | d0 = byte |
-| 0x1A8 | `read_game_config` | (item_index: long) | d0 = long |
-| 0x1AE | `read_high_score_entry` | (class: word, rank: word) | d0 = ptr |
-| 0x1B4 | `write_high_score_entry` | (class, rank, data_ptr) | void |
-| 0x1BA | `get_eeprom_base` | () | d0 = ptr |
-| 0x1C0 | `write_eeprom_setting` | (category, value) | void |
+| 0x190 | `eeprom_init` | () | 0 initialized, 1 bad game header, -1 terminal error |
+| 0x196 | `eeprom_request_write` | (region_index: long) | supplied region index |
+| 0x19C | `record_player_session_histogram` | (player_index: word, coin_count: word) | void |
+| 0x1A2 | `read_eeprom_setting` | (difficulty_row: long, bin: long) | byte, -1 bad bin, -2 unavailable row |
+| 0x1A8 | `read_game_config` | (item_index: long) | decoded long, or -1 invalid |
+| 0x1AE | `read_high_score_entry` | (class: word, rank: word) | expanded-entry pointer, or 0 invalid rank |
+| 0x1B4 | `write_high_score_entry` | (class, rank, expanded_ptr) | 0 success, -1 rank, -2 score overflow |
+| 0x1BA | `update_active_player_time_stats` | (active_mask: long) | 0x904F50 counter-base pointer |
+| 0x1C0 | `write_eeprom_setting` | (config_index, value) | -1 invalid; otherwise delegated writer result |
 | 0x1C6 | `rank_high_score` | (class: word, score: long) | `D0.l` = rank 0–9, 10 when absent, or -1 invalid |
-| 0x1CC | `write_eeprom_config` | () | void |
-| 0x1D2 | `run_self_test` | () | void |
-| 0x200 | `display_large_text` | (text_desc_ptr) | d0 = pixel width |
+| 0x1CC | `activate_player_time_tracking` | (player_index: long) | 0x904F50 counter-base pointer |
+| 0x1D2 | `run_statistics_screens` | (allow_clear: long) | void |
+| 0x200 | `display_large_text` | (text_desc_ptr) | d0 = alpha-cell advance |
+| 0x20C | `display_large_char_at` | (alpha_ptr, glyph_index, color) | d0 = 1 or 2 cells |
+| 0x212 | `display_large_char_raw` | (alpha_ptr, glyph_index, color) | d0 = 1 or 2 cells |
 | 0x218 | `write_alpha_char` | (row, col, char, color) | void |
+| 0x21E | `write_alpha_word` | (cell_index, value) | void |
 | 0x224 | `calc_alpha_address` | (row, col) | d0 = address |
-| 0x230 | `check_credits` | (required: long, player: long) | d0 = 1 if sufficient |
+| 0x230 | `check_and_deduct_credits` | (required: long, player: long) | d0 = 1 consumed/free play, 0 insufficient |
 | 0x236 | `get_coin_multiplier` | () | d0 = multiplier |
 | 0x23C | `send_sound_command_wait` | (command: word) | `D0.l = 1` after accepted |
 | 0x242 | `try_send_sound_command` | (command: word) | `D0.l = 1` accepted, 0 busy |
-| 0x24E | `eeprom_read_block` | (dest_buf, block_index, mode) | void |
-| 0x254 | `reset_sound_cpu` | () | void |
-| 0x25A | `draw_string` | (row, col, string_ptr, color) | d0 = chars written |
-| 0x260 | `display_decimal_value` | (desc_ptr, color) | void |
-| 0x266 | `display_hex_value` | (desc_ptr, color) | void |
+| 0x248 | `run_game_options` | (descriptor_stream_ptr) | delegated setting-writer result |
+| 0x24E | `eeprom_read_block` | (dest_buf, block_index: word, mode) | 1 success, 0 unavailable, -1/-2 syndrome |
+| 0x254 | `reset_sound_cpu` | (control: word, startup_command: word) | void |
+| 0x25A | `draw_string` | (coordinate0, coordinate1, string_ptr, color) | d0 = source bytes including NUL |
+| 0x260 | `display_decimal_value` | (coordinate0, coordinate1, value, width, pad_mode, color) | void |
+| 0x266 | `display_hex_value` | (coordinate0, coordinate1, value, width, pad_mode, color) | void |
+| 0x272 | `display_large_decimal_value` | (coordinate0, coordinate1, value, width, pad_mode, color) | d0 = alpha-cell advance |
 
 ---
 
@@ -1218,7 +1233,15 @@ Calls `pf_stamp_update` (0x5E542) to write tile data to VRAM.
 
 ### `write_tile_descriptor` — 0x5E542
 
-Args: d0.w = packed tile position (bits 9:5 = column, bits 4:0 = row); a0 = pointer to 4-word sprite descriptor; a1.w = palette base. Computes VRAM address at 0x900000 for a 2×2 tile block. The sprite table at 0x900000 is **128 columns × 256 rows** of 2-byte entries. Writes 4 words from template at: `[slot+0]`, `[slot+0x80]`, `[slot+2]`, `[slot+0x82]`.
+Args: D0.w = packed tile position (bits 9–5 = row, bits 4–0 =
+column); A0 = pointer to the four-word descriptor; A1.w = palette/base
+addend. It computes the byte address `0x900000 + (column << 8) + (row <<
+2)` for the top-left of the maze tile's 2×2 block in the column-first 64×64
+playfield-word grid, then writes the descriptor words at offsets `+0`,
+`+0x80`, `+2`, and `+0x82`. **Contradicted and corrected:** the former bit
+labels were reversed and the playfield was incorrectly described here as a
+128×256 table; the raw instructions mask low bits with 0x1F and shift them
+left eight, while masking high bits with 0x3E0 and shifting them right three.
 
 ### `maze_scan_objects` — 0x43D8C *(formerly `maze_food_mob_consume` — corrected)*
 

@@ -4,7 +4,7 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
 
 | Priority | Confidence | Issue | Next test |
 |---|---|---|---|
-| — | — | No active ROM-analysis issue remains. | — |
+| — | — | No active prioritized issue remains. | — |
 
 ## Unresolvable from the supplied artifacts
 
@@ -13,14 +13,174 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   reachable dispatch, or runtime consumer. Their byte ranges, contents, and
   dead status are Verified; only the original editor/linker intent—information
   not present in the shipped runtime artifacts—cannot be recovered.
+- **Unknown, unresolvable retained-module provenance:** the exact source-game
+  revision and linker/editor symbol names for row9.bin's runtime-dead
+  0x8000–0xF9F9 payload are not encoded in the supplied ROMs. Its bytes,
+  instruction/data partition, 21 entry contracts, stale main-ROM call targets,
+  data formats, and lack of Gauntlet II reachability are documented; only the
+  original build identity remains unknowable from these artifacts.
 - **Unknown, immaterial electrical value:** exact open-bus bits for decoded but
   unpopulated ROM sockets depend on physical board state and are absent from
   the ROM images. The decoded apertures and all program behavior that touches
   them are documented; no normal game path depends on a particular empty-
   socket value.
 
+## Resolved in the 2026-07-14 diagram pass
+
+- **Contradicted and corrected:** the position overview formerly approximated
+  pixel position as scalar `slot_position × 32`, and the detailed
+  `pf_stamp_update_regs` description reversed the packed row/column bit names
+  while calling playfield RAM a 128×256 table. The verified representation is
+  `slot = (row << 5) | column`, with unadjusted MOB pixels
+  `(column × 16, row × 16)`. The playfield stamper computes byte address
+  `0x900000 + (column << 8) + (row << 2)` in the column-first 64×64 word grid
+  and writes its four descriptor words at `+0/+0x80/+2/+0x82`. The coordinate
+  and tile-rendering diagrams now use this reconciled model. **Confidence:
+  Verified** from the 0x5E542 instruction masks, shifts, base addition, and
+  four stores.
+
 ## Resolved in the 2026-07-13 audit pass
 
+- **Contradicted and corrected:** bytes 0x8000–0xF9F9 are not a monolithic
+  font/data area. The complete OS-ROM account now has fourteen gap-free
+  top-level regions, 39 byte-classification segments, and 45 exact data
+  subregions. Active code has eight inline-data ranges; retained-module code
+  occupies 0x8000–0x9A0F around five data islands; retained bulk data occupies
+  0x9A10–0xF9F9. The byte sweep also found and contracted five unreferenced
+  active-image entries. The ROM-wide function union is now 256 rows: 168 live
+  implementation/shared roots, five active-image residue entries, 21 retained
+  module roots, six computed cases, and 56 API veneers. Both independent
+  control reports prove no incoming Gauntlet II transfer to the retained
+  module. All new failure reports are empty. **Confidence: Verified** for
+  bytes, partition, contracts, and reachability; retained-module semantic
+  names/provenance are **Strong inference** / unresolvable as stated above.
+
+- **Verified:** the independent OS RAM/hardware reconciliation analyzes all
+  168 implementation/shared roots and records 81 unique absolute addresses
+  with zero uncovered operands or analysis failures. It adds OS-lifetime
+  aliases for three self-test label buffers and Motion Object scratch, exact
+  hardware-register and video-endpoint flags, the sound-test result and
+  saturating sound-poll busy byte, diagnostic alpha/palette targets, and the
+  34-byte early-error destination. It also corrects 0x904FFA: this is bits
+  15–8 of the big-endian counter at 0x904FF8 and is tested as the EEPROM-init
+  drain timeout, not a standalone dirty flag. The address-shaped 0x00800002
+  renderer stride is separately retained as a checked non-address literal.
+  `os_ram_operand_failures.csv` is empty. **Confidence: Verified.**
+
+- **Verified:** the final independent OS control-transfer reconciliation
+  analyzes all 168 contracted implementation roots and records 392 unique
+  sites: 267 direct internal transfers, 94 constant register-indirect
+  internal transfers, 13 inherited memory-test continuations, nine direct
+  and eight register-indirect game-header hooks, and the one six-way
+  text-effect dispatch. Every internal target maps to the callable union;
+  there are no new roots, unresolved targets, or failures. Together with the
+  230-row callable/dispatch/API union, this resolves the callable-entry/ABI
+  backlog item. **Confidence: Verified.**
+
+- **Verified:** `os_callable_contracts.csv` now forms a reject-on-gap union
+  of the 168 implementation/shared roots, six separately bounded
+  computed-dispatch cases, and all 56 fixed public API veneers. Every veneer
+  is independently checked for the absolute-JMP opcode and an implementation
+  target with a contract; the 230-row union has zero duplicates, omissions,
+  target gaps, or failures. The subsequent byte sweep found exactly five
+  no-incoming active-image residue entries and no unclassified executable
+  byte; those are separately contracted and included in the ROM-wide union.
+  **Confidence: Verified.**
+
+- **Contradicted and corrected:** the final 0x4896–0x5999 cluster is the
+  operator statistics/options UI, not attract rendering. API 0x1D2 runs the
+  statistics summary and histogram screens with an allow-clear argument; API
+  0x248 edits configuration item 12 through a game descriptor stream or raw
+  sixteen-bit fallback. Header word 0x40070 is therefore the default game
+  settings word, not a screen-mode value. The 20-row operator-UI batch checks
+  cursor/display helpers, descriptor traversal/rendering, statistics, raw-bit
+  display, semantic and coin option editors, and both public API roots with
+  zero failures. This closes the current OS implementation/shared-root
+  semantic inventory at 168/168. **Confidence: Verified.**
+
+- **Contradicted and corrected:** the public `get_eeprom_base`,
+  `write_eeprom_config`, `process_coin_stats`, and `check_credits` identities
+  were misleading. They respectively accumulate active-player time, activate
+  one player's tracking bit, record a normalized session histogram, and
+  consume credits. The high-score EEPROM record is five bytes (three score
+  bytes plus one 16-bit base-40 initials value), not six. The 15-row
+  coin/config batch now fixes those ABIs and also checks packed coin samples,
+  stateful health conversion, difficulty-row reads, packed configuration,
+  high-score expansion/insertion/ranking, and the internal writer at 0x3D18.
+  The separate 11-row EEPROM batch checks persistent stack allocation,
+  VBLANK serialization, the redundant-block syndrome codec and both register
+  entries, three recovery clear helpers, both request veneers, busy state,
+  and synchronous/asynchronous reads. Both batches have zero verification
+  failures. **Confidence: Verified.**
+
+- **Contradicted and corrected:** `send_sound_command` takes a response byte
+  destination and count, not a callback pointer and parameter; IRQ6 advances
+  that destination directly. Its shared register body at 0x4198 is now a
+  promoted callable root. `reset_sound_cpu` takes two stack arguments rather
+  than none, and `read_sound_data` returns -1 rather than unsigned 0xFF when
+  empty. The eight-entry sound contract batch also bounds both shared latch
+  veneers and verifies polling/IRQ/ring behavior with zero failures.
+  **Confidence: Verified.**
+
+- **Contradicted and corrected:** public large-font APIs 0x278, 0x26C, and
+  0x206 are respectively `display_large_hex_value`,
+  `display_large_text_at`, and `clear_large_text`, not a generic renderer,
+  lookup, and styled draw. Their six-, four-, and one-slot ABIs and exact
+  alpha-cell returns are now part of the expanded 16-row numeric/display
+  batch, which passes with zero failures. **Confidence: Verified.**
+
+- **Contradicted and corrected:** 0x0FCA, 0x17D4, and 0x1B20 are complete
+  Color, Alpha, and Motion Object tests, not mere initialization/setup
+  helpers; 0x229C is the complete Sound Test. The former `eeprom_validate` at
+  0x21A0 instead validates the game ROM/Slapstic through hook 0x40054 and
+  returns 1/0 after displaying any failed packed checks. The hook is now
+  consistently named `game_rom_verify_veneer`. Finally, 0x129A is a
+  non-returning repeating self-test loop: it does not read the mode long
+  pushed by 0x0E14 and has no returning edge to that caller's encoded cleanup.
+  All seven high-level contracts pass body and byte checks. **Confidence:
+  Verified.**
+
+- **Contradicted and corrected:** 0x904F8A is not a packed input snapshot.
+  OS VBLANK stores an input-source pointer there: immediate 0x803000 or the
+  pointer returned by the game hook. `read_debounced_input` indexes that
+  source and maintains newly identified four-word previous-raw and stable
+  arrays at 0x904F7A/0x904F82. The 13-row self-test helper batch also closes
+  the alpha test-row copier, palette/sound initialization, incrementing fill,
+  both large-glyph-range renderers, switch test, OS semaphore wait, next-test
+  prompt, two sound-test waits, and packed-byte hex display with zero
+  verification failures. **Confidence: Verified.**
+
+- **Contradicted and corrected:** OS 0x0C52 is
+  `display_working_ram_error`, not a generic string display: it has no string
+  argument, always copies the literal at 0x0C86 to 0x906D00, and returns only
+  by jumping through A4. Also, `wait_vblanks` observes the counter at
+  0x904F04 that the text/VBLANK processor increments, not the distinct
+  0x904004 semaphore. The 16-row core contract batch now verifies every CPU
+  vector handler, reset/normal/self-test boot root, main-init continuation,
+  early error display, OS VBLANK mode entry/handler, and detailed RAM-error
+  renderer with zero failures. **Confidence: Verified.**
+- **Contradicted and corrected:** `format_hex`'s fourth argument selects zero
+  versus space padding; it is not an uppercase selector, because the direct
+  formatter always emits uppercase. The decimal/hex display APIs at 0x260 and
+  0x266 take six scalar slots `(coordinate0, coordinate1, value, width,
+  pad_mode, color/style)`, not `(descriptor, color)`. The large-decimal API
+  has the same six inputs and returns alpha-cell advance. The 13-row
+  numeric/direct-display contract batch also fixes direct large-glyph returns,
+  alpha word indexing, VBLANK count, and descriptor-position arguments with
+  zero verification failures. **Confidence: Verified.**
+- **Contradicted and corrected:** the public text-effect names, effect-type
+  descriptions, and argument order did not match the implementation. The six
+  computed cases at 0x2C22/32/64/82/C4/D0 implement timed clear, whole-chain
+  blink, progressive draw, progressive clear, and the two cyclic line
+  rotations; type 7 uses the separate whole-alpha path. Three-argument
+  starters take `(descriptor, color/style, interval)`, while API 0x11E takes
+  only `(descriptor, interval)`. The computed case sweep exposed four missing
+  callable workers, two shipped stack veneers, and the shared character
+  writer, raising the proven OS closure to 168 roots with zero decode
+  failures. The 32-row text contract report validates 26 callable entries and
+  all six inherited-frame cases. `draw_string` returns source bytes consumed
+  including NUL, and `display_large_text` returns alpha-cell advance rather
+  than a pixel width. **Confidence: Verified.**
 - **Contradicted and corrected:** the earlier extractor change assumed the raw
   split-chip maze pointers were already linear, because the supplied
   `row10.bin` has normalized high bytes. The raw chips instead store addresses
@@ -81,7 +241,7 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
 - **Verified:** 30 maze/Slapstic callable contracts now have body-checked stack offsets and explicit returns. This includes the unusual `find_maze` shared-stack input/`D1` output, the four frameless maze-number wrappers, register arguments for the bank-switch leaves, and `slapstic_verify`'s 0x0001FFFE success value.
 - **Verified:** 26 player movement/collision contracts now have body-checked inputs and returns. `player_try_move` is a frameless wrapper over three normal stack arguments and returns its result in `D0.w`; the internal movement graph is register-based, the door helpers read a coordinate from their caller's saved-register stack, and `mob_probe_up/down` can return the non-slot boundary sentinel `0x0400`. The interpretation of a zero door status as “path handled” remains a **Strong inference** from its callers.
 - **Verified:** 20 monster/shot-combat contracts now have body-checked inputs and returns. This distinguishes the normal `monsters_everything(first_mob_offset)` wrapper from its three inherited-frame branch entries, proves the shared-stack monster-type input to `monster_find_and_shoot`, records `D4`/Z from `find_unused_shot`, and fixes the complete target/shooter and boolean contracts for collision, reflection, wall, dragon, and impact helpers.
-- **Contradicted and corrected:** the generated-loader and RAM-report Markdown parser required the function-name cell to end immediately after its first backticked name, silently omitting slash-separated alias rows. After the subsequent interior/shared, veneer, pointer-installed, and legacy-entry sweeps it now recognizes 321 documented game entries; the loader contains 400 total OS/game entries.
+- **Contradicted and corrected:** the generated-loader and RAM-report Markdown parser required the function-name cell to end immediately after its first backticked name, silently omitting slash-separated alias rows. After the subsequent interior/shared, veneer, pointer-installed, and legacy-entry sweeps it recognizes 321 documented game entries. The loader contained 400 total OS/game entries at closure of the main-ROM pass and now grows as newly verified OS roots are promoted.
 - **Verified:** `control_targets.csv` analyzes those 321 entries plus 80 unique computed-dispatch destinations and reconciles 1,129 direct sites: 996 target documented game entries, 124 target documented OS API slots, eight target named RAM palette stubs, and one targets the separately tracked 0x10000 VBLANK abort path. It also records all 12 computed dispatches, the reset-vector jump, 192 register-indirect callable sites plus the separate null assertion, and zero analysis failures. Earlier sweeps added missing callable rows for `pf_palette_clear` (0x5FCCE), `pf_door_update_surrounding_xy` (0x5F7F0), `pf_wall_draw_stack` (0x5EAC2), and the RNG veneer/shared entries at 0x5FC22/0x5FC26/0x5FC2C.
 - **Contradicted and corrected:** `monster_playerhit_jumptbl` is ten words at 0x49620–0x49633 for types 0x12–0x1B. The load uses backward-biased base 0x495FC; the former 28-entry description mistook live instructions for table bytes.
 - **Verified:** 20 transporter/forcefield contracts now have body-checked inputs and returns. This proves the blocked/usable polarity of `tport_check_dest`, the one-based/fall-through result of `tport_find_id`, packed forward/reverse route words in `D0.l`, the stack and `D0` forcefield-query entries, and the inherited shared depth-list body used by the animation-placement helpers.

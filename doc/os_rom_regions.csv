@@ -1,0 +1,15 @@
+start,end_exclusive,size_bytes,name,format_and_purpose,classification,confidence
+0x0000,0x0100,256,m68010_vector_table,64 big-endian longword vector slots,data,Verified
+0x0100,0x01D8,216,os_api_jump_table_1,36 six-byte JMP absolute veneers,code,Verified
+0x01D8,0x01F8,32,os_api_data_address_table,eight big-endian hardware/RAM pointers,data,Verified
+0x01F8,0x0200,8,api_alignment_zero_fill_1f8,eight zero bytes,fill,Verified
+0x0200,0x022A,42,os_api_jump_table_2a,seven six-byte JMP absolute veneers,code,Verified
+0x022A,0x0230,6,unused_api_slot_ff_fill,one six-byte 0xFF-filled API slot,fill,Verified
+0x0230,0x027E,78,os_api_jump_table_2b,thirteen six-byte JMP absolute veneers,code,Verified
+0x027E,0x0300,130,preimplementation_zero_fill,130 zero bytes before the implementation image,fill,Verified
+0x0300,0x599A,22170,active_os_implementation,active OS 68010 code with embedded constants/tables,mixed,Verified
+0x599A,0x6DA8,5134,active_os_data_image,"diagnostic/operator tables, descriptor chains, strings, and palette source data",data,Verified
+0x6DA8,0x8000,4696,intermodule_zero_fill,zero fill between active OS and retained module,fill,Verified
+0x8000,0x9A10,6672,retained_game_support_code,runtime-dead 68010 game-support code with five embedded data islands,mixed,Strong inference
+0x9A10,0xF9FA,24554,retained_game_support_data,"runtime-dead older-game tables, text, palettes, and graphics data",data,Strong inference
+0xF9FA,0x10000,1542,trailing_zero_fill,zero fill to end of ROM,fill,Verified

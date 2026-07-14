@@ -11,7 +11,7 @@ address,size_bytes,flag_name,matching_catalog_rows,matching_header_rows,status,c
 0x4006D,1,game.eeprom_start,,game_eeprom_start,exact_header_match,Verified
 0x4006E,1,game.reserved_header_4006e,,game_reserved_header_4006e,exact_header_match,Verified
 0x4006F,1,game.difficulty_byte,,game_difficulty,exact_header_match,Verified
-0x40070,2,game.screen_mode,,game_screen_mode,exact_header_match,Verified
+0x40070,2,game.screen_mode,,game_default_settings,exact_header_match,Verified
 0x40072,1,game.rom_type_flag,,game_rom_type,exact_header_match,Verified
 0x40073,1,game.reserved_header_40073,,game_reserved_header_40073,exact_header_match,Verified
 0x40074,4,game.button0_label_ptr,,game_button0_label_ptr,exact_header_match,Verified

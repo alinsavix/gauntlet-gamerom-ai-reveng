@@ -46,7 +46,13 @@ Plus one software-only parallel array:
 
 **Slot positions** (maze grid): A 10-bit value encoding row (bits 9:5) and column (bits 4:0) in the 32×32 tile maze grid. Used in `mob_link`, the tport/exit position tables, and slot-based collision detection.
 
-**Pixel positions**: The actual pixel X/Y stored in `mob_hpos`/`mob_vpos` (bits 15-6 = pixel coordinate). Used for real-time movement, rendering, and projectile trajectories. Pixel position = slot_position × 32 (approximately, adjusted for tile size).
+**Pixel positions**: The actual pixel X/Y stored in `mob_hpos`/`mob_vpos`
+(bits 15–6 = pixel coordinate). For an unadjusted maze slot,
+`pixel_x = column × 16` and `pixel_y = row × 16`; the words store those values
+pre-shifted left by six, with palette/size fields in the low bits. Individual
+object constructors may then apply sprite-origin corrections. **Contradicted
+and corrected:** the former scalar `slot_position × 32` approximation mixed
+the packed row/column value with the two independent pixel axes.
 
 ---
 
@@ -836,6 +842,34 @@ zero-based index into this table; a miss returns `level_exit_count`.
 and neighbor updates; the explicitly named legacy entry remains **Strong
 inference**.
 
+A logical maze-tile change selects and writes one 2×2 playfield descriptor,
+then revisits adjacent walls so their connectivity-dependent graphics remain
+consistent with the changed center tile.
+
+```mermaid
+flowchart TD
+    change["Logical tile change<br/>pf_replace or mob_place_tile"] --> refresh["refresh_tile_visual<br/>(0x5F5A0)"]
+    refresh --> select["Select floor / wall / door / object<br/>descriptor from type, pattern, and state"]
+    select --> write["write_tile_descriptor<br/>(0x5E542)"]
+
+    subgraph block["One 8-byte descriptor → four playfield words"]
+        direction LR
+        tl["word 0<br/>+0x000<br/>top-left"] --> bl["word 1<br/>+0x080<br/>bottom-left"] --> tr["word 2<br/>+0x002<br/>top-right"] --> br["word 3<br/>+0x082<br/>bottom-right"]
+    end
+    write --> tl
+
+    refresh --> neighbors["update_neighbor_tiles<br/>(0x5F7F0)"]
+    neighbors --> each["Inspect left / right / up / down"]
+    each --> wall{"Adjacent tile is a wall<br/>requiring reconnection?"}
+    wall -- "No" --> more{"More of the four<br/>neighbors?"}
+    wall -- "Yes" --> mask["update_wall_connection<br/>build 4-bit L/R/U/D mask"]
+    mask --> table["Select straight, corner, or<br/>3×3 door-orientation descriptor"]
+    table --> rewrite["write_tile_descriptor<br/>for that neighbor"]
+    rewrite --> more
+    more -- "Yes" --> each
+    more -- "No" --> finish["Tile and neighbor visuals current"]
+```
+
 ### 13.1 Tile Visual Update Chain
 
 When a tile changes (wall placed/removed, door opened, etc.):
@@ -1270,6 +1304,27 @@ The routine does not search for an unused character and there is no separate
 **Confidence: Verified** for bit layouts, coordinate conversion, playfield
 mapping, path-grid semantics, and MOB-creation stack layout.
 
+One packed maze slot feeds two parallel coordinate representations. MOBs use
+16-pixel world coordinates packed into their H/V words, while static maze
+graphics expand to a 2×2 block of 8-pixel cells in column-first playfield RAM.
+
+```mermaid
+flowchart TD
+    rc["Maze coordinates<br/>row 0–31 · column 0–31"] --> slot["Packed slot<br/>(row << 5) | column<br/>0–1023"]
+
+    slot --> split["Extract row = bits 9–5<br/>column = bits 4–0"]
+    split --> world["World pixels<br/>x = column × 16<br/>y = row × 16"]
+    world --> hword["mob_hpos word<br/>(x << 6) | palette/flags"]
+    world --> vword["mob_vpos word<br/>(y << 6) | width/height"]
+
+    split --> pfcoords["Playfield-cell origin<br/>PF column = column × 2<br/>PF row = row × 2"]
+    pfcoords --> pfindex["Column-first word index<br/>(PF column × 64) + PF row"]
+    pfindex --> pfaddr["Top-left address<br/>0x900000 + 2 × word index"]
+    pfaddr --> quad["2×2 descriptor writes<br/>+0x000 · +0x080 · +0x002 · +0x082"]
+
+    slot --> object["For dynamic maze objects,<br/>the same slot selects MOB ID 30–1023"]
+```
+
 ### 26.1 Slot Positions (Maze Grid Coordinates)
 
 The maze is a 32×32 tile grid. A **slot index** is:
@@ -1345,6 +1400,35 @@ previous slot. `mob_depth_list_head` at 0x9049DE is the global head. The
 64-word table at 0x905F80 stores cumulative starting heads used to enter that
 same chain at a vertical/priority band; 0x905F82 is its 63-word tail view, not
 a second independent 64-word array.
+
+Every MOB ID indexes five parallel word arrays. The low ten bits of the two
+link/state words make the shared chain doubly linked; the global head and all
+64 vertical-band heads enter that same ordered chain at different positions.
+
+```mermaid
+flowchart TB
+    id["MOB ID n<br/>0–1023"] --> pic["0x902000 + 2n<br/>picture / software flag"]
+    id --> xpos["0x902800 + 2n<br/>X position / flags / palette"]
+    id --> ypos["0x903000 + 2n<br/>Y position / width / height"]
+    id --> fwd["0x903800 + 2n<br/>object type 15–10 · next ID 9–0"]
+    id --> back["0x904066 + 2n<br/>object state 15–10 · previous ID 9–0"]
+
+    global["mob_depth_list_head<br/>0x9049DE"] --> nprev["Previous MOB"]
+    nprev -- "next" --> ncur["MOB n"]
+    ncur -- "next" --> nnext["Next MOB"]
+    nnext -- "next" --> terminal["ID 0 / end"]
+    ncur -- "previous" --> nprev
+    nnext -- "previous" --> ncur
+
+    bands["64 cumulative vertical-band heads<br/>0x905F80"] -. band entry .-> nprev
+    bands -. later band entry .-> ncur
+    bands -. later band entry .-> nnext
+
+    id -. same record .-> ncur
+    fwd -. low 10 bits .-> nnext
+    back -. low 10 bits .-> nprev
+    keys["32 managed-slot depth keys<br/>0x904940<br/>ordering tie-breakers, not links"] -.-> id
+```
 
 The 32 words at 0x904940 are `mob_depth_key` values for the managed low MOB
 slots. They break ordering ties and record the explicit key supplied to the

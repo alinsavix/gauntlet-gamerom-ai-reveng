@@ -1,0 +1,8 @@
+address,name,purpose,arguments,return,exceptional_convention,confidence
+0x0FCA,run_color_test,"Build the color-RAM test palettes and patterns, display the Color Test screen, and wait for advance",void,void,,Verified
+0x129A,os_selftest_loop,Run the repeating OS diagnostic sequence and optional game test hooks,one mode long supplied by 0x0E14 but not read by this body,no return,normal call entry whose control graph loops forever instead of executing RTS,Verified
+0x1632,display_init_clear,"Clear alpha and playfield display memory, reset the MOB list heads, and initialize diagnostic colors",void,void,,Verified
+0x17D4,run_alpha_test,Populate the alpha display with word and large-glyph test patterns and wait for advance,void,void,,Verified
+0x1B20,run_motion_object_test,"Create and interactively edit the Motion Object Test sprites, fields, and palettes",void,void,,Verified
+0x21A0,validate_game_rom,Call the optional game ROM/Slapstic verifier and display its failed bank checks,void,"D0.l = 1 when valid, 0 after displaying a failure",,Verified
+0x229C,run_sound_test,"Reset, diagnose, and interactively exercise the sound CPU, music, effects, and speech paths",void,void,,Verified

@@ -287,7 +287,7 @@
 'e cfg.table.maxcol = 0
 'e cfg.table.wrap = false
 'e cfg.taskmode = thread
-'e cfg.user = jaygrizzard
+'e cfg.user = nobody
 'e cfg.wseek = false
 'e cmd.bbgraph =
 'e cmd.bp =
@@ -480,7 +480,7 @@
 'e http.cors = false
 'e http.dietime = 0
 'e http.dirlist = false
-'e http.homeroot = /Users/jaygrizzard/.local/share/radare2/www
+'e http.homeroot = /Users/nobody/.local/share/radare2/www
 'e http.index = index.html
 'e http.log = true
 'e http.logfile =
@@ -550,7 +550,7 @@
 'e pdb.autoload = 0
 'e pdb.extract = 1
 'e pdb.server = https://msdl.microsoft.com/download/symbols
-'e pdb.symstore = /Users/jaygrizzard/.local/share/radare2/pdb
+'e pdb.symstore = /Users/nobody/.local/share/radare2/pdb
 'e pdb.useragent = microsoft-symbol-server/6.11.0001.402
 'e prj.alwasyprompt = false
 'e prj.files = false

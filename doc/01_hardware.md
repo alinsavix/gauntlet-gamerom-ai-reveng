@@ -128,6 +128,42 @@ ordering.
 - **Playfield (maze):** 512×512 pixels; only ~240×240 is visible at once
 - **Scroll registers:** vertical at `0x905F6E`, horizontal at `0x930000`
 
+The display hardware resolves one output pixel by testing the alpha and MOB
+layers over the scrolled playfield. MOB pixel value 1 is not an ordinary
+sprite color: it selects the half-intensity playfield-shadow palette for the
+underlying playfield pixel.
+
+```mermaid
+flowchart LR
+    scroll["PF H/V scroll registers"] --> pfsample["Sample playfield tile pixel"]
+    pfword["Playfield word<br/>tile 11–0 · palette 14–12"] --> pfsample
+    pfgfx["8×8 playfield graphics"] --> pfsample
+    pfpal["Playfield palettes<br/>Color RAM 0x910500–0x9105FF"] --> pfcolor["Normal playfield color"]
+    shadowpal["Shadow palettes<br/>Color RAM 0x910400–0x9104FF"] --> shadow["Half-intensity underlying<br/>playfield color"]
+    pfsample --> pfcolor
+
+    mobram["MOB picture / H / V / link arrays"] --> mobsample["Sample MOB pixel"]
+    mobgfx["MOB graphics"] --> mobsample
+    mobpal["MOB palettes<br/>Color RAM 0x910200–0x9103FF"] --> mobcolor["MOB color"]
+
+    alpharam["Alpha RAM word<br/>character · palette · opaque bit"] --> alphasample["Sample alpha pixel"]
+    alphagfx["Alphanumeric graphics"] --> alphasample
+    alphapal["Alpha palettes<br/>Color RAM 0x910000–0x9101FF"] --> alphacolor["Alpha color"]
+
+    alphasample --> alpha{"Visible alpha pixel<br/>or opaque color 0?"}
+    alpha -- "Yes" --> alphacolor
+    alpha -- "No" --> mobcase{"MOB pixel index"}
+    mobsample --> mobcase
+    mobcase -- "2–15" --> mobcolor
+    mobcase -- "1: shadow" --> shadow
+    mobcase -- "0: transparent" --> pfcolor
+
+    alphacolor --> output["Final display pixel"]
+    mobcolor --> output
+    shadow --> output
+    pfcolor --> output
+```
+
 ### 4.1 Rendering Layers (bottom to top)
 
 1. **Playfield** — the maze (walls, floor, doors, items)

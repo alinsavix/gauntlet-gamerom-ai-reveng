@@ -1,0 +1,2 @@
+value,meaning,sites,owners,opcodes,confidence
+0x00800002,packed large-text strides: 0x0080-byte row and 0x0002-byte cell,0x3202;0x32CC;0x336E,clear_large_text;display_large_char_at;display_large_text,"movea.l 0x800002, a0",Verified

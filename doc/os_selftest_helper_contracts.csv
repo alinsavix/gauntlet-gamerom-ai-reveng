@@ -1,0 +1,14 @@
+address,name,purpose,arguments,return,exceptional_convention,confidence
+0x0F7E,copy_test_tile_rows_to_alpha,Copy sixteen source words into each selected alpha-display row,start column word; first row word; last row inclusive word; source word pointer,void,,Verified
+0x113E,read_debounced_input,Sample and two-frame-debounce one self-test input word,input/player index word,"D0.l = stable active-low press edges, with asserted raw high-nibble inputs included",,Verified
+0x169C,load_color_test_palettes,Load the three 256-word color-test palette banks and initialize the test palette,void,void,,Verified
+0x1704,reset_sound_test_interface,"Synchronize to VBLANK, pulse the sound reset/control line, and clear OS sound-test state",void,void,,Verified
+0x1732,fill_incrementing_words,Fill a word buffer with an ascending sequence,destination word pointer; first word; count long,void,,Verified
+0x1758,display_standard_large_glyph_range,Draw an ascending glyph-index range with standard-display large-glyph strides,alpha destination pointer; first glyph word; count word,void,,Verified
+0x179E,display_rotated_large_glyph_range,Draw an ascending glyph-index range with rotated-display large-glyph strides,alpha destination pointer; first glyph word; count long,void,,Verified
+0x1A34,run_switch_test,Render and operate the live four-player switch/input diagnostic until the advance input is pressed,void,void,,Verified
+0x2190,wait_os_vblank,Clear the OS VBLANK semaphore and wait until the IRQ4 handler sets it,void,void,,Verified
+0x226A,display_next_test_prompt,Draw the orientation-appropriate 'Press [button] for next test' descriptor chain,color/style word,void,,Verified
+0x27AC,send_sound_test_command_wait,Send one diagnostic sound command and wait up to thirty VBLANK ticks for its response,sound command word,"D0.l = response byte, or -1 on timeout",,Verified
+0x27F4,wait_sound_test_delay_or_abort,Clear the sound command latch and wait up to four VBLANK ticks for the advance input,void,"D0.l = 1 when advance was pressed, otherwise 0 after timeout",,Verified
+0x28CA,display_two_byte_hex_pair,Pack two byte-valued arguments and display them as a four-digit zero-padded hexadecimal field,high byte; low byte; signed display-offset byte,void,,Verified

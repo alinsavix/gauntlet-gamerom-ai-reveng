@@ -19,7 +19,7 @@ CONTRACTS=(
  (0x40024,"game_exception_veneer","D0.w = exception action (OS supplies zero)","does not return","six-byte OS exception hook; tail-jumps to game_exception_abort","Verified",0x6,("jmp 0x40140.l",)),
  (0x40030,"game_playfield_init_veneer","void","void","six-byte OS hook; tail-jumps to game_playfield_init","Verified",0x6,("jmp 0x44a82.l",)),
  (0x40048,"game_options_veneer","void","void","six-byte OS game-options hook; tail-jumps to game_options_display","Verified",0x6,("jmp 0x5317c.l",)),
- (0x40054,"game_eeprom_config_veneer","void","D0.l = packed verification/config result","six-byte OS EEPROM-config hook; tail-jumps to slapstic_verify","Verified",0x6,("jmp 0x56eaa.l",)),
+ (0x40054,"game_rom_verify_veneer","void","D0.l = packed ROM/Slapstic verification result","six-byte OS game-ROM verification hook; tail-jumps to slapstic_verify","Verified",0x6,("jmp 0x56eaa.l",)),
  (0x400DE,"scroll_to_slot_veneer","uint16 packed_slot","void","six-byte tail veneer to scroll_to_slot; preserves the target's normal stack ABI","Verified",0x6,("jmp 0x46c5e.l",)),
  (0x400E4,"init_display_veneer","uint16 main_palette_index, uint16 special_palette_variant","void","six-byte tail veneer to init_display; preserves the target's normal stack ABI","Verified",0x6,("jmp 0x43486.l",)),
  (0x400EA,"maze_setup_veneer","const uint8_t *maze_record","void","six-byte tail veneer to maze_setupnew; preserves the target's normal stack ABI","Verified",0x6,("jmp 0x44ac2.l",)),
@@ -41,7 +41,7 @@ CONTRACTS=(
  (0x4ADAE,"sound_queue_reset","void","void","frameless leaf; fills all eight slots with 0xFF and zeroes byte head/tail indices","Verified",0x28,("clr.w d1","move.b 0xff, (a0, d0.w)","cmpi.w 0x8, d1","clr.b d0","move.b d0, 0x904054.l","move.b d0, 0x904053.l","rts")),
  (0x4ADD6,"enqueue_sound","uint8 sound_id","void","normal-stack leaf; capacity is seven entries and a full queue silently drops the new byte","Verified",0x4A,("move.b 0xb(a7), d2","move.b (a1), d0","sub.l d1, d0","and.l d1, d0","cmp.l d0, d1","move.b d2, (a0, d0.w)","addq.l 0x1, d0","move.b d0, (a1)","rts")),
  (0x4D12E,"alpha_clear_rect","uint16 column, uint16 width, uint16 row, uint16 height","void","normal stack; exact dimensions in alpha words/rows, 64-word (0x80-byte) row stride; zero width or height writes nothing","Verified",0x76,("move.w 0xa(a6), d3","move.w 0xe(a6), d5","move.w 0x12(a6), d4","addi.l 0x905000, d1","clr.w (a0)+","moveq 0x40, d1","move.w 0x16(a6), d0","rts")),
- (0x5317C,"game_options_display","void","void","OS game-options hook; passes the ROM descriptor stream to display_attract_screen (API 0x248)","Verified",0x10,("pea.l 0x5318c.l","jsr 0x248.l","addq.l 0x4, a7","rts")),
+ (0x5317C,"game_options_display","void","void","OS game-options hook; passes the ROM descriptor stream to run_game_options (API 0x248)","Verified",0x10,("pea.l 0x5318c.l","jsr 0x248.l","addq.l 0x4, a7","rts")),
 )
 
 def direct_sites(rom):

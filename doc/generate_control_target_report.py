@@ -297,7 +297,7 @@ FIELDS = [
 
 def write_csv(path: Path, rows: list[dict[str, str]], fields: list[str]) -> None:
     with path.open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=fields)
+        writer = csv.DictWriter(stream, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 

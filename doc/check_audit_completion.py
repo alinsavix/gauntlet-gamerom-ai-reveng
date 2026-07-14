@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-check the evidence required to call the main-ROM audit complete."""
+"""Cross-check the evidence required to call both ROM audits complete."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ def require_empty(path: Path) -> None:
         raise SystemExit(f"{path.name} is not empty")
 
 
-def require_contiguous(report: list[dict[str, str]], label: str) -> int:
-    cursor = ROM_START
+def require_contiguous(report: list[dict[str, str]], label: str, start_address: int, end_address: int) -> int:
+    cursor = start_address
     total = 0
     for row in report:
         start = int(row["start"], 16)
@@ -35,8 +35,23 @@ def require_contiguous(report: list[dict[str, str]], label: str) -> int:
             )
         total += end - start + 1
         cursor = end + 1
-    if cursor != ROM_END + 1 or total != ROM_END - ROM_START + 1:
-        raise SystemExit(f"{label} does not cover the full 128 KiB image")
+    if cursor != end_address + 1 or total != end_address - start_address + 1:
+        raise SystemExit(f"{label} does not cover its full image")
+    return total
+
+
+def require_contiguous_exclusive(report: list[dict[str, str]], label: str, start_address: int, end_exclusive: int) -> int:
+    cursor = start_address
+    total = 0
+    for row in report:
+        start = int(row["start"], 16)
+        end = int(row["end_exclusive"], 16)
+        if start != cursor or end <= start:
+            raise SystemExit(f"{label} is not contiguous at 0x{cursor:04X}")
+        total += end - start
+        cursor = end
+    if cursor != end_exclusive or total != end_exclusive - start_address:
+        raise SystemExit(f"{label} does not cover its full image")
     return total
 
 
@@ -44,12 +59,12 @@ def main() -> None:
     here = Path(__file__).resolve().parent
 
     regions = rows(here / "rom_regions.csv")
-    require_contiguous(regions, "rom_regions.csv")
+    require_contiguous(regions, "rom_regions.csv", ROM_START, ROM_END)
     if any(row["confidence"] != "Verified" for row in regions):
         raise SystemExit("rom_regions.csv contains a non-Verified range")
 
     byte_rows = rows(here / "rom_byte_coverage.csv")
-    byte_count = require_contiguous(byte_rows, "rom_byte_coverage.csv")
+    byte_count = require_contiguous(byte_rows, "rom_byte_coverage.csv", ROM_START, ROM_END)
     bad_byte_rows = [
         row for row in byte_rows
         if row["confidence"] == "Unknown"
@@ -117,6 +132,37 @@ def main() -> None:
         raise SystemExit("linear and callable-anchored RAM scans differ")
     require_empty(here / "ram_linear_scan_failures.csv")
 
+    os_regions = rows(here / "os_rom_regions.csv")
+    os_region_count = require_contiguous_exclusive(os_regions, "os_rom_regions.csv", 0, 0x10000)
+    if any(row["confidence"] in {"Unknown", "Contradicted", "Hypothesis"} for row in os_regions):
+        raise SystemExit("os_rom_regions.csv contains unresolved confidence")
+    os_bytes = rows(here / "os_rom_byte_coverage.csv")
+    os_byte_count = require_contiguous(os_bytes, "os_rom_byte_coverage.csv", 0, 0xFFFF)
+    if any(row["confidence"] != "Verified" or row["classification"].startswith("unknown") for row in os_bytes):
+        raise SystemExit("OS byte report contains an unknown/unverified byte range")
+    require_empty(here / "os_rom_byte_coverage_failures.csv")
+
+    os_data = rows(here / "os_rom_data_catalog.csv")
+    if len(os_data) != 45 or any(row["confidence"] in {"Unknown", "Contradicted", "Hypothesis"} for row in os_data):
+        raise SystemExit("OS data catalog is incomplete or unresolved")
+    os_functions = rows(here / "os_all_function_contracts.csv")
+    if len(os_functions) != 256 or any(
+        row["confidence"] in {"Unknown", "Contradicted", "Hypothesis"}
+        or not row["arguments"].strip() or not row["return"].strip()
+        for row in os_functions
+    ):
+        raise SystemExit("OS all-function contract union is incomplete")
+    for filename in (
+        "os_all_function_contract_failures.csv",
+        "os_residue_contract_failures.csv",
+        "os_legacy_module_contract_failures.csv",
+        "os_data_xref_failures.csv",
+        "os_callable_contract_failures.csv",
+        "os_control_target_failures.csv",
+        "os_ram_operand_failures.csv",
+    ):
+        require_empty(here / filename)
+
     backlog = (here / "08_known_issues.md").read_text().split(
         "## Unresolvable from the supplied artifacts", 1
     )[0]
@@ -127,7 +173,9 @@ def main() -> None:
         "audit completion: "
         f"{byte_count} ROM bytes; {len(callable_rows)} callable ABIs; "
         f"{len(catalog)} catalog rows; {len(flags)} non-code flags; "
-        f"{len(ram)} RAM literals; no active backlog"
+        f"{len(ram)} RAM literals; {os_region_count} OS region bytes; "
+        f"{os_byte_count} OS classified bytes; {len(os_functions)} OS function/veneer contracts; "
+        f"{len(os_data)} OS data ranges; no active backlog"
     )
 
 

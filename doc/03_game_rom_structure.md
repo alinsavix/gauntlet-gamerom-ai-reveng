@@ -18,6 +18,17 @@ mixture; compiler-vendor attribution remains **Strong inference**.
 
 ### 1.1 ROM Layout
 
+This address-ordered map shows the five physical regions in the populated
+128 KiB image. It is not drawn to scale; the table below gives exact sizes.
+
+```mermaid
+flowchart LR
+    mixed1["0x40000–0x5561F<br/>87,584 B<br/>main mixed code/data"] --> pad1["0x55620–0x56E53<br/>6,196 B<br/>0xFF padding"]
+    pad1 --> mixed2["0x56E54–0x5FFB1<br/>37,214 B<br/>late mixed code/data"]
+    mixed2 --> pad2["0x5FFB2–0x5FFFD<br/>76 B<br/>0xFF padding"]
+    pad2 --> checksum["0x5FFFE–0x5FFFF<br/>2 B<br/>checksum word 0xE19E"]
+```
+
 | Region | Address Range | Size | Content |
 |--------|--------------|------|---------|
 | Main mixed executable region | 0x40000–0x5561F | 87,584 B | Compiled C/assembly plus inline dispatch and lookup tables |
@@ -52,7 +63,7 @@ Fifteen six-byte hook slots occupy 0x40000–0x40059. Ten slots contain active a
 | `0x40042` | zero | Optional supplemental VBLANK hook slot; absent, not a callable entry |
 | `0x40048` | `0x5317C` | `game_options_veneer` — game-specific operator-options/configuration display hook; the former attract-handler name was contradicted |
 | `0x4004E` | zero | Optional post-attract hook slot; absent |
-| `0x40054` | `0x56EAA` | `game_eeprom_config_veneer` — EEPROM config provider |
+| `0x40054` | `0x56EAA` | `game_rom_verify_veneer` — packed game-ROM/Slapstic verification provider |
 
 **Confidence: Verified.** The ten active hook veneers and five later
 trampolines at 0x400DE–0x400FB are callable entries with the same ABI as their
@@ -66,6 +77,39 @@ watchdog traps if those unexpected sources fire; IRQ6 tail-jumps through OS
 
 **Confidence: Verified** by the checked 29-entry main-loop contract generator
 and whole-ROM direct-call reconciliation.
+
+The main loop is synchronized to the game-owned VBLANK path. Three services
+run before the dialog gate, sixteen gameplay calls are skipped as one block
+while a dialog is active, and the remaining UI, persistence, and sound work
+runs every frame.
+
+```mermaid
+flowchart TD
+    start["game_start → m2mainloop<br/>(0x42A66)"] --> once["one_time_init<br/>once before first frame"]
+    once --> wait["Wait for VBLANK semaphore<br/>ram 0x904002 != 0"]
+
+    irq["IRQ4 → game_vblank<br/>(0x4017E)"] -. once per field .-> publish["Set VBLANK semaphore"]
+    publish -.-> wait
+
+    wait --> consume["Increment frame counter;<br/>clear semaphore; save PF color"]
+    consume --> pre["Always before gate<br/>logo colors → input debounce → coin check"]
+    pre --> dialog{"dialog_timer active?"}
+
+    dialog -- "No" --> gameplay1["Gameplay group 1<br/>tport/forcefield → potions → doors → shots"]
+    gameplay1 --> gameplay2["Gameplay group 2<br/>players → scroll → monsters → dragon"]
+    gameplay2 --> gameplay3["Gameplay group 3<br/>thief anim/start → health → treasure → death → exit"]
+    gameplay3 --> walls["Cyclic walls → random walls"]
+    walls --> post1
+
+    dialog -- "Yes: skip all 16 gameplay calls" --> post1["Always after gate<br/>message box → character select → start game"]
+    post1 --> post2["Score update/display → attract state"]
+    post2 --> post3["EEPROM timer → sound responses → sound queue"]
+    post3 --> overflow{"Semaphore already set again?"}
+    overflow -- "Yes" --> late["frame_overflow = 8"]
+    overflow -- "No" --> decay["frame_overflow >>= 1"]
+    late --> wait
+    decay --> wait
+```
 
 ### 2.1 Verified Main Loop Call Sequence (`m2mainloop`, 0x42A66)
 

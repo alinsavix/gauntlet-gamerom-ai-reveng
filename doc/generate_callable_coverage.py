@@ -19,6 +19,10 @@ def main():
  coverage={address:set() for address in indexed}
  extras=[]
  for path in sorted(here.glob("*_contracts.csv")):
+  # This artifact is intentionally the game-ROM union.  OS contract batches
+  # have their own low-address union and must not be interpreted as missing
+  # 0x40000-0x5FFFF game index rows.
+  if path.name.startswith("os_"): continue
   with path.open(newline="") as handle:
    reader=csv.DictReader(handle)
    fields=reader.fieldnames or []

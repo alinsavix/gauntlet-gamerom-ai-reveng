@@ -832,10 +832,20 @@ Specifies a 2×2 block of playfield tiles. Written to VRAM at offsets from base:
 
 ### 4.5 High Score Entry (in EEPROM)
 
+**Confidence: Verified.** Each class owns ten consecutive five-byte records
+at OS configuration-image offset `0x1E + class * 50`. The earlier six-byte
+record interpretation is **Contradicted**: the three initials are packed
+together into one 16-bit base-40 integer.
+
 | Offset | Size | Description |
 |--------|------|-------------|
 | 0 | 3 B | Score (24-bit big-endian) |
-| 3 | 3 B | Initials (3 characters encoded as base-40: A-Z=1-26, 0-9=27-36, space=0) |
+| 3 | 2 B | Three initials as one big-endian base-40 value (space=0, A-Z=1-26, 0-9=27-36) |
+
+`read_high_score_entry` expands a record into a separate seven-byte RAM view
+at `0x904F44`: a 32-bit score followed by three ASCII bytes. That expanded
+view is the input accepted by `write_high_score_entry`; it is not the EEPROM
+layout.
 
 ### 4.6 `text_desc` Struct (for OS `display_text`)
 

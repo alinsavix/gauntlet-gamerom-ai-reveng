@@ -1,0 +1,21 @@
+address,name,purpose,arguments,return,exceptional_convention,confidence
+0x03B6,normal_boot_spare_test_done,Handle full spare-RAM result and start color-RAM test,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x03C4,normal_boot_spare_error_ack,Wait for acknowledgement after spare-RAM error and resume color test,inherited hardware switch/status state,no ordinary return,A4 continuation from error display,Verified
+0x0424,normal_boot_color_test_done,Handle full color-RAM result and start playfield test,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x04A4,normal_boot_playfield_test_done,Handle full playfield-RAM result and start alpha test,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x0512,normal_boot_alpha_test_done,Handle full alpha-RAM result and start MOB test,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x0582,normal_boot_mob_test_done,Handle full MOB-RAM result and enter main initialization,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x0652,selftest_spare_test_done,Handle short spare-RAM result and start color test,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x0660,selftest_spare_error_ack,Resume short diagnostics after spare-RAM error display,inherited hardware status,no ordinary return,A4 continuation from error display,Verified
+0x067C,selftest_color_test_done,Handle short color-RAM result and start playfield test,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x06A6,selftest_playfield_test_done,Handle short playfield-RAM result and start alpha test,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x06D0,selftest_alpha_test_done,Handle short alpha-RAM result and start MOB test,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x06FC,selftest_mob_test_done,Handle short MOB-RAM result and enter main initialization,inherited D4.w=test status,no ordinary return,A4 continuation from memory tester,Verified
+0x08EC,boot_postcheck_dispatch,"Finish hardware/EEPROM checks, clear work RAM, and dispatch OS or game",D5.w=boot/error mode,no return,shared branch target; tail-dispatches,Verified
+0x0D26,game_descriptor_ram_test,Run the short memory test for a game checksum-descriptor RAM range,A0=start; A1=end,returns through game_descriptor_ram_test_done,saves complete register set and tail-enters tester with A4 continuation,Verified
+0x0D3A,game_descriptor_ram_test_done,Restore descriptor-test state and display a failing address,inherited D4.w=test status; A5=saved stack frame,returns to game_descriptor_ram_test caller,A4 continuation; restores another entry's saved registers,Verified
+0x0D7A,game_rom_checksum_error,Identify and display a failed even/odd game-ROM checksum slice,D0.b/D1.b=checksum accumulators; A0=range end; inherited descriptor frame in A6,D5.w=2; otherwise void,register and inherited-frame helper,Verified
+0x0F04,playfield_add_word_test_range,"Add a word delta to 4,095 tested playfield words",delta in low word of one normal longword slot,void,,Verified
+0x11FC,color_test_palette_init,Install fixed six-word diagnostic color palette,void,void,,Verified
+0x1228,selftest_load_control_labels,Copy game-specific or default control labels into OS work buffers,void,void,,Verified
+0x16F6,copy_cstring,Copy a NUL-terminated string including its terminator,destination pointer; source pointer,void,frameless normal stack entry,Verified
