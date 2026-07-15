@@ -65,7 +65,7 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   15–8 of the big-endian counter at 0x904FF8 and is tested as the EEPROM-init
   drain timeout, not a standalone dirty flag. The address-shaped 0x00800002
   renderer stride is separately retained as a checked non-address literal.
-  `os_ram_operand_failures.csv` is empty. **Confidence: Verified.**
+  `generated/os_ram_operand_failures.csv` is empty. **Confidence: Verified.**
 
 - **Verified:** the final independent OS control-transfer reconciliation
   analyzes all 168 contracted implementation roots and records 392 unique
@@ -77,7 +77,7 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   230-row callable/dispatch/API union, this resolves the callable-entry/ABI
   backlog item. **Confidence: Verified.**
 
-- **Verified:** `os_callable_contracts.csv` now forms a reject-on-gap union
+- **Verified:** `generated/os_callable_contracts.csv` now forms a reject-on-gap union
   of the 168 implementation/shared roots, six separately bounded
   computed-dispatch cases, and all 56 fixed public API veneers. Every veneer
   is independently checked for the absolute-JMP opcode and an implementation
@@ -189,13 +189,13 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   disproved the claim that pointer entry 116 was only an end sentinel:
   `show_level_start_screen` selects maze 115 for challenge tasks 0x50–0x56 and
   maze 116 for tasks 0x57–0x5D. The generator now validates all 117 live
-  pointers, headers, and record boundaries against `maze_catalog.csv`.
+  pointers, headers, and record boundaries against `generated/maze_catalog.csv`.
 - **Verified:** the fine ROM-byte audit now classifies every byte in the mixed
   regions 0x40000–0x5561F and 0x56E54–0x5FFB1 as analyzed code or a named ROM
-  range. `rom_catalog_reconciliation.csv` gives all 328 parsed §5 rows an
-  exact project-flag match, and `rom_flag_reconciliation.csv` gives all 351
+  range. `generated/rom_catalog_reconciliation.csv` gives all 328 parsed §5 rows an
+  exact project-flag match, and `generated/rom_flag_reconciliation.csv` gives all 351
   non-code ROM flags an exact §5 or header-table row;
-  `rom_range_overlaps.csv` records 21 intentional
+  `generated/rom_range_overlaps.csv` records 21 intentional
   nested/alternate views; there are zero unknown segments, suspicious
   code/data overlaps, or analysis failures. The sweep added 27 shipped
   callable entries (15 header veneers, the exception body, eight
@@ -206,16 +206,17 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
 - **Verified:** an independent linear decode of the 34 proven executable
   ranges covers 93,722 bytes without a gap and extracts exactly the same 318
   explicit/indexed-base RAM literals as the 321-entry callable-body report.
-  `ram_linear_reconciliation.csv` has zero linear-only or callable-only
+  `generated/ram_linear_reconciliation.csv` has zero linear-only or callable-only
   candidates, every literal is covered by a named RAM flag, and
-  `ram_linear_scan_failures.csv` is empty. This closes the former concern that
+  `generated/ram_linear_scan_failures.csv` is empty. This closes the former concern that
   function boundaries might hide immediate-shaped RAM operands.
 - **Verified:** the reference corpus and its ROM-independent manifest check
   contain exactly mazes 0 through 116. Maze 116 is regenerated from its full
   stream rather than the formerly truncated first-zero interpretation.
-  `generate_reference_images.py` checks the complete required chip list before
+  `python-gex/tests/generate_reference_images.py` checks the complete required chip list before
   writing, verifies all eight header fields and the pointer/boundary span of
-  every maze against `maze_catalog.csv`, records the headers in the manifest,
+  every maze against its private `python-gex/tests/data/maze_catalog.csv`
+  snapshot, records the headers in the manifest,
   and removes only truly out-of-range maze PNGs after a successful full render.
   The 231 regenerated PNGs match their stored dimensions and pixel hashes; all
   240 all-maze golden tests and all 420 extractor tests pass. **Confidence:
@@ -237,19 +238,19 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
 - **Contradicted and corrected:** maze vertical RLE writes at decreasing slot addresses (−0x20, or −0x1F for the odd-angle case).
 - **Verified:** the game decoder stops at output cursor 0x400 and ignores terminators, while every stored maze record has a trailing zero delimiter used by offline tooling.
 - **Verified:** the 29 `m2mainloop` callees have 37 direct call sites in the whole game ROM. Body analysis finds no stack-argument reads and every direct caller ignores `D0`/condition codes, establishing `void f(void)` for the complete batch. The interrupt-side `game_vblank` saves `D0-D1/A0-A2` and returns with `RTE`; the hand-written `input_debounce` leaf clobbers only `D0`.
-- **Verified:** `doc/gauntlet_loader.r2` now maps all three ROMs, applies `m68k`/`68010`/32-bit/big-endian settings after the raw-file opens, and imports the retained function entries and flags with zero errors under radare2 6.1.8. `generate_r2_loader.py --check --run-check` makes this reproducible; the full legacy `gauntlet.r2` export remains an archival annotation source rather than the supported loader.
-- **Contradicted and corrected:** 0x56F00–0x5FFB1 is mixed code/data, not a pure table region, and the 0xE19E word at 0x5FFFE–0x5FFFF is not padding. `rom_regions.csv` now verifies the complete physical ROM union and both actual solid-0xFF pads.
+- **Verified:** `doc/gauntlet_loader.r2` now maps all three ROMs, applies `m68k`/`68010`/32-bit/big-endian settings after the raw-file opens, and imports the retained function entries and flags with zero errors under radare2 6.1.8. `generated/generate_r2_loader.py --check --run-check` makes this reproducible; the full legacy `gauntlet.r2` export remains an archival annotation source rather than the supported loader.
+- **Contradicted and corrected:** 0x56F00–0x5FFB1 is mixed code/data, not a pure table region, and the 0xE19E word at 0x5FFFE–0x5FFFF is not padding. `generated/rom_regions.csv` now verifies the complete physical ROM union and both actual solid-0xFF pads.
 - **Verified:** 30 maze/Slapstic callable contracts now have body-checked stack offsets and explicit returns. This includes the unusual `find_maze` shared-stack input/`D1` output, the four frameless maze-number wrappers, register arguments for the bank-switch leaves, and `slapstic_verify`'s 0x0001FFFE success value.
 - **Verified:** 26 player movement/collision contracts now have body-checked inputs and returns. `player_try_move` is a frameless wrapper over three normal stack arguments and returns its result in `D0.w`; the internal movement graph is register-based, the door helpers read a coordinate from their caller's saved-register stack, and `mob_probe_up/down` can return the non-slot boundary sentinel `0x0400`. The interpretation of a zero door status as “path handled” remains a **Strong inference** from its callers.
 - **Verified:** 20 monster/shot-combat contracts now have body-checked inputs and returns. This distinguishes the normal `monsters_everything(first_mob_offset)` wrapper from its three inherited-frame branch entries, proves the shared-stack monster-type input to `monster_find_and_shoot`, records `D4`/Z from `find_unused_shot`, and fixes the complete target/shooter and boolean contracts for collision, reflection, wall, dragon, and impact helpers.
 - **Contradicted and corrected:** the generated-loader and RAM-report Markdown parser required the function-name cell to end immediately after its first backticked name, silently omitting slash-separated alias rows. After the subsequent interior/shared, veneer, pointer-installed, and legacy-entry sweeps it recognizes 321 documented game entries. The loader contained 400 total OS/game entries at closure of the main-ROM pass and now grows as newly verified OS roots are promoted.
-- **Verified:** `control_targets.csv` analyzes those 321 entries plus 80 unique computed-dispatch destinations and reconciles 1,129 direct sites: 996 target documented game entries, 124 target documented OS API slots, eight target named RAM palette stubs, and one targets the separately tracked 0x10000 VBLANK abort path. It also records all 12 computed dispatches, the reset-vector jump, 192 register-indirect callable sites plus the separate null assertion, and zero analysis failures. Earlier sweeps added missing callable rows for `pf_palette_clear` (0x5FCCE), `pf_door_update_surrounding_xy` (0x5F7F0), `pf_wall_draw_stack` (0x5EAC2), and the RNG veneer/shared entries at 0x5FC22/0x5FC26/0x5FC2C.
+- **Verified:** `generated/control_targets.csv` analyzes those 321 entries plus 80 unique computed-dispatch destinations and reconciles 1,129 direct sites: 996 target documented game entries, 124 target documented OS API slots, eight target named RAM palette stubs, and one targets the separately tracked 0x10000 VBLANK abort path. It also records all 12 computed dispatches, the reset-vector jump, 192 register-indirect callable sites plus the separate null assertion, and zero analysis failures. Earlier sweeps added missing callable rows for `pf_palette_clear` (0x5FCCE), `pf_door_update_surrounding_xy` (0x5F7F0), `pf_wall_draw_stack` (0x5EAC2), and the RNG veneer/shared entries at 0x5FC22/0x5FC26/0x5FC2C.
 - **Contradicted and corrected:** `monster_playerhit_jumptbl` is ten words at 0x49620–0x49633 for types 0x12–0x1B. The load uses backward-biased base 0x495FC; the former 28-entry description mistook live instructions for table bytes.
 - **Verified:** 20 transporter/forcefield contracts now have body-checked inputs and returns. This proves the blocked/usable polarity of `tport_check_dest`, the one-based/fall-through result of `tport_find_id`, packed forward/reverse route words in `D0.l`, the stack and `D0` forcefield-query entries, and the inherited shared depth-list body used by the animation-placement helpers.
 - **Contradicted and corrected:** 0x47DAE is not `tport_cycle_update`; it is `shot_impact_spawn`. `tport_cycle_start` initializes one of four effect-MOB channels, and loop 3 of `main_score_update` advances pictures 0x924–0x95A through byte counters at 0x90497C–0x90497F. Those bytes are an intentional `mob_effect_anim_counter` overlay, not transporter active flags.
 - **Contradicted and corrected:** the temporary impact pool is four MOBs, 0x0D–0x10, not 0x0D–0x0F. `shot_impact_spawn` takes the first free channel; when full it derives a fallback from `shooter_slot & 3` but refuses to overwrite a channel carrying an active 0x924–0x95A transporter effect.
 - **Contradicted and corrected:** `tport_route_read_pair` does not let its reverse lookup supersede the forward result. It returns the forward word in `D0` bits 31–16 and the reverse word in bits 15–0.
-- **Contradicted and corrected:** the RAM report's `asm.flags=false` setting did not prevent exact named addresses from rendering as symbols, so the former 149-literal total omitted every such base. With `asm.sub.names=false`, `ram_operands.csv` extracts 318 unique `0x904000–0x905FFF` literals from 321 independently analyzed game entry addresses. Every one is covered by a named RAM flag, and `ram_operand_failures.csv` is empty.
+- **Contradicted and corrected:** the RAM report's `asm.flags=false` setting did not prevent exact named addresses from rendering as symbols, so the former 149-literal total omitted every such base. With `asm.sub.names=false`, `generated/ram_operands.csv` extracts 318 unique `0x904000–0x905FFF` literals from 321 independently analyzed game entry addresses. Every one is covered by a named RAM flag, and `generated/ram_operand_failures.csv` is empty.
 - **Verified:** the 26-row dragon/thief/exit catalog contributes 23 newly covered callable entries; `main_handle_dragon`, `main_thief_anim`, and `main_exit_move` overlap the earlier main-loop batch and are not double-counted. The pass fixes stack arguments and return polarity for dragon proximity/fire, thief theft/collision/transport callbacks, exit lookup/transition, and the frameless shared exit-animation entry.
 - **Contradicted and corrected:** 0x53E4A chooses the dragon's movement direction/state; it is not the per-frame position updater. 0x53D10 updates the four rendered dragon segments; it is not merely `dragon_change_dir`.
 - **Contradicted and corrected:** `dragon_find_free_shot_slot` scans physical MOB slots 8 down to 5 and returns logical subslot 4 down to 1. The former “slots 5 down to 1” description conflated the returned subslot with the physical picture slot.

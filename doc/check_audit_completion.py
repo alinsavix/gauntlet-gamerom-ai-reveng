@@ -57,13 +57,14 @@ def require_contiguous_exclusive(report: list[dict[str, str]], label: str, start
 
 def main() -> None:
     here = Path(__file__).resolve().parent
+    artifacts = here / "generated"
 
-    regions = rows(here / "rom_regions.csv")
+    regions = rows(artifacts / "rom_regions.csv")
     require_contiguous(regions, "rom_regions.csv", ROM_START, ROM_END)
     if any(row["confidence"] != "Verified" for row in regions):
         raise SystemExit("rom_regions.csv contains a non-Verified range")
 
-    byte_rows = rows(here / "rom_byte_coverage.csv")
+    byte_rows = rows(artifacts / "rom_byte_coverage.csv")
     byte_count = require_contiguous(byte_rows, "rom_byte_coverage.csv", ROM_START, ROM_END)
     bad_byte_rows = [
         row for row in byte_rows
@@ -75,22 +76,22 @@ def main() -> None:
     ]
     if bad_byte_rows:
         raise SystemExit("ROM byte report contains unknown or suspicious overlaps")
-    require_empty(here / "rom_byte_coverage_failures.csv")
+    require_empty(artifacts / "rom_byte_coverage_failures.csv")
 
-    catalog = rows(here / "rom_catalog_reconciliation.csv")
+    catalog = rows(artifacts / "rom_catalog_reconciliation.csv")
     if not catalog or any(row["status"] != "exact_match" for row in catalog):
         raise SystemExit("not every §5 catalog row has an exact ROM flag")
-    flags = rows(here / "rom_flag_reconciliation.csv")
+    flags = rows(artifacts / "rom_flag_reconciliation.csv")
     if not flags or any(
         row["status"] not in {"exact_catalog_match", "exact_header_match"}
         for row in flags
     ):
         raise SystemExit("not every non-code ROM flag has exact documentation")
-    overlaps = rows(here / "rom_range_overlaps.csv")
+    overlaps = rows(artifacts / "rom_range_overlaps.csv")
     if any(row["classification"] != "intentional_overlapping_views" for row in overlaps):
         raise SystemExit("ROM overlap report contains a non-intentional overlap")
 
-    maze_catalog = rows(here / "maze_catalog.csv")
+    maze_catalog = rows(artifacts / "maze_catalog.csv")
     if [int(row["maze"]) for row in maze_catalog] != list(range(117)):
         raise SystemExit("maze_catalog.csv must contain exactly mazes 0 through 116")
     final_maze = maze_catalog[-1]
@@ -103,7 +104,7 @@ def main() -> None:
     ):
         raise SystemExit("maze 116 boundary/overlap metadata is not canonical")
 
-    callable_rows = rows(here / "callable_contract_coverage.csv")
+    callable_rows = rows(artifacts / "callable_contract_coverage.csv")
     callable_addresses = {int(row["address"], 16) for row in callable_rows}
     if len(callable_rows) != len(callable_addresses) or any(
         row["confidence"] != "Verified" for row in callable_rows
@@ -111,7 +112,7 @@ def main() -> None:
         raise SystemExit("callable coverage is duplicate or not fully Verified")
 
     abi_addresses: set[int] = set()
-    for path in sorted(here.glob("*_contracts.csv")):
+    for path in sorted(artifacts.glob("*_contracts.csv")):
         for row in rows(path):
             key = "address" if "address" in row else "target" if "target" in row else ""
             if not key:
@@ -127,38 +128,38 @@ def main() -> None:
             + ", ".join(f"0x{address:05X}" for address in missing_abi)
         )
 
-    control = rows(here / "control_targets.csv")
+    control = rows(artifacts / "control_targets.csv")
     if any(
         row["confidence"] == "Unknown"
         or row["classification"].startswith("unresolved")
         for row in control
     ):
         raise SystemExit("control-target report contains an unresolved target")
-    require_empty(here / "control_target_failures.csv")
+    require_empty(artifacts / "control_target_failures.csv")
 
-    ram = rows(here / "ram_operands.csv")
+    ram = rows(artifacts / "ram_operands.csv")
     if any(not row["covering_flags"] or row["confidence"] != "Verified" for row in ram):
         raise SystemExit("RAM operand report contains an uncovered literal")
-    require_empty(here / "ram_operand_failures.csv")
-    linear_ram = rows(here / "ram_linear_reconciliation.csv")
+    require_empty(artifacts / "ram_operand_failures.csv")
+    linear_ram = rows(artifacts / "ram_linear_reconciliation.csv")
     if any(row["status"] != "exact_union_match" for row in linear_ram):
         raise SystemExit("linear and callable-anchored RAM scans differ")
-    require_empty(here / "ram_linear_scan_failures.csv")
+    require_empty(artifacts / "ram_linear_scan_failures.csv")
 
-    os_regions = rows(here / "os_rom_regions.csv")
+    os_regions = rows(artifacts / "os_rom_regions.csv")
     os_region_count = require_contiguous_exclusive(os_regions, "os_rom_regions.csv", 0, 0x10000)
     if any(row["confidence"] in {"Unknown", "Contradicted", "Hypothesis"} for row in os_regions):
         raise SystemExit("os_rom_regions.csv contains unresolved confidence")
-    os_bytes = rows(here / "os_rom_byte_coverage.csv")
+    os_bytes = rows(artifacts / "os_rom_byte_coverage.csv")
     os_byte_count = require_contiguous(os_bytes, "os_rom_byte_coverage.csv", 0, 0xFFFF)
     if any(row["confidence"] != "Verified" or row["classification"].startswith("unknown") for row in os_bytes):
         raise SystemExit("OS byte report contains an unknown/unverified byte range")
-    require_empty(here / "os_rom_byte_coverage_failures.csv")
+    require_empty(artifacts / "os_rom_byte_coverage_failures.csv")
 
-    os_data = rows(here / "os_rom_data_catalog.csv")
+    os_data = rows(artifacts / "os_rom_data_catalog.csv")
     if len(os_data) != 45 or any(row["confidence"] in {"Unknown", "Contradicted", "Hypothesis"} for row in os_data):
         raise SystemExit("OS data catalog is incomplete or unresolved")
-    os_functions = rows(here / "os_all_function_contracts.csv")
+    os_functions = rows(artifacts / "os_all_function_contracts.csv")
     if len(os_functions) != 256 or any(
         row["confidence"] in {"Unknown", "Contradicted", "Hypothesis"}
         or not row["arguments"].strip() or not row["return"].strip()
@@ -174,7 +175,7 @@ def main() -> None:
         "os_control_target_failures.csv",
         "os_ram_operand_failures.csv",
     ):
-        require_empty(here / filename)
+        require_empty(artifacts / filename)
 
     backlog = (here / "08_known_issues.md").read_text().split(
         "## Unresolvable from the supplied artifacts", 1

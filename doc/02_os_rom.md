@@ -356,7 +356,7 @@ D6 counts completed stages and the inner workers pet the watchdog.
 | `0x0AE0` | `mem_test_full_done` | Return D4 status through A4 |
 
 The exact argument/return/exception rows are checked into
-`os_memory_test_contracts.csv`; its failure report is empty.
+`generated/os_memory_test_contracts.csv`; its failure report is empty.
 
 ---
 
@@ -567,7 +567,7 @@ NUL-terminated literal at 0x0C86 to the diagnostic display destination at
 through A4. The destination lies outside the ordinary 0x905000–0x905FFF
 alpha aperture; its use as the early-failure display alias is a **Strong
 inference**, while the address, span, conversion, and continuation are
-**Verified**. The complete rows are checked in `os_core_contracts.csv`; its
+**Verified**. The complete rows are checked in `generated/os_core_contracts.csv`; its
 failure report is empty.
 
 ---
@@ -729,7 +729,7 @@ at 0x2FBE/0x3020, the shared character writer at 0x304E, the A0 descriptor
 clearer at 0x308C, the allocator at 0x3172, the large-glyph register renderer
 at 0x324E, and `reset_text_effects` at 0x355C. Purpose, arguments, return, and
 exceptional-convention rows for all of them and the six computed cases are in
-`os_text_contracts.csv`; its failure report is empty.
+`generated/os_text_contracts.csv`; its failure report is empty.
 
 ### 8.5 Large Character Display
 
@@ -794,7 +794,7 @@ while (count-- > 0) {
 writes to `0x905000 + 2*index`. `set_text_position` (0x35B2, API 0x13C) takes
 `(descriptor pointer, coordinate0, coordinate1)`, writes the first two
 descriptor bytes, and clears its byte-6 repeat field. The checked 13-row
-numeric/direct-display batch is `os_numeric_display_contracts.csv`; its
+numeric/direct-display batch is `generated/os_numeric_display_contracts.csv`; its
 failure report is empty.
 
 ### 8.7 Sound System
@@ -847,7 +847,7 @@ passes zero for both slots.
 
 The complete eight-entry sound contract batch includes the stack wrapper and
 0x4198 register body, both blocking/nonblocking latch veneers, polling,
-interrupt receive, ring read, and reset. `os_sound_contracts.csv` passes with
+interrupt receive, ring read, and reset. `generated/os_sound_contracts.csv` passes with
 zero failures.
 
 ### 8.8 Sound-Latch Submission
@@ -873,7 +873,7 @@ record as a thirty-byte physical block with five interleaved XOR syndromes.
 It can correct a single encoded data-bit syndrome while loading, identifies
 uncorrectable syndromes by a negative status, queues logical-region writes in
 a 32-bit bitmap, and serializes physical byte writes and verification from
-VBLANK. The eleven-entry `os_eeprom_contracts.csv` batch covers both public
+VBLANK. The eleven-entry `generated/os_eeprom_contracts.csv` batch covers both public
 services and every promoted register/shared helper with zero failures.
 
 #### `eeprom_init` (`0x44E8`, API `0x190`)
@@ -936,7 +936,7 @@ The initialization-only register helpers are also now bounded:
   difficulty rows and queues their regions; difficulty zero is a no-op.
 
 All four clear/decode helpers use register-only internal conventions recorded
-in `os_eeprom_contracts.csv`.
+in `generated/os_eeprom_contracts.csv`.
 
 #### `eeprom_read_block` (`0x4822`, API `0x24E`)
 
@@ -1082,7 +1082,7 @@ sets the selected bin to `0x80`; all affected regions are queued. The divisor
 is expected nonzero. The former generic `process_coin_stats` label is
 **Contradicted**.
 
-The 15-entry `os_coin_config_contracts.csv` batch verifies every routine in
+The 15-entry `generated/os_coin_config_contracts.csv` batch verifies every routine in
 §8.10–§8.12, including the internal packed writer at 0x3D18, with zero
 failures.
 
@@ -1090,7 +1090,7 @@ failures.
 
 **Confidence: Verified.** The final twenty callable roots at
 `0x4896–0x5999` are the operator statistics/options UI, not attract-mode
-rendering. `os_operator_ui_contracts.csv` checks every body, byte prefix, ABI,
+rendering. `generated/os_operator_ui_contracts.csv` checks every body, byte prefix, ABI,
 and observable result with zero failures. This closes semantic contracts for
 all 168 roots in the current OS control closure.
 
@@ -1153,7 +1153,7 @@ OR to zero terminates the stream.
 #### Checked self-test and input helpers
 
 **Confidence: Verified.** The following thirteen roots have independently
-decoded bodies and ROM-byte prefixes in `os_selftest_helper_contracts.csv`;
+decoded bodies and ROM-byte prefixes in `generated/os_selftest_helper_contracts.csv`;
 its failure report is empty. All use the normal stack ABI unless stated by
 their argument column.
 
@@ -1184,7 +1184,7 @@ remain asserted rather than edge-only.
 #### High-level diagnostic screens and loop
 
 **Confidence: Verified.** The seven high-level bodies are checked in
-`os_selftest_screen_contracts.csv`; its failure report is empty.
+`generated/os_selftest_screen_contracts.csv`; its failure report is empty.
 
 | Address | Entry | Arguments | Result / behavior |
 |---:|---|---|---|
@@ -1285,11 +1285,11 @@ otherwise it appends to that ring.
 
 ### 9.2 Independent RAM/hardware operand reconciliation
 
-**Confidence: Verified.** `os_ram_operands.csv` independently analyzes all
+**Confidence: Verified.** `generated/os_ram_operands.csv` independently analyzes all
 168 implementation/shared roots and records 81 unique absolute RAM, video,
 color, EEPROM, and hardware addresses. Every address has a containing loader
 flag; OS-lifetime aliases in spare video RAM use explicit OS-specific flags,
-and `os_ram_operand_failures.csv` is empty. Endpoint and diagnostic-only
+and `generated/os_ram_operand_failures.csv` is empty. Endpoint and diagnostic-only
 targets include the last words at 0x901FFE, 0x903FFE, 0x904FFE, 0x905FFE, and
 0x9107FE; the Color Test bottom alpha row at 0x905E80; the 34-byte early-error
 destination at 0x906D00; alpha palette entries 1–7 at 0x910002–0x91000E; and
@@ -1297,7 +1297,7 @@ playfield palette entry 15 at 0x91051E.
 
 The scan also identifies one address-shaped value that is not an address:
 0x00800002 at 0x3202/0x32CC/0x336E is the packed large-text stride described
-above. `os_non_address_literals.csv` keeps that exclusion explicit and
+above. `generated/os_non_address_literals.csv` keeps that exclusion explicit and
 site-checked instead of silently omitting it.
 
 ---
@@ -1363,8 +1363,8 @@ whereas neither the complete active-OS control sweep nor the complete
 Gauntlet II main-ROM control sweep transfers into it. Its Gauntlet II
 runtime-dead status is therefore **Verified** for the supplied game, while
 its identification as a retained legacy/game-support module is a **Strong
-inference**. `os_rom_regions.csv` is the gap-free fourteen-row top-level
-partition; `os_rom_byte_coverage.csv` further reduces the two mixed regions
+inference**. `generated/os_rom_regions.csv` is the gap-free fourteen-row top-level
+partition; `generated/os_rom_byte_coverage.csv` further reduces the two mixed regions
 to 39 contiguous code/data segments with no unknown byte.
 
 ### 10.1 Callable-entry completeness baseline
@@ -1375,7 +1375,7 @@ active roots.
 
 The former total of 68 named functions is **Contradicted** as a completeness
 claim: it was a prose-category count, not a callable-entry reconciliation.
-`generate_os_entry_candidates.py` now starts from all vector targets, all 56
+`generated/generate_os_entry_candidates.py` now starts from all vector targets, all 56
 API implementation targets, and the 79 OS-address roots inherited from the
 legacy loader, then recursively follows direct calls and out-of-body tail
 jumps, memory-test continuation pointers, constant targets proven to feed
@@ -1390,13 +1390,13 @@ The current closure contains:
 | Roots already present in the legacy loader | 79 | Address inventory Verified; names still audited individually |
 | Roots absent from the legacy loader | 89 | Included in the generated closure/loader; the final operator-UI batch closes checked semantic coverage at 168/168 roots |
 
-`os_callable_contracts.csv` is a reject-on-gap union of all 168
+`generated/os_callable_contracts.csv` is a reject-on-gap union of all 168
 implementation/shared roots, the six separately bounded computed-dispatch
 cases, and all 56 raw-opcode/target-checked public API veneers: 230 rows with
-zero failures. Discovery evidence remains in `os_entry_candidates.csv`; both
+zero failures. Discovery evidence remains in `generated/os_entry_candidates.csv`; both
 failure reports are empty.
 
-**Confidence: Verified.** The independent `os_control_targets.csv` pass then
+**Confidence: Verified.** The independent `generated/os_control_targets.csv` pass then
 re-analyzes every implementation root and reconciles 392 unique control sites:
 267 direct internal transfers, 94 constant register-indirect internal
 transfers, 13 inherited memory-test continuations, 17 direct/register game
@@ -1406,8 +1406,8 @@ the callable-entry inventory independently of the legacy symbol set.
 
 The byte sweep then found five structurally valid but unreferenced entries
 outside that reachable closure. They are separately checked in
-`os_residue_contracts.csv`. The retained upper module contributes 21 more
-entries. `os_all_function_contracts.csv` is therefore the complete 256-row
+`generated/os_residue_contracts.csv`. The retained upper module contributes 21 more
+entries. `generated/os_all_function_contracts.csv` is therefore the complete 256-row
 ROM-wide union: 168 active implementation/shared roots, five active-image
 residue entries, 21 retained-module roots, six computed-dispatch entries, and
 56 public API veneers. Its failure report is empty.
@@ -1467,7 +1467,7 @@ The copy beginning at 0x6184 deliberately treats 0x6624–0x6783 as palette
 words even though the same bytes encode error descriptors and text. This is
 an intentional overlapping view, not an undecoded gap. The complete
 machine-readable 45-row active/retained catalog is
-`os_rom_data_catalog.csv`.
+`generated/os_rom_data_catalog.csv`.
 
 ### 10.4 Active-image residue entries
 
@@ -1532,7 +1532,7 @@ game options; level/status tables; status descriptors; two large gameplay/
 movement/object table blocks; four factory high-score lists; high-score and
 name-entry data; tutorial descriptors; hint/legend text; legend/credit text;
 descriptor/tile tables; and final palette/packed-graphics tables. The precise
-boundaries and formats are in `os_rom_data_catalog.csv`; bytes
+boundaries and formats are in `generated/os_rom_data_catalog.csv`; bytes
 `0xF9FA–0xFFFF` are verified zero fill.
 
 ---
@@ -1679,7 +1679,7 @@ canonical address:
 r2 -q -n -i doc/gauntlet_loader.r2 malloc://1
 ```
 
-`generate_r2_loader.py --check --run-check` verifies three maps, the CPU
+`generated/generate_r2_loader.py --check --run-check` verifies three maps, the CPU
 configuration, a zero-error load, and all 515 current analysis-function
 entries. The loader maps row9.bin at 0, row10.bin at 0x38000, and row76.bin at
 0x40000 and includes the OS data/RAM/hardware flags described above.

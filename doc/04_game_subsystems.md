@@ -224,7 +224,7 @@ leaves. The candidate helper retains/tags the candidate in `D0.w`, returns the
 candidate type/result or `-1` in `D2.w`, and exposes rejection through N. The
 dragon helper adds 0x1000 to `D0.w` only when the shot overlaps the moving head
 hitbox. Complete register inputs and control-transfer sites are in
-[`monster_combat_contracts.csv`](monster_combat_contracts.csv).
+[`generated/monster_combat_contracts.csv`](generated/monster_combat_contracts.csv).
 
 ---
 
@@ -294,7 +294,7 @@ candidate doubled offset or `-1` in `D1.w`, with N signalling failure, and set
 bit 31 of `D2` on failure.
 
 The complete checked contracts and direct control-transfer sites are in
-[`player_collision_contracts.csv`](player_collision_contracts.csv).
+[`generated/player_collision_contracts.csv`](generated/player_collision_contracts.csv).
 
 ### 4.3 Player Health
 
@@ -1184,7 +1184,7 @@ Pattern: game code sets these to negative values (e.g. −30) when damage starts
 ## 23. Main Loop Sound IDs (Complete List)
 
 **Confidence: Verified** for command values and ROM call sites. Human-readable
-sound descriptions inherit the supplied `soundcmds.csv` labels.
+sound descriptions inherit the supplied `generated/soundcmds.csv` labels.
 
 | ID | Sound |
 |----|-------|

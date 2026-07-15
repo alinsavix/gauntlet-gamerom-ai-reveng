@@ -41,7 +41,7 @@ flowchart LR
 former classification of 0x56F00–0x5FFB1 as a pure data-table region was
 **Contradicted**: executable routines are interleaved throughout it.  The
 hash-guarded, gap-free union is generated as
-[`rom_regions.csv`](rom_regions.csv) by `generate_rom_regions.py`.
+[`generated/rom_regions.csv`](generated/rom_regions.csv) by `generated/generate_rom_regions.py`.
 
 ### 1.2 Jump Table (`0x40000–0x40054`)
 
@@ -363,21 +363,21 @@ control-target, detailed byte-range, and RAM-operand reports.
 - **Verified:** the detailed byte report identifies 93,722 analyzed instruction
   bytes across 34 executable ranges, and all 29 main-loop top-level entries
   have checked purpose/ABI descriptions.
-- **Verified:** `callable_contract_coverage.csv` reconciles all 321 indexed
+- **Verified:** `generated/callable_contract_coverage.csv` reconciles all 321 indexed
   entries to body-checked catalogs that state purpose, arguments, return
   behavior, and every discovered convention exception. Naming alone was not
   accepted as contract evidence.
 
 ### 4.2 Data Tables Coverage
 
-- **Verified:** `rom_regions.csv` provides a checked, contiguous physical union
+- **Verified:** `generated/rom_regions.csv` provides a checked, contiguous physical union
   of every byte from 0x40000 through 0x5FFFF, including the two erased pads and
   final checksum word.
-- **Verified:** `rom_byte_coverage.csv` classifies every byte in both mixed
+- **Verified:** `generated/rom_byte_coverage.csv` classifies every byte in both mixed
   code/data regions as analyzed instructions or a named ROM range;
-  `rom_catalog_reconciliation.csv` gives every §5 row an exact matching flag,
-  `rom_flag_reconciliation.csv` gives all 351 non-code ROM flags an exact §5
-  or header-table row, and `rom_range_overlaps.csv` records the 21 intentional
+  `generated/rom_catalog_reconciliation.csv` gives every §5 row an exact matching flag,
+  `generated/rom_flag_reconciliation.csv` gives all 351 non-code ROM flags an exact §5
+  or header-table row, and `generated/rom_range_overlaps.csv` records the 21 intentional
   nested/alternate table views. No mixed-region byte or analysis failure
   remains unclassified.
 

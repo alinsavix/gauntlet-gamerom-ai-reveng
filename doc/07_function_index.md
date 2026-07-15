@@ -8,12 +8,12 @@
 are covered by the checked contract catalogs linked in this chapter. Those
 catalogs state arguments, returns, and every convention exception found by
 fresh body/caller analysis; the union is checked by
-`generate_callable_coverage.py`. Purpose-level naming alone was formerly
+`generated/generate_callable_coverage.py`. Purpose-level naming alone was formerly
 insufficient, but the completed contract pass now supplies the missing ABI
 evidence.
 
 The target audit does not rely on prologue bytes. The checked
-[`control_targets.csv`](control_targets.csv) independently analyzes all 321
+[`generated/control_targets.csv`](generated/control_targets.csv) independently analyzes all 321
 documented game entries plus the 80 unique destinations proven by the 12
 computed-dispatch tables, and deduplicates overlapping bodies. Its 1,129
 direct sites comprise 996 calls/jumps to documented game entries, 124 calls to
@@ -102,9 +102,9 @@ The non-normal control-transfer cases in this group are:
 | 0x5E62A | `main_walls_cyclic_move` | Handles cyclic wall animation |
 
 The machine-readable callable/body inventory is
-[`main_loop_contracts.csv`](main_loop_contracts.csv).  Regenerate and verify
+[`generated/main_loop_contracts.csv`](generated/main_loop_contracts.csv).  Regenerate and verify
 the call opcodes, all direct call sites, and stack-argument absence with
-`python3 generate_main_loop_contracts.py --check --run-check`.
+`python3 generated/generate_main_loop_contracts.py --check --run-check`.
 
 ### 1.1 Reset/VBLANK, orchestration, sound-ring, and alpha contracts
 
@@ -153,9 +153,9 @@ slots remain data rather than callable entries.
 | 0x5317C | `game_options_display` | void | void | Passes descriptor stream 0x5318C to OS API 0x248 |
 
 Machine-readable source:
-[`orchestration_sound_contracts.csv`](orchestration_sound_contracts.csv),
+[`generated/orchestration_sound_contracts.csv`](generated/orchestration_sound_contracts.csv),
 regenerated and body-checked by
-`python3 generate_orchestration_sound_contracts.py --check --run-check`.
+`python3 generated/generate_orchestration_sound_contracts.py --check --run-check`.
 
 ---
 
@@ -232,9 +232,9 @@ results, and exceptional entry conventions below.
 | 0x47DAE | `shot_impact_spawn` | `uint16 target_slot, uint16 shooter_slot` | void | — |
 
 The checked machine-readable form is
-[`monster_combat_contracts.csv`](monster_combat_contracts.csv); regenerate and
+[`generated/monster_combat_contracts.csv`](generated/monster_combat_contracts.csv); regenerate and
 reanalyze all 20 bodies with
-`python3 generate_monster_combat_contracts.py --check --run-check`.
+`python3 generated/generate_monster_combat_contracts.py --check --run-check`.
 
 ---
 
@@ -321,9 +321,9 @@ use the normal convention from §3.
 | 0x4D900 | `player_activecount` | void | D0.l=0..4 count of statuses 1, 2, 8, or 0x10 | — |
 
 Machine-readable source:
-[`player_lifecycle_contracts.csv`](player_lifecycle_contracts.csv), regenerated
+[`generated/player_lifecycle_contracts.csv`](generated/player_lifecycle_contracts.csv), regenerated
 and body-checked by
-`python3 generate_player_lifecycle_contracts.py --check --run-check`.
+`python3 generated/generate_player_lifecycle_contracts.py --check --run-check`.
 
 ### 4.2 Player movement / collision callable contracts
 
@@ -363,9 +363,9 @@ exception.
 | 0x5E10C | `ray_march_down` | Same as prior row | Same as prior row | Register entry |
 
 The checked machine-readable form is
-[`player_collision_contracts.csv`](player_collision_contracts.csv); regenerate
+[`generated/player_collision_contracts.csv`](generated/player_collision_contracts.csv); regenerate
 and reanalyze all 26 bodies with
-`python3 generate_player_collision_contracts.py --check --run-check`.
+`python3 generated/generate_player_collision_contracts.py --check --run-check`.
 
 ### 4.3 Player-runtime and name-entry callable contracts
 
@@ -397,9 +397,9 @@ also distinguish presentation-only helpers and global-selector entries.
 | 0x555C4 | `name_entry_draw_char_copy` | Same as 0x554B6 | void | Byte-identical copy; no discovered direct site |
 
 Machine-readable source:
-[`player_runtime_contracts.csv`](player_runtime_contracts.csv), regenerated
+[`generated/player_runtime_contracts.csv`](generated/player_runtime_contracts.csv), regenerated
 and body-checked by
-`python3 generate_player_runtime_contracts.py --check --run-check`.
+`python3 generated/generate_player_runtime_contracts.py --check --run-check`.
 
 ---
 
@@ -480,8 +480,8 @@ only exceptions are called out.
 | 0x46F56 | `set_scroll_pos` | `int16 horizontal, int16 vertical` | void | — |
 
 The checked machine-readable form is
-[`maze_contracts.csv`](maze_contracts.csv); regenerate and reanalyze all 30
-bodies with `python3 generate_maze_contracts.py --check --run-check`.
+[`generated/maze_contracts.csv`](generated/maze_contracts.csv); regenerate and reanalyze all 30
+bodies with `python3 generated/generate_maze_contracts.py --check --run-check`.
 
 ---
 
@@ -534,9 +534,9 @@ entry conventions below.
 | 0x5FC5E | `pf_isff` | `uint16 packed_maze_pos` | `D0.l=1` on segment, zero otherwise | Frameless stack entry eight bytes after `pf_isff_d0`; own save frame, shared body at 0x5FC66 |
 
 The checked machine-readable form is
-[`tport_forcefield_contracts.csv`](tport_forcefield_contracts.csv); regenerate
+[`generated/tport_forcefield_contracts.csv`](generated/tport_forcefield_contracts.csv); regenerate
 and reanalyze all 20 entries plus the common depth-list body with
-`python3 generate_tport_forcefield_contracts.py --check --run-check`.
+`python3 generated/generate_tport_forcefield_contracts.py --check --run-check`.
 
 ---
 
@@ -634,9 +634,9 @@ bodies in more detail.
 | 0x5DF80 | `exit_create_player_anim` | `uint16 source_mob_slot, uint16 animation_channel` | void | Frameless entry adds 0x15 to channel and branches into shared depth-list body |
 
 The checked machine-readable form is
-[`dragon_thief_exit_contracts.csv`](dragon_thief_exit_contracts.csv);
+[`generated/dragon_thief_exit_contracts.csv`](generated/dragon_thief_exit_contracts.csv);
 regenerate and reanalyze all 26 entries plus the common depth-list body with
-`python3 generate_dragon_thief_exit_contracts.py --check --run-check`.
+`python3 generated/generate_dragon_thief_exit_contracts.py --check --run-check`.
 
 ---
 
@@ -691,9 +691,9 @@ exceptional conventions below. Normal rows use the stack ABI from
 | 0x5214C | `player_add_score_with_mult` | `uint16 player_index, uint16 base_score` | void | — |
 
 The checked machine-readable form is
-[`score_coin_dialog_contracts.csv`](score_coin_dialog_contracts.csv);
+[`generated/score_coin_dialog_contracts.csv`](generated/score_coin_dialog_contracts.csv);
 regenerate and reanalyze all 24 entries with
-`python3 generate_score_coin_dialog_contracts.py --check --run-check`.
+`python3 generated/generate_score_coin_dialog_contracts.py --check --run-check`.
 
 ---
 
@@ -726,9 +726,9 @@ the start of this chapter.
 | 0x54BE0 | `secret_code_build` | void | void | Frameless global-buffer routine; preserves D2 |
 | 0x54EC6 | `secret_getname` | void | void | Uses global winner/settings state; initializes entry or completes winner state |
 
-Machine-readable source: [`thief_secret_contracts.csv`](thief_secret_contracts.csv),
+Machine-readable source: [`generated/thief_secret_contracts.csv`](generated/thief_secret_contracts.csv),
 regenerated and body-checked by
-`python3 generate_thief_secret_contracts.py --check --run-check`.
+`python3 generated/generate_thief_secret_contracts.py --check --run-check`.
 
 ---
 
@@ -787,9 +787,9 @@ do not consume D0 or condition codes.
 | 0x5E064 | `mob_depth_remove` | `uint16 physical_slot_minus_one` | void | Resolves physical slot by adding 1 |
 
 The checked machine-readable form is
-[`mob_list_contracts.csv`](mob_list_contracts.csv); regenerate and reanalyze
+[`generated/mob_list_contracts.csv`](generated/mob_list_contracts.csv); regenerate and reanalyze
 all 13 entries with
-`python3 generate_mob_list_contracts.py --check --run-check`.
+`python3 generated/generate_mob_list_contracts.py --check --run-check`.
 
 ---
 
@@ -848,9 +848,9 @@ are exact D0.l results.
 | 0x5EA66 | `pf_is_connectable_floor_xy` | D0.w=x, D1.w=y | D0.l=-1 connectable; 0 otherwise | Register entry sharing return leaves with 0x5EA2E |
 
 Machine-readable source:
-[`playfield_floor_contracts.csv`](playfield_floor_contracts.csv), regenerated
+[`generated/playfield_floor_contracts.csv`](generated/playfield_floor_contracts.csv), regenerated
 and body-checked by
-`python3 generate_playfield_floor_contracts.py --check --run-check`.
+`python3 generated/generate_playfield_floor_contracts.py --check --run-check`.
 
 ### 13.2 Wall and door playfield callable contracts
 
@@ -877,9 +877,9 @@ condition codes for the void render/update routines.
 | 0x5F876 | `pf_door_draw_xy` | A0.w=x, A1.w=y, D0.w=door class | void | Register wrapper into shared door renderer |
 | 0x5F880 | `pf_door_draw` | `uint16 x, uint16 y, uint16 door_class` | void | Calls fixed `pf_isdoor` indirectly through A2=0x5F77A |
 
-Machine-readable source: [`wall_door_contracts.csv`](wall_door_contracts.csv),
+Machine-readable source: [`generated/wall_door_contracts.csv`](generated/wall_door_contracts.csv),
 regenerated and body-checked by
-`python3 generate_wall_door_contracts.py --check --run-check`.
+`python3 generated/generate_wall_door_contracts.py --check --run-check`.
 
 ---
 
@@ -942,9 +942,9 @@ colors. `display_state_clear` clears exactly 0x20 priority-head longwords,
 0x3C0 alpha-VRAM longwords, and 0x800 playfield-VRAM longwords; it does not
 write four bytes beyond the 0x905FFF priority table.
 
-Machine-readable source: [`utility_init_contracts.csv`](utility_init_contracts.csv),
+Machine-readable source: [`generated/utility_init_contracts.csv`](generated/utility_init_contracts.csv),
 regenerated and body-checked by
-`python3 generate_utility_init_contracts.py --check --run-check`.
+`python3 generated/generate_utility_init_contracts.py --check --run-check`.
 
 ---
 
@@ -1132,9 +1132,9 @@ are stated where the former prose did not establish an ABI.
 | 0x51FAE | `door_scan_vertical_endpoints` | `uint16 packed_door_slot, uint16 player_index, uint16 next_endpoint_index` | D0.l=updated index, capped at 2 | Immediate above/below only; direction codes 0/2 |
 | 0x5207C | `door_scan_horizontal_endpoints` | `uint16 packed_door_slot, uint16 player_index, uint16 next_endpoint_index` | D0.l=updated index, capped at 2 | Immediate left/right only; direction codes 3/1 |
 
-Machine-readable source: [`movement_path_contracts.csv`](movement_path_contracts.csv),
+Machine-readable source: [`generated/movement_path_contracts.csv`](generated/movement_path_contracts.csv),
 regenerated and body-checked by
-`python3 generate_movement_path_contracts.py --check --run-check`.
+`python3 generated/generate_movement_path_contracts.py --check --run-check`.
 
 ---
 
@@ -1197,9 +1197,9 @@ exception cells use the normal convention from §3.
 | 0x4DA3E | `title_logo_init` | void | void | — |
 | 0x4DCBA | `main_logo_updcolors` | void | void | — |
 
-Machine-readable source: [`startup_attract_contracts.csv`](startup_attract_contracts.csv),
+Machine-readable source: [`generated/startup_attract_contracts.csv`](generated/startup_attract_contracts.csv),
 regenerated and body-checked by
-`python3 generate_startup_attract_contracts.py --check --run-check`.
+`python3 generated/generate_startup_attract_contracts.py --check --run-check`.
 
 ### `eeprom_load_config` — 0x42F86
 

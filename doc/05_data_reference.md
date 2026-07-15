@@ -873,13 +873,13 @@ struct text_desc {
 **Confidence: Contradicted** for the former implication that every part of this
 audit was already reproducible from checked-in artifacts. The top-level ROM
 union is now mechanically verified by
-[`rom_regions.csv`](rom_regions.csv): it covers every byte from 0x40000 through
+[`generated/rom_regions.csv`](generated/rom_regions.csv): it covers every byte from 0x40000 through
 0x5FFFF with no gap or overlap, verifies both solid-0xFF padding ranges, and
 separates the final 0xE19E checksum word. The finer audit is now independently
-generated as [`rom_byte_coverage.csv`](rom_byte_coverage.csv),
-[`rom_catalog_reconciliation.csv`](rom_catalog_reconciliation.csv), and
-[`rom_flag_reconciliation.csv`](rom_flag_reconciliation.csv), plus
-[`rom_range_overlaps.csv`](rom_range_overlaps.csv).
+generated as [`generated/rom_byte_coverage.csv`](generated/rom_byte_coverage.csv),
+[`generated/rom_catalog_reconciliation.csv`](generated/rom_catalog_reconciliation.csv), and
+[`generated/rom_flag_reconciliation.csv`](generated/rom_flag_reconciliation.csv), plus
+[`generated/rom_range_overlaps.csv`](generated/rom_range_overlaps.csv).
 
 **Confidence: Verified.** Fresh analysis of all 321 indexed entries plus 80
 computed-dispatch destinations accounts for every byte of the two mixed
@@ -887,22 +887,22 @@ code/data regions as an instruction byte or named ROM range. All 328 parsed §5
 rows have exact address/size matches in `gauntlet.r2`, while the reverse report
 gives all 351 non-code ROM flags an exact §5 or game-header row. The overlap
 report classifies 21 deliberate nested/alternate views and contains no
-code/data collision. `rom_byte_coverage_failures.csv` is empty.
+code/data collision. `generated/rom_byte_coverage_failures.csv` is empty.
 
 **Confidence: Verified** for the documented callable set: the generated
-[`ram_operands.csv`](ram_operands.csv) independently analyzes all 321 unique
+[`generated/ram_operands.csv`](generated/ram_operands.csv) independently analyzes all 321 unique
 game-ROM entry addresses in `07_function_index.md` with symbol substitution
 disabled. It extracts 318 distinct explicit `0x904000–0x905FFF` literals,
 including address-register bases used for indexed access; every literal lands
 in at least one named loader flag, and no function analysis fails. The empty
-`ram_operand_failures.csv` is retained so failures cannot disappear silently.
+`generated/ram_operand_failures.csv` is retained so failures cannot disappear silently.
 
 **Confidence: Verified** for ROM-encoded RAM operands. The independent
-[`ram_linear_reconciliation.csv`](ram_linear_reconciliation.csv) decodes all
+[`generated/ram_linear_reconciliation.csv`](generated/ram_linear_reconciliation.csv) decodes all
 34 ranges already proven executable by the byte audit—93,722 instruction
 bytes without a gap—and finds exactly the same 318 RAM literals as the
 callable-anchored report. There are no linear-only or callable-only candidates,
-and `ram_linear_scan_failures.csv` is empty. This test cannot discover an
+and `generated/ram_linear_scan_failures.csv` is empty. This test cannot discover an
 address synthesized entirely at runtime; those cases are documented from
 their construction sites. Array sizes in the RAM catalog are total extents;
 element widths and strides are stated separately.
