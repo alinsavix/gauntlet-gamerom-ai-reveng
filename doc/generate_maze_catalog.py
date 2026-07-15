@@ -13,7 +13,9 @@ from pathlib import Path
 
 
 ROM_BASE = 0x38000
-MAZE_COUNT = 116
+ROM_END = 0x40000
+MAZE_COUNT = 117
+BANK_TABLE_START = 0x3FFE0
 EXPECTED_SHA1 = "e4a36380f4a6394ad5cfb5aff5d7c8b352232d3d"
 FIELDS = (
     "maze",
@@ -23,7 +25,8 @@ FIELDS = (
     "record_size",
     "decoder_bytes_consumed",
     "terminator_offset",
-    "padding_to_next_pointer",
+    "bytes_after_record_to_boundary",
+    "bank_table_overlap_bytes",
     "secret_trick",
     "level_flags",
     "playfield_patterns",
@@ -78,9 +81,9 @@ def generate(rom: bytes) -> str:
     if len(rom) != 0x8000:
         raise ValueError(f"row10.bin size {len(rom):#x} != 0x8000")
 
-    pointers = [struct.unpack_from(">I", rom, 0x0C + 4 * i)[0] for i in range(MAZE_COUNT + 1)]
+    pointers = [struct.unpack_from(">I", rom, 0x0C + 4 * i)[0] for i in range(MAZE_COUNT)]
     if pointers[-1] != 0x3FE48:
-        raise ValueError(f"pointer-table end sentinel {pointers[-1]:#x} != 0x3fe48")
+        raise ValueError(f"maze 116 pointer {pointers[-1]:#x} != 0x3fe48")
     bank_bytes = rom[0x7FE0:0x8000]
 
     output = io.StringIO(newline="")
@@ -89,9 +92,9 @@ def generate(rom: bytes) -> str:
 
     for maze in range(MAZE_COUNT):
         pointer = pointers[maze]
-        next_pointer = pointers[maze + 1]
+        boundary = pointers[maze + 1] if maze + 1 < MAZE_COUNT else ROM_END
         start = pointer - ROM_BASE
-        next_start = next_pointer - ROM_BASE
+        boundary_start = boundary - ROM_BASE
         bank = (bank_bytes[maze // 4] >> ((maze % 4) * 2)) & 3
         expected_bank = start // 0x2000
         if bank != expected_bank:
@@ -100,11 +103,25 @@ def generate(rom: bytes) -> str:
         cursor, decoder_end = _decoder_end(rom, start)
         if cursor < 0x400:
             raise ValueError(f"maze {maze}: decoder stopped early at {cursor:#x}")
-        if rom[decoder_end] != 0:
-            raise ValueError(f"maze {maze}: missing trailing zero at {decoder_end:#x}")
-        padding = next_start - (decoder_end + 1)
-        if padding < 0:
-            raise ValueError(f"maze {maze}: decoder overlaps next record by {-padding} bytes")
+        if maze + 1 < MAZE_COUNT:
+            if rom[decoder_end] != 0:
+                raise ValueError(f"maze {maze}: missing trailing zero at {decoder_end:#x}")
+            record_end = decoder_end + 1
+            terminator_offset = f"0x{decoder_end:04X}"
+        else:
+            # Maze 116 has no delimiter. Its final 15 compressed bytes occupy
+            # the beginning of the live 32-byte bank-selection table.
+            if decoder_end != BANK_TABLE_START - ROM_BASE + 15:
+                raise ValueError(
+                    f"maze 116: decoder ended at {decoder_end:#x}, expected 0x7fef"
+                )
+            record_end = decoder_end
+            terminator_offset = ""
+
+        trailing = boundary_start - record_end
+        if trailing < 0:
+            raise ValueError(f"maze {maze}: decoder crosses its boundary by {-trailing} bytes")
+        overlap = max(0, decoder_end + ROM_BASE - BANK_TABLE_START)
 
         writer.writerow(
             {
@@ -112,10 +129,11 @@ def generate(rom: bytes) -> str:
                 "bank": bank,
                 "pointer": f"0x{pointer:05X}",
                 "file_offset": f"0x{start:04X}",
-                "record_size": decoder_end + 1 - start,
+                "record_size": record_end - start,
                 "decoder_bytes_consumed": decoder_end - start,
-                "terminator_offset": f"0x{decoder_end:04X}",
-                "padding_to_next_pointer": padding,
+                "terminator_offset": terminator_offset,
+                "bytes_after_record_to_boundary": trailing,
+                "bank_table_overlap_bytes": overlap,
                 "secret_trick": f"0x{rom[start]:02X}",
                 "level_flags": f"0x{struct.unpack_from('>I', rom, start + 1)[0]:08X}",
                 "playfield_patterns": f"0x{rom[start + 5]:02X}",
@@ -156,11 +174,11 @@ def main() -> int:
             expected = (int(csv_rows[maze]["bank"]), int(csv_rows[maze]["file_offset"], 16))
             if markdown_rows.get(maze) != expected:
                 raise SystemExit(f"06_maze_catalog.md row {maze} differs from maze_catalog.csv")
-        print("maze_catalog.csv: verified 116 records and Markdown bank/offset rows")
+        print("maze_catalog.csv: verified 117 records and Markdown bank/offset rows")
         return 0
 
     catalog_path.write_text(generated)
-    print(f"wrote {catalog_path} (116 records)")
+    print(f"wrote {catalog_path} (117 records)")
     return 0
 
 

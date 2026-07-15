@@ -1068,7 +1068,7 @@ These functions are called from multiple top-level subsystems:
 | 0x449D4 | `attract_demo_init` / `demo_setup` | Initialize maze 102 for the DEMO attract screen, set up Elf player 1, and install demo stream pointer 0x581C4 |
 | 0x40D24 | `load_level_tileset` | Load level tile data into VRAM |
 | 0x4CD1C | `load_legend_page` | Load maze 103 for LEGEND mode and render the overview (selector 0), rules (selector 2), or monsters (other selector) page. The former `load_demo_level` name was contradicted by the body |
-| 0x44DB4 | `show_level_start_screen` | Build the between-level/start display; after a secret-room win, replace the maze trick ID with a random 0x50–0x5D challenge task, set its timer, and show its qualifier |
+| 0x44DB4 | `show_level_start_screen` | Build the between-level/start display; after a secret-room win, replace the trick ID with a random 0x50–0x5D challenge, select maze 115 for tasks 0x50–0x56 or maze 116 for tasks 0x57–0x5D, set its timer, and show its qualifier |
 | 0x40CF2 | `maze_init` | Maze initialization (called from main_start_game) |
 | 0x4FCF0 | `thief_find_aligned_shooter` | Return the first active player 0–3 whose shot direction is opposite the thief's and whose wrapped position lies exactly on that shot ray; -1 if none |
 | 0x4EE7A | `thief_move_engine` | Core thief movement/direction computation |
@@ -1098,7 +1098,7 @@ These functions are called from multiple top-level subsystems:
 | 0x5EAC2 | `pf_wall_draw_stack` | Normal-stack `(uint16 x,uint16 y)` entry to the same wall-rendering body; retained but with no discovered direct control site |
 | 0x4ADD6 | `enqueue_sound` | Low-level sound ID enqueue into ring buffer at 0x90404B; called by play_sound |
 | 0x40CC4 | `maze_select_alt_bank` | Call `find_maze`, switch the Slapstic through the alternate bank-selection path, and store the resulting command offset at 0x904B8C. It does not clear maze state. |
-| 0x40D4E | `maze_select_bank_special` | No-prologue callable bank-selection path used by `show_level_start_screen` and `main_start_game`; calls `find_maze`, executes the 0x38000/0x3FB4A/selected-bank Slapstic sequence through 0x56E98, and stores D1 at 0x904B8C |
+| 0x40D4E | `maze_select_bank_special` | No-prologue callable bank-selection path used by `show_level_start_screen` and `main_start_game`; calls `find_maze` for either secret layout (115/116), executes the 0x38000/0x3FB4A/selected-bank Slapstic sequence through 0x56E98, and stores D1 at 0x904B8C |
 | 0x54B68 | `dragon_shot_hitbox_adjust` | Register-argument leaf called only from `shot_mob_collision` after the candidate type is 0x3C: reset dragon escape/idle timers, test the moving head hitbox using the five-word padded offsets at 0x54BD6, and add 0x1000 to D0 when the shot overlaps the head |
 | 0x449CC | `attract_noop_hook` | Deliberate empty routine called once at the end of the attract-screen timer/display update path |
 | 0x48B58 | `update_monster_bonus_from_score_per_coin` | Sum active players' scores and inserted-coin counts, then add `(total_score >> 14) / total_coins` to the signed monster-cap bonus byte at 0x90405F |

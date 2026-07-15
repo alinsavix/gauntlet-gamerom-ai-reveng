@@ -90,6 +90,19 @@ def main() -> None:
     if any(row["classification"] != "intentional_overlapping_views" for row in overlaps):
         raise SystemExit("ROM overlap report contains a non-intentional overlap")
 
+    maze_catalog = rows(here / "maze_catalog.csv")
+    if [int(row["maze"]) for row in maze_catalog] != list(range(117)):
+        raise SystemExit("maze_catalog.csv must contain exactly mazes 0 through 116")
+    final_maze = maze_catalog[-1]
+    if (
+        final_maze["pointer"] != "0x3FE48"
+        or final_maze["terminator_offset"]
+        or int(final_maze["record_size"]) != 0x1A7
+        or int(final_maze["bytes_after_record_to_boundary"]) != 0x11
+        or int(final_maze["bank_table_overlap_bytes"]) != 0x0F
+    ):
+        raise SystemExit("maze 116 boundary/overlap metadata is not canonical")
+
     callable_rows = rows(here / "callable_contract_coverage.csv")
     callable_addresses = {int(row["address"], 16) for row in callable_rows}
     if len(callable_rows) != len(callable_addresses) or any(
@@ -172,7 +185,8 @@ def main() -> None:
     print(
         "audit completion: "
         f"{byte_count} ROM bytes; {len(callable_rows)} callable ABIs; "
-        f"{len(catalog)} catalog rows; {len(flags)} non-code flags; "
+        f"{len(catalog)} ROM catalog rows; {len(maze_catalog)} maze records; "
+        f"{len(flags)} non-code flags; "
         f"{len(ram)} RAM literals; {os_region_count} OS region bytes; "
         f"{os_byte_count} OS classified bytes; {len(os_functions)} OS function/veneer contracts; "
         f"{len(os_data)} OS data ranges; no active backlog"

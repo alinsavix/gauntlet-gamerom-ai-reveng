@@ -185,12 +185,11 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   split-chip maze pointers were already linear, because the supplied
   `row10.bin` has normalized high bytes. The raw chips instead store addresses
   in the selected Slapstic bank's `0x38000–0x39FFF` aperture; `python-gex` now
-  folds in the 2-bit bank value for each maze and the end sentinel. The
-  generator validated all 116 raw headers and record spans against
-  `maze_catalog.csv` before regenerating all 230 reference images. All 239
-  golden-image tests, including every maze, and all 420 extractor tests pass;
-  the suite also reconciles every normalized pointer and the end sentinel with
-  `maze_catalog.csv`.
+  folds in each pointer's 2-bit bank value. A subsequent code-path audit also
+  disproved the claim that pointer entry 116 was only an end sentinel:
+  `show_level_start_screen` selects maze 115 for challenge tasks 0x50–0x56 and
+  maze 116 for tasks 0x57–0x5D. The generator now validates all 117 live
+  pointers, headers, and record boundaries against `maze_catalog.csv`.
 - **Verified:** the fine ROM-byte audit now classifies every byte in the mixed
   regions 0x40000–0x5561F and 0x56E54–0x5FFB1 as analyzed code or a named ROM
   range. `rom_catalog_reconciliation.csv` gives all 328 parsed §5 rows an
@@ -211,14 +210,16 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   candidates, every literal is covered by a named RAM flag, and
   `ram_linear_scan_failures.csv` is empty. This closes the former concern that
   function boundaries might hide immediate-shaped RAM operands.
-- **Verified:** the obsolete unmanifested `maze_116.png` was removed, and the
-  ROM-independent reference-corpus test proves the manifest and PNG set
-  contain exactly maze 0 through maze 115. `generate_reference_images.py`
-  checks the complete required chip list before writing, verifies all eight
-  header fields and pointer span of every maze against `maze_catalog.csv`,
-  records the headers in the manifest, and removes out-of-range maze PNGs only
-  after a successful full render. The 230 regenerated PNGs match their stored
-  dimensions and pixel hashes. **Confidence: Verified.**
+- **Verified:** the reference corpus and its ROM-independent manifest check
+  contain exactly mazes 0 through 116. Maze 116 is regenerated from its full
+  stream rather than the formerly truncated first-zero interpretation.
+  `generate_reference_images.py` checks the complete required chip list before
+  writing, verifies all eight header fields and the pointer/boundary span of
+  every maze against `maze_catalog.csv`, records the headers in the manifest,
+  and removes only truly out-of-range maze PNGs after a successful full render.
+  The 231 regenerated PNGs match their stored dimensions and pixel hashes; all
+  240 all-maze golden tests and all 420 extractor tests pass. **Confidence:
+  Verified.**
 - **Contradicted:** the former statement that most legacy tables remained
   unlabeled is no longer current. Every chapter-level section in
   `01_hardware.md` through `07_function_index.md` now has a canonical

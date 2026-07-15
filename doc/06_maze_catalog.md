@@ -1,6 +1,6 @@
 # Gauntlet II — Complete Maze Catalog
 
-*All 116 mazes (numbers 0–115) with bank assignments, ROM offsets, secret tricks, random food counts, and base flags. **Confidence: Verified.** Evidence is the `row10.bin` pointer/header data.*
+*All 117 mazes (numbers 0–116) with bank assignments, ROM offsets, secret tricks, random food counts, and base flags. **Confidence: Verified.** Evidence is the `row10.bin` pointer/header data and the secret-room selection code at `0x44DB4`.*
 
 ---
 
@@ -9,7 +9,7 @@
 `find_maze` (0x40C78) maps a maze number to a data pointer and slapstic bank:
 
 1. Reads a **bank lookup table** at hardware address `0x39FE0` (slapstic bank 3, file offset 0x7FE0). Each byte packs four 2-bit bank numbers (one per maze, LSB first).
-2. Reads the **pointer table** starting at the address stored at `0x38000` (which points to `0x3800C`). In the raw split Slapstic chips, each entry is an address in the selected bank's `0x38000–0x39FFF` CPU aperture; an offline extractor must normalize it as `raw_pointer + bank × 0x2000` before indexing the interleaved 32 KB image. The supplied normalized `row10.bin` has those 2-bit bank offsets already folded into the pointer high bytes, so its entries 0–115 are linear addresses in `0x38000–0x3FFFF` and must not be adjusted again. Raw entry 116 is the end sentinel in bank 3; its normalized value is `0x3FE48`, not another maze. **Confidence: Verified.**
+2. Reads the **117-entry pointer table** starting at the address stored at `0x38000` (which points to `0x3800C`). In the raw split Slapstic chips, each entry is an address in the selected bank's `0x38000–0x39FFF` CPU aperture; an offline extractor must normalize it as `raw_pointer + bank × 0x2000` before indexing the interleaved 32 KB image. The supplied normalized `row10.bin` has those 2-bit bank offsets already folded into the pointer high bytes, so entries 0–116 are linear addresses in `0x38000–0x3FFFF` and must not be adjusted again. Entry 116 normalizes to `0x3FE48` and is the second secret-room maze, not an end-only sentinel. **Confidence: Verified.**
 
 The lookup result drives both the Slapstic selection and the record decoder.
 Header bytes configure level behavior and presentation, while the compressed
@@ -18,7 +18,7 @@ playfield graphics.
 
 ```mermaid
 flowchart TD
-    maze["Maze number 0–115"] --> find["find_maze<br/>(0x40C78)"]
+    maze["Maze number 0–116"] --> find["find_maze<br/>(0x40C78)"]
     find --> banktbl["2-bit bank lookup<br/>0x39FE0"]
     find --> ptrtbl["117-entry pointer table<br/>base 0x3800C"]
     banktbl --> bank["Bank 0–3"]
@@ -46,8 +46,8 @@ flowchart TD
 
 ## 2. Slapstic ROM Bank Layout
 
-**Confidence: Verified** by the bank table, all 117 pointer entries including
-the end sentinel, and the generated catalog.
+**Confidence: Verified** by the bank table, all 117 live pointer entries, and
+the generated catalog.
 
 The slapstic ROM (`row10.bin`, 32 KB) is divided into 4 banks of 8 KB each:
 
@@ -56,7 +56,7 @@ The slapstic ROM (`row10.bin`, 32 KB) is divided into 4 banks of 8 KB each:
 | 0 | 0x0000 | 0x38000–0x39FFF | Mazes 0–32 |
 | 1 | 0x2000 | 0x3A000–0x3BFFF | Mazes 33–62 |
 | 2 | 0x4000 | 0x3C000–0x3DFFF | Mazes 63–88 |
-| 3 | 0x6000 | 0x3E000–0x3FFFF | Mazes 89–115 + bank table |
+| 3 | 0x6000 | 0x3E000–0x3FFFF | Mazes 89–116 + bank table |
 
 ---
 
@@ -72,7 +72,13 @@ Descriptive group names follow their live callers and rendered content.
 | 102 | 1 | Demo level (attract mode) |
 | 103 | 1 | Legend/high-scores screen |
 | 104–114 | 11 | Treasure rooms (T1–T11) |
-| 115 | 1 | Secret room |
+| 115–116 | 2 | Secret-room layouts selected by challenge code |
+
+`show_level_start_screen` (0x44DB4) first selects a random challenge code
+0x50–0x5D. Codes 0x50–0x56 leave maze number 115 in `ram.os_flag`; codes
+0x57–0x5D increment it to 116 before calling `maze_select_bank_special`
+(0x40D4E). Thus both records are live, with seven of the fourteen challenges
+mapped to each layout. **Confidence: Verified.**
 
 ---
 
@@ -236,13 +242,14 @@ The raw pointer/header/boundary fields are also checked into `maze_catalog.csv`,
 | 113 | T10 | 3 | 0x79EF | WatchShoot2 (walls) | 0 | Exit1of |
 | 114 | T11 | 3 | 0x7BC9 | Diet (no food) | 0 | InvisTrap, Exit1of, TrapLocal |
 | | | | | | | |
-| 115 | — | 3 | 0x7D29 | **Secret Room** | 0 | (none) |
+| 115 | — | 3 | 0x7D29 | **Secret Room 1 (tasks 0x50–0x56)** | 0 | (none) |
+| 116 | — | 3 | 0x7E48 | **Secret Room 2 (tasks 0x57–0x5D)** | 0 | CyclicWalls |
 
 ---
 
 ## 7. Secret Trick Distribution
 
-**Confidence: Verified** from the first header byte of all 116 records.
+**Confidence: Verified** from the first header byte of all 117 records.
 
 Every gameplay level has exactly one secret trick. Distribution across Levels 1–97:
 
@@ -292,4 +299,13 @@ Each maze in the slapstic ROM has this header format:
 
 The four `level_flags` bytes are assembled by `maze_load_pickup_config` (0x436FE) into the 32-bit `level_flags` longword at `0x90491C` (historical alias `ram.maze_pickup_config`). **Confidence: Verified.**
 
-Each stored record ends with a zero byte. For 113 records that delimiter is immediately followed by the next pointer-table target (including maze 115 followed by the end sentinel). Bank-final mazes 32, 62, and 88 have padding before the next bank's first pointer target; separate unused bytes follow the final sentinel before the bank table. The game decoder does not test the delimiter; it stops when its output cursor reaches `0x400`. **Confidence: Verified.**
+Mazes 0–115 end with a zero delimiter. For 113 of those records the delimiter
+is immediately followed by the next pointer target; bank-final mazes 32, 62,
+and 88 have padding before the next bank's first record. Maze 116 is the one
+exception: it begins at `0x3FE48`, has no delimiter, and its decoder consumes
+423 bytes through `0x3FFEE`. The final 15 compressed bytes therefore overlap
+the start of the live 32-byte bank lookup table at `0x3FFE0–0x3FFFF`; 17 table
+bytes remain after decoding stops. This is safe because the game decoder does
+not search for a delimiter—it stops when its output cursor reaches `0x400`.
+`0x3FE48` is consequently both the boundary after maze 115 and the address of
+live maze 116 data. **Confidence: Verified.**

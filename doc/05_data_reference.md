@@ -624,7 +624,12 @@ semantic distinction is labeled inline.
 | MAZENUM_LEGEND_SCORES | 103 |
 | MAZENUM_TREASURE_FIRST | 104 |
 | MAZENUM_TREASURE_LAST | 114 |
-| MAZENUM_SECRET | 115 |
+| MAZENUM_SECRET_1 | 115 |
+| MAZENUM_SECRET_2 | 116 |
+
+`show_level_start_screen` selects maze 115 for challenge codes 0x50–0x56 and
+maze 116 for codes 0x57–0x5D. Pointer entry 116 (`0x3FE48` after bank
+normalization) is therefore live maze data, not merely an end sentinel.
 
 ### 3.14 Maze Object IDs (tile types in `mob_link` bits 15-10)
 
