@@ -14,16 +14,9 @@ The AI was able to document ~170 functions across all the game subsystems, along
 
 ## Results
 
-The main work outputs are in ROM_COVERAGE.md, REPORT.md, FUNCTIONS_PLAN.md, and DETAILED_REPORT.md (and perhaps GAME_ROM_KNOWN.md, even though it shouldn't have been updating it, I need to doublecheck). Other files in the directory are information I provided ahead of time to the AI.
+The maintained reverse-engineering documentation is under [`doc/`](doc/INDEX.md). Start with [`doc/INDEX.md`](doc/INDEX.md), which links the hardware, OS, game-ROM, subsystem, data-reference, maze-catalog, function-index, and known-issues chapters.
 
-The main work output of the AI is [REPORT.md](REPORT.md), which has a running log of what it discovered for each phase of its disassembly work. This was later expanded into [DETAILED_REPORT.md](DETAILED_REPORT.md), which digs much deeper into individual subsystems, corrects some findings from the initial report, and documents things like the attract mode demo playback, MOB animation system, and monster movement dispatch in full detail.
-
-[FUNCTIONS_PLAN.md](FUNCTIONS_PLAN.md) tracks the analysis status of every function, including a shared registry of OS ROM API calls and common utility functions. All 28 top-level functions from the main loop were fully analyzed, plus dozens of shared helper functions.
-
-[ROM_COVERAGE.md](ROM_COVERAGE.md) identifies what parts of the ROM are still not fully understood -- gaps in the data tables, inline sub-functions, and other areas that could use further work.
-
-The radare2 project state is saved in [gauntlet.r2](gauntlet.r2) and [gauntlet_r2_database.txt](gauntlet_r2_database.txt).
-
+Machine-readable CSV artifacts and their Python generators are kept together under [`doc/generated/`](doc/generated/README.md). The supported radare2 loader is [`doc/gauntlet_loader.r2`](doc/gauntlet_loader.r2).
 
 ## Finally
 
