@@ -200,7 +200,7 @@
 
 | Address | Name | Description |
 |---------|------|-------------|
-| 0x42a66 | m2mainloop | game main loop entry point |
+| 0x42a66 | g2mainloop | game main loop entry point |
 | 0x44562 | main_attract | handle attract mode |
 | 0x457c0 | main_score_display | displays player scores |
 | 0x45c00 | main_open_doors | handle opening of doors |

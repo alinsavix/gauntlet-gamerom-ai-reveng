@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate and check the m2mainloop direct-call contract catalog."""
+"""Generate and check the g2mainloop direct-call contract catalog."""
 
 from __future__ import annotations
 

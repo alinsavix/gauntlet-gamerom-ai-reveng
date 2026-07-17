@@ -15,7 +15,7 @@ address,name,arguments,return,exceptional_convention,direct_control_sites,confid
 0x400F0,pf_replace_veneer,"uint16 packed_maze_slot, uint16 new_object_type",void,six-byte tail veneer to pf_replace; preserves the target's normal stack ABI,,Verified
 0x400F6,mob_clear_veneer,uint16 mob_slot,void,six-byte tail veneer to moblist_remove_and_clear; preserves the target's normal stack ABI,,Verified
 0x40140,game_exception_abort,D0.w = exception action (OS supplies zero),does not return,register-controlled exception entry: zero jumps to the watchdog-abort address; nonzero falls through to game_start,0x40024,Verified
-0x4014C,game_start,void,does not return,"OS reset entry through JMP veneer 0x40000; initializes palette/profile pointers, sets SR=0x2300, and tail-jumps to m2mainloop",0x40000,Verified
+0x4014C,game_start,void,does not return,"OS reset entry through JMP veneer 0x40000; initializes palette/profile pointers, sets SR=0x2300, and tail-jumps to g2mainloop",0x40000,Verified
 0x4017E,game_vblank,interrupt frame only,no value; exits with RTE,68010 interrupt entry through veneer 0x40006; saves/restores D0-D1/A0-A2; may take the watchdog-abort path or jump through the reset vector instead of returning,0x40006,Verified
 0x404A0,palette_power_warrior,"D0.w = cycle byte offset, A1 = source palette, A2 = destination palette",void,frameless pointer-table leaf; preserves registers,,Verified
 0x404AE,palette_hurt_warrior,"D0.w = cycle byte offset, A1 = source palette, A2 = destination palette",void,frameless pointer-table leaf; preserves registers,,Verified
@@ -25,7 +25,7 @@ address,name,arguments,return,exceptional_convention,direct_control_sites,confid
 0x404F8,palette_hurt_wizard,"D0.w = cycle byte offset, A1 = source palette, A2 = destination palette",void,frameless pointer-table leaf; preserves registers,,Verified
 0x4050C,palette_power_elf,"D0.w = cycle byte offset, A1 = source palette, A2 = destination palette",void,frameless pointer-table leaf; preserves registers,,Verified
 0x4051A,palette_hurt_elf,"D0.w = cycle byte offset, A1 = source palette, A2 = destination palette",void,frameless pointer-table leaf; preserves registers,,Verified
-0x42A66,m2mainloop,void,does not return,one-time init followed by infinite VBLANK-semaphore dispatch loop,0x40178,Verified
+0x42A66,g2mainloop,void,does not return,one-time init followed by infinite VBLANK-semaphore dispatch loop,0x40178,Verified
 0x42DC8,sound_system_reset,void,void,"normal stack; calls OS reset_sound_cpu(0,0), installs 180-frame grace, clears state/retries, and resets queue",0x43288,Verified
 0x4ADAE,sound_queue_reset,void,void,frameless leaf; fills all eight slots with 0xFF and zeroes byte head/tail indices,0x42DEA,Verified
 0x4ADD6,enqueue_sound,uint8 sound_id,void,normal-stack leaf; capacity is seven entries and a full queue silently drops the new byte,0x4ADA2,Verified

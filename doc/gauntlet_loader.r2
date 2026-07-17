@@ -267,7 +267,7 @@ af+ 0x4280e door_traverse_right
 af+ 0x428a4 door_traverse_left
 af+ 0x4293a door_traverse_up
 af+ 0x429d0 door_traverse_down
-af+ 0x42a66 m2mainloop
+af+ 0x42a66 g2mainloop
 af+ 0x42b6a coincheck
 af+ 0x42d0a sound_response
 af+ 0x42dc8 sound_system_reset
@@ -712,7 +712,7 @@ f door_traverse_right 1 0x0004280e
 f door_traverse_left 1 0x000428a4
 f door_traverse_up 1 0x0004293a
 f door_traverse_down 1 0x000429d0
-f m2mainloop 1 0x00042a66
+f g2mainloop 1 0x00042a66
 f coincheck 1 0x00042b6a
 f sound_response 1 0x00042d0a
 f sound_system_reset 1 0x00042dc8

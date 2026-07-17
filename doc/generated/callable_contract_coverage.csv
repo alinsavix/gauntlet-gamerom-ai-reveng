@@ -63,7 +63,7 @@ address,name,catalogs,confidence
 0x428A4,door_traverse_left,player_collision_contracts.csv,Verified
 0x4293A,door_traverse_up,player_collision_contracts.csv,Verified
 0x429D0,door_traverse_down,player_collision_contracts.csv,Verified
-0x42A66,m2mainloop,orchestration_sound_contracts.csv,Verified
+0x42A66,g2mainloop,orchestration_sound_contracts.csv,Verified
 0x42B6A,coincheck,main_loop_contracts.csv;score_coin_dialog_contracts.csv,Verified
 0x42D0A,sound_response,main_loop_contracts.csv,Verified
 0x42DC8,sound_system_reset,orchestration_sound_contracts.csv,Verified

@@ -1195,7 +1195,7 @@ fs *
 fs *
 'f door_traverse_down 1 0x000429d0
 fs *
-'f m2mainloop 1 0x00042a66
+'f g2mainloop 1 0x00042a66
 fs *
 'f coincheck 1 0x00042b6a
 fs *

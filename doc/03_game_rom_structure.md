@@ -119,7 +119,7 @@ runs every frame.
 
 ```mermaid
 flowchart TD
-    start["game_start → m2mainloop<br/>(0x42A66)"] --> once["one_time_init<br/>once before first frame"]
+    start["game_start → g2mainloop<br/>(0x42A66)"] --> once["one_time_init<br/>once before first frame"]
     once --> wait["Wait for VBLANK semaphore<br/>ram 0x904002 != 0"]
 
     irq["IRQ4 → game_vblank<br/>(0x4017E)"] -. once per field .-> publish["Set VBLANK semaphore"]
@@ -145,12 +145,12 @@ flowchart TD
     decay --> wait
 ```
 
-### 2.1 Verified Main Loop Call Sequence (`m2mainloop`, 0x42A66)
+### 2.1 Verified Main Loop Call Sequence (`g2mainloop`, 0x42A66)
 
 > **Correction from REPORT.md:** The main loop does NOT execute everything every frame. It has a two-level conditional structure.
 
 ```
-m2mainloop (0x42a66):
+g2mainloop (0x42a66):
     link a6, #-4
     a2 = #0x904002              ; → VBLANK semaphore
     jsr one_time_init (0x4327a) ; runs once before first VBLANK
@@ -221,7 +221,7 @@ The game's VBLANK handler implementation is at **`0x4017E`**, reached via the ju
 (0x4014C). That entry installs three initial playfield-color pointers at
 0x904036/3A/3E, installs forcefield delay profile 0 (ROM 0x571DA) at
 0x904042, writes SR=0x2300, and tail-jumps to the non-returning
-`m2mainloop`. The interrupt veneer at 0x40006 reaches `game_vblank`, which
+`g2mainloop`. The interrupt veneer at 0x40006 reaches `game_vblank`, which
 saves D0-D1/A0-A2 and exits with `RTE` unless it takes one of the separately
 documented abort/reset-vector paths.
 

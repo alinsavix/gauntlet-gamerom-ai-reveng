@@ -51,7 +51,7 @@ tails).
 **Confidence: Verified** for entry addresses, frame-loop membership, purposes,
 and the checked void/no-argument contracts below.
 
-**Callable-contract confidence: Verified.** `m2mainloop` names 29 direct
+**Callable-contract confidence: Verified.** `g2mainloop` names 29 direct
 callees: `one_time_init` once and 28 frame services. A whole-ROM direct-call
 scan finds 37 call sites to these entries; the only alternate callers are
 seven additional calls to `main_msgbox_countdown` and one to
@@ -63,7 +63,7 @@ They use the normal convention unless listed as an exception below.
 
 The non-normal control-transfer cases in this group are:
 
-- **Verified:** `m2mainloop` takes no arguments and never returns; it enters an
+- **Verified:** `g2mainloop` takes no arguments and never returns; it enters an
   infinite VBLANK-synchronized dispatch loop after `one_time_init`.
 - **Verified:** `game_vblank` is an interrupt entry, not a C-callable function.
   It saves and restores `D0-D1/A0-A2`, takes its inputs from hardware and
@@ -74,7 +74,7 @@ The non-normal control-transfer cases in this group are:
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x42A66 | `m2mainloop` | Main game loop entry point; VBLANK-synchronized frame dispatch |
+| 0x42A66 | `g2mainloop` | Main game loop entry point; VBLANK-synchronized frame dispatch |
 | 0x4017E | `game_vblank` | Game-ROM VBLANK interrupt handler: acknowledge watchdog/VBLANK, publish scroll registers, increment the semaphore, update palette effects/timers, and run the per-frame interrupt-side hooks before restoring registers |
 | 0x40528 | `main_cycle_tport_and_ffield` | Advance transporter and forcefield palette-cycle state |
 | 0x42B6A | `coincheck` | Per-frame coin/start input and player-credit handling |
@@ -135,9 +135,9 @@ slots remain data rather than callable entries.
 
 | Address | Name | Arguments | Return | Convention exception |
 |---|---|---|---|---|
-| 0x4014C | `game_start` | void | does not return | OS reset entry through veneer 0x40000; sets SR and tail-jumps to `m2mainloop` |
+| 0x4014C | `game_start` | void | does not return | OS reset entry through veneer 0x40000; sets SR and tail-jumps to `g2mainloop` |
 | 0x4017E | `game_vblank` | interrupt frame only | no value; `RTE` | Saves/restores D0-D1/A0-A2; may instead take abort/reset-vector paths |
-| 0x42A66 | `m2mainloop` | void | does not return | Infinite VBLANK-semaphore loop after one-time initialization |
+| 0x42A66 | `g2mainloop` | void | does not return | Infinite VBLANK-semaphore loop after one-time initialization |
 | 0x42DC8 | `sound_system_reset` | void | void | Calls OS `reset_sound_cpu(0,0)`, installs grace state, and resets the ring |
 | 0x4ADAE | `sound_queue_reset` | void | void | Frameless leaf; fills eight slots and clears byte indices |
 | 0x4ADD6 | `enqueue_sound` | `uint8 sound_id` | void | Seven-entry capacity; silently drops on full |

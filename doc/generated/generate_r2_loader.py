@@ -378,7 +378,7 @@ def runtime_check(root: Path, expected_function_count: int) -> None:
     command = [
         "r2", "-q", "-n", "-e", "scr.color=0",
         "-c", ". doc/gauntlet_loader.r2",
-        "-c", "e asm.arch; e asm.cpu; e asm.bits; e cfg.bigendian; oj; om; f~m2mainloop; aflc",
+        "-c", "e asm.arch; e asm.cpu; e asm.bits; e cfg.bigendian; oj; om; f~g2mainloop; aflc",
         "-c", "q", "malloc://1",
     ]
     result = subprocess.run(command, cwd=root, text=True, capture_output=True)
@@ -390,7 +390,7 @@ def runtime_check(root: Path, expected_function_count: int) -> None:
         )
     required = (
         "m68k", "68010", "32", "true", "row9.bin", "row10.bin",
-        "row76.bin", "m2mainloop", "r-x",
+        "row76.bin", "g2mainloop", "r-x",
     )
     missing = [item for item in required if item not in combined]
     if missing:
