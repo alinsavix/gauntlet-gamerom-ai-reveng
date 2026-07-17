@@ -1,4 +1,5 @@
 address,size_bytes,catalog_name,matching_flags,status,confidence
+0x4009C,9,game_copyright_morse_signature,game.copyright_morse_signature,exact_match,Verified
 0x405C0,8,"Forcefield color table (4 words, one per animation step)",forcefield_color_steps,exact_match,Verified
 0x405C8,16,palette_offset_by_walltype,palette_offset_by_walltype,exact_match,Verified
 0x405D8,16,palette_offset2_by_walltype,palette_offset2_by_walltype,exact_match,Verified

@@ -71,6 +71,40 @@ tail targets. IRQ1/IRQ2/IRQ3 deliberately self-jump and therefore become
 watchdog traps if those unexpected sources fire; IRQ6 tail-jumps through OS
 0x17E to the sound receive interrupt body, which exits with `RTE`.
 
+### 1.3 Copyright Morse Signature (`0x4009C–0x400A4`)
+
+The otherwise runtime-dead header area contains a nine-byte copyright
+signature at file offset `0x009C` (CPU address `0x4009C`):
+
+```text
+AE D6 8C 17 FB 90 6A 33 80
+```
+
+Treating the first 69 bits in CPU/MSB-first order as Morse symbols, with
+`0 = dot` and `1 = dash`, gives the following letter grouping:
+
+```text
+-.-. --- .--. -.-- .-. .. --. .... -
+.---- ----. ---.. -....
+.- - .- .-. ..
+--. .- -- . ...
+```
+
+This decodes to **`COPYRIGHT 1986 ATARI GAMES`**. Morse character and word
+separators are not stored; they are the grouping of the continuous bitstream.
+The signature consumes five high bits of the last byte, leaving its low three
+zero bits as byte-alignment padding. It is split byte-by-byte across the 7A
+and 7B physical ROM lanes and becomes contiguous in the reconstructed
+CPU-visible `row76.bin` image.
+
+**Confidence: Verified** for the bytes, address, bit order, and decoded text.
+No OS or game code references the range. Its purpose as a deliberate
+copyright/anti-copy code trap is **Strong inference**, consistent with Atari's
+known practice of embedding ownership statements directly in ROM bits rather
+than displaying or executing them. The earlier Centipede implementation is
+described, including its affidavit's Morse decoding, in
+[Atari Centipede's Hidden Code Trap](https://arcadeblogger.com/2019/06/29/atari-centipedes-hidden-code-trap/).
+
 ---
 
 ## 2. Main Loop Structure
@@ -376,7 +410,7 @@ control-target, detailed byte-range, and RAM-operand reports.
 - **Verified:** `generated/rom_byte_coverage.csv` classifies every byte in both mixed
   code/data regions as analyzed instructions or a named ROM range;
   `generated/rom_catalog_reconciliation.csv` gives every §5 row an exact matching flag,
-  `generated/rom_flag_reconciliation.csv` gives all 351 non-code ROM flags an exact §5
+  `generated/rom_flag_reconciliation.csv` gives all 352 non-code ROM flags an exact §5
   or header-table row, and `generated/rom_range_overlaps.csv` records the 21 intentional
   nested/alternate table views. No mixed-region byte or analysis failure
   remains unclassified.
@@ -409,7 +443,7 @@ The original build-time intent of unreachable residue remains **Unknown** and
 is unresolvable from the supplied runtime artifacts; this does not leave its
 ROM range, runtime status, or contents unaccounted.
 
-The four unknowns formerly listed here (dragon path table format, dialog tip boundaries, tile pattern → descriptor mapping, EEPROM bits 5–7/13) have all been resolved by disassembly — see `05_data_reference.md` (data formats, §3.19 bytecodes, §5 ROM tables) and `04_game_subsystems.md` (§8 dragon, §30 shot resolution). The dragon path table turned out to be 5×16 bytes at 0x5D578, with the rest of its formerly claimed 2 KB being playfield palettes and contest strings.
+The four unknowns formerly listed here (dragon path table format, dialog tip boundaries, tile pattern → descriptor mapping, EEPROM bits 5–7/13) have all been resolved by disassembly — see `05_data_reference.md` (data formats, §3.19 bytecodes, §5 ROM tables) and `04_game_subsystems.md` (§8 dragon, §26 shot resolution). The dragon path table turned out to be 5×16 bytes at 0x5D578, with the rest of its formerly claimed 2 KB being playfield palettes and contest strings.
 
 Pointerless blocks are classified as runtime-dead ROM residue rather than unknown live tables. The two large blocks are 0x57BD8–0x57EB9 and 0x5C8B0–0x5CAA7; the completeness pass also isolated the smaller dead blocks at 0x571D8–0x571D9, 0x57332–0x5733F, 0x57358–0x5735F, and 0x5870C–0x58749. Whole-ROM encoded-pointer searches, xrefs, exact-range immediate searches, and surrounding-page immediate searches found no consumer. Their original editor/build-time purpose is not recoverable from runtime code, so apparent geometric layouts are not assigned semantics; `05_data_reference.md` records exact contents and boundaries. The adjacent 0x571DA–0x571F9 bytes are **Verified** live forcefield cycle-delay profiles and are not part of this residue.
 

@@ -192,8 +192,8 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   pointers, headers, and record boundaries against `generated/maze_catalog.csv`.
 - **Verified:** the fine ROM-byte audit now classifies every byte in the mixed
   regions 0x40000–0x5561F and 0x56E54–0x5FFB1 as analyzed code or a named ROM
-  range. `generated/rom_catalog_reconciliation.csv` gives all 328 parsed §5 rows an
-  exact project-flag match, and `generated/rom_flag_reconciliation.csv` gives all 351
+  range. `generated/rom_catalog_reconciliation.csv` gives all 329 parsed §5 rows an
+  exact project-flag match, and `generated/rom_flag_reconciliation.csv` gives all 352
   non-code ROM flags an exact §5 or header-table row;
   `generated/rom_range_overlaps.csv` records 21 intentional
   nested/alternate views; there are zero unknown segments, suspicious

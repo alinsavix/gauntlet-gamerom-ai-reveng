@@ -227,7 +227,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904A4E | 2 B | `global_ui_delay_timer` | Shared display/input holdoff timer. Level setup loads 150/180/600 frames and `main_start_game` waits for zero before entering the maze; secret-name entry and related UI code reuse it for cursor/input pacing. While nonzero it also suppresses treasure countdown processing. |
 | 0x904A50 | 1 B × 4 | `player_treascount` | Count of treasures picked up by player |
 | 0x904A54 | 2 B × 4 | `player_stundelay` | Timer for player being stunned |
-| 0x904A5C | 2 B | `death_hits` | Number of times Death has been hit/shot |
+| 0x904A5C | 2 B | `death_hits` | Global hit count shared by all players and Death MOBs. Every player shot that hits Death, ordinary or supershot, increments it; `death_potion_score` uses `death_hits & 7` to select the score and popup variant. It is distinct from the four per-player Death-damage accumulators at 0x904B3A and does not control Death's >200 dismissal threshold. |
 | 0x904A5E | 2 B | `unused_init_word_904a5e` | Write-only in the program ROM: `one_time_init` clears this word, and no reader or other writer exists. It is retained here so the initialized RAM location is not mistaken for an unidentified live state variable. |
 | 0x904A62 | 2 B | `monster_cull_h_origin` | Horizontal origin for monster visibility/culling, computed as `(pf_hscroll - 0x17) << 7` |
 | 0x904A64 | 2 B | `monster_cull_v_origin` | Vertical origin for monster visibility/culling, computed as `(0xF9 - pf_vscroll_lo) << 7` |
@@ -271,7 +271,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904B1A | 4 B × 4 | `player_scorepercoin` | **Verified:** per-player unsigned 32-bit score divided by the player's 16-bit inserted-coin count through `calc_score_per_coin`; this is the metric passed to OS `rank_high_score` (0x1C6), not merely an attract-display cache |
 | 0x904B2A | 2 B × 4 | `player_coincount` | Per-player number of coins inserted |
 | 0x904B32 | 2 B × 4 | `player_onlevel` | Per-player what level player is on |
-| 0x904B3A | 2 B × 4 | `player_death_damage_counter` | Per-player Death-damage accumulator used by `death_damage_accumulate`; a total greater than 200 clears the counter and dismisses the supplied Death MOB with a transporter-cycle effect. Both Death contact and supershot paths add to it. |
+| 0x904B3A | 2 B × 4 | `player_death_damage_counter` | Per-player Death-damage accumulator used by `death_damage_accumulate`. Death contact adds 4 normally or 3 when `player_powers` byte 1 bit 1 is set; a supershot adds 25, while an ordinary shot does not add to this counter. A total strictly greater than 200 clears the counter and dismisses the supplied Death MOB with a transporter-cycle effect. The value can span Death MOBs within one level, but successful `player_start_inner` placement clears it on normal level entry or player join. |
 | 0x904B42 | 2 B × 4 | `death_touch_timer` | Per-player cooldown/state for contact with Death |
 | 0x904B4A | 2 B × 4 | `ff_hurt_timer` | Per-player forcefield-contact hurt/sound cooldown |
 
@@ -352,7 +352,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x905F50 | 2 B × 4 | `invis_timer` | Per-player invisibility countdown |
 | 0x905F58 | 2 B × 4 | `debounce_shift_a` | Per-player bit-0 joystick debounce shift register |
 | 0x905F60 | 2 B × 4 | `debounce_shift_b` | Per-player bit-1 joystick debounce shift register |
-| 0x905F68 | 1 B × 4 | `player_supershot` | Per-player supershot state (POWER_SUPERSHOT pickup): while > 0, shots do 3 damage to monsters (10 to players), pierce through monsters (except Death/IT), hit blinking sorcerers, break treasure/invulnerable items, and damage Death via `death_damage_accumulate` |
+| 0x905F68 | 1 B × 4 | `player_supershot` | Per-player supershot state (POWER_SUPERSHOT pickup): while > 0, shots do 3 damage to ordinary monsters (10 to players), pierce through monsters (except Death/IT), hit blinking sorcerers, and break treasure/invulnerable items. Death is a special case: a supershot adds a fixed 25 to the shooting player's `player_death_damage_counter` via `death_damage_accumulate`. |
 | 0x905F6D | 1 B | `secret_saved_supershot` | Single-byte secret-room transition scratch. `main_start_game` saves the selected secret entrant's supershot byte here before clearing the ordinary per-player value; `show_level_end_bonus_screen` adds it back to that player on return. The former continue-screen interpretation was contradicted. |
 | 0x905F80 | 2 B × 64 | `priority_bucket_heads` | Complete cumulative head table for the one depth/priority chain, exact range 0x905F80–0x905FFF. Insertion/removal updates entries from the selected band toward element 0; `main_move_monsters` uses element 0 as its fallback head. |
 | 0x905F82 | 2 B × 63 overlapping tail view | `priority_bucket_heads_tail` | Elements 1–63 of `priority_bucket_heads`. Scroll-indexed traversal addresses this tail base; the former 64-element size extended two bytes past the documented RAM window and was contradicted. |
@@ -883,9 +883,9 @@ generated as [`generated/rom_byte_coverage.csv`](generated/rom_byte_coverage.csv
 
 **Confidence: Verified.** Fresh analysis of all 321 indexed entries plus 80
 computed-dispatch destinations accounts for every byte of the two mixed
-code/data regions as an instruction byte or named ROM range. All 328 parsed §5
+code/data regions as an instruction byte or named ROM range. All 329 parsed §5
 rows have exact address/size matches in `gauntlet.r2`, while the reverse report
-gives all 351 non-code ROM flags an exact §5 or game-header row. The overlap
+gives all 352 non-code ROM flags an exact §5 or game-header row. The overlap
 report classifies 21 deliberate nested/alternate views and contains no
 code/data collision. `generated/rom_byte_coverage_failures.csv` is empty.
 
@@ -913,6 +913,7 @@ For ROM data, every catalog start has a matching project flag, and adjacent stru
 
 | Address | Size | Content |
 |---------|------|---------|
+| 0x4009C | 9 B | `game_copyright_morse_signature` — bytes `AE D6 8C 17 FB 90 6A 33 80`; the first 69 MSB-first bits, interpreted as `0 = Morse dot` and `1 = Morse dash`, decode to `COPYRIGHT 1986 ATARI GAMES`. The final three zero bits are byte-alignment padding. The range has no runtime xref or consumer; its anti-copy/code-trap purpose is Strong inference, while the bytes and decoded text are Verified. See §1.3 of the game-ROM structure chapter. |
 | 0x405C0 | 8 B | Forcefield color table (4 words, one per animation step) |
 | 0x405C8 | 16 B | `palette_offset_by_walltype` — 16 one-byte playfield palette offsets indexed by wall pattern; exact range 0x405C8–0x405D7 |
 | 0x405D8 | 16 B | `palette_offset2_by_walltype` — second 16-byte wall-pattern palette-offset table; exact range 0x405D8–0x405E7 |

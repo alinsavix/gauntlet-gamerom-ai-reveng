@@ -184,12 +184,19 @@ that value to the player score.
 damage)` adds the low damage word to that player's counter at 0x904B3A. When
 the total becomes greater than 200, it clears the counter, starts a
 transporter-cycle effect on the supplied Death slot, and removes that MOB.
-Both the monster/player contact path and the supershot hit path feed this
-counter; there is no all-monster or player AOE loop in either helper.
+The monster/player contact path adds 4 normally or 3 when `player_powers` byte
+1 bit 1 is set; a player supershot adds a fixed 25. Thus eight supershots leave
+the counter at 200 and the ninth dismisses Death. Ordinary shots increment the
+separate global `death_hits` word but do not add to this counter. The counter
+belongs to the player rather than a Death MOB, so it can accumulate across
+multiple Death MOBs within one level. Successful `player_start_inner`
+placement clears it; `main_start_game` uses that path for active players on a
+normal level transition, and `player_join` uses it for a mid-level join. There
+is no all-monster or player AOE loop in either helper.
 
 ### 3.7 Player Hit (`monster_playerhit`, 0x495A6)
 
-Called when a monster occupies the same tile as a player. Applies monster-type damage from `shothit_dist` tables to player health, checks player invincibility flags, and triggers hurt/low-health audio as appropriate.
+Called from monster/player collision dispatch when a monster overlaps a player. It selects contact damage from the 64-word `monster_contact_damage_table` at 0x57A2E, using the contact class and player character and selecting the powered-player half when applicable. It then applies the type-specific collision behavior, including invincibility checks and hurt/low-health audio where appropriate. The `shothit_dist_H/V` words at 0x904028/0x90402A are collision-distance scratch values used by shot and MOB probes; they are not damage tables.
 
 ### 3.8 Monster / Combat Calling Contracts
 
@@ -471,6 +478,58 @@ Demo input streams are stored at ROM 0x5818C+. Format: 2-byte entries.
 | 0xFE | packed | End-of-sequence / player switch: hi nibble=direction, lo nibble=player slot. Resets pointer to initial value from ROM table at 0x58098. |
 
 The demo data pointer for each player is at `0x904B66[player × 4]` (longword). The frame timer is at `0x904B76[player]` (byte).
+
+The second byte is an active-low joystick value for normal input records:
+
+| Bit | Function | 0 = Pressed |
+|-----|----------|-------------|
+| 7 | UP | Moving up |
+| 6 | DOWN | Moving down |
+| 5 | LEFT | Moving left |
+| 4 | RIGHT | Moving right |
+| 3 | (spare) | Not connected |
+| 2 | (spare) | Not connected |
+| 1 | FIRE | Attacking |
+| 0 | MAGIC | Using potion |
+
+For example, `0xB3` presses DOWN; `0xF3` supplies no input.
+
+| Player | ROM Address | Exact size | Notes |
+|--------|-------------|------------|-------|
+| Player 0 | 0x5818C | 56 B | 28 command pairs; not active in the standard demo |
+| Player 1 | 0x581C4 | 150 B | 75 command pairs; active Elf stream in the standard demo |
+| Player 2 | 0x5825A | 2 B | One minimal command pair |
+| Player 3 | 0x5825C | 48 B | 24 command pairs through 0x5828B |
+
+The initial pointer table is at ROM 0x58098 (four longwords).
+
+### 6.3 Demo Setup (`attract_demo_init`, 0x449D4)
+
+When transitioning to DEMO mode, the routine hides the maze, rebuilds the
+information panel, clears dialog flags, loads maze 102, and runs new-level
+setup. It selects player 1 as the Elf, joins that player, installs pointer
+0x581C4 and its first timer byte, and clears the pointers and timers for
+players 0, 2, and 3.
+
+### 6.4 Attract-Mode Interruption
+
+During attract mode, the game checks raw joystick ports 0x904922 and 0x904924
+(players 2 and 3). With paid pricing it tests FIRE+MAGIC (`0x03`); in free
+play it tests FIRE only (`0x02`). A qualifying input plus START calls
+`start_attract_to_game` (0x44204).
+
+The input thresholds are exactly 60 frames below each screen's loaded timer,
+creating a one-second input lockout rather than changing screen duration:
+
+| Mode | Threshold | Loaded timer |
+|------|-----------|--------------|
+| SCORES (0xFFFF) | 0x21C | 0x258 |
+| TITLE (0xFFFE) | 0x5A1 | 0x5DD |
+| DEMO (0xFFFD) | 0x1BE4 | 0x1C20 |
+| LEGEND (0xFFFC) | 0x21C | 0x258 |
+
+LEGEND has multiple sub-screens tracked by `attract_legend` (0x90491A),
+initially 2 and counting down.
 
 ---
 
@@ -773,15 +832,41 @@ and game bodies.
 
 ### 11.2 Sound Dispatch (`main_update_sound`, 0x4AE20)
 
-Dequeues sound IDs from the ring buffer and sends them to the sound CPU via OS `send_sound_command` (0x172). Processes the sound queue every frame.
+Called every frame. It skips work during frame overflow or while speech is in
+progress. Otherwise it drains up to eight entries, stopping when the ring is
+empty or OS `try_send_sound_command` (0x242) reports busy. Each accepted byte
+is replaced with 0xFF, the read head advances modulo eight, and a short delay
+separates commands.
 
-### 11.3 Speech (`sound_speech_play`, 0x4AD4E)
+The physical ring has eight byte slots but reserves one state to distinguish
+full from empty, so usable capacity is seven. A full ring drops the new byte
+without moving either index. `sound_queue_reset` fills all eight slots with
+0xFF and zeroes both indices.
+
+### 11.3 Sound Responses and Recovery (`sound_response`, 0x42D0A)
+
+Called every frame. It polls OS 0x178; no response is reported as 0xFFFF. A
+0xFF response while `speech_counter` (0x9049EE) is nonzero marks speech
+complete; other unexpected responses invoke `sound_system_reset`.
+
+When idle, nonzero low bits in `sound_queue_state` (0x9049F0) force a reset.
+Otherwise it advances the speech and idle timer (0x9049F2), then sends ping
+command 0x07 through OS 0x172 after the idle timer expires. A successful ping
+reloads the timer to 240 frames and clears retry count 0x9049F4. After 180
+failed retries it performs a full reset. `sound_system_reset` calls OS 0x254,
+gives the sound CPU a 180-frame grace period, clears queue/retry state, and
+resets the ring.
+
+### 11.4 Speech (`sound_speech_play`, 0x4AD4E)
 
 **Confidence: Verified.** `sound_speech_play(uint8 sound_id) -> void` calls
 `sound_play` only when bit 11 of `game_settings` (`0x904A24`) is clear. Used
 for speech samples that should be silenced by the "Disable Speech" setting.
 
-### 11.4 Known Sound IDs
+### 11.5 Sound IDs Used by the Main Loop
+
+**Confidence: Verified** for command values and ROM call sites. Human-readable
+descriptions inherit the supplied `generated/soundcmds.csv` labels.
 
 | ID | Sound |
 |----|-------|
@@ -794,9 +879,16 @@ for speech samples that should be silenced by the "Disable Speech" setting.
 | 0x18–0x1B | Heartbeat (low health, by player index) |
 | 0x1C | Message appears on screen |
 | 0x1D | Potion use |
+| 0x20 | Death Touches Player (start loop) |
+| 0x21 | Death Silencer (stop loop) |
 | 0x26 | Treasure pickup |
 | 0x27 | Trap/walls turn to exits |
 | 0x28 | Teleport |
+| 0x29 | Super-thief spawn |
+| 0x2B | Cyclic Walls |
+| 0x2D | Normal thief spawn |
+| 0x2E | Player Touches Force Field (start loop) |
+| 0x2F | Force Field Silencer (stop loop) |
 | 0x31 | Exit moving |
 | 0x35 | IT sound |
 | 0x3B | Gauntlet II Theme Song (secret room theme) |
@@ -925,7 +1017,21 @@ services in A2/A3 for its many calls.
 
 ### 14.2 Score Display (`main_score_display`, 0x457C0)
 
-Displays all active player scores via OS `display_decimal_value` (0x260). Called every frame.
+Called every frame, but skips TITLE (0xFFFE) and SCORES (0xFFFF). It selects
+one player per frame using `frame_counter & 3` and redraws only fields whose
+update conditions require it:
+
+- Score redraw requires bit 2 of 0x904007 and update bit 0, then uses
+  `draw_player_score` (0x45940) to render the seven-digit `player_score` at
+  0x904990 through OS `display_decimal_value` (0x260), with the flash
+  attribute from table 0x57350. It clears update bit 0 afterward.
+- Health redraw uses update bit 1 or health below 0xC8 and
+  `draw_player_health` (0x459A2). It renders the bonus multiplier when greater
+  than one and the five-digit health value at 0x904980. During the dim half of
+  a low-health pulse it shifts the palette by −0x1000; acid-slowed players use
+  −0x2000. It clears update bit 1 afterward.
+- `player_it_label_set` (0x45866) draws and announces the IT label, but its
+  caller owns the tracked IT state.
 
 ### 14.3 Logo Color Cycling (`main_logo_updcolors`, 0x4DCBA)
 
@@ -1098,44 +1204,7 @@ Maze setup establishes these bounds while scanning `mob_link`: object type `0x06
 
 ---
 
-## 20. Sound CPU Communication
-
-**Confidence: Verified** for latch addresses, queue capacity, response state,
-and OS API polarity.
-
-### 20.1 `sound_response` (0x42D0A) — Poll and Handle Sound CPU Responses
-
-Called every frame. Polls OS `0x178` (read sound CPU response). Returns 0xFFFF if no data.
-
-**Response dispatch:**
-- If speech counter (`0x9049EE`) non-zero AND response = 0xFF: clears counter (speech finished)
-- Otherwise: calls `sound_system_reset` to re-sync
-
-**Idle processing:** If `sound_queue_state` (`0x9049F0`) low 3 bits non-zero: reset. Otherwise decrements speech counter. When counter reaches zero: decrements idle timer `0x9049F2`. When timer goes negative:
-1. Sends OS `0x172` ping command (0x07) to sound CPU
-2. If response: reset idle timer to 0xF0 (240 frames), clear retry counter `0x9049F4`
-3. If no response: increment retry counter. After 0xB4 (180) retries: call `sound_system_reset` (full reset after ~3 seconds of no response)
-
-### 20.2 `main_update_sound` (0x4AE20) — Drain Sound Queue
-
-Called every frame. Skips if frame_overflow is set or speech is in progress (`0x9049EE ≠ 0`).
-
-**Ring buffer drain:** Loops up to 8 times: compare read-head (`0x904054`) vs write-head (`0x904053`). If equal: buffer empty. Otherwise: read sound ID byte from `0x90404B[read_head]`, call OS `try_send_sound_command` (0x242). If hardware busy (returns 0): exit (retry next frame). If accepted: write 0xFF to slot, advance read-head = `(read_head + 1) & 7`. Executes a brief busy-wait (5 iterations) between commands to give sound CPU time to process.
-
-**Confidence: Verified.** The physical ring has eight byte slots but reserves
-one slot to distinguish full from empty, so usable capacity is seven.
-`enqueue_sound(uint8 sound_id)` computes `(head-tail)&7`; when that equals 7
-it silently drops the new byte and leaves both indices unchanged. Otherwise
-it writes at `head` and advances `head=(head+1)&7`. `sound_queue_reset()`
-fills all eight bytes with 0xFF and zeroes the byte head/tail indices.
-
-### 20.3 `sound_system_reset` (0x42DC8)
-
-Full reset: calls OS `0x254` (hardware reset), sets speech counter `0x9049EE` to 0xB4 (180 frames grace period), clears queue state and retry counter, calls `sound_queue_reset` (0x4ADAE) which fills ring buffer with 0xFF and zeros read/write heads.
-
----
-
-## 21. EEPROM Persistence (`eeprom_timer`, 0x431EE)
+## 20. EEPROM Persistence (`eeprom_timer`, 0x431EE)
 
 **Confidence: Verified** for timer value, comparison set, write buffer, and OS
 calls.
@@ -1157,7 +1226,7 @@ Called every frame. Uses a countdown timer to write game settings to EEPROM appr
 
 If ALL match: no write. If ANY differ: calls `eeprom_write` (0x43192) to copy all 6 values to write buffer at `0x904B8E` and flush via OS 0x24E.
 
-### 21.1 Operator Options Hook
+### 20.1 Operator Options Hook
 
 **Confidence: Verified.** The OS calls the game header veneer at 0x40048,
 which tail-jumps to `game_options_display` (0x5317C). That body passes the
@@ -1167,7 +1236,7 @@ per coin, coins to start, secret codes, speech, and reduced-text settings.
 
 ---
 
-## 22. Forcefield and Death Sound Timers (`main_handle_death`, 0x4664C)
+## 21. Forcefield and Death Sound Timers (`main_handle_death`, 0x4664C)
 
 **Confidence: Verified** for timer state and emitted command IDs.
 
@@ -1181,109 +1250,7 @@ Pattern: game code sets these to negative values (e.g. −30) when damage starts
 
 ---
 
-## 23. Main Loop Sound IDs (Complete List)
-
-**Confidence: Verified** for command values and ROM call sites. Human-readable
-sound descriptions inherit the supplied `generated/soundcmds.csv` labels.
-
-| ID | Sound |
-|----|-------|
-| 0x01 | Silence |
-| 0x02 | "Noisy" (level start ambience) |
-| 0x09–0x0C | Player join sounds (by player index) |
-| 0x0D | Food pickup |
-| 0x0E–0x11 | Level exit sounds |
-| 0x13 | Key pickup |
-| 0x18–0x1B | Heartbeat (low health, by player index) |
-| 0x1C | Message appears on screen |
-| 0x1D | Potion use |
-| 0x20 | Death Touches Player (start loop) |
-| 0x21 | Death Silencer (stop loop) |
-| 0x26 | Treasure pickup |
-| 0x27 | Trap/walls turn to exits |
-| 0x28 | Teleport |
-| 0x29 | Super-thief spawn |
-| 0x2B | Cyclic Walls |
-| 0x2D | Normal thief spawn |
-| 0x2E | Player Touches Force Field (start loop) |
-| 0x2F | Force Field Silencer (stop loop) |
-| 0x31 | Exit moving |
-| 0x35 | IT sound |
-| 0x3B | Gauntlet II Theme Song (secret room theme) |
-| 0x3C | Music fade-out |
-| 0x44 | No potion |
-| 0x62–0x65 | Thief speech (by player index) |
-| 0xBD–0xCC | Character announcement speech ("RED WARRIOR" through "GREEN ELF") |
-
----
-
-## 24. Demo Data Detailed Format
-
-**Confidence: Verified** for pointer boundaries, command bytes, player-switch
-semantics, and the four stored streams.
-
-### 24.1 Joystick Byte Encoding (Active-Low)
-
-| Bit | Function | 0 = Pressed |
-|-----|----------|-------------|
-| 7 | UP | Moving up |
-| 6 | DOWN | Moving down |
-| 5 | LEFT | Moving left |
-| 4 | RIGHT | Moving right |
-| 3 | (spare) | Not connected |
-| 2 | (spare) | Not connected |
-| 1 | FIRE | Attacking |
-| 0 | MAGIC | Using potion |
-
-Example: `0xB3` = 1011_0011 → DOWN pressed (bit 6=0), all others released.  
-Example: `0xF3` = 1111_0011 → No input. Player stands idle.
-
-### 24.2 Demo Data Stream Addresses
-
-| Player | ROM Address | Size | Notes |
-|--------|------------|------|-------|
-| Player 0 | 0x5818C | ~86 B | Available but not active in standard demo |
-| Player 1 | 0x581C4 | ~150 B | **Active in standard demo** (Elf character) |
-| Player 2 | 0x5825A | ~2 B | Minimal / end-of-stream only |
-| Player 3 | 0x5825C | 48 B | Final 24 command pairs through 0x5828B |
-
-Initial pointer table at ROM `0x58098` (4 longwords).
-
-### 24.3 Demo Mode Setup (`demo_setup`, 0x449D4)
-
-When transitioning to DEMO mode:
-1. Calls `maze_hide` to blank screen
-2. Calls `setup_infopanel` with arg −1
-3. Clears dialog flags
-4. Loads maze 102 (MAZENUM_DEMO) via `0x40D24`
-5. Calls `maze_new_level_setup`
-6. Sets `player_character[1] = 3` (Elf) and calls `player_join(1)`
-7. Initializes demo data pointer for player 1: `demo_pointer[1] = 0x581C4`
-8. Loads first timer byte from demo data: `demo_timer[1] = byte at 0x581C4`
-9. Clears demo pointers/timers for players 0, 2, 3
-
-### 24.4 Attract Mode Interruption
-
-During attract, code checks raw joystick ports `0x904922` and `0x904924` (players 2 and 3) for button presses:
-- If `game_pricing_config (0x9049E2)` non-zero: check FIRE+MAGIC bits (0x03)
-- If zero (free play): check FIRE bit only (0x02)
-
-When detected + start button pressed: calls `game_new_setup` (0x44204) to begin new game.
-
-Attract-mode input-acceptance thresholds (**not** screen durations): `main_attract` compares the countdown against values exactly 60 below the loaded timers. This creates a one-second input lockout at the start of each screen. **Confidence: Verified.**
-
-| Mode | Comparison threshold | Meaning |
-|------|-------------------|----------|
-| SCORES (0xFFFF) | 0x21C (540) | Accept input after the loaded 0x258 timer has counted down by 60 |
-| TITLE (0xFFFE) | 0x5A1 (1441) | Accept input after the loaded 0x5DD timer has counted down by 60 |
-| DEMO (0xFFFD) | 0x1BE4 (7140) | Accept input after the loaded 0x1C20 timer has counted down by 60 |
-| LEGEND (0xFFFC) | 0x21C (540) | Same one-second lockout for each 0x258 sub-screen |
-
-LEGEND mode has multiple sub-screens tracked by `attract_legend` (`0x90491A`), initially set to 2 and counting down.
-
----
-
-## 25. Character Selection (`character_select_input_update`, 0x42DF4)
+## 22. Character Selection (`character_select_input_update`, 0x42DF4)
 
 **Confidence: Verified** for input gates, state transitions, and player setup
 calls.
@@ -1299,7 +1266,7 @@ The routine does not search for an unused character and there is no separate
 
 ---
 
-## 26. Slot vs. Pixel Position Abstraction
+## 23. Slot vs. Pixel Position Abstraction
 
 **Confidence: Verified** for bit layouts, coordinate conversion, playfield
 mapping, path-grid semantics, and MOB-creation stack layout.
@@ -1325,7 +1292,7 @@ flowchart TD
     slot --> object["For dynamic maze objects,<br/>the same slot selects MOB ID 30–1023"]
 ```
 
-### 26.1 Slot Positions (Maze Grid Coordinates)
+### 23.1 Slot Positions (Maze Grid Coordinates)
 
 The maze is a 32×32 tile grid. A **slot index** is:
 
@@ -1336,7 +1303,7 @@ encoded_pos = (row << 5) | column  (bits 9-5 = row, bits 4-0 = column)
 
 Used by `calc_direction` (0x510FC) and position comparison functions. The slot index directly corresponds to a MOB ID in the dynamic range.
 
-### 26.2 Pixel Positions (Playfield Coordinates)
+### 23.2 Pixel Positions (Playfield Coordinates)
 
 MOBs are positioned in pixel coordinates on the 512×512 playfield:
 ```
@@ -1346,14 +1313,14 @@ pixel_y = row × 16       (stored in mob_vpos bits 15-6)
 
 Values are pre-shifted left by 6 bits in VRAM (with size/palette in lower bits).
 
-### 26.3 Playfield RAM Mapping
+### 23.3 Playfield RAM Mapping
 
 The playfield RAM (0x900000) uses a 64×64 tile grid of 8×8 pixel tiles, stored column-first. Each maze tile (16×16 pixels) maps to a 2×2 block:
 ```
 pf_offset = (col × 2) × 64 + (row × 2)   ; top-left 8×8 tile
 ```
 
-### 26.4 Movement, path-grid, and door records
+### 23.4 Movement, path-grid, and door records
 
 **Confidence: Verified.** `tile_occupancy_test(candidate_packed_slot)` accepts
 only slots strictly greater than 0x20 and below 0x400. The candidate picture
@@ -1379,7 +1346,7 @@ only the immediate above/below or left/right cells, append at most two
 endpoints, and return the next endpoint index. Vertical direction codes are
 0/2 and horizontal codes are 3/1.
 
-### 26.5 `mob_create` Argument Layout (0x5DC58)
+### 23.5 `mob_create` Argument Layout (0x5DC58)
 
 | Stack Offset | Argument | Description |
 |-------------|----------|-------------|
@@ -1392,7 +1359,7 @@ endpoints, and return the next endpoint index. Vertical direction codes are
 
 ---
 
-## 27. MOB Linked List Details
+## 24. MOB Linked List Details
 
 **Confidence: Verified.** MOBs form one doubly linked depth/priority chain:
 `mob_link` bits 9–0 hold the next slot and `mob_state_link` bits 9–0 hold the
@@ -1450,34 +1417,28 @@ The removal APIs intentionally differ:
 
 ---
 
-## 28. Score Update System (`main_score_update`, 0x4715E)
+## 25. Score Update System (`main_score_update`, 0x4715E)
 
-**Confidence: Verified** for loop partitions, update bits, and score/health
-render calls.
+**Confidence: Verified** for loop partitions, timers, and effect transitions.
 
 Three loops per frame:
 
-**Loop 1 (generator timers):** Decrements spawn timers at `0x90493A[d4*2]`. When zero, clears the picture for physical animation slot `d4+0x11` and removes its depth entry via `mob_depth_remove(d4+0x10)`.
+**Loop 1 (temporary popup timers):** Decrements timers at `0x90493A[d4*2]`. When zero, clears the picture for physical animation slot `d4+0x11` and removes its depth entry via `mob_depth_remove(d4+0x10)`.
 
-**Loop 1b (score star, player 0 only):** Animates score-star MOB at `0x902000[0x3A]`. Frame milestones: d3=5 (save thief, kill via `mob_unlink`), d3=0xB (spawn new thief via 0x47CFE), d3=0x10 (restore), d3≥0x17 (cleanup).
+**Loop 1b (shared thief/effect transition):** Animates the shared effect MOB at `0x902000[0x3A]`. At counter 5 it saves and unlinks the thief; at 0x0B it creates the temporary effect through 0x47CFE; at 0x10 it restores the thief; and at 0x17 or later it cleans up.
 
-**Loop 2 (per-player score animations):** Same milestone structure, using teleport-related MOB slots via 0x50616/0x50662/0x50B88 for phases.
+**Loop 2 (per-player transitions):** Uses the same milestone structure for per-player transporter/transition MOBs through helpers 0x50616, 0x50662, and 0x50B88.
 
-**Loop 3 (MOB animations):** Iterates entity MOB slots (0xD+), updates the four `mob_effect_anim_counter` bytes at `0x90497C`, and selects tiles from tables at 0x576B6/0x576D2/0x576DA based on value ranges. The sub-function at 0x474F6 manages all 12 active MOB positions, advancing sub-pixel accumulators from velocity tables.
+**Loop 3 (effect MOB animations):** Updates the four `mob_effect_anim_counter` bytes at `0x90497C` and selects pictures from tables at 0x576B6, 0x576D2, and 0x576DA according to each counter's range.
+
+Projectile movement is separate: `main_handle_shots` (0x474F6) is an
+independent top-level main-loop call, not a `main_score_update` sub-function.
+It processes the 12 projectile slots and advances their class-specific motion,
+animation/lifetime, collision, and removal state.
 
 ---
 
-## 29. Score Display HUD (`main_score_display`, 0x457C0)
-
-**Confidence: Verified** for redraw gates, text fields, and palette effects.
-
-Skips in TITLE (0xFFFE) or SCORES (0xFFFF) modes. Selects one player per frame using `frame_counter & 3`. Per selected player:
-
-- Bit 2 of `0x904007` AND bit 0 of update flags → calls `draw_player_score` (0x45940): draws the player's 7-digit score (`player_score` 0x904990) via OS `display_decimal_value` (0x260) with the flash attribute from table 0x57350; clears redraw bit 0
-- Bit 1 of update flags OR health < 0xC8 → calls `draw_player_health` (0x459A2): draws the bonus multiplier "×N" (when `player_bonusmult` > 1) and the 5-digit health value (`player_health` 0x904980, longword) at column 0x25; palette shifted −0x1000 during the dim half of the low-health pulse (`player_state_timer` 0x904A26 low nibble < 8, excluding the 0xFFFF sentinel) or −0x2000 when acid-slowed (`0x905F40`); clears redraw bit 1
-- *(Correction: 0x45866 is `player_it_label_set` — it draws and announces the "IT" label, but its caller owns the tracked IT state; see §4.5.)*
-
-## 30. Shot Hit Resolution (`resolve_shot_hit`, 0x4AF50)
+## 26. Shot Hit Resolution (`resolve_shot_hit`, 0x4AF50)
 
 **Confidence: Verified** for the computed dispatch, damage tables, object
 handlers, reflection, and wall/item effects.
@@ -1492,10 +1453,15 @@ handlers, reflection, and wall/item effects.
 
 **Monsters:** health/tier = the target's own **hpos low nibble**; per-type horizontal-size/tier bases are in `mazeobj_hsize_tier_tbl` (0x5864C: ghost/grunt/aux 4, demon 8, lobber/sorc/supersorc 0xB, generators 5). Damage is subtracted from hpos; if the nibble leaves [base−2, base] the monster is destroyed (`shot_impact_spawn` 0x47DAE sparkle + `moblist_remove_and_clear`), otherwise it survives as a weaker tier. Score = damage × class multiplier (ghost 10, grunt-class 5, Death/IT 1) via `player_add_score_with_mult`. Sorcerers are immune while blinking (hpos bit 12) unless supershot. Supershot pierces monsters (returns 0) except Death and IT.
 
-**Death:** `death_hits` (0x904A5C) increments per shot; supershot damage is
-fed to `death_damage_accumulate`, whose per-player counter dismisses Death
-after it becomes greater than 200 (matching the "DEATH DIES AFTER TAKING UP
-TO 200 HEALTH" tip). Ordinary Death contact can feed the same counter.
+**Death:** every player shot increments the separate global `death_hits`
+(0x904A5C), but an ordinary shot does not add to the per-player Death-damage
+counter. A supershot adds a fixed 25 through `death_damage_accumulate`; Death
+contact adds 4 normally or 3 when `player_powers` byte 1 bit 1 is set. The
+supplied Death MOB is dismissed only when the counter becomes **greater than**
+200, so from zero the ninth supershot crosses the threshold. The counter can
+span Death MOBs within the current level, but successful `player_start_inner`
+placement resets it on normal level entry or player join. This implements the
+"DEATH DIES AFTER TAKING UP TO 200 HEALTH" tip with a strict `> 200` test.
 
 **Generators:** tier 1 destroyed by any hit; tiers 2/3 need damage ≥ 2/3, else they degrade: `mob_link -= damage << 10` (becomes the next weaker generator) with a picture update.
 

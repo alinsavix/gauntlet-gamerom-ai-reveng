@@ -112,8 +112,8 @@ The jump table at `0x100` is the OS API entry point. It consists of `JMP <absolu
 
 **Confidence: Verified.** This block contains 20 JMP entries with one
 intentional six-byte 0xFF-filled hole at `0x22A–0x22F`. The entries are
-`0x200–0x224` and `0x230–0x278`, each on a six-byte stride; `0x22A` is not an
-undocumented API service.
+`0x200–0x224` and `0x230–0x278`, each on a six-byte stride; `0x22A` is
+unused and might point to actual code in other Atari arcade titles.
 
 | Address | Target | Function Name | Category |
 |---------|--------|---------------|----------|
@@ -179,8 +179,9 @@ Verified, and no meaning is inferred from their values.
 | `0x40078` | 4 B | `game_button1_label_ptr` | Pointer to button 1 label string for self-test. |
 | `0x4007C` | 4 B | `game_joystick_label_ptr` | Pointer to joystick label string for self-test. |
 | `0x40080` | 24 B | `game_checksum_tbl` | One 16-byte descriptor `{start=0x40000, end=0x5FFFF, chunk_count=0x8000, enabled=1}`, followed by the 8-byte zero terminator. The OS reads start/end first and stops when the terminator's end is zero. |
-| `0x40098` | 16 B | `game_unreferenced_header_words` | Four unreferenced longwords; not consumed by either checksum-parser path. No runtime meaning assigned. |
-| `0x400A8` | 54 B | `game_header_ff_pad` | 0xFF fill ending at 0x400DD. |
+| `0x40098` | 4 B | `game_header_zero_pad_40098` | Four zero bytes after the checksum-table terminator; no OS/game runtime consumer found. |
+| `0x4009C` | 9 B | `game_copyright_morse_signature` | Bytes `AE D6 8C 17 FB 90 6A 33 80`. Reading the first 69 bits MSB-first with `0` as Morse dot and `1` as Morse dash decodes to `COPYRIGHT 1986 ATARI GAMES`; the low three bits of the final byte are zero padding. No runtime consumer exists. The decoded copyright statement is Verified; use as a deliberate anti-copy/code-trap signature is Strong inference from Atari's documented practice. |
+| `0x400A5` | 57 B | `game_header_ff_pad` | Solid 0xFF fill ending at 0x400DD. |
 | `0x400DE` | 6 B | `scroll_to_slot_veneer` | JMP to `scroll_to_slot` (0x46C5E). |
 | `0x400E4` | 6 B | `init_display_veneer` | JMP to `init_display` (0x43486). |
 | `0x400EA` | 6 B | `maze_setup_veneer` | JMP to `maze_setupnew` (0x44AC2). |

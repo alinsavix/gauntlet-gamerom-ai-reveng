@@ -348,6 +348,25 @@ def generated_text(source: str, function_index: str) -> str:
         for line in flag_block.splitlines()
         if line.startswith("'f ")
     ]
+    # The archival database treated 0x40098-0x400A7 as four unknown
+    # longwords and began the following 0xFF pad at 0x400A8.  Byte-level
+    # decoding identifies the embedded Atari copyright Morse signature, so
+    # replace those two legacy ranges with the exact three-way partition.
+    split_header_flags: list[str] = []
+    for line in flags:
+        match = re.match(r"f \S+ (\S+) (0x[0-9A-Fa-f]+)$", line)
+        if match and int(match.group(2), 16) in {0x40098, 0x400A8}:
+            if int(match.group(2), 16) == 0x40098:
+                split_header_flags.extend(
+                    (
+                        "f game.header_zero_pad_40098 4 0x00040098",
+                        "f game.copyright_morse_signature 9 0x0004009c",
+                        "f game.header_ff_pad 57 0x000400a5",
+                    )
+                )
+            continue
+        split_header_flags.append(line)
+    flags = split_header_flags
     existing_flag_names = {
         match.group(1)
         for line in flags

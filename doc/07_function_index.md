@@ -81,13 +81,13 @@ The non-normal control-transfer cases in this group are:
 | 0x44562 | `main_attract` | Attract mode state machine (SCORES→TITLE→DEMO→LEGEND) |
 | 0x457C0 | `main_score_display` | Displays player scores on alpha layer |
 | 0x45C00 | `main_open_doors` | Manages up to 8 concurrent door-opening animations |
-| 0x4664C | `main_handle_death` | Handles Death monster behavior |
+| 0x4664C | `main_handle_death` | Advances the per-player forcefield-hurt and Death-touch looping-sound timers, issuing their start and silencer commands |
 | 0x466F6 | `main_health_countdown` | Automatic per-frame health drain; advances the low-health heartbeat/HUD-pulse timer and schedules heartbeat sounds using mask table 0x576A8 |
 | 0x46CAA | `main_scroll_playfield` | Updates playfield scroll based on player positions |
 | 0x46FEA | `main_handle_potions` | Per-frame potion usage processing for all 4 players |
-| 0x4715E | `main_score_update` | Updates score accumulation and display |
+| 0x4715E | `main_score_update` | Advances temporary score/effect timers and the thief, transporter, player-transition, and shared effect animations |
 | 0x474F6 | `main_handle_shots` | Per-frame processing for exactly 12 projectile slots (0–3 player, 4–7 ordinary monster, 8–11 special/dragon): decrements each slot's animation/lifetime counter, reloads it from the character/slot-indexed table at 0x578C2 when appropriate, advances the class-specific picture sequence, performs MOB/tile collision and visibility handling, and removes or explodes expired shots |
-| 0x4800C | `main_start_game` | Handles new game initialization |
+| 0x4800C | `main_start_game` | Per-frame game-start and level-transition state machine: waits on presentation timers, initializes normal or secret levels, places active players, and handles join/continue and secret-room bookkeeping |
 | 0x49034 | `main_move_monsters` | Per-frame monster movement/AI dispatch |
 | 0x4A53A | `main_move_players` | Per-frame player input, movement, animation |
 | 0x4AE20 | `main_update_sound` | Processes sound queue and sends to sound CPU |
@@ -970,7 +970,7 @@ tables, and checked return polarity.
 | 0x41B16 | `find_unused_shot` | Scan shot MOB array for slot with mob_picture == 0 |
 | 0x490DC | `monster_create_shot` | Create a monster shot MOB; link into shot list |
 | 0x53666 | `player_create_shot` | If the player's shot slot is free, create the direction/class-specific shot or explosion, play its class sound, and consume one supershot charge when present |
-| 0x4AF50 | `resolve_shot_hit` | Full combat resolution for all target types (~0xED4 B, fully analyzed — see `04_game_subsystems.md` §30): `(target, shooter) → 0` shot survives / `-1` shot consumed; computed JMP 0x4B336 with table 0x4B338–0x4BB3; damage tables 0x596B6/0x596C2/0x596CE; monster tier system, generator degradation, secret-wall prizes, supershot/reflect |
+| 0x4AF50 | `resolve_shot_hit` | Full combat resolution for all target types (~0xED4 B, fully analyzed — see `04_game_subsystems.md` §26): `(target, shooter) → 0` shot survives / `-1` shot consumed; computed JMP 0x4B336 with table 0x4B338–0x4BB3; damage tables 0x596B6/0x596C2/0x596CE; monster tier system, generator degradation, secret-wall prizes, supershot/reflect |
 | 0x40906 | `shot_mob_collision` | Bounding-box collision test for shot projectiles |
 | 0x52192 | `mob_collision_test` | Bounding-box overlap + type dispatch for combat/pickup/warp |
 | 0x47DAE | `shot_impact_spawn` | Spawns an impact/explosion effect at the target in shared effect MOB slots 0x0D–0x10 |
@@ -1056,7 +1056,7 @@ These functions are called from multiple top-level subsystems:
 |---------|------|-------------------|
 | 0x42DC8 | `sound_system_reset` | Flush sound ring buffer, reset speech counter, send HW reset |
 | 0x4C9A2 | `demo_speech_cmd` | Process 0xFF speech command in demo input stream |
-| 0x48BEC | `player_start_inner` | Find a usable spawn tile, install character-specific RAM jump stubs, initialize player state/MOB data, and return -1 on success or 0 when placement fails |
+| 0x48BEC | `player_start_inner` | Find a usable spawn tile, install character-specific RAM jump stubs, initialize player state/MOB data (including clearing `player_death_damage_counter`), and return -1 on success or 0 when placement fails. Called for active players during normal level entry and for mid-level joins. |
 | 0x48F12 | `tile_occupancy_test` / `check_tile_passable` | Return -1 only for an in-bounds empty candidate whose eight neighboring cells contain no MOB within 0x7C0 on both rendered axes |
 | 0x55440 | `name_entry_step_char` | Increment/decrement and wrap a name-entry character through space, A–Z, and optional backspace |
 | 0x4A44A | `name_entry_draw_large_char` | Draw a 2×2 name-entry character/control glyph using OS 0x224 and 0x20C |

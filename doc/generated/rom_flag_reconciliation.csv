@@ -18,8 +18,9 @@ address,size_bytes,flag_name,matching_catalog_rows,matching_header_rows,status,c
 0x40078,4,game.button1_label_ptr,,game_button1_label_ptr,exact_header_match,Verified
 0x4007C,4,game.joystick_label_ptr,,game_joystick_label_ptr,exact_header_match,Verified
 0x40080,24,game.checksum_table,,game_checksum_tbl,exact_header_match,Verified
-0x40098,16,game.unreferenced_header_words,,game_unreferenced_header_words,exact_header_match,Verified
-0x400A8,54,game.header_ff_pad,,game_header_ff_pad,exact_header_match,Verified
+0x40098,4,game.header_zero_pad_40098,,game_header_zero_pad_40098,exact_header_match,Verified
+0x4009C,9,game.copyright_morse_signature,game_copyright_morse_signature,game_copyright_morse_signature,exact_catalog_match,Verified
+0x400A5,57,game.header_ff_pad,,game_header_ff_pad,exact_header_match,Verified
 0x400FC,6,game.unreferenced_ram_value_pair,,game_unreferenced_ram_value_pair,exact_header_match,Verified
 0x40102,17,game.joystick_label,,game_joystick_label,exact_header_match,Verified
 0x40113,22,game.fire_label,,game_fire_label,exact_header_match,Verified

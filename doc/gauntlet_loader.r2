@@ -632,8 +632,9 @@ f game.button0_label_ptr 4 0x00040074
 f game.button1_label_ptr 4 0x00040078
 f game.joystick_label_ptr 4 0x0004007c
 f game.checksum_table 24 0x00040080
-f game.unreferenced_header_words 16 0x00040098
-f game.header_ff_pad 54 0x000400a8
+f game.header_zero_pad_40098 4 0x00040098
+f game.copyright_morse_signature 9 0x0004009c
+f game.header_ff_pad 57 0x000400a5
 f scroll_to_slot_veneer 6 0x000400de
 f init_display_veneer 6 0x000400e4
 f maze_setup_veneer 6 0x000400ea

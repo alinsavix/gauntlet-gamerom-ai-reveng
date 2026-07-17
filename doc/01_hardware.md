@@ -31,7 +31,7 @@ under the table.
 | **Game ROM image** | `0x040000–0x05FFFF` | 128 KB | Populated `row76.bin` main-game image |
 | **Unpopulated main-ROM decode** | `0x060000–0x07FFFF` | 128 KB | Decoded main-program ROM aperture with no bytes in this Gauntlet II set; not a mirror |
 | **Main RAM** | `0x800000–0x801FFF` | 8 KB | General-purpose RAM |
-| **EEPROM** | `0x802001–0x802FFF` | ~4 KB | High scores, settings, statistics (odd bytes only) |
+| **EEPROM** | `0x802000–0x8023FF` | 1 KB CPU aperture | 28C04A, 4 Kbit (512 × 8); high scores, settings, and statistics occupy the low byte lane (odd byte addresses `0x802001–0x8023FF`) |
 | **Hardware I/O** | `0x803000–0x8031FF` | 512 B | Input ports, watchdog, sound, LEDs |
 | **Playfield RAM** | `0x900000–0x901FFF` | 8 KB | Playfield tile map |
 | **MOB RAM** | `0x902000–0x903FFF` | 8 KB | Motion object (sprite) data |
@@ -48,8 +48,7 @@ and MAME's explicitly
 [schematic-verified address map](https://github.com/mamedev/mame/blob/master/src/mame/atari/gauntlet.cpp#L3083-L3096).
 Both sources map the full `0x040000–0x07FFFF` main-ROM aperture, while this
 set supplies bytes only through `0x05FFFF`; neither describes a mirror.
-MAME also decodes `0x000000–0x037FFF` as ROM, although Atari's software map
-labels only the populated `0x000000–0x00FFFF` OS portion. Exact electrical
+MAME also decodes `0x000000–0x037FFF` as ROM. Exact electrical
 data returned by an empty socket is board-state dependent and is not modeled
 as a separate device response.
 
@@ -106,8 +105,7 @@ limited to behavior actually exercised by the software.
 
 ### 3.1 Status Register Bits (`0x803009`)
 
-**Confidence: Verified.** The former `0x803170` “interrupt control” label is
-contradicted by the OS implementations at 0x41C8/0x41CC: both take a command
+**Confidence: Verified.** Implementations at 0x41C8/0x41CC: both take a command
 word, test SoundIOFull, and write that word to 0x803170.
 
 | Bit | Description |
@@ -400,6 +398,8 @@ Shadow copies maintained in RAM by the OS VBLANK handler:
 - **Verified:** the **6502 sound CPU** interface is software-managed: the game
   writes command bytes to `0x803171`, reads responses from `0x80300F` (or the
   OS lane at `0x80300E`), and the OS maintains send/receive queues.
-- **Verified:** **EEPROM** occupies odd byte addresses in
-  `0x802001–0x802FFF`; writes use the `0x803150` unlock, and the OS queues one
-  byte per VBLANK with XOR checksums and retry logic.
+- **Verified:** the **28C04A EEPROM** stores 4 Kbit (512 bytes). It is decoded
+  across the 1 KB CPU aperture `0x802000–0x8023FF`, with its 512 data bytes on
+  the low byte lane at odd addresses `0x802001–0x8023FF`. Writes use the
+  `0x803150` unlock, and the OS queues one byte per VBLANK with XOR checksums
+  and retry logic.

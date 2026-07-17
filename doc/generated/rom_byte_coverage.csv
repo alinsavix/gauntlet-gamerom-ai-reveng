@@ -22,8 +22,9 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x40078,0x4007B,4,named_rom_range,game.button1_label_ptr,,Verified
 0x4007C,0x4007F,4,named_rom_range,game.joystick_label_ptr,,Verified
 0x40080,0x40097,24,named_rom_range,game.checksum_table,,Verified
-0x40098,0x400A7,16,named_rom_range,game.unreferenced_header_words,,Verified
-0x400A8,0x400DD,54,named_rom_range,game.header_ff_pad,,Verified
+0x40098,0x4009B,4,named_rom_range,game.header_zero_pad_40098,,Verified
+0x4009C,0x400A4,9,named_rom_range,game.copyright_morse_signature,game_copyright_morse_signature,Verified
+0x400A5,0x400DD,57,named_rom_range,game.header_ff_pad,,Verified
 0x400DE,0x400FB,30,analyzed_code,,,Verified
 0x400FC,0x40101,6,named_rom_range,game.unreferenced_ram_value_pair,,Verified
 0x40102,0x40112,17,named_rom_range,game.joystick_label,,Verified
