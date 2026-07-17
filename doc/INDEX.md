@@ -17,7 +17,7 @@ This project reverse-engineered the Gauntlet II arcade game (Atari Games, 1986) 
 **CPU:** Motorola 68010 (32-bit, big-endian)  
 **Display:** 336×240, 60 Hz
 
-**Confidence: Verified** for file sizes, checksums, and populated address ranges. `row76.bin` is a 128 KB image, not 256 KB. It contains about 87 KB of compiled C/assembly code plus ROM data and padding, running on a 68010.
+**Confidence: Verified** for file sizes, checksums, and populated address ranges. `row76.bin` is a 128 KB image, not 256 KB. The byte audit identifies 93,722 analyzed instruction bytes across 34 executable ranges; the rest is named ROM data and padding.
 
 **Confidence: Contradicted** for the former unsupported claim that all functions
 and tables were “fully documented.” The current audit instead checks 321/321

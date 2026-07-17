@@ -1421,7 +1421,8 @@ The removal APIs intentionally differ:
 
 **Confidence: Verified** for loop partitions, timers, and effect transitions.
 
-Three loops per frame:
+Three indexed loops run per frame, with an additional inline transition pass
+between the first and second loops:
 
 **Loop 1 (temporary popup timers):** Decrements timers at `0x90493A[d4*2]`. When zero, clears the picture for physical animation slot `d4+0x11` and removes its depth entry via `mob_depth_remove(d4+0x10)`.
 

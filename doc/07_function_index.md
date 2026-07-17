@@ -79,7 +79,7 @@ The non-normal control-transfer cases in this group are:
 | 0x40528 | `main_cycle_tport_and_ffield` | Advance transporter and forcefield palette-cycle state |
 | 0x42B6A | `coincheck` | Per-frame coin/start input and player-credit handling |
 | 0x44562 | `main_attract` | Attract mode state machine (SCORES→TITLE→DEMO→LEGEND) |
-| 0x457C0 | `main_score_display` | Displays player scores on alpha layer |
+| 0x457C0 | `main_score_display` | Updates one player's score, health, bonus-multiplier, low-health/acid palette effect, and IT-label HUD state each frame |
 | 0x45C00 | `main_open_doors` | Manages up to 8 concurrent door-opening animations |
 | 0x4664C | `main_handle_death` | Advances the per-player forcefield-hurt and Death-touch looping-sound timers, issuing their start and silencer commands |
 | 0x466F6 | `main_health_countdown` | Automatic per-frame health drain; advances the low-health heartbeat/HUD-pulse timer and schedules heartbeat sounds using mask table 0x576A8 |
@@ -296,7 +296,7 @@ runtime, movement, collision, and path contracts.
 
 **Confidence: Verified.** Each row is checked against a freshly analyzed body;
 the catalog records every direct control-transfer site. Empty exception cells
-use the normal convention from §3.
+use the normal convention from `03_game_rom_structure.md` §3.
 
 | Address | Name | Arguments | Return | Convention exception |
 |---|---|---|---|---|
@@ -371,7 +371,8 @@ and reanalyze all 26 bodies with
 
 **Confidence: Verified.** Each body below is freshly analyzed with the
 configured 68010 loader, and the catalog records every discovered direct
-control-transfer site. Normal rows use the stack ABI from §3; exception cells
+control-transfer site. Normal rows use the stack ABI from
+`03_game_rom_structure.md` §3; exception cells
 also distinguish presentation-only helpers and global-selector entries.
 
 | Address | Name | Arguments | Return | Convention exception |
@@ -1173,7 +1174,7 @@ Level-dependent palette: if `0x904B5E < 6`, uses biased base `0x5D7E8`; otherwis
 
 **Confidence: Verified.** Each row is checked against a freshly analyzed body;
 the generated catalog also records every direct control-transfer site. Empty
-exception cells use the normal convention from §3.
+exception cells use the normal convention from `03_game_rom_structure.md` §3.
 
 | Address | Function | Arguments | Return | Exceptional convention |
 |---|---|---|---|---|

@@ -9,7 +9,7 @@
 **Confidence: Verified** from the board/software reference and ROM decoding.
 
 - **Main CPU:** Motorola 68010 (32-bit, big-endian)
-- **Sound CPU:** MOS 6502 (accessed via shared RAM; protocol is software-defined)
+- **Sound CPU:** MOS 6502 (connected through command/response latches; protocol is software-defined)
 - **Clock:** ~7.159 MHz (NTSC)
 - **SLAPSTIC chip:** Performs bank switching for the level-data ROM (`row10.bin`), triggered by CPU accesses to special address sequences. **Confidence: Verified.**
 
@@ -194,9 +194,9 @@ corpus.
 formulas. The analog phrase “actual output level” is a model of the intensity
 and channel nibbles rather than a calibrated monitor voltage.
 
-Each color entry is **2 bytes** (16-bit word): **4 bits each for I (Intensity), R, G, B**. Actual output level = I × channel (0–255 range).
+Each color entry is **2 bytes** (16-bit word): **4 bits each for I (Intensity), R, G, B**. In the simple nibble-product model, `I × channel` ranges from 0 to 225 before display/emulator scaling.
 
-Total: **768 color entries** × 2 bytes = 1,536 bytes.
+The 2 KB hardware window contains **1,024 color entries**. Entries 0–767 have assigned layer roles; entries 768–1023 are spare.
 
 | Color Index Range | Type | Layout |
 |-------------------|------|--------|
@@ -225,6 +225,7 @@ Total: **768 color entries** × 2 bytes = 1,536 bytes.
 | `0x910200–0x9103FF` | 256 entries | MOB palettes |
 | `0x910400–0x9104FF` | 128 entries | Playfield Shadow palettes |
 | `0x910500–0x9105FF` | 128 entries | Playfield palettes |
+| `0x910600–0x9107FF` | 256 entries | Spare palette RAM |
 
 ---
 

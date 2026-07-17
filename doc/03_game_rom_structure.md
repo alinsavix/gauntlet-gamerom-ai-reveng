@@ -429,7 +429,7 @@ The following major data areas were unlabeled but have since been decoded:
 | Special object tiles (overlapping views 0x5CB48–0x5D2F7) | 1,968 B | Sparse object tile index table + dense animation frame table within the attract tile stream |
 | Tile pattern data + embedded code (0x5D848–0x5F9CE) | ~8.6 KB | Palette ramps, contest strings, connectivity table + tile rendering code |
 | Wall/door connectivity and correction tables (0x5EDD4–0x5FC11, interleaved with renderer code) | — | Wall connectivity variants, random descriptor pointers, and exact 3×3 door graphic/position tables |
-| Speech/dialog strings and first-encounter data (0x59736–0x5A37F) | 2,634 B | Hint/tip records, power-up masks/speech, 32 message records, two pointer views, and parallel speech IDs |
+| Speech/dialog strings and first-encounter data (0x59736–0x5A37F) | 3,146 B | Hint/tip records, power-up masks/speech, 32 message records, two pointer views, and parallel speech IDs |
 | In-game message/audio data (0x5A380–0x5AC1F) | 2,208 B | Power-up names, monster names, credits, bonus scoring, and treasure-room countdown speech tables |
 | Palette cycling data (0x5B22E–0x5B64A) | ~1.1 KB | Hurt flash, poison shimmer, invulnerability shimmer |
 | Challenge/character display config (0x57056–0x57370) | 795 B | Challenge target types, linked instruction text, split portrait word/destination arrays, joystick masks, and floor-palette indices |

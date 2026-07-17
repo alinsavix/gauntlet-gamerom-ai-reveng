@@ -1035,9 +1035,11 @@ fs *
 fs *
 'f game.checksum_table 24 0x00040080
 fs *
-'f game.unreferenced_header_words 16 0x00040098
+'f game.header_zero_pad_40098 4 0x00040098
 fs *
-'f game.header_ff_pad 54 0x000400a8
+'f game.copyright_morse_signature 9 0x0004009c
+fs *
+'f game.header_ff_pad 57 0x000400a5
 fs *
 'f scroll_to_slot_veneer 6 0x000400de
 fs *

@@ -226,7 +226,7 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   `01_hardware.md` through `07_function_index.md` now has a canonical
   Verified/Strong inference/Hypothesis/Unknown/Contradicted evidence label;
   mixed-evidence sections use inline overrides for individual rows or claims.
-  `check_confidence_labels.py` makes the 96-section requirement part of
+  `check_confidence_labels.py` makes the 92-section requirement part of
   `make check` and rejects noncanonical
   `Confidence:` values.
 - **Strong inference:** 0x40146 is an intentional watchdog-abort path. Atari's hardware memo specifies a 128 ms watchdog; 0x10000 lies in a decoded but unpopulated OS-ROM aperture, not outside all decode. A fetch exception recursively returns through OS 0x300 and game hook 0x40024 to the same JMP, while any non-faulting empty-socket value still leaves the watchdog unserviced. The exact open-bus word is board-state dependent, but the stable result is reset. RAM 0x904C00 is startup-cleared ordinary spare RAM with no post-clear writer found, so its nonzero test is a corruption guard rather than a palette inhibit or device latch.
