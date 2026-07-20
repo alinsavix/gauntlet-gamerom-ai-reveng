@@ -10,8 +10,6 @@
 read/write role unless a row explicitly carries another label. The generated
 callable and linear operand reports cover every ROM-encoded base/literal.
 
-*Note: `0x904908` is `player_redraw`, NOT `player_state` (a REPORT.md error). Player status is at `0x9049A0`. Player health is a 32-bit longword at `0x904980`.*
-
 ### 1.1 Core Game State
 
 | Address | Size | Name | Description |
@@ -45,7 +43,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904036 | 4 B | `ptr_playfield_color1` | Pointer to 1st playfield color set |
 | 0x90403A | 4 B | `ptr_playfield_color2` | Pointer to 2nd playfield color set |
 | 0x90403E | 4 B | `ptr_playfield_color3` | Pointer to 3rd playfield color set |
-| 0x904042 | 4 B | `ptr_ff_cycle_delay` | Pointer to the selected eight-byte forcefield cycle-delay profile in ROM 0x571DA–0x571F9. `game_start` installs profile 0 and maze setup selects `(level & 3)`. The former `ptr_ff_color` name was **Contradicted** by every consumer. |
+| 0x904042 | 4 B | `ptr_ff_cycle_delay` | Pointer to the selected eight-byte forcefield cycle-delay profile in ROM 0x571DA–0x571F9. `game_start` installs profile 0 and maze setup selects `(level & 3)`. |
 | 0x904046 | 2 B | `forcefield_color` | Current forcefield color word |
 | 0x904048 | 2 B | `ff_cycle_timer` | Forcefield color cycle step timer |
 | 0x904049 | 1 B | `ff_cycle_index` | Current step index into forcefield color table (0–7) |
@@ -92,12 +90,12 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x90487C | 2 B | `dragon_fire_cooldown` | Fire cooldown/hold timer: set to 8 by `dragon_fire_setup` (0x54748), decremented per frame in `main_handle_dragon`, gates fireball rate and holds the path counter during locked-in sustained fire. *(Formerly `dragon_stun_timer` — verified uses are fire pacing.)* |
-| 0x90487E | 2 B | `dialog_once_flags` | WORD bitfield of "dialog shown once" flags (one bit per dialog id; tested/set by `dialog_first_encounter` code). **Bit 0 = dragon first-encounter dialog** (the old `dragon_encounter_flag`); bit 0 cleared per level by `maze_new_level_setup`, whole word cleared at game init. Covers GRK's `item_dlg_flags` (0x90487E) + `power_dlg_flags` (0x90487F) bytes. |
+| 0x90487C | 2 B | `dragon_fire_cooldown` | Fire cooldown/hold timer: set to 8 by `dragon_fire_setup` (0x54748), decremented per frame in `main_handle_dragon`, gates fireball rate and holds the path counter during locked-in sustained fire. |
+| 0x90487E | 2 B | `dialog_once_flags` | WORD bitfield of "dialog shown once" flags (one bit per dialog id; tested/set by `dialog_first_encounter` code). **Bit 0 = dragon first-encounter dialog** (the old `dragon_encounter_flag`); bit 0 cleared per level by `maze_new_level_setup`, whole word cleared at game init. |
 | 0x904880 | 2 B | `dragon_hits` | Number of hits on the dragon (9th hit = death) |
-| 0x904882 | 2 B | `dragon_head_hpos` | Horizontal position of the dragon's HEAD: mob hpos + pose/facing delta from table 0x5D438, masked 0xFF80. *(Not the target player — GRK's "head position" guess was right.)* |
+| 0x904882 | 2 B | `dragon_head_hpos` | Horizontal position of the dragon's HEAD: mob hpos + pose/facing delta from table 0x5D438, masked 0xFF80. |
 | 0x904884 | 2 B | `dragon_head_vpos` | Vertical position of the dragon's head (delta table 0x5D478) |
-| 0x904886 | 2 B | `dragon_path_num` | Current path program number 0–4 (row into `dragon_path_programs` 0x5D578); re-randomized via getrandom(5) on every hit. *(Formerly `dragon_rand_dir`.)* |
+| 0x904886 | 2 B | `dragon_path_num` | Current path program number 0–4 (row into `dragon_path_programs` 0x5D578); re-randomized via getrandom(5) on every hit. |
 | 0x90488C | 2 B | `dragon_move_state` | Dragon movement sub-state; low nibble also limits simultaneous fireballs (< 4 to fire) |
 | 0x90488E | 2 B | `dragon_facing` | Current facing direction (0–3; used as ×4 stride into head pose tables) |
 | 0x904890 | 2 B | `dragon_state` | State bitmask (see Dragon Activity enum) |
@@ -133,7 +131,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x9048F0 | 2 B × 4 | `player_joystick` | Per-player last joystick direction |
 | 0x9048F8 | 2 B × 4 | `lobber_shot_vec_h` | Horizontal component for lobber shots |
 | 0x904900 | 2 B × 4 | `lobber_shot_vec_v` | Vertical component for lobber shots |
-| **0x904908** | **1 B × 4** | **`player_redraw`** | **Per-player redraw flags (bit 0 = score needs redraw, cleared by `draw_player_score`; bit 1 = health, set on damage, cleared by `draw_player_health`). NOT player_state — that array is `player_status` at 0x9049A0** |
+| 0x904908 | 1 B × 4 | `player_redraw` | Per-player redraw flags (bit 0 = score needs redraw, cleared by `draw_player_score`; bit 1 = health, set on damage, cleared by `draw_player_health`). |
 | 0x90490C | 2 B | `idle_timer` | Counts up while the post-player-loop activity gate is set. Above 0x04B0 or 0x0A8C (selected by caller state), `open_timed_doors` removes type-0x0D/0x0E door objects and this word becomes 0xFFFF to disable further increments. |
 | 0x90490E | 2 B × 4 | `player_bonusmult` | Per-player current bonus multiplier |
 | 0x904876 | 2 B | `current_player` | Index (0–3) of the player currently being processed by `main_move_players`; written each iteration of the per-player loop |
@@ -148,7 +146,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904940 | 2 B × 32 overlapping view | `mob_depth_key` | Per-managed-MOB depth/packed-position key used by the Y-sorted display-list insertion code, exact range 0x904940–0x90497F. General list code indexes `base + slot×2`; shot processing uses the biased base 0x904942 for logical slot 1 onward. Reserved element 0 at 0x904940 safely aliases `score_display_timer[3]`; the final two nominal words alias `mob_effect_anim_counter`. |
 | 0x90497C | 1 B × 4 overlapping view | `mob_effect_anim_counter` | Four per-channel counters for temporary transporter/score-star effect MOBs. `tport_cycle_start` initializes a selected byte to 0xFF; loop 3 of `main_score_update` increments it and advances/removes pictures in the 0x924–0x95A family. This view aliases `mob_depth_key[30..31]`. |
 | 0x904B02 | 24 B (12 words) | `shot_anim_lifetime_counter` | One word per projectile slot. `main_handle_shots` decrements the selected word every eligible frame. For slots 0–7, expiration reloads it from `shot_counter_reload` and advances the projectile picture; for special/dragon slots 8–11, the four 0x20 reload values act as lifetime counters and zero triggers impact/removal handling. Shot creation and reflection paths initialize or clear the same indexed words. |
-| **0x904980** | **4 B × 4** | **`player_health`** | **Per-player health (32-bit longwords, stride 4). NOT 16-bit — verified, e.g. the acid damage path reads/writes `0x904980 + player*4` as longwords** |
+| 0x904980 | 4 B × 4 | `player_health` | Per-player health (32-bit longwords, stride 4). |
 | 0x904990 | 4 B × 4 | `player_score` | Per-player current score (32-bit longwords) |
 | 0x9049A0 | 1 B × 4 | `player_status` | Per-player status: 0x01=alive here, 0x02=alive next, 0x04=death/high-score sequence (including initials when qualified), 0x08=exiting/respawn wait, 0x10=selecting character, 0x20=secret-winner name entry |
 | 0x9049A4 | 2 B × 4 | `player_facing_dir` | Per-player facing direction (0=up, 1=up-right, 2=right, 3=down-right, 4=down, 5=down-left, 6=left, 7=up-left) |
@@ -272,8 +270,8 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904B2A | 2 B × 4 | `player_coincount` | Per-player number of coins inserted |
 | 0x904B32 | 2 B × 4 | `player_onlevel` | Per-player what level player is on |
 | 0x904B3A | 2 B × 4 | `player_death_damage_counter` | Per-player Death-damage accumulator used by `death_damage_accumulate`. Death contact adds 4 normally or 3 when `player_powers` byte 1 bit 1 is set; a supershot adds 25, while an ordinary shot does not add to this counter. A total strictly greater than 200 clears the counter and dismisses the supplied Death MOB with a transporter-cycle effect. The value can span Death MOBs within one level, but successful `player_start_inner` placement clears it on normal level entry or player join. |
-| 0x904B42 | 2 B × 4 | `death_touch_timer` | Per-player cooldown/state for contact with Death |
 | 0x904B4A | 2 B × 4 | `ff_hurt_timer` | Per-player forcefield-contact hurt/sound cooldown |
+| 0x904B42 | 2 B × 4 | `death_touch_timer` | Per-player cooldown/state for contact with Death |
 
 ### 1.15 Level / Maze State
 
@@ -355,7 +353,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x905F68 | 1 B × 4 | `player_supershot` | Per-player supershot state (POWER_SUPERSHOT pickup): while > 0, shots do 3 damage to ordinary monsters (10 to players), pierce through monsters (except Death/IT), hit blinking sorcerers, and break treasure/invulnerable items. Death is a special case: a supershot adds a fixed 25 to the shooting player's `player_death_damage_counter` via `death_damage_accumulate`. |
 | 0x905F6D | 1 B | `secret_saved_supershot` | Single-byte secret-room transition scratch. `main_start_game` saves the selected secret entrant's supershot byte here before clearing the ordinary per-player value; `show_level_end_bonus_screen` adds it back to that player on return. The former continue-screen interpretation was contradicted. |
 | 0x905F80 | 2 B × 64 | `priority_bucket_heads` | Complete cumulative head table for the one depth/priority chain, exact range 0x905F80–0x905FFF. Insertion/removal updates entries from the selected band toward element 0; `main_move_monsters` uses element 0 as its fallback head. |
-| 0x905F82 | 2 B × 63 overlapping tail view | `priority_bucket_heads_tail` | Elements 1–63 of `priority_bucket_heads`. Scroll-indexed traversal addresses this tail base; the former 64-element size extended two bytes past the documented RAM window and was contradicted. |
+| 0x905F82 | 2 B × 63 overlapping tail view | `priority_bucket_heads_tail` | Elements 1–63 of `priority_bucket_heads`. Scroll-indexed traversal addresses this tail base. |
 | 0x905C54 | 2 B cells, 22 per 0x80-B row | `tport_route_forward` | Forward transporter/pathfinding connection table. Cell address is `base + (id / 22) * 0x80 + (id % 22) * 2`; bits 15–8 hold the linked transporter ID and the low nibble holds direction+1 (0 means no route). Written together with the reverse table by 0x5107A; read as a paired longword by 0x510BC. |
 | 0x905D54 | 2 B cells, 22 per 0x80-B row | `tport_route_reverse` | Reverse-direction companion to `tport_route_forward`, with the same padded-row addressing and word format. `tport_route_connect` (0x4E684) writes both directions; 0x4E73A only fills an empty route. |
 | 0x910700 | 2 B × 32 | `tport_pos_table` | Maze slot index for each transporter |
@@ -838,8 +836,7 @@ Specifies a 2×2 block of playfield tiles. Written to VRAM at offsets from base:
 ### 4.5 High Score Entry (in EEPROM)
 
 **Confidence: Verified.** Each class owns ten consecutive five-byte records
-at OS configuration-image offset `0x1E + class * 50`. The earlier six-byte
-record interpretation is **Contradicted**: the three initials are packed
+at OS configuration-image offset `0x1E + class * 50`. The three initials are packed
 together into one 16-bit base-40 integer.
 
 | Offset | Size | Description |
@@ -953,7 +950,7 @@ Four parallel 64-entry tables (one entry per maze object type, indexed 0–63). 
 |---------------|----------------------|------|---------|
 | 0x5858C | word / 128 B | `mazeobj_hpos_correction_tbl` | Per-type centering/correction word subtracted from the packed horizontal position |
 | 0x5860C | byte / 64 B | `mazeobj_vpos_offset_tbl` | Low-byte vertical-position addend/size encoding |
-| 0x5864C | byte / 64 B | `mazeobj_hsize_tier_tbl` | Low nibble ORed into the packed horizontal-position word. This is the base horizontal sprite size; for monsters the same nibble is also the three-step health/tier value used by combat. It is **not a palette table**. |
+| 0x5864C | byte / 64 B | `mazeobj_hsize_tier_tbl` | Low nibble ORed into the packed horizontal-position word. This is the base horizontal sprite size; for monsters the same nibble is also the three-step health/tier value used by combat. |
 | 0x5868C | word / 128 B | `mazeobj_base_picture_tbl` | Base picture word for each object type; ends at 0x5870B |
 
 ### 5.2.1 Computed dispatch tables
@@ -1085,14 +1082,14 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 
 | Address | Size | Content |
 |---------|------|---------|
-| 0x5AC20 | 14 B | `logo_brightness_seq` | Six brightness words followed by a zero terminator; `logo_anim_ptr` advances by two bytes and wraps on the terminator |
-| 0x5AC5E | 192 B | `fixed_playfield_palette_bank` | Six contiguous 32-byte/16-word IRGB palettes. `init_display` uses this bank for the fixed/special palette path (main palette sentinel 0x10), copies from the bank, and reads the interior word at 0x5AC6E into both playfield color-save words. Exact range 0x5AC5E–0x5AD1D. |
-| 0x5AC2E | 32 B | `logo_motion_program_full` | Eight 4-byte motion records used for the normal title intro; final record is all-zero terminator. Record bytes are duration, horizontal delta, vertical delta, and auxiliary/scroll delta. |
-| 0x5AC4E | 16 B | `logo_motion_program_short` | Four-record alternate title motion program selected when `title_intro_state` is nonzero; ends with an all-zero record at 0x5AC5A |
-| 0x5BA68 | 2 B | `logo_outer_timer_init` | Logo outer color cycle timer reset value |
-| 0x5BA6A | 2 B | `logo_inner_timer_init` | Logo inner brightness timer reset value |
-| 0x5BA6C | 2 B | `logo_bright_min` | Logo brightness accumulator minimum clamp |
-| 0x5BA6E | 2 B | `logo_bright_max` | Logo brightness accumulator maximum clamp |
+| 0x5AC20 | 14 B | `logo_brightness_seq` |
+| 0x5AC5E | 192 B | `fixed_playfield_palette_bank` |
+| 0x5AC2E | 32 B | `logo_motion_program_full` |
+| 0x5AC4E | 16 B | `logo_motion_program_short` |
+| 0x5BA68 | 2 B | `logo_outer_timer_init` |
+| 0x5BA6A | 2 B | `logo_inner_timer_init` |
+| 0x5BA6C | 2 B | `logo_bright_min` |
+| 0x5BA6E | 2 B | `logo_bright_max` |
 | 0x5BA70 | 64 B | `forcefield_gfx_ptrs` — one 16-longword pointer table (not two 8-entry tables) into forcefield/floor tile descriptors at 0x5CAB0–0x5CB20; indexed by the 4-bit forcefield graphic state |
 | 0x5BAB0 | 16 B | `shot_reflect_hdelta` — 8 signed horizontal-position correction words indexed by reflected shot direction |
 | 0x5BAC0 | 16 B | `shot_reflect_vdelta` — 8 signed vertical-position correction words parallel to `shot_reflect_hdelta` |
@@ -1120,8 +1117,8 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x5D4E8 | 32 B | `dragon_pose_vdelta` — matching 16 vertical words. |
 | 0x5D508 | 32 B | `dragon_body_pics` — 16 picture words selected by animation phase plus facing; used while turning/stunned and for the normal body animation. |
 | 0x5D528 | 80 B | `dragon_head_pics` — head picture words, indexed by path byte + facing×4 (verified; the old "0x5D508 head sprites"/"0x5D568 fire-breath tiles" rows described parts of this range) |
-| 0x5D578 | 80 B | `dragon_path_programs` — **5 path programs × 16 bytes** (NOT 128×16/2 KB; see `04_game_subsystems.md` §8.3). Byte = (pose<<1)\|fire-bit; one byte per 8-frame phase |
-| 0x5D5C8 | 512 B | `playfield_palettes` — **16 × 32-byte (16 IRGB words) playfield palettes, indexed by the high nibble of maze-header `playfield_colors`**; copied to color RAM 0x910500 by `init_display` (entry = index×32; the word at entry+16 is also stored to 0x904020/0x90401E). Previously misattributed to the dragon path table |
+| 0x5D578 | 80 B | `dragon_path_programs` — 5 path programs × 16 bytes (see `04_game_subsystems.md` §8.3). Byte = (pose<<1)\|fire-bit; one byte per 8-frame phase |
+| 0x5D5C8 | 512 B | `playfield_palettes` — 16 × 32-byte (16 IRGB words) playfield palettes, indexed by the high nibble of maze-header `playfield_colors`; copied to color RAM 0x910500 by `init_display` (entry = index×32; the word at entry+16 is also stored to 0x904020/0x90401E). |
 | 0x5D7C8 | 128 B | `playfield_special_palette_bank` — four contiguous 32-byte palettes through 0x5D847. In `init_display`, wall patterns ≥6 use this base and select an entry with `variant_D3 × 32`. |
 | 0x5B20E | 72 B | `player0_hurt_palette_cycle` — normal hurt/flash cycle for player 0 |
 | 0x5B256 | 72 B | `player1_hurt_palette_cycle` — player 1 normal cycle |
@@ -1144,7 +1141,7 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x5B71C | 8 B | `tport_direction_rotation` — eight bytes `{1,6,2,5,3,4,0,0}` used before the direction-delta tables. |
 | 0x5B724 | 8 B | `damage_comment_speech_ids` — two longword speech IDs `{0x60,0x5F}`. |
 | 0x5B72C | 8 B | `character_reflect_timer_init` — four character-indexed words `{0x038C,0x04B8,0x0260,0x038C}`. |
-| 0x5B734 | 8 B overlapping view | `character_stun_delay_add` — four character-indexed words `{0x2D,0x78,0x3C,0}`; 0x5B738 is element 2. |
+| 0x5B734 | 8 B | `character_stun_delay_add` — four character-indexed words `{0x2D,0x78,0x3C,0}`; 0x5B738 is element 2. |
 | 0x5B73C | 8 B | `tile_effect_sound_ids` — two longword sound IDs `{0x32,0x34}` used by adjacent tile-effect branches. |
 | 0x5B744 | 8 B | `tile_effect_sound_ids_alt` — alternate two-entry order `{0x34,0x32}` used by the corresponding object-interaction branch. |
 | 0x5B74C | 40 B | `pickup_score_values` — 20 score words indexed by normalized pickup/result code. |
@@ -1444,7 +1441,7 @@ consumers.
 
 ---
 
-## 9. Additional RAM Variables (from Phases 9–28 analysis)
+## 9. Additional RAM Variables
 
 **Confidence: Verified** for addresses, extents, and observed use. This
 section is retained as a provenance grouping; its ranges also participate in

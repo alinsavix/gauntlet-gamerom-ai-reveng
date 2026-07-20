@@ -50,9 +50,7 @@ Plus one software-only parallel array:
 (bits 15–6 = pixel coordinate). For an unadjusted maze slot,
 `pixel_x = column × 16` and `pixel_y = row × 16`; the words store those values
 pre-shifted left by six, with palette/size fields in the low bits. Individual
-object constructors may then apply sprite-origin corrections. **Contradicted
-and corrected:** the former scalar `slot_position × 32` approximation mixed
-the packed row/column value with the two independent pixel axes.
+object constructors may then apply sprite-origin corrections. 
 
 ---
 
@@ -257,8 +255,7 @@ Processes all 4 player slots each frame. Four main sections:
 4. **Post-loop:** When the idle timer exceeds its configured threshold,
    `open_timed_doors` removes every active type-0x0D/0x0E door object and plays
    sound 0x12 ("Doors Open"); independently, trigger trap-wall conversion if
-   the step counter reaches 21000. The former walk-bonus interpretation was
-   **Contradicted**.
+   the step counter reaches 21000. 
 
 ### 4.2 Player Movement (`player_try_move`, 0x41BF0)
 
@@ -331,9 +328,7 @@ no usable spawn position exists. Only after success does the wrapper call
 `player_join_finalize(uint16 player_index)` (0x48A36). The finalizer performs
 coin initialization when necessary, persists configuration through OS 0x1CC,
 sets the player's status/on-level state, plays the character join sound,
-redraws the HUD, and calls `speech_welcome`. The former description that
-`player_join2` picked the character and initialized the MOB was
-**Contradicted**.
+redraws the HUD, and calls `speech_welcome`.
 
 ### 4.5 IT Mechanic
 
@@ -348,8 +343,7 @@ or 0xD3 for a transfer.
 `player_it_label_clear(uint16 player_index)` (0x4590E) erases the two-tile
 label. Neither helper writes the IT player variable: the transfer caller
 clears the old label, draws/announces the new one, and then stores the new
-player in 0x9049DC. The former helper names implied state ownership and were
-therefore **Contradicted**.
+player in 0x9049DC.
 
 The IT player variable is at `0x9049DC` (0xFFFF = nobody is IT).
 
@@ -416,7 +410,7 @@ Called when transitioning to a new level:
 9. Clears the transporter and exit position tables (`0x910700` and `ram.exit_pos_table` at `0x910740`)
 10. Scans all mob_link slots to repopulate tport and exit tables
 
-### 5.3 Maze Decode (`maze_decode`, 0x4C1BC) — fully traced
+### 5.3 Maze Decode (`maze_decode`, 0x4C1BC)
 
 Decompresses maze data from the slapstic ROM into playfield RAM. See `05_data_reference.md` §3.19 for the verified bytecode encoding (note: 0xC0–0xDF skip *without* adding a wall; only 0xE0–0xFF add one).
 
@@ -673,8 +667,6 @@ callbacks, transport behavior, and route-table effects.
 
 ### 9.1 Thief State Machine (`main_thief_anim`, 0x4E8DC)
 
-> **Correction from GAME_ROM_KNOWN.md:** The main loop calls `0x4E8DC`, not `0x4D8DC` — the GRK address was a typo. 0x4D8DC is not a function entry at all: it is the epilogue of `show_level_end_bonus_screen` (0x4D476), which calls `secret_check` and advances the maze/level numbers.
-
 States (in `ram.thief_mode`, `0x904BA0`):
 
 | Mode | Behavior |
@@ -789,29 +781,26 @@ using the strings at 0x5AB1A–0x5AB63: ordinary treasure rooms award the
 displayed `100 × players × coins × treasures` result, while the secret-room
 path can award `5,000 × coins`. It removes departing player sprites, restores
 the saved secret-room counters, changes game mode, runs `secret_check`, and
-loads the saved next maze/level. The earlier name `show_continue_screen` was
-**Contradicted**.
+loads the saved next maze/level. 
 
 `secret_bonus_earned` (0x4D1A4) supplies the secret-room award predicate. It
 checks the active challenge code and the entrant's progress (and scans the
 playfield for challenge 0x53), returning -1 when the 5,000-per-coin bonus is
-earned and 0 otherwise. Its former `secret_continue_disallowed` meaning was
-**Contradicted**; it is called only from the secret bonus path.
+earned and 0 otherwise.
 
 ### 10.6 Secret Room (verified by disassembly)
 
-Secret-room availability is paced by a pair of level counters (the old "score counter/threshold" description was wrong):
+Secret-room availability is paced by a pair of level counters:
 
 - `secret_possible_counter` (0x904878) counts down **once per level** (decrement site 0x4A748); both it and `secret_possible_start` (0x90487A) initialize to 20 at game init (0x43312). When the countdown reaches 0, `maze_new_level_setup` may activate a secret room by loading the maze's secret-room config byte into `0x904065` (the ordinary 0x01–0x11 trick ID; see §3.17 in `05_data_reference.md`).
-- `secret_check` (0x486FE) runs at level transitions (from `main_start_game` at 0x480EC when the between-level delay `0x904A4E` expires, and from the `show_level_end_bonus_screen` epilogue at 0x4D8DC). If a secret room was active (`0x904065` ≠ 0): when a valid player (0–3) is in `0x904063`, it records the maze number into `secret_prev_maze` (0x904870) and adds 15 to the start value (clamped at 40) — secret rooms become rarer after a win; when nobody entered, it subtracts 2 (floor 4) — they come sooner. Either way the countdown reloads from the start value. (The `update_bgm_volume` name from FUNCTIONS_PLAN.md is refuted — the function touches no sound state.)
+- `secret_check` (0x486FE) runs at level transitions (from `main_start_game` at 0x480EC when the between-level delay `0x904A4E` expires, and from the `show_level_end_bonus_screen` epilogue at 0x4D8DC). If a secret room was active (`0x904065` ≠ 0): when a valid player (0–3) is in `0x904063`, it records the maze number into `secret_prev_maze` (0x904870) and adds 15 to the start value (clamped at 40) — secret rooms become rarer after a win; when nobody entered, it subtracts 2 (floor 4) — they come sooner. Either way the countdown reloads from the start value.
 - `secret_getname` (0x54EC6) handles the winner: with EEPROM settings bit 13 set it opens the name-entry screen (buffer 0x904AA4 = 'A' + spaces, `player_status` = 0x20, "ENTER YOUR" / "'LAST-NAME FIRST-NAME'" prompts); otherwise `player_status` = 2 and a short between-level delay.
 - `secret_name_entry_update` (0x54FE8), selected only by status 0x20, edits
   that winner's name using `ram.secret_player`, calls the live character-step
   and small-character draw helpers at 0x55440/0x554B6, and invokes
-  `secret_code_build` when entry completes. It is not a player spawn or entry
-  animation; the former interpretation was **Contradicted**.
+  `secret_code_build` when entry completes.
 - After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-character `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
-- After a player earns the secret challenge, `show_level_start_screen` (0x44DB4; formerly misnamed `spawn_enemies_attract`) saves the maze trick in `0x904064`, replaces `0x904065` with a random task code 0x50–0x5D, selects a time limit from tables at 0x57360/0x5737C, and displays the optional task qualifier from the 14-record table at 0x573D4. It initializes the secret maze number to 115, compares the task against 0x57, and increments the maze number for tasks 0x57–0x5D before calling `maze_select_bank_special`; tasks 0x50–0x56 therefore use maze 115 and tasks 0x57–0x5D use maze 116. Code 0x5A is valid: its qualifier is “AFTER REMOVING ALL TREASURE,” and a supershot hit on ordinary treasure increments the player's progress.
+- After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) saves the maze trick in `0x904064`, replaces `0x904065` with a random task code 0x50–0x5D, selects a time limit from tables at 0x57360/0x5737C, and displays the optional task qualifier from the 14-record table at 0x573D4. It initializes the secret maze number to 115, compares the task against 0x57, and increments the maze number for tasks 0x57–0x5D before calling `maze_select_bank_special`; tasks 0x50–0x56 therefore use maze 115 and tasks 0x57–0x5D use maze 116. Code 0x5A is valid: its qualifier is “AFTER REMOVING ALL TREASURE,” and a supershot hit on ordinary treasure increments the player's progress.
 - Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872). Ordinary-maze hooks in `resolve_shot_hit` include trick 5 (shoot food), trick 9 (get hit), and trick 17 (hurt another player); the same array is reused for challenge codes 0x50–0x5D.
 
 ---
@@ -826,9 +815,7 @@ Enqueues an 8-bit sound ID into a circular ring buffer (8 slots at `0x90404B`). 
 `speech_counter` is zero it first calls OS `try_send_sound_command` (0x242):
 an immediately accepted command is not queued; a busy result falls back to
 the ring. While speech traffic is active it skips the immediate attempt and
-queues directly. The former “sound enabled/channel already playing”
-description and the OS name `enable_interrupts` were contradicted by the OS
-and game bodies.
+queues directly.
 
 ### 11.2 Sound Dispatch (`main_update_sound`, 0x4AE20)
 

@@ -42,8 +42,6 @@ entries below (including the path-grid helpers, transporter pair helpers,
 collision-preserving wrappers, playfield register entries, and placement
 tails).
 
-*Note: Corrections from FIXME.md are applied inline with `> **Correction:**` callouts.*
-
 ---
 
 ## 1. Main Loop Functions (all DONE)
@@ -705,8 +703,8 @@ contracts.
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x486FE | `secret_check` **(RESOLVED)** | Level-transition secret-room bookkeeping: if a player entered the secret room, `secret_prev_maze` = maze# and interval 0x90487A += 15 (max 40); if nobody did, −2 (min 4); countdown 0x904878 reloaded. Called from `main_start_game` (0x480EC) and the `show_level_end_bonus_screen` epilogue (0x4D8DC). `update_bgm_volume` refuted (no sound state touched) |
-| 0x54EC6 | `secret_getname` **(RESOLVED)** | Secret-room winner name-entry setup, gated by EEPROM settings bit 13: name buffer 0x904AA4 = 'A'+spaces, `player_status` = 0x20, draws "ENTER YOUR" / "'LAST-NAME FIRST-NAME'"; bit clear → status 2, short delay. `reset_attract_player` refuted |
+| 0x486FE | `secret_check` | Level-transition secret-room bookkeeping: if a player entered the secret room, `secret_prev_maze` = maze# and interval 0x90487A += 15 (max 40); if nobody did, −2 (min 4); countdown 0x904878 reloaded. Called from `main_start_game` (0x480EC) and the `show_level_end_bonus_screen` epilogue (0x4D8DC). |
+| 0x54EC6 | `secret_getname` | Secret-room winner name-entry setup, gated by EEPROM settings bit 13: name buffer 0x904AA4 = 'A'+spaces, `player_status` = 0x20, draws "ENTER YOUR" / "'LAST-NAME FIRST-NAME'"; bit clear → status 2, short delay. |
 | 0x54BE0 | `secret_code_build` | Build the six-character `XXX-XXX` secret code in `dialog_msg_buf`: CRC-CCITT-hash the entered name while skipping spaces, interleave three hash symbols with three symbols encoding the previous maze/trick/challenge tuple, and map 5-bit groups through the alphabet at 0x54CA6 |
 
 ### 11.1 Final thief-state and secret-room callable contracts
