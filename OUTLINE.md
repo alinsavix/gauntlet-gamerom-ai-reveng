@@ -3,7 +3,7 @@
 This file is the authoritative outline and style contract for a reader-friendly
 book about the internals of the Gauntlet II arcade game, derived from the
 reverse-engineering documentation in this repository. It is written so that a
-writing agent can produce the final chapters from it without needing any other
+writing agent can produce the final chapters without needing any other
 briefing.
 
 ---
@@ -12,34 +12,63 @@ briefing.
 
 ### Purpose
 
-The technical documentation in `doc/` is exhaustive but written for someone
+The technical documentation in `doc/` is extensive but written for someone
 already deep in the game's internals: it is organized around addresses,
-function contracts, and audit coverage. This book re-presents that knowledge
-as a narrative that a newcomer can read front to back, with each chapter
-building only on concepts introduced in earlier chapters.
+function contracts, data ranges, and audit coverage. This book re-presents that
+knowledge as a narrative that a newcomer can read front to back, with each
+chapter building only on concepts introduced in earlier chapters.
+
+The book should answer two questions in parallel:
+
+1. What does the player experience, and what rules make Gauntlet II feel like
+   Gauntlet II?
+2. How do the cabinet's hardware, data structures, and software cooperate to
+   create that experience?
+
+The result should feel like a guided tour of a complete game, not a simplified
+function index.
 
 ### Audience
 
 A **hobbyist programmer**: comfortable with general programming concepts
-(variables, loops, arrays, lookup tables, memory, bits and hex numbers), but
-with **no** knowledge of 68000-family assembly, arcade hardware, or this
-game's internals. Do not assume they know what a sprite engine, an interrupt,
-a palette, or a bank-switch is — each of these must be introduced before use.
-Do assume they can read a short pseudocode block and a labeled table.
+(variables, loops, functions, arrays, lookup tables, memory, bits, bytes, and
+hex numbers), but with **no** knowledge of 68000-family assembly, arcade
+hardware, or this game's internals. Do not explain elementary programming
+ideas, but do introduce domain-specific concepts such as sprites, interrupts,
+palettes, bank switching, memory-mapped hardware, and VBLANK before relying on
+them.
+
+Assume the reader can follow short pseudocode, labeled tables, diagrams, and a
+small amount of hexadecimal notation. Do not assume they have played Gauntlet
+II recently—or at all.
 
 ### Deliverable format
 
 - A new directory `book/` at the repository root.
-- One markdown file per chapter, numbered: `book/01_introduction.md`,
-  `book/02_the_machine.md`, etc. (final filenames should match the chapter
-  titles below, adjusted to `NN_snake_case.md`).
+- One markdown file per chapter, numbered: `book/01_how_to_play.md`,
+  `book/02_introduction.md`, etc. Final filenames should match the chapter
+  titles below, adjusted to `NN_snake_case.md`.
 - A `book/README.md` containing a one-paragraph description of the book and a
   linked table of contents with a one-line summary per chapter.
-- A final `book/appendix_glossary.md` (see Appendix section at the end).
-- Target length: roughly **1,500–3,000 words per chapter** (the grab-bag
-  chapters 10, 11, and 14 may run longer). Favor completeness of *concepts*
-  over completeness of *inventory* — this book never needs to list every
-  function, table, or maze.
+- A final `book/appendix_glossary.md` (see the Appendix section).
+- There is **no hard chapter count or word limit**. Most chapters will probably
+  land around 1,500–3,000 words, but clarity determines length. Split a chapter
+  when it contains two different mental models or when a newcomer would benefit
+  from a pause; do not compress an important explanation merely to hit a target.
+- Favor completeness of *concepts* over completeness of *inventory*. The book
+  never needs to list every function, table, maze, or object ID.
+
+### Chapter-opening contract
+
+Every chapter begins with a short statement of:
+
+- what question the chapter answers;
+- what the reader will understand by the end; and
+- which earlier concepts it builds upon.
+
+Whenever practical, begin with a concrete player-visible moment—a coin drop, a
+crowd of ghosts, a moving wall, a spoken warning—and then work inward toward
+the mechanism.
 
 ### Voice and style rules
 
@@ -47,495 +76,761 @@ Do assume they can read a short pseudocode block and a labeled table.
    able to follow every chapter without reading a single line of code.
 2. **Pseudocode over assembly.** When showing logic, use short high-level
    pseudocode (Python-ish or C-ish, whichever reads cleaner). Raw 68010
-   assembly is allowed only when the *assembly itself* is the point (e.g., a
-   clever trick that pseudocode would hide), and must be explained line by
-   line when used.
-3. **Tables are welcome** when they mirror an actual table in the ROM —
-   always label rows and columns with meaningful names, never raw offsets.
-   Example of the desired register: instead of describing a speed lookup as
-   address arithmetic, say "the game keeps a table in ROM with one column per
-   character class and two rows — normal speed, and speed with an extra-speed
-   potion" and show that table with labeled headers.
-4. **Diagrams** (mermaid preferred) are encouraged when they
-   genuinely simplify — flow of a frame, layering of the display, the
-   maze-decode pipeline. Keep them small; a diagram that needs a legend longer
-   than itself should be prose instead.
-5. **Names in prose: yes. Addresses in prose: no.** Using a real function or
+   assembly is allowed only when the *assembly itself* is the point, and must
+   be explained line by line when used.
+3. **Tables are welcome** when they mirror an actual table in ROM. Always label
+   rows and columns with meaningful names, never raw offsets. For example,
+   describe a speed table as rows for normal/powered state and columns for
+   character class, then show those labels.
+4. **Use actual game graphics when they clarify.** Annotated screenshots,
+   isolated sprites, maze renderings from `python-gex/`, and small crops of the
+   HUD are especially useful in Chapters 1, 4, 8, 9, 10, and 13. Every image
+   must teach something that would take longer to explain in prose.
+5. **Diagrams** (Mermaid preferred) are encouraged when they genuinely
+   simplify—flow of a frame, layer composition, a MOB record, a session
+   lifecycle, or the maze-decode pipeline. Keep them small.
+6. **Names in prose: yes. Addresses in prose: no.** Using a real function or
    variable name in body text (`g2mainloop`, `game_mode`, `find_maze`) is
-   encouraged whenever it beats a roundabout description — especially for
-   the higher-level functions a chapter keeps returning to. Introduce each
-   name once in plain language ("the main loop, `g2mainloop`, …") and use it
-   freely afterward. Raw hex addresses stay out of body prose. Every chapter
-   still ends with an **"Under the hood"** box: a short bulleted list
-   mapping the chapter's topics (including any names used in prose) to their
-   addresses and the `doc/` file/section that covers them, for readers who
-   want to go deeper. Format:
+   encouraged when it beats a roundabout description. Introduce each name once
+   in plain language and use it freely afterward. Raw addresses stay out of
+   body prose.
+7. Every chapter ends with an **"Under the hood"** box: a short bulleted list
+   mapping the chapter's important mechanisms and names to their addresses and
+   the `doc/` file/section that covers them. This box is optional reading and
+   may be more technical than the chapter body. Format:
 
    > **Under the hood**
-   > - The main loop described here is `g2mainloop` (0x42A66); the full
-   >   verified call sequence is in `doc/03_game_rom_structure.md` §2.
+   > - The main loop described here is `g2mainloop` (0x42A66); the verified
+   >   call sequence is in `doc/03_game_rom_structure.md` §2.
    > - The VBLANK semaphore is the word at 0x904002.
-6. **Introduce before use.** Each chapter may rely on concepts from earlier
+8. **Introduce before use.** Each chapter may rely on concepts from earlier
    chapters only. If a later chapter needs a concept out of order, add a
-   one-sentence reminder with a link back ("as covered in Chapter 3, sprites
-   are drawn from four parallel tables").
-7. **Consistent terminology.** First use: "motion objects — 'MOBs' — the
-   hardware's name for sprites"; thereafter "MOB" or "sprite (MOB)". Use
-   "playfield" for the maze tile layer, "text layer" for alphanumerics,
-   "Slapstic ROM" for the bank-switched level-data ROM, "OS ROM" and
-   "game ROM" for the other two. "Level" is what the player sees counted on
-   screen; "maze" is the stored record (Level N = Maze N+4 — establish this
-   once in Chapter 6 and stay consistent).
-8. **Light, curious tone.** This is a tour, not a spec. Wry asides are fine;
-   memes and forced jokes are not. Write like a good conference talk.
+   one-sentence reminder and link back.
+9. **Consistent terminology.** First use: "motion objects—MOBs—the hardware's
+   name for sprites"; thereafter "MOB" or "sprite (MOB)." Use "playfield" for
+   the maze tile layer, "text layer" for alphanumerics, "Slapstic ROM" for the
+   bank-switched level-data ROM, and "OS ROM" and "game ROM" for the other two
+   analyzed ROM images. Use "level" for the player's progress count and "maze"
+   for a stored layout record. Do **not** publish a simple level-to-maze formula
+   until the maze-selection research task below is resolved.
+10. **Light, curious tone.** This is a tour, not a specification. Wry asides
+    are fine; memes and forced jokes are not. Write like a good conference
+    talk.
 
-### Accuracy constraints (important)
+### Accuracy and source constraints
 
-- **Everything factual must trace back to `doc/`** (or `refs/HW_WRITEUP.md`).
-  Do not fill factual gaps with guesses about "how arcade games usually
-  work" — if the docs don't say it, either omit it, or write it anyway and
-  flag it for review (see the needs-verification rule below).
-- **MAME source is a legitimate research aid.** Consulting MAME's Gauntlet
-  driver to understand a behavior well enough to explain it clearly is fine;
-  just never cite or mention MAME as a source in the book text, and flag any
-  claim that rests *only* on MAME with the needs-verification marker.
-- **Folklore is flavor, not fact.** Well-known Gauntlet lore and player
-  culture are welcome as color, framed as lore. Don't let folklore quietly
-  become a factual claim about what the code does.
-- The `doc/` files carry confidence labels (**Verified**, **Strong
+- Everything factual must trace to the maintained `doc/` chapters,
+  `refs/HW_WRITEUP.md`, the checked artifacts in `doc/generated/`, the
+  radare2 annotations, `python-gex/`, or an explicitly identified external
+  source.
+- The current main documentation is the normal source of truth.
+  `doc/08_known_issues.md` is primarily a historical correction log; consult it
+  when a claim looks suspicious or provenance/intent is involved, but do not
+  organize the book around it.
+- The project owner's clarifications in this outline are part of the source
+  briefing. If they conflict with the maintained documentation, reconcile the
+  conflict before drafting the affected chapter rather than silently choosing
+  one.
+- MAME source and tracing are legitimate secondary research aids, especially
+  for hardware behavior that cannot be observed from ROM bytes alone. They
+  were not the project's primary tool. Cite MAME honestly when a claim
+  materially depends on it; do not make it the default explanation or conceal
+  its use.
+- `python-gex/` is a working demonstration of graphics and maze formats. Its
+  code and rendered output may be used to explain those formats, but the book
+  must not require the reader to run it.
+- The documentation carries confidence labels (**Verified**, **Strong
   inference**, **Contradicted**, etc.). State Verified material as fact.
-  Present Strong-inference material with a softener ("almost certainly",
-  "the evidence points to"). Never present Contradicted claims; `doc/` files
-  contain corrections of earlier wrong claims — always use the corrected
-  version.
-- **Needs-verification markers.** When a worthwhile detail can't be fully
-  confirmed from `doc/`, don't water it down — write it at the intended
-  level of specificity and flag it with the literal inline marker
-  `**[needs verification]**` immediately after the claim (one marker per
-  claim, grep-able), so a human pass can find and confirm or correct each
-  one before publication.
-- `python-gex/` (the ROM extractor) is a working demonstration of the data
-  formats (tiles, stamps, maze records). Its source may be consulted to
-  clarify formats, and the book may mention it as a companion tool, but the
-  book must not require the reader to run it.
+  Present Strong-inference material with a softener. Never repeat a
+  Contradicted claim.
+- **Needs-verification markers are draft-only.** A drafting agent may put
+  `**[needs verification]**` immediately after a worthwhile unresolved claim,
+  but the finished book must contain **zero** such markers. Each must be
+  verified, rewritten with an honest uncertainty statement, or removed during
+  final review.
+- Separate **observed behavior** from **historical provenance**, **authorial
+  intent**, and **design interpretation**. The code can prove what it does much
+  more often than why its authors chose to do it.
+- Folklore is flavor, not fact. Player culture and well-known Gauntlet stories
+  are welcome when framed as lore and sourced when practical.
+
+### Research gates before affected chapters are drafted
+
+These are targeted rechecks, not invitations to redo the whole project:
+
+1. **Normal maze order and the maze randomizer.** The project owner confirms
+   that stored mazes 0–5 are the first six normal levels and that randomized
+   maze selection begins afterward. This conflicts with the current
+   `doc/06_maze_catalog.md` range table and the `Level N = Maze N+4` wording.
+   Revisit `maze_checknum`, `maze_next`, the saved randomizer state around
+   0x90400E/0x904010, level-start/exit callers, EEPROM initialization, and the
+   separate treasure-room randomizer. Correct the maintained documentation,
+   then give Chapter 9 the exact algorithm: activation point, state update,
+   allowed range, wrap behavior, repeat behavior, and special-case paths.
+2. **MOB depth/priority chains.** Reconfirm the relationship among the global
+   doubly linked chain, forward/back links, the 64 cumulative priority heads,
+   hardware traversal, collision queries, and monster iteration. Use targeted
+   disassembly and, if useful, MAME tracing or instrumentation. This mechanism
+   is central to explaining how the game supports unusually large crowds, so
+   Chapter 8 must not inherit a convenient but inaccurate "64 separate lists"
+   story.
+3. **Mugger differences.** Treat the mugger as a variant of the thief state
+   machine that fights/inflicts damage and steals health rather than inventory.
+   Verify whether its speed or timing actually differs before saying that it
+   is faster.
+4. **Demo determinism.** The recorded-input format, pointers, timers, setup
+   path, and primary Elf stream are already verified in the ROM documentation.
+   Before explaining *why* playback remains synchronized, verify exactly how
+   the random seed and other initial state are established. Do not use the
+   vague phrase "same seeded state" without showing the setup path.
+5. **Secret-code verifier.** Independently reproduce `secret_code_build` from
+   its disassembly and checked data tables. Capture at least one in-game
+   name/state/code example and confirm that the independent implementation
+   produces the same `XXX-XXX` result. Chapter 13 should explain what can be
+   verified from the displayed code alone and what requires the entered name
+   or saved challenge context.
 
 ### Primary sources by chapter
 
 | Chapter | Main sources |
 |---------|--------------|
-| 1 | `README.md`, `doc/INDEX.md` |
-| 2 | `doc/01_hardware.md`, `refs/HW_WRITEUP.md` |
-| 3 | `doc/01_hardware.md` (tiles, palettes, MOBs, alpha, priority) |
-| 4 | `doc/02_os_rom.md` (boot, vectors, jump tables, self-test) |
-| 5 | `doc/03_game_rom_structure.md` (main loop, game modes, VBLANK) |
-| 6 | `doc/06_maze_catalog.md`, `doc/04_game_subsystems.md` §5, `doc/05_data_reference.md` §3.19–3.20, §4.1; `python-gex/` |
-| 7 | `doc/04_game_subsystems.md` §4, §23; `doc/05_data_reference.md` §1.7, §1.11, §3 |
-| 8 | `doc/04_game_subsystems.md` §3, §26; `doc/05_data_reference.md` §7 |
-| 9 | `doc/04_game_subsystems.md` §8, §9 |
-| 10 | `doc/04_game_subsystems.md` §7, §12, §16, §18, §19, §10.6 |
-| 11 | `doc/04_game_subsystems.md` §10, §14, §20, §25; `doc/02_os_rom.md` §8.9–8.12 |
-| 12 | `doc/04_game_subsystems.md` §6, §22; `doc/03_game_rom_structure.md` §2.5 |
-| 13 | `doc/04_game_subsystems.md` §11; `doc/02_os_rom.md` §6.7, §8.7–8.8; `refs/soundcmds.csv` |
-| 14 | `README.md`, `doc/03_game_rom_structure.md` §1.3, §4; `doc/08_known_issues.md`, `doc/02_os_rom.md` §10.5, §12 |
+| 1 | `doc/04_game_subsystems.md`, `doc/05_data_reference.md`, in-game legend/strings and selected rendered graphics |
+| 2 | `README.md`, `doc/INDEX.md` |
+| 3 | `doc/01_hardware.md`, `refs/HW_WRITEUP.md`, ROM assembly instructions in `README.md` |
+| 4 | `doc/01_hardware.md`, `refs/HW_WRITEUP.md`, `doc/04_game_subsystems.md` §13, §24 |
+| 5 | `doc/02_os_rom.md` (boot, vectors, jump tables, self-test, error paths) |
+| 6 | `doc/03_game_rom_structure.md` §2, `doc/04_game_subsystems.md` §15 |
+| 7 | `doc/04_game_subsystems.md` §4, §6, §10, §12, §16, §22; `doc/03_game_rom_structure.md` §2.3–2.5 |
+| 8 | `doc/01_hardware.md` §7–10; `doc/04_game_subsystems.md` §1, §13, §17, §23–24; `doc/05_data_reference.md` §1 |
+| 9 | `doc/06_maze_catalog.md`, `doc/04_game_subsystems.md` §5, `doc/05_data_reference.md` §3.12–3.20 and §4.1, `refs/GAME_ROM_KNOWN.md`, `python-gex/` |
+| 10 | `doc/04_game_subsystems.md` §2, §4, §15, §22–23, §26; `doc/05_data_reference.md` §1.7, §1.11, §3, §5 |
+| 11 | `doc/04_game_subsystems.md` §3, §26; `doc/05_data_reference.md` §7 |
+| 12 | `doc/04_game_subsystems.md` §8–9; `doc/05_data_reference.md` thief/dragon state and data tables |
+| 13 | `doc/04_game_subsystems.md` §7, §10.6, §12–13, §16, §18–19, §21, §26; `doc/05_data_reference.md` secret-code data |
+| 14 | `doc/04_game_subsystems.md` §10, §14, §20, §25; `doc/02_os_rom.md` §8.9–8.13 |
+| 15 | `doc/04_game_subsystems.md` §6; `doc/03_game_rom_structure.md` §2.5; `doc/05_data_reference.md` demo tables |
+| 16 | `doc/04_game_subsystems.md` §11; `doc/02_os_rom.md` §6.7, §8.7–8.8; `refs/soundcmds.csv` |
+| 17 | `README.md`, `doc/03_game_rom_structure.md` §1.3, §3–4; the Ed Logg Centipede affidavit linked in the chapter; selected audit artifacts |
 
 ---
 
-## Chapter 1 — Welcome to the Machine (Introduction)
+## Chapter 1 — Enter the Gauntlet (How the Game Plays)
 
-*Sets expectations: what the game is, what "reverse engineering it" produced,
-and how to read this book.*
+*The player's-eye foundation. Before asking how the machine works, establish
+what it is trying to accomplish.*
 
-- What Gauntlet II is (Atari Games, 1986; up to four players; the arcade
-  context) and why its internals are worth a book: it's a complete, readable
-  example of how a golden-age arcade game actually works.
-- What this book is based on: a decades-long reverse-engineering effort,
-  recently completed with AI assistance, that documented essentially every
-  byte of the game's three program ROMs. What "reverse engineering" means
-  here (reading the machine code and data the shipped game contains — no
-  source code was ever available).
-- The cast of chips, at a headline level: one main CPU running the show, a
-  separate small computer dedicated to sound, video hardware that draws the
-  screen from tables, and three ROMs with distinct jobs (OS ROM, game ROM,
-  level-data ROM) — each gets proper treatment in later chapters.
-- How to read this book: chapters build in order; every chapter ends with an
-  "Under the hood" box pointing into the technical docs (`doc/`) for the
-  reader who wants addresses and disassembly; a glossary appendix exists.
-- A frame-of-reference teaser: everything the player experiences is produced
-  sixty times per second by one loop of code — a promise the book will pay
-  off in Chapter 5.
+- The cabinet and the immediate experience: up to four people standing at four
+  color-coded control stations, exploring a scrolling maze together while
+  monsters pour from generators. The objective is simple—survive, find the
+  exit, and keep going—but the systems underneath it are not.
+- The controls and moment-to-moment verbs: an eight-way joystick, Fire, and
+  Magic; walking, fighting/shooting, using potions, collecting items, opening
+  doors with keys, eating food, and reaching exits. Use a labeled control-panel
+  diagram and one annotated gameplay screenshot.
+- The four heroes—Warrior, Valkyrie, Wizard, and Elf—and the broad tradeoffs
+  among fight strength, armor, magic, movement, and shooting. Keep this at the
+  level of player expectations; the exact tables come in Chapter 10.
+- Health as both life and arcade currency: it drains with time, falls from
+  damage, rises with food or inserted coins, and makes continued play a
+  visible economic choice. Briefly introduce score, treasure, inventory, and
+  the score multiplier without explaining their storage yet.
+- The shape of a game: coin/start, choose a hero, enter a level, explore and
+  fight, exit, occasionally visit treasure or secret rooms, die or continue,
+  and eventually return to high scores and attract mode. Chapter 7 will turn
+  this into a complete state diagram.
+- What makes Gauntlet II distinctive: join-in-progress multiplayer, the IT/tag
+  mechanic, friendly-fire variants, moving and invisible walls, transporters,
+  the dragon, thief/mugger, treasure rooms, secret challenges, and a very large
+  number of simultaneous monsters. This is a preview, not an exhaustive rules
+  chapter.
+- A visual vocabulary for the rest of the book: identify the maze/playfield,
+  heroes and monsters, generators, floor items, the HUD, text messages, and the
+  visible camera window. Later chapters can point back to this annotated image.
 
 ---
 
-## Chapter 2 — The Machine (Hardware Overview)
+## Chapter 2 — Welcome to the Machine (Introduction)
 
-*The reader leaves knowing what hardware exists and the single most important
-idea in the whole book: the CPU doesn't draw anything — it fills in tables,
-and the video hardware paints from them.*
+*Sets expectations: what was reverse engineered, what kind of evidence the
+book uses, and how to read it.*
 
-- The main CPU: a Motorola 68010, the same family as early Macs and the
-  Amiga; briefly what that means (16/32-bit, big-endian) and — for a 1986
-  arcade machine — how surprisingly ordinary it is.
+- Why Gauntlet II's internals are worth a book: it is a complete, readable
+  example of how a 1986 arcade game turns compact data and modest CPUs into a
+  busy four-player world.
+- What this book is based on: decades of manual reverse engineering followed by
+  an AI-assisted documentation and audit effort. Explain "reverse engineering"
+  here as recovering code, data structures, and behavior from the shipped ROM
+  images rather than working from original source.
+- The cast of chips at headline level: one main CPU running the game, a second
+  computer dedicated to sound, video hardware that draws from tables, and
+  three analyzed ROM images with distinct jobs—OS, main game, and
+  bank-switched level data. Graphics and sound data live in additional physical
+  ROMs.
+- What "thoroughly documented" means precisely: the supplied game and OS images
+  have byte-level code/data accounting and checked callable contracts, while
+  the level-data tooling validates all stored maze records. Avoid the looser
+  and misleading phrase "every function and table fully understood."
+- How to read the book: chapters build in order; optional "Under the hood"
+  boxes point into `doc/`; confidence and uncertainty are stated honestly; a
+  glossary and repository map are available at the end.
+- A frame-of-reference teaser: after boot, nearly everything the player sees is
+  advanced by one recurring loop synchronized to the 60 Hz display. Chapter 6
+  will slow down one trip through that loop.
+
+---
+
+## Chapter 3 — The Machine (Hardware Overview)
+
+*The reader leaves knowing what hardware exists and the most important design
+idea: the CPU usually describes what should appear, while specialized video
+hardware paints it.*
+
+- The main CPU: a Motorola 68010; briefly explain its 16-bit external data bus,
+  32-bit address/register model, big-endian byte order, and why it is a
+  relatively conventional general-purpose processor inside an arcade cabinet.
 - Memory-mapped everything: one address space containing ROM, working RAM,
-  video RAM, and hardware control registers, so "writing to the screen" and
-  "writing to a variable" are the same instruction. Include a simplified
-  memory map (a handful of labeled regions, not the full table).
-- The three program ROMs and their jobs: the OS ROM (boot, self-test, shared
-  services), the game ROM (all gameplay), and the Slapstic level-data ROM
-  (the mazes, behind a bank-switching copy-protection chip — deferred to
-  Chapter 6). Graphics live in separate ROMs the CPU can't even read.
-- The display in one paragraph: a 336×240 screen refreshed 60 times a second,
-  composed by hardware from three layers (maze tiles, sprites, text) — the
-  full story is Chapter 3.
-- The supporting cast: the sound board's own 6502 CPU (a second computer,
-  Chapter 13), the EEPROM that remembers settings and high scores when
-  unplugged, coin counters and joystick inputs as readable ports, and the
-  watchdog timer that reboots the machine if the code ever stops checking in.
+  video RAM, EEPROM, input ports, and hardware control registers. Include a
+  simplified memory map with a handful of labeled regions.
+- **From physical chips to analyzable images:** the board uses pairs of 8-bit
+  ROM chips on the 68010's 16-bit bus. One chip supplies the even byte lane and
+  its partner the odd byte lane; reverse engineering first interleaves those
+  bytes into CPU order. Explain how the row 7 and row 6 game pairs are then
+  concatenated, and show a tiny `even[0], odd[0], even[1], odd[1]` diagram.
+- The three analyzed ROM images and their jobs: OS ROM (boot, diagnostics,
+  shared services), game ROM (gameplay), and Slapstic ROM (bank-switched maze
+  data). Distinguish these logical images from the larger collection of
+  physical program, graphics, and sound chips.
+- The display in one paragraph: a 336×240 screen refreshed at 60 Hz, composed
+  from a scrolling playfield, motion objects, and text. Defer the full
+  explanation to Chapter 4.
+- The supporting cast: the sound board's 6502 CPU, EEPROM, joystick/coin/start
+  inputs, output latches and LEDs, and the watchdog that reboots a machine
+  whose software stops checking in.
 
 ---
 
-## Chapter 3 — Painting the Screen (The Display System)
+## Chapter 4 — Painting the Screen (The Display System)
 
-*How three layers of tables become a picture. This chapter carries the
-heaviest conceptual load in the book; lean on diagrams.*
+*How tables in video RAM become a picture. This chapter explains rendering;
+Chapter 8 later explains how the same records participate in game state,
+ordering, and collision.*
 
-- Tiles: everything visible is built from 8×8-pixel, 16-color tiles stored in
-  graphics ROMs. The CPU never touches pixels; it places tile *numbers* into
-  video RAM. Introduce palettes here: a tile's pixels are color *indices*,
-  looked up in color RAM (with the intensity+RGB format explained briefly).
-- The playfield layer: a 64×64 grid of tile words forming a 512×512-pixel
-  world of which only a window is visible; the camera is just two scroll
-  registers. Each grid word = tile number + palette choice. This is the maze:
-  floors, walls, and doors are nothing more than grid entries.
-- Motion objects (MOBs) — the sprite system: 1024 possible sprites, each
-  described by four parallel tables (which picture, horizontal position,
-  vertical position + size, link). Multi-tile sprites (like the huge Death
-  figure or the dragon) come from the size fields. Explain the linked-list
-  organization: 64 list heads, one per 8-pixel band of the playfield's
-  height, each chaining together the sprites whose Y position falls in that
-  band; the display hardware traverses these lists to draw, and the game
-  walks the same lists itself for collision work.
-- Sprite pixel special cases that give the game its look: color 0 is
-  transparent, and color 1 is *shadow* — it darkens whatever is underneath
-  instead of drawing a color (how monster/player shadows work for free).
-- The text layer and layer priority: a character grid overlaying everything,
-  with a per-character "opaque" bit; the famous fact that the black screen
-  between levels is not the display turning off, but the text layer filled
-  with opaque spaces. Close with the full layer-priority stack (text over
-  sprites over playfield) and a one-diagram summary of the whole composition
-  pipeline.
-
----
-
-## Chapter 4 — Waking Up (Boot, the OS, and Self-Test)
-
-*What happens between power-on and the attract screen, and the elegant
-division of labor between the OS ROM and the game ROM.*
-
-- The 68010's first breath: the CPU reads its initial stack pointer and start
-  address from the very beginning of the OS ROM; the OS then tests RAM,
-  checksums the ROMs, and refuses to continue (with an on-screen error) if
-  anything fails. Explain the destructive-RAM-test trick of running with no
-  usable RAM in the earliest stage.
-- Why there's an "OS" at all: Atari shipped a common services layer — text
-  drawing, coin/credit accounting, EEPROM storage, sound communication,
-  self-test — so game code doesn't reimplement it. Frame it as an API:
-  a fixed jump table at a known place in the OS ROM that game code calls.
-- The contract in the other direction: the game ROM begins with a header of
-  hook slots (start, per-frame interrupt, options screen, etc.) that the OS
-  calls through. This two-way jump-table contract is what makes OS and game
-  separately replaceable — and is why the OS ROM is shared across Atari
-  System 1-era Gauntlet variants.
-- Interrupts as the machine's pulse: what an interrupt is (hardware tapping
-  the CPU on the shoulder), and the ones that matter here — chiefly the
-  once-per-frame VBLANK interrupt (the 60 Hz heartbeat everything else
-  synchronizes to, setting up Chapter 5) and the sound-CPU interrupt
-  (Chapter 13). Mention the watchdog: unexpected interrupts are deliberately
-  routed into traps that let the watchdog reboot the machine.
-- Self-test mode: the operator-facing diagnostic world hidden behind a
-  switch — RAM/ROM checks, color and sprite test screens, sound tests,
-  coin-option and difficulty editors, and the statistics screens, all stored
-  in the EEPROM the game reads its settings from at boot.
+- Tiles and palettes: visible art is built from small indexed-color graphics
+  stored in ROM. The CPU writes tile numbers and palette choices, not pixels.
+  Explain 8×8, 4-bit-per-pixel tiles and the intensity-plus-RGB palette format
+  using one enlarged tile and palette example.
+- The playfield layer: a column-first 64×64 grid of tile words forming a
+  512×512-pixel world, of which the screen shows a window. Two scroll
+  registers move that window. Each logical 16×16 maze cell normally expands to
+  a 2×2 block of playfield tiles.
+- Motion objects—MOBs, or sprites: up to 1024 numbered slots, each described by
+  four parallel hardware tables for picture, horizontal position/palette,
+  vertical position/size, and link. Show how a MOB ID addresses the same entry
+  in all four tables and how multi-tile sprites build the dragon or large
+  effects.
+- Introduce MOB traversal cautiously: the hardware follows links rather than
+  scanning every possible slot for every line. State only the verified
+  high-level fact here; defer the global chain and 64 cumulative entry heads to
+  Chapter 8 after the targeted recheck.
+- Sprite pixel special cases: color index 0 is transparent and index 1 selects
+  the shadow treatment for the underlying playfield pixel. Use a crop showing
+  a monster/player shadow.
+- The text layer and layer priority: a character grid overlays the action,
+  with a per-character opaque bit. The black screen between levels is the text
+  layer filled with opaque spaces, not the monitor or playfield turning off.
+  Close with a small diagram of text over MOBs over the playfield, including
+  the transparent cases.
+- Make the boundary explicit: playfield words and MOB pictures are the *visible
+  representation*. Walls, doors, players, monsters, and items also have
+  logical state that cannot be recovered merely by reading the resulting
+  pixels. Chapter 8 explains that second half.
 
 ---
 
-## Chapter 5 — The Heartbeat (The Main Loop)
+## Chapter 5 — Waking Up (Boot, the OS, and Self-Test)
 
-*The single most important piece of code in the game: one loop, sixty times a
-second, that runs everything the player ever sees.*
+*What happens between power-on and the attract screen, including the real error
+paths rather than a simplified "everything passes or boot stops" story.*
 
-- The frame-lock idea: the game does one full update per screen refresh. The
-  VBLANK interrupt sets a flag; the main loop finishes its work, then spins
-  waiting for that flag before starting the next frame. Pseudocode of the
-  whole loop skeleton (wait → housekeeping → gameplay → UI/sound → repeat).
-- A guided walk through one frame's call list, grouped conceptually rather
-  than exhaustively: always-run services (logo color cycling, input
-  debouncing, coin check); the gameplay block (doors, shots, players,
-  camera, monsters, dragon, thief, health drain, walls, exits…); the
-  always-run tail (score display, attract state, EEPROM writes, sound).
-- The dialog gate: when a message box is up, the entire sixteen-call gameplay
-  block is skipped in one branch — which is why the world genuinely freezes
-  during dialogs while scores and sound keep working.
+- The 68010's first breath: it reads its initial stack pointer and start address
+  from the beginning of the OS ROM, masks interrupts, resets/enables board
+  hardware, services the watchdog during delays, and chooses normal or
+  self-test boot from the cabinet switch.
+- Destructive RAM testing before RAM can be trusted: the short and full test
+  state machines, their continuation-address convention, and why early boot
+  cannot casually use the stack it is trying to verify.
+- The exact failure policy: working/video RAM failures are identified and
+  displayed while the sequence continues through later tests; OS/game ROM
+  validation and "NO GAME PROGRAM" have their own paths; self-test and normal
+  boot dispatch differently after accumulated errors. Use a flowchart that
+  shows what continues, what enters diagnostics, and what waits.
+- Why there is an "OS" at all: text drawing, coin accounting, EEPROM, sound
+  communication, input and diagnostic services live behind fixed API jump
+  veneers so game code can call stable entry points.
+- The contract in the other direction: the game ROM header supplies hooks the
+  OS may call for start, interrupts, tests, options, and other game-specific
+  behavior. Explain this two-way interface without claiming more historical
+  interchangeability than the evidence proves.
+- Interrupts as the machine's pulse: hardware temporarily redirects the CPU to
+  OS-owned vector handlers, which may dispatch to game hooks. Emphasize VBLANK
+  and sound communication; introduce the watchdog/reset paths.
+- Self-test and the operator's cabinet: color, alpha, MOB, switch, sound, RAM,
+  and ROM tests; configuration editors; coin options; and statistics screens.
+  Later chapters revisit the operator settings from the business/game-design
+  side.
+
+---
+
+## Chapter 6 — The Heartbeat (The Main Loop)
+
+*One synchronized loop advances gameplay, presentation, persistence, and sound.
+This is the software's per-frame loop, distinct from the complete player
+session covered in Chapter 7.*
+
+- The frame-lock idea: a VBLANK interrupt publishes a semaphore once per screen
+  refresh; the main loop waits for it, consumes it, performs one update, and
+  waits again. Show high-level pseudocode.
+- A guided walk through one frame's 29 direct calls, grouped conceptually:
+  always-run input/coin/color services; the gameplay block; then messages,
+  selection/start logic, score/UI, attract mode, EEPROM, and sound.
+- Input sampling and debouncing: raw four-player controls are read every frame;
+  hand-written rotate/shift logic keeps short electrical bounces from becoming
+  extra button presses. Save the control interpretation itself for Chapter 10.
+- The dialog gate: while a message box is active, the sixteen-call gameplay
+  block is skipped as a unit, genuinely freezing movement and hazards while
+  post-gameplay UI and sound work continue.
 - The mode variable: one word distinguishes normal play, treasure-room exit,
-  and the attract-family modes (title, high scores, demo, legend); most
-  subsystems check it themselves, so the same loop serves the whole game.
-  Include a simplified "what runs when" table (a handful of representative
-  rows, not all 29).
-- Keeping time honestly: the frame counter, and the overflow detector that
-  notices when a frame's work overran into the next VBLANK — the game's
-  built-in "we're running late" signal, which decays back to zero when
-  performance recovers.
+  and the four attract-family modes. Most subsystems also apply their own
+  player/mode gates, so "called" does not always mean "does work." Include a
+  compact representative matrix.
+- Keeping time honestly: the frame counter and overflow signal that notices a
+  second VBLANK arriving before the frame is finished, then decays when the
+  workload recovers.
+- Close by separating three scales of time used in the book: interrupts happen
+  during a frame; the main loop advances one frame; the session state machine
+  carries the player from coin drop to game over.
 
 ---
 
-## Chapter 6 — Building a Level (Mazes and the Slapstic)
+## Chapter 7 — From Coin Drop to Game Over (The Session Lifecycle)
 
-*From a maze number to a playable level: bank-switched ROM, a compact
-compression scheme, and a decoder that plants everything in the world.*
+*A single map of the whole experience. Later chapters can explain each branch
+without losing the reader in disconnected subsystem details.*
 
-- Levels vs. mazes: the ROM stores 117 maze records — 97 playable levels
-  (Level N = Maze N+4), a demo maze, the legend screen, eleven treasure
-  rooms, and two secret rooms. The maze is the unit of storage; the level is
-  the unit of play.
-- The Slapstic: level data lives in a 32 KB ROM visible only through an 8 KB
-  window, with a copy-protection chip choosing which quarter is visible;
-  switching banks requires a specific access ritual. Why Atari did this, and
-  how the game looks up a maze: a packed 2-bit bank table plus a 117-entry
-  pointer table.
-- Anatomy of a maze record: a small header (secret-trick code, level flags,
-  wall/floor pattern and color choices, horizontal/vertical type bytes)
-  followed by a compressed object stream. Explain the flag system with a
-  table of the fun ones (invisible walls, wrap-around, moving exits, "shots
-  stun other players"…).
-- The decoder: the compressed stream is a bytecode walked with a cursor over
-  the maze grid — draw runs of wall, skip, place object, repeat — expanding
-  into logical walls, floors, doors, items, monsters, and generators. Show a
-  small worked example (a few bytes → a few placed cells), using the format
-  knowledge demonstrated by `python-gex`. Introduce here the two coordinate
-  systems used everywhere after this: *slot* coordinates (maze grid cells)
-  vs. *pixel* coordinates (playfield positions), and how a slot maps to a
-  2×2 block of playfield tiles.
-- Placement and finishing touches: objects become MOBs and tile records;
-  post-decode scans build the transporter and exit tables; wall tiles get
-  their connected shapes; and the difficulty spice — at higher levels the
-  game *randomly adds* extra flags (fast monsters, invisible walls…) on top
-  of the stored ones, plus randomly scattered food.
+- Begin in attract mode: title, scores, demo, and legend run until a coin/start
+  path transfers control into a real session. Explain paid versus free-play
+  only at a high level here.
+- Starting and joining: a cabinet position gains health/credit, enters
+  character-selection state, chooses a hero with the joystick, receives a HUD
+  column, and is placed at a usable spawn. The same lifecycle supports friends
+  joining a level already in progress.
+- Starting a level: choose the next stored maze, show the level/secret
+  presentation, load and construct the world, position existing players, set
+  the camera, and release the input/UI delay into ordinary play.
+- Playing and leaving: active players move through the same per-frame loop until
+  they die, exit, or trigger a treasure/secret transition. Multiple players may
+  be in different per-player states while the global session continues.
+- Level transitions: exit animations, bonus/tally screens, treasure rooms,
+  secret challenges, and restoration of the saved normal-game level/maze state.
+  Point forward to Chapters 9 and 13 for the exact selection rules.
+- Death and continuation: health reaches zero, death/respawn presentation runs,
+  surviving players may keep the level alive, and an all-player loss can lead
+  to the timed continue prompt at the current level.
+- End of session: score-per-coin ranking, ordinary initials entry when
+  qualified, game-over timing, statistics/persistence updates, and return to
+  attract mode.
+- Use one state diagram with separate lanes for global mode and per-player
+  status. The point is not to enumerate every numeric state but to show how
+  independent player lifecycles coexist inside one cabinet session.
 
 ---
 
-## Chapter 7 — The Heroes (Players)
+## Chapter 8 — The World in Memory (Objects, Coordinates, and Crowds)
 
-*Everything about the four player characters: stats, movement, health,
-inventory, and the strange democracy of a four-joystick cabinet.*
+*The bridge between rendering and gameplay. Explain what a "thing in the maze"
+is, how it is located, and how hundreds of things can be maintained without
+turning the game into a pile of pixels.*
 
-- The four classes as data: per-class stat tables in ROM (speed, shot power,
-  shot speed, armor, magic…) — present one or two as labeled tables in the
-  book's signature style. Character choice is literally a column index.
-- Joining and leaving: coin-in creates a hero mid-game at a spawn point;
-  what a "credit" buys under the different operator settings; name entry and
-  how per-player state is organized (parallel arrays indexed by player,
-  echoing the hardware's own style).
-- Movement as negotiation: each frame, per player: read the debounced
-  joystick, look up speed, propose a move in slot/pixel terms, and test it
-  against walls, doors, monsters, and other players before committing —
-  described as a pipeline, with the key insight that "walls" are consulted
-  as game-state, not by reading pixels.
-- Health as a currency: the constant drain timer, food, potions and other
-  pickups via the tile-interaction dispatch (food, keys, treasure, doors,
-  transporters, exit — each a case in one big "what did I just step on?"
-  switch), damage, death, and what actually happens at zero health.
-- Gauntlet II's signature player mechanics: the IT mechanic (tag — one
-  player is "IT", labeled in their HUD, transferred by touch), shot-stun and
-  friendly-fire flags from Chapter 6 affecting player-vs-player play, and
-  the score multiplier system for treasure.
-
----
-
-## Chapter 8 — The Horde (Monsters and Combat)
-
-*Ghosts, grunts, demons, lobbers, sorcerers, and Death — how the game animates
-a screenful of enemies on a 1986 CPU budget.*
-
-- The monster roster as data: types, strength tiers (the palette tells you
-  the tier), and per-type parameter tables; generators as a special kind of
-  monster that spawns others, with spawn pacing rules.
-- One brain, many bodies: monsters share a common handler with per-type
-  hooks; each frame the game walks the monster list and gives each a small
-  slice of decision-making. How "move toward the player" works on a grid,
-  and what the odd-angle and double-speed level flags actually change.
-- Type specialties: lobbers arc shots over walls, sorcerers blink in and out
-  of existence, Death drains health by touch until it dies of overeating,
-  ghosts damage-and-die on contact. Keep each to a paragraph — behavior, not
-  exhaustive parameters.
-- Shots and hit resolution: players and monsters share a projectile system;
-  how a shot finds what it hit (using the per-band sprite lists from
-  Chapter 3), damage accumulation versus instant kills, and stun behavior.
-- Dying by the numbers: monster death, score awards, the death-potion
-  mass-kill, and how corpses/scores are displayed with floating score MOBs —
-  linking back to sprite machinery the reader already knows.
+- Three related coordinate spaces: a packed 32×32 maze-slot grid for logical
+  placement, a 64×64 grid of 8×8 playfield tiles for rendering, and 0–511
+  pixel coordinates for MOBs and camera movement. Show one cell traced through
+  all three representations, including object-specific origin offsets.
+- A MOB slot as both hardware record and software object handle: four video-RAM
+  arrays plus the software-only state/back-link array. The upper link/state
+  bits carry object type or object-specific state; the same field means
+  animation/direction for a monster, player identity for a hero, door shape
+  state for a door, and hit count for a movable wall.
+- Fixed and dynamic identities: reserved low slots for shots, explosions,
+  score popups, exit animations, and transporter effects; dynamic slots for
+  maze objects. Explain why a numbered slot is useful without implying that
+  all 1024 are active or visible at once.
+- **The MOB chain, after the research gate:** one depth/priority-sorted doubly
+  linked chain, a global head, forward and backward links, and 64 cumulative
+  vertical/priority entry heads into that same chain. Show insertion, removal,
+  and traversal with a diagram; explicitly contrast this with the incorrect
+  mental model of 64 independent lists.
+- Rendering order, monster iteration, and collision: identify which operations
+  follow the shared chain, which enter through a cumulative head, and which
+  probe neighboring maze slots or fixed projectile channels. Do not blur
+  hardware display traversal and software collision merely because they share
+  link data.
+- Logical state versus visible tile: walls and doors can have MOB/object
+  records and neighbor/endpoint state even though the player ultimately sees
+  playfield tiles. Explain the path-grid nibbles and per-player door endpoint
+  records at a conceptual level.
+- The multiplayer camera: compute the active-player extent, constrain outliers
+  with the rubber-band limit, choose the midpoint, move smoothly toward it,
+  and account for wraparound/offscreen level flags. Pair the algorithm with two
+  annotated screenshots showing close and widely separated players.
+- Why crowds are possible: compact parallel arrays, fixed-size IDs, linked
+  traversal, hardware sprite composition, simple per-monster decisions, and
+  bounded per-frame work. Present this as an evidence-backed design reading,
+  not a claim that any one data structure alone created Gauntlet's crowds.
 
 ---
 
-## Chapter 9 — Special Guests (The Dragon and the Thief)
+## Chapter 9 — Building and Choosing a Level (Mazes and the Slapstic)
 
-*Two custom-built characters that live outside the common monster machinery.*
+*From level progression to a playable world: choose a stored maze, expose its
+bank, decode a compact record, and construct the logical and visible state
+introduced in Chapter 8.*
 
-- Why they're special: both have private state machines and private data
-  tables instead of the shared monster handler — the cost (code size) and
-  the payoff (distinctive behavior).
-- The dragon, Gauntlet II's mini-boss: a multi-sprite body (head, neck
-  segments, body) assembled from MOBs; its state machine (dormant, active,
-  attacking, dying) and fire-breathing attacks.
-- The dragon's path system: pre-authored movement routes in ROM data that
-  the dragon follows through the maze — a rare case of scripted movement in
-  an otherwise reactive game.
-- The thief and the mugger: the timer that decides when a thief visits
-  (tuned by player wealth and level number — the game literally computes a
-  weighted "wealth" score to pick the richest victim), its
-  pursue/steal/escape state machine including shot-dodging, what it steals
-  (an item or health), and the mugger variant (a mode flag on the same state
-  machine; `doc/` records little beyond the flag itself, so describe
-  mugger-specific behavior at full specificity but tag it
-  **[needs verification]**).
-- What their design says about the game: hand-tuned exceptions layered on a
-  general engine — a pattern the reader will recognize from modern game
-  development.
-
----
-
-## Chapter 10 — A Living Maze (World Mechanics and Hazards)
-
-*The tricks that keep 97 levels interesting: everything in the world that
-moves, hides, teleports, or lies to you. Grab-bag chapter; more bullets by
-design.*
-
-- Transporters: how destination selection works, the sparkle animation, and
-  the post-decode transporter table from Chapter 6 coming into play.
-- Forcefields: segment tables, the color-cycling effect (palette animation,
-  not redrawn graphics — callback to Chapter 3), and timed on/off patterns
-  that make them passable.
-- Walls that misbehave: cyclic walls that open and close on timers, the
-  random wall-mover that relocates maze walls behind your back, destructible
-  walls (two tiers), and invisible walls (a flag from Chapter 6 finally paid
-  off: the tile is there, the graphics just aren't).
-- Exits, honest and otherwise: normal exits, moving exits, fake exits,
-  "only one of these exits is real", and the exit sequence that walks the
-  player out and tallies the level.
-- Traps and stun tiles: the tile types that hurt or hold you, and the acid
-  puddle / slow-motion floor effects.
-- Treasure rooms: the timed bonus levels between worlds — timer, scoring,
-  and the special "treasure room exit" game mode from Chapter 5.
-- Secret rooms: the hidden challenge system — per-level secret tricks (a
-  table of examples: "don't shoot food", "stay invulnerable-free"…), the
-  challenge codes, the two secret-room layouts they select, and how the game
-  announces success.
+- Levels versus stored mazes: the Slapstic ROM contains 117 records numbered
+  0–116, including normal layouts, demo/legend material, treasure rooms, and
+  two secret-room layouts. Establish the corrected normal progression:
+  **mazes 0–5 are always the first six levels**, after which the maze selector
+  begins randomizing later layouts. Do not retain `Level N = Maze N+4`.
+- **The maze-selection randomizer:** after completing the research gate,
+  explain the exact algorithm and state in plain pseudocode—when it activates,
+  how it chooses/advances the next maze, its legal normal-maze range, how it
+  prevents or permits repeats, wrap/endgame behavior, and what EEPROM state
+  preserves. Separately explain the treasure-room selector and the fixed
+  demo, legend, and secret paths.
+- The Slapstic: a 32 KB level-data image visible through an 8 KB CPU window,
+  with a copy-protection chip selecting the bank after a required access
+  ritual. Explain the 2-bit bank table and 117-entry pointer table without
+  drowning the reader in bus cycles.
+- Anatomy of a maze record: secret objective, four bytes of level flags,
+  wall/floor art and palette choices, four horizontal/vertical span types, and
+  a compressed object stream. Show a labeled header.
+- The decoder: a bytecode stream walks a cursor over the 32×32 logical grid,
+  placing object types, repeating horizontal/vertical spans, repeating the
+  previous type, or skipping cells. Show a small verified worked example and a
+  matching `python-gex` rendering.
+- Placement and construction: tokens become logical object/MOB records or
+  marker records; visible 2×2 tile descriptors are selected; post-decode scans
+  find the player start, build transporter/exit tables, connect walls and
+  doors, initialize forcefields, and center the camera.
+- **Do not confuse two kinds of randomization.** Maze selection chooses which
+  stored layout comes next. Level-flag randomization modifies how a chosen maze
+  behaves, adding late-game hazards such as faster/odd-angle monsters,
+  wraparound, or invisible walls. Random pickup placement is a third,
+  object-placement step.
+- The game's RNG in one page or less: a small deterministic 16-bit
+  linear-congruential generator feeds maze selection/flags (once verified),
+  pickup placement, AI choices, forcefield timing, secret tasks, and other
+  systems. Show the recurrence or short pseudocode, then focus on how one
+  shared stream creates coupling among apparently unrelated events.
 
 ---
 
-## Chapter 11 — Keeping Score (Money, Scores, and Memory)
+## Chapter 10 — The Heroes (Players, Controls, and Inventory)
 
-*The commercial machinery: coins to credits to health, scores to EEPROM, and
-the HUD that displays it all.*
+*Everything the active-player update does: selection, movement, attacks,
+health, items, powers, animation, and four-player interaction.*
 
-- Coin to credit to health: the coin-detection path in the main loop, the
-  OS's coin/credit accounting, and operator-configurable "health per coin"
-  economics — the arcade business model expressed as game settings.
-- Scoring: what scores points, the treasure multiplier, floating score
-  displays in the playfield, and the high-score check at game end with the
-  initials-entry flow.
-- The info panel: each player's HUD column (score, health, inventory icons,
-  the IT label) as text-layer and MOB composition — a concrete payoff of
-  Chapter 3's layer system.
-- Dialogs and messages: the first-encounter dialog system ("Ghosts damage
-  you on contact!") with its seen-it-before bit flags, the continue prompt,
-  and how the dialog timer freezes gameplay (the Chapter 5 gate, seen from
-  the other side).
-- The EEPROM: what persists (settings, statistics, high scores), the
-  redundant-block storage scheme that survives power loss mid-write, and the
-  periodic write timer in the main loop — why the machine remembers you.
-
----
-
-## Chapter 12 — The Show (Attract Mode and the Demo)
-
-*What the machine does when nobody's playing — and how the self-playing demo
-is a recording, not an AI.*
-
-- The attract cycle as a state machine: high scores → title → self-playing
-  demo → legend (monster/item explanations) → repeat, driven from the main
-  loop by the mode variable introduced in Chapter 5.
-- The demo is a tape: recorded joystick/button inputs stored in ROM, played
-  back through the same input path real players use — with the consequence
-  that the demo runs the real game engine on a real maze (the dedicated demo
-  maze from Chapter 6).
-- Determinism and its limits: why input playback works (same maze, same
-  seeded starting state) and what the recording format looks like at a high
-  level.
-- Interruption: how a coin drop or start press exits attract mode cleanly at
-  any point, and what gets reset on the way into a real game.
-- Character select: the pre-game screen where each cabinet position claims a
-  hero, its timeout, and how it hands off to level 1.
-
----
-
-## Chapter 13 — The Voice (Sound, at Arm's Length)
-
-*Broad strokes only: the sound hardware design, and how the game talks to it.
-The sound board's internals get their own separate writeup.*
-
-- A second computer for sound: the sound board runs its own 6502 CPU with
-  its own ROM and its own synthesizer/speech chips; the main CPU never makes
-  a sound itself — it sends requests. Why this split was standard practice
-  (timing isolation, parallel development).
-- The wire between them: byte-latch communication surfaced through OS
-  services, with an interrupt on the main CPU when the sound CPU replies —
-  connecting back to the interrupt map from Chapter 4.
-- The game side of the conversation: a small queue in game RAM that gameplay
-  code drops sound-command bytes into, drained once per frame by the main
-  loop (Chapter 5's tail), plus the response handler that processes what the
-  sound CPU sends back — including recovery if the sound CPU resets.
-- Commands as vocabulary: sound effects, music cues, and speech are all just
-  command numbers (with `refs/soundcmds.csv` as the phrasebook); a few
-  concrete examples tied to moments the reader knows ("Elf shot the food" is
-  a byte with a number).
-- Where to go for the rest: an explicit pointer that voice synthesis, music
-  playback, and the sound ROM's internals are covered in the companion sound
-  writeup, not here.
+- The four classes as data: per-class ROM tables for movement speed, fighting,
+  shot damage/speed, armor, and magic. Present a few labeled tables and connect
+  them to the broad tradeoffs introduced in Chapter 1.
+- Selection, joining, and player state: each cabinet position owns a player
+  record and HUD color; character selection is a per-player state, not merely
+  one pre-game screen. Successful joining finds a clear spawn, creates a player
+  MOB, installs character-specific palette handlers, and initializes status,
+  speech, and counters.
+- From raw controls to intent: active-low joystick/button bits, per-frame
+  debouncing, conversion of direction nibbles to one of eight directions, and
+  the distinction among movement, Fire, and Magic. Keep electrical details in
+  Chapter 6 and focus here on game meaning.
+- Movement as negotiation: look up speed, propose a pixel/slot movement, probe
+  walls, door geometry, corners, monsters, and players, account for wrap/offscreen
+  flags and stun/slow effects, then commit or reject. Refer back to Chapter 8's
+  coordinate and collision model.
+- Fighting and shooting: standing, walking, fighting, and shooting animation
+  tables; how attack direction and animation timing lead to projectile
+  creation; fixed per-player shot channels; ordinary shot power, upgraded
+  power, supershots, piercing/reflection, and the one-shot-at-a-time constraints
+  visible to the player.
+- Magic and potions: the Magic button consumes a carried potion; a
+  character/powered-state matrix determines damage or transformation across
+  monster and generator types. Use a compact labeled slice of the real matrix
+  rather than listing all 28×16 entries.
+- Health, damage, and death: constant drain, armor and contact/projectile
+  damage, food and coins as replenishment, low-health pulsing/heartbeat and
+  speech, poison/acid timing, accumulated damage statistics, zero-health state,
+  and the continue path from Chapter 7.
+- Inventory and doors: keys, potions, treasure multiplier, and power-up icons
+  in the HUD; collecting a key versus spending it; door endpoints and
+  direction-aware traversal; timed door opening. Keep door rendering and world
+  mutation in Chapter 13.
+- The power-up vocabulary: extra speed, shot speed/power, magic, armor/fight,
+  invisibility, invulnerability, repulsiveness, reflect, supershots,
+  transportability, and relevant one-shot/dialog behavior. Explain effects and
+  durations by category rather than as a bitmask dump.
+- Gauntlet II's player-vs-player layer: IT transfer and HUD announcement,
+  monsters targeting IT, shot-stun and shot-hurt level flags, supershot damage,
+  and how cooperative play can temporarily become competitive.
 
 ---
 
-## Chapter 14 — How We Know All This (Methodology and Curiosities)
+## Chapter 11 — The Horde (Monsters and Combat)
 
-*The closing chapter: how the reverse engineering was actually done, and the
-treasures found along the way. May run long; it's the dessert course.*
+*Ghosts, grunts, demons, lobbers, sorcerers, Death, acid, and special variants:
+how the game animates and fights a crowd on a 1986 CPU budget.*
 
-- The toolkit: disassembly with radare2, live tracing in MAME, decades of
-  prior manual work, and a recent AI-assisted push; what "every byte
-  classified" means (code vs. data vs. padding) and how the audit kept the
-  AI honest — machine-checked contracts per function, regenerable CSV
-  reports, confidence labels on every claim.
-- What the code itself revealed about its authors: compiled C with
-  hand-written assembly hot paths, the compiler's fingerprints, calling
-  conventions as archaeology, and the OS/game split as 1980s software
-  engineering discipline.
-- The Morse code Easter egg: nine bytes in the game ROM header that decode,
-  bit by bit, to "COPYRIGHT 1986 ATARI GAMES" in Morse — a copyright trap in
-  the tradition of Atari's Centipede affidavit. Show the decoding.
-- Ghosts in the OS ROM: the runtime-dead "retained module" — a chunk of
-  earlier Gauntlet game code, complete with gameplay hint strings and
-  factory high-score tables, shipped inside every OS ROM but never executed.
-- What remains unknown — and why that's the honest ending: open questions
-  the ROMs alone can't answer (build provenance, intent behind reserved
-  areas, physical open-bus behavior), plus an invitation: the full technical
-  docs in `doc/`, the extractor in `python-gex/`, and everything the curious
-  reader needs to go one level deeper.
+- The monster roster as data: types, strength tiers (also reflected in
+  palette/packed state), per-type parameters, and the distinction among
+  ordinary monsters, generators, acid, Super Sorcerer, Death, and IT-related
+  behavior.
+- One brain, many bodies: the common monster dispatcher and shared handler;
+  small state codes for moving/chasing; simple target selection; grid/path
+  decisions; and level flags that enable odd-angle or double-speed behavior.
+  Explain how monsters react to the current IT player when appropriate.
+- Generators: object types that periodically create other monsters, using
+  per-level caps, spawn probability, tier/type tables, and a bounded scan for a
+  clear adjacent cell. Connect the cap to operator difficulty and active play.
+- Type specialties: ghosts damage-and-die on contact, demons shoot, lobbers arc
+  projectiles over walls, sorcerers blink and may be immune while hidden,
+  acid moves and slows, Super Sorcerers use special placement, and Death drains
+  health until its special threshold is met.
+- Shots and hit resolution: fixed player/monster projectile channels, movement
+  and collision, player/monster/wall/item/dragon targets, ordinary versus
+  supershot rules, stun/friendly-fire behavior, and why the result depends on
+  both target type and level flags.
+- Dying by the numbers: packed monster tier/health changes, destruction,
+  score awards, potion mass damage, corpse/effect animation, and floating score
+  MOBs. Tie the visual effects back to Chapters 4 and 8.
 
 ---
 
-## Appendix — Glossary (book/appendix_glossary.md)
+## Chapter 12 — Special Guests (The Dragon, Thief, and Mugger)
 
-- Alphabetical glossary of every term of art the book introduces (MOB,
+*Purpose-built actors that sit outside the common monster path and show how the
+game layers hand-tuned exceptions over a general engine.*
+
+- Why they are special: private state, dedicated MOB slots/data, custom path or
+  targeting code, and specialized damage/animation handling rather than the
+  ordinary monster dispatcher.
+- The dragon as a multi-MOB actor: head/body segments, spawn offsets, dormant
+  and active phases, turning/sleeping/fire constraints, nine-hit defeat
+  behavior, and the special bonus/drop path.
+- Dragon path programs: five compact authored sequences controlling pose/fire
+  timing, plus random path changes that preserve pose continuity after a hit.
+  Use an annotated sequence and sprite composite.
+- The thief: wealth-based victim selection, level/wealth-dependent appearance
+  timer, pursue/steal/escape states, path recording, shot-alignment detection
+  and dodging, transport interactions, theft priority, carried loot, and exit.
+- The mugger: the same broad state machine with its variant flag, animations,
+  speech, carried-state fields, fighting/contact behavior, and **health theft
+  rather than ordinary inventory theft**. Include speed/timing differences only
+  if the research gate verifies them.
+- What these exceptions teach: ROM space and special-case code were spent where
+  they produced memorable encounters, while shared MOB, coordinate, collision,
+  sound, and rendering systems still did most of the supporting work.
+
+---
+
+## Chapter 13 — A Living Maze (Doors, Hazards, Treasure, and Secrets)
+
+*The systems that make stored layouts change underneath the players—and the
+complete path from an ordinary secret objective to a verifiable secret code.*
+
+- Doors and keys as a complete system: logical door objects, connected/isolated
+  shapes, endpoint records, key consumption, direction-aware traversal, manual
+  and timed opening, neighbor redraw, and the "Doors Open" presentation.
+  Refer back to Chapter 10 for inventory ownership.
+- Transporters: post-decode destination tables, destination selection,
+  saved/restored player graphics, sparkle/transition MOBs, state changes, and
+  interactions with thieves and secret objectives.
+- Forcefields: hub/segment records, horizontal/vertical runs, palette animation,
+  randomized on/off timing, collision damage/sound timers, and when the field
+  becomes passable.
+- Walls that misbehave: cyclic groups, random appearance/disappearance,
+  movable walls with hit accumulation, destructible and secret walls,
+  invisible walls, trap-wall conversions, prizes or danger hidden behind
+  walls, and the exact distinction between a logical wall and its current
+  graphic.
+- Exits, honest and otherwise: ordinary exits, moving exits, one-real-exit
+  selection, fake exits, exit animations, and the long-time escape behavior
+  that can convert walls into exits. Explain how the next-maze calculation
+  connects back to Chapter 9.
+- Traps and special floors: stun tiles, acid puddles, slow-motion effects,
+  wraparound/offscreen geometry, and how tile interaction dispatch turns a
+  stepped-on object type into player state.
+- Treasure rooms: selection among the treasure layouts, saved normal-session
+  state, countdown and deliberately mischievous speech, treasure scoring,
+  timeout, bonus tally, and restoration to ordinary progression.
+- **Ordinary secret objectives:** every normal maze's trick/task state, examples
+  such as avoiding treasure or shooting walls/food, per-player progress and
+  violation hooks spread across movement/combat/item systems, and the event
+  that earns entry to a secret challenge.
+- **Secret challenge rooms:** save the previous maze/trick, choose one of
+  challenge codes 0x50–0x5D, select secret layout 115 or 116, display the
+  qualifier and time limit, track the selected objective, award the
+  5,000-per-coin bonus, and distinguish these challenge codes from ordinary
+  maze-header trick IDs.
+- **Name entry and the `XXX-XXX` secret code:** the operator setting that
+  enables contest/name entry, editing the winner's name, CRC-CCITT hashing
+  while ignoring spaces, combining name-derived symbols with
+  maze/trick/challenge state, the 32-character alphabet, interleaving the six
+  symbols, and the original contest text.
+- **How to verify a code:** include readable pseudocode or a short independent
+  reference implementation derived from `secret_code_build`, walk one captured
+  in-game example end to end, and explain which inputs are necessary to
+  reproduce or validate it. The code in the book must be tested against the
+  game, not merely transcribed from the documentation.
+
+---
+
+## Chapter 14 — Keeping Score (UI, Arcade Economics, and Memory)
+
+*Coins, health, score, presentation, operator policy, and persistence: the
+commercial and informational layer surrounding the action.*
+
+- Coin to credit to health: hardware/OS coin samples, per-player coin counts,
+  coins-to-start rules, active-player re-coining, configurable health per coin,
+  and why Gauntlet's business model is visible directly in its player state.
+- Scoring: pickups, monster awards, the treasure multiplier, special bonuses,
+  floating score displays, and the difference between the live raw score and
+  the value used for ranking.
+- **Score per coin:** compute each player's score divided by their inserted
+  coins, pass that metric to the OS ranking service, and show how the four-way
+  high-score display makes efficiency—not just total spending—the comparison.
+  This deserves a small worked example.
+- The HUD/info panel: score, health, class/name, inventory icons, multiplier,
+  IT label, GAME OVER/selection states, and the combination of text-layer and
+  MOB graphics used to present it.
+- Dialogs and messages: first-encounter advice, seen-before flags, power-up and
+  item messages, the continue prompt, and the Chapter 6 dialog gate that
+  freezes gameplay without stopping the whole frame loop.
+- EEPROM: what persists, queued writes, redundant/checksummed storage and
+  recovery behavior, the periodic write timer, high scores, settings, and
+  statistics. Explain durability without making a stronger power-failure
+  guarantee than the verified codec/worker behavior supports.
+- The operator's view: difficulty/extra-monster setting, health per coin, coins
+  to start, attract sound, speech, secret-code/name-entry option, reduced text,
+  reset/default controls, and coin options. Keep the settings table concise.
+- Statistics and tuning evidence: active-player time, games/session data,
+  normalized score/coin histograms and other operator screens—enough to show
+  that the cabinet measured how people played, without cataloging every EEPROM
+  byte.
+
+---
+
+## Chapter 15 — The Show (Attract Mode, Demo Playback, and Legend)
+
+*What the cabinet does when nobody is playing, and how recorded control input
+uses the real game engine as a presentation system.*
+
+- The attract cycle as a state machine: high scores → title → demo → legend →
+  repeat, driven from the same main loop and `game_mode` introduced in
+  Chapter 6. Include the real timers and the occasional title/settings work.
+- The demo is a recording, not game-playing AI: four ROM stream pointers,
+  two-byte duration/input records, active-low joystick bits, and special
+  command bytes for dialog/speech or player switching. The standard demo sets
+  up maze 102 and uses the player-1 Elf stream.
+- Source the claim directly: trace `attract_demo_init` into the same
+  `main_move_players`, potion, shot, transporter, and input consumers used by
+  real play. A short decoded run of records should show recorded input becoming
+  visible movement.
+- Determinism, precisely: after the research gate, explain which state is reset
+  or fixed (maze, player/class, pointers/timers, frame state, RNG seed if
+  verified), which normal random/game systems remain active, and how divergence
+  is avoided or tolerated. Do not merely say "the game is deterministic."
+- Interruption: coin/start handling, paid/free-play differences, and the
+  one-second lockout at the beginning of each attract screen before qualifying
+  input transfers to a real session.
+- The legend pages: maze 103 as presentation background; overview, rules, and
+  monster/power/item explanations; how the game reuses playfield and text
+  rendering to teach itself.
+
+---
+
+## Chapter 16 — The Voice (Sound, at Arm's Length)
+
+*The main-game side of sound communication. Detailed sound-board synthesis,
+music, and speech-ROM internals are reserved for a future volume.*
+
+- A second computer for sound: the sound board's 6502 CPU, its own ROM and
+  sound/speech hardware, and the architectural advantage of running audio work
+  separately from the 68010's game loop.
+- The wire between them: byte-latch communication exposed through OS services,
+  status/full bits, reset/control paths, and the main-CPU interrupt used when
+  responses arrive.
+- The game side of the conversation: a small command queue in game RAM,
+  once-per-frame draining from the main-loop tail, a receive/response handler,
+  and recovery behavior when the sound processor resets or stops responding.
+- Commands as vocabulary: effects, music, and spoken phrases are command
+  numbers. Use `refs/soundcmds.csv` for a few concrete examples tied to moments
+  already covered, such as joining, low health, doors, food, the thief, and
+  treasure countdowns.
+- Speech as game design: character/color-specific phrases, contextual warnings,
+  attract/option gating, one-shot dialog flags, and how audio helps four players
+  understand a crowded screen.
+- Scope boundary: explicitly say that synthesizer programming, voice
+  reconstruction, music playback, and the sound ROM will be covered in a
+  **future volume**; do not point to a nonexistent companion document.
+
+---
+
+## Chapter 17 — How We Know All This (Methodology and Curiosities)
+
+*How the reverse engineering was performed, how claims were checked, and what
+the ROMs reveal—or cannot reveal—about the people and process behind the game.*
+
+- The toolkit and evidence ladder: decades of manual notes, radare2
+  disassembly/annotation, targeted MAME tracing, `python-gex` rendering,
+  AI-assisted analysis, and generated contract/coverage reports. Explain what
+  each tool can and cannot prove.
+- Keeping the AI and humans honest: byte classification, callable contracts,
+  control-target and RAM-reference reconciliation, regenerable CSV artifacts,
+  confidence labels, independent implementations, screenshots/traces, and the
+  difference between semantic naming and mechanical verification.
+- What the code reveals about its construction: compiled C conventions,
+  compiler-vendor attribution as inference, hand-written assembly leaves such
+  as input debouncing and Slapstic access, table-driven data, and the disciplined
+  OS/game interface.
+- The Morse copyright trap: nine runtime-dead game-ROM bytes decode to
+  `COPYRIGHT 1986 ATARI GAMES`. Explain Atari's documented technique using Ed
+  Logg's Centipede affidavit, which describes a nonfunctional data pattern read
+  as International Morse code and used to prove copying:
+  <https://arcadeblogger.com/wp-content/uploads/2019/06/ed-logg.pdf>. Present
+  Gauntlet II's decoded bytes and the historical evidence together.
+- A brief ghost in the OS image: a runtime-dead retained game-support payload
+  exists in the supplied OS ROM. Mention it only as an archaeological
+  curiosity. Its exact provenance is not encoded; a possible relationship to
+  earlier Atari System 1 software such as Marble Madness is a future research
+  question, not a fact needed by this volume.
+- What cannot be recovered from runtime artifacts alone: exact build
+  provenance, original symbol names, intent behind reserved/dead regions, and
+  physical open-bus values. End by distinguishing an unanswered historical
+  question from an undocumented runtime behavior.
+- Where to go next: the technical chapters in `doc/`, generated audits,
+  radare2 loader, maze/graphics tools in `python-gex/`, the future sound volume,
+  and concrete follow-up projects such as System 1 BIOS comparison.
+
+---
+
+## Appendix — Glossary and Repository Map (`book/appendix_glossary.md`)
+
+- Alphabetical glossary of every term of art the book introduces: MOB,
   playfield, VBLANK, palette, bank switching, Slapstic, EEPROM, watchdog,
-  attract mode, slot vs. pixel coordinates, generator, IT, …), each defined
-  in one or two sentences consistent with its introduction in the chapters.
-- A short "map of the repository" table: which `doc/` file to open for which
-  kind of question, mirroring the per-chapter source table above.
+  attract mode, maze versus level, slot/tile/pixel coordinates, generator,
+  IT, score per coin, and so on. Each definition should match its first use.
+- A short "map of the repository" table: which `doc/` file, generated artifact,
+  reference, or tool to open for each kind of question.
+- A compact source note for external material used by the book, including MAME
+  references and the Ed Logg affidavit, so provenance remains visible without
+  turning chapter prose into academic apparatus.
+- A checklist for final publication: chapter-opening promises present,
+  diagrams/images sourced, "Under the hood" boxes checked, internal links
+  valid, terminology consistent, and zero `**[needs verification]**` markers.
