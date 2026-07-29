@@ -61,9 +61,27 @@ II recently—or at all.
 ### Deliverable format
 
 - A new directory `book/` at the repository root.
-- One markdown file per chapter, numbered: `book/01_how_to_play.md`,
-  `book/02_introduction.md`, etc. Final filenames should match the chapter
-  titles below, adjusted to `NN_snake_case.md`.
+- One markdown file per chapter, numbered. Use exactly these filenames:
+
+  | Chapter | File |
+  |---------|------|
+  | 1 | `book/01_how_to_play.md` |
+  | 2 | `book/02_introduction.md` |
+  | 3 | `book/03_hardware_overview.md` |
+  | 4 | `book/04_display_system.md` |
+  | 5 | `book/05_boot_and_os.md` |
+  | 6 | `book/06_main_loop.md` |
+  | 7 | `book/07_session_lifecycle.md` |
+  | 8 | `book/08_world_in_memory.md` |
+  | 9 | `book/09_mazes_and_slapstic.md` |
+  | 10 | `book/10_players.md` |
+  | 11 | `book/11_monsters.md` |
+  | 12 | `book/12_dragon_thief_mugger.md` |
+  | 13 | `book/13_living_maze.md` |
+  | 14 | `book/14_score_and_economics.md` |
+  | 15 | `book/15_attract_and_demo.md` |
+  | 16 | `book/16_sound.md` |
+  | 17 | `book/17_methodology.md` |
 - A `book/README.md` containing a one-paragraph description of the book and a
   linked table of contents with a one-line summary per chapter.
 - A final `book/appendix_glossary.md` (see the Appendix section).
@@ -132,6 +150,26 @@ the mechanism.
 10. **Light, curious tone.** This is a tour, not a specification. Wry asides
     are fine; memes and forced jokes are not. Write like a good conference
     talk.
+
+### Image and asset policy
+
+- All raster images live in `book/img/`, named `chNN_short_description.png`
+  (e.g. `ch04_tile_zoom.png`), and are referenced with relative markdown
+  links. Mermaid diagrams are authored inline in ```mermaid fences, as in
+  `doc/`, and need no image files.
+- The two production paths are `python-gex` renders (tiles, sprites, stamps,
+  full mazes) and MAME screenshots of the running game, annotated as needed.
+  The ROMs themselves are **not** in this repository; producing either kind of
+  asset requires a ROM set assembled per the checksums in `README.md`.
+- A drafting agent that cannot produce an image (no ROMs or MAME available)
+  must not skip it, substitute an unrelated image, or fabricate one. Instead,
+  insert a placeholder image link to the intended `book/img/` path plus a
+  blockquote beginning `**[image needed]**` that describes exactly what the
+  image must show and how to produce it (the `gex` command line, or the game
+  situation to screenshot and the annotations to add).
+- Like `**[needs verification]**`, the `**[image needed]**` marker is
+  draft-only: the finished book contains zero such markers. Every image is
+  either produced or its passage rewritten to stand without it.
 
 ### Accuracy and source constraints
 
@@ -850,4 +888,5 @@ the ROMs reveal—or cannot reveal—about the people and process behind the gam
   turning chapter prose into academic apparatus.
 - A checklist for final publication: chapter-opening promises present,
   diagrams/images sourced, "Under the hood" boxes checked, internal links
-  valid, terminology consistent, and zero `**[needs verification]**` markers.
+  valid, terminology consistent, and zero `**[needs verification]**` or
+  `**[image needed]**` markers.
