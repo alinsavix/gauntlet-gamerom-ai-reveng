@@ -42,6 +42,22 @@ Assume the reader can follow short pseudocode, labeled tables, diagrams, and a
 small amount of hexadecimal notation. Do not assume they have played Gauntlet
 II recently—or at all.
 
+### Depth and abstraction target
+
+- Begin with the player-visible effect, then explain the smallest set of
+  cooperating systems needed to account for it. Stop before instruction-level
+  mechanics unless they reveal an idea that would otherwise be lost.
+- Prefer semantic descriptions of data. A table should have labels such as
+  character, normal speed, and powered speed—not offsets and index arithmetic.
+- Explain responsibilities and information flow: what state exists, who reads
+  or changes it, what checks occur, and what the player sees as a result.
+- Use exact constants when they illuminate a rule (four players, one shot
+  channel each, a 32×32 maze grid), not merely because the disassembly exposes
+  them.
+- Keep raw addresses, calling conventions, register use, audit machinery, and
+  exhaustive inventories in optional "Under the hood" material or the existing
+  technical documentation.
+
 ### Deliverable format
 
 - A new directory `book/` at the repository root.
@@ -286,8 +302,9 @@ idea: the CPU usually describes what should appear, while specialized video
 hardware paints it.*
 
 - The main CPU: a Motorola 68010; briefly explain its 16-bit external data bus,
-  32-bit address/register model, big-endian byte order, and why it is a
-  relatively conventional general-purpose processor inside an arcade cabinet.
+  24-bit physical address space, 32-bit registers, big-endian byte order, and
+  why it is a relatively conventional general-purpose processor inside an
+  arcade cabinet.
 - Memory-mapped everything: one address space containing ROM, working RAM,
   video RAM, EEPROM, input ports, and hardware control registers. Include a
   simplified memory map with a handful of labeled regions.
@@ -353,9 +370,9 @@ ordering, and collision.*
 paths rather than a simplified "everything passes or boot stops" story.*
 
 - The 68010's first breath: it reads its initial stack pointer and start address
-  from the beginning of the OS ROM, masks interrupts, resets/enables board
-  hardware, services the watchdog during delays, and chooses normal or
-  self-test boot from the cabinet switch.
+  from the beginning of the OS ROM, masks interrupts, pulses the board-control
+  latch, services the watchdog during delays, and chooses normal or self-test
+  boot from the cabinet switch.
 - Destructive RAM testing before RAM can be trusted: the short and full test
   state machines, their continuation-address convention, and why early boot
   cannot casually use the stack it is trying to verify.
