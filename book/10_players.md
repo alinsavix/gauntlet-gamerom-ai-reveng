@@ -1,58 +1,56 @@
 # Chapter 10 — The Heroes (Players, Controls, and Inventory)
 
-**This chapter answers:** What is a player, from the machine's point of view —
+**This chapter answers:** What is a player from the machine's point of view,
 and how do up to four of them move, fight, drink potions, go shopping for
 power-ups, and die, all inside one shared frame?
 
 **By the end you will understand:** how the four character classes exist as
-data tables; what actually happens when someone joins a game in progress; the
-pipeline from joystick switches to intent; movement as a negotiation with the
-world; how melee, shots, and potions deal their damage; the full life of the
-health number; inventory, doors, and the power-up vocabulary; and the moments
-when cooperative play quietly becomes competitive.
+data tables; what happens when someone joins a game in progress; the path from
+joystick switches to intent; how the maze answers a request to walk; how
+melee, shots, and potions deal their damage; the full life of the health
+number; inventory, doors, and the power-up vocabulary; and the moments when
+cooperative play quietly turns competitive.
 
 **It builds on:** the frame loop from Chapter 6 (each system here is one of
 its per-frame calls), the session lifecycle from Chapter 7, Chapter 8's world
-model — maze slots, pixel coordinates, and MOBs, the motion-object records
-that represent every moving thing — and Chapter 9's freshly constructed
-level.
+model of maze slots, pixel coordinates, and MOBs (the motion-object records
+that represent every moving thing), and Chapter 9's freshly constructed level.
 
 ---
 
 ## A friend with a coin
 
-Start with the most Gauntlet II moment there is. You're alone on level nine,
-health sagging, when a friend walks up, drops a coin, holds the stick left,
-and presses start. A valkyrie materializes in a clear cell near where you're
-standing, her stats column lights up in blue on the info panel, and the
-cabinet says, in its best announcer voice, "Welcome, Blue Valkyrie."
+You are alone on level nine with your health sagging when a friend walks up,
+drops a coin, presses Fire, and holds the stick left. A valkyrie materializes
+in a clear cell near where you stand, her stats column lights up in blue on
+the info panel, and the cabinet says, in its best announcer voice, "Welcome,
+Blue Valkyrie."
 
-Nothing about that moment is special-cased. Joining mid-level runs the same
-machinery as starting a fresh game, and by the end of this chapter you'll
-have seen every gear in it: the character-selection state your friend was
-briefly in, the spawn search that found her a safe cell, the MOB that now
-carries her around, the tables that make her a valkyrie rather than a wizard,
-and the shared per-frame update — one of the sixteen gameplay calls inside
-`g2mainloop` — that treats her exactly like you, sixty times a second.
+Joining mid-level runs the same machinery as starting a fresh game. By the end
+of this chapter you will have seen every gear in it: the character-selection
+state your friend passed through, the spawn search that found her a safe cell,
+the MOB that now carries her around, the tables that make her a valkyrie, and
+the shared per-frame update that treats her exactly like you, sixty times a
+second. That update is one of the sixteen gameplay calls inside `g2mainloop`.
 
 ## A hero, by the numbers
 
 The four classes feel different to play, and the differences are almost
-entirely *data*. There is one body of player code; being a Warrior or an Elf
-means indexing that code's tables with a different character number
-(0 Warrior, 1 Valkyrie, 2 Wizard, 3 Elf<!-- AGENT: make this a small table --> — an ID you'll see reused
-everywhere).
+entirely *data*. One body of player code serves all of them, and being a
+Warrior or an Elf means indexing that code's tables with a different character
+number (0 Warrior, 1 Valkyrie, 2 Wizard, 3 Elf<!-- AGENT: make this a small table -->), an ID that turns up
+everywhere.
 
 Per-class ROM tables cover, among other things:
 
-- **movement speed** — one entry per character, in normal and powered
-  states (the extra-speed power-up selects the second column);
-- **health drain** — how fast time itself eats you, indexed by character
-  and difficulty;
-- **shot damage** — what your projectiles do;
-- **armor** — how badly monster shots and contact hurt *you*, again by
+- **movement speed**, one entry per character in normal and powered states
+  (the extra-speed power-up selects the second column);
+- **health drain**, how fast time itself eats you, indexed by character and
+  difficulty;
+- **shot damage**, what your projectiles do;
+- **armor**, how badly monster shots and contact hurt *you*, again by
   character;
-- **magic** — a whole matrix, covered in its own section below.
+- **magic**, a whole matrix, covered in its own section below.
 
 The shot-damage table is small enough to show in full, with its two
 modifiers: <!-- AGENT: we should swap the rows and columns here, so
@@ -69,101 +67,99 @@ anything! -->
 
 (Basic monsters die in one to three points of damage depending on their
 tier, so these small numbers matter more than they look; Chapter 11 does the
-bookkeeping.) Armor works the same way in the other direction: incoming
-monster-shot damage is looked up by monster type *and* victim character, and
-the table is kindest to the Valkyrie and cruelest to the Wizard. The famous
-class tradeoffs from Chapter 1 are, concretely, just these lookups. <!-- AGENT: we
+bookkeeping.) Armor works by the same method in the other direction, with
+incoming monster-shot damage looked up by monster type *and* victim character.
+That table gives the Valkyrie the lowest damage figures and the Wizard the
+highest. Chapter 1's class tradeoffs are these lookups. <!-- AGENT: we
 should actually show each of the major player-power-associated-tables
 here, if they're not included elsewhere in the book -->
 
 ![Walking and fighting animation frames for one hero](img/ch10_anim_frames.png)
 
 > **[image needed]** `book/img/ch10_anim_frames.png`: a grid of one
-> character's sprites rendered from the graphics ROMs with `python-gex` —
+> character's sprites rendered from the graphics ROMs with `python-gex`,
 > ideally the Warrior's walking frames (4 frames × 8 directions, or one row
 > of 4 frames for two or three directions) beside his fighting frames, scaled
 > 3–4×, with row labels for direction and column labels for frame number.
 > This illustrates the "4 chars × 8 dirs × N frames" animation tables
 > described below.
 
-Even a hero's *look* is table-driven. Each player has a free-running
-animation counter, and four ROM tables — idle, walking, fighting, shooting —
-are indexed by character, facing direction, and a few bits of that counter to
-pick the sprite for this frame. Walking cycles four frames roughly every
-quarter second; fighting runs an eight-frame swing; shooting is a four-frame
-throw. Nothing anywhere "plays an animation" — every frame, the current
-counter value simply *is* the animation.
+Even a hero's *look* comes from tables. Each player has a free-running
+animation counter, and four ROM tables covering idle, walking, fighting, and
+shooting are indexed by character, facing direction, and a few bits of that
+counter to pick the sprite for this frame. Walking cycles four frames in about
+a quarter second. Fighting runs an eight-frame swing, and shooting is a
+four-frame throw. No code anywhere "plays an animation." Every frame, the
+current counter value *is* the animation.
 
 ## Joining the party
 
-Now the join itself, in order.
+A coin credits an idle player position with health, and pressing Fire moves
+that position into **character-selection state**, one of the per-player status
+values from Chapter 7. The game keeps running while your friend picks a hero,
+so you are still fighting during her deliberations. Selection reads her
+joystick directly: up offers the Warrior, left the Valkyrie, down the Wizard,
+right the Elf, and each change repaints her info-panel column to preview the
+choice.
 
-A coin gives a dead station health-credit and drops it into
-**character-selection state** — one of the per-player status values from
-Chapter 7, not a separate screen. The game is still running; your friend is
-choosing a hero *while* you fight. Selection reads her joystick directly: up
-offers the Warrior, left the Valkyrie, down the Wizard, right the Elf, and
-each change repaints her info-panel column to preview the choice.
-
-When the choice is committed (Chapter 7's session machinery owns the exact
-trigger), the actual placement runs:
+Once the choice is committed (Chapter 7's session machinery owns the exact
+trigger), the placement runs:
 
 1. **Find ground.** The spawn search probes candidate cells using the same
-   offset tables the game's other placement searches use — the level's
-   player-start marker is the recorded fallback anchor for joins — looking
-   for a cell that is genuinely clear: traversable floor, no occupant, no
-   rendered MOB crowding any of its eight neighbors. Only a successful
-   placement lets the join proceed; the finalizer never runs without a spot
-   to stand. <!-- AGENT: this probably needs to note that when a second (or third,
+   offset tables the game's other placement searches use, with the level's
+   player-start marker recorded as the fallback anchor for joins. A cell
+   qualifies when it is traversable floor with no occupant and no rendered
+   MOB crowding any of its eight neighbors. The join proceeds only after a
+   successful placement, and the finalizer never runs without a spot to
+   stand. <!-- AGENT: this probably needs to note that when a second (or third,
    or fourth) player joins, it tries to add them immediately next to an existing
-   player, only falling back to the maze start if those are unavailable, and 
+   player, only falling back to the maze start if those are unavailable, and
    giving an error buzz if no location is available. This needs to be verified. -->
-2. **Build the body.** A MOB is created at that cell and its slot is
-   recorded as this player's — from here on, "player 2" is an index into the
-   same five parallel arrays as every monster (Chapter 8), plus a family of
-   per-player state arrays: health, score, facing, powers, inventory,
-   timers.
+2. **Build the body.** A MOB is created at that cell, and its slot becomes
+   this player's. From here on, "player 2" is an index into the same five
+   parallel arrays as every monster (Chapter 8), plus a family of per-player
+   arrays holding health, score, facing, powers, inventory, and timers.
 3. **Install the character.** Two small per-player handler slots in RAM are
-   pointed at character-specific palette routines — one for the "hurt" flash
-   cycle, one for power-state color cycling — which the display update calls
-   every frame thereafter. This is why a poisoned wizard and a poisoned
-   warrior each flicker in their own class's colors: the *handler itself*
-   was chosen at join time.
+   pointed at character-specific palette routines, one driving the "hurt"
+   flash cycle and one driving power-state color cycling, and the display
+   update calls them every frame thereafter. A poisoned wizard flickers in
+   different colors from a poisoned warrior because the *handler itself* was
+   chosen at join time.
 4. **Announce.** Counters and per-player state are initialized, the active
    player count goes up, the join sound plays, the info-panel column is
    drawn for real, and the speech system greets the newcomer by color and
    class.
 
-Death runs this film backward — but that's the end of the chapter.
+Death unwinds the same structures, and that comes later in this chapter.
 
 ## From switches to intent
 
-Chapter 6 showed the electrical half: raw joystick words read every frame,
-active-low (a pressed switch reads 0), filtered through hand-written
-debouncing. This chapter picks up at the clean result: for each player, a
-byte whose high four bits are up/down/left/right and whose low bits include
+Chapter 6 covered the electrical half: raw joystick words read every frame,
+active-low so that a pressed switch reads 0, filtered through hand-written
+debouncing. This chapter picks up at the clean result, which is one byte per
+player whose high four bits are up/down/left/right and whose low bits include
 **Fire** and **Magic**.
 
-The game converts those four direction bits into *intent* with a sixteen-entry
-lookup: every combination of the four switches maps to one of eight
-compass directions or to "no direction" (that's how up+left becomes a clean
-diagonal, and contradictory combinations resolve to nothing). The result
-feeds three separate pieces of per-player state — and keeping them separate
-is what makes the controls feel right:
+A sixteen-entry lookup converts those four direction bits into intent, mapping
+every combination of the switches to one of eight compass directions or to "no
+direction." That is how up plus left becomes a clean diagonal, while
+contradictory combinations resolve to nothing. The result feeds three separate
+pieces of per-player state, and keeping them separate is part of why the
+controls feel right:
 
-- **facing direction** — the way your sprite looks and shoots; updated as
-  you move, and deliberately left unchanged when a move is rejected;
-- **fighting direction** — a parallel direction used while an attack
-  animation is in flight, with its own sixteen-entry input map;
-- **the buttons** — Fire arms the shooting sequence; Magic asks to drink a
-  potion. Each is a request, not an instant action: the per-frame player
-  update decides if and when the request is honored.
+- **facing direction**, the way your sprite looks and shoots, updated as you
+  move and deliberately left unchanged when a move is rejected;
+- **fighting direction**, a parallel direction used while an attack animation
+  is in flight, with its own sixteen-entry input map;
+- **the buttons**: Fire arms the shooting sequence and Magic asks to drink a
+  potion. Both are requests, and the per-frame player update decides if and
+  when to honor them.
 
-## Movement is a negotiation
+## The maze pushes back
 
-Walking sounds simple and is anything but: the maze pushes back. Each frame,
-the player update proposes a move and the movement routine — the project
-calls it `player_try_move` — either commits it or explains why not:
+Each frame the player update proposes a move, and the maze answers. The
+routine the project named `player_try_move` either commits the move or reports
+why it failed:
 
 ```
 speed = speed_table[character][powered?]
@@ -179,220 +175,214 @@ result = try_move(player, delta, flags):
     commit the move, or report "blocked"
 ```
 
-A few details make this negotiation feel polished. The **corner squeeze**
-retries a blocked diagonal as an L-shaped slide, so brushing a corner steers
-you around it instead of stopping you dead. A **blocked** result sets a flag
-the caller uses to keep your facing unchanged, so a failed step never
-scrambles your aim. Movement against the **camera window** is constrained too:
-unless the level flags say otherwise, you can't walk somewhere the shared
-screen refuses to follow (Chapter 8's rubber-band, seen from the other
-side). And the slow-effects are stacking debuffs on the proposal itself:
-stun freezes it briefly, poison drags it for ten or twenty seconds, walking
-through acid slows you while you're in it.
+Several details make walking feel polished. The **corner squeeze** retries a
+blocked diagonal as an L-shaped slide, so brushing a corner steers you around
+it. A **blocked** result sets a flag the caller uses to keep your facing
+unchanged, so a failed step never scrambles your aim. The **camera window**
+constrains movement too: unless the level flags say otherwise, you cannot walk
+somewhere the shared screen refuses to follow, which is Chapter 8's
+rubber-band seen from the other side. Slow effects land on the proposal
+itself. A stun freezes it briefly, poison drags on it for ten or twenty
+seconds, and acid slows you for as long as you stand in it.
 
 All of the wall, door, and occupancy probes work on Chapter 8's packed maze
-slots and the traversability table introduced there — movement is the
-biggest customer of that machinery.
+slots and the traversability table introduced there. Movement is the biggest
+customer of that machinery.
 
 ## Swords and arrows
 
-Gauntlet II's melee is famously implicit: there is no "sword button." Walk
-into a monster and your hero *fights* — the eight-frame fighting animation
-runs in your fighting direction, and the collision between the two bodies is
-resolved through class data: the monster's contact damage against your
-armor table on one side, your class's fighting ability on the other. The
-upgrade item called "extra fight power" and the armor power-up both act
-here.
+Melee happens without a button. Walk into a monster and your hero *fights*:
+the eight-frame fighting animation runs in your fighting direction, and the
+collision between the two bodies resolves through class data, weighing the
+monster's contact damage against your armor table on one side and your class's
+fighting ability on the other. The upgrade item called "extra fight power"
+acts here, as does the armor power-up.
 
-Shooting is the explicit half. Pressing Fire starts the four-frame shooting
-animation; when the animation *completes*, the shot actually spawns —
-provided your shot channel is free. That wind-up is why firing feels like a
-throw rather than a laser. The projectile takes your facing direction, a velocity
-from a per-direction/per-class table, and a picture from your class.
+Shooting takes a button. Pressing Fire starts the four-frame shooting
+animation, and the shot spawns when that animation *completes*, provided your
+shot channel is free. The wind-up is why firing feels like a throw. The
+projectile takes your facing direction, a velocity from a table indexed by
+direction and class, and a picture from your class.
 
-The most important rule is the channel: **each player owns exactly one shot
-MOB**, one of the fixed low slots from Chapter 8. One arrow in flight per
-elf. Your next shot cannot exist until the current one lands, so standing
-close makes you objectively faster — the defining rhythm of Gauntlet
-marksmanship, implemented as a slot allocation rule.
+One rule shapes everything about shooting: **each player owns exactly one shot
+MOB**, one of the fixed low slots from Chapter 8. One arrow in flight per elf.
+Your next shot cannot exist until the current one lands, so standing close to
+your target makes you faster.
 
-When a shot arrives somewhere interesting, one large resolution routine —
-`resolve_shot_hit`, the busiest intersection in the combat system — decides
-what happens, dispatching on what was hit: monster, generator, player, wall,
-door, food, potion, dragon, Death. Its monster-and-generator side belongs to
-Chapter 11; its player-vs-player side closes this chapter. Two of its
-verdicts matter everywhere: a shot is either *consumed* by the hit or
-*survives* it — supershots pierce through most monsters, and with the
-reflect power a shot can bounce off a wall instead of dying there.
+When a shot arrives somewhere interesting, a large resolution routine called
+`resolve_shot_hit` decides what happens, dispatching on what was hit: monster,
+generator, player, wall, door, food, potion, dragon, Death. It is the busiest
+intersection in the combat system. Chapter 11 takes its monster and generator
+branches, and the player-versus-player branch closes this chapter. Every hit
+also ends with the shot either *consumed* or still flying: supershots pierce
+most monsters, and the reflect power lets a shot bounce off a wall and keep
+going.
 
 ## Potions and the Magic button
 
-Press Magic with a potion in your pocket, and the drink dispatches a blast
-against every eligible monster and generator around. What it does to each is
-not a formula but a lookup — a genuinely pretty piece of 1986 data design.
+Press Magic with a potion in your pocket and the drink dispatches a blast
+against every eligible monster and generator around. What happens to each of
+them comes out of a table.
 
-In ROM sits a **potion-effect matrix**: one 16-byte record for each of the
-28 monster and generator object types. Within a record, the entry is
-selected by *who* is drinking (the four characters) and *how* the magic was
-triggered — a drunk potion or one set off by a shot — plus a flag for
-whether the drinker owns the **extra magic power** upgrade. The entry for a
-monster type is a damage value; the entry for a generator type is a
-*replacement* — the generator transforms into the object named by the table,
-which is how a strong magic user doesn't just dent a ghost generator but
-demotes or deletes it.
+ROM holds a **potion-effect matrix** of one 16-byte record per monster or
+generator object type, 28 types in all. Within a record, the entry is selected
+by who is drinking (the four characters) and by how the magic was triggered,
+either drunk from your pocket or set off by a shot, plus a flag for whether
+the drinker owns the **extra magic power** upgrade. For a monster type the
+entry holds a damage value. For a generator type it holds a *replacement*, so
+the generator transforms into whatever object the table names, which is how a
+strong magic user can demote or delete a ghost generator outright.
 
-One matrix, and every question answers itself. Why does the Wizard's potion
-level a room while the Warrior's just singes it? Different columns. Why does
-a shot-triggered potion fizzle compared to a drunk one? Different trigger
-row — the game charges you for clumsiness by table lookup. Why did that
-generator turn into rubble for one player and merely downgrade for another?
-Same answer. (The dragon, as always, is special: the potion handler gives it
-a private check of its own — Chapter 12.)
+That one matrix answers a lot of questions at once. A Wizard's potion levels a
+room where a Warrior's singes it, because the two read different columns of
+the same record. A potion set off by a stray shot does less than one you
+drank, since the trigger bit selects a different entry, which is the game
+charging you for clumsiness by table lookup. The same record explains why one
+player's magic reduces a generator to rubble while another's merely demotes
+it. (The dragon gets a private check of its own inside the potion handler; see
+Chapter 12.)
 
-> **[needs verification]** A worked slice of the real matrix — e.g. the
-> ghost, demon, and ghost-generator records across all four characters,
-> normal versus enhanced magic — should be extracted from the ROM
+> **[needs verification]** A worked slice of the real matrix (for example the
+> ghost, demon, and ghost-generator records across all four characters, with
+> normal and enhanced magic) should be extracted from the ROM
 > (`potion_effect_matrix`, 28 × 16 bytes) and shown here as a labeled table.
-> The matrix's structure and indexing are verified; the documentation does
-> not list the individual byte values.
+> The matrix's structure and indexing are verified; the documentation lacks
+> the individual byte values.
 
 ## The dwindling number
 
-Chapter 1 called health both life bar and cash register. Here is its
-complete life story, every entry verified in the per-frame code:
+Chapter 1 called health both life bar and cash register. The per-frame code
+accounts for every movement of that number.
 
-**Down.** Time itself drains health on a steady cadence — the amount comes
-from a table indexed by character and the operator's difficulty setting, so
-the tax rate is a tuning knob. Monster contact subtracts through the
-contact-damage table (with its powered-player half), monster shots through
-the armor table, hazards and special monsters through their own paths.
-Damage isn't only applied — it's *sampled*: a 60-frame window accumulates
-what you've taken, maintains a running average, and uses it to decide when
-the situation deserves spoken commentary.
+Time drains health on a steady cadence, in an amount that comes from a table
+indexed by character and by the operator's difficulty setting, which makes the
+tax rate a tuning knob. Monster contact subtracts through the contact-damage
+table, which carries its own half for powered players. Monster shots subtract
+through the armor table, while hazards and special monsters take their own
+paths to the same number. Damage also gets *sampled*: a 60-frame window
+accumulates what you have taken and maintains a running average, which the
+game consults when deciding whether your situation deserves spoken commentary.
 
-**Up.** Food adds a flat hundred. Coins add the operator-configured amount.
-That's the whole list — health is scarce by design.
+Food adds a flat hundred, and coins add the operator-configured amount. Those
+two sources are the entire supply, and health is scarce by design.
 
-**The warnings.** Below 200 health, a per-player timer starts driving the
-low-health show: the health number on the info panel pulses dim and bright
-in a steady eight-frame rhythm, and a heartbeat sound plays on a cadence
-selected by a mask table indexed by how low you are — the lower the health,
-the more often the mask fires, so the heartbeat genuinely accelerates as you
-fade. The spoken warning ("… is about to die!", "… needs food, badly") is a
-one-shot latch per life, so the cabinet frightens your friends exactly once
-per emergency.
+Below 200 health, a per-player timer starts driving the low-health show. The
+health number on the info panel pulses dim and bright in a steady eight-frame
+rhythm, and a heartbeat sound plays on a cadence selected by a mask table
+indexed by how low you are. The lower the health, the more often the mask
+fires, so the heartbeat accelerates as you fade. The spoken warning ("… is
+about to die!", "… needs food, badly") latches once per life, so the cabinet
+frightens your friends exactly once per emergency.
 
-**Zero.** The death sequence runs, your MOB winds down, and the per-player
-timer that drove your heartbeat is bluntly *reused* as your death
-countdown — 45 seconds if your score-per-coin ranked for initials entry, 10
-seconds of GAME OVER display if it didn't. (The same word, two jobs,
-depending on whether you're alive: a very 1986 economy.) If you were the
-last player standing, Chapter 7's continue prompt takes it from here.
+At zero the death sequence runs, your MOB winds down, and the per-player timer
+that drove your heartbeat is bluntly *reused* as your death countdown: 45
+seconds if your score-per-coin ranked for initials entry, 10 seconds of GAME
+OVER display if it did not. One word, two jobs, chosen by whether you are
+alive, which is a very 1986 economy. If you were the last player standing,
+Chapter 7's continue prompt takes over.
 
-**Poison, a footnote with teeth.** Some food and some potions are poison
-variants, distinguished by their sprite. Shooting one releases the toxin on
-you — a ten-to-twenty-second slowdown, announced by sound — which converts
-"don't shoot the food" from etiquette into self-interest.
+Poison is a footnote with teeth. Some food and some potions are poison
+variants, told apart by their sprite. Shooting one releases the toxin onto
+you, a ten-to-twenty-second slowdown announced by sound, which turns "don't
+shoot the food" from etiquette into self-interest.
 
 ## Pockets and doors
 
 A hero's inventory is spartan: a count of **keys**, a count of **potions**,
 the **score multiplier**, and the power-up bits below. The info-panel column
-renders it directly — rows of key and potion icons, the multiplier when it
-exceeds one — so your pockets are always public.
+renders it directly, with rows of key and potion icons and the multiplier
+whenever it exceeds one, so your pockets stay public.
 
 ![One player's info-panel column, annotated](img/ch10_hud_column.png)
 
 > **[image needed]** `book/img/ch10_hud_column.png`: a MAME screenshot crop
 > of a single player's info-panel column mid-game, annotated with callouts
-> for: score, health value, hero name in station color, the key/potion icon
-> rows, the power-up icons, the score multiplier (if present), and the "IT"
-> label position. Capture with a player who holds several keys and potions
-> and at least one power-up.
+> for: score, health value, hero name in that player position's color, the
+> key/potion icon rows, the power-up icons, the score multiplier (if
+> present), and the "IT" label position. Capture with a player who holds
+> several keys and potions and at least one power-up.
 
-Keys are collected by walking over them and *spent* without ceremony: touch
-a locked door with a key in pocket and the door system takes over. Doors are
-more than wall-with-a-lock — each is a logical object with recorded
-**endpoints** and direction codes, so traversal is direction-aware, and
-opening one animates through the door renderer (up to eight doors can be
-mid-animation at once). The world-side of doors — how the maze graph
-changes, how neighbors redraw — is Chapter 13's; the player-side rule is
-simply *one key, one opening*. And if the party dawdles long enough, an idle
-timer gives up and opens every door on the level for free, with a "Doors
-open" announcement — the dungeon would like you to keep moving.
+You collect keys by walking over them and spend them without ceremony: touch a
+locked door while carrying one and the door system takes over. Each door is a
+logical object with recorded **endpoints** and direction codes, so passing
+through depends on which way you approach, and opening one animates through
+the door renderer, which can carry eight doors mid-animation at once. Chapter
+13 covers the world side of doors, meaning how the maze graph changes and how
+neighboring tiles redraw. The player's side of the rule is *one key, one
+opening*. If the party dawdles long enough, an idle timer opens every door on
+the level for free and announces "Doors open," the dungeon's way of asking you
+to keep moving.
 
-Around all of this hovers the advice system: the first time you meet a
-mechanic — first key, first locked treasure, first transporter, first potion
-wasted by a stray shot — a one-time dialog box freezes gameplay (Chapter 6's
-dialog gate) and explains it. Each tip is a bit in a 32-bit seen-it mask, so
-the machine nags precisely once per lesson.
+An advice system hovers over all of this. The first time you meet a mechanic,
+whether that is your first key, first locked treasure, first transporter, or
+first potion wasted by a stray shot, a dialog box freezes gameplay (Chapter
+6's dialog gate) and explains it. Each tip owns a bit in a 32-bit seen-it
+mask, so the machine nags once per lesson.
 
 ## The power-up shelf
 
-Beyond food and cash, the floor offers power-ups — presented, like most
-things in this dungeon, in bottle form. The game's own legend screen sorts
-them into two shelves, and the implementation agrees:
+The floor offers power-ups beyond food and cash, presented, like most things
+in this dungeon, in bottle form. The game's own legend screen sorts them onto
+two shelves, and the code agrees with the legend.
 
-**The permanent shelf** — six upgrades that set a bit in your power word and
-stay with you: **extra speed**, **extra armor**, **extra fight power**,
+**The permanent shelf** holds six upgrades that set a bit in your power word
+and stay with you: **extra speed**, **extra armor**, **extra fight power**,
 **extra shot speed**, **extra shot power**, and **extra magic power**. Each
-one selects the better column of a table you've already met in this
-chapter — speed's powered column, the contact table's powered half, melee
-strength, projectile velocity, the damage table's upgraded column, the
-potion matrix's enhanced variant. Six bits, six icons on your info-panel
-column; the thief (Chapter 12) appraises exactly these when choosing his
+selects the better column of a table you have already met in this chapter,
+namely speed's powered column, the contact table's powered half, melee
+strength, projectile velocity, the damage table's upgraded column, and the
+potion matrix's enhanced variant. Six bits become six icons on your info-panel
+column, and the thief in Chapter 12 appraises exactly these when choosing a
 victim.
 
-**The temporary shelf** — timed or metered effects:
+**The temporary shelf** holds timed or metered effects:
 
-- **Invisibility** — monsters lose track of you; as the timer runs out,
-  your sprite flickers at an accelerating rate (a mask table indexed by the
-  timer's phase — the flicker *is* the fuel gauge).
-- **Invulnerability** — damage immunity on a timer, with its own palette
+- **Invisibility** makes monsters lose track of you. As the timer runs out
+  your sprite flickers at an accelerating rate, driven by a mask table
+  indexed by the timer's phase, so the flicker doubles as a fuel gauge.
+- **Invulnerability** grants damage immunity on a timer, with its own palette
   cycling so everyone can see you're briefly a demigod.
-- **Repulsiveness** — the anti-magnet: monsters keep their distance while
-  it lasts.
-- **Reflective shots** — your projectiles bounce off walls instead of dying
-  there, with a per-bounce recalculated direction.
-- **Super shots** — a metered pack of screen-clearing ammunition (the
-  legend advertises ten): while charges remain, every shot does top damage,
-  pierces through ordinary monsters, ignores a blinking sorcerer's
-  immunity, breaks "unbreakable" items, and hurts things nothing else can
-  hurt. Each fired shot burns one charge.
-- **Transportability** — loosens the transporter rules, letting you arrive
-  in places ordinarily off-limits; the game's secret challenges go so far
-  as to dare you to land on a demon, or on Death itself.
+- **Repulsiveness** works as an anti-magnet, keeping monsters at a distance
+  while it lasts.
+- **Reflective shots** bounce your projectiles off walls, with a fresh
+  direction calculated per bounce.
+- **Super shots** come as a metered pack of screen-clearing ammunition, ten
+  charges by the legend's account. While charges remain, every shot does top
+  damage, pierces ordinary monsters, ignores a blinking sorcerer's immunity,
+  breaks "unbreakable" items, and hurts things that nothing else can hurt.
+  Each fired shot burns one charge.
+- **Transportability** loosens the transporter rules, letting you arrive in
+  places ordinarily off-limits. The game's secret challenges go so far as to
+  dare you to land on a demon, or on Death itself.
 
 ## When friends become targets
 
-Everything above treats the four heroes as colleagues. Gauntlet II keeps a
-little venom in reserve.
+Gauntlet II keeps a little venom in reserve for a party that has spent the
+whole chapter cooperating.
 
-**IT.** Touch the darting IT creature and the IT variable — a single word
-naming the cursed player, or nobody — points at you. The presentation
-half is instant: "IT" is stenciled into your info-panel column in your
-colors, and the cabinet announces the transfer by name. The gameplay half is
-that monster targeting *accounts for the IT player* when choosing whom to
-chase: the crowd's attention finds you. Tag another hero and the label, the
-announcement, and the crowd's attention move on. It's the one mechanic where
-touching a friend is an act of aggression.
+Touch the darting IT creature and the IT variable, a single word naming the
+cursed player or nobody, points at you. The presentation half is instant, with
+"IT" stenciled into your info-panel column in your colors and the cabinet
+announcing the transfer by name. The gameplay half is that monster targeting
+*accounts for the IT player* when choosing whom to chase, so the crowd's
+attention finds you. Tag another hero and the label, the announcement, and the
+crowd all move on. Touching a friend is an act of aggression here.
 
-**Friendly fire, by level flags.** On levels flagged **shots stun**, a
+Friendly fire arrives by level flag. On levels flagged **shots stun**, a
 teammate's shot freezes you mid-stride for a beat and knocks your attack out
-of your hands; on the rarer **shots hurt** levels it also costs a couple of
-health. And regardless of flags, a **supershot** is honest artillery: catch
-a friend with one and they lose ten health. Four players, one shared screen,
-metered ammunition — the game knows exactly what it's inviting.
+of your hands. On the rarer **shots hurt** levels it also costs a couple of
+health. Whatever the flags say, a **supershot** is honest artillery: catch a
+friend with one and they lose ten health. Four players, one shared screen, and
+metered ammunition add up to something the game knows it is inviting.
 
-**The dungeon is watching.** One of the hidden secret-room objectives from
-Chapter 13 is literally named "Don't Hurt Friends" — and the shot-resolution
-code files the report the instant you shoot a teammate. The machine keeps
-score on your sportsmanship.
+The dungeon watches all of it. One of the hidden secret-room objectives from
+Chapter 13 carries the name "Don't Hurt Friends," and the shot-resolution code
+files its report the instant you shoot a teammate, which means the machine
+keeps score on your sportsmanship.
 
-That's a player: a character number indexing a stack of tables, a MOB in
-the crowd, a dozen timers, a power word, and a health number spending itself
-sixty ticks a second. Next chapter, the other side of the collision: the
-horde.
+A player, then, is a character number indexing a stack of tables, a MOB in the
+crowd, a dozen timers, a power word, and a health number spending itself sixty
+ticks a second. Chapter 11 takes the other side of the collision, the horde.
 
 ---
 

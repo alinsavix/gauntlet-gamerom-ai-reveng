@@ -1,13 +1,12 @@
 # Chapter 1 — Enter the Gauntlet (How the Game Plays)
 
-**This chapter answers:** What is Gauntlet II, what does a player actually do
-at the cabinet, and which rules make it feel like Gauntlet II and nothing else?
+**This chapter answers:** What is Gauntlet II, what does a player do at the
+cabinet, and which rules give the game its particular character?
 
-**By the end you will understand:** the controls and the handful of verbs they
-drive, the four heroes and their broad tradeoffs, how health doubles as the
-game's currency, the overall shape of a play session, and a working vocabulary
-— maze, hero, monster, generator, item, info panel — that every later chapter
-builds on.
+**By the end you will understand:** the controls and the actions they drive,
+the four heroes and their broad tradeoffs, how health doubles as the game's
+currency, the overall shape of a play session, and a working vocabulary (maze,
+hero, monster, generator, item, info panel) that later chapters build on.
 
 **It builds on:** nothing. This is the front door of the book, and of the
 dungeon.
@@ -16,40 +15,36 @@ dungeon.
 
 ## Four joysticks, one dungeon
 
-Picture the machine first. A Gauntlet II cabinet is wide enough that four
-people can stand at it shoulder to shoulder, each at their own control
-station: one eight-way joystick and two buttons per person. The stations are
-color-coded — red, blue, yellow, and green — and the game keeps that color
-pairing everywhere. If you play at the blue station, your
-hero is blue, your score column is blue, and when the cabinet talks about you
-(it talks a lot), it calls you "Blue Warrior" or "Blue Elf."
+A Gauntlet II cabinet is wide enough for four people standing shoulder to
+shoulder, each with an eight-way joystick and two buttons. The four player
+positions are color-coded red, blue, yellow, and green, and the game carries
+that color through everything it shows you. Play at the blue position and your
+hero is blue, your score column is blue, and when the cabinet talks about you,
+which it does constantly, it calls you "Blue Warrior" or "Blue Elf."
 
-Everyone shares a single screen. It shows a window onto a maze seen from
-above: stone walls, floor, scattered food and treasure, doors, an exit
-somewhere — and monsters. Usually a *lot* of monsters, because the maze is
-seeded with **generators**, objects that continuously spawn new monsters until
-someone destroys them. The pitch of the game in one sentence: walk into the
-maze with up to three friends, fight through the crowd, grab what you can,
-find the exit, and do it again one level deeper — for as long as your health
-(and your pocket change) holds out.
+Everyone shares one screen, which looks down on a maze of stone walls and
+floor, scattered food and treasure, doors, an exit somewhere, and monsters.
+Usually a *lot* of monsters, because the maze is seeded with **generators**,
+objects that keep spawning new ones until someone destroys them. Walk in with
+up to three friends, fight through the crowd, grab what you can, reach the
+exit, and start over one level deeper, for as long as your health and your
+pocket change hold out. Gauntlet II is an endurance game, and its dungeon runs
+deeper than any party can survive.
 
-There is no princess to rescue and no final boss. Gauntlet II is an endurance
-game, and everything else in this chapter is about what "enduring" costs.
+## The controls
 
-## The controls, and the eight verbs
-
-![Labeled diagram of one Gauntlet II control station](img/ch01_control_panel.png)
+![Labeled diagram of one Gauntlet II player position](img/ch01_control_panel.png)
 
 > **[image needed]** `book/img/ch01_control_panel.png`: a simple labeled
-> diagram of a single control station — one eight-way joystick (arrows showing
-> all eight directions) flanked by the two buttons, labeled **Fire** and
-> **Magic**, with a caption noting the four color-coded stations (red, blue,
+> diagram of one player position: an eight-way joystick (arrows showing all
+> eight directions) flanked by the two buttons, labeled **Fire** and
+> **Magic**, with a caption noting the four color-coded positions (red, blue,
 > yellow, green). This can be drawn as a clean vector diagram, or cropped from
-> a photograph of an actual Gauntlet II control panel with labels added; it is
-> not producible from ROM data or MAME.
+> a photograph of an actual Gauntlet II control panel with labels added. ROM
+> data and MAME cannot produce it.
 
-Each station has exactly three inputs — a stick and two buttons — and the
-entire game is played through them:
+A stick and two buttons per position, and the whole game is played through
+them:
 
 | Input | What it does |
 |-------|--------------|
@@ -57,86 +52,80 @@ entire game is played through them:
 | **Fire** | Shoot a projectile in the direction you're facing |
 | **Magic** | Drink one of the potions you're carrying, damaging every monster in view |
 
-Everything else the player does — collecting items, eating food, opening
-doors, entering transporters, stepping onto the exit — happens by walking into
-things. Keys are spent automatically when you touch a locked door; food is
-eaten by walking over it; treasure leaps into your score. The game never asks
-you to manage a menu. Its one moment of restraint.
+Walking into things covers the rest of what a player does. You collect items,
+eat food, open doors, step into transporters, and reach the exit by putting
+your hero on top of them. A key spends itself the instant you touch a locked
+door. No menu ever appears.
 
-Two warnings the cabinet itself will give you, so this book may as well too:
-your shots destroy some food ("Someone shot the food!" is the machine's
-best-known line of dialogue), and shooting one of your own potions sets it
-off on the spot — a waste the game makes sure to announce. Both lessons are
-usually learned the hard way, about four seconds apart.
+The cabinet issues two warnings early, so this book may as well repeat them.
+Your shots destroy some kinds of food, and "Someone shot the food!" is the
+machine's best-known line of dialogue. Shooting one of your own potions sets
+it off where it lies, which the game also announces. Both lessons tend to
+arrive within seconds of each other.
 
 ## Choosing your hero
 
 ![The four heroes, rendered from the game's graphics ROMs](img/ch01_four_heroes.png)
 
 > **[image needed]** `book/img/ch01_four_heroes.png`: the four player
-> characters — Warrior, Valkyrie, Wizard, Elf — each rendered as a single
+> characters (Warrior, Valkyrie, Wizard, Elf), each rendered as a single
 > standing/walking-down sprite from the graphics ROMs using `python-gex`
 > (e.g. the `gex` sprite names for each character's walk-down frame, scaled
 > 3–4× with nearest-neighbor), arranged left to right with name labels
 > underneath.
 
-When you coin up, you pick one of four heroes by pointing the joystick: up
-for the **Warrior**, left for the **Valkyrie**, down for the **Wizard**,
-right for the **Elf**. Any station can pick any hero — four
-Wizards is a legal, if chaotic, party — and your color still comes from where
-you're standing.
+Drop a coin, press Fire, and the game asks who you want to be. Point the
+joystick up for the **Warrior**, left for the **Valkyrie**, down for the
+**Wizard**, right for the **Elf**. Any position can pick any hero, so a party
+of four Wizards is legal, and your color still comes from where you stand.
 
-The four differ in the ways you'd guess from their silhouettes:
+The four differ in ways their silhouettes suggest:
 
-- **Warrior** — hits hardest hand-to-hand; slow; weak magic.
-- **Valkyrie** — the best armor, so everything hurts her less; middling
-  elsewhere.
-- **Wizard** — devastating potions and magic; practically allergic to being
-  touched.
-- **Elf** — fastest on his feet; his shots are quick but light.
+- **Warrior** hits hardest hand-to-hand. He is slow, and his magic is feeble.
+- **Valkyrie** wears the best armor, so everything hurts her less. Her other
+  numbers sit in the middle.
+- **Wizard** turns a potion into a catastrophe for whatever stands nearby,
+  and a single monster touch costs him dearly.
+- **Elf** covers ground faster than the rest. His shots are quick and light.
 
-That's deliberately vague, because the exact numbers live in tables in the
-ROM — movement speed per character, shot damage per character, armor per
-character — and Chapter 10 lays those tables out with proper labels. For now
-it's enough to know the tradeoffs are real, data-driven, and noticeable within
-your first minute of play.
+Those descriptions stay vague on purpose. The exact numbers live in ROM tables
+covering movement speed, shot damage, armor, and magic, one entry per
+character, and Chapter 10 lays them out with proper labels. The tradeoffs show
+up inside a minute of play.
 
 ## Health is money
 
-Here is the rule that makes Gauntlet II *Gauntlet II*: your hero has no lives,
-no shields, no timer. There is a single number under your name — health — and
-it is always going down.
+Your hero carries one number, health, and it falls the whole time you play.
+Everything another game might track with lives or shields collapses into that
+single value.
 
-- **Time drains it.** Just standing around costs health, tick by tick. The
-  dungeon meters your visit.
-- **Damage drains it faster.** Every monster touch, fireball, and hazard
-  subtracts from the same number.
-- **Food restores it.** Each plate of food is worth a solid meal — one
-  hundred points of health.
-- **Coins restore it.** Dropping another coin into the slot while you play
-  adds a chunk of health (how much is up to the arcade operator — it's a
-  configurable setting, typically several hundred points).
+- **Time drains it.** Standing still costs health, tick by tick. The dungeon
+  meters your visit.
+- **Damage drains it faster.** A monster's touch, a fireball, a floor hazard,
+  a shot from a careless friend: it all comes off the same number.
+- **Food restores it.** A plate of food is worth one hundred points of
+  health.
+- **Coins restore it.** Feeding the slot mid-game buys a chunk of health, in
+  an amount the arcade operator configures. Several hundred points is
+  typical.
 
-When your health gets low the game starts a heartbeat sound that quickens as
-the number falls, your health readout pulses on the panel, and the cabinet
-announces, by color and class, that "your life force is running out!" — or
-the blunter classic, "needs food, badly." At zero, your hero dies. If nobody else
-is still standing, the game offers a countdown: *press start within so-many
-seconds to continue at this level*. Another coin, and you're back where you
-fell.
+Once health runs low the machine starts a heartbeat sound that quickens as the
+number falls, your health readout pulses on the panel, and the cabinet
+announces by color and class that "your life force is running out!" The
+blunter classic, "needs food, badly," comes from the same warning system. At
+zero your hero dies, and if nobody else is still standing you get a countdown
+inviting one more coin to continue at the level where you fell.
 
-So health is simultaneously your life bar and the arcade's cash register, and
-the game is refreshingly honest about it. It even scores you that way: the
-high-score table doesn't rank raw points, it ranks **score per coin** — how
-efficiently you spent your money — which may be the most honest scoreboard in
-arcade history.
+Health works as your life bar and as the arcade's cash register, which the
+game makes no attempt to disguise. The high-score table ranks players by
+**score per coin**, a measure of how efficiently the money was spent.
 
-While health flows out, three other pockets fill up, and for now you only
-need their names: your **score** (monsters and treasure), your **inventory**
-(keys to open doors, potions for the Magic button — you can carry a pile of
-each), and a **score multiplier** that can grow above one and makes everything
-worth more. Where these live in memory, and who is allowed to change them, is
-a story for Chapters 10 and 14.
+Other quantities move upward while health drains. Score climbs when you kill
+things and pocket treasure. Keys for doors and potions for the Magic button
+pile up in an inventory with room for plenty of both, and a **score
+multiplier** that can rise above one makes everything pay better while you
+hold it. Where all this lives in memory, and which code may change it, waits
+for Chapters 10 and 14.
 
 ## The shape of a game
 
@@ -144,7 +133,7 @@ A full session traces a loop that this book will keep returning to:
 
 ```mermaid
 flowchart LR
-    attract["Attract mode<br/>(title, scores, demo)"] --> coin["Coin + Start"]
+    attract["Attract mode<br/>(title, scores, demo)"] --> coin["Coin + Fire"]
     coin --> pick["Pick a hero"]
     pick --> play["Explore, fight, eat,<br/>find the exit"]
     play -- "exit" --> next["Next level"]
@@ -157,88 +146,82 @@ flowchart LR
     gameover --> attract
 ```
 
-Left alone, the cabinet runs its **attract mode** on a cycle — high scores,
-title screen, a self-playing demo (which, we'll see in Chapter 15, is a
-recording of real inputs played back through the real game engine), and a
-"legend" screen that explains the monsters and items. A coin and a start
-button break the cycle and put a hero in the maze.
+Left alone, the cabinet cycles through its **attract mode**: high scores, the
+title screen, a self-playing demo, and a "legend" screen that explains the
+monsters and items. That demo is a recording of real inputs played back
+through the real game engine, as Chapter 15 shows. A coin and a press of Fire
+break the cycle and put a hero in the maze.
 
-From there the loop is: explore and fight, find the exit, next level. Some
-levels detour into a **treasure room** — a timed scramble to grab loot
-before a spoken countdown runs out — and some hide the entrance requirements
-for a **secret room**, a challenge stage with its own strange rules. Death
-leads to the continue countdown; walking away leads to the score-per-coin
+After that you explore and fight until you find the exit, which drops you into
+the next level. Some levels detour into a **treasure room**, a timed scramble
+for loot under a spoken countdown. Others hide the requirements for entering a
+**secret room**, a challenge stage with strange rules of its own. Dying leads
+to the continue countdown, and walking away leads to the score-per-coin
 high-score ceremony and back to attract mode.
 
-Two things about this loop are unusually friendly for 1986. First, **anyone
-can join at any time**: a friend with a coin can drop into the middle of your
-level, pick a hero, and appear beside you — no waiting for a game over.
-Second, the loop has no bottom. The levels keep coming, remixing more than a
-hundred stored maze layouts, for as long as the party lasts. Chapter 7 turns
-this sketch into the game's actual state machine, and Chapter 9 explains
-where levels really come from.
+Two parts of this loop were unusually friendly for 1986. Anyone can join at
+any time, so a friend with a coin drops into the middle of your level, picks a
+hero, and appears beside you without waiting for a game over. The loop also
+has no bottom, remixing more than a hundred stored maze layouts for as long as
+the party lasts. Chapter 7 turns this sketch into the game's actual state
+machine, and Chapter 9 explains where levels come from.
 
 ## What makes it Gauntlet II
 
-If you've seen the original Gauntlet, everything so far sounds familiar — the
-sequel's maze-crawling core is the same. What the 1986 sequel added is a layer
-of mischief. A preview, with pointers to the chapters that dissect each trick:
+If you have seen the original Gauntlet, the maze-crawling core here will look
+familiar. What the 1986 sequel added is a layer of mischief, previewed below
+with pointers to the chapters that take each trick apart.
 
-- **Any hero, any station, any time.** Four Valkyries welcome. Join-in-progress
-  multiplayer (Chapters 7 and 10).
-- **Tag — you're IT.** A darting creature haunts some levels; touch it and
-  you become IT. Monsters single you out, an "IT" label appears by your name,
-  and the cabinet announces it aloud. Tag another hero to pass it on.
-  Cooperative play, temporarily competitive (Chapter 10).
-- **Levels that fight dirty.** Per-level hazard flags can make monsters
-  faster or let them move at odd angles, make walls invisible, make the maze
-  wrap around at its edges — walk off the left, arrive from the right — and,
-  on the meanest levels, let players' shots stun or even hurt each other
-  (Chapters 9 and 13).
-- **Architecture with opinions.** Walls that shift on a cycle, walls that
-  appear and disappear at random, walls you can push, walls you can shoot
-  down, secret walls, exits that wander around the level, and exits that are
-  lying to you (Chapter 13). Wait long enough on a level and the dungeon
-  starts opening its own doors to hurry you along.
+- **Any hero, any position, any time.** Four Valkyries are welcome, and
+  players can join a game already in progress (Chapters 7 and 10).
+- **Tag, and you're IT.** A darting creature haunts some levels. Touch it and
+  you become IT: monsters single you out, an "IT" label appears by your name,
+  and the cabinet announces the news aloud. Tagging another hero passes it on
+  (Chapter 10).
+- **Levels that fight dirty.** Per-level hazard flags can speed monsters up,
+  let them move at odd angles, hide walls, and wrap the maze around at its
+  edges so that walking off the left brings you in from the right. On the
+  meanest levels, players' shots stun or wound each other (Chapters 9 and 13).
+- **Architecture with opinions.** Walls shift on a cycle, appear and vanish at
+  random, slide when pushed, and fall when shot. Exits wander around the
+  level, and some of them are lying to you (Chapter 13). Wait long enough and
+  the dungeon starts opening its own doors to hurry you along.
 - **Transporters and forcefields.** Sparkling pads teleport whoever steps on
-  them; blinking energy fences meter the corridors (Chapter 13).
-- **The dragon.** A screen-filling, multi-part boss monster that sleeps until
-  someone wanders close. It doesn't appear until you're a dozen levels deep
+  them, and blinking energy fences meter the corridors (Chapter 13).
+- **The dragon.** A screen-filling boss monster built from several pieces
+  sleeps until somebody wanders close. A normal game keeps it out of sight
+  until you are a dozen levels deep (Chapter 12).
+- **The thief and the mugger.** A thief works out which player carries the
+  most valuable loot, sneaks in, takes an item, and sprints for the edge of
+  the level. His cousin the mugger prefers to rough you up and steal health
   (Chapter 12).
-- **The thief and the mugger.** A thief studies which player is carrying the
-  most valuable loot, sneaks in, steals an item, and sprints for the edge of
-  the level. His cousin the mugger would rather rough you up and steal health
-  instead (Chapter 12).
 - **Treasure rooms that heckle you.** The timed bonus rooms count down out
-  loud — and on deep levels, once in a while, the voice *lies about the
-  numbers* and then says "just kidding" (Chapter 13). Someone at Atari put
-  that in on purpose; Chapter 13 shows you the code that decides when to
-  troll you.
+  loud, and on deep levels the voice occasionally *lies about the numbers*
+  before admitting "just kidding" (Chapter 13). Someone at Atari put that in
+  on purpose, and Chapter 13 shows the code that decides when to troll you.
 - **Secret rooms and secret codes.** Every ordinary level hides an unmarked
-  challenge — feats like "don't touch any treasure" or "shoot three secret
-  walls." Pull one off and you earn a visit to a secret room; win *that* and
-  the machine can print a cryptic six-character code that fed a real mail-in
-  contest — the ROM still carries the entry-form text, deadline and all:
-  "CONTEST ENDS 12/19/86" (Chapter 13 decodes the whole pipeline, including
-  how to verify a code yourself).
-- **Crowds.** Not five monsters. Not ten. Walls of ghosts deep enough that
-  shooting into them is a form of digging. How a 1986 machine keeps that many
-  actors moving is one of the central questions of this book (Chapters 8
-  and 11).
+  challenge, with feats like "don't touch any treasure" or "shoot three
+  secret walls." Pull one off and you earn a visit to a secret room; win
+  *that* and the machine can print a cryptic six-character code that fed a
+  real mail-in contest. The ROM still carries the entry-form text, deadline
+  included: "CONTEST ENDS 12/19/86" (Chapter 13 decodes the whole pipeline,
+  including how to verify a code yourself).
+- **Crowds.** Ghosts arrive in walls thick enough that shooting into them
+  amounts to digging. How a 1986 machine keeps that many actors moving is one
+  of the central questions of this book (Chapters 8 and 11).
 
 ## A visual vocabulary
 
-One last piece of equipment for the road: names for what's on screen. Later
-chapters will point back to this picture.
+Names for what's on screen, which later chapters will point back to.
 
 ![Annotated Gauntlet II gameplay with each screen element labeled](img/ch01_gameplay_annotated.png)
 
 > **[image needed]** `book/img/ch01_gameplay_annotated.png`: a MAME screenshot
 > of Gauntlet II mid-game with two or more active players, annotated with
-> labeled callouts for: (1) the **maze** — walls and floor filling most of the
-> screen; (2) two **heroes** with their station colors; (3) a crowd of
+> labeled callouts for: (1) the **maze**, walls and floor filling most of the
+> screen; (2) two **heroes** in their player-position colors; (3) a crowd of
 > **monsters** (ideally ghosts or grunts); (4) a **generator** actively
-> spawning; (5) floor **items** — at least food, a key, a potion, and
+> spawning; (5) floor **items**, at least food, a key, a potion, and
 > treasure; (6) the **exit**; (7) the **info panel** along the screen edge
 > showing each player's score, health, and inventory icons; (8) a **text
 > message** line (e.g. a hint or announcement); and (9) a note that the whole
@@ -247,36 +230,34 @@ chapters will point back to this picture.
 > an early level, pausing near a generator with items visible, taking a
 > screenshot, and adding the labels in an image editor.
 
-- The **maze** is the world: a grid of walls, floors, doors, and hazards.
-  You see it through a **camera window** that scrolls to follow the party —
-  all players share one screen, and the camera compromises when you spread
-  out — past a point, the screen edge itself holds the party together
+- The **maze** is the world: a grid of walls, floors, doors, and hazards. You
+  see it through a **camera window** that scrolls to follow the party. All
+  players share one screen, so the camera compromises when you spread out,
+  and past a certain distance the screen edge itself holds the party together
   (Chapter 8 explains the rubber-band).
-- **Heroes** are the four player characters; **monsters** are everything
-  trying to stop them; **generators** are the objects that mint new monsters.
+- **Heroes** are the four player characters. Everything trying to stop them is
+  a **monster**, and the objects that mint new monsters are **generators**.
 - **Items** lie on the floor: food, keys, potions, treasure, and a family of
-  special power-ups (invisibility, invulnerability, reflecting shots, super
-  shots, and more — Chapter 10 has the full catalog).
-- The **info panel** runs along the edge of the screen, one column per
-  station: score, health, hero name in station color, inventory icons, and
-  occasional labels like "IT." Floating score numbers pop up in the maze
-  itself when you earn points.
-- **Text messages** — hints, welcomes, warnings, the continue countdown —
-  are drawn over the action on a separate text layer. And under everything,
-  the cabinet's voice narrates: welcoming players, announcing who's IT,
-  scolding whoever shot the food.
+  special power-ups covering invisibility, invulnerability, reflecting shots,
+  super shots, and more. Chapter 10 has the full catalog.
+- The **info panel** runs along the edge of the screen with one column per
+  player position: score, health, hero name in that position's color,
+  inventory icons, and occasional labels like "IT." Floating score numbers pop
+  up in the maze itself when you earn points.
+- **Text messages** such as hints, welcomes, warnings, and the continue
+  countdown are drawn over the action on a separate text layer. Underneath
+  everything, the cabinet's voice narrates: welcoming players, announcing
+  who's IT, scolding whoever shot the food.
 
-That's the game as the player meets it: three controls, one dwindling number,
-and a dungeon that cheats affectionately. The rest of this book is about the
-machine underneath — and the next chapter sets the ground rules for how we
-know what we claim to know.
+Chapter 2 sets the ground rules for how this book knows what it claims about
+the machine underneath.
 
 ---
 
 > **Under the hood**
 >
-> Everything in this chapter is grounded in the maintained technical docs;
-> these are the load-bearing entry points if you want to dig now:
+> Everything in this chapter is grounded in the maintained technical docs.
+> These are the load-bearing entry points if you want to dig now:
 >
 > - Joystick/button bit assignments: `doc/05_data_reference.md` §3.11; the
 >   per-frame debounce that reads them is `input_debounce` (0x40644),
@@ -284,7 +265,7 @@ know what we claim to know.
 > - Hero selection by joystick direction (up=Warrior, left=Valkyrie,
 >   down=Wizard, right=Elf): `character_select_input_update` (0x42DF4),
 >   `doc/04_game_subsystems.md` §22.
-> - Station colors and speech: `player_color_name_ptrs` (0x57212) and
+> - Player-position colors and speech: `player_color_name_ptrs` (0x57212) and
 >   `speech_charname_tbl` (0x596F6, "RED WARRIOR" … "GREEN ELF"),
 >   `doc/05_data_reference.md` §5.
 > - Health drain, low-health heartbeat cadence, and the pulsing readout:
@@ -307,7 +288,7 @@ know what we claim to know.
 >   `doc/05_data_reference.md` §3.12.
 > - Dragons are suppressed from maze data before level 12 in a normal game:
 >   `maze_place_object` (0x45E40), `doc/04_game_subsystems.md` §5.4.
-> - Treasure-room countdown, including the fake-countdown gag: 
+> - Treasure-room countdown, including the fake-countdown gag:
 >   `main_treasure_timer` (0x4D29E), `doc/04_game_subsystems.md` §16.
 > - Idle-timer door opening ("Doors Open"): `open_timed_doors` via
 >   `main_move_players`, `doc/04_game_subsystems.md` §4.1.
