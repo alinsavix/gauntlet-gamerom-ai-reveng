@@ -106,8 +106,13 @@ the mechanism.
 
 ### Voice and style rules
 
-1. **Prose first.** Explain mechanisms in plain sentences. A reader should be
-   able to follow every chapter without reading a single line of code.
+1. **Prose first.** This is a book written for curious people, not a
+   specification or game-design document. Explain mechanisms in natural,
+   ordinary sentences that a human author would plausibly write. Avoid insider
+   shorthand such as calling player actions "verbs" or describing controls as
+   a "grammar" when plain words such as actions, controls, or choices will do.
+   A reader should be able to follow every chapter without reading a single
+   line of code.
 2. **Pseudocode over assembly.** When showing logic, use short high-level
    pseudocode (Python-ish or C-ish, whichever reads cleaner). Raw 68010
    assembly is allowed only when the *assembly itself* is the point, and must
@@ -144,9 +149,13 @@ the mechanism.
    name for sprites"; thereafter "MOB" or "sprite (MOB)." Use "playfield" for
    the maze tile layer, "text layer" for alphanumerics, "Slapstic ROM" for the
    bank-switched level-data ROM, and "OS ROM" and "game ROM" for the other two
-   analyzed ROM images. Use "level" for the player's progress count and "maze"
-   for a stored layout record. Do **not** publish a simple level-to-maze formula
-   until the maze-selection research task below is resolved.
+   analyzed ROM images. Use **"player position"** for one of the cabinet's four
+   fixed player/control slots; use "position" alone when the player context is
+   already clear. Do not call these "stations" or "cabinet positions." The
+   cabinet has no separate Start button: a player uses Fire to start or join
+   play. Use "level" for the player's progress count and "maze" for a stored
+   layout record. Do **not** publish a simple level-to-maze formula until the
+   maze-selection research task below is resolved.
 10. **Light, curious tone.** This is a tour, not a specification. Wry asides
     are fine; memes and forced jokes are not. Write like a good conference
     talk.
@@ -207,6 +216,26 @@ the mechanism.
   more often than why its authors chose to do it.
 - Folklore is flavor, not fact. Player culture and well-known Gauntlet stories
   are welcome when framed as lore and sourced when practical.
+
+### Additional Style Notes
+
+No antithesis. No corrective negation. No paragraph pinning. No parataxis. No summary beats. No rhetorical crutches. No negative parallelisms. No negative anaphoras. No contrasting pairs. No rule of three. No em dashes. No throat-clearing openers. No landing sentences. No setup/payoff constructions. No parallel sentence structures within a paragraph. Vary sentence length unpredictably. No stacked noun phrases. No filler intensifiers (genuinely, really, truly, actually). No corporate-register verbs (leverage, underscore, reflect). No nominalization. No hedging qualifiers. No performed enthusiasm.
+
+### Author-to-agent comments
+
+The author may leave batch-edit instructions in chapter prose as Markdown HTML
+comments beginning with `AGENT:`:
+
+```markdown
+<!-- AGENT: Rewrite this paragraph in plainer language. -->
+```
+
+When asked to process the agent comments, search the requested scope for every
+`<!-- AGENT:` comment, carry out each instruction in context, and remove
+comments that have been resolved. Leave a comment in place when it explicitly
+asks to be preserved or when it cannot be resolved without the author's
+judgment, and report any such comments at the end. These comments do not replace
+the formal `**[image needed]**` and `**[needs verification]**` draft markers.
 
 ### Research gates before affected chapters are drafted
 
@@ -288,10 +317,10 @@ what it is trying to accomplish.*
   damage, rises with food or inserted coins, and makes continued play a
   visible economic choice. Briefly introduce score, treasure, inventory, and
   the score multiplier without explaining their storage yet.
-- The shape of a game: coin/start, choose a hero, enter a level, explore and
-  fight, exit, occasionally visit treasure or secret rooms, die or continue,
-  and eventually return to high scores and attract mode. Chapter 7 will turn
-  this into a complete state diagram.
+- The shape of a game: insert a coin, press Fire to start or join, choose a
+  hero, enter a level, explore and fight, exit, occasionally visit treasure or
+  secret rooms, die or continue, and eventually return to high scores and
+  attract mode. Chapter 7 will turn this into a complete state diagram.
 - What makes Gauntlet II distinctive: join-in-progress multiplayer, the IT/tag
   mechanic, friendly-fire variants, moving and invisible walls, transporters,
   the dragon, thief/mugger, treasure rooms, secret challenges, and a very large
@@ -358,7 +387,7 @@ hardware paints it.*
 - The display in one paragraph: a 336×240 screen refreshed at 60 Hz, composed
   from a scrolling playfield, motion objects, and text. Defer the full
   explanation to Chapter 4.
-- The supporting cast: the sound board's 6502 CPU, EEPROM, joystick/coin/start
+- The supporting cast: the sound board's 6502 CPU, EEPROM, joystick/button/coin
   inputs, output latches and LEDs, and the watchdog that reboots a machine
   whose software stops checking in.
 
@@ -447,7 +476,7 @@ session covered in Chapter 7.*
   waits again. Show high-level pseudocode.
 - A guided walk through one frame's 29 direct calls, grouped conceptually:
   always-run input/coin/color services; the gameplay block; then messages,
-  selection/start logic, score/UI, attract mode, EEPROM, and sound.
+  selection/join logic, score/UI, attract mode, EEPROM, and sound.
 - Input sampling and debouncing: raw four-player controls are read every frame;
   hand-written rotate/shift logic keeps short electrical bounces from becoming
   extra button presses. Save the control interpretation itself for Chapter 10.
@@ -472,13 +501,13 @@ session covered in Chapter 7.*
 *A single map of the whole experience. Later chapters can explain each branch
 without losing the reader in disconnected subsystem details.*
 
-- Begin in attract mode: title, scores, demo, and legend run until a coin/start
-  path transfers control into a real session. Explain paid versus free-play
-  only at a high level here.
-- Starting and joining: a cabinet position gains health/credit, enters
-  character-selection state, chooses a hero with the joystick, receives a HUD
-  column, and is placed at a usable spawn. The same lifecycle supports friends
-  joining a level already in progress.
+- Begin in attract mode: title, scores, demo, and legend run until the coin and
+  Fire path transfers control into a real session. Explain paid versus
+  free-play only at a high level here.
+- Starting and joining: a player position gains health/credit, presses Fire to
+  enter character-selection state, chooses a hero with the joystick, receives
+  a HUD column, and is placed at a usable spawn. The same lifecycle supports
+  friends joining a level already in progress.
 - Starting a level: choose the next stored maze, show the level/secret
   presentation, load and construct the world, position existing players, set
   the camera, and release the input/UI delay into ordinary play.
@@ -597,7 +626,7 @@ health, items, powers, animation, and four-player interaction.*
 - The four classes as data: per-class ROM tables for movement speed, fighting,
   shot damage/speed, armor, and magic. Present a few labeled tables and connect
   them to the broad tradeoffs introduced in Chapter 1.
-- Selection, joining, and player state: each cabinet position owns a player
+- Selection, joining, and player state: each player position owns a player
   record and HUD color; character selection is a per-player state, not merely
   one pre-game screen. Successful joining finds a clear spawn, creates a player
   MOB, installs character-specific palette handlers, and initializes status,
