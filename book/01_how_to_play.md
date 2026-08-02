@@ -67,12 +67,10 @@ arrive within seconds of each other.
 
 ![The four heroes, rendered from the game's graphics ROMs](img/ch01_four_heroes.png)
 
-> **[image needed]** `book/img/ch01_four_heroes.png`: the four player
-> characters (Warrior, Valkyrie, Wizard, Elf), each rendered as a single
-> standing/walking-down sprite from the graphics ROMs using `python-gex`
-> (e.g. the `gex` sprite names for each character's walk-down frame, scaled
-> 3–4× with nearest-neighbor), arranged left to right with name labels
-> underneath.
+*The four heroes as the game draws them, decoded from the graphics ROMs:
+each is shown standing and facing the player, wearing a different
+position's color (red Warrior, blue Valkyrie, yellow Wizard, green Elf).
+The soft gray blob is the sprite's built-in shadow.*
 
 Drop a coin, press Fire, and the game asks who you want to be. Point the
 joystick up for the **Warrior**, left for the **Valkyrie**, down for the

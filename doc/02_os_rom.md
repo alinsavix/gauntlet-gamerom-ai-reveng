@@ -204,16 +204,21 @@ The two boot paths differ mainly in the destructive RAM-test suite they use.
 They rejoin at `main_init_cont`, which validates the ROMs and EEPROM before
 selecting the game or OS-controlled diagnostic/attract path.
 
+**Contradicted and corrected:** the self-test switch is **active low**. Bit 3
+of `0x803009` reads 0 while the operator has the switch engaged and 1 during
+ordinary play, so the boot-path labels below are the reverse of what earlier
+revisions of this document stated. See §5.7 for the evidence.
+
 ```mermaid
 flowchart TD
     vector["Reset vector<br/>SSP = 0x904F00<br/>PC = 0x05E2"] --> reset["reset_entry (0x05E2)<br/>mask IRQs; pulse board latch;<br/>delay while servicing watchdog"]
-    reset --> switch{"Self-test switch<br/>bit 3 of 0x803009?"}
+    reset --> switch{"Self-test switch<br/>bit 3 of 0x803009<br/>(active low)"}
 
-    switch -- "No" --> normal["normal_boot (0x03A0)"]
-    normal --> full["mem_test_full (0x0A6A)<br/>spare → color → playfield → alpha → MOB"]
+    switch -- "0: switch engaged" --> self["selftest_boot (0x03A0)"]
+    self --> full["mem_test_full (0x0A6A)<br/>spare → color → playfield → alpha → MOB<br/>pause for acknowledgement on failure"]
 
-    switch -- "Yes" --> self["selftest_boot (0x061E)<br/>seed color-RAM pattern"]
-    self --> short["mem_test_short (0x0A2C)<br/>spare → color → playfield → alpha → MOB"]
+    switch -- "1: normal play" --> normal["normal_boot (0x061E)<br/>seed color-RAM pattern"]
+    normal --> short["mem_test_short (0x0A2C)<br/>spare → color → playfield → alpha → MOB"]
 
     full --> init["main_init_cont (0x070C)<br/>initialize display and core board state"]
     short --> init
@@ -222,10 +227,11 @@ flowchart TD
     header -- "No" --> nogame["Display NO GAME PROGRAM<br/>and wait"]
     header -- "Yes" --> gamecheck["Validate game checksum descriptors<br/>beginning at 0x40080"]
     gamecheck --> eeprom["Validate EEPROM; clear OS work RAM;<br/>call eeprom_init (0x44E8)"]
-    eeprom --> dispatch{"Boot mode and<br/>accumulated error state"}
-    dispatch -- "Self-test; no errors" --> gamestart["JMP game_start_veneer<br/>0x40000"]
-    dispatch -- "Self-test; errors" --> diag["Enter OS VBLANK mode<br/>and diagnostic loop"]
-    dispatch -- "Normal" --> attract["Enter OS VBLANK mode<br/>and game attract path"]
+    eeprom --> dispatch{"Switch bit 3 and<br/>accumulated error state D5"}
+    dispatch -- "bit 3 = 0: switch engaged" --> diag["Enter OS VBLANK mode<br/>and diagnostic loop"]
+    dispatch -- "bit 3 = 1, D5 = 0" --> gamestart["JMP game_start_veneer<br/>0x40000"]
+    dispatch -- "bit 3 = 1, D5 = 1<br/>no game program" --> diag
+    dispatch -- "bit 3 = 1, D5 = 2<br/>ROM checksum error" --> abort["JMP game_exception_veneer<br/>0x40024 with D0 = 1<br/>(falls back to 0x40000<br/>if the slot holds no JMP)"]
 ```
 
 ### 5.1 Reset Entry (`0x5E2`)
@@ -238,19 +244,20 @@ The 68010 loads SSP from `0x000000` (= `0x904F00`) and PC from `0x000004` (= `0x
 3. Write 0x0000 to hardware latch — reset pulse
 4. Delay loop (0xFA0 iterations) petting watchdog
 5. Write 0x0001 to hardware latch — re-enable
-6. Read self-test switch (bit 3 of 0x803009)
-7. If self-test: JMP selftest_boot (0x61E)
-8. Otherwise:    JMP normal_boot (0x3A0)
+6. Read self-test switch (bit 3 of 0x803009; active low)
+7. If bit 3 is set (normal play):     JMP normal_boot (0x61E)
+8. If bit 3 is clear (switch engaged): JMP selftest_boot (0x3A0)
 ```
 
-### 5.2 Normal Boot (`0x3A0`)
+### 5.2 Self-Test Boot (`0x3A0`)
 
-Performs the full extended destructive memory test on each video RAM region.
-Uses `mem_test_full` (0xA6A), which runs both bit orders, restoration
-passes, an all-ones fill, and a per-word inversion test. Test order:
+Taken when the operator has the self-test switch engaged. Performs the full
+extended destructive memory test on each video RAM region. Uses
+`mem_test_full` (0xA6A), which runs both bit orders, restoration passes, an
+all-ones fill, and a per-word inversion test. Test order:
 
 ```
-1. Test Video RAM Spare     (0x904000–0x904FFE) → error: continue anyway
+1. Test Video RAM Spare     (0x904000–0x904FFE) → error: display "Working RAM error"
 2. Test Color RAM           (0x910000–0x9107FE) → error: display "COLOR RAM error"
 3. Test Playfield RAM       (0x900000–0x901FFE) → error: display "PLAYFIELD RAM error"
 4. Test Alpha RAM           (0x905000–0x905FFE) → error: display "ALPHA RAM error"
@@ -258,13 +265,23 @@ passes, an all-ones fill, and a per-word inversion test. Test order:
 6. On success: JMP main_init_cont (0x70C)
 ```
 
-### 5.3 Self-Test Boot (`0x61E`)
+Every stage on this path holds on its failure. After the error display each
+stage synchronizes to VBLANK and samples the player 1 Magic button (bit 0 of
+`0x803001`, active low). If the button is up the stage simply runs again, so a
+failing test repeats indefinitely with its error on screen; pressing and then
+releasing Magic advances to the next region. The five acknowledge loops sit at
+0x3F4, 0x46C, 0x4E2, 0x552, and 0x5C2, retrying 0x3A0, 0x40E, 0x486, 0x4FC,
+and 0x56C respectively.
 
-Uses the shorter `mem_test_short` (0xA2C) on the same RAM regions and also
-initializes Color RAM with an incrementing pattern first. **Contradicted and
-corrected:** the former `quick`/`thorough` names were reversed: 0xA2C is the
-short three-stage test, while 0xA6A is the full extended suite used by normal
-boot.
+### 5.3 Normal Boot (`0x61E`)
+
+Taken on an ordinary power-on with the self-test switch released. Uses the
+shorter `mem_test_short` (0xA2C) on the same RAM regions and also initializes
+Color RAM with an incrementing pattern first. Failures here still write their
+error display, but nothing waits for acknowledgement — the path runs straight
+through to `main_init_cont`. **Contradicted and corrected:** the former
+`quick`/`thorough` names were reversed: 0xA2C is the short three-stage test,
+while 0xA6A is the full extended suite used by the self-test-switch boot.
 
 ### 5.4 Main Init Continuation (`0x70C`)
 
@@ -279,20 +296,26 @@ boot.
     - Two byte accumulators: d0 init=0, d1 init=1
     - Loop 0x8000 times, adding even-addressed bytes to d0, odd to d1
     - Both must equal 0xFF (even bytes sum to 0xFF, odd bytes sum to 0xFE)
-    - On failure: call rom_checksum_display (0xCC0)
-    - In self-test mode: continue regardless
+    - On failure: call rom_checksum_display (0xCC0), which sets D5.w = 2
+    - Switch released (bit 3 set): continue regardless
+    - Switch engaged (bit 3 clear): repeat the checksum sweep until the
+      operator acknowledges with Magic (wait at 0x7D4, retrying 0x76E)
 8.  Check for valid game ROM:
     - 0x40000 must contain JMP instruction (0x4EF9)
     - Target address must be in range 0x40000–0x7FFFF
-    - If invalid: display "NO GAME PROGRAM" and wait
+    - If invalid: set D5.w = 1, display "NO GAME PROGRAM", and repeat the
+      display until Magic is pressed (this wait is not switch-gated)
 9.  If valid game ROM: validate checksums from table at 0x40080
 10. Validate EEPROM
 11. Clear Video RAM Spare (0x904000–0x904FFB, 4092 bytes)
 12. Call eeprom_init (0x44E8)
-13. Dispatch:
-    - Self-test + no errors: JMP game ROM start (0x40000)
-    - Self-test + errors: JMP os_vblank_mode_entry → self-test
-    - Normal mode: JMP os_vblank_mode_entry → game attract
+13. Dispatch on the switch (bit 3 of 0x803009) and D5 (0x9D8):
+    - Bit 3 clear (switch engaged): store D5 & 1 to 0x904014 and
+      JMP os_vblank_mode_entry (0xE14) → os_selftest_loop, which never returns
+    - Bit 3 set, D5 = 0: JMP game ROM start (0x40000)
+    - Bit 3 set, D5 = 1 (no game program): same os_vblank_mode_entry path
+    - Bit 3 set, D5 = 2 (ROM checksum error): JMP the game exception veneer
+      (0x40024) with D0.w = 1 if that slot holds a JMP, otherwise JMP 0x40000
 ```
 
 > **Architectural note:** The OS ROM uses an unusual "continuation address in A4" pattern for memory tests during early boot. Instead of returning via `RTS`, test routines jump to `(A4)` pre-loaded with the continuation address. This is continuation-passing style used when the stack hasn't been validated yet.
@@ -307,18 +330,18 @@ register state.
 
 | Address | Name | Inputs | Result | Exceptional convention and purpose |
 |---:|---|---|---|---|
-| `0x03B6` | `normal_boot_spare_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; handles spare-RAM failure and starts the full color-RAM test |
-| `0x03C4` | `normal_boot_spare_error_ack` | hardware switch/status state | no ordinary return | A4 continuation from `display_working_ram_error`; waits for acknowledgement and resumes at the color test |
-| `0x0424` | `normal_boot_color_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; reports color-RAM failure and starts the full playfield-RAM test |
-| `0x04A4` | `normal_boot_playfield_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; reports playfield failure and starts the full alpha-RAM test |
-| `0x0512` | `normal_boot_alpha_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; reports alpha failure and starts the full MOB-RAM test |
-| `0x0582` | `normal_boot_mob_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; reports MOB failure and jumps to `main_init_cont` |
-| `0x0652` | `selftest_spare_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; optionally displays the spare-RAM error and starts the short color test |
-| `0x0660` | `selftest_spare_error_ack` | hardware status | no ordinary return | A4 continuation from the error display; resumes the short color test |
-| `0x067C` | `selftest_color_test_done` | inherited `D4.w` test status | no ordinary return | reports color failure and starts the short playfield test |
-| `0x06A6` | `selftest_playfield_test_done` | inherited `D4.w` test status | no ordinary return | reports playfield failure and starts the short alpha test |
-| `0x06D0` | `selftest_alpha_test_done` | inherited `D4.w` test status | no ordinary return | reports alpha failure and starts the short MOB test |
-| `0x06FC` | `selftest_mob_test_done` | inherited `D4.w` test status | no ordinary return | reports MOB failure and falls into `main_init_cont` |
+| `0x03B6` | `selftest_boot_spare_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; handles spare-RAM failure and starts the full color-RAM test |
+| `0x03C4` | `selftest_boot_spare_error_ack` | hardware switch/status state | no ordinary return | A4 continuation from `display_working_ram_error`; re-runs the spare test until Magic is pressed, then resumes at the color test |
+| `0x0424` | `selftest_boot_color_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; reports color-RAM failure and starts the full playfield-RAM test |
+| `0x04A4` | `selftest_boot_playfield_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; reports playfield failure and starts the full alpha-RAM test |
+| `0x0512` | `selftest_boot_alpha_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; reports alpha failure and starts the full MOB-RAM test |
+| `0x0582` | `selftest_boot_mob_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; reports MOB failure and jumps to `main_init_cont` |
+| `0x0652` | `normal_boot_spare_test_done` | inherited `D4.w` test status | no ordinary return | A4 continuation; optionally displays the spare-RAM error and starts the short color test |
+| `0x0660` | `normal_boot_spare_error_resume` | hardware status | no ordinary return | A4 continuation from the error display; resumes the short color test |
+| `0x067C` | `normal_boot_color_test_done` | inherited `D4.w` test status | no ordinary return | reports color failure and starts the short playfield test |
+| `0x06A6` | `normal_boot_playfield_test_done` | inherited `D4.w` test status | no ordinary return | reports playfield failure and starts the short alpha test |
+| `0x06D0` | `normal_boot_alpha_test_done` | inherited `D4.w` test status | no ordinary return | reports alpha failure and starts the short MOB test |
+| `0x06FC` | `normal_boot_mob_test_done` | inherited `D4.w` test status | no ordinary return | reports MOB failure and falls into `main_init_cont` |
 | `0x08EC` | `boot_postcheck_dispatch` | `D5.w` boot/error mode | no return | shared branch target; performs the sound/EEPROM readiness handshakes, clears OS work RAM, initializes EEPROM, and tail-dispatches to the game, OS VBLANK mode, or game exception hook |
 | `0x0D26` | `game_descriptor_ram_test` | `A0=start`, `A1=end` | returns through 0x0D3A | saves all registers, converts descriptor bounds to A1/A2, installs A4 continuation, and tail-enters `mem_test_short` |
 | `0x0D3A` | `game_descriptor_ram_test_done` | inherited `D4.w` test status and saved frame in A5 | returns to 0x0D26 caller | A4 continuation; restores the saved register set and displays the failing address when nonzero |
@@ -343,7 +366,7 @@ D6 counts completed stages and the inner workers pet the watchdog.
 | `0x0A42` | `mem_test_short_walk_ones` | Schedule walking ones over zero base |
 | `0x0A52` | `mem_test_short_walk_zeroes` | Schedule walking zeroes over 0xFFFF base |
 | `0x0A62` | `mem_test_short_done` | Return D4 status through A4 |
-| `0x0A6A` | `mem_test_full` | Start the full extended destructive suite used by normal boot |
+| `0x0A6A` | `mem_test_full` | Start the full extended destructive suite used by the self-test-switch boot |
 | `0x0A7A` | `mem_test_full_walk_ones_highbit` | High-bit-first walking ones |
 | `0x0A84` | `mem_test_full_walk_zeroes_highbit` | High-bit-first walking zeroes |
 | `0x0A8E` | `mem_test_full_walk_ones_lowbit` | Low-bit-first walking ones |
@@ -358,6 +381,35 @@ D6 counts completed stages and the inner workers pet the watchdog.
 
 The exact argument/return/exception rows are checked into
 `generated/os_memory_test_contracts.csv`; its failure report is empty.
+
+### 5.7 Self-test switch polarity
+
+**Confidence: Verified** from the four dispatch sites below, all disassembled
+from `row9.bin`. Earlier revisions of this document and of
+`doc/01_hardware.md` §3.1 described bit 3 of `0x803009` as "1 = self-test
+active" and labelled the boot paths accordingly. That polarity is
+**Contradicted**: the switch is active low, reading 0 while engaged.
+
+| Site | Instruction | Bit clear (switch engaged) | Bit set (normal play) |
+|---|---|---|---|
+| `0x060C` | `btst #3,$803009` / `bne $61E` | falls through to `selftest_boot` (0x3A0), the full destructive suite that pauses on every failure | branches to `normal_boot` (0x61E), the short suite that never pauses |
+| `0x079A` | `btst #3,$803009` / `bne $7EE` | repeats the OS-ROM checksum sweep until the operator acknowledges | skips the wait and carries on booting |
+| `0x08F0` | `btst #3,$803009` / `bne $946` | with D5 already nonzero, repeats the game-ROM header and checksum stage from 0x7EE until acknowledged | skips the wait |
+| `0x095A` | `btst #3,$803009` / `bne $9AE` | after `validate_game_rom` (0x21A0) returns 0, repeats that validation from 0x94C until acknowledged | skips the wait |
+| `0x09D8` | `btst #3,$803009` / `beq $9FC` | enters `os_vblank_mode_entry` (0xE14) and `os_selftest_loop`, which never returns (§8.14) | starts the game at 0x40000 when D5 = 0 |
+
+The decisive argument is the last row. A production cabinet must start its
+game on an ordinary power-on and must reach diagnostics when the operator
+engages the switch inside the coin door. Since bit 3 *set* is the state that
+starts the game, set is the ordinary state and clear is the engaged one. This
+matches MAME's schematic-derived `gauntlet.cpp`, which declares the service
+input as `PORT_SERVICE( 0x0008, IP_ACTIVE_LOW )` in the `803008` port, and it
+matches the surrounding hardware convention: the player switches on
+`0x803001`–`0x803007` are active low as well.
+
+The same inversion applies to `irq6_handler` (§6.7) and the residual
+`selftest_watchdog_reset_trap` (0xEEE), both of which treat bit 3 set as the
+ordinary running state.
 
 ---
 
@@ -388,11 +440,11 @@ flowchart TD
     vgate -- "Yes" --> gamevbl["Tail-JMP game VBLANK handler"]
     vgate -- "No" --> localvbl["Acknowledge VBLANK; RTE"]
 
-    kind -- "IRQ6 / sound" --> st{"Self-test switch active?"}
+    kind -- "IRQ6 / sound" --> st{"Switch bit 3 set?<br/>(1 = normal play)"}
     st -- "Yes" --> sgate{"JMP at game sound hook<br/>0x4001E?"}
     sgate -- "Yes" --> gamesnd["Tail-JMP game IRQ6 hook"]
     sgate -- "No" --> drain["Dummy-read sound latch; RTE"]
-    st -- "No" --> ossnd["OS reads response byte,<br/>clears availability flag; RTE"]
+    st -- "No: switch engaged" --> ossnd["OS reads response byte,<br/>clears availability flag; RTE"]
 ```
 
 ### 6.1 Architecture
@@ -433,14 +485,14 @@ if (ram.os_vblank_active != 0) {
 ### 6.7 IRQ6 Handler (`0x36C`) — Sound processor communication
 
 ```c
-if (bit3(hw.vblank_selftest)) {   // self-test switch active?
+if (bit3(hw.vblank_selftest)) {   // set = self-test switch released (normal play)
     if (*(uint16_t*)0x4001E == 0x4EF9) {
         JMP 0x4001E;              // dispatch to game IRQ6 handler
     }
     READ(0x80300E);               // dummy read to clear interrupt
     RTE;
 } else {
-    // OS handles sound data
+    // Self-test switch engaged: OS handles sound data
     ram.sound_data_recv = READ(0x80300E);
     ram.sound_data_flag = 0;      // signal data available
     RTE;
@@ -505,6 +557,14 @@ scroll_v = (ram.pf_vscroll_hi << 7) | ram.pf_vscroll_lo;
 WRITE(0x905F6E, scroll_v);
 WRITE(0x930000, ram.pf_hscroll);
 
+// Self-test switch flipped back to normal play while the OS holds the
+// display: ask 0x4802 whether it is safe to leave, then deliberately hang
+// with interrupts masked so the watchdog reboots into the game (0xE8C).
+if (bit3(hw.vblank_selftest) && call 0x4802 == 0) {
+    SR = 0x2700;
+    for (;;) {}          // watchdog is no longer petted; board resets
+}
+
 // Signal VBLANK to main loop
 ram.vblank_occurred = 1;
 ram.timer_countdown--;
@@ -549,9 +609,9 @@ boot register continuations and therefore are not ordinary C calls.
 | `0x0338` | `irq3_handler` | CPU interrupt frame | RTE or tail-jump to hook 0x40012 |
 | `0x034A` | `irq4_vblank_handler` | CPU interrupt frame | tail-jumps to OS/game VBLANK handler, or acknowledges locally and RTE |
 | `0x036C` | `irq6_handler` | CPU interrupt frame | tail-jumps to game sound hook or consumes/stores the OS-lane response and RTE |
-| `0x03A0` | `normal_boot` | void | installs A4 and tail-enters the full RAM test; no return |
-| `0x05E2` | `reset_entry` | reset-vector CPU state | tail-selects normal/self-test boot; no return |
-| `0x061E` | `selftest_boot` | void | seeds color RAM, installs A4, and tail-enters the short RAM test |
+| `0x03A0` | `selftest_boot` | void | reached when switch bit 3 is clear; installs A4 and tail-enters the full RAM test; no return |
+| `0x05E2` | `reset_entry` | reset-vector CPU state | tail-selects `normal_boot` when switch bit 3 is set, `selftest_boot` when clear; no return |
+| `0x061E` | `normal_boot` | void | reached when switch bit 3 is set; seeds color RAM, installs A4, and tail-enters the short RAM test |
 | `0x070C` | `main_init_cont` | void | validates ROM/EEPROM, clears OS RAM, and tail-dispatches; no return |
 | `0x0C52` | `display_working_ram_error` | A4 continuation | writes the fixed “Working RAM error” text, then JMP (A4) |
 | `0x0C98` | `error_display_ram` | D4 error class, A0 address, D0 expected, D1 actual | register wrapper; displays details and returns void |
@@ -823,6 +883,17 @@ calls `eeprom_process`, and submits command 3 with a one-byte response directed
 to the status byte at 0x904F8E whenever the direct-response channel is free.
 It has no arguments or scalar return.
 
+**This is the coin path.** When the pending flag at 0x904F90 is negative (a
+fresh reply is marked) and the reply byte at 0x904F8E differs from the saved
+previous byte at 0x904F8F, the routine calls `process_coins`
+(0x35C4) with `(current, previous)` and then latches the new value as previous.
+The coin switches are read by the sound board, which packs four two-bit
+per-channel counters into the byte it returns for command 3, so **every coin
+in Gauntlet II arrives as the reply to a sound command**. This 0x4216 call
+site is the only caller of `process_coins` in the OS ROM, and Gauntlet II
+reaches `process_sound` from the tail of its own VBLANK handler at 0x40496
+using the 16-bit absolute form `4EB8 015A`. **Confidence: Verified.**
+
 #### `read_sound_data` (`0x42C8`, API `0x178`)
 Reads the next byte from the sound data receive buffer. Circular buffer (15 entries) at `0x904F98+`. Read pointer at `0x904F91`, write pointer at `0x904F92`.
 
@@ -966,7 +1037,10 @@ computes `(previous + 4 - current) & 3`, rejects impossible deltas above one,
 applies the multiplier and bonus encoded by complementary configuration bytes
 `+0x0A/+0x0B`, and updates the per-player accumulated, total, and pending
 credit bytes. The former claims that this routine directly drives LEDs and
-sound are **Contradicted**; those operations are not in this body.
+sound are **Contradicted**; those operations are not in this body. Its two
+byte samples originate on the **sound board**, not at a main-CPU input port:
+the only caller is `process_sound` (0x41FA) at 0x4216, which supplies the
+current and previous replies to sound command 3. See §8.7.
 
 #### `get_coin_multiplier` (`0x3706`, API `0x236`)
 
@@ -1478,7 +1552,7 @@ contracts are complete.
 
 | Address | Entry | Arguments | Return / convention | Purpose |
 |---:|---|---|---|---|
-| `0x0EEE` | `selftest_watchdog_reset_trap` | D0.w watchdog value | never returns; supervisor trap | Masks interrupts, services watchdog until self-test release, then stops servicing it to force reset |
+| `0x0EEE` | `selftest_watchdog_reset_trap` | D0.w watchdog value | never returns; supervisor trap | Masks interrupts, services the watchdog while the self-test switch reads released (bit 3 set), then stops servicing it once the switch is engaged to force a reset |
 | `0x2FB2` | `draw_text_effect_next_char_stack_veneer` | descriptor, color/style, index | result of 0x2FBE; stack-to-register fallthrough | Loads A0/D1/D0 for the documented worker |
 | `0x3018` | `clear_text_effect_next_char_stack_veneer` | descriptor, index | result of 0x3020; stack-to-register fallthrough | Loads A0/D0 for the documented worker |
 | `0x3088` | `clear_text_descriptor_chain_stack_veneer` | descriptor | void; stack-to-register fallthrough | Loads A0 for the documented worker |

@@ -67,6 +67,13 @@
 | 5 | Sound I/O full |
 | 6 | VBLANK status (toggles each field) |
 
+> **Superseded.** The bit 0 and bit 3 rows above are wrong and are kept only
+> as the original note. The OS ROM never reads bit 0 of this port — the boot
+> acknowledge waits poll bit 0 of `0x803001` (player 1 Magic) — and bit 3 is
+> active low, reading 0 when the self-test switch is engaged. See
+> `doc/01_hardware.md` §3.1 and `doc/02_os_rom.md` §5.7 for the verified
+> version and the disassembled evidence.
+
 ## 2. Known ROM contents
 
 ### 2.1 Jump Table Entries

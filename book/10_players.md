@@ -38,51 +38,64 @@ second. That update is one of the sixteen gameplay calls inside `g2mainloop`.
 The four classes feel different to play, and the differences are almost
 entirely *data*. One body of player code serves all of them, and being a
 Warrior or an Elf means indexing that code's tables with a different character
-number (0 Warrior, 1 Valkyrie, 2 Wizard, 3 Elf<!-- AGENT: make this a small table -->), an ID that turns up
-everywhere.
+number, an ID that turns up everywhere:
 
-Per-class ROM tables cover, among other things:
+| Character number | Hero |
+|------------------|------|
+| 0 | Warrior |
+| 1 | Valkyrie |
+| 2 | Wizard |
+| 3 | Elf |
 
-- **movement speed**, one entry per character in normal and powered states
-  (the extra-speed power-up selects the second column);
-- **health drain**, how fast time itself eats you, indexed by character and
-  difficulty;
-- **shot damage**, what your projectiles do;
-- **armor**, how badly monster shots and contact hurt *you*, again by
-  character;
-- **magic**, a whole matrix, covered in its own section below.
+Per-class ROM tables cover movement speed, health drain, shot damage, armor,
+and magic (a whole matrix, covered in its own section below). Most are small
+enough to show outright, with values read straight from the ROM.
 
-The shot-damage table is small enough to show in full, with its two
-modifiers: <!-- AGENT: we should swap the rows and columns here, so
-that the columns are by hero, and the rows are by power up, which
-matches the layout in ROM. I think, anyhow. Verify before changing
-anything! -->
+**Movement speed**, in the engine's fixed-point units; the powered row is
+selected by the extra-speed power-up:
 
-| Hero | Normal shot | With shot-power upgrade | Super shot |
-|------|------------|-------------------------|------------|
-| Warrior | 2 | 2 (+0–1 random) | 3 |
-| Valkyrie | 1 | 2 | 3 |
-| Wizard | 1 (+0–1 random) | 2 | 3 |
-| Elf | 1 | 2 | 3 |
+| | Warrior | Valkyrie | Wizard | Elf |
+|--|---------|----------|--------|-----|
+| Normal | 0x80 | 0x80 | 0x80 | 0x100 |
+| Powered | 0x100 | 0x100 | 0x100 | 0x100 |
 
-(Basic monsters die in one to three points of damage depending on their
-tier, so these small numbers matter more than they look; Chapter 11 does the
-bookkeeping.) Armor works by the same method in the other direction, with
-incoming monster-shot damage looked up by monster type *and* victim character.
-That table gives the Valkyrie the lowest damage figures and the Wizard the
-highest. Chapter 1's class tradeoffs are these lookups. <!-- AGENT: we
-should actually show each of the major player-power-associated-tables
-here, if they're not included elsewhere in the book -->
+The Elf natively moves at double rate, and the speed power promotes everyone
+else to Elf pace. (A companion table layers smaller per-class fractional
+boosts on a cadence, so the walking feel differs a little more than the base
+row suggests.)
 
-![Walking and fighting animation frames for one hero](img/ch10_anim_frames.png)
+**Health drain**, the per-tick tax that time itself charges: Warrior 2,
+Valkyrie 2, Wizard 6, Elf 4, with a second row of gentler rates (1, 1, 5,
+3) reachable through the lookup's power/difficulty selector. The Wizard's
+clock runs three times as fast as the Warrior's, which is the number behind
+his fragile reputation.
 
-> **[image needed]** `book/img/ch10_anim_frames.png`: a grid of one
-> character's sprites rendered from the graphics ROMs with `python-gex`,
-> ideally the Warrior's walking frames (4 frames × 8 directions, or one row
-> of 4 frames for two or three directions) beside his fighting frames, scaled
-> 3–4×, with row labels for direction and column labels for frame number.
-> This illustrates the "4 chars × 8 dirs × N frames" animation tables
-> described below.
+The shot-damage table is small enough to show in full. Heroes run across the
+columns here because that is how ROM stores them: consecutive entries step
+through the four characters, and owning the shot-power upgrade moves the
+lookup to the second row (forward 8 bytes) in the same table.
+
+| Shot | Warrior | Valkyrie | Wizard | Elf |
+|------|---------|----------|--------|-----|
+| Normal | 2 | 1 | 1 (+0–1 random) | 1 |
+| With shot-power upgrade | 2 (+0–1 random) | 2 | 2 | 2 |
+
+A super shot skips the lookup and deals a flat 3.
+
+Basic monsters die in one to three points of damage depending on their tier,
+so small numbers decide a lot here, and Chapter 11 does that bookkeeping.
+Armor works by the same method in the other direction, with incoming
+monster-shot damage looked up by monster type, shot tier, *and* victim
+character. The basic tier reads Valkyrie 3, Warrior 4, Elf 4, Wizard 5; the
+armor powers select lower rows; and the strongest shot tiers reach 15
+against a Wizard while a Valkyrie holds the same shot to 10. Chapter 1's
+class tradeoffs are these lookups.
+
+![Walking and fighting animation frames for the Warrior](img/ch10_anim_frames.png)
+
+*The Warrior's animation tables, rendered from the graphics ROMs: the
+four-frame walking cycle in three of its eight directions, and the
+eight-frame fighting swing. The soft gray is the sprite's built-in shadow.*
 
 Even a hero's *look* comes from tables. Each player has a free-running
 animation counter, and four ROM tables covering idle, walking, fighting, and
@@ -105,16 +118,15 @@ choice.
 Once the choice is committed (Chapter 7's session machinery owns the exact
 trigger), the placement runs:
 
-1. **Find ground.** The spawn search probes candidate cells using the same
-   offset tables the game's other placement searches use, with the level's
-   player-start marker recorded as the fallback anchor for joins. A cell
-   qualifies when it is traversable floor with no occupant and no rendered
-   MOB crowding any of its eight neighbors. The join proceeds only after a
-   successful placement, and the finalizer never runs without a spot to
-   stand. <!-- AGENT: this probably needs to note that when a second (or third,
-   or fourth) player joins, it tries to add them immediately next to an existing
-   player, only falling back to the maze start if those are unavailable, and
-   giving an error buzz if no location is available. This needs to be verified. -->
+1. **Find ground.** If nobody else is in the level, the newcomer stands on
+   the level's recorded player-start marker, and the IT curse is cleared
+   for good measure, since nobody remains to hold it. Joining a level in
+   progress instead anchors the search on the party itself: for each active
+   player in turn, four candidate cells offset around that player's position
+   are tested for traversable, unoccupied floor, and the first clear one
+   wins, which is why a latecomer materializes beside a friend. Placement
+   has to succeed before the join continues, and the finalizer never runs
+   without a spot for the new hero.
 2. **Build the body.** A MOB is created at that cell, and its slot becomes
    this player's. From here on, "player 2" is an index into the same five
    parallel arrays as every monster (Chapter 8), plus a family of per-player
@@ -130,7 +142,11 @@ trigger), the placement runs:
    drawn for real, and the speech system greets the newcomer by color and
    class.
 
-Death unwinds the same structures, and that comes later in this chapter.
+When every candidate around every player is blocked, the join is refused,
+and the cabinet says so with a sound effect whose entry in the project's
+sound-command catalog is simply named "Unable to Join In."
+
+Player death unwinds the same structures, and that comes later in this chapter.
 
 ## From switches to intent
 
@@ -229,25 +245,39 @@ generator object type, 28 types in all. Within a record, the entry is selected
 by who is drinking (the four characters) and by how the magic was triggered,
 either drunk from your pocket or set off by a shot, plus a flag for whether
 the drinker owns the **extra magic power** upgrade. For a monster type the
-entry holds a damage value. For a generator type it holds a *replacement*, so
-the generator transforms into whatever object the table names, which is how a
-strong magic user can demote or delete a ghost generator outright.
+entry holds a damage value, subtracted from the monster's tier health. For a
+generator type it holds a *replacement*, the object the generator becomes.
+And in both halves, a **zero entry means the target is destroyed outright**:
+the blast handler branches a zero straight to MOB removal, no damage
+arithmetic involved.
+
+A slice of the real matrix, read from the ROM, for ghost generators under a
+normally drunk potion:
+
+| Target | Warrior | Valkyrie | Wizard | Elf |
+|--------|---------|----------|--------|-----|
+| Ghost generator, tier 1 | unaffected | unaffected | destroyed | destroyed |
+| Ghost generator, tier 2 | unaffected | unaffected | destroyed | destroyed |
+| Ghost generator, tier 3 | unaffected | unaffected | destroyed | demoted to tier 1 |
+
+The Wizard's column is zeros: every ghost generator on screen, erased with
+one drink. The Warrior's and Valkyrie's columns name each generator's own
+type, a replacement that changes nothing. Their enhanced-magic columns
+upgrade them to one-tier demotions, the shot-triggered columns are a step
+weaker across the board, and the grunt, demon, lobber, and sorcerer
+generator families all follow the same shape. Over in the monster rows,
+ordinary ghosts read damage 2 for the Warrior and Valkyrie and zero, that
+is, instant erasure, for the Wizard and Elf. The most famous zero in the
+matrix belongs to Death, whose row is nothing else: any character's potion
+destroys Death on contact, the one reliable remedy the game offers, and it
+is one table byte.
 
 That one matrix answers a lot of questions at once. A Wizard's potion levels a
 room where a Warrior's singes it, because the two read different columns of
 the same record. A potion set off by a stray shot does less than one you
 drank, since the trigger bit selects a different entry, which is the game
-charging you for clumsiness by table lookup. The same record explains why one
-player's magic reduces a generator to rubble while another's merely demotes
-it. (The dragon gets a private check of its own inside the potion handler; see
-Chapter 12.)
-
-> **[needs verification]** A worked slice of the real matrix (for example the
-> ghost, demon, and ghost-generator records across all four characters, with
-> normal and enhanced magic) should be extracted from the ROM
-> (`potion_effect_matrix`, 28 × 16 bytes) and shown here as a labeled table.
-> The matrix's structure and indexing are verified; the documentation lacks
-> the individual byte values.
+charging you for clumsiness by table lookup. (The dragon gets a private check
+of its own inside the potion handler; see Chapter 12.)
 
 ## The dwindling number
 
@@ -393,10 +423,14 @@ ticks a second. Chapter 11 takes the other side of the collision, the horde.
 >   `doc/04_game_subsystems.md` §4.1. Character selection is
 >   `character_select_input_update` (0x42DF4), §22.
 > - Joining: `player_join` (0x48BB6) → `player_start_inner` (0x48BEC) →
->   `player_join_finalize` (0x48A36), §4.4. Spawn probing uses the
->   candidate-offset tables at 0x578A2/0x578B2 and `tile_occupancy_test`
->   (§23.4). Character palette handlers: pointer tables 0x57842/0x57852 into
->   RAM JMP stubs at 0x905F00, §2.4.
+>   `player_join_finalize` (0x48A36), §4.4. Spawn logic verified by
+>   disassembly at 0x48C04–0x48CA6: an empty level uses
+>   `maze_player_start_slot` (0x9049E0) and clears IT; otherwise four
+>   candidate offsets (tables 0x578A2/0x578B2) are tried around each active
+>   player's cell in turn, and total failure plays sound 0x43, catalogued
+>   in `refs/soundcmds.csv` as "Unable to Join In". Character palette
+>   handlers: pointer tables 0x57842/0x57852 into RAM JMP stubs at
+>   0x905F00, §2.4.
 > - Input: raw words at 0x904920, direction decode via
 >   `joystick_nibble_to_direction` (0x580FC) and `fight_direction_map`
 >   (0x5811C); facing/fighting state at 0x9049A4/0x9049AC. Debounce itself:
@@ -417,8 +451,14 @@ ticks a second. Chapter 11 takes the other side of the collision, the horde.
 >   (0x905F68).
 > - Potions: `main_handle_potions` (0x46FEA); `potion_effect_matrix`
 >   (0x5DA98, 28 types × 16 bytes; character bits, shot-trigger bit,
->   enhanced-magic bit; damage for monsters, replacement type for
->   generators), `doc/05_data_reference.md` §5.
+>   enhanced-magic bit; a zero entry destroys the target outright,
+>   otherwise damage for monsters and replacement type for generators),
+>   `doc/05_data_reference.md` §5. The matrix values quoted here were
+>   dumped from `row76.bin`, and the zero-entry-destroys rule is verified
+>   in the blast handler (0x41664–0x416CA: a zero byte branches directly
+>   to MOB removal); the data reference now documents the same semantics.
+>   All stat-table values in this chapter were likewise read straight
+>   from the ROM.
 > - Health: `main_health_countdown` (0x466F6), §4.3; `health_drain_table`
 >   (0x5813C); `health_per_coin_table` (0x57862); heartbeat mask table
 >   0x576A8; damage sampling `player_damage_sample_update` (0x50E34); the

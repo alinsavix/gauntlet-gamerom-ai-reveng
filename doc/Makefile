@@ -4,6 +4,36 @@ SOURCES = INDEX.md 01_hardware.md 02_os_rom.md 03_game_rom_structure.md \
 
 OUTPUT = gauntlet2_docs.pdf
 
+# The checkers read these UTF-8 documents with Python's default encoding,
+# which is cp1252 on Windows and makes them die on the first en dash.
+export PYTHONUTF8 := 1
+
+# The contract generators invoke "r2" through Python's subprocess, which on
+# Windows goes to CreateProcess -- and CreateProcess only ever appends .exe,
+# so the r2.bat that the radare2 Windows build ships is invisible to them.
+# Copy radare2.exe aside as r2.exe and put that directory first on PATH.
+# Non-Windows hosts already have a real r2 executable, so all of this is
+# skipped and `check` gains no extra prerequisite.
+R2_SHIM := $(CURDIR)/.r2shim
+ifeq ($(OS),Windows_NT)
+export PATH := $(R2_SHIM);$(PATH)
+R2_SHIM_DEP := $(R2_SHIM)/r2.exe
+endif
+
+$(R2_SHIM)/r2.exe:
+	@mkdir -p "$(R2_SHIM)"
+	@src="$$(command -v radare2 2>/dev/null)"; \
+	if [ -z "$$src" ]; then \
+		bat="$$(command -v r2 2>/dev/null)"; \
+		if [ -n "$$bat" ]; then src="$$(dirname "$$bat")/radare2.exe"; fi; \
+	fi; \
+	if [ ! -f "$$src" ]; then \
+		echo "radare2 not found on PATH. Install it (or add its bin directory)" >&2; \
+		echo "and re-run; the OS/game contract checks all shell out to it." >&2; \
+		exit 1; \
+	fi; \
+	cp "$$src" "$@" && echo "r2.exe shim created in $(R2_SHIM) from $$src"
+
 $(OUTPUT): $(SOURCES) pdf-header.tex Makefile
 	pandoc $(SOURCES) \
 		--pdf-engine=xelatex \
@@ -19,8 +49,9 @@ $(OUTPUT): $(SOURCES) pdf-header.tex Makefile
 
 clean:
 	rm -f $(OUTPUT)
+	rm -rf $(R2_SHIM)
 
-check:
+check: $(R2_SHIM_DEP)
 	python3 generated/generate_maze_catalog.py --check
 	python3 generated/generate_rom_regions.py --check
 	python3 generated/generate_r2_loader.py --check --run-check

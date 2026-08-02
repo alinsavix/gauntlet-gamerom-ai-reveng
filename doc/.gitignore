@@ -1,0 +1,4 @@
+# Build products of doc/Makefile.
+gauntlet2_docs.pdf
+.r2shim/
+generated/__pycache__/

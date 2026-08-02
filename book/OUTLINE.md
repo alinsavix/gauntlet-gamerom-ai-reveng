@@ -6,6 +6,10 @@ reverse-engineering documentation in this repository. It is written so that a
 writing agent can produce the final chapters without needing any other
 briefing.
 
+Note: almost all file paths in this document are relative to the repository
+root (which is one level up from this outline). When creating book content,
+all paths (for e.g. images) should be relative to the book directory.
+
 ---
 
 ## Frontmatter: Goals, Audience, and Constraints
@@ -164,12 +168,12 @@ the mechanism.
 
 - All raster images live in `book/img/`, named `chNN_short_description.png`
   (e.g. `ch04_tile_zoom.png`), and are referenced with relative markdown
-  links. Mermaid diagrams are authored inline in ```mermaid fences, as in
-  `doc/`, and need no image files.
+  links. Mermaid diagrams are authored inline in "mermaid fences", and need no image files.
 - The two production paths are `python-gex` renders (tiles, sprites, stamps,
   full mazes) and MAME screenshots of the running game, annotated as needed.
-  The ROMs themselves are **not** in this repository; producing either kind of
-  asset requires a ROM set assembled per the checksums in `README.md`.
+  The ROMs themselves may or may not be present at the root of this 
+  repository; if they are present, they can be used to produce assets using
+  `python-gex`.
 - A drafting agent that cannot produce an image (no ROMs or MAME available)
   must not skip it, substitute an unrelated image, or fabricate one. Instead,
   insert a placeholder image link to the intended `book/img/` path plus a

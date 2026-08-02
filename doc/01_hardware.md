@@ -106,14 +106,30 @@ limited to behavior actually exercised by the software.
 ### 3.1 Status Register Bits (`0x803009`)
 
 **Confidence: Verified.** Implementations at 0x41C8/0x41CC: both take a command
-word, test SoundIOFull, and write that word to 0x803170.
+word, test SoundIOFull, and write that word to 0x803170. The bit assignments
+below are verified from every `btst` site in the OS ROM: bits 3, 5, and 6 are
+the only ones the software reads.
 
 | Bit | Description |
 |-----|-------------|
-| 0 | Player 1 start button (active low, used for boot wait) |
-| 3 | Self-test switch (1 = self-test active) |
+| 3 | Self-test switch, **active low** (0 = switch engaged, 1 = normal play) |
 | 5 | Sound I/O full |
 | 6 | VBLANK status (toggles each field) |
+
+**Contradicted and corrected:** earlier revisions gave bit 3 as
+"1 = self-test active" and listed a bit 0 "Player 1 start button (active low,
+used for boot wait)". Both are wrong.
+
+- Bit 3 is inverted. The boot dispatch at 0x9D8 of `row9.bin` starts the game
+  at 0x40000 when bit 3 is *set* and enters the never-returning diagnostic
+  loop when it is *clear*, so set is the ordinary running state. MAME's
+  schematic-derived `gauntlet.cpp` agrees, declaring the service input as
+  `PORT_SERVICE( 0x0008, IP_ACTIVE_LOW )`. `doc/02_os_rom.md` §5.7 lists all
+  four dispatch sites.
+- There is no bit 0 here. The OS ROM never tests bit 0 of `0x803009`; the
+  boot-time acknowledge waits poll bit 0 of `0x803001`, which is the player 1
+  Magic input (`doc/05_data_reference.md` §3.11), not a start button. MAME
+  marks bits 0–2 of this port unused.
 
 ---
 

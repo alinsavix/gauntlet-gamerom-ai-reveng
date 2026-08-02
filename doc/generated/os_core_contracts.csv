@@ -5,9 +5,9 @@ address,name,purpose,arguments,return,exceptional_convention,confidence
 0x0338,irq3_handler,Dispatch IRQ3 to game hook 0x40012 when installed,CPU interrupt frame,no scalar result,interrupt entry; RTE or tail-JMP,Verified
 0x034A,irq4_vblank_handler,"Dispatch VBLANK to the OS handler or game hook, otherwise acknowledge it locally",CPU interrupt frame,no scalar result,interrupt entry; RTE or tail-JMP,Verified
 0x036C,irq6_handler,Dispatch self-test-mode IRQ6 to the game sound hook or consume/store the OS-lane sound response,CPU interrupt frame,no scalar result,interrupt entry; RTE or tail-JMP,Verified
-0x03A0,normal_boot,Start the full destructive test of video-RAM spare before the normal boot continuation chain,void,no return,early-boot tail entry; installs A4 continuation,Verified
+0x03A0,selftest_boot,Start the full destructive test of video-RAM spare before the self-test boot continuation chain,void,no return,early-boot tail entry; installs A4 continuation,Verified
 0x05E2,reset_entry,"Mask interrupts, pulse the board latch, delay while petting watchdog, and select normal or self-test boot",reset-vector CPU state,no return,reset vector entry; tail-JMP,Verified
-0x061E,selftest_boot,Seed color RAM and start the short destructive video-RAM-spare test for self-test boot,void,no return,early-boot tail entry; installs A4 continuation,Verified
+0x061E,normal_boot,Seed color RAM and start the short destructive video-RAM-spare test for normal boot,void,no return,early-boot tail entry; installs A4 continuation,Verified
 0x070C,main_init_cont,"Initialize display/stack, validate OS and game ROM checksums plus EEPROM, clear OS RAM, and dispatch game or OS mode",void,no return,early-boot continuation; final tail dispatch,Verified
 0x0C52,display_working_ram_error,Write the fixed 'Working RAM error' message to diagnostic video memory,A4=continuation,no ordinary return,register continuation entry; JMP (A4),Verified
 0x0C98,error_display_ram,Initialize alpha display and show detailed RAM-test failure values,D4.l=error class; A0=failing address; D0.w=expected; D1.w=actual,void,register wrapper that constructs four normal stack arguments,Verified
