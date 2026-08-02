@@ -165,14 +165,12 @@ the shading computed per pixel from whatever the floor beneath happens to
 be. The cost is one reserved color index and a duplicate palette bank at
 half brightness.
 
-![Close crop of a hero and monsters showing shadows on the floor](img/ch04_shadow.png)
+![Three renders of the Warrior showing what pixel value 1 does](img/ch04_shadow.png)
 
-> **[image needed]** `book/img/ch04_shadow.png`: a tight MAME screenshot
-> crop (2–3× zoom) of a hero and a monster or two standing on light-colored
-> floor, with the soft shadows under their feet clearly visible; annotate
-> one shadow with a callout noting it is MOB pixel value 1 darkening the
-> floor pixels beneath. Capture by pausing an early level in MAME with
-> characters over a pale floor tile and cropping the screenshot.
+*The Warrior standing on a pale floor, rendered from the graphics ROMs. The
+left panel paints the sprite's value-1 pixels red so you can see the crescent
+they form; the middle skips them; the right does what the hardware does and
+darkens the floor showing through them.*
 
 ## The text layer
 

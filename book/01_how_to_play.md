@@ -35,13 +35,9 @@ deeper than any party can survive.
 
 ![Labeled diagram of one Gauntlet II player position](img/ch01_control_panel.png)
 
-> **[image needed]** `book/img/ch01_control_panel.png`: a simple labeled
-> diagram of one player position: an eight-way joystick (arrows showing all
-> eight directions) flanked by the two buttons, labeled **Fire** and
-> **Magic**, with a caption noting the four color-coded positions (red, blue,
-> yellow, green). This can be drawn as a clean vector diagram, or cropped from
-> a photograph of an actual Gauntlet II control panel with labels added. ROM
-> data and MAME cannot produce it.
+*One player position. The stick reads eight directions, and the two buttons
+are everything else you can do. Four of these panels sit side by side, one
+per colour-coded position.*
 
 A stick and two buttons per position, and the whole game is played through
 them:
@@ -212,21 +208,13 @@ with pointers to the chapters that take each trick apart.
 
 Names for what's on screen, which later chapters will point back to.
 
-![Annotated Gauntlet II gameplay with each screen element labeled](img/ch01_gameplay_annotated.png)
+![Annotated gameplay frame with the screen elements labelled](img/ch01_gameplay_annotated.png)
 
-> **[image needed]** `book/img/ch01_gameplay_annotated.png`: a MAME screenshot
-> of Gauntlet II mid-game with two or more active players, annotated with
-> labeled callouts for: (1) the **maze**, walls and floor filling most of the
-> screen; (2) two **heroes** in their player-position colors; (3) a crowd of
-> **monsters** (ideally ghosts or grunts); (4) a **generator** actively
-> spawning; (5) floor **items**, at least food, a key, a potion, and
-> treasure; (6) the **exit**; (7) the **info panel** along the screen edge
-> showing each player's score, health, and inventory icons; (8) a **text
-> message** line (e.g. a hint or announcement); and (9) a note that the whole
-> view is a **camera window** onto a larger maze that scrolls to follow the
-> party. Produce by running Gauntlet II in MAME, starting a two-player game on
-> an early level, pausing near a generator with items visible, taking a
-> screenshot, and adding the labels in an image editor.
+*A single frame with the vocabulary labelled: the maze the party walks
+through, three heroes in their position colours, a crowd of grunts closing
+in, and the info panel that reports on all of it. The frame comes from the
+attract demo, which Chapter 15 shows is the real game engine playing back a
+recording.*
 
 - The **maze** is the world: a grid of walls, floors, doors, and hazards. You
   see it through a **camera window** that scrolls to follow the party. All

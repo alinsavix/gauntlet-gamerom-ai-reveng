@@ -218,18 +218,17 @@ negotiation. Each frame, the scroll system:
 The result is the familiar feel of the party dragging a shared window
 around the dungeon, and the screen edge itself becoming a leash.
 
-![Two players close together, camera centered between them](img/ch08_camera_close.png)
+![Two heroes close together inside one camera window](img/ch08_camera_close.png)
 
-> **[image needed]** `book/img/ch08_camera_close.png`: MAME screenshot of a
-> two-player game with both heroes near each other; annotate the midpoint
-> between them and note the camera centers the pair in the maze viewport.
+*Two heroes back together after the party had split. With the extent small,
+one window holds them both and the camera has nearly caught up with the
+midpoint it steers toward.*
 
-![Players at the rubber-band limit, held at the screen edge](img/ch08_camera_spread.png)
+![Three heroes strung out, the lowest held at the screen edge](img/ch08_camera_spread.png)
 
-> **[image needed]** `book/img/ch08_camera_spread.png`: MAME screenshot of
-> two players pulling in opposite directions at the camera's limit, one
-> hero pressed against the screen edge; annotate that the camera has
-> stopped following and the edge now holds the party together.
+*The same session earlier, with three heroes strung out and the lowest hard
+against the bottom edge. Past the rubber-band limit the camera stops chasing
+the outlier, and the edge of the window holds the party together.*
 
 ## Why crowds are possible
 

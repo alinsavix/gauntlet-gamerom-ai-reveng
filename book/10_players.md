@@ -323,14 +323,12 @@ the **score multiplier**, and the power-up bits below. The info-panel column
 renders it directly, with rows of key and potion icons and the multiplier
 whenever it exceeds one, so your pockets stay public.
 
-![One player's info-panel column, annotated](img/ch10_hud_column.png)
+![One player's info-panel column with every field populated](img/ch10_hud_column.png)
 
-> **[image needed]** `book/img/ch10_hud_column.png`: a MAME screenshot crop
-> of a single player's info-panel column mid-game, annotated with callouts
-> for: score, health value, hero name in that player position's color, the
-> key/potion icon rows, the power-up icons, the score multiplier (if
-> present), and the "IT" label position. Capture with a player who holds
-> several keys and potions and at least one power-up.
+*One player position's column with every field populated at once: class name
+in the position's colour, score, health, the treasure multiplier, the keys
+and potions carried, and the power-up icons along the top. The inset shows
+the IT label, which the game stamps between score and health.*
 
 You collect keys by walking over them and spend them without ceremony: touch a
 locked door while carrying one and the door system takes over. Each door is a

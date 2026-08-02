@@ -623,6 +623,171 @@ def make_demo_script():
     print("wrote ch15_demo_script.png")
 
 
+# ---------------------------------------------------------------------------
+# ch01_control_panel.png
+# ---------------------------------------------------------------------------
+
+POSITION_COLORS = [("red", (200, 40, 40)), ("blue", (50, 90, 210)),
+                   ("yellow", (215, 175, 30)), ("green", (40, 155, 60))]
+
+
+def make_control_panel():
+    """One player position: eight-way stick, Fire, Magic. Drawn rather than
+    extracted, because the ROMs hold no picture of the control panel."""
+    W, H = 760, 430
+    out = Image.new("RGBA", (W, H), WHITE)
+    d = ImageDraw.Draw(out)
+    f_lab, f_small = font(20), font(15)
+
+    d.rounded_rectangle((40, 40, W - 40, 300), 18, fill=(232, 232, 236),
+                        outline=(120, 120, 126), width=2)
+
+    cx, cy, reach = 235, 170, 74
+    for dx, dy in ((0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0),
+                   (-1, -1)):
+        n = (dx * dx + dy * dy) ** 0.5
+        ux, uy = dx / n, dy / n
+        d.line([(cx + ux * 34, cy + uy * 34), (cx + ux * reach, cy + uy * reach)],
+               fill=(90, 90, 96), width=4)
+        x1, y1 = cx + ux * reach, cy + uy * reach
+        px, py = -uy, ux
+        d.polygon([(x1 + ux * 12, y1 + uy * 12), (x1 + px * 7, y1 + py * 7),
+                   (x1 - px * 7, y1 - py * 7)], fill=(90, 90, 96))
+    d.ellipse([cx - 40, cy - 12, cx + 40, cy + 46], fill=(168, 168, 174),
+              outline=(110, 110, 116), width=2)
+    d.ellipse([cx - 30, cy - 30, cx + 30, cy + 30], fill=BLACK,
+              outline=(60, 60, 60), width=2)
+    d.ellipse([cx - 20, cy - 22, cx - 2, cy - 6], fill=(78, 78, 82))
+    d.text((cx, cy + 108), "eight-way joystick", fill=BLACK, font=f_lab,
+           anchor="mm")
+
+    for bx, name, face, rim in ((500, "FIRE", (206, 52, 46), (150, 30, 26)),
+                                (640, "MAGIC", (60, 105, 200), (36, 68, 148))):
+        d.ellipse([bx - 52, cy - 52, bx + 52, cy + 52], fill=(196, 196, 202),
+                  outline=(120, 120, 126), width=2)
+        d.ellipse([bx - 42, cy - 42, bx + 42, cy + 42], fill=face, outline=rim,
+                  width=3)
+        d.text((bx, cy), name, fill=WHITE, font=f_lab, anchor="mm")
+    d.text((570, cy + 108), "two buttons", fill=BLACK, font=f_lab, anchor="mm")
+    d.text((W // 2, 326),
+           "The cabinet has no Start button. Fire both starts a game and joins one.",
+           fill=BLACK, font=f_small, anchor="mm")
+
+    sw, y = 96, 392
+    x = W // 2 - (sw * 4 + 3 * 14) // 2
+    d.text((x, y - 26), "Four positions, one panel each:", fill=BLACK,
+           font=f_small, anchor="lm")
+    for name, rgb in POSITION_COLORS:
+        d.rounded_rectangle([x, y - 14, x + sw, y + 16], 6, fill=rgb)
+        d.text((x + sw // 2, y + 1), name, fill=WHITE, font=f_small, anchor="mm")
+        x += sw + 14
+    out.convert("RGB").save(os.path.join(IMG_DIR, "ch01_control_panel.png"))
+    print("wrote ch01_control_panel.png")
+
+
+# ---------------------------------------------------------------------------
+# ch04_shadow.png
+# ---------------------------------------------------------------------------
+
+def _floor_bg(w_tiles, h_tiles):
+    """Pick the palest, flattest floor stamp the ROM offers, so a darkening
+    shadow reads against it rather than disappearing into texture."""
+    from gex.floor import FLOOR_STAMPS
+
+    best = None
+    for si, stamp in enumerate(FLOOR_STAMPS):
+        for pnum in range(len(GAUNTLET_PALETTES["floor"])):
+            pal = GAUNTLET_PALETTES["floor"][pnum]
+            cell = blank_image(16, 16)
+            for k, num in enumerate(stamp):
+                ty, tx = divmod(k, 2)
+                write_tile_to_image(cell, get_parsed_tile(num), pal, False,
+                                    tx * 8, ty * 8)
+            lums = [luminance(p) for p in cell.getdata()]
+            mean = sum(lums) / len(lums)
+            var = sum((v - mean) ** 2 for v in lums) / len(lums)
+            score = mean - 0.9 * var ** 0.5      # bright, but not busy
+            if best is None or score > best[0]:
+                best = (score, si, pnum, cell)
+    _, si, pnum, cell = best
+    print(f"shadow backdrop: floor stamp {si}, floor palette {pnum}")
+    bg = Image.new("RGBA", (w_tiles * 8, h_tiles * 8))
+    for ty in range(0, h_tiles * 8, 16):
+        for tx in range(0, w_tiles * 8, 16):
+            bg.alpha_composite(cell, (tx, ty))
+    return bg
+
+
+MASK_RGBA = (230, 40, 40, 255)
+
+
+def _hero_over(bg, tilenum, ptype, pnum, mode):
+    """Composite a 3x3-tile hero onto `bg`. `mode` decides what pixel value 1
+    does: 'mark' paints it red, 'skip' leaves the floor alone, 'shadow'
+    darkens the floor underneath, which is what the hardware does."""
+    out = bg.copy()
+    pal = list(GAUNTLET_PALETTES[ptype][pnum])
+    pal[1] = _ShadowColor()
+    sprite = blank_image(24, 24)
+    for k in range(9):
+        ty, tx = divmod(k, 3)
+        write_tile_to_image(sprite, get_parsed_tile(tilenum + k), pal, True,
+                            tx * 8, ty * 8)
+    sp, base = sprite.load(), out.load()
+    for yy in range(24):
+        for xx in range(24):
+            if sp[xx, yy][:3] != SHADOW_RGBA[:3]:
+                continue
+            if mode == "mark":
+                sp[xx, yy] = MASK_RGBA
+                continue
+            sp[xx, yy] = (0, 0, 0, 0)
+            if mode == "shadow":
+                r, g, b, a = base[xx + 4, yy + 4]
+                base[xx + 4, yy + 4] = (r // 2, g // 2, b // 2, a)
+    out.alpha_composite(sprite, (4, 4))
+    return out
+
+
+def make_shadow():
+    """ch04: what MOB pixel value 1 does to the playfield underneath."""
+    tilenum = words_at(0x58A4A, 32)[4]          # Warrior, idle, facing down
+    bg = _floor_bg(4, 4)
+    panels = [("where value 1 lives", "mark"),
+              ("value 1 skipped", "skip"),
+              ("value 1 darkening the floor", "shadow")]
+    cells = [upscale(_hero_over(bg, tilenum, "warrior", 0, m), 8) for _, m in panels]
+
+    pad, gap, lab = 22, 30, 34
+    notes = ["The Warrior's sprite and the floor beneath it, both rendered from "
+             "the graphics ROMs.",
+             "Sixty-nine of the sprite's 576 pixels carry value 1. The hardware "
+             "spends them darkening the",
+             "playfield underneath, not painting a colour."]
+    f_note = font(14)
+    probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    W = max(pad * 2 + cells[0].width * 3 + gap * 2,
+            pad * 2 + max(probe.textlength(n, font=f_note) for n in notes))
+    W = int(W)
+    H = pad + cells[0].height + lab + 22 + 18 * len(notes)
+    out = Image.new("RGBA", (W, H), WHITE)
+    d = ImageDraw.Draw(out)
+    f = font(17)
+    for i, (cap, _) in enumerate(panels):
+        x = pad + i * (cells[i].width + gap)
+        out.alpha_composite(cells[i], (x, pad))
+        d.rectangle([x - 1, pad - 1, x + cells[i].width, pad + cells[i].height],
+                    outline=GRAY)
+        d.text((x + cells[i].width // 2, pad + cells[i].height + lab // 2),
+               cap, fill=BLACK, font=f, anchor="mm")
+    ny = pad + cells[0].height + lab + 14
+    for note in notes:
+        d.text((pad, ny), note, fill=BLACK, font=f_note, anchor="lt")
+        ny += 18
+    out.convert("RGB").save(os.path.join(IMG_DIR, "ch04_shadow.png"))
+    print("wrote ch04_shadow.png")
+
+
 make_tile_zoom()
 make_dragon_tiles()
 make_four_heroes()
@@ -635,3 +800,5 @@ make_secret_rooms()
 make_treasure_room()
 make_demo_maze()
 make_demo_script()
+make_control_panel()
+make_shadow()
