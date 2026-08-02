@@ -78,7 +78,7 @@ Assembled from 4 chips (interleave A-chips as even bytes, B-chips as odd; concat
 | [03_game_rom_structure.md](03_game_rom_structure.md) | Game ROM: main-frame timeline, verified call sequence, calling convention, ROM-layout diagram, and coverage |
 | [04_game_subsystems.md](04_game_subsystems.md) | All game subsystems, including tile-redraw, coordinate-conversion, and MOB-list structure diagrams |
 | [05_data_reference.md](05_data_reference.md) | RAM variable map, enums and constants, data structures, ROM data tables catalog |
-| [06_maze_catalog.md](06_maze_catalog.md) | Maze lookup/Slapstic/decode/render pipeline and complete 117-maze table (mazes 0–116, levels 1–97 plus treasure rooms and two secret-room layouts) |
+| [06_maze_catalog.md](06_maze_catalog.md) | Maze lookup/Slapstic/decode/render pipeline, the EEPROM-backed level→maze selection algorithm, and the complete 117-maze table (mazes 0–116: fixed opening levels, rotation mazes, treasure rooms, and two secret-room layouts) |
 | [07_function_index.md](07_function_index.md) | Consolidated callable-entry index with addresses, names, descriptions, and checked ABI batches |
 | [08_known_issues.md](08_known_issues.md) | Authoritative prioritized backlog and resolved-audit record |
 

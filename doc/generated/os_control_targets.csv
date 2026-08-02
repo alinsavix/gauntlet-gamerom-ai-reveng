@@ -6,22 +6,22 @@ site,owners,kind,opcode,target,target_name,register_source,classification,confid
 0x0342,irq3_handler,jmp,jmp 0x40012.l,0x40012,,,direct_game_header_hook,Verified
 0x035E,irq4_vblank_handler,jmp,jmp 0x40006.l,0x40006,,,direct_game_header_hook,Verified
 0x0380,irq6_handler,jmp,jmp 0x4001e.l,0x4001E,,,direct_game_header_hook,Verified
-0x0436,normal_boot_color_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
-0x04AC,normal_boot_playfield_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
-0x051C,normal_boot_alpha_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
-0x058C,normal_boot_mob_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
-0x05DC,normal_boot_mob_test_done,jmp,jmp 0x70c.l,0x070C,main_init_cont,,direct_internal_root,Verified
-0x0618,reset_entry,jmp,jmp 0x3a0.l,0x03A0,normal_boot,,direct_internal_root,Verified
-0x0684,selftest_color_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
-0x06AE,selftest_playfield_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
-0x06DA,selftest_alpha_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
-0x0706,selftest_mob_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
-0x0768,main_init_cont;selftest_mob_test_done,jsr,jsr 0x3522.l,0x3522,init_alpha_display,,direct_internal_root,Verified
-0x0894,boot_postcheck_dispatch;main_init_cont;selftest_mob_test_done,jsr,jsr 0x2e36.l,0x2E36,display_text,,direct_internal_root,Verified
-0x09D2,boot_postcheck_dispatch;main_init_cont;selftest_mob_test_done,jsr,jsr 0x44e8.l,0x44E8,eeprom_init,,direct_internal_root,Verified
-0x09F0,boot_postcheck_dispatch;main_init_cont;selftest_mob_test_done,jmp,jmp 0x40000.l,0x40000,,,direct_game_header_hook,Verified
-0x0A0C,boot_postcheck_dispatch;main_init_cont;selftest_mob_test_done,jmp,jmp 0xe14.l,0x0E14,os_vblank_mode_entry,,direct_internal_root,Verified
-0x0A26,boot_postcheck_dispatch;main_init_cont;selftest_mob_test_done,jmp,jmp 0x40024.l,0x40024,,,direct_game_header_hook,Verified
+0x0436,selftest_boot_color_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
+0x04AC,selftest_boot_playfield_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
+0x051C,selftest_boot_alpha_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
+0x058C,selftest_boot_mob_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
+0x05DC,selftest_boot_mob_test_done,jmp,jmp 0x70c.l,0x070C,main_init_cont,,direct_internal_root,Verified
+0x0618,reset_entry,jmp,jmp 0x3a0.l,0x03A0,selftest_boot,,direct_internal_root,Verified
+0x0684,normal_boot_color_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
+0x06AE,normal_boot_playfield_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
+0x06DA,normal_boot_alpha_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
+0x0706,normal_boot_mob_test_done,jsr,jsr 0xc98.l,0x0C98,error_display_ram,,direct_internal_root,Verified
+0x0768,main_init_cont;normal_boot_mob_test_done,jsr,jsr 0x3522.l,0x3522,init_alpha_display,,direct_internal_root,Verified
+0x0894,boot_postcheck_dispatch;main_init_cont;normal_boot_mob_test_done,jsr,jsr 0x2e36.l,0x2E36,display_text,,direct_internal_root,Verified
+0x09D2,boot_postcheck_dispatch;main_init_cont;normal_boot_mob_test_done,jsr,jsr 0x44e8.l,0x44E8,eeprom_init,,direct_internal_root,Verified
+0x09F0,boot_postcheck_dispatch;main_init_cont;normal_boot_mob_test_done,jmp,jmp 0x40000.l,0x40000,,,direct_game_header_hook,Verified
+0x0A0C,boot_postcheck_dispatch;main_init_cont;normal_boot_mob_test_done,jmp,jmp 0xe14.l,0x0E14,os_vblank_mode_entry,,direct_internal_root,Verified
+0x0A26,boot_postcheck_dispatch;main_init_cont;normal_boot_mob_test_done,jmp,jmp 0x40024.l,0x40024,,,direct_game_header_hook,Verified
 0x0A68,mem_test_short_done,jmp,jmp (a4),,,caller/inherited register,inherited_memory_test_continuation,Verified
 0x0AE0,mem_test_full_done,jmp,jmp (a4),,,caller/inherited register,inherited_memory_test_continuation,Verified
 0x0AF2,mem_test_short,jmp,jmp (a6),0x0A42,mem_test_short_walk_ones,"lea.l 0xa42.l, a6",constant_internal_root,Verified

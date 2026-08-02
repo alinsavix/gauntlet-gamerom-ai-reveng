@@ -57,7 +57,7 @@ target,sites,owners,opcodes,confidence
 0x6624,0x0CD0,rom_checksum_display,pea.l 0x6624.l,Verified
 0x663C,0x0CFC,rom_checksum_display,pea.l 0x663c.l,Verified
 0x6646,0x0D14,rom_checksum_display,pea.l 0x6646.l,Verified
-0x666E,0x088E,boot_postcheck_dispatch;main_init_cont;selftest_mob_test_done,pea.l 0x666e.l,Verified
+0x666E,0x088E,boot_postcheck_dispatch;main_init_cont;normal_boot_mob_test_done,pea.l 0x666e.l,Verified
 0x6712,0x21EE,validate_game_rom,pea.l 0x6712.l,Verified
 0x6878,0x2210,validate_game_rom,pea.l 0x6878.l,Verified
 0x6918,0x2232,validate_game_rom,pea.l 0x6918.l,Verified

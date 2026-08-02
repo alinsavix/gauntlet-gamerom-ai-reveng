@@ -106,14 +106,30 @@ limited to behavior actually exercised by the software.
 ### 3.1 Status Register Bits (`0x803009`)
 
 **Confidence: Verified.** Implementations at 0x41C8/0x41CC: both take a command
-word, test SoundIOFull, and write that word to 0x803170.
+word, test SoundIOFull, and write that word to 0x803170. The bit assignments
+below are verified from every `btst` site in the OS ROM: bits 3, 5, and 6 are
+the only ones the software reads.
 
 | Bit | Description |
 |-----|-------------|
-| 0 | Player 1 start button (active low, used for boot wait) |
-| 3 | Self-test switch (1 = self-test active) |
+| 3 | Self-test switch, **active low** (0 = switch engaged, 1 = normal play) |
 | 5 | Sound I/O full |
 | 6 | VBLANK status (toggles each field) |
+
+**Contradicted and corrected:** earlier revisions gave bit 3 as
+"1 = self-test active" and listed a bit 0 "Player 1 start button (active low,
+used for boot wait)". Both are wrong.
+
+- Bit 3 is inverted. The boot dispatch at 0x9D8 of `row9.bin` starts the game
+  at 0x40000 when bit 3 is *set* and enters the never-returning diagnostic
+  loop when it is *clear*, so set is the ordinary running state. MAME's
+  schematic-derived `gauntlet.cpp` agrees, declaring the service input as
+  `PORT_SERVICE( 0x0008, IP_ACTIVE_LOW )`. `doc/02_os_rom.md` §5.7 lists all
+  four dispatch sites.
+- There is no bit 0 here. The OS ROM never tests bit 0 of `0x803009`; the
+  boot-time acknowledge waits poll bit 0 of `0x803001`, which is the player 1
+  Magic input (`doc/05_data_reference.md` §3.11), not a start button. MAME
+  marks bits 0–2 of this port unused.
 
 ---
 
@@ -294,13 +310,28 @@ T+W, T+W+1, ..., T+2W-1
 | 9–0 | MOB ID of next MOB in linked list (0 = end of list) |
 | 15–10 | Software-only — **maze object type** (see Maze Object IDs enum in `05_data_reference.md`) |
 
-- Linked list heads: 64 words at `0x905F80`, one per 8-pixel vertical band of the playfield
-- Each band's list contains MOBs whose Y position falls in that scanline range
+- Linked list heads: 64 words at `0x905F80`, one per 8-pixel vertical band of
+  the playfield. Atari's term for these is **SLIP** (starting link point); the
+  symbol name `priority_bucket_heads` is retained in `05_data_reference.md` and
+  `gauntlet_loader.r2` for continuity.
+- The table occupies `0x905F80–0x905FFF`, exactly the last 64 words of the
+  alphanumerics RAM range, which also carries the playfield vertical scroll
+  register at `0x905F6E`.
+- Each band's list contains MOBs whose Y position falls in that scanline range.
+  Bands index the **playfield**, not the screen, so a MOB's band is independent
+  of the current scroll position.
 - Used by **software** for collision detection and by the motion-object
   hardware for display traversal. **Confidence: Verified** by MAME's
   [schematic-backed Gauntlet motion-object configuration](https://github.com/mamedev/mame/blob/master/src/mame/atari/gauntlet.cpp#L2668-L2707),
   which marks entries linked, selects the fourth word's 10-bit link field, and
   uses one 8-pixel SLIP head per band.
+- Independent corroboration of the term and the mechanism: Ed Logg's 2012 GDC
+  [Gauntlet Postmortem](https://media.gdcvault.com/gdc2012/slides/Design%20Track/Logg_Ed_Gauntlet_Postmortem.pdf),
+  slide 22 ("Starting link pointers 8 scan lines"), slide 35 ("Starting Link
+  Points (SLIPs) we created ... Every 8 scan lines we have a linked list ... The
+  SLIPs were linked to the playfield not TV"), and slide 44, which lists the
+  SLIPs among Gauntlet's five patents. The talk describes the 1985 original,
+  whose motion-object hardware Gauntlet II reuses.
 
 ### 8.5 MOB Backward Link / Object State (`0x904066`, software only)
 

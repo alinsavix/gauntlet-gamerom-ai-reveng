@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 CONTRACTS = (
-    (0x0EEE, 0x0F04, "selftest_watchdog_reset_trap", "D0.w watchdog service value", "no return", "non-returning trap; supervisor SR write", "Masks interrupts, services the watchdog until the self-test switch is released, then spins without servicing it so hardware resets", "46fc2700", "move.w d0, 0x803100"),
+    (0x0EEE, 0x0F04, "selftest_watchdog_reset_trap", "D0.w watchdog service value", "no return", "non-returning trap; supervisor SR write", "Masks interrupts, services the watchdog while the self-test switch is released, then spins without servicing it once the switch is engaged so hardware resets", "46fc2700", "move.w d0, 0x803100"),
     (0x2FB2, 0x2FBE, "draw_text_effect_next_char_stack_veneer", "descriptor pointer; color/style word; character index word", "same as 0x2FBE", "normal stack veneer; falls through to register worker", "Loads the stack arguments into A0/D1/D0 and falls through to draw_text_effect_next_char", "322f000a206f0004302f000e", "movea.l 0x4(a7), a0"),
     (0x3018, 0x3020, "clear_text_effect_next_char_stack_veneer", "descriptor pointer; character index word", "same as 0x3020", "normal stack veneer; falls through to register worker", "Loads the stack arguments into A0/D0 and falls through to clear_text_effect_next_char", "206f0004302f000a", "movea.l 0x4(a7), a0"),
     (0x3088, 0x308C, "clear_text_descriptor_chain_stack_veneer", "descriptor pointer", "void", "normal stack veneer; falls through to register worker", "Loads A0 from the normal argument slot and falls through to clear_text_descriptor_chain", "206f0004", "movea.l 0x4(a7), a0"),

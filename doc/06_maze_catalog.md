@@ -60,25 +60,183 @@ The slapstic ROM (`row10.bin`, 32 KB) is divided into 4 banks of 8 KB each:
 
 ---
 
-## 3. Maze Number Ranges
+## 3. Maze Number Ranges and Level Selection
 
 **Confidence: Verified** for stored record numbers and game selection paths.
 Descriptive group names follow their live callers and rendered content.
 
 | Range | Count | Purpose |
 |-------|-------|---------|
-| 0–4 | 5 | Unused/placeholder |
-| 5–101 | 97 | Gameplay levels (Level N = Maze N+4) |
+| 0–4 | 5 | Opening act — played in fixed order as levels 1–5 of every session |
+| 5–101 | 97 | Rotation mazes — levels 6 and up; the level→maze mapping is cabinet state, not a formula |
 | 102 | 1 | Demo level (attract mode) |
 | 103 | 1 | Legend/high-scores screen |
 | 104–114 | 11 | Treasure rooms (T1–T11) |
 | 115–116 | 2 | Secret-room layouts selected by challenge code |
+
+There is **no fixed level→maze relationship**. Mazes 0–4 are ordinary,
+fully live levels, and mazes 5–101 are selected by a rotation whose state
+lives in the cabinet's EEPROM and survives power-off. The former
+`Level N = Maze N+4` rule and the "unused" label on mazes 0–4 were both
+wrong. **Confidence: Verified.**
 
 `show_level_start_screen` (0x44DB4) first selects a random challenge code
 0x50–0x5D. Codes 0x50–0x56 leave maze number 115 in `ram.os_flag`; codes
 0x57–0x5D increment it to 116 before calling `maze_select_bank_special`
 (0x40D4E). Thus both records are live, with seven of the fourteen challenges
 mapped to each layout. **Confidence: Verified.**
+
+### 3.1 Session start — levels 1 to 5
+
+`start_attract_to_game` (0x44204) begins a session with
+`mazenum_current` (0x904000) = 0 and `levelnum_current` (0x904004) = 1,
+then runs the level-start pipeline directly (0x442AC/0x442B2) rather than
+through `main_start_game`. `start_attract_screen` (0x44414) does the same
+reset at 0x4445A/0x44462 for every attract screen.
+
+Because the ordinary-exit path advances by exactly 1 whenever the current
+maze is below 5 (§3.2), levels 1–5 always play mazes 0, 1, 2, 3, 4 in that
+order. Those five records have secret-trick ID 0 — the game's only levels
+with no secret objective — but their random-food counts and base flags are
+live and applied normally. **Confidence: Verified.**
+
+### 3.2 The rotation — level 6 and up
+
+Two EEPROM-backed words hold the rotation state. Both are loaded and
+range-checked by `eeprom_load_config` (0x42F86) and written back by
+`eeprom_periodic_write` (0x431EE) from the cache bytes at 0x904B8E/0x904B8F.
+
+| Word | Name | Role | Fresh-EEPROM default |
+|------|------|------|----------------------|
+| 0x904010 | `mazerand_num` | **Resume position** — where this cabinet's rotation through mazes 5–101 currently stands | 5 |
+| 0x90400E | `mazerand_adder` | **Stride**, masked to 0–7 — extra mazes advanced per level | 0 |
+
+`player_exit_sequence` (0x52B40) computes the next level and maze in its
+tail at 0x52DB2–0x52E56, using `maze_checknum` (0x52ECA) to validate each
+candidate. For an ordinary exit (`exit_type` = 0x10 = `MAZEOBJ_EXIT`) taken
+while `mazenum_current` < 104:
+
+```text
+level_next = levelnum_current + 1              # 0x52DC6-0x52DD0
+if level_next > 999: level_next -= 994         # 0x52DD6-0x52DE0  (level 1000 -> 6)
+
+maze_next = mazenum_current                    # 0x52DE8
+steps = 1                                      # 0x52DF2
+if mazenum_current >= 5: steps += stride       # 0x52DF4-0x52DFE
+
+repeat steps times:                            # 0x52E04-0x52E16
+    maze_next += 1
+    maze_checknum():
+        if maze_next == 5:                     # 0x52ED8-0x52EDE (once, on entry)
+            maze_next = resume
+        loop:                                  # 0x52EE4-0x52F1A
+            if pointer-table entry for maze_next is live and maze_next <= 101:
+                return
+            if maze_next > 101:
+                maze_next = 5
+                eeprom_write_timer (0x904012) = 1   # force a save next tick
+            else:
+                maze_next += 1
+
+if maze_next == 5: stride = (stride + 1) & 7   # 0x52E18-0x52E30
+```
+
+`maze_checknum`'s `maze_next == 5` substitution is the hinge: exiting maze 4
+makes the candidate 5, which is replaced by the resume position, so **level 6
+is wherever the cabinet's rotation stands**. The validity loop re-checks the
+117-entry pointer table (base `[0x38000]`, §1); all 117 entries are live, so
+in practice only the `> 101` wrap fires. That wrap forces an EEPROM save by
+setting the write countdown to 1, and because it re-enters the loop *after*
+the substitution point, a wrapped value of 5 stays 5.
+
+The stride bump fires whenever a step sequence ends on maze 5 — either a
+lap wrap or a resume value that is still 5 — so each lap of the catalog
+advances in coarser steps, up to 8 mazes per level.
+
+A factory-fresh cabinet therefore plays mazes 0, 1, 2, 3, 4, 5 as levels
+1–6. Landing on 5 raises the stride to 1, so that first session continues
+7, 9, 11, … **Confidence: Verified.**
+
+### 3.3 When the resume position is recorded
+
+`main_health_countdown` (0x466F6) updates the persistent state in its
+player-removal path, after `level_players_active` (0x904928) is decremented
+at 0x469DA. Both updates require the counter to have reached zero — that
+is, **the last player has died and the game is over**:
+
+- 0x469E8–0x469FE: if `mazenum_current` >= 104 (a treasure room), restore
+  `mazenum_current` from `maze_next` (0x904B54), so the recorded position is
+  a rotation maze rather than a treasure room.
+- 0x46A00–0x46A16: if `levelnum_current` >= 6, `resume` (0x904010) =
+  `mazenum_current`.
+
+This is the only gameplay write to the resume word. The next session
+replays mazes 0–4, then resumes at the maze where the previous game ended.
+The normal end-of-level path (`main_move_players` 0x4A6E6) does **not**
+touch it. **Confidence: Verified.**
+
+### 3.4 `MAZEOBJ_EXITTO6` — the shortcut out of the opening act
+
+`player_tile_interact` (0x511AC) reads the tile object type from
+`mob_link` bits 15–10 and dispatches types 0x0A–0x11 through the jump table
+at 0x51200. Types 0x10 (`MAZEOBJ_EXIT`) and 0x11 (`MAZEOBJ_EXITTO6`) share
+the handler at 0x513DA, which passes the type through as
+`player_exit_sequence`'s `exit_type` argument. `main_exit_move` (0x52958)
+always passes 0x10.
+
+Any `exit_type` other than 0x10 takes the second branch at 0x52E38:
+
+```text
+level_next = 6                                 # 0x52E38
+maze_next  = level_next - 1 = 5                # 0x52E40-0x52E4A
+maze_checknum()                                # 0x52E50  -> 5 becomes resume
+```
+
+So an `EXITTO6` tile jumps straight to level 6 at the current resume
+position, skipping the rest of the opening act. Note that it does not
+consult the stride and does not bump it.
+
+Decoding all 117 records shows tile type 0x11 occurs exactly once in the
+whole Slapstic ROM: **maze 0 has one `EXITTO6` tile beside its single
+ordinary exit**, and no other maze has one. The shortcut is therefore
+available only on level 1. **Confidence: Verified.**
+
+### 3.5 Treasure-room scheduling
+
+Treasure rooms run the same design on a second EEPROM-backed pair, also
+loaded by `eeprom_load_config` and cached at 0x904B90/0x904B91.
+
+| Word | Name | Role | Load-time range check | Fresh default |
+|------|------|------|-----------------------|---------------|
+| 0x904018 | `treas_mazerand_num` | Next treasure maze | forced to 104 if outside 104–114 (0x4303E–0x43054) | 104 |
+| 0x904016 | `treas_mazerand_adder` | Treasure stride, masked to 0–3 (0x43062) | — | 0 |
+
+`maze_new_level_setup` seeds the level countdown `level_next_treasure`
+(0x904B80) with `getrandom(3) + 3` when `levelnum_current` reaches 6
+(0x438E4–0x438FC). `main_move_players` decrements it once per level, on
+the end-of-level path, only while `mazenum_current` < 104 and
+`level_next` > 6 (0x4A756–0x4A788).
+
+`show_level_start_screen` (0x44E92–0x44F38) fires when the countdown is
+zero:
+
+```text
+level_next_treasure = getrandom(3) + 3         # 0x44E9C-0x44EAC  (3..5)
+mazenum_current = treas_mazerand_num           # 0x44EB2-0x44EB8, then bank-select
+treas_mazerand_num += treas_mazerand_adder + 1 # 0x44ECA-0x44ED2  (advance 1..4)
+if treas_mazerand_num > 114:                   # 0x44ED8-0x44EF6
+    treas_mazerand_num -= 11                   # back into 104..114
+    if treas_mazerand_num == 104:              # 0x44EFC-0x44F14
+        treas_mazerand_adder = (treas_mazerand_adder + 1) & 3
+treasure_timer (0x9049E8) =                    # 0x44F1A-0x44F32
+    treasure_room_duration[player_activecount() - 1] + 1
+```
+
+The duration table at 0x57358 holds 1200/1440/1500/1560 frames — 20, 24,
+25 and 26 seconds for one to four active players. `player_exit_sequence`
+clears `treasure_timer` at 0x52E88 once no player still has status 1 in a
+maze ≥ 104, and the maze restore at 0x469F6 covers the everybody-died case.
+**Confidence: Verified.**
 
 ---
 
@@ -118,114 +276,122 @@ The flags listed in the table below are the **base flags** stored in each maze's
 
 ## 6. Complete Maze Table
 
-Every gameplay level (Levels 1–97) has a secret trick — there are no levels without one.
+Every rotation maze (5–101) has exactly one secret trick. Mazes 0–4 — the
+fixed opening levels 1–5 — store trick ID 0 and have no secret objective.
+
+The **Level** column is the level number a maze is played as. It is fixed
+only for mazes 0–4. Mazes 5–101 are reached from level 6 onward through the
+EEPROM-backed rotation of §3.2, so their level number depends on cabinet
+state and differs between sessions; `6+` marks them. Treasure rooms
+(T1–T11) are interleaved by the countdown of §3.5 and do not consume a
+level number.
 
 The raw pointer/header/boundary fields are also checked into `generated/maze_catalog.csv`, generated by `generated/generate_maze_catalog.py`. Run `python3 doc/generated/generate_maze_catalog.py --check` from the repository root for the regression check. **Confidence: Verified.**
 
 | Maze | Level | Bank | ROM Offset | Secret Trick | RndFood | Base Flags |
 |-----:|------:|-----:|-----------:|:-------------|--------:|:-----------|
-| 0 | — | 0 | 0x01E0 | *(unused)* | 0 | (none) |
-| 1 | — | 0 | 0x0262 | *(unused)* | 0 | (none) |
-| 2 | — | 0 | 0x02F4 | *(unused)* | 2 | (none) |
-| 3 | — | 0 | 0x037E | *(unused)* | 2 | FastGhost, FastDeath, ExitMoves |
-| 4 | — | 0 | 0x0404 | *(unused)* | 0 | CyclicWalls |
-| 5 | 1 | 0 | 0x04CC | WatchShoot2 (walls) | 0 | InvisWalls |
-| 6 | 2 | 0 | 0x0555 | No Greedy (treasure) | 0 | WrapH |
-| 7 | 3 | 0 | 0x0631 | No Greedy (treasure) | 4 | Exit1of, TrapLocal |
-| 8 | 4 | 0 | 0x07AB | Be Pushy | 0 | DelWalls1 |
-| 9 | 5 | 0 | 0x0858 | Transport3 (into exit) | 0 | (none) |
-| 10 | 6 | 0 | 0x08D5 | Transport3 (into exit) | 4 | OddGhost, FastGrunt, CyclicWalls, Exit1of |
-| 11 | 7 | 0 | 0x097E | WatchShoot1 (food) | 0 | Exit1of |
-| 12 | 8 | 0 | 0x0A76 | No Invulnerability | 6 | FastGrunt, FastDeath, Exit1of |
-| 13 | 9 | 0 | 0x0B48 | No Hit (dragon) | 0 | (none) |
-| 14 | 10 | 0 | 0x0CA0 | No Invulnerability | 2 | OddGrunt, OddAuxGrunt, FastGrunt, CyclicWalls |
-| 15 | 11 | 0 | 0x0D6F | Don't Be Fooled | 0 | OddGhost, FastGrunt, Exit1of, TrapLocal, WrapH, FakeExit |
-| 16 | 12 | 0 | 0x0EB8 | Transport2 (onto death) | 2 | ExitMoves, ShotStun, TrapLocal, WrapH |
-| 17 | 13 | 0 | 0x1011 | Transport4 (into exit) | 3 | WrapH |
-| 18 | 14 | 0 | 0x10D0 | No Greedy (keys/pots) | 6 | CyclicWalls, ExitMoves |
-| 19 | 15 | 0 | 0x11A0 | Diet (no food) | 0 | (none) |
-| 20 | 16 | 0 | 0x12B3 | Save Super Shots | 5 | CyclicWalls |
-| 21 | 17 | 0 | 0x13A6 | No Hurt Friends | 2 | Exit1of |
-| 22 | 18 | 0 | 0x14FC | Transport2 (onto death) | 1 | InvisWalls, Exit1of |
-| 23 | 19 | 0 | 0x15A4 | Transport3 (into exit) | 0 | CyclicWalls, WrapH |
-| 24 | 20 | 0 | 0x1689 | WatchShoot1 (food) | 3 | DelWalls1 |
-| 25 | 21 | 0 | 0x1789 | No Greedy (keys/pots) | 0 | ExitMoves, WrapH |
-| 26 | 22 | 0 | 0x1895 | WatchShoot1 (food) | 2 | DelWalls1, Exit1of |
-| 27 | 23 | 0 | 0x197D | Save Super Shots | 0 | WrapH |
-| 28 | 24 | 0 | 0x1A88 | No Invulnerability | 3 | ShotStun |
-| 29 | 25 | 0 | 0x1B3A | Transport2 (onto death) | 0 | WrapH |
-| 30 | 26 | 0 | 0x1C21 | Be Pushy | 2 | (none) |
-| 31 | 27 | 0 | 0x1D25 | No Hurt Friends | 0 | TrapLocal |
-| 32 | 28 | 0 | 0x1E9B | Transport3 (into exit) | 0 | WrapH |
-| 33 | 29 | 1 | 0x2000 | Don't Be Fooled | 2 | Exit1of, ShotHurt, FakeExit |
-| 34 | 30 | 1 | 0x20B2 | WatchShoot1 (food) | 0 | (none) |
-| 35 | 31 | 1 | 0x21FF | IT Could Be Nice | 0 | (none) |
-| 36 | 32 | 1 | 0x22C1 | No Hurt Friends | 0 | WrapH |
-| 37 | 33 | 1 | 0x2447 | IT Could Be Nice | 5 | Exit1of |
-| 38 | 34 | 1 | 0x24FC | Push a Wall | 0 | (none) |
-| 39 | 35 | 1 | 0x262D | Don't Be Fooled | 4 | FastDemon, Exit1of, ShotHurt, FakeExit |
-| 40 | 36 | 1 | 0x2706 | Push a Wall | 0 | Exit1of, WrapH |
-| 41 | 37 | 1 | 0x282D | No Hit (dragon) | 4 | (none) |
-| 42 | 38 | 1 | 0x2906 | No Hurt Friends | 0 | DelWalls1, Exit1of, WrapV, WrapH |
-| 43 | 39 | 1 | 0x2A90 | Transport4 (into exit) | 0 | OddAuxGrunt, WrapH |
-| 44 | 40 | 1 | 0x2C0D | No Greedy (treasure) | 0 | WrapH |
-| 45 | 41 | 1 | 0x2D6C | Diet (no food) | 2 | ShotHurt, WrapH |
-| 46 | 42 | 1 | 0x2E39 | IT Could Be Nice | 0 | OddGhost, OddGrunt, OddDeath, FastGhost, FastSorc |
-| 47 | 43 | 1 | 0x2F57 | No Hurt Friends | 1 | OddAuxGrunt, DelWalls1, Exit1of |
-| 48 | 44 | 1 | 0x30A9 | WatchShoot1 (food) | 0 | (none) |
-| 49 | 45 | 1 | 0x31DA | Save Super Shots | 0 | OddGrunt, OddAuxGrunt, Exit1of, ShotStun |
-| 50 | 46 | 1 | 0x328B | IT Could Be Nice | 0 | WrapH |
-| 51 | 47 | 1 | 0x337F | Push a Wall | 0 | FastGhost, FastGrunt, Exit1of |
-| 52 | 48 | 1 | 0x342D | Diet (no food) | 0 | Exit1of, WrapH, FakeExit |
-| 53 | 49 | 1 | 0x3530 | No Hurt Friends | 0 | OddAuxGrunt |
-| 54 | 50 | 1 | 0x361B | No Invulnerability | 5 | (none) |
-| 55 | 51 | 1 | 0x37F3 | Be Pushy | 1 | FastGrunt, FastDemon |
-| 56 | 52 | 1 | 0x388C | Transport1 (onto demon) | 0 | (none) |
-| 57 | 53 | 1 | 0x3966 | No Hurt Friends | 0 | Exit1of, ShotHurt |
-| 58 | 54 | 1 | 0x3A55 | Transport1 (onto demon) | 0 | DelWalls1 |
-| 59 | 55 | 1 | 0x3B4F | Transport1 (onto demon) | 0 | OddGrunt |
-| 60 | 56 | 1 | 0x3C63 | Don't Be Fooled | 0 | FastSorc, Exit1of, FakeExit |
-| 61 | 57 | 1 | 0x3D90 | No Greedy (keys/pots) | 0 | Exit1of, WrapH |
-| 62 | 58 | 1 | 0x3EB9 | Push a Wall | 0 | WrapH |
-| 63 | 59 | 2 | 0x4000 | No Greedy (keys/pots) | 0 | (none) |
-| 64 | 60 | 2 | 0x417C | Transport4 (into exit) | 0 | FastAuxGrunt, FastDeath, CyclicWalls, Exit1of |
-| 65 | 61 | 2 | 0x4294 | Transport2 (onto death) | 0 | (none) |
-| 66 | 62 | 2 | 0x4382 | No Greedy (treasure) | 0 | ShotHurt, TrapLocal |
-| 67 | 63 | 2 | 0x44DB | No Hit (dragon) | 0 | FastAuxGrunt |
-| 68 | 64 | 2 | 0x45B9 | Transport3 (into exit) | 0 | WrapH |
-| 69 | 65 | 2 | 0x46E1 | Don't Be Fooled | 0 | Exit1of, TrapRand, WrapV, WrapH, FakeExit |
-| 70 | 66 | 2 | 0x47CB | WatchShoot2 (walls) | 0 | WrapH |
-| 71 | 67 | 2 | 0x4932 | WatchShoot2 (walls) | 0 | Exit1of, FakeExit |
-| 72 | 68 | 2 | 0x4A45 | Transport1 (onto demon) | 0 | FastAuxGrunt |
-| 73 | 69 | 2 | 0x4B68 | Transport4 (into exit) | 0 | TrapLocal |
-| 74 | 70 | 2 | 0x4D14 | Save Super Shots | 0 | ExitMoves, WrapV, WrapH |
-| 75 | 71 | 2 | 0x4EB5 | Transport1 (onto demon) | 0 | WrapV, WrapH |
-| 76 | 72 | 2 | 0x4FDD | No Greedy (treasure) | 0 | TrapRand, WrapH |
-| 77 | 73 | 2 | 0x50F7 | Don't Be Fooled | 3 | FastGhost–FastDeath (all), CyclicWalls, Exit1of, FakeExit |
-| 78 | 74 | 2 | 0x5254 | No Hit (dragon) | 0 | OddGhost, FastGrunt, FastLobber, FastSorc, TrapLocal |
-| 79 | 75 | 2 | 0x535B | Push a Wall | 0 | TrapRand, WrapH |
-| 80 | 76 | 2 | 0x546C | Transport2 (onto death) | 0 | ShotHurt, TrapLocal, WrapH |
-| 81 | 77 | 2 | 0x55F7 | No Greedy (keys/pots) | 0 | WrapH |
-| 82 | 78 | 2 | 0x5789 | Save Super Shots | 0 | WrapH |
-| 83 | 79 | 2 | 0x5917 | Transport1 (onto demon) | 0 | FastGrunt, FastSorc |
-| 84 | 80 | 2 | 0x5A2F | No Invulnerability | 0 | FastGhost, TrapRand |
-| 85 | 81 | 2 | 0x5B41 | Save Super Shots | 0 | FastGrunt |
-| 86 | 82 | 2 | 0x5C36 | Transport3 (into exit) | 0 | (none) |
-| 87 | 83 | 2 | 0x5D73 | IT Could Be Nice | 0 | WrapH |
-| 88 | 84 | 2 | 0x5EAD | No Invulnerability | 1 | DelWalls1 |
-| 89 | 85 | 3 | 0x6000 | Be Pushy | 0 | (none) |
-| 90 | 86 | 3 | 0x612E | No Hit (dragon) | 0 | DelWalls2 |
-| 91 | 87 | 3 | 0x6291 | Push a Wall | 0 | FastAuxGrunt, CyclicWalls |
-| 92 | 88 | 3 | 0x63A0 | No Greedy (keys/pots) | 0 | OddAuxGrunt, FastAuxGrunt, FastDeath, DelWalls2, Exit1of, ShotHurt |
-| 93 | 89 | 3 | 0x64B7 | Push a Wall | 0 | InvisTrap, WrapV, WrapH |
-| 94 | 90 | 3 | 0x65A6 | IT Could Be Nice | 4 | DelWalls1, ExitMoves |
-| 95 | 91 | 3 | 0x669B | Transport2 (onto death) | 0 | ShotStun, TrapRand, WrapH |
-| 96 | 92 | 3 | 0x6786 | No Greedy (treasure) | 4 | InvisTrap, ShotStun, TrapLocal |
-| 97 | 93 | 3 | 0x68A3 | No Greedy (keys/pots) | 0 | ShotHurt |
-| 98 | 94 | 3 | 0x69F4 | Diet (no food) | 0 | WrapH |
-| 99 | 95 | 3 | 0x6B16 | No Hit (dragon) | 0 | OddGhost, WrapH |
-| 100 | 96 | 3 | 0x6C3F | WatchShoot1 (food) | 0 | InvisTrap, InvisWalls |
-| 101 | 97 | 3 | 0x6D35 | Transport4 (into exit) | 4 | Exit1of |
+| 0 | 1 | 0 | 0x01E0 | *(none)* | 0 | (none) |
+| 1 | 2 | 0 | 0x0262 | *(none)* | 0 | (none) |
+| 2 | 3 | 0 | 0x02F4 | *(none)* | 2 | (none) |
+| 3 | 4 | 0 | 0x037E | *(none)* | 2 | FastGhost, FastDeath, ExitMoves |
+| 4 | 5 | 0 | 0x0404 | *(none)* | 0 | CyclicWalls |
+| 5 | 6+ | 0 | 0x04CC | WatchShoot2 (walls) | 0 | InvisWalls |
+| 6 | 6+ | 0 | 0x0555 | No Greedy (treasure) | 0 | WrapH |
+| 7 | 6+ | 0 | 0x0631 | No Greedy (treasure) | 4 | Exit1of, TrapLocal |
+| 8 | 6+ | 0 | 0x07AB | Be Pushy | 0 | DelWalls1 |
+| 9 | 6+ | 0 | 0x0858 | Transport3 (into exit) | 0 | (none) |
+| 10 | 6+ | 0 | 0x08D5 | Transport3 (into exit) | 4 | OddGhost, FastGrunt, CyclicWalls, Exit1of |
+| 11 | 6+ | 0 | 0x097E | WatchShoot1 (food) | 0 | Exit1of |
+| 12 | 6+ | 0 | 0x0A76 | No Invulnerability | 6 | FastGrunt, FastDeath, Exit1of |
+| 13 | 6+ | 0 | 0x0B48 | No Hit (dragon) | 0 | (none) |
+| 14 | 6+ | 0 | 0x0CA0 | No Invulnerability | 2 | OddGrunt, OddAuxGrunt, FastGrunt, CyclicWalls |
+| 15 | 6+ | 0 | 0x0D6F | Don't Be Fooled | 0 | OddGhost, FastGrunt, Exit1of, TrapLocal, WrapH, FakeExit |
+| 16 | 6+ | 0 | 0x0EB8 | Transport2 (onto death) | 2 | ExitMoves, ShotStun, TrapLocal, WrapH |
+| 17 | 6+ | 0 | 0x1011 | Transport4 (into exit) | 3 | WrapH |
+| 18 | 6+ | 0 | 0x10D0 | No Greedy (keys/pots) | 6 | CyclicWalls, ExitMoves |
+| 19 | 6+ | 0 | 0x11A0 | Diet (no food) | 0 | (none) |
+| 20 | 6+ | 0 | 0x12B3 | Save Super Shots | 5 | CyclicWalls |
+| 21 | 6+ | 0 | 0x13A6 | No Hurt Friends | 2 | Exit1of |
+| 22 | 6+ | 0 | 0x14FC | Transport2 (onto death) | 1 | InvisWalls, Exit1of |
+| 23 | 6+ | 0 | 0x15A4 | Transport3 (into exit) | 0 | CyclicWalls, WrapH |
+| 24 | 6+ | 0 | 0x1689 | WatchShoot1 (food) | 3 | DelWalls1 |
+| 25 | 6+ | 0 | 0x1789 | No Greedy (keys/pots) | 0 | ExitMoves, WrapH |
+| 26 | 6+ | 0 | 0x1895 | WatchShoot1 (food) | 2 | DelWalls1, Exit1of |
+| 27 | 6+ | 0 | 0x197D | Save Super Shots | 0 | WrapH |
+| 28 | 6+ | 0 | 0x1A88 | No Invulnerability | 3 | ShotStun |
+| 29 | 6+ | 0 | 0x1B3A | Transport2 (onto death) | 0 | WrapH |
+| 30 | 6+ | 0 | 0x1C21 | Be Pushy | 2 | (none) |
+| 31 | 6+ | 0 | 0x1D25 | No Hurt Friends | 0 | TrapLocal |
+| 32 | 6+ | 0 | 0x1E9B | Transport3 (into exit) | 0 | WrapH |
+| 33 | 6+ | 1 | 0x2000 | Don't Be Fooled | 2 | Exit1of, ShotHurt, FakeExit |
+| 34 | 6+ | 1 | 0x20B2 | WatchShoot1 (food) | 0 | (none) |
+| 35 | 6+ | 1 | 0x21FF | IT Could Be Nice | 0 | (none) |
+| 36 | 6+ | 1 | 0x22C1 | No Hurt Friends | 0 | WrapH |
+| 37 | 6+ | 1 | 0x2447 | IT Could Be Nice | 5 | Exit1of |
+| 38 | 6+ | 1 | 0x24FC | Push a Wall | 0 | (none) |
+| 39 | 6+ | 1 | 0x262D | Don't Be Fooled | 4 | FastDemon, Exit1of, ShotHurt, FakeExit |
+| 40 | 6+ | 1 | 0x2706 | Push a Wall | 0 | Exit1of, WrapH |
+| 41 | 6+ | 1 | 0x282D | No Hit (dragon) | 4 | (none) |
+| 42 | 6+ | 1 | 0x2906 | No Hurt Friends | 0 | DelWalls1, Exit1of, WrapV, WrapH |
+| 43 | 6+ | 1 | 0x2A90 | Transport4 (into exit) | 0 | OddAuxGrunt, WrapH |
+| 44 | 6+ | 1 | 0x2C0D | No Greedy (treasure) | 0 | WrapH |
+| 45 | 6+ | 1 | 0x2D6C | Diet (no food) | 2 | ShotHurt, WrapH |
+| 46 | 6+ | 1 | 0x2E39 | IT Could Be Nice | 0 | OddGhost, OddGrunt, OddDeath, FastGhost, FastSorc |
+| 47 | 6+ | 1 | 0x2F57 | No Hurt Friends | 1 | OddAuxGrunt, DelWalls1, Exit1of |
+| 48 | 6+ | 1 | 0x30A9 | WatchShoot1 (food) | 0 | (none) |
+| 49 | 6+ | 1 | 0x31DA | Save Super Shots | 0 | OddGrunt, OddAuxGrunt, Exit1of, ShotStun |
+| 50 | 6+ | 1 | 0x328B | IT Could Be Nice | 0 | WrapH |
+| 51 | 6+ | 1 | 0x337F | Push a Wall | 0 | FastGhost, FastGrunt, Exit1of |
+| 52 | 6+ | 1 | 0x342D | Diet (no food) | 0 | Exit1of, WrapH, FakeExit |
+| 53 | 6+ | 1 | 0x3530 | No Hurt Friends | 0 | OddAuxGrunt |
+| 54 | 6+ | 1 | 0x361B | No Invulnerability | 5 | (none) |
+| 55 | 6+ | 1 | 0x37F3 | Be Pushy | 1 | FastGrunt, FastDemon |
+| 56 | 6+ | 1 | 0x388C | Transport1 (onto demon) | 0 | (none) |
+| 57 | 6+ | 1 | 0x3966 | No Hurt Friends | 0 | Exit1of, ShotHurt |
+| 58 | 6+ | 1 | 0x3A55 | Transport1 (onto demon) | 0 | DelWalls1 |
+| 59 | 6+ | 1 | 0x3B4F | Transport1 (onto demon) | 0 | OddGrunt |
+| 60 | 6+ | 1 | 0x3C63 | Don't Be Fooled | 0 | FastSorc, Exit1of, FakeExit |
+| 61 | 6+ | 1 | 0x3D90 | No Greedy (keys/pots) | 0 | Exit1of, WrapH |
+| 62 | 6+ | 1 | 0x3EB9 | Push a Wall | 0 | WrapH |
+| 63 | 6+ | 2 | 0x4000 | No Greedy (keys/pots) | 0 | (none) |
+| 64 | 6+ | 2 | 0x417C | Transport4 (into exit) | 0 | FastAuxGrunt, FastDeath, CyclicWalls, Exit1of |
+| 65 | 6+ | 2 | 0x4294 | Transport2 (onto death) | 0 | (none) |
+| 66 | 6+ | 2 | 0x4382 | No Greedy (treasure) | 0 | ShotHurt, TrapLocal |
+| 67 | 6+ | 2 | 0x44DB | No Hit (dragon) | 0 | FastAuxGrunt |
+| 68 | 6+ | 2 | 0x45B9 | Transport3 (into exit) | 0 | WrapH |
+| 69 | 6+ | 2 | 0x46E1 | Don't Be Fooled | 0 | Exit1of, TrapRand, WrapV, WrapH, FakeExit |
+| 70 | 6+ | 2 | 0x47CB | WatchShoot2 (walls) | 0 | WrapH |
+| 71 | 6+ | 2 | 0x4932 | WatchShoot2 (walls) | 0 | Exit1of, FakeExit |
+| 72 | 6+ | 2 | 0x4A45 | Transport1 (onto demon) | 0 | FastAuxGrunt |
+| 73 | 6+ | 2 | 0x4B68 | Transport4 (into exit) | 0 | TrapLocal |
+| 74 | 6+ | 2 | 0x4D14 | Save Super Shots | 0 | ExitMoves, WrapV, WrapH |
+| 75 | 6+ | 2 | 0x4EB5 | Transport1 (onto demon) | 0 | WrapV, WrapH |
+| 76 | 6+ | 2 | 0x4FDD | No Greedy (treasure) | 0 | TrapRand, WrapH |
+| 77 | 6+ | 2 | 0x50F7 | Don't Be Fooled | 3 | FastGhost–FastDeath (all), CyclicWalls, Exit1of, FakeExit |
+| 78 | 6+ | 2 | 0x5254 | No Hit (dragon) | 0 | OddGhost, FastGrunt, FastLobber, FastSorc, TrapLocal |
+| 79 | 6+ | 2 | 0x535B | Push a Wall | 0 | TrapRand, WrapH |
+| 80 | 6+ | 2 | 0x546C | Transport2 (onto death) | 0 | ShotHurt, TrapLocal, WrapH |
+| 81 | 6+ | 2 | 0x55F7 | No Greedy (keys/pots) | 0 | WrapH |
+| 82 | 6+ | 2 | 0x5789 | Save Super Shots | 0 | WrapH |
+| 83 | 6+ | 2 | 0x5917 | Transport1 (onto demon) | 0 | FastGrunt, FastSorc |
+| 84 | 6+ | 2 | 0x5A2F | No Invulnerability | 0 | FastGhost, TrapRand |
+| 85 | 6+ | 2 | 0x5B41 | Save Super Shots | 0 | FastGrunt |
+| 86 | 6+ | 2 | 0x5C36 | Transport3 (into exit) | 0 | (none) |
+| 87 | 6+ | 2 | 0x5D73 | IT Could Be Nice | 0 | WrapH |
+| 88 | 6+ | 2 | 0x5EAD | No Invulnerability | 1 | DelWalls1 |
+| 89 | 6+ | 3 | 0x6000 | Be Pushy | 0 | (none) |
+| 90 | 6+ | 3 | 0x612E | No Hit (dragon) | 0 | DelWalls2 |
+| 91 | 6+ | 3 | 0x6291 | Push a Wall | 0 | FastAuxGrunt, CyclicWalls |
+| 92 | 6+ | 3 | 0x63A0 | No Greedy (keys/pots) | 0 | OddAuxGrunt, FastAuxGrunt, FastDeath, DelWalls2, Exit1of, ShotHurt |
+| 93 | 6+ | 3 | 0x64B7 | Push a Wall | 0 | InvisTrap, WrapV, WrapH |
+| 94 | 6+ | 3 | 0x65A6 | IT Could Be Nice | 4 | DelWalls1, ExitMoves |
+| 95 | 6+ | 3 | 0x669B | Transport2 (onto death) | 0 | ShotStun, TrapRand, WrapH |
+| 96 | 6+ | 3 | 0x6786 | No Greedy (treasure) | 4 | InvisTrap, ShotStun, TrapLocal |
+| 97 | 6+ | 3 | 0x68A3 | No Greedy (keys/pots) | 0 | ShotHurt |
+| 98 | 6+ | 3 | 0x69F4 | Diet (no food) | 0 | WrapH |
+| 99 | 6+ | 3 | 0x6B16 | No Hit (dragon) | 0 | OddGhost, WrapH |
+| 100 | 6+ | 3 | 0x6C3F | WatchShoot1 (food) | 0 | InvisTrap, InvisWalls |
+| 101 | 6+ | 3 | 0x6D35 | Transport4 (into exit) | 4 | Exit1of |
 | | | | | | | |
 | 102 | — | 3 | 0x6DF2 | **Demo Level** | 0 | OddGrunt, OddAuxGrunt, FastAuxGrunt |
 | 103 | — | 3 | 0x6E6C | **Legend/Scores** | 0 | (none) |
@@ -251,7 +417,8 @@ The raw pointer/header/boundary fields are also checked into `generated/maze_cat
 
 **Confidence: Verified** from the first header byte of all 117 records.
 
-Every gameplay level has exactly one secret trick. Distribution across Levels 1–97:
+Every rotation maze has exactly one secret trick. Distribution across the 97
+rotation mazes (5–101); mazes 0–4 store trick ID 0 and are excluded:
 
 | Secret Trick | Count | Description |
 |:-------------|------:|:------------|

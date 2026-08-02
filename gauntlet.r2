@@ -709,8 +709,8 @@ af+ 0x0338 irq3_handler
 af+ 0x034a irq4_vblank_handler
 af+ 0x036c irq6_handler
 af+ 0x05e2 reset_entry
-af+ 0x03a0 normal_boot
-af+ 0x061e selftest_boot
+af+ 0x03a0 selftest_boot
+af+ 0x061e normal_boot
 af+ 0x070c main_init_cont
 af+ 0x0a2c mem_test_thorough
 af+ 0x0a6a mem_test_quick
@@ -903,9 +903,9 @@ fs functions
 'f irq3_handler 1 0x00000338
 'f irq4_vblank_handler 1 0x0000034a
 'f irq6_handler 1 0x0000036c
-'f normal_boot 1 0x000003a0
+'f selftest_boot 1 0x000003a0
 'f reset_entry 1 0x000005e2
-'f selftest_boot 1 0x0000061e
+'f normal_boot 1 0x0000061e
 'f main_init_cont 1 0x0000070c
 'f mem_test_thorough 1 0x00000a2c
 'f mem_test_quick 1 0x00000a6a
@@ -1667,7 +1667,7 @@ fs *
 fs *
 'f player_text_palette_words 8 0x00057350
 fs *
-'f dead_position_word_block 8 0x00057358
+'f treasure_room_duration 8 0x00057358
 fs *
 'f challenge_timer_base 28 0x00057360
 fs *

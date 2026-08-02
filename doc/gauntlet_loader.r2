@@ -2,6 +2,10 @@
 o row9.bin 0x000000 r-x
 o row10.bin 0x038000 r-x
 o row76.bin 0x040000 r-x
+om-*
+om 4 0x000000 0x10000 0x0 r-x
+om 5 0x038000 0x08000 0x0 r-x
+om 6 0x040000 0x20000 0x0 r-x
 e io.va=true
 e anal.arch=m68k
 e asm.arch=m68k
@@ -16,8 +20,8 @@ af+ 0x0338 irq3_handler
 af+ 0x034a irq4_vblank_handler
 af+ 0x036c irq6_handler
 af+ 0x05e2 reset_entry
-af+ 0x03a0 normal_boot
-af+ 0x061e selftest_boot
+af+ 0x03a0 selftest_boot
+af+ 0x061e normal_boot
 af+ 0x070c main_init_cont
 af+ 0xa2c mem_test_short
 af+ 0xa6a mem_test_full
@@ -88,18 +92,18 @@ af+ 0x17d4 run_alpha_test
 af+ 0xfca run_color_test
 af+ 0x1b20 run_motion_object_test
 af+ 0x21a0 validate_game_rom
-af+ 0x03b6 normal_boot_spare_test_done
-af+ 0x03c4 normal_boot_spare_error_ack
-af+ 0x0424 normal_boot_color_test_done
-af+ 0x04a4 normal_boot_playfield_test_done
-af+ 0x0512 normal_boot_alpha_test_done
-af+ 0x0582 normal_boot_mob_test_done
-af+ 0x0652 selftest_spare_test_done
-af+ 0x0660 selftest_spare_error_ack
-af+ 0x067c selftest_color_test_done
-af+ 0x06a6 selftest_playfield_test_done
-af+ 0x06d0 selftest_alpha_test_done
-af+ 0x06fc selftest_mob_test_done
+af+ 0x03b6 selftest_boot_spare_test_done
+af+ 0x03c4 selftest_boot_spare_error_ack
+af+ 0x0424 selftest_boot_color_test_done
+af+ 0x04a4 selftest_boot_playfield_test_done
+af+ 0x0512 selftest_boot_alpha_test_done
+af+ 0x0582 selftest_boot_mob_test_done
+af+ 0x0652 normal_boot_spare_test_done
+af+ 0x0660 normal_boot_spare_error_resume
+af+ 0x067c normal_boot_color_test_done
+af+ 0x06a6 normal_boot_playfield_test_done
+af+ 0x06d0 normal_boot_alpha_test_done
+af+ 0x06fc normal_boot_mob_test_done
 af+ 0x08ec boot_postcheck_dispatch
 af+ 0x0a42 mem_test_short_walk_ones
 af+ 0x0a52 mem_test_short_walk_zeroes
@@ -530,9 +534,9 @@ f irq2_handler 1 0x00000326
 f irq3_handler 1 0x00000338
 f irq4_vblank_handler 1 0x0000034a
 f irq6_handler 1 0x0000036c
-f normal_boot 1 0x000003a0
+f selftest_boot 1 0x000003a0
 f reset_entry 1 0x000005e2
-f selftest_boot 1 0x0000061e
+f normal_boot 1 0x0000061e
 f main_init_cont 1 0x0000070c
 f mem_test_short 1 0x00000a2c
 f mem_test_full 1 0x00000a6a
@@ -948,7 +952,7 @@ f level_start_message_strings 184 0x0005727a
 f dead_header_byte_block 14 0x00057332
 f character_hud_text_ptrs 16 0x00057340
 f player_text_palette_words 8 0x00057350
-f dead_position_word_block 8 0x00057358
+f treasure_room_duration 8 0x00057358
 f challenge_timer_base 28 0x00057360
 f challenge_timer_random_minutes 28 0x0005737c
 f challenge_shared_qualifier_text 60 0x00057398

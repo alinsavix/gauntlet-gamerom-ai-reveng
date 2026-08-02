@@ -21,6 +21,25 @@ MAPS = (
     "o row9.bin 0x000000 r-x",
     "o row10.bin 0x038000 r-x",
     "o row76.bin 0x040000 r-x",
+    # radare2 6.0.8 reports these files as size -2 and mis-maps them: besides
+    # the intended map, each `o <file> <addr>` with a nonzero address creates a
+    # second map at 0 with a huge negative delta. row76.bin's shadows
+    # 0x0-0x3FFFF, so every OS-ROM address reads back 0xffff and the OS
+    # contract generators fail with "Cannot find function at 0x...". Discard
+    # all maps and rebuild the three with explicit sizes. fd 3 is the
+    # `malloc://1` every generator opens r2 with, so the ROMs take fd 4/5/6;
+    # runtime_check probes all three regions so a change in that numbering
+    # fails loudly instead of silently reading 0xffff.
+    "om-*",
+    "om 4 0x000000 0x10000 0x0 r-x",
+    "om 5 0x038000 0x08000 0x0 r-x",
+    "om 6 0x040000 0x20000 0x0 r-x",
+)
+# address -> first 4 bytes, one per mapped ROM, asserted by runtime_check.
+MAP_PROBES = (
+    (0x000300, "0c794ef9"),  # row9.bin  — exception_handler prologue
+    (0x038000, "0003800c"),  # row10.bin — maze pointer-table base pointer
+    (0x052ECA, "4e560000"),  # row76.bin — maze_checknum prologue
 )
 CANONICAL_OS_NAMES = {
     0x0FCA: "run_color_test",
@@ -53,18 +72,18 @@ CANONICAL_OS_NAMES = {
     0x58C6: "run_game_options",
 }
 ADDITIONAL_OS_FUNCTIONS = {
-    0x03B6: "normal_boot_spare_test_done",
-    0x03C4: "normal_boot_spare_error_ack",
-    0x0424: "normal_boot_color_test_done",
-    0x04A4: "normal_boot_playfield_test_done",
-    0x0512: "normal_boot_alpha_test_done",
-    0x0582: "normal_boot_mob_test_done",
-    0x0652: "selftest_spare_test_done",
-    0x0660: "selftest_spare_error_ack",
-    0x067C: "selftest_color_test_done",
-    0x06A6: "selftest_playfield_test_done",
-    0x06D0: "selftest_alpha_test_done",
-    0x06FC: "selftest_mob_test_done",
+    0x03B6: "selftest_boot_spare_test_done",
+    0x03C4: "selftest_boot_spare_error_ack",
+    0x0424: "selftest_boot_color_test_done",
+    0x04A4: "selftest_boot_playfield_test_done",
+    0x0512: "selftest_boot_alpha_test_done",
+    0x0582: "selftest_boot_mob_test_done",
+    0x0652: "normal_boot_spare_test_done",
+    0x0660: "normal_boot_spare_error_resume",
+    0x067C: "normal_boot_color_test_done",
+    0x06A6: "normal_boot_playfield_test_done",
+    0x06D0: "normal_boot_alpha_test_done",
+    0x06FC: "normal_boot_mob_test_done",
     0x08EC: "boot_postcheck_dispatch",
     0x0A42: "mem_test_short_walk_ones",
     0x0A52: "mem_test_short_walk_zeroes",
@@ -375,10 +394,12 @@ def generated_text(source: str, function_index: str) -> str:
 
 
 def runtime_check(root: Path, expected_function_count: int) -> None:
+    probe_commands = "; ".join(f"p8 4 @ 0x{address:x}" for address, _ in MAP_PROBES)
     command = [
         "r2", "-q", "-n", "-e", "scr.color=0",
         "-c", ". doc/gauntlet_loader.r2",
         "-c", "e asm.arch; e asm.cpu; e asm.bits; e cfg.bigendian; oj; om; f~g2mainloop; aflc",
+        "-c", probe_commands,
         "-c", "q", "malloc://1",
     ]
     result = subprocess.run(command, cwd=root, text=True, capture_output=True)
@@ -399,8 +420,20 @@ def runtime_check(root: Path, expected_function_count: int) -> None:
         raise SystemExit(
             f"radare2 loader did not create {expected_function_count} analysis functions\n{combined}"
         )
+    unreadable = [
+        f"0x{address:06x} did not read back {expected_bytes}"
+        for address, expected_bytes in MAP_PROBES
+        if not re.search(rf"(?mi)^{expected_bytes}$", combined)
+    ]
+    if unreadable:
+        raise SystemExit(
+            "radare2 loader mapped the ROMs incorrectly (all-0xffff reads mean a "
+            "stale map shadowed the region):\n  "
+            + "\n  ".join(unreadable)
+            + f"\n{combined}"
+        )
     print(
-        "gauntlet_loader.r2: zero-error load; 3 ROM maps; "
+        "gauntlet_loader.r2: zero-error load; 3 ROM maps probed readable; "
         f"m68k/68010/32-bit/big-endian; {expected_function_count} functions"
     )
 

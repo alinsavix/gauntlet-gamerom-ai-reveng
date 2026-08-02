@@ -130,16 +130,88 @@ Uses `mob_hpos` flag bits to determine monster state:
 
 | Bit 5 | Bit 4 | State | Behavior |
 |-------|-------|-------|----------|
-| 1 | x | Moving | Advance animation, check collisions, continue movement |
-| 0 | 1 | Chasing | Move toward target player, check for shooting opportunity |
-| 0 | 0 | Idle | Find nearest player (`monster_find_and_shoot`), start chasing |
+| 1 | x | Moving | Advance the moving-bank animation, then enter the shared movement/collision body at 0x4126A |
+| 0 | 1 | Attacking | Advance the attack animation by 0x2000 per step; on carry, clear bit 4 and call `monster_find_and_shoot`, otherwise select the attack animation bank |
+| 0 | 0 | Idle | Apply the `((slot \| 2) ^ frame) & 0x1E` turn stagger, call `monster_find_and_shoot`, then fall into the movement body |
 
-**Special-case handling within chasing state:**
-- **Sorcerer (type 0x10):** Skips physical movement; only animates and shoots from distance
-- **Acid (type 0x1C):** Uses fixed direction advance value 0x1E; moves in fixed pattern
-- **IT (type 0x24):** Direction adjusted from odd-angle table; moves erratically
+The bit-4 state is an *attack-animation* state rather than a separate pursuit
+mode; both it and the idle state reach `monster_find_and_shoot`, and both fall
+through to the same movement/collision body, which writes the H/V words and
+calls `move_mob_slot` on a clear destination or `monster_playerhit` when the
+destination holds a player (0x41336–0x413C2).
 
-**Monster speeds:** All types share base speed 0x80. The speed table at 0x40E02 (7 longwords) overrides specific types to 0x100 (double speed) when fast-monster level flags are active. Movement is probabilistic: each frame, `random(32)` is compared against the speed value — higher speed = higher chance of moving.
+**The `D6` monster-index offset. Confidence: Verified** by disassembly at
+0x40FAE–0x41022 and 0x411BA–0x41460. Throughout the loop body `D6` is **not**
+an object type. `monster_loop_core` loads the `mob_link` high byte and masks
+0xFC, giving `object_type × 4`, then subtracts 0x48 (`18 × 4`), leaving
+
+```
+D6 = (object_type − MAZEOBJ_MONST_GHOST) × 4 = monster_index × 4
+```
+
+a byte offset with a four-byte stride into the ten-record monster-index tables
+(`monster_anim_idle_ptrs` 0x40DB2, `monster_anim_moving_ptrs` 0x40DDA,
+`monster_oddangle_table` 0x40E1E) and into the per-family stack configuration
+read at `0xA(A7,D6.w)`. The surrounding bounds tests use the same scale:
+`bcs` after the subtraction rejects types below 18, `cmpi.w 0x6C` (`27 × 4`)
+rejects types above 45, and `cmpi.w 0x24` (`9 × 4`) is the creature/generator
+split at type 27.
+
+The former text quoted these offsets as "type" values, which contradicted the
+Maze Object IDs enum and §3.2 (the latter correctly names Super Sorcerer 26).
+The correspondence is:
+
+| `D6` offset | Monster index | Object type | Name |
+|-------------|---------------|-------------|------|
+| 0x0C | 3 | 21 (0x15) | Lobber |
+| 0x10 | 4 | 22 (0x16) | Sorcerer |
+| 0x1C | 7 | 25 (0x19) | Acid |
+| 0x20 | 8 | 26 (0x1A) | Super Sorcerer |
+| 0x24 | 9 | 27 (0x1B) | IT |
+
+**Special-case handling within the attack (bit 4) state. Confidence:
+Verified** at 0x411D2–0x4121E and 0x413E6–0x41428:
+
+- **Sorcerer** (offset 0x10, type 22): branches straight to the shared
+  movement/collision body at 0x4126A, bypassing the frame gate, the
+  attack-animation advance, and `monster_find_and_shoot`. The former claim that
+  it "skips physical movement; only animates and shoots from distance" was
+  **Contradicted**; it is the shooting path that is skipped. Sorcerers do
+  relocate, but their `monster_anim_moving_ptrs` entry is NULL (§7.2 of
+  `05_data_reference.md`), so they reuse idle pictures while doing it, which is
+  the origin of the "sorcerers don't visually move" reading.
+- **Acid** (offset 0x1C, type 25): loads the literal 0x1E and ANDs it with the
+  frame byte at 0x413FA, so the puddle acts only when `frame & 0x1E` is zero,
+  i.e. once every 32 frames. The former "fixed direction advance value"
+  description was **Contradicted**: 0x1E is a rate mask, not a direction. The
+  acid path also substitutes this literal for its own
+  `monster_oddangle_table` +1 byte (which is 0x02).
+- **IT** (offset 0x24, type 27): takes its rate mask from
+  `monster_oddangle_table[D6+1]` through the same gate, then selects
+  `anim_tiles_it_special` for its chase pictures.
+- **Lobber** (offset 0x0C, type 21): selects `anim_tiles_lobber_throw` where
+  every other family selects `anim_tiles_monster_special_attack`
+  (0x41208–0x4121E). This fourth special case was absent from the former list.
+
+In the idle (neither bit) state the handler first applies a per-monster turn
+stagger, `((slot | 2) ^ frame) & 0x1E`, and only then calls
+`monster_find_and_shoot`; acid instead rolls a fresh random direction
+(0x41222–0x41250).
+
+**Monster speeds:** **Confidence: Verified** by disassembly at
+0x40EEE–0x40F58. `monsters_everything` builds a seven-longword per-family
+configuration on its own stack before walking the chain. All families start at
+speed 0x80. The `level_flags_2` fast bits raise a family to 0x100, but only on
+frames where bit 1 of the working frame word is set, so a "fast" family
+averages roughly 1.5× the base rate rather than 2×. The separate override table
+at 0x40E02 is then applied from the `level_flags` odd-angle bits under mask
+0x73, patching the high byte of the same stack records for ghosts, grunts,
+sorcerers, auxiliary grunts, and Death; the demon and lobber odd-angle bits are
+outside the mask and have no record to install. The former claim that each
+monster's movement is gated per frame by `random(32)` against its speed was
+**Contradicted**: that comparison belongs to `handle_generate` (§3.4).
+While `poison_timer` is non-zero the entire monster pass is skipped on even
+frames.
 
 #### Super Sorcerer placement
 
@@ -161,7 +233,21 @@ byte offset required by the register body.
 
 ### 3.4 Generator Spawning (inline in `monster_loop_core`)
 
-When the loop encounters a generator type (28–45), it checks `ram.monster_count` against the level cap. If conditions are met, spawns a new monster MOB at the generator position using the maze-encoded monster type, respecting the max-monsters-per-type cap.
+**Confidence: Verified** by disassembly at 0x40F5C–0x41056 and
+0x492C0–0x4930E. When the loop encounters a generator type (28–45) it first
+applies a turn stagger: the generator acts only on the frame where low bits of
+its doubled MOB slot match low bits of the working frame word (mask 0x1E), so
+every generator in a level gets one turn per sixteen frames.
+
+The number computed before the walk is a **spawn probability out of 32**, not a
+live population count. It is `monster_count_table[((game_settings & 0xE0) >> 3)
++ players_active − 1]` plus the signed `monster_cap_bonus` byte (0x90405F),
+clamped to `level × 2` on every level except level 1, and forced to zero when
+`frame_overflow` (0x904916) is set. `handle_generate` compares it against
+`getrandom(32)` and returns without spawning when the random value wins. The
+former description referenced a `ram.monster_count` variable and a
+max-monsters-per-type cap; neither exists in the shipped image
+(**Contradicted**).
 
 `handle_generate` (0x492C0) is the generator spawn routine called from the type->0x24 branch of `monster_loop_core` (0x41026). Its arguments are the generator's maze/MOB slot, generated monster type index, and spawn probability. On success it chooses a random starting cardinal direction, scans as many as eight neighboring cells using the padded tables at 0x57B50/0x57B68/0x57B80, requires a traversable empty cell, and creates the appropriate tiered monster there. In the special negative game state, `monster_generation_retry_timer` replaces the random probability gate.
 
@@ -469,7 +555,20 @@ Demo input streams are stored at ROM 0x5818C+. Format: 2-byte entries.
 |--------|--------|---------|
 | ≤ 0xFD | — | Normal timer value (countdown between events) |
 | 0xFF | argument | Speech/sound command; argument is the speech ID |
-| 0xFE | packed | End-of-sequence / player switch: hi nibble=direction, lo nibble=player slot. Resets pointer to initial value from ROM table at 0x58098. |
+| 0xFE | packed | Join command: hi nibble = **character class**, lo nibble = player slot. Writes the class to `player_character` (0x9048E8 + slot × 2), calls `player_join` (0x48BB6) on that slot, sets its timer to 1, and reloads its pointer from the ROM table at 0x58098. |
+
+**Contradicted and corrected:** the 0xFE payload's high nibble was previously
+described as a direction. The 0xFE arm at 0x4A5B2–0x4A5DE shifts it right four
+bits and stores it with `move.w d1,(a4,d0.w)` where A4 = `player_character`
+(0x9048E8), then calls `player_join`. It is a character class (0 = Warrior,
+1 = Valkyrie, 2 = Wizard, 3 = Elf), matching `attract_demo_init`'s own
+`move.w #3, 0x9048EA` for the Elf. The record is also not an end-of-sequence
+marker: a stream ends with an ordinary record whose duration byte is 0, which
+parks the timer at zero so the pointer never advances again while the input
+consumers keep reading that record's second byte.
+
+In the shipped streams the two 0xFE records are `FE 20` (slot 0 as Wizard) and
+`FE 03` (slot 3 as Warrior), both in the player-1 stream at 0x58234/0x58236.
 
 The demo data pointer for each player is at `0x904B66[player × 4]` (longword). The frame timer is at `0x904B76[player]` (byte).
 
@@ -507,10 +606,34 @@ players 0, 2, and 3.
 
 ### 6.4 Attract-Mode Interruption
 
-During attract mode, the game checks raw joystick ports 0x904922 and 0x904924
-(players 2 and 3). With paid pricing it tests FIRE+MAGIC (`0x03`); in free
-play it tests FIRE only (`0x02`). A qualifying input plus START calls
-`start_attract_to_game` (0x44204).
+During attract mode, the game checks the raw input words at
+`player_input_raw` (0x904920) for **all four** positions, tested in pairs.
+With paid pricing (`two_player_mode` 0x9049E2 nonzero) it masks with `0x03`,
+so either FIRE or MAGIC qualifies; in free play (multiplier 0) it masks with
+`0x02`, so only FIRE does. The words are active low, so a masked value equal
+to the mask means nothing is pressed.
+
+**Contradicted and corrected:** the former note named only 0x904922/0x904924
+and described the input as transferring to gameplay. Neither holds. There are
+five separate test blocks, and each one restarts an *attract screen* rather
+than starting a session:
+
+| Block | Positions | Input | `start_attract_screen` argument |
+|-------|-----------|-------|--------------------------------|
+| 0x4460E | 1, 2 (blue, yellow) | FIRE/MAGIC | −1 (SCORES) |
+| 0x44694 | 0, 3 (red, green) | FIRE/MAGIC | −2 (TITLE) |
+| 0x44716 | 0, 3 (red, green) | joystick direction | −3 (DEMO) |
+| 0x4477E | 1, 2 (blue, yellow) | joystick direction | −4 (LEGEND), with `attract_legend` reset to 2 |
+| 0x447F8 | 1, 2 (blue, yellow) | joystick direction, LEGEND only | next legend page, or −1 when the last page has shown |
+
+Entering gameplay is a separate path that runs every frame regardless of mode.
+`start_attract_to_game` (0x44204) has exactly three callers: `coincheck` at
+0x42BE2 (a coin arriving while `game_mode` < 0 and either no player has health
+or the mode is DEMO), `main_start_game` at 0x484B8 (free play only, on a
+debounced FIRE press edge), and `main_attract` at 0x448CE (attract timer
+expiring in mode 0 with a player still holding health). The FIRE edge
+`main_start_game` matches is `(debounce_A[player] & 0x1F) == 0x1C` at
+0x48402–0x48416 over the shift registers at 0x905F58.
 
 The input thresholds are exactly 60 frames below each screen's loaded timer,
 creating a one-second input lockout rather than changing screen duration:
@@ -678,7 +801,25 @@ States (in `ram.thief_mode`, `0x904BA0`):
 | THIEF_ENTER_OK (16) | Entering the level |
 | THIEF_IS_MUGGER (128) | Mugger variant |
 
-When overlapping target player: steals an item or health (calls `thief_steal_from_player`, 0x4E1FE), then plays the player-specific “thief” speech (0x62–0x65). Exit when thief reaches the maze edge calls `thief_exit` (0x4E122).
+When overlapping target player: steals an item or health (calls `thief_steal_from_player`, 0x4E1FE). Exit when thief reaches the maze edge calls `thief_exit` (0x4E122).
+
+**Escape taunt. Confidence: Verified** at 0x4E960–0x4E992. When the escape
+animation counter passes 0x3B, `getrandom(2)` selects one of two *pitch*
+variants, not a player. Index 0 plays sound 0x62 plus speech 0x63 and index 1
+plays sound 0x64 plus speech 0x65, i.e. the high- and low-pitched pairs of
+“HEE HEE HEE” / “YOU CAN'T CATCH ME!” in `refs/soundcmds.csv`. The tables at
+0x5B6FA and 0x5B702 are therefore pitch pairs; their `thief_`/`mugger_` names
+are historical and do not reflect the selector.
+
+**Mugger selection. Confidence: Verified** at 0x4E516–0x4E568 inside
+`thief_timer_set`. The routine returns without scheduling when both
+`THIEF_ENTER_OK` (bit 4) and `THIEF_ENTER_OK_MUGGER` (bit 5) are already set.
+Otherwise, with bit 5 clear, `getrandom(32) < 16` makes the next visitor a
+mugger; if that roll fails, bit 4 (thief already used) forces a mugger anyway.
+`ram.thief_speed` (0x9048BC) is then loaded with **0x180 for the mugger and
+0x200 for the ordinary thief**, so the mugger is the *slower* of the two. These
+are the same per-frame movement units as the player speed table (Elf 0x100,
+others 0x80).
 
 ### 9.2 Thief Targeting (`thief_target_calc`, 0x4DFF6)
 
@@ -718,9 +859,34 @@ record selection, and observed OS service use.
 Called every frame. Change-detection pattern: compares `ram.coin_counters` (`0x904FEC`) against cached `ram.last_coin_state` (`0x9049EA`). If they differ, processes all 4 player slots.
 
 Per-player logic:
-- If all players have zero health AND in attract mode: call `start_attract_to_game`
+- If all players have zero health OR `game_mode` is DEMO, AND `game_mode` < 0: call `start_attract_to_game` (0x42BE2). The extra DEMO test at 0x42BD0 exists because the demo's scripted heroes do hold health.
 - If player HAS health (active re-coining): add health from `0x57862` table, set redraw flag
 - If player has NO health (new player joining): call `player_init_for_coin` (0x488CA)
+
+**Where the coin counters come from (Verified).** `coincheck` only polls
+`0x904FEC`; it never reads a coin port. That word is written exclusively by OS
+`process_coins` (0x35C4, API 0x16C), whose sole caller in the whole OS ROM is
+`process_sound` (0x41FA, API 0x15A) at 0x4216. The **coin switches are wired
+to the sound board**, and the game learns about them as the reply to a sound
+command:
+
+1. The tail of `game_vblank` calls API 0x15A at 0x40496, using the 16-bit
+   absolute form `4EB8 015A` (which is why 32-bit `jsr.l` scans miss it).
+2. `process_sound` submits command **0x03** through the shared
+   `send_sound_command` body at 0x4198 with a one-byte reply directed at its
+   status block base 0x904F8E.
+3. The sound CPU's write of its response latch raises IRQ6. The game's hook at
+   0x4001E is `jmp 0x17E`, tail-entering OS `sound_receive_irq_body` (0x427A),
+   which stores the byte at the installed destination.
+4. Next frame, `process_sound` compares the new byte at 0x904F8E against the
+   saved previous byte at 0x904F8F and calls
+   `process_coins(current, previous)` on any difference. Each byte packs four
+   two-bit per-channel coin counters; `process_coins` computes
+   `(previous + 4 - current) & 3` per channel and rejects deltas above one.
+
+`refs/soundcmds.csv` labels command 0x03 "Stop playing? (used during idle)".
+That entry is a guess in the supplied labels; the OS uses it as a status and
+coin poll.
 
 ### 10.2 Floating Score Display (`playfield_showscore`, 0x49498)
 
@@ -819,11 +985,18 @@ queues directly.
 
 ### 11.2 Sound Dispatch (`main_update_sound`, 0x4AE20)
 
-Called every frame. It skips work during frame overflow or while speech is in
-progress. Otherwise it drains up to eight entries, stopping when the ring is
-empty or OS `try_send_sound_command` (0x242) reports busy. Each accepted byte
-is replaced with 0xFF, the read head advances modulo eight, and a short delay
-separates commands.
+Called every frame. It skips work entirely when `frame_overflow` (0x904916) or
+the recovery holdoff at 0x9049EE is nonzero. Otherwise it makes **at most
+eight attempts**, exiting when the ring is empty or the attempt count reaches
+eight. Each accepted byte is replaced with 0xFF and the read head advances
+modulo eight; a short register delay loop separates commands.
+
+**Contradicted and corrected:** a busy result from OS
+`try_send_sound_command` (0x242) does not end the drain. At 0x4AE6E the
+failure branch targets the delay at 0x4AE8E and falls through to
+`addq.w #1,d2` / `bra 0x4AE40`, so the read head is left alone and the same
+byte is offered again on the next attempt. A busy latch therefore costs one of
+the eight attempts rather than the rest of the frame's drain.
 
 The physical ring has eight byte slots but reserves one state to distinguish
 full from empty, so usable capacity is seven. A full ring drops the new byte
@@ -832,17 +1005,39 @@ without moving either index. `sound_queue_reset` fills all eight slots with
 
 ### 11.3 Sound Responses and Recovery (`sound_response`, 0x42D0A)
 
-Called every frame. It polls OS 0x178; no response is reported as 0xFFFF. A
-0xFF response while `speech_counter` (0x9049EE) is nonzero marks speech
-complete; other unexpected responses invoke `sound_system_reset`.
+Called every frame. It polls OS 0x178; no response is reported as 0xFFFF.
 
-When idle, nonzero low bits in `sound_queue_state` (0x9049F0) force a reset.
-Otherwise it advances the speech and idle timer (0x9049F2), then sends ping
-command 0x07 through OS 0x172 after the idle timer expires. A successful ping
-reloads the timer to 240 frames and clears retry count 0x9049F4. After 180
-failed retries it performs a full reset. `sound_system_reset` calls OS 0x254,
-gives the sound CPU a 180-frame grace period, clears queue/retry state, and
-resets the ring.
+**Contradicted and corrected: 0x9049EE is a sound-board recovery holdoff, not
+a speech-in-progress counter.** The only site that stores a nonzero value into
+it is 0x42DDA inside `sound_system_reset`, which loads 0xB4 (180 frames). A
+byte-level scan of `row76.bin` for the 32-bit address finds references only at
+0x42D14 (the `lea` in this routine), 0x42DDA, 0x4AD7E (`sound_play`) and
+0x4AE36 (`main_update_sound`); nothing in the speech path touches it. The
+0xFF test at 0x42D30 is therefore the post-reset acknowledgement from a sound
+CPU that has finished booting, not a speech-completion signal. The name
+`speech_counter` is retained for continuity with the loader symbols.
+
+Response handling:
+- A byte arrives while the holdoff is nonzero: 0xFF clears the holdoff (the
+  board is back); any other value invokes `sound_system_reset`.
+- A byte arrives while the holdoff is zero: unexpected traffic, so
+  `sound_system_reset`.
+
+Idle handling, when no byte arrived:
+- Nonzero low three bits in `sound_queue_state` (0x9049F0) force a reset. This
+  word receives the one-byte reply to the status query below, so those bits
+  are the sound board's own error report.
+- Otherwise, if the holdoff is nonzero it is decremented, and reaching zero
+  without the 0xFF acknowledgement triggers another reset.
+- Otherwise the idle timer (0x9049F2) is decremented, and on going negative
+  the routine clears `sound_queue_state` and sends status command 0x07 through
+  OS 0x172 with a one-byte reply directed at 0x9049F1. A successful send
+  reloads the timer to 0xF0 (240 frames) and clears retry count 0x9049F4. A
+  failed send clears the timer so the next frame retries immediately and
+  increments the retry count; above 0xB4 (180) it performs a full reset.
+
+`sound_system_reset` (0x42DC8) calls OS 0x254 with (0, 0), sets the 180-frame
+holdoff, clears `sound_queue_state` and the retry count, and resets the ring.
 
 ### 11.4 Speech (`sound_speech_play`, 0x4AD4E)
 
@@ -871,9 +1066,9 @@ descriptions inherit the supplied `generated/soundcmds.csv` labels.
 | 0x26 | Treasure pickup |
 | 0x27 | Trap/walls turn to exits |
 | 0x28 | Teleport |
-| 0x29 | Super-thief spawn |
+| 0x29 | Thief arrival warning |
 | 0x2B | Cyclic Walls |
-| 0x2D | Normal thief spawn |
+| 0x2D | Mugger arrival warning |
 | 0x2E | Player Touches Force Field (start loop) |
 | 0x2F | Force Field Silencer (stop loop) |
 | 0x31 | Exit moving |
@@ -883,6 +1078,19 @@ descriptions inherit the supplied `generated/soundcmds.csv` labels.
 | 0x44 | No potion |
 | 0x62–0x65 | Thief speech (by player index) |
 | 0xBD–0xCC | Character announcement speech ("RED WARRIOR" through "GREEN ELF") |
+
+**Contradicted and corrected:** 0x29 and 0x2D were previously labelled
+"Super-thief spawn" and "Normal thief spawn". They share a single call site at
+0x4DFC0–0x4DFD8 in `main_start_thief`, which does
+`btst.b #7, 0x904BA1` on `thief_mode` and pushes 0x2D when the bit is set and
+0x29 when it is clear. §9 and `thief_timer_set` establish that bit as the
+mugger-variant selector, so the supplied `refs/soundcmds.csv` labels ("Thief
+Warning" and "Mugger Warning") are the ones the code supports.
+
+Two further command values with literal call sites, absent from the table
+above: **0x12** ("Doors Open") is pushed at 0x47FF4 after a 0x400-slot scan
+for vertical-door objects finds at least one, and **0x2A** ("Treasure Chest
+Opens") at 0x52644.
 
 ---
 
@@ -933,7 +1141,7 @@ flowchart TD
 
     subgraph block["One 8-byte descriptor → four playfield words"]
         direction LR
-        tl["word 0<br/>+0x000<br/>top-left"] --> bl["word 1<br/>+0x080<br/>bottom-left"] --> tr["word 2<br/>+0x002<br/>top-right"] --> br["word 3<br/>+0x082<br/>bottom-right"]
+        tl["word 0<br/>+0x000<br/>top-left"] --> tr["word 1<br/>+0x080<br/>top-right"] --> bl["word 2<br/>+0x002<br/>bottom-left"] --> br["word 3<br/>+0x082<br/>bottom-right"]
     end
     write --> tl
 
@@ -976,9 +1184,22 @@ Each tile descriptor is 8 bytes = 4 words, written to VRAM positions for a 2×2 
 | Word | VRAM Offset | Position |
 |------|------------|----------|
 | Word 0 | +0x000 | Top-left |
-| Word 1 | +0x080 | Bottom-left |
-| Word 2 | +0x002 | Top-right |
+| Word 1 | +0x080 | Top-right (one playfield column right) |
+| Word 2 | +0x002 | Bottom-left (one playfield row down) |
 | Word 3 | +0x082 | Bottom-right |
+
+The offsets follow from the column-first playfield grid of §7 in
+`doc/01_hardware.md`: word index is `column × 64 + row`, so one word (+2
+bytes) advances the row and moves **down**, while 64 words (+0x80 bytes)
+advance the column and move **right**.
+
+**Contradicted and corrected:** words 1 and 2 were previously labelled
+bottom-left and top-right, which implied a row-first grid and contradicted
+the verified column-first layout. **Confidence: Verified** from the address
+arithmetic in `write_tile_descriptor` (0x5E542), which forms `0x900000 +
+(column << 8) + (row << 2)`, and independently from `python-gex`, whose
+validated wall stamps store the four tiles in top-left, top-right,
+bottom-left, bottom-right order.
 
 ### 13.3 Wall Connectivity
 
