@@ -140,13 +140,16 @@ is told one starting tile number T plus a width and height; consecutive
 tiles fill the grid left to right, row by row.*
 
 The link words are the interesting part. The hardware does no scanning of
-all 1,024 slots; instead it follows chains of links from entry points it
-maintains, visiting only the MOBs those chains reach, which is how the
-machine can offer a thousand slots without paying for a thousand lookups on
-every scanline. The software arranges those chains, and it turns out to use
-the very same links for its own purposes. That shared structure, one ordered
-chain that both the display hardware and the game logic walk, is central to
-how Gauntlet II manages crowds, and Chapter 8 gives it the full treatment.
+all 1,024 slots; instead it follows chains of links from a set of 64 entry
+points, one for every eight scanlines, visiting only the MOBs those chains
+reach. That is how the machine can offer a thousand slots without paying
+for a thousand lookups on every scanline. Atari called those entry points
+**SLIPs**, for starting link points, and the name is worth learning now
+because it turns up in the hardware documentation and in MAME. The software
+arranges the chains the SLIPs point into, and it turns out to use the very
+same links for its own purposes. That shared structure, one ordered chain
+that both the display hardware and the game logic walk, is central to how
+Gauntlet II manages crowds, and Chapter 8 gives it the full treatment.
 
 ## Transparency and shadows
 
@@ -256,11 +259,12 @@ and then Chapter 8 opens the invisible half.
 >   `doc/05_data_reference.md` §8; the ghost table with its stride-9 frames
 >   is §7.4. The images in this chapter were rendered from these tables and
 >   the graphics ROMs with `python-gex`.
-> - Hardware traversal of the link words, with 64 per-band entry heads at
->   0x905F80, is Verified partly via MAME's schematic-backed motion-object
->   configuration for this board: `doc/01_hardware.md` §8.4. The full
->   doubly linked depth chain and the software's use of it:
->   `doc/04_game_subsystems.md` §24 (Chapter 8's subject).
+> - Hardware traversal of the link words, with the 64 SLIPs at 0x905F80
+>   (one per 8-pixel band), is Verified partly via MAME's schematic-backed
+>   motion-object configuration for this board: `doc/01_hardware.md` §8.4.
+>   The full doubly linked depth chain and the software's use of it:
+>   `doc/04_game_subsystems.md` §24 (Chapter 8's subject). The term SLIP
+>   is Atari's own; Chapter 8 sources it.
 > - Alpha RAM at 0x905000: word format (opaque bit 15, palette fields,
 >   character bits 9–0), the 42-of-64 visible columns, the two-bitplane
 >   character ROM format, and the opaque-space blackout:

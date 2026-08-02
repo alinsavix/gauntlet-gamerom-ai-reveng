@@ -124,18 +124,25 @@ low ten bits, a global head variable, and slot 0 terminating the ends. The
 chain holds every active MOB, sorted by depth, meaning vertical screen
 band and draw priority.
 
-Alongside the chain sits a table of **64 cumulative entry heads**, one per
-8-pixel horizontal band of the playfield. These are not 64 separate lists.
-Each entry points *into the one chain* at the first MOB belonging to that
-band or later; insertion and removal update both the neighbors' links and
-every affected band head. It is one ordered street with 64 signposts
-telling you where each block begins.
+Alongside the chain sits a table of 64 entry points, one for each 8-pixel
+horizontal band of the playfield. Atari had a name for these, and it
+survives: **SLIPs**, starting link points. Ed Logg, who led the original
+Gauntlet, laid out the problem they solve in a 2012 postmortem talk. A
+thousand motion objects can exist at once, and the display hardware has
+only the time between two scanlines to decide which of them matter. So the
+software keeps a bookmark every eight scan lines, and the hardware starts
+reading there instead of at the beginning.
+
+The SLIPs are not 64 separate lists. Each one points *into the one chain*
+at the first MOB belonging to its band or a later one, so insertion and
+removal update the neighbors' links along with every affected SLIP. It is
+one ordered street with 64 signposts telling you where each block begins.
 
 ```mermaid
 flowchart LR
     ghead["global head"] --> A["MOB A"]
-    bands["64 band heads<br/>(one per 8-pixel row band)"] -. "band 12 entry" .-> B
-    bands -. "band 13 entry" .-> C
+    slips["64 SLIPs<br/>(one per 8-scanline band)"] -. "band 12 entry" .-> B
+    slips -. "band 13 entry" .-> C
     A -- "next" --> B["MOB B"]
     B -- "next" --> C["MOB C"]
     C -- "next" --> nul["slot 0 = end"]
@@ -146,8 +153,15 @@ flowchart LR
 The earlier drafts of this project's documentation described 64 independent
 per-band lists, and the corrected picture matters beyond pedantry: one
 chain means one insertion discipline, one traversal order shared by
-everything, and band heads that are a cheap index rather than a second data
+everything, and SLIPs that are a cheap index rather than a second data
 structure.
+
+Two details are worth pinning down because they are easy to get backwards.
+The SLIP bands measure the *playfield*, not the screen, so a sprite's band
+does not change when the camera scrolls past it. And the SLIP words do not
+live in the MOB tables at all; they sit at the very top of the
+alphanumerics RAM address range, in company with the playfield's vertical
+scroll register, on address lines that were going spare.
 
 ## Three users of one structure
 
@@ -155,13 +169,13 @@ Different subsystems enter this structure at different doors, and keeping
 them straight explains a lot of the engine.
 
 **The display hardware** follows the links. Composing a scanline, it
-enters through a band head and walks the chain, visiting only sprites that
+enters through a SLIP and walks the chain, visiting only sprites that
 can touch the bands it is drawing. This is the traversal Chapter 4
 promised: the hardware and the game are literally reading the same
 pointers, which is why the software maintains draw order as it maintains
 the chain.
 
-**Monster processing** walks the chain too, entering through the head
+**Monster processing** walks the chain too, entering through the SLIP
 table, but on the CPU's budget. Chapter 6 introduced the per-frame monster
 allowance; the walk keeps a resume pointer, processes up to the allowance,
 and picks up next frame where it stopped. A culling rectangle derived from
@@ -172,7 +186,12 @@ frame can afford.
 
 **Collision does not walk anything.** A player probing a move asks "what
 occupies the cell I am entering?", and because slot number equals cell
-address, that is a direct read of the neighboring slots. Shots are found
+address, that is a direct read of the neighboring slots. Each of the four
+directional probes reads exactly three cells: the one straight ahead and
+its two flanking neighbors, which covers everything a 24-pixel body can
+overlap while crossing a 16-pixel cell boundary. Logg gave the same rule
+from memory in his postmortem, three grid entries in any direction, and
+the shipped Gauntlet II code does exactly that. Shots are found
 in their fixed channels, 1 through 12, without any search at all. The
 chain orders the world; the slot arithmetic interrogates it. They share
 data, and conflating them would misdescribe both.
@@ -242,7 +261,7 @@ other:
   common query in the game, "what is in that cell," into arithmetic.
 - One shared chain gives the display hardware its draw order and the
   monster system its iteration order from the same maintained pointers.
-- Band heads, fixed effect channels, and direct slot probes keep every
+- SLIPs, fixed effect channels, and direct slot probes keep every
   lookup near constant time regardless of crowd size.
 - The per-frame allowance, resume pointer, culling rectangle, and Chapter
   6's overflow throttle bound the CPU cost of any crowd, trading monster
@@ -269,16 +288,28 @@ hundred ghosts at you, this is the machinery underneath.
 >   `doc/04_game_subsystems.md` §23.1–23.3, §5.4.
 > - The chain: forward links in `mob_link` bits 9–0, back links in
 >   `mob_state_link` (0x904066) bits 9–0, global head
->   `mob_depth_list_head` (0x9049DE), 64 cumulative band heads
->   `priority_bucket_heads` (0x905F80), and the 32 depth keys at 0x904940
+>   `mob_depth_list_head` (0x9049DE), the 64 SLIPs at 0x905F80 (named
+>   `priority_bucket_heads` in the documentation and the radare2 loader),
+>   and the 32 depth keys at 0x904940
 >   as ordering tie-breakers for managed low slots:
 >   `doc/04_game_subsystems.md` §24; `doc/05_data_reference.md` §1. The
 >   removal/move API family (`moblist_remove`,
 >   `moblist_remove_and_clear`, `move_mob_slot`, `mob_depth_remove`) is
 >   §24.
-> - Hardware traversal through the band heads is Verified partly via
->   MAME's schematic-backed motion-object configuration:
->   `doc/01_hardware.md` §8.4.
+> - 0x905F80–0x905FFF is exactly the last 64 words of the alphanumerics
+>   RAM range (0x905000–0x905FFF), which also carries the playfield
+>   vertical scroll register at 0x905F6E: `doc/01_hardware.md` §1, §8.4.
+> - Hardware traversal through the SLIPs is Verified partly via
+>   MAME's schematic-backed motion-object configuration, which models one
+>   8-pixel SLIP head per band: `doc/01_hardware.md` §8.4.
+> - "SLIP" is Atari's own term, used both by MAME's Atari motion-object
+>   device and by Ed Logg in his 2012 GDC Gauntlet postmortem (slides 22,
+>   35, and 44):
+>   <https://media.gdcvault.com/gdc2012/slides/Design%20Track/Logg_Ed_Gauntlet_Postmortem.pdf>.
+>   Slide 22 writes it "starting link pointers" and slide 35 "Starting
+>   Link Points"; slide 44 records that the mechanism was one of Gauntlet's
+>   five patents. The talk covers the original Gauntlet, whose motion-object
+>   hardware Gauntlet II reuses.
 > - Monster iteration: `main_move_monsters` (0x49034) →
 >   `monsters_everything` (0x40E6A) with `monster_iter_ptr` (0x904A60),
 >   the per-frame allowance `monster_count_table` (0x40E46), and culling
@@ -287,7 +318,11 @@ hundred ghosts at you, this is the machinery underneath.
 > - Collision probes: `player_try_move` (0x41BF0) and the `mob_probe_*`
 >   leaves with their contracts in
 >   `doc/generated/player_collision_contracts.csv`:
->   `doc/04_game_subsystems.md` §4.2.
+>   `doc/04_game_subsystems.md` §4.2. The three-cell count is visible in
+>   `doc/generated/control_targets.csv`: each of `mob_probe_up` (0x406B6),
+>   `mob_probe_down` (0x40732), `mob_probe_left` (0x4083A), and
+>   `mob_probe_right` (0x408A0) branches to the shared
+>   `mob_probe_candidate` (0x407A6) exactly three times.
 > - Direction/path grid (0x905054, two nibbles per byte, thief mode) and
 >   door endpoint records: `doc/04_game_subsystems.md` §23.4.
 > - Camera: `main_scroll_playfield` (0x46CAA) with the ±0xC8 rubber band,

@@ -310,13 +310,28 @@ T+W, T+W+1, ..., T+2W-1
 | 9–0 | MOB ID of next MOB in linked list (0 = end of list) |
 | 15–10 | Software-only — **maze object type** (see Maze Object IDs enum in `05_data_reference.md`) |
 
-- Linked list heads: 64 words at `0x905F80`, one per 8-pixel vertical band of the playfield
-- Each band's list contains MOBs whose Y position falls in that scanline range
+- Linked list heads: 64 words at `0x905F80`, one per 8-pixel vertical band of
+  the playfield. Atari's term for these is **SLIP** (starting link point); the
+  symbol name `priority_bucket_heads` is retained in `05_data_reference.md` and
+  `gauntlet_loader.r2` for continuity.
+- The table occupies `0x905F80–0x905FFF`, exactly the last 64 words of the
+  alphanumerics RAM range, which also carries the playfield vertical scroll
+  register at `0x905F6E`.
+- Each band's list contains MOBs whose Y position falls in that scanline range.
+  Bands index the **playfield**, not the screen, so a MOB's band is independent
+  of the current scroll position.
 - Used by **software** for collision detection and by the motion-object
   hardware for display traversal. **Confidence: Verified** by MAME's
   [schematic-backed Gauntlet motion-object configuration](https://github.com/mamedev/mame/blob/master/src/mame/atari/gauntlet.cpp#L2668-L2707),
   which marks entries linked, selects the fourth word's 10-bit link field, and
   uses one 8-pixel SLIP head per band.
+- Independent corroboration of the term and the mechanism: Ed Logg's 2012 GDC
+  [Gauntlet Postmortem](https://media.gdcvault.com/gdc2012/slides/Design%20Track/Logg_Ed_Gauntlet_Postmortem.pdf),
+  slide 22 ("Starting link pointers 8 scan lines"), slide 35 ("Starting Link
+  Points (SLIPs) we created ... Every 8 scan lines we have a linked list ... The
+  SLIPs were linked to the playfield not TV"), and slide 44, which lists the
+  SLIPs among Gauntlet's five patents. The talk describes the 1985 original,
+  whose motion-object hardware Gauntlet II reuses.
 
 ### 8.5 MOB Backward Link / Object State (`0x904066`, software only)
 

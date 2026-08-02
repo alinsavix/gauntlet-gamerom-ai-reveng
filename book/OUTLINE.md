@@ -159,7 +159,11 @@ the mechanism.
    cabinet has no separate Start button: a player uses Fire to start or join
    play. Use "level" for the player's progress count and "maze" for a stored
    layout record. Do **not** publish a simple level-to-maze formula until the
-   maze-selection research task below is resolved.
+   maze-selection research task below is resolved. Call the 64 entry points
+   into the MOB chain **SLIPs** (starting link points), Atari's own term,
+   rather than "band heads", "bucket heads", or "cumulative entry heads";
+   `priority_bucket_heads` remains the symbol name in `doc/` and the radare2
+   loader, so name it once when pointing there.
 10. **Light, curious tone.** This is a tour, not a specification. Wry asides
     are fine; memes and forced jokes are not. Write like a good conference
     talk.
@@ -418,8 +422,9 @@ ordering, and collision.*
   effects.
 - Introduce MOB traversal cautiously: the hardware follows links rather than
   scanning every possible slot for every line. State only the verified
-  high-level fact here; defer the global chain and 64 cumulative entry heads to
-  Chapter 8 after the targeted recheck.
+  high-level fact here and name the 64 entry points as SLIPs; defer the global
+  chain and the SLIPs' cumulative behavior to Chapter 8 after the targeted
+  recheck.
 - Sprite pixel special cases: color index 0 is transparent and index 1 selects
   the shadow treatment for the underlying playfield pixel. Use a crop showing
   a monster/player shadow.
@@ -554,9 +559,10 @@ turning the game into a pile of pixels.*
   all 1024 are active or visible at once.
 - **The MOB chain, after the research gate:** one depth/priority-sorted doubly
   linked chain, a global head, forward and backward links, and 64 cumulative
-  vertical/priority entry heads into that same chain. Show insertion, removal,
-  and traversal with a diagram; explicitly contrast this with the incorrect
-  mental model of 64 independent lists.
+  vertical/priority entry points (**SLIPs**) into that same chain. Show
+  insertion, removal, and traversal with a diagram; explicitly contrast this
+  with the incorrect mental model of 64 independent lists. Source the SLIP
+  term to Ed Logg's 2012 GDC Gauntlet postmortem and MAME.
 - Rendering order, monster iteration, and collision: identify which operations
   follow the shared chain, which enter through a cumulative head, and which
   probe neighboring maze slots or fixed projectile channels. Do not blur

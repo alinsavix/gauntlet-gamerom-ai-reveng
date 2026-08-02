@@ -150,6 +150,17 @@ documentation records that as the likely toolchain. There is no build stamp in
 the image, so the vendor attribution is inference, and the convention itself is
 the part that is verified.
 
+Ed Logg's Gauntlet postmortem complicates the attribution without settling it.
+His slide on the programming environment lists a VAX for compiles and edits,
+terminals, C as a language still new to the group in the mid-1980s, and then
+six words: "Greenhills C post compiler came later." That could place Green
+Hills after the original Gauntlet, which would still leave the 1986 sequel
+inside the window. It could equally name a Green Hills *post-compiler*, an
+optimizer run over another compiler's output, which would account for a
+familiar convention arriving by an unfamiliar route. The slide does not say
+which, and the bytes cannot arbitrate. What this project can prove is the
+convention; the vendor behind it stays an open question.
+
 Hand-written assembly stands out immediately once you know the compiled shape,
 because it breaks all of it at once: no frame, no register saves, inputs
 arriving in registers or fixed memory, and instructions no compiler emits.
@@ -166,7 +177,7 @@ tables. Speeds, damage, animation frames, palettes, spawn parameters, maze
 records, dragon flight paths, speech phrases, the potion effect matrix, the
 2×2 tile descriptors. The code is a small interpreter for a large pile of
 authored data, which is what let a handful of people tune a game this varied
-inside 128 KB.
+inside 128 KB.<!-- ALINSA: is this actually useful or make sense -->
 
 ## Nine bytes that never run
 
@@ -323,6 +334,11 @@ maps the repository, so you know which file answers which kind of question.
 >   `doc/03_game_rom_structure.md` §3.1–3.6. Named examples: `input_debounce`
 >   (0x40644, `roxl`), the Slapstic helpers (0x56E58/0x56E6E), and the
 >   frameless `mob_create` (0x5DC58).
+> - The Green Hills attribution and its counterweight: the convention is in
+>   `doc/03_game_rom_structure.md` §3.1; the "Greenhills C post compiler came
+>   later" line is slide 18 of Ed Logg's 2012 GDC
+>   [Gauntlet Postmortem](https://media.gdcvault.com/gdc2012/slides/Design%20Track/Logg_Ed_Gauntlet_Postmortem.pdf),
+>   which covers the 1985 original rather than this 1986 sequel.
 > - Coverage figures: `doc/03_game_rom_structure.md` §4.1–4.2 and the
 >   `make check` output. The unused block is 0x55620–0x56E53 (§4.5); the
 >   runtime-dead residue blocks are 0x57BD8–0x57EB9, 0x5C8B0–0x5CAA7, and

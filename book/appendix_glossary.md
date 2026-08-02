@@ -199,6 +199,12 @@ Chapter 9.
 **Slapstic ROM.** The 32 KB bank-switched image holding all 117 maze records,
 one of the three analyzed images. Chapters 3 and 9.
 
+**SLIP.** Starting link point: one of the 64 entry points into the MOB chain,
+one per 8-scanline band of the playfield, which lets the display hardware skip
+straight to the sprites that can appear on the lines it is drawing. The term is
+Atari's own, used by Ed Logg in his Gauntlet postmortem and by MAME's Atari
+motion-object device. Chapters 4 and 8.
+
 **Slot, tile, and pixel coordinates.** The three related spaces a thing in the
 maze occupies: a 32×32 logical maze grid for placement, a 64×64 grid of 8×8
 tiles for rendering, and 0–511 pixel coordinates for sprites and camera.
@@ -302,6 +308,19 @@ with the surrounding story at
 [Atari Centipede's Hidden Code Trap](https://arcadeblogger.com/2019/06/29/atari-centipedes-hidden-code-trap/).
 The decoded Gauntlet II bytes are from this project; the technique and its
 legal use are from that source.
+
+Ed Logg's 2012 GDC talk,
+[Gauntlet Postmortem](https://media.gdcvault.com/gdc2012/slides/Design%20Track/Logg_Ed_Gauntlet_Postmortem.pdf),
+is the source for the name SLIP and for several statements of design intent
+that the ROM can corroborate but not explain: the three-cell collision probe,
+motion objects positioned in playfield rather than screen coordinates,
+monsters that simply walk toward the nearest player and are allowed to jam in
+corners, and the maze editor and level compression scheme behind Chapter 9's
+records. The talk describes the original Gauntlet, which shares its
+motion-object hardware and much of its engine with Gauntlet II, and Logg opens
+it by warning that he was working from 26-year-old memory with his notes long
+gone. Where his recollection and the shipped ROM disagree, this book follows
+the ROM and says so.
 
 Player culture and well-known Gauntlet stories appear only as lore, and are
 labeled as such where they appear.
