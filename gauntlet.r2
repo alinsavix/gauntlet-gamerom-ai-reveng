@@ -1801,7 +1801,7 @@ fs *
 fs *
 'f player_anim_rate 16 0x000580b8
 fs *
-'f player_collision_size 16 0x000580c8
+'f lobber_lead_distance 16 0x000580c8
 fs *
 'f player_delta_x 16 0x000580d8
 fs *

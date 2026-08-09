@@ -158,7 +158,7 @@ address,size_bytes,flag_name,matching_catalog_rows,matching_header_rows,status,c
 0x58098,16,demo_stream_ptrs,"Demo initial pointer table;Initial demo pointer table (4 longwords, one per player)",,exact_catalog_match,Verified
 0x580A8,16,player_speed_normal,player_speed_normal,,exact_catalog_match,Verified
 0x580B8,16,player_anim_rate,player_anim_rate,,exact_catalog_match,Verified
-0x580C8,16,player_collision_size,player_collision_size,,exact_catalog_match,Verified
+0x580C8,16,lobber_lead_distance,lobber_lead_distance,,exact_catalog_match,Verified
 0x580D8,16,player_delta_x,player_delta_x,,exact_catalog_match,Verified
 0x580E8,16,player_delta_y,player_delta_y,,exact_catalog_match,Verified
 0x580F8,4,pad_580f8,player_delta_y,,exact_catalog_match,Verified

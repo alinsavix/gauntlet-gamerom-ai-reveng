@@ -1019,7 +1019,7 @@ f fighting_anim_end 8 0x00058090
 f demo_stream_ptrs 16 0x00058098
 f player_speed_normal 16 0x000580a8
 f player_anim_rate 16 0x000580b8
-f player_collision_size 16 0x000580c8
+f lobber_lead_distance 16 0x000580c8
 f player_delta_x 16 0x000580d8
 f player_delta_y 16 0x000580e8
 f pad_580f8 4 0x000580f8

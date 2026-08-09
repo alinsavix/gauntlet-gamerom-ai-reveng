@@ -187,7 +187,7 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x58098,0x580A7,16,named_rom_range,demo_stream_ptrs,"Demo initial pointer table;Initial demo pointer table (4 longwords, one per player)",Verified
 0x580A8,0x580B7,16,named_rom_range,player_speed_normal,player_speed_normal,Verified
 0x580B8,0x580C7,16,named_rom_range,player_anim_rate,player_anim_rate,Verified
-0x580C8,0x580D7,16,named_rom_range,player_collision_size,player_collision_size,Verified
+0x580C8,0x580D7,16,named_rom_range,lobber_lead_distance,lobber_lead_distance,Verified
 0x580D8,0x580E7,16,named_rom_range,player_delta_x,player_delta_x,Verified
 0x580E8,0x580F7,16,named_rom_range,player_delta_y,player_delta_y,Verified
 0x580F8,0x580FB,4,named_rom_range,pad_580f8,player_delta_y,Verified

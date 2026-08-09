@@ -23,7 +23,7 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x58070,32,invisibility_flash_masks,invisibility_flash_masks,exact_match,Verified
 0x580A8,16,player_speed_normal,player_speed_normal,exact_match,Verified
 0x580B8,16,player_anim_rate,player_anim_rate,exact_match,Verified
-0x580C8,16,player_collision_size,player_collision_size,exact_match,Verified
+0x580C8,16,lobber_lead_distance,lobber_lead_distance,exact_match,Verified
 0x580D8,16,player_delta_x,player_delta_x,exact_match,Verified
 0x580E8,16,player_delta_y,player_delta_y,exact_match,Verified
 0x580F8,4,player_delta_y,pad_580f8,exact_match,Verified

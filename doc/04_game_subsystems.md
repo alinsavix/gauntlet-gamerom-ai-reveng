@@ -253,7 +253,15 @@ max-monsters-per-type cap; neither exists in the shipped image
 
 ### 3.5 Monster Find and Shoot (`monster_find_and_shoot`, 0x41750)
 
-Finds the nearest player within range. Sets monster facing direction. Calls `find_unused_shot` and `monster_create_shot` if attack conditions are met. Target player selection accounts for IT status.
+Finds the nearest player within range. Sets monster facing direction. Calls `find_unused_shot` and `monster_create_shot` if attack conditions are met. Target player selection accounts for IT status (the IT player at 0x9049DC is evaluated first, at 0x41762, biasing selection toward the cursed hero; otherwise the nearest player by summed absolute axis delta wins, 0x417B4–0x4180E). Ordinary directional shooters resolve the aim to one of eight compass directions by comparing the two absolute player-axis deltas against per-class thresholds in `monster_shoot_axis_thresholds` (0x40D8A).
+
+**Confidence: Verified.** **Lobber target leading (0x41946–0x41A22).** The lobber is the one shooter that predicts the target's future position rather than aiming at its current cell. Its branch:
+
+- **Range gate (0x41946–0x41960).** Throw only when at least one absolute axis delta is ≥0x14 *and* both are <0x2C — a mid-range annulus. Too close reverses direction and bails (0x41876); too far bails outright.
+- **Lead vector (0x41980–0x419CA).** For the chosen target (offset in `-0xC(a6)`), read `player_character` (0x9048E8→`d1`) and `player_joystick` — the target's last/facing direction — (0x9048F0→`d6`). A power bit (`btst #0,0x19(a1,d0)` at 0x4198A) adds 8 to the character index, selecting the powered half of `lobber_lead_distance` (0x580C8). The scalar `0x580C8[character]` is multiplied by the facing unit vector `player_delta_x`/`player_delta_y` (0x580D8/0x580E8, indexed by direction via `joystick_nibble_to_direction`) to form the lead. The final aim is `4×(current axis delta) + lead`, computed at 0x419B4–0x419CA.
+- **Velocity store (0x419E4–0x41A10).** After `monster_create_shot`, the per-direction seed `lobber_shot_spawn_h_offset`/`_v_offset` (0x57BB8/0x57BC8) is scaled and subtracted from the aim to yield the launch velocity, written to `lobber_shot_vec_h`/`_v` (0x9048F8/0x904900) for the chosen shot slot. A lobber-throw sound (0x49) is played at 0x41A14.
+
+The demon branch (0x41A2E) uses `monster_shooter_in_view` and a maze-cell line-of-fire walk but no character/facing lead; it fires along `d3`'s compass direction.
 
 ### 3.6 Death (`death_potion_score`, 0x49446 and `death_damage_accumulate`, 0x49A3C)
 
