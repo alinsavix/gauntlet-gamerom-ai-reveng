@@ -943,7 +943,7 @@ For ROM data, every catalog start has a matching project flag, and adjacent stru
 | 0x58070 | 32 B | `invisibility_flash_masks` — sixteen phase masks used by the player invisibility flicker path. |
 | 0x580A8 | 16 B | `player_speed_normal` — 8 words indexed by character × normal/powered state |
 | 0x580B8 | 16 B | `player_anim_rate` — 8 words parallel to `player_speed_normal`; mask/divider used to add the temporary 0x80 speed boost |
-| 0x580C8 | 16 B | `player_collision_size` — eight collision-dimension words selected by character and collision axis. |
+| 0x580C8 | 16 B | `lobber_lead_distance` — eight per-character target-lead scalars (four normal, four powered) read only by the lobber aim path at 0x419A6; see the Player Movement / Physics table above. Not collision dimensions. |
 | 0x580D8 | 16 B | `player_delta_x` — eight signed horizontal movement-delta words indexed by direction. |
 | 0x580E8 | 16 B | `player_delta_y` — eight signed vertical movement-delta words indexed by direction. |
 | 0x580F8 | 4 B | Zero alignment padding between `player_delta_y` and `joystick_nibble_to_direction`. |
@@ -1432,7 +1432,7 @@ consumers.
 | 0x58090 | 4 W | `fighting_anim_end` | Per-player current threshold for attack animation end |
 | 0x580A8 | 8 W | `player_speed_normal` | Movement speed per character (×2 for normal/powered modes) |
 | 0x580B8 | 8 W | `player_anim_rate` | Animation rate divisor per character type |
-| 0x580C8 | 8 W | `player_collision_size` | Collision box dimensions per character type |
+| 0x580C8 | 8 W | `lobber_lead_distance` | Per-character target-lead distance scalar used by `monster_find_and_shoot` (0x419A6) to predict where the target player will move. Four normal entries `{96,112,96,128}` (Warrior, Valkyrie, Wizard, Elf) followed by four powered entries `{128,128,128,160}`; the firing path selects the powered half via the +8 at 0x41992. The lobber multiplies this scalar by the target's facing unit vector (`player_delta_x`/`player_delta_y`) and adds the result to the aim point. **Confidence: Verified** by disassembly — this table has exactly one consumer in the ROM, at 0x419A6, and is reached only through base 0x580FC. The former `player_collision_size` / "collision box dimensions" label was **Contradicted**: no collision-detection code reads this table, and the values rank like character movement speed, not box sizes. |
 | 0x580D8 | 8 W | `player_delta_x` | Horizontal movement deltas per direction |
 | 0x580E8 | 8 W | `player_delta_y` | Vertical movement deltas per direction |
 | 0x580FC | 32 B | `joystick_nibble_to_direction` | Sixteen words mapping the high joystick-input nibble to direction 0–7; 8 means no valid direction. Used by player/thief/transporter movement—not a lobber sine/cosine table. |

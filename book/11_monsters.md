@@ -207,6 +207,20 @@ lifetime counter drops into its final few frames. For most of its arc it simply
 is not there, as far as collision is concerned, and then it lands. Lobbers also
 have no contact damage; walking into one costs you nothing.
 
+The rock's vector is where the real cleverness hides, because a lobber does not
+aim at where you are — it aims at where you are going. When it decides to throw,
+it reads the target player's *character* and looks that up in a small
+per-character table of movement distances: the Elf, the fastest hero, gets the
+largest value, the Warrior and Wizard the smallest, and every character's entry
+roughly doubles while a speed potion is running. It then reads the direction
+that player is currently facing and projects that distance along it, producing a
+lead offset. The throw is aimed at the sum: your current position plus that
+predicted step. A stationary player, or one you have just spun around, is
+throwing off the lobber's arithmetic; a hero sprinting in a straight line is
+handing it a perfect solution. The range gate reinforces the trick — a lobber
+holds its fire unless you are in a middle band, too far to reach on foot but not
+so far the lead becomes guesswork.
+
 **Sorcerers** blink out. A flag bit in the sorcerer's position word marks it as
 hidden, and while that bit is set every ordinary shot passes through. A
 supershot ignores the flag, which is the answer to a corridor full of them.
@@ -342,6 +356,16 @@ introduces them.
 >   `shot_counter_reload` (0x578C2). Loop slots 8–11, the lobber rocks, run
 >   their collision test only while the lifetime counter is in 0–5
 >   (0x47564–0x47584); slots 0–7 are tested on every frame.
+> - Lobber target leading: `monster_find_and_shoot` (0x41750), lobber branch
+>   0x41946–0x41A22. The range gate is 0x41946–0x41960 (throw only when a player
+>   axis delta is ≥0x14 and both are <0x2C). The lead reads `player_character`
+>   (0x9048E8) and `player_joystick` (0x9048F0) for the chosen target at
+>   0x41980/0x41986, indexes the per-character distance scalar at 0x580C8
+>   (`[96,112,96,128]` normal, `[128,128,128,160]` powered; the powered half is
+>   selected by the +8 at 0x41992), multiplies it by the facing unit vector
+>   `player_delta_x`/`player_delta_y` (0x580D8/0x580E8) at 0x419AC/0x419B0, and
+>   adds that to 4× the current position delta at 0x419B4–0x419CA. Verified by
+>   disassembly; 0x580C8 has exactly one consumer in the ROM, this site.
 > - Hit resolution: `resolve_shot_hit` (0x4AF50) and
 >   `resolve_shot_hit_jumptbl` (0x4B338), `doc/04_game_subsystems.md` §26,
 >   including the sorcerer blink bit, supershot pierce, generator degrade, and

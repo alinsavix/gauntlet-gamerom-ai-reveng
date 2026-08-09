@@ -95,6 +95,7 @@ check: $(R2_SHIM_DEP)
 	python3 generated/generate_callable_coverage.py --check
 	python3 generated/generate_control_target_report.py --check
 	python3 generated/generate_ram_operand_report.py --check
+	python3 generated/generate_data_flag_consumers.py --check
 	python3 generated/generate_rom_byte_coverage.py --check
 	python3 generated/generate_ram_linear_scan.py --check
 	python3 check_confidence_labels.py
