@@ -23,36 +23,49 @@ Output columns (`data_flag_consumers.csv`):
   classification: direct    -- named by an absolute operand or lea/movea base
                   resolved  -- reached only via base+displacement (the 0x580C8
                               class; the interesting one)
+                  indirect  -- carries no operand of its own but is pointed to
+                              by a referenced pointer table, whose consumers it
+                              inherits (sample_sites shows `ptr:<table>`)
                   unreferenced -- no reader found (dead data, padding, or a
                               computed-jump/PC-relative table this static pass
                               cannot see)
   review:  unreferenced_unexpected -- unreferenced and not obviously padding,
-                              dead, reserved, or a jump table
-           domain_review    -- has consumers, but the flag name shares no
-                              meaningful word with any consumer function name
-                              (the `collision_size` read only by
-                              `monster_find_and_shoot` smell)
+                              dead, reserved, a jump table, or pointer-referenced
 
 The `review` column is advisory: it is the human worklist, not a build gate.
 The build fails only on r2 analysis errors or a stale committed CSV.
 
-Scope and limits. The resolver follows a base only when it is loaded by a plain
-`lea 0xADDR,aN` or `movea.l #imm,aN`; it deliberately does not chase a base that
-is computed by arithmetic, read through a pointer (`movea.l (xxx).l,aN`), or
-carried across a call. Tables reached that way -- `potion_effect_matrix`, whose
-address never appears literally in the ROM, is the canonical example -- surface
-as `unreferenced_unexpected`. That label therefore means "no reader found by
-this pass, confirm by hand", not "provably dead". The value is bounding the
-manual audit to a couple dozen tables instead of all ~350, and -- via the
-`consumers` column -- pinning every resolvable table to the exact function and
-site that reads it, so a wrong semantic label stands out against its real
-consumer (the miss that started this: `player_collision_size` read only by
-`monster_find_and_shoot`).
+Two passes give the coverage. (1) Each function is disassembled over its whole
+`[start, next_function)` byte range -- a LINEAR sweep, not r2's CFG -- so the
+`movea.l #imm` table loads hiding in computed-jump arms (monster_playerhit's
+contact-damage arm at 0x497AE is the case that forced this) are seen. (2) Every
+referenced table's longwords are read; any that land in another table's range
+are pointer entries, and the pointed-to table inherits the pointer table's
+consumers. A domain-mismatch heuristic -- flag a table whose name names a
+subsystem none of its consumers do -- was tried and dropped: table names
+describe the data domain while function names describe the action, so
+legitimate splits like `*_palette` read by `init_display` drowned the signal.
+The `consumers` column surfaces genuine mismatches for human review instead.
+
+Scope and limits. The resolver follows a base only when it is a plain
+`lea 0xADDR,aN` or `movea.l #imm,aN`; it does not chase a base computed by
+arithmetic, a biased base plus a runtime index, or an overlapping sub-view.
+The handful that remain `unreferenced_unexpected` are exactly those --
+`potion_effect_matrix` (biased base `lea 0x5D978`, index `type<<4`, so 0x5DA98
+never appears literally), `special_object_tile_numbers` (overlapping view),
+`joystick_direction_bitmasks` (values self-evidently direction masks; consumer
+untraced). The label therefore means "no reader found by this pass, confirm by
+hand", not "provably dead". The value is bounding the manual audit to a few
+tables instead of all ~350 and -- via the `consumers` column -- pinning every
+resolvable table to the function and site that reads it, so a wrong semantic
+label stands out against its real consumer (the miss that started this:
+`player_collision_size` read only by `monster_find_and_shoot`).
 """
 
 from __future__ import annotations
 
 import argparse
+import bisect
 import csv
 import re
 import subprocess
@@ -110,29 +123,34 @@ def parse_functions(loader_text: str) -> list[tuple[int, str]]:
     return sorted(by_address.items())
 
 
-def _run_r2(root: Path, loader: Path, address: int, printer: str) -> tuple[str, str]:
+# Upper bound on how many bytes past a function's start to sweep, for the last
+# function in a segment or one followed by a large data gap. Comfortably larger
+# than any real function here.
+SWEEP_LIMIT = 0x2000
+
+
+def analyze_one(root: Path, loader: Path, item: tuple[int, int, str]) -> tuple[int, str, str, str]:
+    start, end_excl, name = item
+    # Linear disassembly of the whole [start, next_function) byte range, NOT
+    # r2's CFG (`af;pdf`). A CFG walk drops the arms of a computed-jump dispatch
+    # -- exactly where a `movea.l #imm` table load hides (monster_playerhit's
+    # contact-damage arm at 0x497AE being the case that motivated this) -- so
+    # the function would look like it reads nothing. Sweeping bytes decodes a
+    # little embedded jump-table data as junk instructions, but that only adds
+    # spurious refs (visible in `consumers`), never hides a real one.
+    length = min(end_excl - start, SWEEP_LIMIT)
     command = [
         "r2", "-q", "-n", "-e", "scr.color=0", "-e", "asm.flags=false",
         "-e", "asm.sub.names=false", "-e", "asm.lines=false",
         "-i", str(loader),
-        "-c", f"af- 0x{address:x}; af @ 0x{address:x}; s 0x{address:x}; {printer}",
+        "-c", f"s 0x{start:x}; pD {length}",
         "-c", "q", "malloc://1",
     ]
     result = subprocess.run(command, cwd=root, text=True, capture_output=True)
     errors = "; ".join(
         line for line in result.stderr.splitlines() if line.startswith(("ERROR", "FATAL"))
     )
-    return result.stdout, errors
-
-
-def analyze_one(root: Path, loader: Path, item: tuple[int, str]) -> tuple[int, str, str, str]:
-    address, name = item
-    stdout, errors = _run_r2(root, loader, address, "pdf")
-    # r2 refuses `pdf` on a few functions whose linear size diverges from the
-    # basic-block sum and explicitly recommends `pdr`; take its advice.
-    if errors and "bbsum" in errors:
-        stdout, errors = _run_r2(root, loader, address, "pdr")
-    return address, name, stdout, errors
+    return start, name, result.stdout, errors
 
 
 def resolve_function(name: str, text: str,
@@ -199,6 +217,8 @@ def build_rows(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     loader = doc / "gauntlet_loader.r2"
     loader_text = loader.read_text()
     functions = parse_functions(loader_text)
+    # Game-ROM image (base ROM_START), read to follow pointer-table entries.
+    rom = (root / "row76.bin").read_bytes()
 
     # The curated catalog of non-code data flags (address, size, name,
     # confidence) is the audit universe -- the same 352 rows the rest of the
@@ -215,11 +235,17 @@ def build_rows(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
             confidence[address] = row.get("confidence", "")
     flags.sort()
 
+    # Each function is swept over [start, next_function_start), capped.
+    extents = [
+        (start, functions[i + 1][0] if i + 1 < len(functions) else start + SWEEP_LIMIT, name)
+        for i, (start, name) in enumerate(functions)
+    ]
+
     direct: dict[int, set[str]] = {}
     resolved: dict[int, set[str]] = {}
     failures: list[dict[str, str]] = []
     with ThreadPoolExecutor(max_workers=8) as executor:
-        results = executor.map(lambda item: analyze_one(root, loader, item), functions)
+        results = executor.map(lambda item: analyze_one(root, loader, item), extents)
         for function_address, name, output, errors in results:
             if errors:
                 failures.append({
@@ -237,30 +263,81 @@ def build_rows(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
                 found |= uses
         return found
 
-    rows = []
+    # First pass: the code that names each table via an operand or a resolved
+    # base+displacement. Keyed by address; aliases at one address (e.g.
+    # demo_input_streams and demo_player0_input_stream) share this analysis but
+    # each still gets its own output row below.
+    info: dict[int, dict[str, object]] = {}
     for start, end, name in flags:
-        d_uses = owners(start, end, direct)
-        r_uses = owners(start, end, resolved)
-        d_funcs = {u.split("@", 1)[0] for u in d_uses}
-        r_funcs = {u.split("@", 1)[0] for u in r_uses}
-        all_funcs = d_funcs | r_funcs
+        if start in info:
+            continue
+        info[start] = {
+            "end": end, "name": name,
+            "d_uses": owners(start, end, direct),
+            "r_uses": owners(start, end, resolved),
+            "indirect": set(), "via": "",
+        }
+
+    # Second pass: pointer-table indirection. A `*_ptrs` table is read by code as
+    # a base, but the tables it *points to* carry no operand of their own. Read
+    # each referenced table's longwords; any that land in another table's range
+    # are pointer entries, so the pointed-to table inherits the pointer table's
+    # consumers. A game-ROM address encodes as 0x0004xxxx/0x0005xxxx, which plain
+    # data almost never is, so coincidental edges are rare.
+    starts = sorted(info)
+    def covering(addr: int) -> int | None:
+        i = bisect.bisect_right(starts, addr) - 1
+        if i >= 0 and info[starts[i]]["end"] >= addr >= starts[i]:  # type: ignore[operator]
+            return starts[i]
+        return None
+
+    for start in starts:
+        rec = info[start]
+        consumers = {u.split("@", 1)[0] for u in rec["d_uses"] | rec["r_uses"]}  # type: ignore[operator]
+        if not consumers:
+            continue
+        end = rec["end"]
+        for off in range(start, end - 2, 2):
+            image_off = off - ROM_START
+            if not 0 <= image_off <= len(rom) - 4:
+                continue
+            pointer = int.from_bytes(rom[image_off:image_off + 4], "big")
+            target = covering(pointer)
+            if target is None or target == start:
+                continue
+            tgt = info[target]
+            if tgt["d_uses"] or tgt["r_uses"]:  # already directly attributed
+                continue
+            tgt["indirect"].update(consumers)  # type: ignore[union-attr]
+            tgt["via"] = rec["name"]  # type: ignore[assignment]
+
+    rows = []
+    for start, _end, name in flags:
+        rec = info[start]
+        d_uses, r_uses = rec["d_uses"], rec["r_uses"]
+        indirect = rec["indirect"]
+        d_funcs = {u.split("@", 1)[0] for u in d_uses}  # type: ignore[union-attr]
+        r_funcs = {u.split("@", 1)[0] for u in r_uses}  # type: ignore[union-attr]
 
         if d_uses:
-            classification = "direct"
+            classification, all_funcs, sample = "direct", d_funcs | r_funcs, sorted(d_uses)[:4]
         elif r_uses:
-            classification = "resolved"
+            classification, all_funcs, sample = "resolved", r_funcs, sorted(r_uses)[:4]
+        elif indirect:
+            classification = "indirect"
+            all_funcs = set(indirect)  # type: ignore[arg-type]
+            sample = [f"ptr:{rec['via']}"]
         else:
-            classification = "unreferenced"
+            classification, all_funcs, sample = "unreferenced", set(), []
 
         review = ""
         if classification == "unreferenced" and not EXPECTED_UNREF.search(name):
             review = "unreferenced_unexpected"
 
-        sample = sorted(d_uses or r_uses)[:4]
         rows.append({
             "address": f"0x{start:05X}",
             "flag_name": name,
-            "size_bytes": str(end - start + 1),
+            "size_bytes": str(rec["end"] - start + 1),  # type: ignore[operator]
             "confidence": confidence.get(start, ""),
             "classification": classification,
             "consumers": ";".join(sorted(all_funcs)) or "-",
@@ -306,14 +383,14 @@ def main() -> None:
         write_csv(report, rows, FIELDS)
         write_csv(failure_report, failures, FAIL_FIELDS)
 
-    counts = {"direct": 0, "resolved": 0, "unreferenced": 0}
+    counts = {"direct": 0, "resolved": 0, "indirect": 0, "unreferenced": 0}
     for row in rows:
         counts[row["classification"]] += 1
     unref = [r for r in rows if r["review"] == "unreferenced_unexpected"]
     print(
         f"data_flag_consumers.csv: {len(rows)} flags "
         f"({counts['direct']} direct, {counts['resolved']} resolved, "
-        f"{counts['unreferenced']} unreferenced); "
+        f"{counts['indirect']} indirect, {counts['unreferenced']} unreferenced); "
         f"{len(unref)} unreferenced-unexpected; "
         f"{len(failures)} function-analysis failures"
     )
