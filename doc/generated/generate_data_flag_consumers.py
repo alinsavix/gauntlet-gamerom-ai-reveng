@@ -18,7 +18,7 @@ each flag ends up with the set of functions that actually read it.
 
 Output columns (`data_flag_consumers.csv`):
   address, flag_name, size_bytes, confidence, classification, consumers,
-  sample_sites, review
+  access, sample_sites, review
 
   classification: direct    -- named by an absolute operand or lea/movea base
                   resolved  -- reached only via base+displacement (the 0x580C8
@@ -29,8 +29,16 @@ Output columns (`data_flag_consumers.csv`):
                   unreferenced -- no reader found (dead data, padding, or a
                               computed-jump/PC-relative table this static pass
                               cannot see)
-  review:  unreferenced_unexpected -- unreferenced and not obviously padding,
-                              dead, reserved, a jump table, or pointer-referenced
+  access:  how the table is touched, aggregated over its sites -- `a` (address
+                              taken as a base pointer), `rb`/`rw`/`rl` (element
+                              read as byte/word/long), `wb`/`ww`/`wl` (written),
+                              `?` (form uncertain: a far/stale binding). This is
+                              the evidence for whether the USE matches the label:
+                              a "16 words" table only ever read `rb` is a flag.
+  review:  unreferenced_unexpected -- no reader found and not obviously padding,
+                              dead, a jump table, or pointer-referenced
+           mixed_read_width -- read at more than one element width; confirm the
+                              documented element size covers all of them
 
 The `review` column is advisory: it is the human worklist, not a build gate.
 The build fails only on r2 analysis errors or a stale committed CSV.
@@ -76,11 +84,19 @@ from pathlib import Path
 ROM_START = 0x40000
 ROM_END = 0x5FFFF
 
-# How many instructions a `lea`/`movea` base binding stays trustworthy. A base
-# is often loaded once near the top of a function and used far below, so the
-# window is generous; correctness comes from clearing the binding the moment
-# the register is clobbered, not from the window.
+# How many instructions a `lea`/`movea` base binding stays trustworthy for
+# attributing a *reference* (which function reads the table). Generous, because
+# a base is often loaded once and used far below; correctness comes from
+# clearing the binding when the register is clobbered.
 FRESHNESS = 160
+
+# A much tighter window for trusting the *access form* (read/write + width). The
+# linear sweep decodes a function's trailing data bytes as junk instructions,
+# and a stale base binding can make that junk look like a write or an odd-width
+# read (secret_code_alphabet's own "0123..." bytes decoding as `addq.w #8,(a1)`
+# was the case that exposed this). A real element access sits within a few
+# instructions of its base load; beyond this window the form is marked unknown.
+ACCESS_FRESHNESS = 8
 
 LINE_RE = re.compile(r"0x([0-9a-fA-F]{8})\s+([0-9a-fA-F]+)\s+(\S.*?)\s*$")
 LEA_RE = re.compile(r"^lea(?:\.\w)?\s+0x([0-9a-fA-F]+)\.[wl],\s*(a[0-7])$")
@@ -153,10 +169,46 @@ def analyze_one(root: Path, loader: Path, item: tuple[int, int, str]) -> tuple[i
     return start, name, result.stdout, errors
 
 
+def split_top(operands: str) -> list[str]:
+    """Split an operand string on commas that are not inside `(...)`, so the
+    index comma in `(a0, d0.w)` does not separate source from destination."""
+    parts, depth, cur = [], 0, ""
+    for ch in operands:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip() or parts:
+        parts.append(cur.strip())
+    return parts
+
+
+def _width(mnem: str) -> str:
+    w = mnem.rsplit(".", 1)[1] if "." in mnem else ""
+    return w if w in ("b", "w", "l") else "?"
+
+
 def resolve_function(name: str, text: str,
                      direct: dict[int, set[str]], resolved: dict[int, set[str]]) -> None:
-    """Straight-line register-base resolution over one function's disassembly."""
+    """Straight-line register-base resolution over one function's disassembly.
+
+    Each recorded reference carries its access form as a `#kind` suffix on the
+    site token: `a` = the table address is taken as a base pointer, `r?`/`w?`
+    is an element read/write at the instruction's operation width (`rb`, `rw`,
+    `rl`, ...). That form is the evidence for how the table is actually applied,
+    so a "16 words" table only ever read as bytes stands out.
+    """
     regs: dict[str, tuple[int, int] | None] = {f"a{i}": None for i in range(8)}
+
+    def record(table: dict[int, set[str]], target: int, site: int, kind: str) -> None:
+        if ROM_START <= target <= ROM_END:
+            table.setdefault(target, set()).add(f"{name}@0x{site:05X}#{kind}")
+
     for i, raw in enumerate(text.splitlines()):
         m = LINE_RE.search(raw)
         if not m:
@@ -164,52 +216,60 @@ def resolve_function(name: str, text: str,
         site = int(m.group(1), 16)
         opword = int(m.group(2)[:4], 16) if len(m.group(2)) >= 4 else 0
         instr = m.group(3)
-        # split mnemonic / operands
         sp = instr.find(" ")
+        mnem = instr[:sp] if sp >= 0 else instr
         operands = instr[sp + 1:] if sp >= 0 else ""
 
-        # (a) references visible in THIS instruction, using the CURRENT bindings
-        for token in ABS_RE.findall(operands):
-            target = int(token, 16)
-            if ROM_START <= target <= ROM_END:
-                direct.setdefault(target, set()).add(f"{name}@0x{site:05X}")
-        for disp_text, reg in DISP_RE.findall(operands):
-            binding = regs.get(reg)
-            if binding is None:
-                continue
-            value, bound_at = binding
-            if i - bound_at > FRESHNESS:
-                continue
-            disp = int(disp_text, 16) if disp_text else 0
-            target = value + disp
-            if ROM_START <= target <= ROM_END:
-                resolved.setdefault(target, set()).add(f"{name}@0x{site:05X}")
-
-        # (b) update bindings produced BY this instruction
+        # Base loads: the address is TAKEN, not an element access. `lea A,aN`
+        # and `movea.l #A,aN` bind aN := A (kind `a`); `movea.l A.l,aN` (2x79)
+        # instead reads the longword pointer stored at A (kind `rl`).
         lea = LEA_RE.match(instr)
         if lea:
-            regs[lea.group(2)] = (int(lea.group(1), 16), i)
+            addr = int(lea.group(1), 16)
+            record(direct, addr, site, "a")
+            regs[lea.group(2)] = (addr, i)
             continue
         mov = MOVEA_RE.match(instr)
         if mov:
-            value = int(mov.group(1), 16)
-            reg = mov.group(2)
-            # 2x7C = immediate (aN := address); 2x79 = absolute (aN := *address)
+            addr, reg = int(mov.group(1), 16), mov.group(2)
             if "#" in operands or (opword & 0xF1FF) == 0x207C:
-                regs[reg] = (value, i)
-                if ROM_START <= value <= ROM_END:
-                    direct.setdefault(value, set()).add(f"{name}@0x{site:05X}")
+                record(direct, addr, site, "a")
+                regs[reg] = (addr, i)
             else:
+                record(direct, addr, site, "rl")
                 regs[reg] = None
-                if ROM_START <= value <= ROM_END:
-                    direct.setdefault(value, set()).add(f"{name}@0x{site:05X}")
             continue
-        # (c) clobbers: auto inc/dec, or a bare address-register destination
+
+        # Element accesses. Read vs write from the operand's position; width from
+        # the mnemonic.
+        parts = split_top(operands)
+        n = len(parts)
+        width = _width(mnem)
+        for idx, part in enumerate(parts):
+            if n >= 2:
+                rw = "w" if idx == n - 1 else "r"
+            else:
+                rw = "w" if mnem.split(".", 1)[0] in ("clr", "st") else "r"
+            kind = rw + width
+            for token in ABS_RE.findall(part):
+                record(direct, int(token, 16), site, kind)
+            for disp_text, reg in DISP_RE.findall(part):
+                binding = regs.get(reg)
+                if binding is None:
+                    continue
+                value, bound_at = binding
+                if i - bound_at > FRESHNESS:
+                    continue
+                # Trust the access form only near the base load; a stale binding
+                # over decoded data yields a bogus read/write width.
+                form = kind if i - bound_at <= ACCESS_FRESHNESS else "?"
+                record(resolved, value + (int(disp_text, 16) if disp_text else 0), site, form)
+
+        # Clobbers: auto inc/dec, or a bare address-register destination.
         for a, b in AUTO_RE.findall(operands):
             regs[a or b] = None
-        dst = operands.rsplit(",", 1)[-1].strip() if "," in operands else operands.strip()
-        if re.fullmatch(r"a[0-7]", dst):
-            regs[dst] = None
+        if parts and re.fullmatch(r"a[0-7]", parts[-1]):
+            regs[parts[-1]] = None
 
 
 def build_rows(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
@@ -311,6 +371,9 @@ def build_rows(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
             tgt["indirect"].update(consumers)  # type: ignore[union-attr]
             tgt["via"] = rec["name"]  # type: ignore[assignment]
 
+    def kinds_of(uses: set[str]) -> set[str]:
+        return {u.rsplit("#", 1)[1] for u in uses if "#" in u}
+
     rows = []
     for start, _end, name in flags:
         rec = info[start]
@@ -330,9 +393,22 @@ def build_rows(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
         else:
             classification, all_funcs, sample = "unreferenced", set(), []
 
+        access = sorted(kinds_of(d_uses | r_uses))  # type: ignore[operator]
+        read_widths = {k[1:] for k in access if k.startswith("r") and k[1:] in ("b", "w", "l")}
+
         review = ""
         if classification == "unreferenced" and not EXPECTED_UNREF.search(name):
             review = "unreferenced_unexpected"
+        elif len(read_widths) > 1 and not EXPECTED_UNREF.search(name):
+            # Read at more than one element width. Often legitimate -- the tool
+            # rediscovered that lobber_shot_spawn_* is read as a word seed AND a
+            # signed byte, which the docs already note -- but worth confirming
+            # the documented element size covers every width. Pointer/string
+            # tables (long pointer + byte char) are excluded as expected.
+            review = "mixed_read_width"
+        # (A `writes_rom` flag was tried and dropped: a ROM table cannot be
+        # written, so every hit was a linear-sweep decode artifact -- a stale
+        # base binding over a function's trailing data decoded as a store.)
 
         rows.append({
             "address": f"0x{start:05X}",
@@ -341,6 +417,7 @@ def build_rows(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
             "confidence": confidence.get(start, ""),
             "classification": classification,
             "consumers": ";".join(sorted(all_funcs)) or "-",
+            "access": ";".join(access) or "-",
             "sample_sites": ";".join(sample) or "-",
             "review": review,
         })
@@ -349,7 +426,7 @@ def build_rows(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
 
 
 FIELDS = ("address", "flag_name", "size_bytes", "confidence",
-          "classification", "consumers", "sample_sites", "review")
+          "classification", "consumers", "access", "sample_sites", "review")
 FAIL_FIELDS = ("function_address", "name", "error")
 
 
@@ -387,11 +464,12 @@ def main() -> None:
     for row in rows:
         counts[row["classification"]] += 1
     unref = [r for r in rows if r["review"] == "unreferenced_unexpected"]
+    mixed = [r for r in rows if r["review"] == "mixed_read_width"]
     print(
         f"data_flag_consumers.csv: {len(rows)} flags "
         f"({counts['direct']} direct, {counts['resolved']} resolved, "
         f"{counts['indirect']} indirect, {counts['unreferenced']} unreferenced); "
-        f"{len(unref)} unreferenced-unexpected; "
+        f"{len(unref)} unreferenced-unexpected, {len(mixed)} mixed-read-width; "
         f"{len(failures)} function-analysis failures"
     )
     if failures:
