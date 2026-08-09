@@ -239,6 +239,17 @@ def resolve_function(name: str, text: str,
                 record(direct, addr, site, "rl")
                 regs[reg] = None
             continue
+        if mnem.startswith("pea"):
+            # push effective address: the operand is an address TAKEN (kind `a`),
+            # not a memory read -- typically a table handed to a copy routine.
+            for token in ABS_RE.findall(operands):
+                record(direct, int(token, 16), site, "a")
+            for disp_text, reg in DISP_RE.findall(operands):
+                binding = regs.get(reg)
+                if binding is None or i - binding[1] > FRESHNESS:
+                    continue
+                record(direct, binding[0] + (int(disp_text, 16) if disp_text else 0), site, "a")
+            continue
 
         # Element accesses. Read vs write from the operand's position; width from
         # the mnemonic.
