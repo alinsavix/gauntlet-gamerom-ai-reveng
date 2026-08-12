@@ -210,8 +210,14 @@ sorcerers, auxiliary grunts, and Death; the demon and lobber odd-angle bits are
 outside the mask and have no record to install. The former claim that each
 monster's movement is gated per frame by `random(32)` against its speed was
 **Contradicted**: that comparison belongs to `handle_generate` (§3.4).
-While `poison_timer` is non-zero the entire monster pass is skipped on even
-frames.
+While `monster_slowmo_timer` (0x9048B2, historically `poison_timer`) is
+non-zero the entire monster pass is skipped on even frames, halving every
+monster's update rate. **Confidence: Verified** at 0x40EB0–0x40EE8: the timer
+is decremented, sound 0x39 fires as it reaches zero and 0x38 at 0x1E, and
+`btst #0,d6` / `beq 0x4152C` drops the whole walk on even frames. Its only
+other reader is `maze_new_level_setup`, which clears it; **no player-movement
+code reads it**, so this is a global slow-motion effect on monsters rather
+than a player debuff.
 
 #### Super Sorcerer placement
 
@@ -240,8 +246,8 @@ its doubled MOB slot match low bits of the working frame word (mask 0x1E), so
 every generator in a level gets one turn per sixteen frames.
 
 The number computed before the walk is a **spawn probability out of 32**, not a
-live population count. It is `monster_count_table[((game_settings & 0xE0) >> 3)
-+ players_active − 1]` plus the signed `monster_cap_bonus` byte (0x90405F),
+live population count. It is `monster_spawn_probability_table[((game_settings & 0xE0) >> 3)
++ players_active − 1]` plus the signed `monster_spawn_probability_bonus` byte (0x90405F),
 clamped to `level × 2` on every level except level 1, and forced to zero when
 `frame_overflow` (0x904916) is set. `handle_generate` compares it against
 `getrandom(32)` and returns without spawning when the random value wins. The
@@ -258,7 +264,7 @@ Finds the nearest player within range. Sets monster facing direction. Calls `fin
 **Confidence: Verified.** **Lobber target leading (0x41946–0x41A22).** The lobber is the one shooter that predicts the target's future position rather than aiming at its current cell. Its branch:
 
 - **Range gate (0x41946–0x41960).** Throw only when at least one absolute axis delta is ≥0x14 *and* both are <0x2C — a mid-range annulus. Too close reverses direction and bails (0x41876); too far bails outright.
-- **Lead vector (0x41980–0x419CA).** For the chosen target (offset in `-0xC(a6)`), read `player_character` (0x9048E8→`d1`) and `player_joystick` — the target's last/facing direction — (0x9048F0→`d6`). A power bit (`btst #0,0x19(a1,d0)` at 0x4198A) adds 8 to the character index, selecting the powered half of `lobber_lead_distance` (0x580C8). The scalar `0x580C8[character]` is multiplied by the facing unit vector `player_delta_x`/`player_delta_y` (0x580D8/0x580E8, indexed by direction via `joystick_nibble_to_direction`) to form the lead. The final aim is `4×(current axis delta) + lead`, computed at 0x419B4–0x419CA.
+- **Lead vector (0x41980–0x419CA).** For the chosen target (offset in `-0xC(a6)`), read `player_character` (0x9048E8→`d1`) and `player_joystick` — the target's last/facing direction — (0x9048F0→`d6`). A power bit (`btst #0,0x19(a1,d0)` at 0x4198A) adds 8 to the character index, selecting the powered half of `lobber_lead_distance` (0x580C8). The scalar `0x580C8[character]` is multiplied by the facing unit vector `player_delta_x`/`player_delta_y` (0x580D8/0x580EA, indexed by direction via `joystick_nibble_to_direction`) to form the lead. The final aim is `4×(current axis delta) + lead`, computed at 0x419B4–0x419CA.
 - **Velocity store (0x419E4–0x41A10).** After `monster_create_shot`, the per-direction seed `lobber_shot_spawn_h_offset`/`_v_offset` (0x57BB8/0x57BC8) is scaled and subtracted from the aim to yield the launch velocity, written to `lobber_shot_vec_h`/`_v` (0x9048F8/0x904900) for the chosen shot slot. A lobber-throw sound (0x49) is played at 0x41A14.
 
 The demon branch (0x41A2E) uses `monster_shooter_in_view` and a maze-cell line-of-fire walk but no character/facing lead; it fires along `d3`'s compass direction.
@@ -398,7 +404,7 @@ The complete checked contracts and direct control-transfer sites are in
 
 > **Correction:** Player health is a **32-bit longword** at `0x904980` (stride 4, 4 players), not a 16-bit word as REPORT.md claimed (verified — e.g., the acid damage path reads/writes `0x904980 + player*4` as longwords).
 
-Health drain is handled by `main_health_countdown` (0x466F6): automatic per-frame health reduction plus the low-health warning cadence. Below 200 health, it increments `player_state_timer` (`0x904A26[player]`) modulo 0x8000. A seven-word mask table at 0x576A8, selected by `health >> 5`, makes the heartbeat progressively more frequent as health falls; the health-number renderer uses the timer's low nibble for an 8-frames-dim/8-frames-normal pulse. At 200 health or above, the timer is reset to `0xFFFF` (disabled). The same RAM words are reused as death/name-entry countdowns when the player is no longer active; see §10.3.
+Health drain is handled by `main_health_countdown` (0x466F6). **Confidence: Verified** for the rate: it gates on `frame_counter & 0x3F` at 0x4670C and, for each active player, executes `subq.l #1,(a3,d0.w)` at 0x4675E — a flat **one point per player per 64 frames in every game mode**, with no character, power, or difficulty term. The former claim that the drain reads a per-class table was **Contradicted**; the table at 0x5813C is `forcefield_damage_table` and has a single consumer in §7.4. The routine also runs the low-health warning cadence: below 200 health, it increments `player_state_timer` (`0x904A26[player]`) modulo 0x8000 at 0x46BAC — once per frame, at a constant rate. A seven-word mask table at 0x576A8, selected by `health >> 5`, makes the heartbeat *sound* progressively more frequent as health falls (0x46BC0–0x46BE2); the health-number renderer uses the timer's low nibble for an 8-frames-dim/8-frames-normal pulse, whose cadence therefore does **not** change with health. At 200 health or above, the timer is reset to `0xFFFF` (disabled). The same RAM words are reused as death/name-entry countdowns when the player is no longer active; see §10.3.
 
 **Confidence: Verified.** `player_damage_sample_update(uint16 player_index)`
 (0x50E34), formerly misidentified as a pickup detector, advances a signed
@@ -638,10 +644,26 @@ Entering gameplay is a separate path that runs every frame regardless of mode.
 `start_attract_to_game` (0x44204) has exactly three callers: `coincheck` at
 0x42BE2 (a coin arriving while `game_mode` < 0 and either no player has health
 or the mode is DEMO), `main_start_game` at 0x484B8 (free play only, on a
-debounced FIRE press edge), and `main_attract` at 0x448CE (attract timer
-expiring in mode 0 with a player still holding health). The FIRE edge
-`main_start_game` matches is `(debounce_A[player] & 0x1F) == 0x1C` at
-0x48402–0x48416 over the shift registers at 0x905F58.
+debounced **Magic** press edge), and `main_attract` at 0x448CE (attract timer
+expiring in mode 0 with a player still holding health).
+
+**Contradicted and corrected:** that edge was previously labelled FIRE. The
+pattern `main_start_game` matches is `(debounce_A[player] & 0x1F) == 0x1C` at
+0x48402–0x48416 over `debounce_shift_magic` (0x905F58), and §15 shows
+`input_debounce` filling that register from raw input **bit 0**, which
+`05_data_reference.md` §3.11 names `JOY_MAGIC_BIT`. Two independent readings
+confirm the assignment: `main_handle_potions` — the Magic/potion handler —
+tests the same register with the same mask at 0x47020 and, in demo mode,
+`btst #0` of the demo record byte (§6.2 labels bit 0 MAGIC); while shooting is
+gated on bit 1 at 0x4A9DE and 0x4ABFA. The start/join/character-commit press
+therefore sits on the Magic line. `0x1C` is three frames released followed by
+two frames held, because `roxl.w` shifts the newest sample into bit 0 and the
+switches are active low.
+
+The screen-switch tests tabulated above are a *different*, genuinely FIRE-only
+comparison: they mask the raw input words with `0x02` at 0x4463E under free
+play (`0x03` — either button — with paid pricing at 0x44616). The two must not
+be merged.
 
 The input thresholds are exactly 60 frames below each screen's loaded timer,
 creating a one-second input lockout rather than changing screen duration:
@@ -656,6 +678,12 @@ creating a one-second input lockout rather than changing screen duration:
 LEGEND has multiple sub-screens tracked by `attract_legend` (0x90491A),
 initially 2 and counting down.
 
+That one-second lockout gates **screen switching only**. `start_attract_to_game`
+is reached from `coincheck` and `main_start_game`, both of which run every
+frame in every mode and consult neither threshold, so a coin or a qualifying
+press can begin a session at any point in an attract screen's life.
+**Confidence: Verified.**
+
 ---
 
 ## 7. Transporter & Forcefield Systems
@@ -663,7 +691,10 @@ initially 2 and counting down.
 ### 7.1 Transporter Animation
 
 **Confidence: Verified.** Transporter-effect MOBs use pictures 0x924–0x95A.
-`tport_cycle_start` (0x47C0E) chooses an effect MOB in slots 0x0D–0x10,
+`tport_cycle_start` (0x47C0E) chooses an effect MOB in slots 0x0D–0x10 — the
+shot-explosion block of `01_hardware.md` §8.7, reused as the four sparkle
+channels for transporter arrivals and dissolving movable walls; the separate
+pad-animation block is slots 25–29 —
 initializes its picture to 0x924, copies the source MOB's tile-aligned position,
 inserts it into the depth list, and initializes one of the four byte animation
 counters at 0x90497C–0x90497F to 0xFF.  Loop 3 of `main_score_update`
@@ -719,6 +750,21 @@ independent of the effect-MOB picture sequence in §7.1.
 
 Part 2 (forcefield): Step counter at `0x904049` cycles 0→7. Each step's duration = ROM table value + random(8). On even steps: reads one of 4 color words from ROM table at 0x405C0, writes to `forcefield_color` at `0x904046`. On odd steps: writes 0 (blink off).
 
+**Forcefield contact damage. Confidence: Verified** by disassembly at
+0x4AA42–0x4AAB8 inside `main_move_players`. The check begins with
+`tst.w 0x904046` and skips the whole damage branch while the live field colour
+is zero, so a blinked-off field is harmless. While the field is lit, each
+frame of contact charges the player a per-character amount read from
+`forcefield_damage_table` (0x5813C) as a longword at index
+`character + 4 × armor-power` (`btst #1,1(a0,d0.w)` on `player_powers` at
+0x4AA82 selects the armoured half): `{2, 2, 6, 4}` for Warrior, Valkyrie,
+Wizard, Elf, and `{1, 1, 5, 3}` with extra armour. A byte scan of the whole
+128 KB image for the 32-bit literal 0x0005813C finds exactly one reference,
+the `lea` at 0x4AA96, so this is the table's sole consumer; the former
+`health_drain_table` name and its "per tick, indexed by difficulty" gloss were
+**Contradicted** — the time-based drain is the flat `subq.l #1` in §4.3.
+Contact also arms the looping hurt/silencer sound timers in §21.
+
 ---
 
 ## 8. Dragon System
@@ -768,7 +814,7 @@ is set, `dragon_fire_cooldown` == 0, and `(dragon_move_state & 0xF) < 4`.
 
 The path table at 0x5D578 is **5 path programs × 16 bytes** (0x5D578–0x5D5C7), *not* 128×16. The current program is `dragon_path_num` (0x904886, 0–4); the byte index is `dragon_anim_ctr` (0x904892) >> 3, so the path phase advances every 8 frames and wraps at 128.
 
-**Path byte format:** bit 0 = fire trigger; the byte value (0–7) is the head pose. Head rendering per phase boundary: `idx = byte + facing*4` → picture from 0x5D528, hpos delta from 0x5D438, vpos delta from 0x5D478 (deltas are added to the dragon MOB position and produce `dragon_head_hpos/vpos` 0x904882/84).
+**Path byte format:** bit 0 = fire trigger; the **pose is `byte >> 1`** (0–3), not the raw byte. Head rendering per phase boundary: `idx = (byte >> 1) + facing*2` → picture from 0x5D528, hpos delta from 0x5D438, vpos delta from 0x5D478 (deltas are added to the dragon MOB position and produce `dragon_head_hpos/vpos` 0x904882/84). **Contradicted and corrected:** the index was formerly given as `byte + facing*4`, which conflated the packed path byte with the pose and doubled the facing stride. Verified by disassembly at 0x53D5C–0x53D70.
 
 **Sustained fire:** while locked-in (state bit 3), a fire byte at a phase boundary holds the counter until the fire cooldown expires (continuous flame), otherwise the counter advances mod 128.
 
@@ -778,12 +824,12 @@ The path table at 0x5D578 is **5 path programs × 16 bytes** (0x5D578–0x5D5C7)
 
 | ROM Address | Content |
 |-------------|---------|
-| 0x5D438 | `dragon_head_hdelta` — head hpos deltas, indexed by pose + facing*4 |
-| 0x5D478 | `dragon_head_vdelta` — head vpos deltas |
-| 0x5D4B8 | `dragon_fire_segment_tbl` — 16 signed bytes: which segment MOB the fireball spawns from, indexed by pose plus facing offset |
+| 0x5D438 | `dragon_head_hdelta` — head hpos deltas, indexed by `(path byte >> 1) + facing*2` |
+| 0x5D478 | `dragon_head_vdelta` — head vpos deltas, same index |
+| 0x5D4B8 | `dragon_fire_segment_tbl` — 16 signed bytes: which segment MOB the fireball spawns from, indexed by `(path byte >> 1) + facing*2` |
 | 0x5D4C8/0x5D4E8 | `dragon_pose_hdelta` / `dragon_pose_vdelta` — 16 pose/facing position words per axis |
 | 0x5D508 | `dragon_body_pics` — 16 animation/facing picture words |
-| 0x5D528 | `dragon_head_pics` — head picture words, indexed by pose + facing*4 |
+| 0x5D528 | `dragon_head_pics` — head picture words, indexed by `(path byte >> 1) + facing*2`; values run 0xA180–0xA2F0 |
 | 0x5D578 | `dragon_path_programs` — 5 × 16-byte path programs (see 8.3) |
 | 0x54BD6 | `dragon_head_hitbox_offsets` — five padded words forming four overlapping H/V pairs for the cardinal head hitbox |
 
@@ -855,6 +901,25 @@ not erase a MOB or write a blank tile.
 
 Calculates next thief appearance based on target player wealth and current level number. Lower wealth → longer delay. Higher levels → shorter delays. Stored at `ram.thief_enter_time` (`0x904B9E`).
 
+**Confidence: Verified** for the delay arithmetic at 0x4E568–0x4E620. Let
+`W = (player_score >> 13) / inserted_coins` and
+`D = 50 − (min(level − 6, 100) >> 1)`, so `D` falls from 50 at level 6 to 0 at
+level 106. On an ordinary maze, with `W` clamped to 15, the delay is
+`((20 − W) + getrandom(W + 10 + D)) × 60` frames; the final `× 60` is the
+`asl.l #2` / `asl.l #4` / `sub.l` sequence at 0x4E618–0x4E61E. Treasure rooms
+(`mazenum_current >= 0x68`) take the tighter branch at 0x4E5D4: `W` clamped to
+5, `D = 3 − (min(level − 6, 100) >> 5)`, and a base of 10 instead of 20.
+
+### 9.4 Thief Scheduling (`thief_setup`, 0x4E432)
+
+**Confidence: Verified** by disassembly at 0x4E43A–0x4E498. A level gets a
+thief only when `game_mode >= 0`, `mazenum_current < 0x73`, and
+`levelnum_current >= 6`; the roll is then `(level >> 3) > getrandom(8)`, so the
+probability is `(level >> 3) / 8` — nothing on levels 6–7, 1/8 on levels 8–15,
+2/8 on 16–23, and certain from level 64. **Contradicted and corrected:** the
+maze gate is not "a normal maze". `0x73` is 115, so treasure rooms 104–114
+qualify and only the two secret-room layouts, 115 and 116, are excluded.
+
 ---
 
 ## 10. Scoring, Coin & Dialog Systems
@@ -890,7 +955,9 @@ command:
    saved previous byte at 0x904F8F and calls
    `process_coins(current, previous)` on any difference. Each byte packs four
    two-bit per-channel coin counters; `process_coins` computes
-   `(previous + 4 - current) & 3` per channel and rejects deltas above one.
+   `(current + 4 - previous) & 3` per channel and rejects deltas above one.
+   **Contradicted and corrected:** the operand order was formerly given as
+   `previous + 4 - current`, which inverts the sense of the delta.
 
 `refs/soundcmds.csv` labels command 0x03 "Stop playing? (used during idle)".
 That entry is a guess in the supplied labels; the OS uses it as a status and
@@ -930,7 +997,7 @@ tables at 0x5A200/0x5A300, and plays sound 0x1C when it displays the box.
 ### 10.5 Continue Prompt (`show_continue_prompt`, 0x44C7E)
 
 **Confidence: Verified.** This is the routine that conditionally draws the
-six-line continue prompt. It first requires `level_players_active == 0`, a
+five-line continue prompt. It first requires `level_players_active == 0`, a
 level other than 1, an enabled display timer, and every player status to be
 either zero or character-select (`0x10`). It does not decrement
 `level_players_active`; the former `update_maze_player_count` description was
@@ -1347,7 +1414,7 @@ Post-processing: calls `wall_remove_playfield_update` (0x5E888) or `wall_place_p
 
 Two independent leaf routines follow this function in ROM and must not be treated as cyclic-wall tail blocks:
 
-- `maze_place_object_types` (0x5E7A6) takes one longword stack argument whose low byte is an object type. It scans MOB slots 0x20–0x3FF, accepts `mob_link >> 10` equal to either that type or `type - 3`, optionally rejects off-screen tiles when level-flags byte 4 bit 2 is set, and calls `mob_place_tile(slot, 0)` for each match. It returns 1 if any matching slot was found, otherwise 0. Maze setup calls it for types 0x0A–0x0D according to level flags; `player_tile_interact` calls it again after replacing the relevant maze object.
+- `maze_place_object_types` (0x5E7A6) takes one longword stack argument whose low byte is an object type. It scans MOB slots 0x20–0x3FF, accepts `mob_link >> 10` equal to either that type or `type - 3`, optionally rejects off-screen tiles when level-flags byte 4 bit 2 is set, and calls `mob_place_tile(slot, 0)` for each match. **Corrected:** it reports a match only for the `type - 3` arm — it returns 1 when at least one type-3-relative slot was converted, and otherwise 0, so a run that only matched the literal type still returns 0. Maze setup calls it for types 0x0A–0x0D according to level flags; `player_tile_interact` calls it again after replacing the relevant maze object.
 - `maze_convert_walls_to_exits` (0x5E80C) takes no arguments and scans the same MOB-slot range. It converts picture 0x20F6 and generic wall markers (`mob_picture == 0x8000`) other than forcefields (type 0x3F) by calling `mob_place_tile(slot, 0x10)`. It returns 1 if it converted at least one slot. `main_move_players` calls it when `escape_timer` reaches 0x5208 (21,000 frames), producing the documented all-walls-become-exits escape behavior.
 
 **Confidence: Verified.** The two visibility pairs use exact -1/0
@@ -1367,8 +1434,9 @@ both forms write the four descriptor words to the corresponding 2×2
 playfield cells after adding the same palette/base value.
 
 `pf_isblankfloor` was previously documented with inverted polarity and object
-type. It returns -1 only when X is nonzero, the picture is 0x8000, and the
-object type is **not** 0x3F; otherwise it returns zero. The stack wrapper at
+type. It returns -1 when the picture is 0x8000 and the object type is **not**
+0x3F, with column 0 accepted through an OR rather than excluded by the X test;
+otherwise it returns zero. The stack wrapper at
 0x5EA26 is retained but has no discovered direct site. The related
 `pf_is_connectable_floor_xy` applies the same base test plus the level-flag and
 object-types 7–9 exclusions used to choose neighboring floor connectivity.
@@ -1664,7 +1732,7 @@ handlers, reflection, and wall/item effects.
 
 **Player shot damage:** base = `shot_damage_base_tbl` (0x596B6)[class] where class = `player_character` (+8 with the shot-power upgrade, `player_powers` byte 1 bit 4): Warrior 2, others 1, upgraded 2; classes 2 and 8 add getrandom(2) (`shot_damage_rand_tbl` 0x596C2). Supershot (`player_supershot` 0x905F68) forces damage 3.
 
-**Dispatch:** target object type = `mob_link >> 10`. The computed JMP is at 0x4B336; its 62-entry signed-word displacement table occupies 0x4B338–0x4BB3 and uses 0x4B338 as the branch base.
+**Dispatch:** target object type = `mob_link >> 10`. The computed JMP is at 0x4B336; its 62-entry signed-word displacement table `resolve_shot_hit_jumptbl` occupies 0x4B338–0x4B3B3 (124 bytes) and uses 0x4B338 as the branch base. The companion `mob_collision_test` (0x52192) dispatches through `mob_collision_object_jumptbl` at 0x52210, a **53-entry** displacement table of 106 bytes. Across the whole game ROM the twelve computed dispatches reach **81 distinct destinations**, all enumerated in `generated/control_targets.csv`.
 
 **Player victims** (target hpos & 0xF ≥ 0xC; victim = `0x904066[slot] >> 10`): LFLAG4 bit 0 (ShotStun) → `player_stundelay` += 0x28 (clamp 0x5A), fighting dir cleared, `hurt_cooldown` = 0x12; LFLAG4 bit 1 (ShotHurt) → −2 HP; a supershot shooter does −10 HP; acid-slowed victims are immune. Monster shots use `monstshot_damage_tbl` (0x596CE)[character + 4×armor + shot-tier (shot hpos bits 4–5: +0x10/+0x18/+0x20) + 8×(class ≥ 8)] — per-character defense (Valkyrie best, Wizard worst).
 
@@ -1686,7 +1754,7 @@ placement resets it on normal level entry or player join. This implements the
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 
-**Food/potions:** destroyed with per-character speech ("<name> … shot the food", table 0x596F6 + suffix 0x9A) and one-time dialogs (ids 2/0x40/0x80). Poison variants are identified **by picture**: food pic 0x25ED → `poison_timer` (0x9048B2) = 0x258; potion pic 0x20FC → 0x4B0; sound 0x37. Treasure and invulnerable food/potions break only with supershot.
+**Food/potions:** destroyed with per-character speech ("<name> … shot the food", table 0x596F6 + suffix 0x9A) and one-time dialogs (ids 2/0x40/0x80). Slow-motion variants are identified **by picture**: food pic 0x25ED sets `monster_slowmo_timer` (0x9048B2) = 0x258 at 0x4B8B0; potion pic 0x20FC sets it to 0x4B0 at 0x4B9EA; both play sound 0x37, catalogued in `refs/soundcmds.csv` as "Slow Motion" (0x38 "End of Slow Motion", 0x39 "Slow Motion Silencer"). The effect is on the monsters, not the shooter — see §3. Treasure and invulnerable food/potions break only with supershot.
 
 **Dragon:** player shots route to `dragon_shot_hit` (0x54112, see §8.3); monster shots just despawn.
 

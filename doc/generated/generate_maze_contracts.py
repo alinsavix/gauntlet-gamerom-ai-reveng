@@ -20,7 +20,7 @@ CONTRACTS = (
     (0x40C78, "find_maze", "maze number in wrapper caller's first longword", "D1.w bank offset; ptr_maze_data side effect", "frameless shared-stack helper; reads 8(A7) after wrapper JSR", ()),
     (0x40CC4, "maze_select_alt_bank", "uint32 maze_number", "void", "frameless wrapper; argument is consumed by find_maze", ()),
     (0x40CF2, "maze_init", "uint32 maze_number", "void", "frameless wrapper; argument is consumed by find_maze", ()),
-    (0x40D24, "load_level_tileset", "uint32 maze_number", "void", "frameless wrapper; argument is consumed by find_maze", ()),
+    (0x40D24, "maze_select_bank", "uint32 maze_number", "void", "frameless wrapper; argument is consumed by find_maze", ()),
     (0x40D4E, "maze_select_bank_special", "uint32 maze_number", "void", "frameless wrapper; argument is consumed by find_maze", ()),
     (0x44AC2, "maze_setupnew", "const uint8_t *maze_record", "void", "", (0x8,)),
     (0x4C1BC, "maze_decode", "const uint8_t *maze_record", "void", "", (0x8,)),

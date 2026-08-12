@@ -32,8 +32,8 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x40129,0x4013F,23,named_rom_range,game.magic_label,,Verified
 0x40140,0x405BF,1152,analyzed_code,,,Verified
 0x405C0,0x405C7,8,named_rom_range,forcefield_color_steps,"Forcefield color table (4 words, one per animation step)",Verified
-0x405C8,0x405D7,16,named_rom_range,palette_offset_by_walltype,palette_offset_by_walltype,Verified
-0x405D8,0x405E7,16,named_rom_range,palette_offset2_by_walltype,palette_offset2_by_walltype,Verified
+0x405C8,0x405D7,16,named_rom_range,palette_offset_by_floorpattern,palette_offset_by_floorpattern,Verified
+0x405D8,0x405E7,16,named_rom_range,palette_offset2_by_floorpattern,palette_offset2_by_floorpattern,Verified
 0x405E8,0x40627,64,named_rom_range,vscroll_alpha_gradient,vscroll_alpha_gradient,Verified
 0x40628,0x40B57,1328,analyzed_code,,,Verified
 0x40B58,0x40B97,64,named_rom_range,mob_collision_type_filter,mob_collision_type_filter,Verified
@@ -49,8 +49,8 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x40DDA,0x40E01,40,named_rom_range,monster_anim_moving_ptrs,monster_anim_moving_ptrs,Verified
 0x40E02,0x40E1D,28,named_rom_range,monster_level_flag_overrides,monster_level_flag_overrides,Verified
 0x40E1E,0x40E45,40,named_rom_range,monster_oddangle_table,monster_oddangle_table,Verified
-0x40E46,0x40E65,32,named_rom_range,monster_count_table,monster_count_table,Verified
-0x40E66,0x40E69,4,named_rom_range,dead_monster_count_tail_words,dead_monster_count_tail_words,Verified
+0x40E46,0x40E65,32,named_rom_range,monster_spawn_probability_table,monster_spawn_probability_table,Verified
+0x40E66,0x40E69,4,named_rom_range,monster_spawn_probability_bonus_bytes,monster_spawn_probability_bonus_bytes,Verified
 0x40E6A,0x41BCF,3430,analyzed_code,,,Verified
 0x41BD0,0x41BEF,32,named_rom_range,player_character_collision_block_matrix,player_character_collision_block_matrix,Verified
 0x41BF0,0x45C45,16470,analyzed_code,,,Verified
@@ -60,7 +60,7 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x49634,0x4A4F9,3782,analyzed_code,,,Verified
 0x4A4FA,0x4A539,64,named_rom_range,stun_direction_remap,stun_direction_remap,Verified
 0x4A53A,0x4B337,3582,analyzed_code,,,Verified
-0x4B338,0x4B3B3,124,named_rom_range,resolve_shot_hit_jumptbl,"Object type 0–0x3D, doubled; displacement relative to base 0x4B338",Verified
+0x4B338,0x4B3B3,124,named_rom_range,resolve_shot_hit_jumptbl,cmpi.w #1,Verified
 0x4B3B4,0x4FE07,19028,analyzed_code,,,Verified
 0x4FE08,0x4FE17,16,named_rom_range,richest_player_tie_jumptbl,"Eight tie/eligibility states, doubled; displacement and JMP base 0x4FE08",Verified
 0x4FE18,0x511FF,5096,analyzed_code,,,Verified
@@ -68,8 +68,7 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x51210,0x51229,26,analyzed_code,,,Verified
 0x5122A,0x5124B,34,named_rom_range,player_tile_object_jumptbl,"Object type 0x2E–0x3E, doubled without subtraction; load base 0x511CE biases accesses to 0x5122A–0x5124B; JMP base 0x5122A",Verified
 0x5124C,0x5220F,4036,analyzed_code,,,Verified
-0x52210,0x5226D,94,named_rom_range,mob_collision_object_jumptbl,"Object type 0x10–0x3E, doubled without subtraction; load base 0x521FC biases accesses to 0x52210–0x5226D; JMP base 0x52210",Verified
-0x5226E,0x52279,12,named_rom_range,dead_mob_collision_jump_tail,"Six additional valid-looking displacements immediately after the live table. The dispatcher rejects types above 0x3E before indexing, and no other consumer reaches them; retained as runtime-dead compiler/linker residue.",Verified
+0x52210,0x52279,106,named_rom_range,mob_collision_object_jumptbl,cmpi.w #0x0A,Verified
 0x5227A,0x5318B,3858,analyzed_code,,,Verified
 0x5318C,0x53345,442,named_rom_range,game_options_descriptor_stream,game_options_descriptor_stream,Verified
 0x53346,0x538FD,1464,analyzed_code,,,Verified
@@ -93,7 +92,8 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x55620,0x56E53,6196,top_level_nonmixed_region,,,Verified
 0x56E54,0x56F5B,264,analyzed_code,,,Verified
 0x56F5C,0x56FA7,76,named_rom_range,dead_slapstic_verify_suffix,dead_slapstic_verify_suffix,Verified
-0x56FA8,0x57001,90,named_rom_range,pad_56fa8,pad_56fa8,Verified
+0x56FA8,0x56FFF,88,named_rom_range,pad_56fa8,pad_56fa8,Verified
+0x57000,0x57001,2,named_rom_range,residue_word_57000,residue_word_57000,Verified
 0x57002,0x57011,16,named_rom_range,character_announcement_speech_ptrs,Per-player character announcement speech IDs (ROM pointer table),Verified
 0x57012,0x57045,52,named_rom_range,random_maze_flags,get_random_maze_flags,Verified
 0x57046,0x5704D,8,named_rom_range,slapstic_bitwise_addr_a,slapstic_bitwise_addr_a,Verified
@@ -116,8 +116,9 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x57222,0x57241,32,named_rom_range,player_color_name_strings,player_color_name_strings,Verified
 0x57242,0x57251,16,named_rom_range,character_name_ptrs,character_name_ptrs,Verified
 0x57252,0x57279,40,named_rom_range,character_name_strings,character_name_strings,Verified
-0x5727A,0x57331,184,named_rom_range,level_start_message_strings,level_start_message_strings,Verified
-0x57332,0x5733F,14,named_rom_range,dead_header_byte_block,dead_header_byte_block,Verified
+0x5727A,0x5732D,180,named_rom_range,level_start_message_strings,level_start_message_strings,Verified
+0x5732E,0x57333,6,named_rom_range,level_start_row_bytes,level_start_row_bytes,Verified
+0x57334,0x5733F,12,named_rom_range,level_start_attr_words,level_start_attr_words,Verified
 0x57340,0x5734F,16,named_rom_range,character_hud_text_ptrs,character_hud_text_ptrs,Verified
 0x57350,0x57357,8,named_rom_range,player_text_palette_words,player_text_palette_words,Verified
 0x57358,0x5735F,8,named_rom_range,treasure_room_duration,treasure_room_duration,Verified
@@ -129,10 +130,9 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x574AC,0x574B3,8,named_rom_range,challenge_it_desc,challenge_it_desc,Verified
 0x574B4,0x574B7,4,named_rom_range,challenge_it_text,challenge_it_text,Verified
 0x574B8,0x5751D,102,named_rom_range,character_glyph_rows,character_glyph_rows,Verified
-0x5751E,0x5751F,2,named_rom_range,pad_5751e,ui_status_strings,Verified
-0x57520,0x57577,88,named_rom_range,ui_status_strings,"UI strings: ""SELECT HERO"", ""PRESS START"", ""ADD COIN"", ""INSERT COIN"", ""GAME OVER"", ""ON LEVEL:""; exact range 0x57520–0x57577",Verified
-0x57578,0x57637,192,named_rom_range,dip_switch_display_records,DIP-switch display records; exact range 0x57578–0x57637,Verified
-0x57638,0x57643,12,named_rom_range,continue_screen_header,"Continue-screen header data and NUL-terminated ""LEVEL:"" label",Verified
+0x5751E,0x57577,90,named_rom_range,ui_status_strings,pea.l 0x5751E,Verified
+0x57578,0x57633,188,named_rom_range,dip_switch_display_records,DIP-switch display records; exact range 0x57578–0x57633. The chain's last node begins at 0x57628 with flags 0x0200 and its four-byte back-link 0x0005761C occupies 0x57630–0x57633,Verified
+0x57634,0x57643,16,named_rom_range,continue_screen_header,text_desc,Verified
 0x57644,0x57657,20,named_rom_range,continue_blank_line,continue_blank_line,Verified
 0x57658,0x5766B,20,named_rom_range,continue_press_start,continue_press_start,Verified
 0x5766C,0x5767F,20,named_rom_range,continue_within_seconds,continue_within_seconds,Verified
@@ -180,20 +180,18 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x57BC8,0x57BD7,16,named_rom_range,lobber_shot_spawn_v_offset,lobber_shot_spawn_v_offset,Verified
 0x57BD8,0x57EB9,738,named_rom_range,dead_tile_word_block,dead_tile_word_block,Verified
 0x57EBA,0x57FF9,320,named_rom_range,factory_highscore_records,factory_highscore_records,Verified
-0x57FFA,0x57FFF,6,named_rom_range,pad_57ffa,Zero alignment padding between factory high scores and the 0x58000 display-record block.,Verified
-0x58000,0x5806F,112,named_rom_range,score_coin_initials_records,"Score-per-coin display records plus the “Enter your initials:” prompt, exact range 0x58000–0x5806F",Verified
+0x57FFA,0x5806F,118,named_rom_range,score_coin_initials_records,text_desc,Verified
 0x58070,0x5808F,32,named_rom_range,invisibility_flash_masks,invisibility_flash_masks,Verified
 0x58090,0x58097,8,named_rom_range,fighting_anim_end,fighting_anim_end,Verified
-0x58098,0x580A7,16,named_rom_range,demo_stream_ptrs,"Demo initial pointer table;Initial demo pointer table (4 longwords, one per player)",Verified
+0x58098,0x580A7,16,named_rom_range,demo_stream_ptrs,Demo initial pointer table,Verified
 0x580A8,0x580B7,16,named_rom_range,player_speed_normal,player_speed_normal,Verified
 0x580B8,0x580C7,16,named_rom_range,player_anim_rate,player_anim_rate,Verified
 0x580C8,0x580D7,16,named_rom_range,lobber_lead_distance,lobber_lead_distance,Verified
-0x580D8,0x580E7,16,named_rom_range,player_delta_x,player_delta_x,Verified
-0x580E8,0x580F7,16,named_rom_range,player_delta_y,player_delta_y,Verified
-0x580F8,0x580FB,4,named_rom_range,pad_580f8,player_delta_y,Verified
+0x580D8,0x580E9,18,named_rom_range,player_delta_x,player_delta_x,Verified
+0x580EA,0x580FB,18,named_rom_range,player_delta_y,player_delta_y,Verified
 0x580FC,0x5811B,32,named_rom_range,joystick_nibble_to_direction,joystick_nibble_to_direction,Verified
 0x5811C,0x5813B,32,named_rom_range,fight_direction_map,fight_direction_map,Verified
-0x5813C,0x5815B,32,named_rom_range,health_drain_table,health_drain_table,Verified
+0x5813C,0x5815B,32,named_rom_range,forcefield_damage_table,forcefield_damage_table,Verified
 0x5815C,0x5818B,48,named_rom_range,dialog_tip_ptrs,dialog_tip_ptrs,Verified
 0x5818C,0x581C3,56,named_rom_range,demo_input_streams;demo_player0_input_stream,"Four adjacent demo-player streams through 0x5828B, split by the pointer table at 0x58098 into 56, 150, 2, and 48 bytes. Commands are 2-byte pairs. First byte 0x00–0xFD = frame duration and second byte = recorded input; 0xFF = show dialog tip whose index is the second byte; 0xFE = join/switch demo player encoded by the second byte.;Player 0 demo input stream (28 command pairs), ending at 0x581C3",Verified
 0x581C4,0x58259,150,named_rom_range,demo_input_streams;demo_player1_input_stream,"Four adjacent demo-player streams through 0x5828B, split by the pointer table at 0x58098 into 56, 150, 2, and 48 bytes. Commands are 2-byte pairs. First byte 0x00–0xFD = frame duration and second byte = recorded input; 0xFF = show dialog tip whose index is the second byte; 0xFE = join/switch demo player encoded by the second byte.;Player 1 demo input stream (75 command pairs; primary Elf script), ending at 0x58259",Verified
@@ -215,12 +213,10 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x58C0A,0x58C89,128,named_rom_range,anim_tiles_sorcerer,anim_tiles_sorcerer,Verified
 0x58C8A,0x58C99,16,named_rom_range,thief_escape_anim,thief_escape_anim,Verified
 0x58C9A,0x58D19,128,named_rom_range,thief_walk_anim,thief_walk_anim,Verified
-0x58D1A,0x58D29,16,named_rom_range,thief_idle_by_direction,thief_idle_by_direction,Verified
-0x58D2A,0x58D2B,2,named_rom_range,pad_58d2a,thief_walk_anim_compact,Verified
+0x58D1A,0x58D2B,18,named_rom_range,thief_idle_by_direction,thief_idle_by_direction,Verified
 0x58D2C,0x58D6B,64,named_rom_range,thief_walk_anim_compact,thief_walk_anim_compact,Verified
 0x58D6C,0x58DEB,128,named_rom_range,mugger_walk_anim,mugger_walk_anim,Verified
-0x58DEC,0x58DFB,16,named_rom_range,mugger_idle_by_direction,mugger_idle_by_direction,Verified
-0x58DFC,0x58DFD,2,named_rom_range,pad_58dfc,mugger_walk_anim_compact,Verified
+0x58DEC,0x58DFD,18,named_rom_range,mugger_idle_by_direction,mugger_idle_by_direction,Verified
 0x58DFE,0x58E3D,64,named_rom_range,mugger_walk_anim_compact,mugger_walk_anim_compact,Verified
 0x58E3E,0x58EDD,160,named_rom_range,special_projectile_picture_table,special_projectile_picture_table,Verified
 0x58EDE,0x58F1F,66,named_rom_range,monster_projectile_picture_table,monster_projectile_picture_table,Verified
@@ -247,9 +243,9 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x596CE,0x596F5,40,named_rom_range,monstshot_damage_tbl,monstshot_damage_tbl,Verified
 0x596F6,0x59735,64,named_rom_range,speech_charname_tbl,speech_charname_tbl,Verified
 0x59736,0x59785,80,named_rom_range,hint_text_ptrs,hint_text_ptrs,Verified
-0x59786,0x598B5,304,named_rom_range,hint_text_strings,"Hint text strings (“TRY TRANSPORTABILITY”, “WATCH WHAT YOU SHOOT”, etc.), exact range 0x59786–0x598B5",Verified
-0x598B6,0x599FF,330,named_rom_range,hint_speech_records,"Hint records with speech IDs, exact range 0x598B6–0x599FF; records are 10-byte units combining command/speech metadata and a ROM string pointer",Verified
-0x59A00,0x59B53,340,named_rom_range,gameplay_tip_strings,"Gameplay tip strings (“MORE PLAYERS ALLOWS HIGHER / BONUS MULTIPLIER”, etc.), exact range 0x59A00–0x59B53 before the maze-decompression pointer table",Verified
+0x59786,0x598B7,306,named_rom_range,hint_text_strings,"Hint text strings (“TRY TRANSPORTABILITY”, “WATCH WHAT YOU SHOOT”, etc.), exact range 0x59786–0x598B7, including the final string's NUL and its even-alignment pad",Verified
+0x598B8,0x5999B,228,named_rom_range,hint_text_desc_records,hint_text_desc_records,Verified
+0x5999C,0x59B53,440,named_rom_range,gameplay_tip_strings,"Gameplay tip strings (“MORE PLAYERS ALLOWS HIGHER”, “BONUS MULTIPLIER”, “ADD MORE PLAYERS FOR”, “GREATER FIREPOWER”, “ADD COINS ANYTIME”, …), exact range 0x5999C–0x59B53 before the maze-decompression pointer table",Verified
 0x59B54,0x59B63,16,named_rom_range,maze_decomp_type_ptrs,maze_decomp_type_ptrs,Verified
 0x59B64,0x59B7B,24,named_rom_range,powerup_bit_masks,powerup_bit_masks,Verified
 0x59B7C,0x59BAB,48,named_rom_range,powerup_speech_ids,powerup_speech_ids,Verified
@@ -288,11 +284,9 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x5AD1E,0x5AD9D,128,named_rom_range,alpha_palette_init,alpha_palette_init,Verified
 0x5AD9E,0x5AE1D,128,named_rom_range,mob_palette_init,mob_palette_init,Verified
 0x5AE1E,0x5AF9D,384,named_rom_range,mob_palette_extended,mob_palette_extended,Verified
-0x5AF9E,0x5AFA5,8,named_rom_range,character_palette_ptrs,character_palette_ptrs,Verified
-0x5AFA6,0x5AFAD,8,named_rom_range,aux_palette_init;character_palette_ptrs,aux_palette_init;character_palette_ptrs,Verified
-0x5AFAE,0x5B00D,96,named_rom_range,aux_palette_init;tport_palette_cycle_blocks,aux_palette_init;tport_palette_cycle_blocks,Verified
-0x5B00E,0x5B025,24,named_rom_range,aux_palette_init;character_full_palettes,"Four character full palettes (128 B each): Warrior, Valkyrie, Wizard, Elf. Each has four 32-byte sub-palettes (normal/poisoned/ghost/invulnerable); exact range 0x5B00E–0x5B20D;aux_palette_init",Verified
-0x5B026,0x5B20D,488,named_rom_range,character_full_palettes,"Four character full palettes (128 B each): Warrior, Valkyrie, Wizard, Elf. Each has four 32-byte sub-palettes (normal/poisoned/ghost/invulnerable); exact range 0x5B00E–0x5B20D",Verified
+0x5AF9E,0x5AFAD,16,named_rom_range,character_palette_ptrs,character_palette_ptrs,Verified
+0x5AFAE,0x5B00D,96,named_rom_range,tport_palette_cycle_blocks,tport_palette_cycle_blocks,Verified
+0x5B00E,0x5B20D,512,named_rom_range,character_full_palettes,"Four character full palettes (128 B each): Warrior, Valkyrie, Wizard, Elf. Each has four 32-byte sub-palettes (normal/poisoned/ghost/invulnerable); exact range 0x5B00E–0x5B20D",Verified
 0x5B20E,0x5B255,72,named_rom_range,player0_hurt_palette_cycle,player0_hurt_palette_cycle,Verified
 0x5B256,0x5B29D,72,named_rom_range,player1_hurt_palette_cycle,player1_hurt_palette_cycle,Verified
 0x5B29E,0x5B2E5,72,named_rom_range,player2_hurt_palette_cycle,player2_hurt_palette_cycle,Verified
@@ -315,8 +309,7 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x5B724,0x5B72B,8,named_rom_range,damage_comment_speech_ids,damage_comment_speech_ids,Verified
 0x5B72C,0x5B733,8,named_rom_range,character_reflect_timer_init,character_reflect_timer_init,Verified
 0x5B734,0x5B73B,8,named_rom_range,character_stun_delay_add,character_stun_delay_add,Verified
-0x5B73C,0x5B743,8,named_rom_range,tile_effect_sound_ids,tile_effect_sound_ids,Verified
-0x5B744,0x5B74B,8,named_rom_range,tile_effect_sound_ids_alt,tile_effect_sound_ids_alt,Verified
+0x5B73C,0x5B74B,16,named_rom_range,tile_effect_sound_ids,tile_effect_sound_ids,Verified
 0x5B74C,0x5B773,40,named_rom_range,pickup_score_values,pickup_score_values,Verified
 0x5B774,0x5B787,20,named_rom_range,pickup_score_popup_types,pickup_score_popup_types,Verified
 0x5B788,0x5B797,16,named_rom_range,level_exit_sound_ids,level_exit_sound_ids,Verified
@@ -327,21 +320,21 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x5B7E4,0x5B7EB,8,named_rom_range,collision_hpos_random_range_by_player,collision_hpos_random_range_by_player,Verified
 0x5B7EC,0x5B7FB,16,named_rom_range,collision_bonus_threshold_by_case,collision_bonus_threshold_by_case,Verified
 0x5B7FC,0x5B81B,32,named_rom_range,exit_rotation_offset_by_count,exit_rotation_offset_by_count,Verified
-0x5B81C,0x5BA67,588,named_rom_range,exit_desc_by_floorpattern,exit_desc_by_floorpattern,Verified
-0x5BA68,0x5BA69,2,named_rom_range,exit_desc_by_floorpattern;logo_outer_timer_init,exit_desc_by_floorpattern;logo_outer_timer_init,Verified
-0x5BA6A,0x5BA6B,2,named_rom_range,exit_desc_by_floorpattern;logo_inner_timer_init,exit_desc_by_floorpattern;logo_inner_timer_init,Verified
-0x5BA6C,0x5BA6D,2,named_rom_range,exit_desc_by_floorpattern;logo_bright_min,exit_desc_by_floorpattern;logo_bright_min,Verified
-0x5BA6E,0x5BA6F,2,named_rom_range,exit_desc_by_floorpattern;logo_bright_max,exit_desc_by_floorpattern;logo_bright_max,Verified
-0x5BA70,0x5BAAF,64,named_rom_range,exit_desc_by_floorpattern;forcefield_gfx_ptrs,exit_desc_by_floorpattern;forcefield_gfx_ptrs,Verified
-0x5BAB0,0x5BABF,16,named_rom_range,exit_desc_by_floorpattern;shot_reflect_hdelta,exit_desc_by_floorpattern;shot_reflect_hdelta,Verified
-0x5BAC0,0x5BACF,16,named_rom_range,exit_desc_by_floorpattern;shot_reflect_vdelta,exit_desc_by_floorpattern;shot_reflect_vdelta,Verified
-0x5BAD0,0x5BADF,16,named_rom_range,exit_desc_by_floorpattern;shot_reflect_sound_tbl,exit_desc_by_floorpattern;shot_reflect_sound_tbl,Verified
-0x5BAE0,0x5BBDF,256,named_rom_range,exit_desc_by_floorpattern;floor_desc_base,exit_desc_by_floorpattern;floor_desc_base,Verified
-0x5BBE0,0x5BC1B,60,named_rom_range,exit_desc_by_floorpattern;wall_desc_blocks,exit_desc_by_floorpattern;wall_desc_blocks,Verified
-0x5BC1C,0x5C89F,3204,named_rom_range,wall_desc_blocks,wall_desc_blocks,Verified
+0x5B81C,0x5BA5B,576,named_rom_range,exit_desc_by_floorpattern,exit_desc_by_floorpattern,Verified
+0x5BA5C,0x5BA67,12,named_rom_range,wall_crumble_stage_ptrs,wall_crumble_stage_ptrs,Verified
+0x5BA68,0x5BA69,2,named_rom_range,logo_outer_timer_init,logo_outer_timer_init,Verified
+0x5BA6A,0x5BA6B,2,named_rom_range,logo_inner_timer_init,logo_inner_timer_init,Verified
+0x5BA6C,0x5BA6D,2,named_rom_range,logo_bright_min,logo_bright_min,Verified
+0x5BA6E,0x5BA6F,2,named_rom_range,logo_bright_max,logo_bright_max,Verified
+0x5BA70,0x5BAAF,64,named_rom_range,forcefield_gfx_ptrs,forcefield_gfx_ptrs,Verified
+0x5BAB0,0x5BABF,16,named_rom_range,shot_reflect_hdelta,shot_reflect_hdelta,Verified
+0x5BAC0,0x5BACF,16,named_rom_range,shot_reflect_vdelta,shot_reflect_vdelta,Verified
+0x5BAD0,0x5BADF,16,named_rom_range,shot_reflect_sound_tbl,shot_reflect_sound_tbl,Verified
+0x5BAE0,0x5BBDF,256,named_rom_range,floor_desc_base,floor_desc_base,Verified
+0x5BBE0,0x5C89F,3264,named_rom_range,wall_desc_blocks,wall_desc_blocks,Verified
 0x5C8A0,0x5C8A7,8,named_rom_range,floor_type10_desc,floor_type10_desc,Verified
 0x5C8A8,0x5C8AF,8,named_rom_range,floor_type11_desc,floor_type11_desc,Verified
-0x5C8B0,0x5CAA7,504,named_rom_range,dead_sequential_tile_codes,dead_sequential_tile_codes,Verified
+0x5C8B0,0x5CAA7,504,named_rom_range,exit_tile_descs,exit_tile_descs,Verified
 0x5CAA8,0x5CB27,128,named_rom_range,floor_type3e_descs,floor_type3e_descs,Verified
 0x5CB28,0x5CB47,32,named_rom_range,attract_display_tile_stream,attract_display_tile_stream,Verified
 0x5CB48,0x5CD3F,504,named_rom_range,attract_display_tile_stream;special_object_tile_numbers,attract_display_tile_stream;special_object_tile_numbers,Verified
@@ -364,7 +357,7 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x5D5C8,0x5D7C7,512,named_rom_range,playfield_palettes,playfield_palettes,Verified
 0x5D7C8,0x5D7E7,32,named_rom_range,playfield_special_palette_bank,playfield_special_palette_bank,Verified
 0x5D7E8,0x5D847,96,named_rom_range,playfield_special_palette_bank;playfield_special_palette_lowwall_view,playfield_special_palette_bank;playfield_special_palette_lowwall_view,Verified
-0x5D848,0x5D9E7,416,named_rom_range,palette_color_ramps,"Palette color ramps (13 blocks × 32 bytes, 12 colors + 4 zero words each, one per tileset environment). The apparent code reference to 0x5D978 is a biased address for the later potion-effect table, not a palette access: the first reachable index is object type 0x12 × 16, which lands at 0x5DA98.",Verified
+0x5D848,0x5D9E7,416,named_rom_range,unconsumed_block_5d848,unconsumed_block_5d848,Verified
 0x5D9E8,0x5DA97,176,named_rom_range,secretcode_text_recs,secretcode_text_recs,Verified
 0x5DA98,0x5DC57,448,named_rom_range,potion_effect_matrix,potion_effect_matrix,Verified
 0x5DC58,0x5EDD3,4476,analyzed_code,,,Verified

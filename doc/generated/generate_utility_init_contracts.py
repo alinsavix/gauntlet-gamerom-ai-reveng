@@ -17,12 +17,18 @@ ROM_SHA1 = "decbe6438b3a2618bd7fe79d14be034efadd7ff4"
 
 # address, name, arguments, return, exception, confidence,
 # audit start, audit byte count, required opcodes
+RNG_RESULT = (
+    "For bounds 0..0x7FFF (all observed callers), D0.l = "
+    "upper_bound * ((seed + 0x8000) & 0xFFFF) >> 16 in [0, upper_bound); "
+    "a bound with bit 15 set is treated as signed by MULS.W and returns the "
+    "signed arithmetic high word"
+)
 CONTRACTS = (
-    (0x5FC22, "random_seeded", "uint16 upper_bound, uint16 *seed", "D0.l = value in [0, upper_bound); 0 when upper_bound is 0", "normal-stack dormant veneer; no discovered direct control site", "Verified", 0x5FC22, 0x24, ("movea.l 0x8(a7), a0", "moveq 0x0, d0", "move.w 0x6(a7), d0", "move.w (a0), d1", "muls.w 0x3619, d1", "move.w d1, (a0)", "ext.l d0", "rts")),
-    (0x5FC26, "random_bound_stack_core", "uint16 upper_bound on inherited caller stack; A0 = uint16 *seed", "D0.l = value in [0, upper_bound); 0 when upper_bound is 0", "mixed inherited-stack/register shared entry reached by getrandom", "Verified", 0x5FC26, 0x20, ("moveq 0x0, d0", "move.w 0x6(a7), d0", "muls.w d0, d1", "swap d0", "ext.l d0", "rts")),
-    (0x5FC2C, "random_core", "D0.l = zero-extended upper_bound; A0 = uint16 *seed", "D0.l = value in [0, upper_bound); 0 when upper_bound is 0", "register shared body; updates *seed with seed = seed * 0x3619 + 0x5D35 modulo 2^16", "Verified", 0x5FC2C, 0x1A, ("move.w (a0), d1", "muls.w 0x3619, d1", "addi.w 0x5d35, d1", "move.w d1, (a0)", "muls.w d0, d1", "asr.l 0x1, d0", "add.l d1, d0", "ext.l d0", "rts")),
-    (0x5FC46, "random_word", "D0.l = zero-extended upper_bound", "D0.l = value in [0, upper_bound); 0 when upper_bound is 0", "register wrapper using global random_seed; branches to random_core", "Verified", 0x5FC46, 0x08, ("lea.l 0x904bfc.l, a0", "bra.b 0x5fc2c")),
-    (0x5FC4E, "getrandom", "uint16 upper_bound", "D0.l = value in [0, upper_bound); 0 when upper_bound is 0", "normal-stack wrapper using global random_seed; branches to random_bound_stack_core", "Verified", 0x5FC4E, 0x08, ("lea.l 0x904bfc.l, a0", "bra.b 0x5fc26")),
+    (0x5FC22, "random_seeded", "word upper_bound (observed 0..0x7FFF), uint16 *seed", RNG_RESULT, "normal-stack dormant veneer; no discovered direct control site", "Verified", 0x5FC22, 0x24, ("movea.l 0x8(a7), a0", "moveq 0x0, d0", "move.w 0x6(a7), d0", "move.w (a0), d1", "muls.w 0x3619, d1", "move.w d1, (a0)", "ext.l d0", "rts")),
+    (0x5FC26, "random_bound_stack_core", "word upper_bound (observed 0..0x7FFF) on inherited caller stack; A0 = uint16 *seed", RNG_RESULT, "mixed inherited-stack/register shared entry reached by getrandom", "Verified", 0x5FC26, 0x20, ("moveq 0x0, d0", "move.w 0x6(a7), d0", "muls.w d0, d1", "swap d0", "ext.l d0", "rts")),
+    (0x5FC2C, "random_core", "D0.w = upper_bound (observed 0..0x7FFF); A0 = uint16 *seed", RNG_RESULT, "register shared body; updates *seed with seed = seed * 0x3619 + 0x5D35 modulo 2^16, then uses signed MULS.W and takes the arithmetic high word instead of taking a modulo", "Verified", 0x5FC2C, 0x1A, ("move.w (a0), d1", "muls.w 0x3619, d1", "addi.w 0x5d35, d1", "move.w d1, (a0)", "muls.w d0, d1", "asr.l 0x1, d0", "add.l d1, d0", "ext.l d0", "rts")),
+    (0x5FC46, "random_word", "D0.w = upper_bound (observed 0..0x7FFF)", RNG_RESULT, "register wrapper using global random_seed; branches to random_core", "Verified", 0x5FC46, 0x08, ("lea.l 0x904bfc.l, a0", "bra.b 0x5fc2c")),
+    (0x5FC4E, "getrandom", "word upper_bound (observed 0..0x7FFF)", RNG_RESULT, "normal-stack wrapper using global random_seed; branches to random_bound_stack_core", "Verified", 0x5FC4E, 0x08, ("lea.l 0x904bfc.l, a0", "bra.b 0x5fc26")),
     (0x5FCCE, "pf_palette_clear", "void", "void", "tail-calls memclear_core for the final 0x40-longword shadow-color clear", "Verified", 0x5FCCE, 0x46, ("move.w d0, 0x90401e.l", "lea.l 0x910000.l, a0", "move.w 0x40, d0", "lea.l 0x910200.l, a0", "move.w 0x80, d0", "lea.l 0x910500.l, a0", "lea.l 0x910400.l, a0", "bra.w 0x5fd64")),
     (0x5FD14, "display_state_clear", "void", "void", "tail-calls memclear_core for the final 0x800-longword playfield clear", "Verified", 0x5FD14, 0x44, ("lea.l 0x905f80.l, a0", "move.w 0x20, d0", "move.w d0, 0x90400a.l", "move.w d0, 0x902000.l", "lea.l 0x905000.l, a0", "move.w 0x3c0, d0", "lea.l 0x900000.l, a0", "move.w 0x800, d0", "bra.b 0x5fd64")),
     (0x5FD58, "memclear", "uint16 count, uint32 *destination", "void", "normal-stack wrapper; pre-tested DBRA loop clears exactly count longwords and does nothing for zero", "Verified", 0x5FD58, 0x12, ("move.w 0x6(a7), d0", "movea.l 0x8(a7), a0", "bra.b 0x5fd64", "clr.l (a0)+", "dbra d0, 0x5fd62")),

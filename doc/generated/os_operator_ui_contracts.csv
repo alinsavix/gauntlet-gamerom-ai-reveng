@@ -1,15 +1,15 @@
 address,name,purpose,arguments,return,exceptional_convention,confidence
 0x4896,wait_vblank_counter_ticks,Wait for a requested number of changes to the EEPROM/VBLANK long counter,tick count word in a long slot,void,normal stack ABI,Verified
-0x48B8,display_text_set_cursor,Draw one string at explicit coordinates and update the operator-UI cursor to its end,coordinate0 low byte; coordinate1 low byte; string pointer,void,normal three-slot stack ABI,Verified
+0x48B8,display_text_set_cursor,Draw one string at explicit coordinates and update the operator-UI cursor to its end,column low byte; row low byte; string pointer,void,normal three-slot stack ABI,Verified
 0x4912,display_text_at_cursor,Draw one string at the saved operator-UI cursor and advance that cursor,string pointer,void,normal stack veneer over 0x48B8,Verified
 0x493C,display_decimal_at_cursor,Draw one trimmed eight-digit decimal value at the saved operator-UI cursor,value long,void,normal stack veneer over 0x4966,Verified
-0x4966,display_decimal_set_cursor,"Format an eight-digit zero-padded decimal, trim leading zeroes while retaining one digit, draw it at explicit coordinates, and update the cursor",coordinate0 low byte; coordinate1 low byte; value long,void,normal three-slot stack ABI,Verified
+0x4966,display_decimal_set_cursor,"Format an eight-digit zero-padded decimal, trim leading zeroes while retaining one digit, draw it at explicit coordinates, and update the cursor",column low byte; row low byte; value long,void,normal three-slot stack ABI,Verified
 0x49C8,option_record_present,Test whether the first two bytes of an option descriptor record are both zero,record pointer,D0.l = bitwise OR of record bytes 0 and 1 (zero means terminator),normal stack ABI,Verified
 0x49E8,find_option_record,Advance through a variable-length option-descriptor stream to one record index,descriptor-stream pointer; record index word,"D0.l = selected record pointer, or 0 at/past the terminator",normal two-slot stack ABI,Verified
 0x4A44,render_option_record,"Render one option descriptor's label and selected value, optionally clearing its prior effect",record pointer; current settings word; comparison/default word; display row word; style/clear flags word,"D0.l = pointer to the following record, or 0 for a terminator",normal five-slot stack ABI,Verified
 0x4B66,render_option_record_page,Find a starting option record and render one orientation-sized page of records,stream pointer; current settings word; comparison/default word; first record index word; style/clear flags word,void,normal five-slot stack ABI,Verified
 0x4BE6,display_next_screen_prompt,Draw the game-specific action label inside the OS 'Press ... for next screen' prompt,void,void,normal stack ABI,Verified
-0x4C38,init_operator_mob_display,Install the eight-word operator-screen MOB template and clear its trailing link word,void,void,normal stack ABI,Verified
+0x4C38,init_operator_alpha_palette,Copy the eight operator palette words at 0x6B8A into alphanumeric color entries 0-7 (0x910000-0x91000E) and clear playfield palette entry 0 at 0x910500,void,void,normal stack ABI,Verified
 0x4C66,run_statistics_histograms,"Display and navigate per-player difficulty histograms, with optional clearing",nonzero allows clear operation,void,normal stack ABI,Verified
 0x4FA0,display_statistics_play_time,"Sum stored play-time groups, scale large totals safely, and display total time plus active-time percentage",display row word in a long slot,void,normal stack ABI,Verified
 0x5098,run_statistics_summary,Display stored configuration/statistics counters and optionally clear the resettable counters,nonzero allows clear operation,void,normal stack ABI,Verified

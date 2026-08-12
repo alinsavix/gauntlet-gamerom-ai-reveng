@@ -113,6 +113,9 @@ AUTO_RE = re.compile(r"\((a[0-7])\)\+|-\((a[0-7])\)")
 # Names whose data is reached through a pointer table, a computed jump, or the
 # OS/boot path rather than a direct code operand -- being "unreferenced" by this
 # static game-code pass is expected for them and must not raise a review flag.
+# `unconsumed_*` is the explicit label for a range the semantic-use audit proved
+# has NO consumer at all (0x5D848): the absence is the documented finding, so it
+# must not also be reported as an unexpected review item.
 # (A domain-mismatch heuristic -- flag a table whose name names a subsystem none
 # of its consumers do -- was tried and dropped: table names describe the data
 # domain while function names describe the action, so legitimate splits like
@@ -124,7 +127,7 @@ EXPECTED_UNREF = re.compile(
     r"_string|_ptrs|_ptr$|_chain|_message|_text|_label|_name|_desc|_records|"
     r"_stream|_records$|instruction|speech|_tip|hint|credit|portrait|glyph|"
     r"logo|alphabet|anim_tiles|_hook|_slot|checksum|rom_type|difficulty|"
-    r"eeprom|_fill_value|hook_slot|unreferenced",
+    r"eeprom|_fill_value|hook_slot|unreferenced|unconsumed",
     re.IGNORECASE,
 )
 

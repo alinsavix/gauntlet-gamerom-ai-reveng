@@ -157,10 +157,10 @@ def main() -> None:
     require_empty(artifacts / "os_rom_byte_coverage_failures.csv")
 
     os_data = rows(artifacts / "os_rom_data_catalog.csv")
-    if len(os_data) != 45 or any(row["confidence"] in {"Unknown", "Contradicted", "Hypothesis"} for row in os_data):
+    if len(os_data) != 42 or any(row["confidence"] in {"Unknown", "Contradicted", "Hypothesis"} for row in os_data):
         raise SystemExit("OS data catalog is incomplete or unresolved")
     os_functions = rows(artifacts / "os_all_function_contracts.csv")
-    if len(os_functions) != 256 or any(
+    if len(os_functions) != 269 or any(
         row["confidence"] in {"Unknown", "Contradicted", "Hypothesis"}
         or not row["arguments"].strip() or not row["return"].strip()
         for row in os_functions
@@ -190,7 +190,7 @@ def main() -> None:
         f"{len(flags)} non-code flags; "
         f"{len(ram)} RAM literals; {os_region_count} OS region bytes; "
         f"{os_byte_count} OS classified bytes; {len(os_functions)} OS function/veneer contracts; "
-        f"{len(os_data)} OS data ranges; no active backlog"
+        f"{len(os_data)} OS data ranges; no active prioritized backlog row"
     )
 
 

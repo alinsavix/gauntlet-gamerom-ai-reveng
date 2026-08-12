@@ -4,7 +4,82 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
 
 | Priority | Confidence | Issue | Next test |
 |---|---|---|---|
-| — | — | No active prioritized issue remains. | — |
+| — | — | No active prioritized issue remains in this backlog. Unresolved findings raised by the 2026-08-11 full semantic audit are recorded in the repository-root `SOL_ISSUES.md`; promote one back into this table if it becomes testable from the supplied artifacts. | — |
+
+## Resolved in the 2026-08-11 full semantic audit
+
+Findings from a whole-image semantic re-derivation of the game and OS ROMs,
+cross-checked against the book chapters. Every entry below was confirmed by
+disassembly of `row76.bin`/`row9.bin` plus byte-level address scans, and the
+affected prose in `01_hardware.md`, `03_game_rom_structure.md`,
+`04_game_subsystems.md`, `INDEX.md`, and `book/` has been corrected. The
+detailed per-claim record lives in the repository-root `SOL_FIXED.md`.
+
+- **Contradicted and corrected:** `frame_overflow` (0x904916) was described in
+  the book as a per-frame *monster processing* allowance. `monsters_everything`
+  tests it at 0x40F96 and zeroes the value that `handle_generate` later
+  compares against `getrandom(32)`, so the only effect is that generators stop
+  spawning; the chain walk still visits every monster. This restates
+  `05_data_reference.md`'s existing spawn-probability finding for §3.4.
+- **Contradicted and corrected:** the timer at 0x9048B2, historically named
+  `poison_timer`, is a global **monster slow-motion** counter, not a player
+  debuff. Its only readers are `maze_new_level_setup` and
+  `monsters_everything` (0x40EB0/0x40EB8/0x40EC8), where a nonzero value skips
+  the entire monster pass on even frames (`btst #0,d6` / `beq 0x4152C`). Both
+  writers (0x4B8B0 food picture 0x25ED → 0x258, 0x4B9EA potion picture 0x20FC →
+  0x4B0) play sound 0x37, catalogued as "Slow Motion". Referred to as
+  `monster_slowmo_timer` in prose. (§3, §26.)
+- **Contradicted and corrected:** the table at 0x5813C, historically named
+  `health_drain_table`, is the **forcefield contact-damage** table. A scan of
+  the whole 128 KB image for the 32-bit literal finds exactly one reference,
+  0x4AA98, inside the forcefield branch of `main_move_players`; the index is
+  `character + 4 × armor-power` (`btst #1` at 0x4AA82), not difficulty.
+  Referred to as `forcefield_damage_table` in prose. The time-based drain in
+  `main_health_countdown` is a flat `subq.l #1` at 0x4675E gated on
+  `frame_counter & 0x3F` at 0x4670C — one point per player per 64 frames in
+  every mode, with no class or difficulty term. (§4.3, §7.4, §17.)
+- **Contradicted and corrected:** the debounced press edge `main_start_game`
+  matches at 0x48402–0x48416 reads `debounce_shift_magic` (0x905F58), which
+  `input_debounce` fills from raw input **bit 0** — `JOY_MAGIC_BIT`. The same
+  register and `== 0x1C` pattern gate `main_handle_potions` at 0x47020, and
+  shooting is gated on bit 1 at 0x4A9DE/0x4ABFA, so the start/join/commit
+  press is on the Magic line. The separate free-play attract-navigation test at
+  0x4463E masks the raw words with `0x02` and is genuinely FIRE-only; the two
+  must not be merged. (§6.4.)
+- **Corrected:** `0x1C` is three frames released followed by two frames held.
+  `roxl.w` shifts the newest sample into bit 0 and the switches are active low.
+  (§15.)
+- **Corrected:** the attract-screen 60-frame input thresholds gate
+  *screen switching* only. `start_attract_to_game` runs every frame in every
+  mode, so a coin or a qualifying press starts a session at any time. (§6.4.)
+- **Corrected:** `thief_setup` (0x4E432) gates on `mazenum_current < 0x73`, so
+  treasure rooms 104–114 qualify and only the two secret rooms are excluded;
+  the spawn probability is `(level >> 3) / 8`. (§9.)
+- **Corrected:** the continue prompt drawn by `show_continue_prompt` is five
+  lines, not six. (§10.5.)
+- **Corrected:** graphics tiles are supplied by **three banks of four chips**
+  (one chip per bit plane within a bank), indexed by five tile-bank views, plus
+  the separate 8 KB two-bitplane alphanumeric character ROM. The former
+  "4 ROM chips" phrasing described one bank. (`01_hardware.md` §5.)
+- **Corrected:** `getrandom` applies a `+0x8000` bias before scaling. The
+  `swap`/`asr.l #1`/`add.l` sequence at 0x5FC3A–0x5FC40 adds `range × 32768`
+  before the high word is taken, so the result is
+  `floor(range × ((seed + 0x8000) & 0xFFFF) / 65536)` for all observed bounds,
+  which are at most 0x7FFF. A bound with bit 15 set is treated as signed by
+  `MULS.W` and does not have the normal `[0,range)` result. The distribution for
+  the observed positive bounds is unchanged; individual values are not.
+- **Corrected:** `escape_timer` fires at 21,000 frames (`cmpi.w #0x5208` at
+  0x4AD0C), matching §18; the 20,000 figure elsewhere was wrong.
+- **Corrected:** `process_coins` computes `current + 4 − previous` per channel
+  before applying pricing; `text_desc` records carry column/row with a `+8`
+  link field; OS `display_mode` 1 is the rotated/column-major layout and
+  Gauntlet II ships mode 0; `pf_isblankfloor` ORs the column-0 case;
+  `maze_place_object_types` returns only for type 3; and the dragon's fire
+  origin resolves as `(path byte >> 1) + facing × 2`.
+- **Corrected:** several ranges previously described as dead residue or as
+  standalone tables have live consumers or different semantics, including
+  0x5C8B0, 0x57332, and 0x5D848. The false dead/residue claims have been
+  removed rather than relabelled.
 
 ## Resolved in the 2026-08-02 attract/sound pass
 
@@ -26,7 +101,8 @@ paths while drafting the corresponding book chapters. All were checked against
   block restarts an *attract screen* rather than starting a session. Entry to
   gameplay is `start_attract_to_game` (0x44204), whose three callers are
   `coincheck` (0x42BE2), `main_start_game` (0x484B8, free play, on the
-  debounced FIRE edge `(debounce_A & 0x1F) == 0x1C`), and the expired attract
+  debounced Magic edge `(debounce_A & 0x1F) == 0x1C` over the bit-0 register
+  0x905F58), and the expired attract
   timer (0x448CE). (`04_game_subsystems.md` §6.4.)
 - **Contradicted and corrected:** `0x9049EE` was labelled a speech-in-progress
   counter. The only nonzero store is 0x42DDA in `sound_system_reset` (0xB4
@@ -79,7 +155,7 @@ paths while drafting the corresponding book chapters. All were checked against
 - **Unknown, unresolvable retained-module provenance:** the exact source-game
   revision and linker/editor symbol names for row9.bin's runtime-dead
   0x8000–0xF9F9 payload are not encoded in the supplied ROMs. Its bytes,
-  instruction/data partition, 21 entry contracts, stale main-ROM call targets,
+  instruction/data partition, 34 entry contracts, stale main-ROM call targets,
   data formats, and lack of Gauntlet II reachability are documented; only the
   original build identity remains unknowable from these artifacts.
 - **Unknown, immaterial electrical value:** exact open-bus bits for decoded but
@@ -125,12 +201,12 @@ paths while drafting the corresponding book chapters. All were checked against
 
 - **Contradicted and corrected:** bytes 0x8000–0xF9F9 are not a monolithic
   font/data area. The complete OS-ROM account now has fourteen gap-free
-  top-level regions, 39 byte-classification segments, and 45 exact data
+  top-level regions, 33 byte-classification segments, and 42 exact data
   subregions. Active code has eight inline-data ranges; retained-module code
-  occupies 0x8000–0x9A0F around five data islands; retained bulk data occupies
+  occupies 0x8000–0x9A0F around two data islands; retained bulk data occupies
   0x9A10–0xF9F9. The byte sweep also found and contracted five unreferenced
-  active-image entries. The ROM-wide function union is now 256 rows: 168 live
-  implementation/shared roots, five active-image residue entries, 21 retained
+  active-image entries. The ROM-wide function union is now 269 rows: 168 live
+  implementation/shared roots, five active-image residue entries, 34 retained
   module roots, six computed cases, and 56 API veneers. Both independent
   control reports prove no incoming Gauntlet II transfer to the retained
   module. All new failure reports are empty. **Confidence: Verified** for
@@ -274,10 +350,10 @@ paths while drafting the corresponding book chapters. All were checked against
   pointers, headers, and record boundaries against `generated/maze_catalog.csv`.
 - **Verified:** the fine ROM-byte audit now classifies every byte in the mixed
   regions 0x40000–0x5561F and 0x56E54–0x5FFB1 as analyzed code or a named ROM
-  range. `generated/rom_catalog_reconciliation.csv` gives all 329 parsed §5 rows an
-  exact project-flag match, and `generated/rom_flag_reconciliation.csv` gives all 352
+  range. `generated/rom_catalog_reconciliation.csv` gives all 322 parsed §5 rows an
+  exact project-flag match, and `generated/rom_flag_reconciliation.csv` gives all 347
   non-code ROM flags an exact §5 or header-table row;
-  `generated/rom_range_overlaps.csv` records 21 intentional
+  `generated/rom_range_overlaps.csv` records eight intentional
   nested/alternate views; there are zero unknown segments, suspicious
   code/data overlaps, or analysis failures. The sweep added 27 shipped
   callable entries (15 header veneers, the exception body, eight
@@ -326,7 +402,7 @@ paths while drafting the corresponding book chapters. All were checked against
 - **Verified:** 26 player movement/collision contracts now have body-checked inputs and returns. `player_try_move` is a frameless wrapper over three normal stack arguments and returns its result in `D0.w`; the internal movement graph is register-based, the door helpers read a coordinate from their caller's saved-register stack, and `mob_probe_up/down` can return the non-slot boundary sentinel `0x0400`. The interpretation of a zero door status as “path handled” remains a **Strong inference** from its callers.
 - **Verified:** 20 monster/shot-combat contracts now have body-checked inputs and returns. This distinguishes the normal `monsters_everything(first_mob_offset)` wrapper from its three inherited-frame branch entries, proves the shared-stack monster-type input to `monster_find_and_shoot`, records `D4`/Z from `find_unused_shot`, and fixes the complete target/shooter and boolean contracts for collision, reflection, wall, dragon, and impact helpers.
 - **Contradicted and corrected:** the generated-loader and RAM-report Markdown parser required the function-name cell to end immediately after its first backticked name, silently omitting slash-separated alias rows. After the subsequent interior/shared, veneer, pointer-installed, and legacy-entry sweeps it recognizes 321 documented game entries. The loader contained 400 total OS/game entries at closure of the main-ROM pass and now grows as newly verified OS roots are promoted.
-- **Verified:** `generated/control_targets.csv` analyzes those 321 entries plus 80 unique computed-dispatch destinations and reconciles 1,129 direct sites: 996 target documented game entries, 124 target documented OS API slots, eight target named RAM palette stubs, and one targets the separately tracked 0x10000 VBLANK abort path. It also records all 12 computed dispatches, the reset-vector jump, 192 register-indirect callable sites plus the separate null assertion, and zero analysis failures. Earlier sweeps added missing callable rows for `pf_palette_clear` (0x5FCCE), `pf_door_update_surrounding_xy` (0x5F7F0), `pf_wall_draw_stack` (0x5EAC2), and the RNG veneer/shared entries at 0x5FC22/0x5FC26/0x5FC2C.
+- **Verified:** `generated/control_targets.csv` analyzes those 321 entries plus 81 unique computed-dispatch destinations and reconciles 1,129 direct sites: 996 target documented game entries, 124 target documented OS API slots, eight target named RAM palette stubs, and one targets the separately tracked 0x10000 VBLANK abort path. It also records all 12 computed dispatches, the reset-vector jump, 192 register-indirect callable sites plus the separate null assertion, and zero analysis failures. On the OS side `generated/os_control_targets.csv` carries 392 site/owner rows across 384 distinct control sites. Earlier sweeps added missing callable rows for `pf_palette_clear` (0x5FCCE), `pf_door_update_surrounding_xy` (0x5F7F0), `pf_wall_draw_stack` (0x5EAC2), and the RNG veneer/shared entries at 0x5FC22/0x5FC26/0x5FC2C.
 - **Contradicted and corrected:** `monster_playerhit_jumptbl` is ten words at 0x49620–0x49633 for types 0x12–0x1B. The load uses backward-biased base 0x495FC; the former 28-entry description mistook live instructions for table bytes.
 - **Verified:** 20 transporter/forcefield contracts now have body-checked inputs and returns. This proves the blocked/usable polarity of `tport_check_dest`, the one-based/fall-through result of `tport_find_id`, packed forward/reverse route words in `D0.l`, the stack and `D0` forcefield-query entries, and the inherited shared depth-list body used by the animation-placement helpers.
 - **Contradicted and corrected:** 0x47DAE is not `tport_cycle_update`; it is `shot_impact_spawn`. `tport_cycle_start` initializes one of four effect-MOB channels, and loop 3 of `main_score_update` advances pictures 0x924–0x95A through byte counters at 0x90497C–0x90497F. Those bytes are an intentional `mob_effect_anim_counter` overlay, not transporter active flags.
@@ -379,8 +455,8 @@ paths while drafting the corresponding book chapters. All were checked against
 - **Verified:** the seven-row thief-state/secret-room catalog closed the original 294-entry set. The later ROM-byte closure sweep added 27 shipped veneers, pointer-installed leaves, and dormant/legacy entries; the current machine union proves all 321 indexed entries have arguments, return behavior, purpose, and any exceptional convention recorded in a body-checked catalog.
 - **Contradicted and corrected:** 0x4FCF0 is `thief_find_aligned_shooter`, not `find_richest_player`; wealth targeting remains at `thief_target_calc` (0x4DFF6). It returns the first active player whose shot is exactly aligned toward the thief, or -1. The paired 0x4E1B8/0x4E172 helpers begin/end shot-dodge mode rather than marking an item stolen or aborting a theft.
 - **Contradicted and corrected:** 0x4E630 is `thief_track_victim_move(new_packed_pos, player_index)`, not `erase_mob_old_pos`. It updates the path-grid direction and `thief_victim_pos` only when the supplied player is the current target and moved; it never writes MOB picture/playfield memory.
-- **Contradicted and corrected:** ordinary monster movement is not gated per frame by `random(32)` against a per-type speed. `monsters_everything` builds seven per-family stack records at 0x40EEE–0x40F58; the `level_flags_2` fast bits install 0x100 over the 0x80 default only on frames where bit 1 of the working frame word is set (roughly 1.5× average pace), and the 0x40E02 override table is applied from the `level_flags` odd-angle bits under mask 0x73, which excludes the demon and lobber bits. The `random(32)` comparison belongs to `handle_generate`. While `poison_timer` is non-zero the whole monster pass is skipped on even frames.
-- **Contradicted and corrected:** `monster_count_table` (0x40E46) is a generator **spawn probability out of 32**, not a live population cap, and no `ram.monster_count` variable exists. `handle_generate` compares the settings/players value plus `monster_cap_bonus`, clamped to `level × 2` and forced to zero by `frame_overflow`, against `getrandom(32)` at 0x49300–0x4930E. Generators are additionally staggered: a generator acts only when low bits of its doubled MOB slot match the frame word under mask 0x1E, giving each one turn per sixteen frames (0x41026–0x41036).
+- **Contradicted and corrected:** ordinary monster movement is not gated per frame by `random(32)` against a per-type speed. `monsters_everything` builds seven per-family stack records at 0x40EEE–0x40F58; the `level_flags_2` fast bits install 0x100 over the 0x80 default only on frames where bit 1 of the working frame word is set (roughly 1.5× average pace), and the 0x40E02 override table is applied from the `level_flags` odd-angle bits under mask 0x73, which excludes the demon and lobber bits. The `random(32)` comparison belongs to `handle_generate`. While the slow-motion timer at 0x9048B2 is non-zero the whole monster pass is skipped on even frames.
+- **Contradicted and corrected:** `monster_spawn_probability_table` (0x40E46, formerly `monster_count_table`) is a generator **spawn probability out of 32**, not a live population cap, and no `ram.monster_count` variable exists. `handle_generate` compares the settings/players value plus `monster_spawn_probability_bonus`, clamped to `level × 2` and forced to zero by `frame_overflow`, against `getrandom(32)` at 0x49300–0x4930E. Generators are additionally staggered: a generator acts only when low bits of its doubled MOB slot match the frame word under mask 0x1E, giving each one turn per sixteen frames (0x41026–0x41036).
 - **Corrected description:** the low nibble that `mazeobj_hsize_tier_tbl` (0x5864C) ORs into the horizontal-position word is the **MOB palette number** (`01_hardware.md` §8.2), not a horizontal sprite size; horizontal size lives in the vertical-position word. For monsters that nibble is simultaneously the three-step health value, so remaining health and displayed color are one field. Verified bases: ghost/grunt/aux grunt 4, generators 5, demon 8, lobber/sorcerer/Super Sorcerer 11, IT 8, acid 1, Death 0.
 - **Contradicted and corrected:** the thief escape taunt is not player-specific. At 0x4E960–0x4E992 `getrandom(2)` selects a pitch pair, playing sound 0x62 with speech 0x63 or sound 0x64 with speech 0x65. The `thief_player_speech_ids`/`mugger_player_speech_ids` names describe high/low pitch variants rather than a thief/mugger or per-player split.
 - **Verified (mugger research gate):** `thief_timer_set` at 0x4E516–0x4E568 returns without scheduling once thief-mode bits 4 and 5 are both set; otherwise `getrandom(32) < 16` selects the mugger while bit 5 is clear, and a failed roll still yields a mugger when bit 4 is already set. `ram.thief_speed` (0x9048BC) is then 0x180 for the mugger against 0x200 for the ordinary thief, in the same per-frame units as the player speed table, so the mugger is the slower variant. Its contact arm (0x4E232–0x4E280) subtracts a flat 100 from `player_health` with a zero clamp, records object type 0x32 as the carried item, and raises `DLGFLAG_KILLMUGGER`.

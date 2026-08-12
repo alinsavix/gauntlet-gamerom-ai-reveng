@@ -188,14 +188,15 @@ call.
 >   for the OS ROM: `doc/generated/os_rom_regions.csv` and
 >   `doc/generated/os_rom_byte_coverage.csv`.
 > - The 321 checked game-ROM callable contracts:
->   `doc/generated/callable_contract_coverage.csv`; the OS ROM's 256-row
+>   `doc/generated/callable_contract_coverage.csv`; the OS ROM's 269-row
 >   contract union: `doc/generated/os_all_function_contracts.csv`.
 > - Validation of all 117 stored maze records and their rendered images: the
 >   `python-gex/` test suite and `doc/06_maze_catalog.md` with
 >   `doc/generated/maze_catalog.csv`.
 > - The five canonical confidence labels and the script that enforces them in
 >   every documentation section: `doc/check_confidence_labels.py`; the honest
->   list of remaining unresolved questions: `doc/08_known_issues.md`.
+>   list of remaining unresolved questions: `doc/08_known_issues.md` and the
+>   repository-root `SOL_ISSUES.md`.
 > - The main loop teased above is `g2mainloop` (0x42A66); its verified call
 >   sequence and VBLANK semaphore (the word at 0x904002) are in
 >   `doc/03_game_rom_structure.md` §2.

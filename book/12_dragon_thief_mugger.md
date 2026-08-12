@@ -142,10 +142,11 @@ The thief is not placed by a maze record. It is scheduled.
 At level setup the game decides whether this level gets a thief at all. Levels
 one through five never do, and neither do the two secret rooms. From level six
 onward it rolls a random number from 0 to 7 and compares it against the level
-number divided by eight, so the odds climb steadily with depth: nothing at all
-in the single digits, one chance in eight through the teens, and a certainty
-once you reach level sixty-four. Deep play is thief country. Treasure rooms are
-included, which is why the room where you least want a visitor gets one.
+number divided by eight, so the odds climb in steps: nothing at all on levels
+six and seven, one chance in eight from eight to fifteen, two in eight from
+sixteen to twenty-three, and a certainty once you reach level sixty-four. Deep
+play is thief country. Treasure rooms are included, which is why the room where
+you least want a visitor gets one.
 
 **Choosing a victim.** If a thief is coming, `thief_target_calc` walks the four
 player positions, skips anyone who is not active, and scores the rest:

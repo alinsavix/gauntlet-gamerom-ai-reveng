@@ -33,7 +33,7 @@ it, and uncertainty is stated rather than smoothed over.
 | 13 | [A Living Maze](13_living_maze.md) | Doors, transporters, forcefields, misbehaving walls, treasure rooms, and the secret code |
 | 14 | [Keeping Score](14_score_and_economics.md) | Coins into health, scoring, score per coin, the info panel, EEPROM, and operator settings |
 | 15 | [The Show](15_attract_and_demo.md) | The attract cycle, the recorded demo, what actually repeats between runs, and the legend |
-| 16 | [The Voice](16_sound.md) | The sound board as a second computer, the one-byte wire, and the coins that ride it |
+| 16 | [The Voice](16_sound.md) | The sound board as a second computer, the pair of one-byte latches, and the coins that ride them |
 | 17 | [How We Know All This](17_methodology.md) | The evidence ladder, the audits, build fingerprints, a Morse copyright trap, and the limits |
 | — | [Glossary and Repository Map](appendix_glossary.md) | Every term of art, where to look things up, source notes, and the publication checklist |
 

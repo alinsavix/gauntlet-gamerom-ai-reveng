@@ -402,9 +402,9 @@ cabinet's remarkably candid bookkeeping.
 > - Forcefields: segment table 0x910780 built by `forcefield_segments_setup`
 >   (0x53398), word format in `doc/05_data_reference.md` §4.3; blink state
 >   machine in `main_cycle_tport_and_ffield` (0x40528), color word 0x904046;
->   the contact test at 0x4AA42–0x4AAB0 skips damage while that word is zero
->   and charges `health_drain_table` (0x5813C: 2/2/6/4, armored 1/1/5/3) per
->   frame (verified by disassembly); hurt/silencer sounds 0x2E/0x2F via
+>   the contact test beginning at 0x4AA42 skips damage while that word is zero
+>   and charges `forcefield_damage_table` (0x5813C: 2/2/6/4, armored 1/1/5/3)
+>   per frame, its only consumer in the whole ROM (verified by disassembly); hurt/silencer sounds 0x2E/0x2F via
 >   `main_handle_death` (0x4664C), §21.
 > - Cyclic walls: `main_walls_cyclic_move` (0x5E62A), 120-frame timer, phases
 >   at 0x90401C, group bytes at 0x910600 (2 bits/cell), sound 0x2B, §18.

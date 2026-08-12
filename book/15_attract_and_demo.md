@@ -91,7 +91,7 @@ first-encounter flags so the advice messages will fire again for this
 audience, loads stored maze 102, and runs the ordinary new-level pipeline
 from Chapter 9. Then it writes 3 into the blue position's character slot,
 which is the Elf, and calls `player_join` on that position, the same
-`player_join` a real person reaches by pressing Fire in character selection.
+`player_join` a real person reaches by pressing Magic in character selection.
 The blue position now holds a live hero with a MOB, a spawn point, a HUD
 column, and health. Finally it installs a ROM pointer and a countdown byte
 for that position and zeroes the other three.
@@ -259,10 +259,10 @@ the entrance is the coin: `coincheck` sees a new coin arrive while the
 machine is in an attract mode with nobody alive, and calls
 `start_attract_to_game` before it even credits the coin.
 
-On a free-play cabinet the entrance is Fire. Once a frame,
+On a free-play cabinet the entrance is Magic. Once a frame,
 `main_start_game` looks at each position's debounce shift register from
-Chapter 6 and matches the last five samples against a specific pattern: two
-frames released followed by three frames held. That is a clean press edge
+Chapter 6 and matches the last five samples against a specific pattern: three
+frames released followed by two frames held. That is a clean press edge
 with the bounce filtered out. When a free-play cabinet sees one at an empty
 position during attract, it calls the same `start_attract_to_game` and then
 initializes the position as though a coin had arrived. Either way, the
@@ -325,7 +325,7 @@ reached one byte at a time. Chapter 16 walks the wire.
 >   per-frame `main_logo_updcolors` (0x4DCBA): `doc/04_game_subsystems.md`
 >   §14.3.
 > - Demo setup `attract_demo_init` (0x449D4): maze 102 via
->   `load_level_tileset` (0x40D24) and `maze_new_level_setup` (0x438AE),
+>   `maze_select_bank` (0x40D24) and `maze_new_level_setup` (0x438AE),
 >   `player_character[1]` (0x9048EA) = 3, `player_join` (0x48BB6),
 >   `demo_ptr` (0x904B66) = 0x581C4, `demo_timer` (0x904B76). The frame
 >   counter (0x904006) is cleared by the DEMO branch at 0x44524.
@@ -366,9 +366,12 @@ reached one byte at a time. Chapter 16 walks the wire.
 >   are tested, in pairs; §6.4 now tabulates which pair reaches which screen.
 > - Transitions into play: `start_attract_to_game` (0x44204) from
 >   `coincheck` (0x42BE2), `main_start_game` (0x484B8), and the expired
->   attract timer (0x448CE). The Fire press edge `main_start_game` looks for
+>   attract timer (0x448CE). The press edge `main_start_game` looks for
 >   is `(debounce_A[player] & 0x1F) == 0x1C` at 0x48402–0x48416, over the
->   shift registers at 0x905F58 described in `doc/04_game_subsystems.md` §15;
+>   shift register at 0x905F58, which `input_debounce` fills from raw input
+>   **bit 0** — `JOY_MAGIC_BIT` in `doc/05_data_reference.md` §3.11, and the
+>   same register `main_handle_potions` reads at 0x47020;
+>   `doc/04_game_subsystems.md` §15 and §6.4;
 >   the free-play arm at 0x484A8–0x484C4 pairs it with
 >   `player_init_for_coin` (0x488CA).
 > - Legend: `load_legend_page` (0x4CD1C) loads maze 103, blanks a 29×30

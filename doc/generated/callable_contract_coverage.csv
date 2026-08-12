@@ -38,7 +38,7 @@ address,name,catalogs,confidence
 0x40C78,find_maze,maze_contracts.csv,Verified
 0x40CC4,maze_select_alt_bank,maze_contracts.csv,Verified
 0x40CF2,maze_init,maze_contracts.csv,Verified
-0x40D24,load_level_tileset,maze_contracts.csv,Verified
+0x40D24,maze_select_bank,maze_contracts.csv,Verified
 0x40D4E,maze_select_bank_special,maze_contracts.csv,Verified
 0x40E6A,monsters_everything,monster_combat_contracts.csv,Verified
 0x40FAE,monster_loop_core,monster_combat_contracts.csv,Verified
@@ -125,7 +125,7 @@ address,name,catalogs,confidence
 0x488CA,player_coindrop,player_lifecycle_contracts.csv;score_coin_dialog_contracts.csv,Verified
 0x489B8,remove_dying_player_sprites,player_lifecycle_contracts.csv,Verified
 0x48A36,player_join_finalize,player_lifecycle_contracts.csv,Verified
-0x48B58,update_monster_bonus_from_score_per_coin,score_coin_dialog_contracts.csv,Verified
+0x48B58,update_monster_spawn_bonus_from_score_per_coin,score_coin_dialog_contracts.csv,Verified
 0x48BB6,player_join,player_lifecycle_contracts.csv,Verified
 0x48BEC,player_start_inner,player_lifecycle_contracts.csv,Verified
 0x48F12,tile_occupancy_test,movement_path_contracts.csv,Verified

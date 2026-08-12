@@ -1085,9 +1085,9 @@ fs *
 fs *
 'f forcefield_color_steps 8 0x000405c0
 fs *
-'f palette_offset_by_walltype 16 0x000405c8
+'f palette_offset_by_floorpattern 16 0x000405c8
 fs *
-'f palette_offset2_by_walltype 16 0x000405d8
+'f palette_offset2_by_floorpattern 16 0x000405d8
 fs *
 'f vscroll_alpha_gradient 64 0x000405e8
 fs *
@@ -1127,7 +1127,7 @@ fs *
 fs *
 'f maze_init 1 0x00040cf2
 fs *
-'f load_level_tileset 1 0x00040d24
+'f maze_select_bank 1 0x00040d24
 fs *
 'f maze_select_bank_special 1 0x00040d4e
 fs *
@@ -1143,9 +1143,9 @@ fs *
 fs *
 'f monster_oddangle_table 40 0x00040e1e
 fs *
-'f monster_count_table 32 0x00040e46
+'f monster_spawn_probability_table 32 0x00040e46
 fs *
-'f dead_monster_count_tail_words 4 0x00040e66
+'f monster_spawn_probability_bonus_bytes 4 0x00040e66
 fs *
 'f monsters_everything 1 0x00040e6a
 fs *
@@ -1321,7 +1321,7 @@ fs *
 fs *
 'f player_join2 1 0x00048a36
 fs *
-'f update_monster_bonus_from_score_per_coin 1 0x00048b58
+'f update_monster_spawn_bonus_from_score_per_coin 1 0x00048b58
 fs *
 'f player_join 1 0x00048bb6
 fs *
@@ -1517,9 +1517,7 @@ fs *
 fs *
 'f mob_collision_test 1 0x00052192
 fs *
-'f mob_collision_object_jumptbl 94 0x00052210
-fs *
-'f dead_mob_collision_jump_tail 12 0x0005226e
+'f mob_collision_object_jumptbl 106 0x00052210
 fs *
 'f main_exit_move 1 0x0005287c
 fs *
@@ -1613,7 +1611,9 @@ fs *
 fs *
 'f dead_slapstic_verify_suffix 76 0x00056f5c
 fs *
-'f pad_56fa8 90 0x00056fa8
+'f pad_56fa8 88 0x00056fa8
+fs *
+'f residue_word_57000 2 0x00057000
 fs *
 'f character_announcement_speech_ptrs 16 0x00057002
 fs *
@@ -1659,9 +1659,11 @@ fs *
 fs *
 'f character_name_strings 40 0x00057252
 fs *
-'f level_start_message_strings 184 0x0005727a
+'f level_start_message_strings 180 0x0005727a
 fs *
-'f dead_header_byte_block 14 0x00057332
+'f level_start_row_bytes 6 0x0005732e
+fs *
+'f level_start_attr_words 12 0x00057334
 fs *
 'f character_hud_text_ptrs 16 0x00057340
 fs *
@@ -1685,13 +1687,11 @@ fs *
 fs *
 'f character_glyph_rows 102 0x000574b8
 fs *
-'f pad_5751e 2 0x0005751e
+'f ui_status_strings 90 0x0005751e
 fs *
-'f ui_status_strings 88 0x00057520
+'f dip_switch_display_records 188 0x00057578
 fs *
-'f dip_switch_display_records 192 0x00057578
-fs *
-'f continue_screen_header 12 0x00057638
+'f continue_screen_header 16 0x00057634
 fs *
 'f continue_blank_line 20 0x00057644
 fs *
@@ -1787,9 +1787,7 @@ fs *
 fs *
 'f factory_highscore_records 320 0x00057eba
 fs *
-'f pad_57ffa 6 0x00057ffa
-fs *
-'f score_coin_initials_records 112 0x00058000
+'f score_coin_initials_records 118 0x00057ffa
 fs *
 'f invisibility_flash_masks 32 0x00058070
 fs *
@@ -1803,17 +1801,15 @@ fs *
 fs *
 'f lobber_lead_distance 16 0x000580c8
 fs *
-'f player_delta_x 16 0x000580d8
+'f player_delta_x 18 0x000580d8
 fs *
-'f player_delta_y 16 0x000580e8
-fs *
-'f pad_580f8 4 0x000580f8
+'f player_delta_y 18 0x000580ea
 fs *
 'f joystick_nibble_to_direction 32 0x000580fc
 fs *
 'f fight_direction_map 32 0x0005811c
 fs *
-'f health_drain_table 32 0x0005813c
+'f forcefield_damage_table 32 0x0005813c
 fs *
 'f dialog_tip_ptrs 48 0x0005815c
 fs *
@@ -1859,17 +1855,13 @@ fs *
 fs *
 'f thief_walk_anim 128 0x00058c9a
 fs *
-'f thief_idle_by_direction 16 0x00058d1a
-fs *
-'f pad_58d2a 2 0x00058d2a
+'f thief_idle_by_direction 18 0x00058d1a
 fs *
 'f thief_walk_anim_compact 64 0x00058d2c
 fs *
 'f mugger_walk_anim 128 0x00058d6c
 fs *
-'f mugger_idle_by_direction 16 0x00058dec
-fs *
-'f pad_58dfc 2 0x00058dfc
+'f mugger_idle_by_direction 18 0x00058dec
 fs *
 'f mugger_walk_anim_compact 64 0x00058dfe
 fs *
@@ -1921,11 +1913,11 @@ fs *
 fs *
 'f hint_text_ptrs 80 0x00059736
 fs *
-'f hint_text_strings 304 0x00059786
+'f hint_text_strings 306 0x00059786
 fs *
-'f hint_speech_records 330 0x000598b6
+'f hint_text_desc_records 228 0x000598b8
 fs *
-'f gameplay_tip_strings 340 0x00059a00
+'f gameplay_tip_strings 440 0x0005999c
 fs *
 'f maze_decomp_type_ptrs 16 0x00059b54
 fs *
@@ -2005,8 +1997,6 @@ fs *
 fs *
 'f character_palette_ptrs 16 0x0005af9e
 fs *
-'f aux_palette_init 128 0x0005afa6
-fs *
 'f tport_palette_cycle_blocks 96 0x0005afae
 fs *
 'f character_full_palettes 512 0x0005b00e
@@ -2055,9 +2045,7 @@ fs *
 fs *
 'f character_stun_delay_add 8 0x0005b734
 fs *
-'f tile_effect_sound_ids 8 0x0005b73c
-fs *
-'f tile_effect_sound_ids_alt 8 0x0005b744
+'f tile_effect_sound_ids 16 0x0005b73c
 fs *
 'f pickup_score_values 40 0x0005b74c
 fs *
@@ -2079,7 +2067,9 @@ fs *
 fs *
 'f exit_rotation_offset_by_count 32 0x0005b7fc
 fs *
-'f exit_desc_by_floorpattern 1024 0x0005b81c
+'f exit_desc_by_floorpattern 576 0x0005b81c
+fs *
+'f wall_crumble_stage_ptrs 12 0x0005ba5c
 fs *
 'f logo_outer_timer_init 2 0x0005ba68
 fs *
@@ -2105,7 +2095,7 @@ fs *
 fs *
 'f floor_type11_desc 8 0x0005c8a8
 fs *
-'f dead_sequential_tile_codes 504 0x0005c8b0
+'f exit_tile_descs 504 0x0005c8b0
 fs *
 'f floor_type3e_descs 128 0x0005caa8
 fs *
@@ -2151,7 +2141,7 @@ fs *
 fs *
 'f playfield_special_palette_lowwall_view 96 0x0005d7e8
 fs *
-'f palette_color_ramps 416 0x0005d848
+'f unconsumed_block_5d848 416 0x0005d848
 fs *
 'f secretcode_text_recs 176 0x0005d9e8
 fs *
@@ -2453,7 +2443,7 @@ fs *
 fs *
 'f ram.player_keysnum 4 0x0090405a
 fs *
-'f ram.monster_cap_bonus 1 0x0090405f
+'f ram.monster_spawn_probability_bonus 1 0x0090405f
 fs *
 'f ram.trick_player 1 0x00904063
 fs *
@@ -2525,7 +2515,7 @@ fs *
 fs *
 'f ram.thief_direction_change_pos 2 0x009048b0
 fs *
-'f ram.poison_timer 2 0x009048b2
+'f ram.monster_slowmo_timer 2 0x009048b2
 fs *
 'f ram.player_deferred_move_flags 8 0x009048b4
 fs *
@@ -2897,9 +2887,9 @@ fs *
 fs *
 'f ram.invis_timer 8 0x00905f50
 fs *
-'f ram.debounce_shift_a 8 0x00905f58
+'f ram.debounce_shift_magic 8 0x00905f58
 fs *
-'f ram.debounce_shift_b 8 0x00905f60
+'f ram.debounce_shift_fire 8 0x00905f60
 fs *
 'f ram.player_supershot 4 0x00905f68
 fs *

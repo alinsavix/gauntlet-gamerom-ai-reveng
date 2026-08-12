@@ -21,7 +21,7 @@ that represent every moving thing), and Chapter 9's freshly constructed level.
 ## A friend with a coin
 
 You are alone on level nine with your health sagging when a friend walks up,
-drops a coin, presses Fire, and holds the stick left. A valkyrie materializes
+drops a coin, presses Magic, and holds the stick left. A valkyrie materializes
 in a clear cell near where you stand, her stats column lights up in blue on
 the info panel, and the cabinet says, in its best announcer voice, "Welcome,
 Blue Valkyrie."
@@ -47,9 +47,9 @@ number, an ID that turns up everywhere:
 | 2 | Wizard |
 | 3 | Elf |
 
-Per-class ROM tables cover movement speed, health drain, shot damage, armor,
-and magic (a whole matrix, covered in its own section below). Most are small
-enough to show outright, with values read straight from the ROM.
+Per-class ROM tables cover movement speed, shot damage, armor, forcefield
+burn, and magic (a whole matrix, covered in its own section below). Most are
+small enough to show outright, with values read straight from the ROM.
 
 **Movement speed**, in the engine's fixed-point units; the powered row is
 selected by the extra-speed power-up:
@@ -64,16 +64,17 @@ else to Elf pace. (A companion table layers smaller per-class fractional
 boosts on a cadence, so the walking feel differs a little more than the base
 row suggests.)
 
-**Health drain**, the per-tick tax that time itself charges: Warrior 2,
-Valkyrie 2, Wizard 6, Elf 4, with a second row of gentler rates (1, 1, 5,
-3) reachable through the lookup's power/difficulty selector. The Wizard's
-clock runs three times as fast as the Warrior's, which is the number behind
-his fragile reputation.
+**Forcefield burn**, charged per frame while you stand in a lit energy fence:
+Warrior 2, Valkyrie 2, Wizard 6, Elf 4, with a second row of gentler rates
+(1, 1, 5, 3) selected by the extra-armor power-up. The Wizard pays three times
+what the Warrior does, which is one of the numbers behind his fragile
+reputation. Time itself charges a flat rate instead, the same for every class,
+and the section on health below gives it.
 
 The shot-damage table is small enough to show in full. Heroes run across the
 columns here because that is how ROM stores them: consecutive entries step
-through the four characters, and owning the shot-power upgrade moves the
-lookup to the second row (forward 8 bytes) in the same table.
+through the four characters. The table has three such rows, and owning the
+shot-power upgrade moves the lookup forward eight bytes, to the third of them.
 
 | Shot | Warrior | Valkyrie | Wizard | Elf |
 |------|---------|----------|--------|-----|
@@ -107,7 +108,7 @@ current counter value *is* the animation.
 
 ## Joining the party
 
-A coin credits an idle player position with health, and pressing Fire moves
+A coin credits an idle player position with health, and pressing Magic moves
 that position into **character-selection state**, one of the per-player status
 values from Chapter 7. The game keeps running while your friend picks a hero,
 so you are still fighting during her deliberations. Selection reads her
@@ -134,8 +135,8 @@ trigger), the placement runs:
 3. **Install the character.** Two small per-player handler slots in RAM are
    pointed at character-specific palette routines, one driving the "hurt"
    flash cycle and one driving power-state color cycling, and the display
-   update calls them every frame thereafter. A poisoned wizard flickers in
-   different colors from a poisoned warrior because the *handler itself* was
+   update calls them every frame thereafter. A wounded wizard flashes in
+   different colors from a wounded warrior because the *handler itself* was
    chosen at join time.
 4. **Announce.** Counters and per-player state are initialized, the active
    player count goes up, the join sound plays, the info-panel column is
@@ -180,7 +181,7 @@ why it failed:
 ```
 speed = speed_table[character][powered?]
 delta = direction_deltas[facing] scaled by speed
-        (reduced if stunned, poisoned, or acid-slowed)
+        (reduced if stunned or acid-slowed)
 
 result = try_move(player, delta, flags):
     probe the target cell(s) for walls and blocking objects
@@ -198,8 +199,8 @@ unchanged, so a failed step never scrambles your aim. The **camera window**
 constrains movement too: unless the level flags say otherwise, you cannot walk
 somewhere the shared screen refuses to follow, which is Chapter 8's
 rubber-band seen from the other side. Slow effects land on the proposal
-itself. A stun freezes it briefly, poison drags on it for ten or twenty
-seconds, and acid slows you for as long as you stand in it.
+itself. A stun freezes it briefly, and acid slows you for as long as you
+stand in it.
 
 All of the wall, door, and occupancy probes work on Chapter 8's packed maze
 slots and the traversability table introduced there. Movement is the biggest
@@ -284,9 +285,10 @@ of its own inside the potion handler; see Chapter 12.)
 Chapter 1 called health both life bar and cash register. The per-frame code
 accounts for every movement of that number.
 
-Time drains health on a steady cadence, in an amount that comes from a table
-indexed by character and by the operator's difficulty setting, which makes the
-tax rate a tuning knob. Monster contact subtracts through the contact-damage
+Time drains health on a steady cadence: one point off every active player's
+total on every sixty-fourth frame, in every mode, with no class or difficulty
+term at all. It is the one charge in the game nobody can be better at paying.
+Monster contact subtracts through the contact-damage
 table, which carries its own half for powered players. Monster shots subtract
 through the armor table, while hazards and special monsters take their own
 paths to the same number. Damage also gets *sampled*: a 60-frame window
@@ -311,10 +313,11 @@ OVER display if it did not. One word, two jobs, chosen by whether you are
 alive, which is a very 1986 economy. If you were the last player standing,
 Chapter 7's continue prompt takes over.
 
-Poison is a footnote with teeth. Some food and some potions are poison
-variants, told apart by their sprite. Shooting one releases the toxin onto
-you, a ten-to-twenty-second slowdown announced by sound, which turns "don't
-shoot the food" from etiquette into self-interest.
+One footnote runs the other way. A few food and potion sprites are marked
+variants, and shooting one throws the *monsters* into slow motion: ten seconds
+for the food, twenty for the potion, each announced by its own sound. For once
+the machine rewards you for shooting the food, and Chapter 11 has the
+mechanism, which is simply that the monster pass skips every other frame.
 
 ## Pockets and doors
 
@@ -436,8 +439,8 @@ ticks a second. Chapter 11 takes the other side of the collision, the horde.
 > - Movement: `player_try_move` (0x41BF0) and its probe/traversal graph,
 >   §4.2 and `doc/generated/player_collision_contracts.csv`; blocked-facing
 >   flag `movement_blocked` (0x904A0E); speed table `player_speed_normal`
->   (0x580A8); slow effects `player_stundelay` (0x904A54) and `poison_timer`
->   (0x9048B2).
+>   (0x580A8); slow effect `player_stundelay` (0x904A54). The timer at
+>   0x9048B2 is `monster_slowmo_timer`, not a player effect — see Chapter 11.
 > - Animation tables: idle/walking/fighting/shooting at
 >   0x58A4A/0x58A8A/0x5884A/0x5874A with counter mechanics in
 >   `doc/05_data_reference.md` §8.
@@ -457,11 +460,14 @@ ticks a second. Chapter 11 takes the other side of the collision, the horde.
 >   to MOB removal); the data reference now documents the same semantics.
 >   All stat-table values in this chapter were likewise read straight
 >   from the ROM.
-> - Health: `main_health_countdown` (0x466F6), §4.3; `health_drain_table`
->   (0x5813C); `health_per_coin_table` (0x57862); heartbeat mask table
+> - Health: `main_health_countdown` (0x466F6), §4.3, whose drain is a flat
+>   `subq.l #1` at 0x4675E gated on `frame_counter & 0x3F` at 0x4670C;
+>   `health_per_coin_table` (0x57862); heartbeat mask table
 >   0x576A8; damage sampling `player_damage_sample_update` (0x50E34); the
 >   dual-use `player_state_timer` (0x904A26) and score-per-coin ranking
->   `highscore_check` (0x49D0E), §10.3.
+>   `highscore_check` (0x49D0E), §10.3. The per-class table at 0x5813C is
+>   `forcefield_damage_table`, whose sole consumer is the forcefield branch
+>   at 0x4AA96 (Chapter 13), not this routine.
 > - Pickups and doors: `player_tile_interact` (0x511AC), §4.6; key/potion
 >   counters 0x90405A/0x904055; `door_record_endpoints` (0x51E80) with
 >   endpoint records 0x904A76/0x904A86; `main_open_doors` (0x45C00);

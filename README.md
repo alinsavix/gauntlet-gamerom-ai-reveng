@@ -10,7 +10,7 @@ The Gauntlet II game ROM image is 128 KB and mixes compiled C, hand-written 6801
 
 Although the results were not as impressive as the results of having the AI reverse engineer the sound ROMs (partially because the starting point was already fairly advanced) -- and I had to push it a lot more and be a lot more specific about the exact things I wanted it to work on -- the results are still fairly admirable. I feel like they need a human-based cleanup pass to better organize the findings, though!
 
-The maintained audit now covers 321 callable game-ROM entries and 329 cataloged ROM-data ranges, along with a host of finer details about parts of the code I was already mostly familiar with.
+The maintained audit now covers 321 callable game-ROM entries and 322 cataloged ROM-data rows over 321 distinct addresses, along with a host of finer details about parts of the code I was already mostly familiar with.
 
 ## Results
 

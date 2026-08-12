@@ -23,7 +23,7 @@ CONTRACTS = (
     (0x4E684, "tport_route_connect", "uint16 source_pos, uint16 destination_pos, uint16 approach_pos", "void", "", "Verified", ("move.w 0xa(a6), d1", "move.w 0xe(a6), d2", "move.w 0x12(a6), d3")),
     (0x4E73A, "tport_route_connect_if_empty", "uint16 source_pos, uint16 destination_pos, uint16 approach_pos", "void", "", "Verified", ("move.w 0xa(a6), d2", "move.w 0xe(a6), d4", "move.w 0x12(a6), d3")),
     (0x4E7C0, "tport_find_id", "uint16 packed_maze_pos", "D0.l = one-based transporter ID; level_tport_count + 1 when absent", "", "Verified", ("move.w 0xa(a6), d3", "ext.l d0", "addq.l 0x1, d0")),
-    (0x50224, "player_tport", "uint16 transporter_pos, uint16 player_index", "void", "", "Verified", ("move.w 0xa(a6), d3", "move.w 0xe(a6), d4", "move.w d3, (a2, d0.w)")),
+    (0x50224, "player_tport", "uint16 transporter_pos, uint16 player_index", "D0.l = 0 when the teleport is aborted for too few clear landing cells, else -2 (0xFFFFFFFE) after the move; consumed by player_tile_interact at 0x513CE", "", "Verified", ("move.w 0xa(a6), d3", "move.w 0xe(a6), d4", "move.w d3, (a2, d0.w)")),
     (0x50616, "tport_player_flash", "uint16 player_index", "void", "", "Verified", ("move.w 0xa(a6), d1", "move.w 0x1709, (a0, d0.w)")),
     (0x50662, "tport_player_move", "uint16 player_index", "void", "", "Verified", ("move.w 0xa(a6), d3", "move.w (a2, d0.w), d6", "moveq 0x1, d4")),
     (0x50ADE, "tport_check_dest", "uint16 destination_mob_slot, uint16 player_index", "D0.l = 1 blocked or 0 usable", "", "Verified", ("move.w 0xa(a6), d1", "move.w 0xe(a6), d3", "moveq 0x1, d0", "moveq 0x0, d0")),

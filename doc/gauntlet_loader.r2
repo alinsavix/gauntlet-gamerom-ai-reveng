@@ -178,7 +178,7 @@ af+ 0x49e8 find_option_record
 af+ 0x4a44 render_option_record
 af+ 0x4b66 render_option_record_page
 af+ 0x4be6 display_next_screen_prompt
-af+ 0x4c38 init_operator_mob_display
+af+ 0x4c38 init_operator_alpha_palette
 af+ 0x4c66 run_statistics_histograms
 af+ 0x4fa0 display_statistics_play_time
 af+ 0x5098 run_statistics_summary
@@ -191,14 +191,27 @@ af+ 0x8702 legacy_monster_choose_direction
 af+ 0x89aa legacy_four_cell_occupied_test
 af+ 0x89e6 legacy_position_in_active_bounds
 af+ 0x8a12 legacy_set_direction_from_delta
+af+ 0x8a84 legacy_moblist_add_object
 af+ 0x8ae8 legacy_moblist_insert
+af+ 0x8b9e legacy_move_mob_slot_entry
+af+ 0x8bd4 legacy_moblist_remove_and_clear_entry
+af+ 0x8c04 legacy_moblist_unlink_entry
 af+ 0x8c36 legacy_move_mob_slot
 af+ 0x8c70 legacy_moblist_remove_and_clear
 af+ 0x8d00 legacy_moblist_unlink
+af+ 0x8d86 legacy_moblist_link_slot_base13
+af+ 0x8d94 legacy_moblist_link_slot_base0
+af+ 0x8d9e legacy_moblist_link_slot_base17
+af+ 0x8dac legacy_moblist_link_slot_base21
+af+ 0x8dba legacy_moblist_link_slot_base25
+af+ 0x8dc8 legacy_moblist_link_slot_base1
+af+ 0x8dd2 legacy_moblist_link_by_slot_index
+af+ 0x8e90 legacy_moblist_remove_by_slot_index
 af+ 0x8f38 legacy_probe_up
 af+ 0x9006 legacy_probe_down
 af+ 0x90d2 legacy_probe_left
 af+ 0x9192 legacy_probe_right
+af+ 0x9252 legacy_recursive_path_move_entry
 af+ 0x9284 legacy_recursive_path_move
 af+ 0x9864 legacy_test_actor_contact_a
 af+ 0x9880 legacy_test_actor_contact_b
@@ -246,7 +259,7 @@ af+ 0x40a78 shot_collision_candidate_core
 af+ 0x40c78 find_maze
 af+ 0x40cc4 maze_select_alt_bank
 af+ 0x40cf2 maze_init
-af+ 0x40d24 load_level_tileset
+af+ 0x40d24 maze_select_bank
 af+ 0x40d4e maze_select_bank_special
 af+ 0x40e6a monsters_everything
 af+ 0x40fae monster_loop_core
@@ -333,7 +346,7 @@ af+ 0x487ca player_lowhealth
 af+ 0x488ca player_coindrop
 af+ 0x489b8 remove_dying_player_sprites
 af+ 0x48a36 player_join_finalize
-af+ 0x48b58 update_monster_bonus_from_score_per_coin
+af+ 0x48b58 update_monster_spawn_bonus_from_score_per_coin
 af+ 0x48bb6 player_join
 af+ 0x48bec player_start_inner
 af+ 0x48f12 tile_occupancy_test
@@ -661,8 +674,8 @@ f palette_power_elf 14 0x0004050c
 f palette_hurt_elf 14 0x0004051a
 f main_cycle_tport_and_ffield 1 0x00040528
 f forcefield_color_steps 8 0x000405c0
-f palette_offset_by_walltype 16 0x000405c8
-f palette_offset2_by_walltype 16 0x000405d8
+f palette_offset_by_floorpattern 16 0x000405c8
+f palette_offset2_by_floorpattern 16 0x000405d8
 f vscroll_alpha_gradient 64 0x000405e8
 f calc_score_per_coin 1 0x00040628
 f input_debounce 1 0x00040644
@@ -682,7 +695,7 @@ f shot_collision_probe_offsets 160 0x00040bd8
 f find_maze 1 0x00040c78
 f maze_select_alt_bank 1 0x00040cc4
 f maze_init 1 0x00040cf2
-f load_level_tileset 1 0x00040d24
+f maze_select_bank 1 0x00040d24
 f maze_select_bank_special 1 0x00040d4e
 f monster_kill_score_by_multiplier 18 0x00040d78
 f monster_shoot_axis_thresholds 40 0x00040d8a
@@ -690,8 +703,8 @@ f monster_anim_idle_ptrs 40 0x00040db2
 f monster_anim_moving_ptrs 40 0x00040dda
 f monster_level_flag_overrides 28 0x00040e02
 f monster_oddangle_table 40 0x00040e1e
-f monster_count_table 32 0x00040e46
-f dead_monster_count_tail_words 4 0x00040e66
+f monster_spawn_probability_table 32 0x00040e46
+f monster_spawn_probability_bonus_bytes 4 0x00040e66
 f monsters_everything 1 0x00040e6a
 f monster_loop_core 1 0x00040fae
 f monster_special_handler 1 0x0004119a
@@ -779,7 +792,7 @@ f player_lowhealth 1 0x000487ca
 f player_coindrop 1 0x000488ca
 f remove_dying_player_sprites 1 0x000489b8
 f player_join_finalize 1 0x00048a36
-f update_monster_bonus_from_score_per_coin 1 0x00048b58
+f update_monster_spawn_bonus_from_score_per_coin 1 0x00048b58
 f player_join 1 0x00048bb6
 f player_start_inner 1 0x00048bec
 f tile_occupancy_test 1 0x00048f12
@@ -877,8 +890,7 @@ f door_scan_vertical_endpoints 1 0x00051fae
 f door_scan_horizontal_endpoints 1 0x0005207c
 f player_add_score_with_mult 1 0x0005214c
 f mob_collision_test 1 0x00052192
-f mob_collision_object_jumptbl 94 0x00052210
-f dead_mob_collision_jump_tail 12 0x0005226e
+f mob_collision_object_jumptbl 106 0x00052210
 f main_exit_move 1 0x0005287c
 f exit_get_id 1 0x00052b06
 f player_exit_sequence 1 0x00052b40
@@ -925,7 +937,8 @@ f slapstic_cmd_maze_init 1 0x00056e90
 f slapstic_cmd_bankX_special 1 0x00056e98
 f slapstic_verify 1 0x00056eaa
 f dead_slapstic_verify_suffix 76 0x00056f5c
-f pad_56fa8 90 0x00056fa8
+f pad_56fa8 88 0x00056fa8
+f residue_word_57000 2 0x00057000
 f character_announcement_speech_ptrs 16 0x00057002
 f random_maze_flags 52 0x00057012
 f slapstic_bitwise_addr_a 8 0x00057046
@@ -948,8 +961,9 @@ f player_color_name_ptrs 16 0x00057212
 f player_color_name_strings 32 0x00057222
 f character_name_ptrs 16 0x00057242
 f character_name_strings 40 0x00057252
-f level_start_message_strings 184 0x0005727a
-f dead_header_byte_block 14 0x00057332
+f level_start_message_strings 180 0x0005727a
+f level_start_row_bytes 6 0x0005732e
+f level_start_attr_words 12 0x00057334
 f character_hud_text_ptrs 16 0x00057340
 f player_text_palette_words 8 0x00057350
 f treasure_room_duration 8 0x00057358
@@ -961,10 +975,9 @@ f challenge_unique_qualifier_text 104 0x00057444
 f challenge_it_desc 8 0x000574ac
 f challenge_it_text 4 0x000574b4
 f character_glyph_rows 102 0x000574b8
-f pad_5751e 2 0x0005751e
-f ui_status_strings 88 0x00057520
-f dip_switch_display_records 192 0x00057578
-f continue_screen_header 12 0x00057638
+f ui_status_strings 90 0x0005751e
+f dip_switch_display_records 188 0x00057578
+f continue_screen_header 16 0x00057634
 f continue_blank_line 20 0x00057644
 f continue_press_start 20 0x00057658
 f continue_within_seconds 20 0x0005766c
@@ -1012,23 +1025,21 @@ f lobber_shot_spawn_h_offset 16 0x00057bb8
 f lobber_shot_spawn_v_offset 16 0x00057bc8
 f dead_tile_word_block 738 0x00057bd8
 f factory_highscore_records 320 0x00057eba
-f pad_57ffa 6 0x00057ffa
-f score_coin_initials_records 112 0x00058000
+f score_coin_initials_records 118 0x00057ffa
 f invisibility_flash_masks 32 0x00058070
 f fighting_anim_end 8 0x00058090
 f demo_stream_ptrs 16 0x00058098
 f player_speed_normal 16 0x000580a8
 f player_anim_rate 16 0x000580b8
 f lobber_lead_distance 16 0x000580c8
-f player_delta_x 16 0x000580d8
-f player_delta_y 16 0x000580e8
-f pad_580f8 4 0x000580f8
+f player_delta_x 18 0x000580d8
+f player_delta_y 18 0x000580ea
 f joystick_nibble_to_direction 32 0x000580fc
 f fight_direction_map 32 0x0005811c
-f health_drain_table 32 0x0005813c
+f forcefield_damage_table 32 0x0005813c
 f dialog_tip_ptrs 48 0x0005815c
 f demo_player0_input_stream 56 0x0005818c
-f demo_input_streams 256 0x0005818c
+# alias demo_input_streams at 0x0005818c superseded by demo_player0_input_stream
 f demo_player1_input_stream 150 0x000581c4
 f demo_player2_input_stream 2 0x0005825a
 f demo_player3_input_stream 48 0x0005825c
@@ -1048,12 +1059,10 @@ f projectile_picture_table 128 0x00058b8a
 f anim_tiles_sorcerer 128 0x00058c0a
 f thief_escape_anim 16 0x00058c8a
 f thief_walk_anim 128 0x00058c9a
-f thief_idle_by_direction 16 0x00058d1a
-f pad_58d2a 2 0x00058d2a
+f thief_idle_by_direction 18 0x00058d1a
 f thief_walk_anim_compact 64 0x00058d2c
 f mugger_walk_anim 128 0x00058d6c
-f mugger_idle_by_direction 16 0x00058dec
-f pad_58dfc 2 0x00058dfc
+f mugger_idle_by_direction 18 0x00058dec
 f mugger_walk_anim_compact 64 0x00058dfe
 f special_projectile_picture_table 160 0x00058e3e
 f monster_projectile_picture_table 66 0x00058ede
@@ -1079,9 +1088,9 @@ f shot_damage_rand_tbl 12 0x000596c2
 f monstshot_damage_tbl 40 0x000596ce
 f speech_charname_tbl 64 0x000596f6
 f hint_text_ptrs 80 0x00059736
-f hint_text_strings 304 0x00059786
-f hint_speech_records 330 0x000598b6
-f gameplay_tip_strings 340 0x00059a00
+f hint_text_strings 306 0x00059786
+f hint_text_desc_records 228 0x000598b8
+f gameplay_tip_strings 440 0x0005999c
 f maze_decomp_type_ptrs 16 0x00059b54
 f powerup_bit_masks 24 0x00059b64
 f powerup_speech_ids 48 0x00059b7c
@@ -1121,7 +1130,6 @@ f alpha_palette_init 128 0x0005ad1e
 f mob_palette_init 128 0x0005ad9e
 f mob_palette_extended 384 0x0005ae1e
 f character_palette_ptrs 16 0x0005af9e
-f aux_palette_init 128 0x0005afa6
 f tport_palette_cycle_blocks 96 0x0005afae
 f character_full_palettes 512 0x0005b00e
 f player0_hurt_palette_cycle 72 0x0005b20e
@@ -1146,8 +1154,7 @@ f tport_direction_rotation 8 0x0005b71c
 f damage_comment_speech_ids 8 0x0005b724
 f character_reflect_timer_init 8 0x0005b72c
 f character_stun_delay_add 8 0x0005b734
-f tile_effect_sound_ids 8 0x0005b73c
-f tile_effect_sound_ids_alt 8 0x0005b744
+f tile_effect_sound_ids 16 0x0005b73c
 f pickup_score_values 40 0x0005b74c
 f pickup_score_popup_types 20 0x0005b774
 f level_exit_sound_ids 16 0x0005b788
@@ -1158,7 +1165,8 @@ f collision_hpos_base_by_case 16 0x0005b7d4
 f collision_hpos_random_range_by_player 8 0x0005b7e4
 f collision_bonus_threshold_by_case 16 0x0005b7ec
 f exit_rotation_offset_by_count 32 0x0005b7fc
-f exit_desc_by_floorpattern 1024 0x0005b81c
+f exit_desc_by_floorpattern 576 0x0005b81c
+f wall_crumble_stage_ptrs 12 0x0005ba5c
 f logo_outer_timer_init 2 0x0005ba68
 f logo_inner_timer_init 2 0x0005ba6a
 f logo_bright_min 2 0x0005ba6c
@@ -1171,7 +1179,7 @@ f floor_desc_base 256 0x0005bae0
 f wall_desc_blocks 3264 0x0005bbe0
 f floor_type10_desc 8 0x0005c8a0
 f floor_type11_desc 8 0x0005c8a8
-f dead_sequential_tile_codes 504 0x0005c8b0
+f exit_tile_descs 504 0x0005c8b0
 f floor_type3e_descs 128 0x0005caa8
 f attract_display_tile_stream 2000 0x0005cb28
 f special_object_tile_numbers 504 0x0005cb48
@@ -1194,7 +1202,7 @@ f dragon_path_programs 80 0x0005d578
 f playfield_palettes 512 0x0005d5c8
 f playfield_special_palette_bank 128 0x0005d7c8
 f playfield_special_palette_lowwall_view 96 0x0005d7e8
-f palette_color_ramps 416 0x0005d848
+f unconsumed_block_5d848 416 0x0005d848
 f secretcode_text_recs 176 0x0005d9e8
 f potion_effect_matrix 448 0x0005da98
 f mob_create 1 0x0005dc58
@@ -1293,7 +1301,7 @@ f hw.led2 1 0x00803123
 f hw.led3 1 0x00803125
 f hw.led4 1 0x00803127
 f hw.aux_latch 1 0x0080312f
-f hw.sound_reset 1 0x0080312f
+# alias hw.sound_reset at 0x0080312f superseded by hw.aux_latch
 f hw.vblank_ack 1 0x00803140
 f hw.eeprom_unlock 1 0x00803150
 f hw.sound_write 1 0x00803171
@@ -1303,17 +1311,17 @@ f vram.mob_hpos 1 0x00902800
 f vram.mob_vpos 1 0x00903000
 f vram.mob_link 1 0x00903800
 f ram.os_flag 2 0x00904000
-f ram.mazenum_current 2 0x00904000
-f vram.spare 1 0x00904000
+# alias ram.mazenum_current at 0x00904000 superseded by ram.os_flag
+# alias vram.spare at 0x00904000 superseded by ram.os_flag
 f ram.vblank_semaphore 2 0x00904002
-f ram.levelnum_current 2 0x00904004
+# alias ram.levelnum_current at 0x00904004 superseded by the OS-scope flag
 f ram.pf_vscroll_hi 2 0x00904006
 f ram.pf_hscroll 2 0x00904008
 f ram.pf_vscroll_lo 2 0x0090400a
 f ram.timer_countdown 2 0x0090400c
 f ram.sound_data_recv 2 0x0090400e
 f ram.sound_data_flag 2 0x00904010
-f ram.timer_eepromwrite 4 0x00904012
+# alias ram.timer_eepromwrite at 0x00904012 superseded by the OS-scope flag
 f ram.game_hook_flag 2 0x00904014
 f ram.treas_mazerand_adder 2 0x00904016
 f ram.treas_mazerand_num 2 0x00904018
@@ -1334,7 +1342,7 @@ f ram.tport_cycle_dir 2 0x00904032
 f ram.tport_cycle_divider 2 0x00904034
 f ram.ptr_playfield_color1 4 0x00904036
 f ram.ptr_playfield_color2 4 0x0090403a
-f ram.ptr_playfield_color3 4 0x0090403e
+# alias ram.ptr_playfield_color3 at 0x0090403e superseded by the OS-scope flag
 f ram.ptr_ff_cycle_delay 4 0x00904042
 f ram.forcefield_color 2 0x00904046
 f ram.ff_cycle_timer 2 0x00904048
@@ -1345,7 +1353,7 @@ f ram.soundqueue_head 1 0x00904053
 f ram.soundqueue_tail 1 0x00904054
 f ram.player_potionsnum 4 0x00904055
 f ram.player_keysnum 4 0x0090405a
-f ram.monster_cap_bonus 1 0x0090405f
+f ram.monster_spawn_probability_bonus 1 0x0090405f
 f ram.trick_player 1 0x00904063
 f ram.trick_last 1 0x00904064
 f ram.trick_tasknum 1 0x00904065
@@ -1381,7 +1389,7 @@ f ram.randwall_current 2 0x009048a4
 f ram.randwall_timer 2 0x009048a6
 f ram.player_shot_last_wall_pos 8 0x009048a8
 f ram.thief_direction_change_pos 2 0x009048b0
-f ram.poison_timer 2 0x009048b2
+f ram.monster_slowmo_timer 2 0x009048b2
 f ram.player_deferred_move_flags 8 0x009048b4
 f ram.thief_speed 2 0x009048bc
 f ram.reflect_count 8 0x009048be
@@ -1567,8 +1575,8 @@ f ram.reflect_timer 8 0x00905f38
 f ram.acid_timer 8 0x00905f40
 f ram.stun_timer 8 0x00905f48
 f ram.invis_timer 8 0x00905f50
-f ram.debounce_shift_a 8 0x00905f58
-f ram.debounce_shift_b 8 0x00905f60
+f ram.debounce_shift_magic 8 0x00905f58
+f ram.debounce_shift_fire 8 0x00905f60
 f ram.player_supershot 4 0x00905f68
 f ram.secret_saved_supershot 1 0x00905f6d
 f vram.pf_vscroll_reg 2 0x00905f6e
@@ -1586,40 +1594,37 @@ f ram.ff_segment_table 128 0x00910780
 f vram.pf_hscroll_reg 1 0x00930000
 f osdata.working_ram_error_text 18 0x00000c86
 f osdata.rom_error_descriptor_pointer_tables 98 0x00000f1c
-f osdata.number_format_bit_masks 22 0x00002a48
+f osdata.number_format_separator_masks 22 0x00002a48
 f osdata.text_effect_dispatch_offsets 12 0x00002c16
 f osdata.large_character_tile_quads 208 0x000033d2
-f osdata.large_character_clear_maps 128 0x000034a2
+f osdata.large_character_glyph_index_map 128 0x000034a2
 f osdata.eeprom_redundancy_probe_order 12 0x000044be
 f osdata.eeprom_bit_index_map 16 0x00004736
 f osdata.motion_test_lookup_tables 128 0x0000599a
-f osdata.diagnostic_pointer_and_endpoint_tables 48 0x00005a1a
+f osdata.diagnostic_pointer_and_addend_tables 48 0x00005a1a
 f osdata.selftest_descriptor_and_string_stream 1738 0x00005a4a
-f osdata.color_name_pointer_table 32 0x00006114
+f osdata.color_name_descriptor_pointers 32 0x00006114
 f osdata.display_test_selection_tables 64 0x00006134
 f osdata.display_test_palette_words 16 0x00006174
 f osdata.color_test_palette_source_prefix 1184 0x00006184
 f osdata.palette_and_rom_error_descriptor_overlap 352 0x00006624
 f osdata.rom_error_descriptor_stream 514 0x00006784
-f osdata.coin_counter_decode_table 8 0x00006986
+f osdata.coin_bonus_threshold_table 8 0x00006986
 f osdata.game_config_descriptor_table 26 0x0000698e
 f osdata.session_difficulty_factors 4 0x000069a8
 f osdata.statistics_prompt_strings 154 0x000069ac
 f osdata.statistics_summary_table 210 0x00006a46
 f osdata.statistics_error_and_navigation_descriptors 78 0x00006b18
 f osdata.operator_more_marker_variants 36 0x00006b66
-f osdata.operator_ui_palette 16 0x00006b8a
+f osdata.operator_alpha_palette 16 0x00006b8a
 f osdata.operator_option_descriptor_stream 416 0x00006b9a
 f osdata.built_in_coin_option_stream 110 0x00006d3a
 f legacydata.object_motion_tables 246 0x0000860c
-f legacydata.direction_route_tables 132 0x00008a64
-f legacydata.mob_bucket_tables 152 0x00008b9e
-f legacydata.path_probe_tables 434 0x00008d86
-f legacydata.recursive_move_tables 50 0x00009252
+f legacydata.object_proximity_thresholds 32 0x00008a64
 f legacydata.game_option_stream 456 0x00009a10
 f legacydata.level_display_tables 324 0x00009bd8
 f legacydata.status_text_descriptors 772 0x00009d1c
-f legacydata.gameplay_numeric_tables_a 7452 0x0000a020
+f legacydata.pointer_and_numeric_tables_a 7452 0x0000a020
 f legacydata.factory_high_scores 320 0x0000bd3c
 f legacydata.high_score_text 122 0x0000be7c
 f legacydata.name_entry_and_gameplay_tables 586 0x0000bef6

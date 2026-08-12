@@ -173,7 +173,7 @@ Verified, and no meaning is inferred from their values.
 | `0x4006E` | 1 B | `game_reserved_header_4006e` | Zero reserved byte; no runtime consumer found. |
 | `0x4006F` | 1 B | `game_difficulty` | Difficulty/config byte (masked to 0-7). In Gauntlet: `0x2C` (effective difficulty 4). |
 | `0x40070` | 2 B | `game_default_settings` | Default 16-bit game-settings value copied into EEPROM configuration item 12 and used by the operator editor. In Gauntlet: `0xE090`. The former `game_screen_mode` identity is **Contradicted**. |
-| `0x40072` | 1 B | `game_rom_type` | ROM type flag (non-zero = Gauntlet scrolling mode). In Gauntlet: `0x00`. |
+| `0x40072` | 1 B | `game_rom_type` | ROM type flag; non-zero selects the OS rotated column-major alpha mode. In Gauntlet II: `0x00`, so the standard mode is used. |
 | `0x40073` | 1 B | `game_reserved_header_40073` | Value 1; no runtime consumer found. |
 | `0x40074` | 4 B | `game_button0_label_ptr` | Pointer to button 0 label string for self-test. |
 | `0x40078` | 4 B | `game_button1_label_ptr` | Pointer to button 1 label string for self-test. |
@@ -288,7 +288,8 @@ while 0xA6A is the full extended suite used by the self-test-switch boot.
 ```
 1.  Clear d5 (error flag)
 2.  Clear ram.os_flag (0x904000)
-3.  Clear all Color RAM (0x910000–0x9107FE); set colors 1–3 to 0xF00F (white)
+3.  Clear all Color RAM (0x910000–0x9107FE); set alpha colors 1–3 to 0xF00F
+    (full-intensity blue: I=F, R=0, G=0, B=F)
 4.  Enable hardware latch
 5.  Reset stack to 0x904F00
 6.  Call init_alpha_display (0x3522) — clears alpha overlay
@@ -344,10 +345,10 @@ register state.
 | `0x06FC` | `normal_boot_mob_test_done` | inherited `D4.w` test status | no ordinary return | reports MOB failure and falls into `main_init_cont` |
 | `0x08EC` | `boot_postcheck_dispatch` | `D5.w` boot/error mode | no return | shared branch target; performs the sound/EEPROM readiness handshakes, clears OS work RAM, initializes EEPROM, and tail-dispatches to the game, OS VBLANK mode, or game exception hook |
 | `0x0D26` | `game_descriptor_ram_test` | `A0=start`, `A1=end` | returns through 0x0D3A | saves all registers, converts descriptor bounds to A1/A2, installs A4 continuation, and tail-enters `mem_test_short` |
-| `0x0D3A` | `game_descriptor_ram_test_done` | inherited `D4.w` test status and saved frame in A5 | returns to 0x0D26 caller | A4 continuation; restores the saved register set and displays the failing address when nonzero |
+| `0x0D3A` | `game_descriptor_ram_test_done` | inherited `D4.w` test status and saved frame in A5 | returns to 0x0D26 caller; sets `D5.w=1` at 0x0D6E on failure | A4 continuation; restores the saved register set and displays the failing address when nonzero |
 | `0x0D7A` | `game_rom_checksum_error` | `D0.b`/`D1.b` checksum accumulators, `A0` current range end, inherited descriptor frame in A6 | sets `D5.w=2`; otherwise void | register/inherited-frame helper; identifies the failing ROM slice and displays the even/odd checksum errors |
 | `0x0F04` | `playfield_add_word_test_range` | one normal longword slot, low word = signed/additive tile delta | void | frameless normal entry; adds the word to each of 4,095 tested playfield words |
-| `0x11FC` | `color_test_palette_init` | void | void | initializes the first six color-RAM words to the fixed black/red/green/blue diagnostic palette |
+| `0x11FC` | `color_test_palette_init` | void | void | writes the six fixed alpha color words 0x0000, 0x1FFF, 0x7FFF, 0xBFFF, 0x0000, 0x0000 — black plus a three-step white intensity ramp |
 | `0x1228` | `selftest_load_control_labels` | void | void | selects the game header's control-label strings or OS defaults and copies them into three OS work buffers through `copy_cstring` |
 | `0x16F6` | `copy_cstring` | destination pointer, source pointer | void | frameless normal entry; copies through and including the terminating NUL |
 
@@ -677,8 +678,9 @@ uppercase selector.
 #### `format_number` (`0x2918`, API `0x112`)
 General-purpose formatter with `(value, destination buffer, format byte,
 format mode, field width)`. Format bytes `'d'` and `'s'` select unsigned and
-signed decimal; `'X'`, `'x'`, and `'h'` select hexadecimal; `'o'` selects
-octal; other values take the binary path. The mode controls zero/space and
+signed decimal; `'X'` selects uppercase and `'x'`/`'h'` lowercase hexadecimal
+(the >9 digit adjustment is 7 for `'X'` and `0x27` for `'x'`/`'h'`); `'o'`
+selects octal; other values take the binary path. The mode controls zero/space and
 separator post-processing.
 
 ### 8.2 Text Display
@@ -690,21 +692,28 @@ Primary text display function. Displays a string at a position on the alpha over
 
 Text descriptor struct:
 ```c
-struct text_desc {
-    uint8_t  row;         // Y position (0-29)
-    uint8_t  col;         // X position (0-41)
-    uint32_t string_ptr;  // pointer to null-terminated ASCII string
-    uint8_t  repeat;      // continuation count
-    uint32_t next_ptr;    // pointer to next descriptor (for chaining)
+struct text_desc {          // 12 bytes
+    uint8_t  col;         // byte 0 — X/column; advances with the string
+    uint8_t  row;         // byte 1 — Y/row; 0-29 standard, 0-41 scrolled
+    uint32_t string_ptr;  // bytes 2-5 — pointer to null-terminated ASCII string
+    uint8_t  repeat;      // byte 6 — continuation count
+    uint8_t  pad;         // byte 7 — unused
+    uint32_t next_ptr;    // bytes 8-11 — pointer to next descriptor (chaining)
 };
 ```
 
-In scrolled mode (Gauntlet-specific): row is inverted (`41 - col`) and multiplied by 128 for column-major addressing.
+**Contradicted and corrected:** the two leading bytes are `col` then `row`, not
+`row` then `col`. `display_text_register` reads byte 0 into the term added last
+and byte 1 into the term scaled by 64 cells, and the descriptor chain at 0x5B58
+advances byte 0 from 2 to 9 across the seven-character string `" Press "` while
+holding byte 1 at rows 28 and 29. In scrolled mode the *row* byte is inverted as
+`41 - row` and the *column* byte is the one scaled by 64 cells (128 bytes) for
+column-major addressing.
 
 #### `draw_string` (`0x2F04`, API `0x25A`)
 Draws ASCII string directly to alpha RAM at row/column.
 
-**Stack:** `+0x07`: row (byte); `+0x0B`: col (byte); `+0x0C`: string pointer; `+0x12`: color/style word (bits 0–1 select character style: 0=normal, 1=uppercase-shifted, 2=lowercase-shifted).  
+**Stack:** `+0x07`: column (byte); `+0x0B`: row (byte); `+0x0C`: string pointer; `+0x12`: color/style word (bits 0–1 select character style: 0=normal, 1=uppercase-shifted, 2=lowercase-shifted).
 **Returns:** D0 = source bytes consumed, including the terminating NUL. Thus
 an empty string returns 1 and an N-character string returns N+1.
 
@@ -719,7 +728,7 @@ The same six-argument wrapper for uppercase hexadecimal values.
 #### `write_alpha_char` (`0x3044`, API `0x218`)
 Writes a single character to alpha overlay at a given position.
 
-**Stack:** `+0x07`: row; `+0x0B`: col; `+0x0E`: character value (word); `+0x12`: color/style.
+**Stack:** `+0x07`: column; `+0x0B`: row; `+0x0E`: character value (word); `+0x12`: color/style.
 
 #### `calc_alpha_address` (`0x2CE4`, API `0x224`)
 Calculates the linear address in alpha RAM for row/column.
@@ -729,7 +738,11 @@ Calculates the linear address in alpha RAM for row/column.
 ### 8.3 Alpha Display Management
 
 #### `init_alpha_display` (`0x3522`, API `0x14E`)
-Initializes the alpha overlay. Detects Gauntlet game ROM (checks `0x40072`), sets `ram.display_mode` (1 = Gauntlet scrolling, 0 = standard), clears all alpha RAM.
+Initializes the alpha overlay. Sets `ram.display_mode` to 1 only when the game
+header byte `0x40072` is non-zero **and** `0x40000` holds a JMP, otherwise 0, then
+clears all alpha RAM. Mode 1 is the rotated column-major mode used by other
+titles sharing this OS; Gauntlet II ships `0x40072 = 0x00` and therefore always
+runs in mode 0.
 
 #### `write_alpha_word` (`0x3586`, API `0x21E`)
 Writes a raw 16-bit value to alpha RAM at a given offset.
@@ -743,15 +756,23 @@ stores argument 2 as the color/style word and argument 3 as the interval. The
 six-word signed-offset table at 0x2C16 selects these exact inherited-frame
 cases:
 
-| Type | Dispatch | Verified behavior |
-|---:|---:|---|
-| 1 | `0x2C22` | After the interval, deactivate the slot and clear the complete descriptor chain. The allocator draws it immediately, making this timed text. |
-| 2 | `0x2C32` | Toggle the complete chain between drawn and cleared states: blinking text. |
-| 3 | `0x2C64` | Draw one indexed character per interval, advancing to chained descriptors at NUL. |
-| 4 | `0x2C82` | Clear one indexed character position per interval, advancing at NUL. |
-| 5 | `0x2CC4` | Cyclically rotate each descriptor-selected alpha line in one direction. |
-| 6 | `0x2CD0` | Cyclically rotate those lines in the opposite direction. |
-| 7 | separate path at `0x2B54` | Shift the complete visible alpha surface and advance the global scroll offset. |
+All six computed cases inherit `A2 = 0x904F00`, `D2 = slot 0-3` and
+`D0 = 2 × slot`, and rejoin the slot loop at `0x2CDA`.
+
+| Type | Dispatch | Canonical name | Verified behavior and logic |
+|---:|---:|---|---|
+| 1 | `0x2C22` | `text_effect_case_timed_clear` | Clears the slot type at `+0x18`, takes the descriptor from `+0x34`, clears that pointer, and erases the chain through `0x308C`. The allocator draws it immediately, making this timed text. |
+| 2 | `0x2C32` | `text_effect_case_blink` | Toggles the phase byte at `+0x2C`: when set, clears it and erases the chain through `0x308C`; when clear, sets it to 1, loads the color from `+0x10`, and redraws through `0x2E3E`. |
+| 3 | `0x2C64` | `text_effect_case_progressive_draw` | Reads and post-increments the step byte at `+0x30`, then draws that indexed character through `0x2FBE`. |
+| 4 | `0x2C82` | `text_effect_case_progressive_clear` | Same stepping, clearing the indexed character through `0x3020`. |
+| 5 | `0x2CC4` | `text_effect_case_rotate_forward` | Loads the descriptor and calls `rotate_text_line_forward_register` (`0x2D18`). |
+| 6 | `0x2CD0` | `text_effect_case_rotate_reverse` | Loads the descriptor and calls `rotate_text_line_reverse_register` (`0x2D78`). |
+| 7 | separate path at `0x2B54` | — | Shift the complete visible alpha surface and advance the global scroll offset. |
+
+Types 3 and 4 share the tail at `0x2C9A`: a zero return means the character
+index reached NUL, so it adds `text_repeat_bias` to descriptor byte 6,
+deactivates the slot when the count falls to zero, and otherwise follows
+`next_ptr` at descriptor offset 8 and resets the step byte.
 
 All three-argument starters below use `(descriptor pointer, color/style word,
 interval word)` and return `D0.l=1` when one of four slots was allocated or 0
@@ -782,22 +803,39 @@ interval in D1.w while inheriting the normal descriptor/color stack slots. It
 initializes the slot counters and descriptor pointer; types other than 3 and 4
 also draw the descriptor immediately.
 
-The newly bounded internal helpers are `rotate_text_line_forward`/`reverse`
-(0x2D14/0x2D74 normal stack veneers, 0x2D18/0x2D78 A0 register bodies),
-`scroll_alpha_surface_one_step` (0x2DDE), `display_text_register` (0x2E3E),
-`draw_string_register` (0x2F3C), the type-3/type-4 single-character workers
-at 0x2FBE/0x3020, the shared character writer at 0x304E, the A0 descriptor
-clearer at 0x308C, the allocator at 0x3172, the large-glyph register renderer
-at 0x324E, and `reset_text_effects` at 0x355C. Purpose, arguments, return, and
-exceptional-convention rows for all of them and the six computed cases are in
-`generated/os_text_contracts.csv`; its failure report is empty.
+The newly bounded internal helpers have these checked contracts:
+
+| Address | Entry | Arguments | Behavior and operative logic |
+|---:|---|---|---|
+| `0x2D14` | `rotate_text_line_forward` | descriptor pointer | Normal stack veneer; loads A0 and falls into `0x2D18`. |
+| `0x2D18` | `rotate_text_line_forward_register` | `A0` = descriptor | Rotates one alpha line by one cell toward lower addresses, wrapping. Standard mode takes the row from descriptor byte 1, scales by 128 bytes and shifts 41 cells left; rotated mode takes the column as `0x29 - byte 1`, scales by 2 bytes and shifts 30 cells up in 128-byte steps. Void. |
+| `0x2D74` | `rotate_text_line_reverse` | descriptor pointer | Normal stack veneer; loads A0 and falls into `0x2D78`. |
+| `0x2D78` | `rotate_text_line_reverse_register` | `A0` = descriptor | The opposite-direction twin of `0x2D18`; biases the base by `+0x0E80` (rotated) or `+0x52` (standard) to start at the far end and steps the other way. Void. |
+| `0x2DDE` | `scroll_alpha_surface_one_step` | void | Shifts the visible alpha surface one cell and clears the newly exposed edge. |
+| `0x2E3E` | `display_text_register` | `A0` = descriptor; `D1.w` = color/style | Draws a chained descriptor at the current full-screen scroll offset, bounds-checking the row byte against 30 rows (standard) or 42 (rotated). |
+| `0x2F3C` | `draw_string_register` | `D0.w` = alpha byte offset; `D1.w` = color/style; `A0` = string | Draws one NUL-terminated string from a precomputed alpha offset; returns `D0.l` = source bytes consumed including the NUL. |
+| `0x2FBE` | `draw_text_effect_next_char` | `A0` = descriptor; `D0.w` = index; `D1.w` = color/style | Adds the index to descriptor byte 0 (the column) and draws that character; returns 3 while a character was drawn and 0 at NUL. |
+| `0x3020` | `clear_text_effect_next_char` | `A0` = descriptor; `D0.w` = index | The clearing twin; returns 4 while a position was cleared and 0 at NUL. |
+| `0x304E` | `write_alpha_char_register` | `D0.w` = character/tile; `D1.w` = color/style; coordinates in the caller frame | Masks `D1` with `0xFFFC` to drop the two character-set select bits, ORs it into `D0`, computes the alpha address for the current display mode, and stores the combined word. Void. |
+| `0x308C` | `clear_text_descriptor_chain` | `A0` = descriptor | Clears every visible non-NUL character cell in a chained descriptor. |
+| `0x3172` | `allocate_text_effect` | `D0.b` = type; `D1.w` = interval; descriptor and color inherited | Claims the first free slot of four, initialises the per-slot type, phase, step, interval, color and descriptor words, and draws immediately for every type except 3 and 4. Returns 1 when allocated, 0 when all slots are busy. |
+| `0x324E` | `render_large_glyph_register` | `D0.w` = glyph index; `D1.w` = color/style; `A0` = packed strides; `A1` = destination | Fetches the four-byte tile quad at `0x33D2 + 4 × index`, special-cases glyph `0x32` on a negative `D1`, writes tile bytes ORed with the attribute word to two rows, and emits a second column only when the next quad word is non-zero. Returns `D0` = 1 or 2 alpha cells and leaves `A1` advanced. |
+| `0x355C` | `reset_text_effects` | void | Resets the full-screen scroll state and all four slot type/descriptor words. |
+
+The complete argument, return, and exceptional-convention rows for all of them
+and the six computed cases are in `generated/os_text_contracts.csv`; its failure
+report is empty.
 
 ### 8.5 Large Character Display
 
 Used for title screens, attract mode, and score displays. Renders characters using 2×2 or larger tile patterns.
 
 #### `display_large_text` (`0x31D2`, API `0x200`)
-Displays a string using large (multi-tile) characters on the alpha overlay. Looks up each character in the large character font table at PC-relative offset `0x34A2`, renders 2×2 tile blocks.
+Displays a string using large (multi-tile) characters on the alpha overlay. Maps
+each character through the 128-byte ASCII-to-glyph-index table at PC-relative
+`0x34A2` (`large_character_glyph_index_map`), then renders the four-byte tile quad
+at `0x33D2 + 4 × index` (`large_character_tile_quads`) as two tile rows by one or
+two cells.
 
 **Returns:** D0 = total alpha-cell advance. Each mapped glyph contributes one
 or two cells; this is not a pixel count.
@@ -950,8 +988,9 @@ services and every promoted register/shared helper with zero failures.
 
 #### `eeprom_init` (`0x44E8`, API `0x190`)
 
-**Confidence: Verified.** Validates that the game start slot at `0x40000` is
-an even in-range absolute jump, then reserves `0xE6 + 20 *
+**Confidence: Verified.** Validates that the game start slot at `0x40000` holds
+a JMP whose target is even and lies in `0x10000–0x8FFFE` — a wider window than
+`main_init_cont`'s own `0x40000–0x7FFFF` check — then reserves `0xE6 + 20 *
 (game_difficulty & 7)` bytes on the caller's stack and publishes that persistent
 configuration image through `ram.eeprom_config_ptr`. This is an intentional
 nonstandard allocation: it removes the return address, moves SP down by the
@@ -1033,10 +1072,13 @@ data/check staging block at `+25..+39`, current physical EEPROM word offset at
 
 **Confidence: Verified.** Takes two long stack slots but consumes only their
 low bytes, each packing four two-bit coin-counter samples. For each channel it
-computes `(previous + 4 - current) & 3`, rejects impossible deltas above one,
-applies the multiplier and bonus encoded by complementary configuration bytes
-`+0x0A/+0x0B`, and updates the per-player accumulated, total, and pending
-credit bytes. The former claims that this routine directly drives LEDs and
+computes `(current + 4 - previous) & 3`, rejects impossible deltas above one,
+scales the surviving count by the unit multiplier `((cfg[+0x0A] & 0x1C) >> 2) + 1`,
+and converts accumulated coins into pending credits through the bonus
+thresholds at `0x6986` indexed by `cfg[+0x0A] >> 5`. Note that this unit
+multiplier is a different field from `get_coin_multiplier`'s `(cfg[+0x0A] & 3) + 1`.
+The complementary byte `+0x0B` must equal `~cfg[+0x0A]` or the setting is
+treated as zero, and values at or above `0xE0` select free play. The former claims that this routine directly drives LEDs and
 sound are **Contradicted**; those operations are not in this body. Its two
 byte samples originate on the **sound board**, not at a main-CPU input port:
 the only caller is `process_sound` (0x41FA) at 0x4216, which supplies the
@@ -1213,7 +1255,7 @@ The shared operator-UI helpers have these checked contracts:
 | `0x4A44` | `render_option_record` | record, current word, comparison word, row, style/clear flags | following record pointer or zero |
 | `0x4B66` | `render_option_record_page` | stream, current word, comparison word, first index, flags | renders one orientation-sized page; void |
 | `0x4BE6` | `display_next_screen_prompt` | void | inserts the game action label into the OS next-screen prompt |
-| `0x4C38` | `init_operator_mob_display` | void | installs eight MOB template words and clears the trailing link |
+| `0x4C38` | `init_operator_alpha_palette` | void | copies the eight operator palette words at 0x6B8A into alpha color entries 0–7 (0x910000–0x91000E) and clears playfield palette entry 0 at 0x910500 |
 | `0x4FA0` | `display_statistics_play_time` | display row | safely scales and displays total/active-time ratios |
 | `0x5392` | `draw_game_settings_bits` | settings word, selected bit | draws all sixteen bits and highlights one |
 | `0x5476` | `run_option_descriptor_editor` | stream, current word, comparison/default word | returns edited settings word |
@@ -1248,8 +1290,11 @@ their argument column.
 | `0x27F4` | `wait_sound_test_delay_or_abort` | void | 1 if advance was pressed, otherwise 0 after four VBLANK ticks |
 | `0x28CA` | `display_two_byte_hex_pair` | high byte, low byte, signed display offset | draws the packed value as four zero-padded hexadecimal digits; void |
 
-`read_debounced_input` keeps four previous-raw words at 0x904F7A and
-four stable words at 0x904F82. For each bit it retains the stable value while
+`read_debounced_input` also republishes `ram.input_source_ptr` whenever
+`ram.os_vblank_active` is zero, calling the 0x40042 game hook when it holds JMP
+and otherwise storing the 0x803000 constant read from 0x5A46; §7.2 covers only
+the VBLANK-handler half of that behaviour. It keeps four previous-raw words at
+0x904F7A and four stable words at 0x904F82. For each bit it retains the stable value while
 two consecutive raw samples disagree and adopts the raw value once they
 agree. Its edge term is `(new_stable ^ old_stable) & old_stable`, which
 reports the 1-to-0 transition of an active-low switch. It ORs in
@@ -1314,11 +1359,11 @@ inference** semantics where several OS paths reuse the storage.
 | `0x904F08` | word | `fullscreen_scroll_counter` | Frame/interval counter for the type-7 surface shift |
 | `0x904F0A` | word | `fullscreen_scroll_interval` | Frames between type-7 surface shifts |
 | `0x904F0C` | word | `os_vblank_active` | 1 = OS handles VBLANK; 0 = game handles VBLANK |
-| `0x904F0E` | word | `display_mode` | 0 = standard alpha; 1 = Gauntlet scrolling mode |
+| `0x904F0E` | word | `display_mode` | 0 = standard row-major alpha (the mode supplied Gauntlet II uses); 1 = rotated column-major mode, selected only when `0x40072` is non-zero |
 | `0x904F10` | 8 B | `text_color` | Four per-slot text color/style words |
 | `0x904F18` | 4 B | `text_effect_type` | Per-slot effect type (0=inactive, 1-7=active types) |
-| `0x904F1C` | 8 B | `text_effect_speed` | Per-slot speed/delay values (2 words) |
-| `0x904F24` | 8 B | `text_effect_counter` | Per-slot frame counters (2 words) |
+| `0x904F1C` | 8 B | `text_effect_speed` | Per-slot interval values (four words, one per slot) |
+| `0x904F24` | 8 B | `text_effect_counter` | Per-slot frame counters (four words, one per slot) |
 | `0x904F2C` | 4 B | `text_effect_phase` | Per-slot animation phase |
 | `0x904F30` | 4 B | `text_effect_step` | Per-slot step counter |
 | `0x904F34` | 16 B | `text_effect_desc` | Per-slot text descriptor pointers (4 longs) |
@@ -1338,7 +1383,7 @@ inference** semantics where several OS paths reuse the storage.
 | `0x904FC0` | byte | `eeprom_error_count` | Saturating cumulative EEPROM write/decode error count (`eeprom_work+24`) |
 | `0x904FEB` | byte | `sound_status_poll_busy_count` | Cleared on a sound-status transition; saturating count of command-3 status polls rejected because the latch/direct-response path is busy |
 | `0x904FEC` | 4 B | `coin_counters` | Per-player coin counter accumulators |
-| `0x904FF0` | 4 B | `coin_totals` | Per-player total coins deposited |
+| `0x904FF0` | 4 B | `coin_bonus_progress` | Per-channel bonus-progress accumulator; incremented by delta × unit multiplier (0x3696) and decremented by the bonus threshold (0x36D6). Its only reference is 0x35D6; the persistent totals are EEPROM-image bytes `cfg+0x14+ch` with carry into `cfg+0+ch` |
 | `0x904FF4` | 4 B | `coin_pending` | Per-player pending coin credits |
 | `0x904FF8` | long | `vblank_counter` | Monotonic VBLANK counter (incremented each frame) |
 | `0x904FFA` | byte | `eeprom_init_timeout_counter_byte` | Alias of byte +2 in the big-endian `vblank_counter`; nonzero after queued-repair draining means at least 256 process ticks and terminal initialization failure |
@@ -1407,7 +1452,7 @@ flowchart TD
 
     subgraph retained["Retained game-support image — runtime-dead in supplied Gauntlet II"]
         direction LR
-        legacycode["0x8000–0x9A0F<br/>68010 code<br/>+ 5 inline-data islands"] --> legacydata["0x9A10–0xF9F9<br/>tables, strings, palettes,<br/>packed graphics"] --> tail["0xF9FA–0xFFFF<br/>zero fill"]
+        legacycode["0x8000–0x9A0F<br/>68010 code<br/>+ 2 inline-data islands"] --> legacydata["0x9A10–0xF9F9<br/>tables, strings, palettes,<br/>packed graphics"] --> tail["0xF9FA–0xFFFF<br/>zero fill"]
     end
 
     fill2 --> code
@@ -1428,7 +1473,7 @@ flowchart TD
 | `0x0300–0x5999` | 22,170 B | Active OS implementation code and eight exact inline-data ranges |
 | `0x599A–0x6DA7` | 5,134 B | Active OS diagnostic/operator tables, descriptors, strings, and palette data |
 | `0x6DA8–0x7FFF` | 4,696 B | Zero fill between the active OS image and the upper module |
-| `0x8000–0x9A0F` | 6,672 B | Retained game-support code and five exact inline-data islands |
+| `0x8000–0x9A0F` | 6,672 B | Retained game-support code (6,394 B) and two exact inline-data islands (278 B) |
 | `0x9A10–0xF9F9` | 24,554 B | Retained game-support tables, strings, palettes, and packed graphics |
 | `0xF9FA–0xFFFF` | 1,542 B | Solid zero fill |
 
@@ -1440,7 +1485,7 @@ runtime-dead status is therefore **Verified** for the supplied game, while
 its identification as a retained legacy/game-support module is a **Strong
 inference**. `generated/os_rom_regions.csv` is the gap-free fourteen-row top-level
 partition; `generated/os_rom_byte_coverage.csv` further reduces the two mixed regions
-to 39 contiguous code/data segments with no unknown byte.
+to 33 contiguous code/data segments with no unknown byte.
 
 ### 10.1 Callable-entry completeness baseline
 
@@ -1472,7 +1517,8 @@ zero failures. Discovery evidence remains in `generated/os_entry_candidates.csv`
 failure reports are empty.
 
 **Confidence: Verified.** The independent `generated/os_control_targets.csv` pass then
-re-analyzes every implementation root and reconciles 392 unique control sites:
+re-analyzes every implementation root and reconciles 392 site/owner rows across
+384 distinct control sites:
 267 direct internal transfers, 94 constant register-indirect internal
 transfers, 13 inherited memory-test continuations, 17 direct/register game
 header hooks, and the six-way text-effect computed dispatch. No target falls
@@ -1481,10 +1527,10 @@ the callable-entry inventory independently of the legacy symbol set.
 
 The byte sweep then found five structurally valid but unreferenced entries
 outside that reachable closure. They are separately checked in
-`generated/os_residue_contracts.csv`. The retained upper module contributes 21 more
-entries. `generated/os_all_function_contracts.csv` is therefore the complete 256-row
+`generated/os_residue_contracts.csv`. The retained upper module contributes 34 more
+entries. `generated/os_all_function_contracts.csv` is therefore the complete 269-row
 ROM-wide union: 168 active implementation/shared roots, five active-image
-residue entries, 21 retained-module roots, six computed-dispatch entries, and
+residue entries, 34 retained-module roots, six computed-dispatch entries, and
 56 public API veneers. Its failure report is empty.
 
 ### 10.2 Corrected OS API identity at 0x272
@@ -1507,41 +1553,41 @@ is in the analyzed instruction union.
 |---|---|---|
 | `0x0C86–0x0C97` | `working_ram_error_text` | NUL-terminated early-boot diagnostic string |
 | `0x0F1C–0x0F7D` | `rom_error_descriptor_pointer_tables` | Three indexed tables of 16-bit display-descriptor addresses |
-| `0x2A48–0x2A5D` | `number_format_bit_masks` | Eleven words selected by the generic formatter's mode index |
+| `0x2A48–0x2A5D` | `number_format_separator_masks` | Eleven thousands-separator placement bitmasks indexed by field width 0–10; each carry shifted out of the mask emits a comma |
 | `0x2C16–0x2C21` | `text_effect_dispatch_offsets` | Six signed word offsets relative to 0x2C16 |
 | `0x33D2–0x34A1` | `large_character_tile_quads` | 52 four-byte tile-number records |
-| `0x34A2–0x3521` | `large_character_clear_maps` | 128-byte clearing/width lookup stream |
-| `0x44BE–0x44C9` | `eeprom_redundancy_probe_order` | Word seed and signed byte offsets for redundant-record probing |
-| `0x4736–0x4745` | `eeprom_bit_index_map` | Sixteen signed packed-bit-to-record-bit mappings |
+| `0x34A2–0x3521` | `large_character_glyph_index_map` | 128-byte ASCII-to-glyph-index map read on both the draw and clear paths |
+| `0x44BE–0x44C9` | `eeprom_redundancy_probe_order` | Ten Hamming(15,10) data-bit positions `03,05,06,07,09,0A,0B,0C,0D,0E`, terminated by `0xFF`; position 03 is fetched as a word only to clear the index register's high byte, and every position selects the same XOR-check logic |
+| `0x4736–0x4745` | `eeprom_bit_index_map` | Hamming syndrome-to-data-byte-index map indexed by the low nibble of the five-bit syndrome; `0xFF` marks parity positions where no correction is applied |
 
 The separate active data image is also completely partitioned:
 
 | Range | Name | Format / use |
 |---|---|---|
 | `0x599A–0x5A19` | `motion_test_lookup_tables` | Palette, position/delta, and 8x8 multiplication tables |
-| `0x5A1A–0x5A49` | `diagnostic_pointer_and_endpoint_tables` | Descriptor pointers and hardware/video endpoints |
+| `0x5A1A–0x5A49` | `diagnostic_pointer_and_addend_tables` | `0x5A1C` is a display-descriptor pointer; the longwords at `0x5A3A`, `0x5A3E`, `0x5A42` and `0x5A46` are addends and base addresses consumed directly by `adda.l`/`add.l` |
 | `0x5A4A–0x6113` | `selftest_descriptor_and_string_stream` | Chained display descriptors and strings for all hardware tests |
-| `0x6114–0x6133` | `color_name_pointer_table` | Eight longword pointers, including terminator |
+| `0x6114–0x6133` | `color_name_descriptor_pointers` | Eight non-zero longword pointers to eight-byte inline-string display records `{column,row,string_ptr,repeat,pad}` (Red, Green, Blue, White, Grey, White, Violet, Green); no terminator, and the color test cycles only indices 0–5 |
 | `0x6134–0x6173` | `display_test_selection_tables` | Signed word selection/enable matrices |
 | `0x6174–0x6183` | `display_test_palette_words` | Eight palette words |
 | `0x6184–0x6623` | `color_test_palette_source_prefix` | Prefix of the three-bank, 768-word color-test source view |
 | `0x6624–0x6783` | `palette_and_rom_error_descriptor_overlap` | Both the palette-source tail and structured error descriptors/strings |
 | `0x6784–0x6985` | `rom_error_descriptor_stream` | Remaining socket/lane error descriptors and strings |
-| `0x6986–0x698D` | `coin_counter_decode_table` | Eight packed 2-bit counter-decode bytes |
+| `0x6986–0x698D` | `coin_bonus_threshold_table` | Eight bonus-adder coin thresholds indexed by bits 7–5 of coin-config byte `+0x0A`; index 3 awards two credits, other non-zero entries one, and `0x00` disables the bonus |
 | `0x698E–0x69A7` | `game_config_descriptor_table` | Thirteen two-byte packed configuration descriptors |
 | `0x69A8–0x69AB` | `session_difficulty_factors` | Four histogram weighting bytes |
 | `0x69AC–0x6A45` | `statistics_prompt_strings` | Histogram/navigation text fragments |
 | `0x6A46–0x6B17` | `statistics_summary_table` | Title, eleven longword pointers, and summary labels |
 | `0x6B18–0x6B65` | `statistics_error_and_navigation_descriptors` | EEPROM-error and navigation descriptors/strings |
 | `0x6B66–0x6B89` | `operator_more_marker_variants` | Three decorated MORE marker strings |
-| `0x6B8A–0x6B99` | `operator_ui_palette` | Eight Motion Object palette words |
+| `0x6B8A–0x6B99` | `operator_alpha_palette` | Eight alphanumeric palette words loaded into 0x910000–0x91000E by 0x4C38 |
 | `0x6B9A–0x6D39` | `operator_option_descriptor_stream` | Save/cancel, raw-bit, game, and coin editor descriptors |
 | `0x6D3A–0x6DA7` | `built_in_coin_option_stream` | Tagged multiplier/bonus prompts and NUL-terminated choices |
 
 The copy beginning at 0x6184 deliberately treats 0x6624–0x6783 as palette
 words even though the same bytes encode error descriptors and text. This is
 an intentional overlapping view, not an undecoded gap. The complete
-machine-readable 45-row active/retained catalog is
+machine-readable 42-row active/retained catalog is
 `generated/os_rom_data_catalog.csv`.
 
 ### 10.4 Active-image residue entries
@@ -1565,50 +1611,79 @@ boundaries, and Gauntlet II runtime-dead status. Names, argument roles, and
 the conclusion that this is an older linked game-support payload are **Strong
 inference** because the original link map is absent.
 
-The executable partition is exactly `0x8000–0x9A0F`, interrupted by five data
-islands: `0x860C–0x8701` object-motion/MOB attribute tables,
-`0x8A64–0x8AE7` direction/route tables, `0x8B9E–0x8C35` MOB bucket/link
-tables, `0x8D86–0x8F37` path-probe tables, and `0x9252–0x9283` recursive
-movement tables. The 21 contracted entries are:
+The executable partition is exactly `0x8000–0x9A0F`, interrupted by only two
+data islands: `0x860C–0x8701` object-motion/MOB attribute tables and
+`0x8A64–0x8A83` sixteen per-object-type distance thresholds. The caller word
+is divided by four to select an entry at 0x8780–0x878E, then the value is
+compared against the absolute horizontal and vertical deltas at 0x879A/0x87A0.
 
-| Address | Entry | Arguments | Return / special convention |
-|---:|---|---|---|
-| `0x8000` | `legacy_monster_object_update` | object-list selector word | void; normal stack ABI |
-| `0x8702` | `legacy_monster_choose_direction` | D2 object offset; inherited A2–A6 bases | updates direction/path state |
-| `0x89AA` | `legacy_four_cell_occupied_test` | D4 first cell offset | condition codes |
-| `0x89E6` | `legacy_position_in_active_bounds` | D4.b x, D5.b y | D4=-1 inside, 0 outside |
-| `0x8A12` | `legacy_set_direction_from_delta` | D2 object, D3 candidate, A3/A4/A6 arrays | state update; register leaf |
-| `0x8AE8` | `legacy_moblist_insert` | D1 destination; A2/A5/A6 arrays | void; register leaf |
-| `0x8C36` | `legacy_move_mob_slot` | D2 source, D1 destination; A2–A6 | void; falls through to 0x8C70 |
-| `0x8C70` | `legacy_moblist_remove_and_clear` | D2 object; A2–A6 | void |
-| `0x8D00` | `legacy_moblist_unlink` | D2 object; A5/A6 | void |
-| `0x8F38` | `legacy_probe_up` | D2 cell, D3 radius, D4/D5 coords, A2–A4 | D1 candidate/sentinel and flags |
-| `0x9006` | `legacy_probe_down` | same | D1 candidate/sentinel and flags |
-| `0x90D2` | `legacy_probe_left` | same | D1 candidate/sentinel and flags |
-| `0x9192` | `legacy_probe_right` | same | D1 candidate/sentinel and flags |
-| `0x9284` | `legacy_recursive_path_move` | D0 actor index; D6/D7 mode, A2–A4 | D0 status; recursive worker |
-| `0x9864` | `legacy_test_actor_contact_a` | D1 cell, D5 actor offset | D0 predicate; stale call to 0x49572 |
-| `0x9880` | `legacy_test_actor_contact_b` | same | duplicate wrapper and predicate |
-| `0x989C` | `legacy_probe_vertical_triplet_up` | D2 cell, D3/D4 coords, A2–A4 | D1 candidate and flags |
-| `0x98D8` | `legacy_probe_vertical_triplet_down` | same | D1 candidate and flags |
-| `0x9914` | `legacy_test_cell_proximity` | D1 candidate, D3/D4 coords, A2–A4 | carry set for near cell; writes four delta words |
-| `0x99A0` | `legacy_probe_horizontal_triplet_left` | D2 cell, D3/D4 coords, A2–A4 | D1 candidate and flags |
-| `0x99D8` | `legacy_probe_horizontal_triplet_right` | same | D1 candidate and flags |
+**Contradicted and corrected:** the former `0x8A84–0x8AE7`, `0x8B9E–0x8C35`,
+`0x8D86–0x8F37` and `0x9252–0x9283` "data islands" are executable stack-ABI
+wrapper functions, not tables. Each opens with a `movem.l <list>,-(a7)`
+prologue and closes with a matching `movem.l (a7)+` and `RTS`, and together
+they are the module's public entry surface: they load the caller's word
+arguments, install the A2–A6 base registers (`A2=0x902000` picture,
+`A3=0x902800` horizontal, `A4=0x903000` vertical, `A5=0x903800` link-low,
+`A6=0x904046` object state) and the D6/D7 values that the register-convention
+workers below inherit. Reclassifying them adds thirteen contracted roots, so
+the retained module is 6,394 B of code and 278 B of data. The 34 contracted
+entries are:
 
-Absolute calls at 0x88CE, 0x9830, 0x9872, and 0x988E target
-0x48064, 0x49C36, and 0x49572. Those addresses are not callable roots in the
-complete supplied Gauntlet II main-ROM union and land inside different
+| Address | Entry | Purpose | Arguments | Return / special convention |
+|---:|---|---|---|---|
+| `0x8000` | `legacy_monster_object_update` | Per-frame update for one legacy object list: installs the five array bases, aborts unless 0x904022 equals 0x904024, then walks the selected list through the motion tables at 0x860C and the gameplay tables at 0xA020/0xC3D0, dispatching the direction, probe and move workers | object-list selector word | void |
+| `0x8702` | `legacy_monster_choose_direction` | Chooses a movement direction: reads the object X/Y from (A3,D2)/(A4,D2), scans the actor list at 0x904864 and flags at 0x904AF8, rejects candidates through the bounds and occupancy tests, and classifies the surviving link word against the terrain constants 0xD400/0xE800/0xEC00/0x1800/0xB800 | D2.w object byte offset; inherited A2-A5 VRAM/state bases; one caller word at +0x04 | updates object direction/path state; condition codes |
+| `0x89AA` | `legacy_four_cell_occupied_test` | Tests four consecutive word cells against the primary array in A2 and the alternate at 0x90487A, stopping at the first cell clear in both | D4.w first cell byte offset; inherited A2 and the alternate occupancy base 0x90487A | condition codes from the stopping tst.w; D4 advanced by up to six |
+| `0x89E6` | `legacy_position_in_active_bounds` | Window-bounds predicate: subtracts the scroll origins 0x904A82/0x904A84 and requires 6 < D4 < 0x79 and 8 < D5 < 0x7F | D4.b horizontal; D5.b vertical | D4.l=-1 inside the active window, 0 outside; D5 clobbered by the origin subtraction |
+| `0x8A12` | `legacy_set_direction_from_delta` | Derives an eight-way direction code from the signed deltas to (A3,D3)/(A4,D3), selecting 0/4/8 from whether each absolute delta reaches 0x400, then clears bits 12–10 of the object word with `andi.w #0xE3FF` and writes the code into that field | D2.w object byte offset; D3.w candidate offset; A3/A4 positions; A6 state | void; direction bits updated in A6[D2] |
+| `0x8A84` | `legacy_moblist_add_object` | Populates one MOB slot and links it: doubles the slot index into a byte offset, calls the insert worker, writes picture/H/V, then merges two caller six-bit fields into the top of the A5/A6 link words | slot index word; picture word; H word; V word; link-lo field word; link-hi field word | void |
+| `0x8AE8` | `legacy_moblist_insert` | Inserts a slot into the sorted display list: requires a zero or 0x8000 picture word, computes the 0x905F80 bucket index ((D1>>6)+1)*4 capped at 0x7E, walks the chain, and updates the head at 0x90493A | D1.w destination byte offset; inherited A2/A5/A6 arrays | void |
+| `0x8B9E` | `legacy_move_mob_slot_entry` | Stack entry for the slot mover: doubles the source into D2 and destination into D1, installs the five array bases, and calls the move worker | source slot word; destination slot word | void |
+| `0x8BD4` | `legacy_moblist_remove_and_clear_entry` | Stack entry for the destructive remove: doubles the slot argument, installs the five array bases, and calls the remove-and-clear worker | slot word | void |
+| `0x8C04` | `legacy_moblist_unlink_entry` | Stack entry for the non-destructive unlink: doubles the slot argument, installs the five array bases, and calls the unlink worker | slot word | void |
+| `0x8C36` | `legacy_move_mob_slot` | Moves one populated slot: inserts the destination, copies picture/H/V, and transfers only the top six bits of the A5/A6 link words before falling through into the remove-and-clear tail | D2.w source byte offset; D1.w destination byte offset; A2-A6 arrays | void |
+| `0x8C70` | `legacy_moblist_remove_and_clear` | Removes a slot and wipes it: repairs the neighbours' low ten-bit link fields, fixes the head at 0x90493A, rewrites stale 0x905F80 bucket entries, then zeroes all five arrays at (A2..A6,D2) | D2.w object byte offset; inherited A2-A6 arrays | void |
+| `0x8D00` | `legacy_moblist_unlink` | Shares the first 120 bytes of the remove path but preserves the slot: instead of zeroing the arrays it applies `and.w #0xFC00` to the A5/A6 words, clearing only the link fields | D2.w object byte offset; inherited A5/A6 link arrays | void |
+| `0x8D86` | `legacy_moblist_link_slot_base13` | Loads the slot index into D7, adds the fixed base 0x0D, and enters the shared slot-index link body | sort key word; slot index word | void |
+| `0x8D94` | `legacy_moblist_link_slot_base0` | Loads the slot index into D7 unmodified and enters the shared slot-index link body | sort key word; slot index word | void |
+| `0x8D9E` | `legacy_moblist_link_slot_base17` | Loads the slot index into D7, adds the fixed base 0x11, and enters the shared slot-index link body | sort key word; slot index word | void |
+| `0x8DAC` | `legacy_moblist_link_slot_base21` | Loads the slot index into D7, adds the fixed base 0x15, and enters the shared slot-index link body | sort key word; slot index word | void |
+| `0x8DBA` | `legacy_moblist_link_slot_base25` | Loads the slot index into D7, adds the fixed base 0x19, and enters the shared slot-index link body | sort key word; slot index word | void |
+| `0x8DC8` | `legacy_moblist_link_slot_base1` | Loads the slot index into D7, adds one, and falls through into the shared slot-index link body | sort key word; slot index word | void |
+| `0x8DD2` | `legacy_moblist_link_by_slot_index` | Splices slot D7 into the depth chain sorted by D6: derives the 0x905F80 bucket index ((D6>>5)+1)*4 capped at 0x7E, rewrites the neighbours' low ten-bit link fields, replaces stale bucket heads and the 0x90493A global head, then stores the neighbour indices and key to (A5/A6/A0, 2*D7) | D6 = sort key; D7 = biased slot index | void |
+| `0x8E90` | `legacy_moblist_remove_by_slot_index` | Removes a slot addressed by index: increments and doubles it, repairs both neighbours' link fields through an 0xFC00 mask, rewrites any 0x905F80 bucket entry that referenced it, then zeroes the key and both link words | slot index word | void |
+| `0x8F38` | `legacy_probe_up` | Probes the cell one row up (D2 − 0x40), rejecting D2 < 0x80; accepts an empty A2 word, defers negative words to the wrap path, and otherwise requires both coordinate distances to fall below the radius in D3 | D2.w cell offset; D3.w radius; D4/D5 coordinates; A2-A4 arrays | D1.w candidate or 0/-1 sentinel; condition codes |
+| `0x9006` | `legacy_probe_down` | Probes the cell one row down (D2 + 0x40), bounded by D2 >= 0x7C0 and a positive D5 | D2.w cell offset; D3.w radius; D4/D5 coordinates; A2-A4 arrays | D1.w candidate or 0/-1 sentinel; condition codes |
+| `0x90D2` | `legacy_probe_left` | Probes one cell left; the column is recomputed as `((D1 - 2) & 0x3E) \| (D2 & 0x7C0)`, so the search wraps within the row instead of bailing at the edge | D2.w cell offset; D3.w radius; D4/D5 coordinates; A2-A4 arrays | D1.w candidate or -1 sentinel; condition codes |
+| `0x9192` | `legacy_probe_right` | Probes one cell right, wrapping via `((D1 + 2) & 0x3E) \| (D2 & 0x7C0)` | D2.w cell offset; D3.w radius; D4/D5 coordinates; A2-A4 arrays | D1.w candidate or -1 sentinel; condition codes |
+| `0x9252` | `legacy_recursive_path_move_entry` | Stack entry for the recursive path mover: doubles the actor index into D0, loads the step into D6 and the mode into D7, installs A2–A4, decrements the pending-move counter at 0x904ADC, and calls the worker | actor-list index word; step word; mode word | D0 propagated from legacy_recursive_path_move |
+| `0x9284` | `legacy_recursive_path_move` | Recursive path search: resolves the object offset through 0x904864, branches on the mode bits in D7 with D6 as the step, applies the triplet probes, rejects cells against the scroll limits 0x904A6C/0x904A6E, treats an A2 word of 0x8000 as a special cell, and recurses | D0.w legacy actor-list index; inherited D6/D7 mode and A2-A4 arrays | D0.w status/move result |
+| `0x9864` | `legacy_test_actor_contact_a` | Halves both offsets and invokes the legacy actor-contact predicate at 0x49572, which is not a callable root in this build | D1.w cell offset; D5.w actor-list offset | D0 predicate and condition codes |
+| `0x9880` | `legacy_test_actor_contact_b` | Byte-identical 28-byte copy of 0x9864 with the same stale call to 0x49572 | D1.w cell offset; D5.w actor-list offset | D0 predicate and condition codes |
+| `0x989C` | `legacy_probe_vertical_triplet_up` | Probes the three cells in the row above — centre D2 − 0x40 then its wrapped left and right neighbours — returning on the first that passes the proximity test | D2.w cell; D3/D4 coordinates; A2-A4 arrays | condition codes; D1 candidate |
+| `0x98D8` | `legacy_probe_vertical_triplet_down` | The downward mirror of 0x989C, rejecting D2 >= 0x7BE | D2.w cell; D3/D4 coordinates; A2-A4 arrays | condition codes; D1 candidate |
+| `0x9914` | `legacy_test_cell_proximity` | Proximity test for one candidate: returns at once for an empty A2 word, takes a wrap-normalising path for a negative word, and otherwise stores signed ΔX at 0x90403C, absolute ΔX at 0x904038, signed ΔY at 0x90403E and absolute ΔY at 0x90403A, setting carry when both stay below 0x7C0 | D1.w candidate; D3/D4 coordinates; A2-A4 arrays | carry set iff both wrapped coordinate distances are below 0x07C0 |
+| `0x99A0` | `legacy_probe_horizontal_triplet_left` | Probes the three cells in the column to the left through the same proximity test | D2.w cell; D3/D4 coordinates; A2-A4 arrays | condition codes; D1 candidate |
+| `0x99D8` | `legacy_probe_horizontal_triplet_right` | The rightward mirror of 0x99A0 | D2.w cell; D3/D4 coordinates; A2-A4 arrays | condition codes; D1 candidate |
+
+Eleven absolute calls leave this module: 0x81CA→0x470CE, 0x8346→0x47356,
+0x84E6→0x47234, 0x8882→0x46EEE, 0x88CE→0x48064, 0x898E→0x46EEE,
+0x981A→0x4C690, 0x9830→0x49C36, 0x984A→0x4C690, 0x9872→0x49572, and
+0x988E→0x49572. None of those eight distinct targets is a callable root in the
+complete supplied Gauntlet II main-ROM union, and they land inside different
 instruction bodies in this build. Together with the lack of any incoming
 transfer, that is strong evidence that this module was linked against another
 game revision rather than being a hidden Gauntlet II execution path.
 
 The remaining `0x9A10–0xF9F9` data is partitioned into thirteen exact groups:
 game options; level/status tables; status descriptors; two large gameplay/
-movement/object table blocks; four factory high-score lists; high-score and
-name-entry data; tutorial descriptors; hint/legend text; legend/credit text;
-descriptor/tile tables; and final palette/packed-graphics tables. The precise
-boundaries and formats are in `generated/os_rom_data_catalog.csv`; bytes
-`0xF9FA–0xFFFF` are verified zero fill.
+movement/object table blocks, the first of which begins with a word-pointer
+array targeting `0x9D18` onward before its numeric bulk; four factory
+high-score lists; high-score and name-entry data; tutorial descriptors;
+hint/legend text; legend/credit text; descriptor/tile tables; and final
+palette/packed-graphics tables. The precise boundaries and formats are in
+`generated/os_rom_data_catalog.csv`; bytes `0xF9FA–0xFFFF` are verified zero
+fill.
 
 ---
 

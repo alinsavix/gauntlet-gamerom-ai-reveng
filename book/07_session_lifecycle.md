@@ -49,11 +49,12 @@ builds the next screen when it expires. The demo deserves its own chapter
 (15), because it is the real engine playing back a recorded Elf; the legend
 pages are real maze layouts used as scenery.
 
-Each attract screen ignores player input for its first second, a deliberate
-lockout so that a button mashed during a screen change cannot start a
-session by accident. After that, a coin, or the required button press when
-credit already exists, breaks the cycle from any screen. Chapter 15 covers
-the paid and free-play qualifications precisely.
+Each attract screen ignores the panel for its first second, a deliberate
+lockout so that a button mashed during a screen change cannot immediately jump
+the cycle to another screen. Starting a session is a separate path that is live
+every frame in every mode, so a coin, or the qualifying button press when
+credit already exists, breaks the cycle at any moment. Chapter 15 covers the
+paid and free-play qualifications precisely.
 
 ## A coin becomes a hero
 
@@ -68,7 +69,7 @@ A position in character selection is not yet in the maze. Its status byte
 holds the selecting-a-hero value, its column of the info panel shows the
 choices, and every frame `character_select_input_update` reads that
 joystick: point a direction, and the panel redraws for the Warrior,
-Valkyrie, Wizard, or Elf. Pressing Fire commits.
+Valkyrie, Wizard, or Elf. Pressing Magic commits.
 
 Committing runs the join path, `player_join`, and the same path serves a
 player starting a fresh session, a friend joining mid-level, and a
@@ -178,9 +179,9 @@ AT THIS LEVEL
 ```
 
 The theme music plays under it, a countdown runs, and a coin plus the
-start press (Fire, as ever; the on-screen START is the game's own
-vocabulary, not a fifth button) resumes the session at the level where the
-party died. Letting the countdown expire ends the session. On level 1
+start press resumes the session at the level where the
+party died. (There is no fifth button: START is the game's own vocabulary for
+the button whose input line the game calls Magic.) Letting the countdown expire ends the session. On level 1
 there is no prompt, since continuing and starting over would be the same
 thing.
 
@@ -222,7 +223,7 @@ stateDiagram-v2
     }
     state "One player position" as pl {
         Empty --> Selecting : coin
-        Selecting --> Alive : Fire commits, join succeeds
+        Selecting --> Alive : Magic commits, join succeeds
         Alive --> Exiting : exit tile
         Exiting --> Alive : next level starts
         Alive --> Death : health = 0

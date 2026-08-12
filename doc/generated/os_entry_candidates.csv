@@ -157,7 +157,7 @@ address,name,legacy_loader,evidence,analysis_size,terminators,confidence
 0x4A44,render_option_record,no,direct_call@0x4BCA;direct_call@0x5572;direct_call@0x5888;direct_call@0x58AA;project_loader,290,rts,Verified
 0x4B66,render_option_record_page,no,direct_call@0x5552;direct_call@0x56AE;direct_call@0x570E;project_loader,128,rts,Verified
 0x4BE6,display_next_screen_prompt,no,direct_call@0x4F06;direct_call@0x5202;project_loader,82,rts,Verified
-0x4C38,init_operator_mob_display,no,direct_call@0x545A;direct_call@0x58D2;direct_call@0x5942;project_loader,46,rts,Verified
+0x4C38,init_operator_alpha_palette,no,direct_call@0x545A;direct_call@0x58D2;direct_call@0x5942;project_loader,46,rts,Verified
 0x4C66,run_statistics_histograms,no,direct_call@0x546A;project_loader,826,rts,Verified
 0x4FA0,display_statistics_play_time,no,direct_call@0x520A;project_loader,248,rts,Verified
 0x5098,run_statistics_summary,no,direct_call@0x5462;project_loader,402,rts,Verified

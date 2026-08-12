@@ -155,11 +155,11 @@ Those three assembled images divide the machine's software cleanly:
   tells that story.
 
 These are the *analyzed logical images*, and the board holds other ROMs
-besides. The artwork lives in dedicated graphics ROMs, split across four
-chips with each chip holding one bit-plane of the 4-bit pixels<!-- ALINSA: verify this,
-and also how many total chips there are for graphics ROM -->; the video
-hardware reads those directly, and the CPU never sees them at all. A separate
-character ROM feeds the text overlay under the same arrangement. The sound
+besides. The artwork lives in twelve dedicated graphics ROMs, wired as three
+banks of four, with each chip in a bank holding one bit-plane of that bank's
+4-bit pixels; the video hardware reads those directly, and the CPU never sees
+them at all. A single 8 KB character ROM feeds the text overlay, at two bits
+per pixel rather than four. The sound
 board carries its own 48 KB of program and speech data for its own processor.
 The renderings in this book draw on the graphics ROMs, and the code that
 *uses* them, by writing tile numbers into video RAM, lives entirely in the
@@ -191,8 +191,8 @@ and later posts response bytes back through another address, and a status bit re
 whether the latch is occupied. The main CPU can also reset the sound
 processor through a control register when the conversation breaks down.
 Keeping audio on separate hardware means music and speech cost the game loop
-almost nothing, and Chapter 16 covers the protocol spoken across this
-two-byte wire.
+almost nothing, and Chapter 16 covers the protocol spoken across this pair of
+one-byte latches.
 
 **The inputs.** Each of the four player positions presents one byte in the
 I/O region: four joystick direction switches, Fire, Magic, and two unused
@@ -214,8 +214,9 @@ them out one byte per frame behind the game's back, with checksums guarding
 the stored records. Chapter 14 examines what the game chooses to remember.
 
 **Latches and lights.** A handful of write-only registers control the board:
-four LED outputs, a board-control latch<!-- ALINSA: what is this? -->, and an acknowledge register the
-software writes to clear each frame's VBLANK signal.
+four LED outputs, a hardware latch whose bit 0 gates the LED and board-enable
+line (boot pulses it off and on to force a known state), and an acknowledge
+register the software writes to clear each frame's VBLANK signal.
 
 **The watchdog.** One register does its job by being written to, and by
 punishing silence. Unless software writes to the watchdog address every few

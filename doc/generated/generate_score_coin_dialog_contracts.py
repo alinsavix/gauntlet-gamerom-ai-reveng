@@ -26,7 +26,7 @@ CONTRACTS = (
     (0x459A2, "draw_player_health", "uint16 player_index", "void", "", "Verified", ("move.w 0xa(a6), d2", "jsr 0x260.l", "andi.b 0xfd, (a0, d2.w)")),
     (0x4715E, "main_score_update", "void", "void", "", "Verified", ("movea.l 0x902000, a2", "movea.l 0x904ba4, a3", "subq.w 0x1, (a0, d0.w)")),
     (0x488CA, "player_coindrop", "uint16 player_index", "void", "", "Verified", ("move.w 0xa(a6), d3", "jsr 0x4ad76.l", "jsr 0x452d0.l")),
-    (0x48B58, "update_monster_bonus_from_score_per_coin", "void", "void", "", "Verified", ("moveq 0x3, d2", "divs.w d3, d0", "add.b d0, 0x90405f.l")),
+    (0x48B58, "update_monster_spawn_bonus_from_score_per_coin", "void", "void", "", "Verified", ("moveq 0x3, d2", "divs.w d3, d0", "add.b d0, 0x90405f.l")),
     (0x49498, "playfield_showscore", "uint16 source_mob_slot, uint16 popup_type_index", "void", "", "Verified", ("move.w 0xa(a6), d3", "move.w 0xe(a6), d4", "move.w 0x3c, (a0, d0.w)", "jsr 0x5df72.l")),
     (0x49BD0, "highscore_table_init", "void", "void", "", "Verified", ("jsr 0x1a8.l", "jsr 0x1b4.l", "move.b 0x41, 0x1(a1, d0.w)")),
     (0x49D0E, "highscore_check", "uint16 player_index", "void", "", "Verified", ("move.w 0xa(a6), d2", "jsr 0x1c6.l", "jsr 0x452d0.l")),

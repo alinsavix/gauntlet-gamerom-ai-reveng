@@ -128,9 +128,10 @@ frame. The per-frame display routine services exactly one player per frame,
 rotating through the four positions, and within that column it repaints only
 fields whose dirty bits are set, plus health whenever it has fallen low
 enough to deserve attention. The low-health warning is done with palettes,
-not text: below 200 units the health number pulses dim and bright on an
-eight-frame cadence that tightens as the value falls, synchronized with the
-heartbeat sound from Chapter 10, and an acid-slowed player's column shifts to
+not text: below 200 units the health number pulses dim and bright on a steady
+eight-frame cadence — the driving timer ticks once per frame and never speeds
+up — while the heartbeat sound from Chapter 10 accelerates independently, and
+an acid-slowed player's column shifts to
 a different dimmed palette entirely. The score multiplier appears beside the
 health once it exceeds one, and when somebody is IT, the two-character IT
 label is stamped into their column in their color and announced out loud.
@@ -149,10 +150,11 @@ audience.
 The continue prompt is the economic pitch in dialog form. When the last
 player dies past level one, the screen offers to resume at the current level,
 counting down while the theme song plays. Accept by feeding a coin and
-pressing Fire, and the session resumes where it stood; decline and the
+pressing Magic, and the session resumes where it stood; decline and the
 session winds down through the rankings above. One period-correct wrinkle:
 the prompt's ROM text says PRESS START, and the panel in front of you holds
-only a joystick, Fire, and Magic. Fire is the start button.
+only a joystick, Fire, and Magic. The debounced edge the code waits for is the
+one on the Magic line, so Magic is the start button.
 
 ## What the cabinet remembers
 
@@ -241,7 +243,7 @@ a demo that replays a human's hands.
 >   24-bit quotient to OS `rank_high_score` (0x3F68, API 0x1C6); initials
 >   timer 0x0A8C (45 s) vs GAME OVER 0x0258 (10 s) in `player_state_timer`;
 >   attract display `attract_highscores` (0x4A124); difficulty feedback
->   `update_monster_bonus_from_score_per_coin` (0x48B58) into 0x90405F.
+>   `update_monster_spawn_bonus_from_score_per_coin` (0x48B58) into 0x90405F.
 > - Info panel: `setup_infopanel` (0x452D0, selector −1 = full rebuild);
 >   `main_score_display` (0x457C0) services player `frame_counter & 3` only,
 >   score/health renderers 0x45940/0x459A2, low-health dim −0x1000 and acid

@@ -333,11 +333,13 @@ introduces them.
 >   `doc/05_data_reference.md` §3.12. Verified by disassembly: the fast entries
 >   are installed only when bit 1 of the doubled frame counter is set, and the
 >   odd-angle scan uses mask 0x73, which excludes the demon and lobber bits.
->   While any poison timer is running, the whole monster pass is skipped on
->   even frames.
-> - Generator turn stagger and cap: 0x41026–0x41056; `monster_count_table`
->   (0x40E46, 8 settings rows × 4 player columns), `monster_cap_bonus`
->   (0x90405F) maintained by `update_monster_bonus_from_score_per_coin`
+>   While `monster_slowmo_timer` (0x9048B2) is running, the whole monster pass
+>   is skipped on even frames (0x40EE0), halving every monster's update rate.
+>   Chapter 10 explains what sets it.
+> - Generator turn stagger and spawn probability: 0x41026–0x41056;
+>   `monster_spawn_probability_table` (0x40E46, 8 settings rows × 4 player
+>   columns), `monster_spawn_probability_bonus` (0x90405F) maintained by
+>   `update_monster_spawn_bonus_from_score_per_coin`
 >   (0x48B58), the `level × 2` clamp, and the `frame_overflow` (0x904916)
 >   force-to-zero. `handle_generate` (0x492C0) compares the resulting number
 >   against `getrandom(32)` at 0x49300–0x4930E, so the value is a spawn
@@ -363,7 +365,7 @@ introduces them.
 >   0x41980/0x41986, indexes the per-character distance scalar at 0x580C8
 >   (`[96,112,96,128]` normal, `[128,128,128,160]` powered; the powered half is
 >   selected by the +8 at 0x41992), multiplies it by the facing unit vector
->   `player_delta_x`/`player_delta_y` (0x580D8/0x580E8) at 0x419AC/0x419B0, and
+>   `player_delta_x`/`player_delta_y` (0x580D8/0x580EA) at 0x419AC/0x419B0, and
 >   adds that to 4× the current position delta at 0x419B4–0x419CA. Verified by
 >   disassembly; 0x580C8 has exactly one consumer in the ROM, this site.
 > - Hit resolution: `resolve_shot_hit` (0x4AF50) and

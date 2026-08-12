@@ -249,15 +249,15 @@ the formal `**[image needed]**` and `**[needs verification]**` draft markers.
 
 These are targeted rechecks, not invitations to redo the whole project:
 
-1. **Normal maze order and the maze randomizer.** The project owner confirms
-   that stored mazes 0–5 are the first six normal levels and that randomized
-   maze selection begins afterward. This conflicts with the current
-   `doc/06_maze_catalog.md` range table and the `Level N = Maze N+4` wording.
-   Revisit `maze_checknum`, `maze_next`, the saved randomizer state around
-   0x90400E/0x904010, level-start/exit callers, EEPROM initialization, and the
-   separate treasure-room randomizer. Correct the maintained documentation,
-   then give Chapter 9 the exact algorithm: activation point, state update,
-   allowed range, wrap behavior, repeat behavior, and special-case paths.
+1. **Normal maze order and the maze rotation. Resolved.** Selection is a
+   deterministic, cabinet-persistent rotation, not a randomizer, and it never
+   consults `getrandom`. `mazerand_num` (0x904010, the resume position) and
+   `mazerand_adder` (0x90400E, the stride, masked to 0–7) live in EEPROM;
+   `maze_checknum` (0x52ECA) substitutes a candidate of 5 with the resume
+   value. Mazes 0–4 are always levels 1–5; level 6 is wherever the rotation
+   stands, which is maze 5 only on a fresh EEPROM. There is no repeat
+   avoidance. `Level N = Maze N+4` is gone from the documentation. See
+   `doc/06_maze_catalog.md` §3.1–3.5, which Chapter 9 follows.
 2. **MOB depth/priority chains.** Reconfirm the relationship among the global
    doubly linked chain, forward/back links, the 64 cumulative priority heads,
    hardware traversal, collision queries, and monster iteration. Use targeted
@@ -325,7 +325,7 @@ what it is trying to accomplish.*
   damage, rises with food or inserted coins, and makes continued play a
   visible economic choice. Briefly introduce score, treasure, inventory, and
   the score multiplier without explaining their storage yet.
-- The shape of a game: insert a coin, press Fire to start or join, choose a
+- The shape of a game: insert a coin, press Magic to start or join, choose a
   hero, enter a level, explore and fight, exit, occasionally visit treasure or
   secret rooms, die or continue, and eventually return to high scores and
   attract mode. Chapter 7 will turn this into a complete state diagram.
@@ -510,10 +510,10 @@ session covered in Chapter 7.*
 *A single map of the whole experience. Later chapters can explain each branch
 without losing the reader in disconnected subsystem details.*
 
-- Begin in attract mode: title, scores, demo, and legend run until the coin and
-  Fire path transfers control into a real session. Explain paid versus
+- Begin in attract mode: title, scores, demo, and legend run until the
+  coin-or-Magic path transfers control into a real session. Explain paid versus
   free-play only at a high level here.
-- Starting and joining: a player position gains health/credit, presses Fire to
+- Starting and joining: a player position gains health/credit, presses Magic to
   enter character-selection state, chooses a hero with the joystick, receives
   a HUD column, and is placed at a usable spawn. The same lifecycle supports
   friends joining a level already in progress.
@@ -592,13 +592,16 @@ introduced in Chapter 8.*
 - Levels versus stored mazes: the Slapstic ROM contains 117 records numbered
   0–116, including normal layouts, demo/legend material, treasure rooms, and
   two secret-room layouts. Establish the corrected normal progression:
-  **mazes 0–5 are always the first six levels**, after which the maze selector
-  begins randomizing later layouts. Do not retain `Level N = Maze N+4`.
-- **The maze-selection randomizer:** after completing the research gate,
-  explain the exact algorithm and state in plain pseudocode—when it activates,
-  how it chooses/advances the next maze, its legal normal-maze range, how it
-  prevents or permits repeats, wrap/endgame behavior, and what EEPROM state
-  preserves. Separately explain the treasure-room selector and the fixed
+  **mazes 0–4 are always levels 1–5**, and level 6 onward follows a
+  deterministic EEPROM-backed rotation whose position survives power-off —
+  maze 5 as level 6 is the fresh-cabinet case, not the rule. Do not retain
+  `Level N = Maze N+4`, and do not describe the selector as random.
+- **The maze-selection rotation:** explain the exact algorithm and state in
+  plain pseudocode—when it activates,
+  how it chooses/advances the next maze, its legal normal-maze range, its
+  wrap-and-stride-bump behavior at maze 101 and the level-999 wrap, and which
+  EEPROM words carry the state. It has no repeat-avoidance mechanism; say so.
+  Separately explain the treasure-room rotation and the fixed
   demo, legend, and secret paths.
 - The Slapstic: a 32 KB level-data image visible through an 8 KB CPU window,
   with a copy-protection chip selecting the bank after a required access
@@ -660,7 +663,7 @@ health, items, powers, animation, and four-player interaction.*
   rather than listing all 28×16 entries.
 - Health, damage, and death: constant drain, armor and contact/projectile
   damage, food and coins as replenishment, low-health pulsing/heartbeat and
-  speech, poison/acid timing, accumulated damage statistics, zero-health state,
+  speech, stun and acid timing, accumulated damage statistics, zero-health state,
   and the continue path from Chapter 7.
 - Inventory and doors: keys, potions, treasure multiplier, and power-up icons
   in the HUD; collecting a key versus spending it; door endpoints and

@@ -46,7 +46,7 @@ them:
 |-------|--------------|
 | Joystick | Walk in any of eight directions; also swings your melee attack toward whatever you walk into |
 | **Fire** | Shoot a projectile in the direction you're facing |
-| **Magic** | Drink one of the potions you're carrying, damaging every monster in view |
+| **Magic** | Drink one of the potions you're carrying, damaging every monster in view; it doubles as the start/join button between games |
 
 Walking into things covers the rest of what a player does. You collect items,
 eat food, open doors, step into transporters, and reach the exit by putting
@@ -68,7 +68,7 @@ each is shown standing and facing the player, wearing a different
 position's color (red Warrior, blue Valkyrie, yellow Wizard, green Elf).
 The soft gray blob is the sprite's built-in shadow.*
 
-Drop a coin, press Fire, and the game asks who you want to be. Point the
+Drop a coin, press Magic, and the game asks who you want to be. Point the
 joystick up for the **Warrior**, left for the **Valkyrie**, down for the
 **Wizard**, right for the **Elf**. Any position can pick any hero, so a party
 of four Wizards is legal, and your color still comes from where you stand.
@@ -143,7 +143,7 @@ flowchart LR
 Left alone, the cabinet cycles through its **attract mode**: high scores, the
 title screen, a self-playing demo, and a "legend" screen that explains the
 monsters and items. That demo is a recording of real inputs played back
-through the real game engine, as Chapter 15 shows. A coin and a press of Fire
+through the real game engine, as Chapter 15 shows. A coin and a press of Magic
 break the cycle and put a hero in the maze.
 
 After that you explore and fight until you find the exit, which drops you into
@@ -245,9 +245,11 @@ the machine underneath.
 > Everything in this chapter is grounded in the maintained technical docs.
 > These are the load-bearing entry points if you want to dig now:
 >
-> - Joystick/button bit assignments: `doc/05_data_reference.md` §3.11; the
+> - Joystick/button bit assignments (Magic is bit 0, Fire bit 1, both active
+>   low): `doc/05_data_reference.md` §3.11; the
 >   per-frame debounce that reads them is `input_debounce` (0x40644),
->   `doc/04_game_subsystems.md` §15.
+>   `doc/04_game_subsystems.md` §15. The start/join press the game waits for
+>   is a debounced edge on the Magic line, `doc/04_game_subsystems.md` §6.4.
 > - Hero selection by joystick direction (up=Warrior, left=Valkyrie,
 >   down=Wizard, right=Elf): `character_select_input_update` (0x42DF4),
 >   `doc/04_game_subsystems.md` §22.

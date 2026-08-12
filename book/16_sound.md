@@ -4,7 +4,8 @@
 music, effects, and a cabinet that talks constantly?
 
 **By the end you will understand:** what lives on the sound board and why it
-is a separate computer, the one-byte wire between the two processors, the
+is a separate computer, the pair of one-byte latches between the two
+processors, the
 small queue and once-per-frame drain on the game side, how the game notices
 a dead sound board and reboots it, why your quarters arrive as answers to a
 sound command, and how the cabinet builds a sentence out of two commands.
@@ -220,8 +221,8 @@ which visitor it is before you can see the sprite.
 
 ## Speech as game design
 
-Of the two hundred and nineteen catalogued commands, one hundred and forty
-are speech, and the phrases are built to be combined. The ROM stores "NOW
+Of the two hundred and nineteen classified commands in the catalogue, one
+hundred and forty are speech, and the phrases are built to be combined. The ROM stores "NOW
 HAS" as one phrase and "EXTRA ARMOR", "LIMITED
 INVISIBILITY", "EXTRA SHOT POWER" and the rest as others. It stores sixteen
 name phrases covering four colors times four classes. It stores "IS IT" and

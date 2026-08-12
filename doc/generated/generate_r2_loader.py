@@ -158,7 +158,7 @@ ADDITIONAL_OS_FUNCTIONS = {
     0x4A44: "render_option_record",
     0x4B66: "render_option_record_page",
     0x4BE6: "display_next_screen_prompt",
-    0x4C38: "init_operator_mob_display",
+    0x4C38: "init_operator_alpha_palette",
     0x4C66: "run_statistics_histograms",
     0x4FA0: "display_statistics_play_time",
     0x5098: "run_statistics_summary",
@@ -171,14 +171,27 @@ ADDITIONAL_OS_FUNCTIONS = {
     0x89AA: "legacy_four_cell_occupied_test",
     0x89E6: "legacy_position_in_active_bounds",
     0x8A12: "legacy_set_direction_from_delta",
+    0x8A84: "legacy_moblist_add_object",
     0x8AE8: "legacy_moblist_insert",
+    0x8B9E: "legacy_move_mob_slot_entry",
+    0x8BD4: "legacy_moblist_remove_and_clear_entry",
+    0x8C04: "legacy_moblist_unlink_entry",
     0x8C36: "legacy_move_mob_slot",
     0x8C70: "legacy_moblist_remove_and_clear",
     0x8D00: "legacy_moblist_unlink",
+    0x8D86: "legacy_moblist_link_slot_base13",
+    0x8D94: "legacy_moblist_link_slot_base0",
+    0x8D9E: "legacy_moblist_link_slot_base17",
+    0x8DAC: "legacy_moblist_link_slot_base21",
+    0x8DBA: "legacy_moblist_link_slot_base25",
+    0x8DC8: "legacy_moblist_link_slot_base1",
+    0x8DD2: "legacy_moblist_link_by_slot_index",
+    0x8E90: "legacy_moblist_remove_by_slot_index",
     0x8F38: "legacy_probe_up",
     0x9006: "legacy_probe_down",
     0x90D2: "legacy_probe_left",
     0x9192: "legacy_probe_right",
+    0x9252: "legacy_recursive_path_move_entry",
     0x9284: "legacy_recursive_path_move",
     0x9864: "legacy_test_actor_contact_a",
     0x9880: "legacy_test_actor_contact_b",
@@ -216,40 +229,37 @@ CANONICAL_FLAG_NAMES = {
 ADDITIONAL_OS_FLAGS = {
     0x0C86: ("osdata.working_ram_error_text", 0x12),
     0x0F1C: ("osdata.rom_error_descriptor_pointer_tables", 0x62),
-    0x2A48: ("osdata.number_format_bit_masks", 0x16),
+    0x2A48: ("osdata.number_format_separator_masks", 0x16),
     0x2C16: ("osdata.text_effect_dispatch_offsets", 0x0C),
     0x33D2: ("osdata.large_character_tile_quads", 0xD0),
-    0x34A2: ("osdata.large_character_clear_maps", 0x80),
+    0x34A2: ("osdata.large_character_glyph_index_map", 0x80),
     0x44BE: ("osdata.eeprom_redundancy_probe_order", 0x0C),
     0x4736: ("osdata.eeprom_bit_index_map", 0x10),
     0x599A: ("osdata.motion_test_lookup_tables", 0x80),
-    0x5A1A: ("osdata.diagnostic_pointer_and_endpoint_tables", 0x30),
+    0x5A1A: ("osdata.diagnostic_pointer_and_addend_tables", 0x30),
     0x5A4A: ("osdata.selftest_descriptor_and_string_stream", 0x6CA),
-    0x6114: ("osdata.color_name_pointer_table", 0x20),
+    0x6114: ("osdata.color_name_descriptor_pointers", 0x20),
     0x6134: ("osdata.display_test_selection_tables", 0x40),
     0x6174: ("osdata.display_test_palette_words", 0x10),
     0x6184: ("osdata.color_test_palette_source_prefix", 0x4A0),
     0x6624: ("osdata.palette_and_rom_error_descriptor_overlap", 0x160),
     0x6784: ("osdata.rom_error_descriptor_stream", 0x202),
-    0x6986: ("osdata.coin_counter_decode_table", 8),
+    0x6986: ("osdata.coin_bonus_threshold_table", 8),
     0x698E: ("osdata.game_config_descriptor_table", 0x1A),
     0x69A8: ("osdata.session_difficulty_factors", 4),
     0x69AC: ("osdata.statistics_prompt_strings", 0x9A),
     0x6A46: ("osdata.statistics_summary_table", 0xD2),
     0x6B18: ("osdata.statistics_error_and_navigation_descriptors", 0x4E),
     0x6B66: ("osdata.operator_more_marker_variants", 0x24),
-    0x6B8A: ("osdata.operator_ui_palette", 0x10),
+    0x6B8A: ("osdata.operator_alpha_palette", 0x10),
     0x6B9A: ("osdata.operator_option_descriptor_stream", 0x1A0),
     0x6D3A: ("osdata.built_in_coin_option_stream", 0x6E),
     0x860C: ("legacydata.object_motion_tables", 0xF6),
-    0x8A64: ("legacydata.direction_route_tables", 0x84),
-    0x8B9E: ("legacydata.mob_bucket_tables", 0x98),
-    0x8D86: ("legacydata.path_probe_tables", 0x1B2),
-    0x9252: ("legacydata.recursive_move_tables", 0x32),
+    0x8A64: ("legacydata.object_proximity_thresholds", 0x20),
     0x9A10: ("legacydata.game_option_stream", 0x1C8),
     0x9BD8: ("legacydata.level_display_tables", 0x144),
     0x9D1C: ("legacydata.status_text_descriptors", 0x304),
-    0xA020: ("legacydata.gameplay_numeric_tables_a", 0x1D1C),
+    0xA020: ("legacydata.pointer_and_numeric_tables_a", 0x1D1C),
     0xBD3C: ("legacydata.factory_high_scores", 0x140),
     0xBE7C: ("legacydata.high_score_text", 0x7A),
     0xBEF6: ("legacydata.name_entry_and_gameplay_tables", 0x24A),
@@ -367,16 +377,83 @@ def generated_text(source: str, function_index: str) -> str:
         for line in flag_block.splitlines()
         if line.startswith("'f ")
     ]
-    existing_flag_names = {
-        match.group(1)
+    # r2 keeps only the last flag defined at an address, so two rows for one
+    # address silently rename it and make disassembly show the wrong symbol
+    # (0x904004, 0x904012 and 0x90403E each had an inherited game-scope name
+    # shadowing the OS-scope one).  Resolve deterministically instead: an
+    # OS-scope ADDITIONAL_OS_FLAGS name is authoritative for the OS image, and
+    # otherwise the first inherited definition wins.  Dropped aliases are kept
+    # as comments so no naming evidence is lost.
+    def flag_address(line: str) -> int | None:
+        match = re.match(r"f \S+ \S+ (0x[0-9A-Fa-f]+)$", line)
+        return int(match.group(1), 16) if match else None
+
+    def flag_name(line: str) -> str:
+        match = re.match(r"f (\S+) ", line)
+        return match.group(1) if match else line
+
+    authoritative = {address for address in ADDITIONAL_OS_FLAGS}
+    deduplicated: list[str] = []
+    claimed: dict[int, str] = {}
+    for line in flags:
+        address = flag_address(line)
+        if address is None:
+            deduplicated.append(line)
+            continue
+        if address in authoritative:
+            deduplicated.append(f"# alias {flag_name(line)} at 0x{address:08x} superseded by the OS-scope flag")
+            continue
+        if address in claimed:
+            deduplicated.append(f"# alias {flag_name(line)} at 0x{address:08x} superseded by {claimed[address]}")
+            continue
+        claimed[address] = flag_name(line)
+        deduplicated.append(line)
+    flags = deduplicated
+    emitted_names = {
+        flag_name(line): flag_address(line)
         for line in flags
-        if (match := re.match(r"f (\S+) ", line))
+        if flag_address(line) is not None
     }
-    flags.extend(
-        f"f {name} {size} 0x{address:08x}"
-        for address, (name, size) in sorted(ADDITIONAL_OS_FLAGS.items())
-        if name not in existing_flag_names
-    )
+    for address, (name, size) in sorted(ADDITIONAL_OS_FLAGS.items()):
+        if name in emitted_names and emitted_names[name] != address:
+            raise SystemExit(
+                f"flag name collision for {name}: "
+                f"0x{emitted_names[name]:08x} and 0x{address:08x}"
+            )
+        flags.append(f"f {name} {size} 0x{address:08x}")
+    emitted: dict[int, str] = {}
+    for line in flags:
+        address = flag_address(line)
+        if address is None:
+            continue
+        if address in emitted:
+            raise SystemExit(
+                f"flag address collision at 0x{address:08x}: "
+                f"{emitted[address]} and {flag_name(line)}"
+            )
+        emitted[address] = flag_name(line)
+    for address, (name, _) in ADDITIONAL_OS_FLAGS.items():
+        if emitted.get(address) != name:
+            raise SystemExit(
+                f"required OS flag missing at 0x{address:08x}: "
+                f"expected {name}, got {emitted.get(address, 'none')}"
+            )
+    function_addresses = {
+        int(match.group(1), 16)
+        for line in functions
+        if (match := re.match(r"af\+ (0x[0-9A-Fa-f]+) ", line))
+    }
+    for start, (name, size) in ADDITIONAL_OS_FLAGS.items():
+        collisions = sorted(
+            address for address in function_addresses
+            if start <= address < start + size
+        )
+        if collisions:
+            raise SystemExit(
+                f"data flag {name} at 0x{start:08x}-0x{start + size - 1:08x} "
+                "contains function entries: "
+                + ", ".join(f"0x{address:08x}" for address in collisions)
+            )
 
     lines = [
         "# Generated by doc/generate_r2_loader.py; do not edit by hand.",
