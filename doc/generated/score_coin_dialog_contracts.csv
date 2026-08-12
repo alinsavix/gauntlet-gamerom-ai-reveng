@@ -7,7 +7,7 @@ address,name,arguments,return,exceptional_convention,direct_control_sites,confid
 0x459A2,draw_player_health,uint16 player_index,void,,0x45516;0x4585C,Verified
 0x4715E,main_score_update,void,void,,0x42B26,Verified
 0x488CA,player_coindrop,uint16 player_index,void,,0x42CEA;0x484C4;0x484FE;0x485EA;0x486D4;0x48A6A,Verified
-0x48B58,update_monster_bonus_from_score_per_coin,void,void,,0x4834E;0x48588;0x48668,Verified
+0x48B58,update_monster_spawn_bonus_from_score_per_coin,void,void,,0x4834E;0x48588;0x48668,Verified
 0x49498,playfield_showscore,"uint16 source_mob_slot, uint16 popup_type_index",void,,0x49478;0x4BBE6;0x519B8;0x51BE8,Verified
 0x49BD0,highscore_table_init,void,void,,0x43306,Verified
 0x49D0E,highscore_check,uint16 player_index,void,,0x46AC4,Verified

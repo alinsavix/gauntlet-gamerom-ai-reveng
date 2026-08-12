@@ -13,22 +13,22 @@ from pathlib import Path
 
 # address, name, purpose, arguments, return, convention, byte prefix
 ROWS = (
-    (0x2918, "format_number", "Format a value as signed/unsigned decimal, upper/lower hexadecimal, octal, or binary according to a format byte and mode", "value; destination buffer; format byte; format mode word; field width word", "void", "normal stack ABI", "206f0008"),
+    (0x2918, "format_number", "Format a value as decimal ('d' unsigned, 's' signed), hexadecimal ('X' uppercase, 'x' and 'h' lowercase), octal ('o'), or binary for any other format byte; the mode selects zero/space padding and the comma-separator post-pass indexed by field width", "value; destination buffer; format byte; format mode word; field width word", "void", "normal stack ABI", "206f0008"),
     (0x2A5E, "format_hex", "Format an unsigned value as uppercase hexadecimal into a fixed-width NUL-terminated field", "value; destination buffer; field width word; nonzero=space pad, zero=zero pad", "void", "normal stack ABI", "222f0004"),
     (0x2ABE, "format_decimal", "Format an unsigned value as decimal into a fixed-width NUL-terminated field", "value; destination buffer; field width word; nonzero=space pad, zero=zero pad", "void", "normal stack ABI", "2f02"),
-    (0x2CE4, "calc_alpha_address", "Convert two alpha coordinates to the orientation-correct absolute VRAM word address", "coordinate byte 0; coordinate byte 1", "D0.l=absolute alpha VRAM address", "normal stack ABI", "4a7900904f0e"),
-    (0x2EB4, "display_decimal_value", "Format and draw a decimal value through a temporary chained-text descriptor", "coordinate0; coordinate1; value; field width; nonzero=space pad, zero=zero pad; color/style", "void", "normal six-slot stack ABI", "4e56fff0"),
-    (0x2EEA, "display_hex_value", "Format and draw an uppercase hexadecimal value through a temporary chained-text descriptor", "coordinate0; coordinate1; value; field width; nonzero=space pad, zero=zero pad; color/style", "void", "normal six-slot stack ABI", "4e56fff0"),
+    (0x2CE4, "calc_alpha_address", "Convert two alpha coordinates to the orientation-correct absolute VRAM word address", "column byte; row byte", "D0.l=absolute alpha VRAM address", "normal stack ABI", "4a7900904f0e"),
+    (0x2EB4, "display_decimal_value", "Format and draw a decimal value through a temporary chained-text descriptor", "column byte; row byte; value; field width; nonzero=space pad, zero=zero pad; color/style", "void", "normal six-slot stack ABI", "4e56fff0"),
+    (0x2EEA, "display_hex_value", "Format and draw an uppercase hexadecimal value through a temporary chained-text descriptor", "column byte; row byte; value; field width; nonzero=space pad, zero=zero pad; color/style", "void", "normal six-slot stack ABI", "4e56fff0"),
     (0x30F4, "stop_text_effect", "Deactivate a matching effect slot if present and clear the supplied descriptor chain", "descriptor pointer", "void", "normal stack ABI", "2f0a"),
     (0x32A0, "display_large_char_raw", "Render one mapped large glyph with the rotated-display stride/attribute mode", "alpha destination pointer; glyph index word; color/style word", "D0.w=alpha-cell advance (1 or 2)", "tail-enters register renderer", "226f0004"),
     (0x32BC, "display_large_char_at", "Render one mapped large glyph with the standard-display stride/attribute mode", "alpha destination pointer; glyph index word; color/style word", "D0.w=alpha-cell advance (1 or 2)", "tail-enters register renderer", "226f0004"),
-    (0x32DA, "display_large_decimal_value", "Format and draw a decimal value with the mapped large font", "coordinate0; coordinate1; value; field width; nonzero=space pad, zero=zero pad; color/style", "D0.l=total alpha-cell advance", "normal six-slot stack ABI", "4e56fff0"),
-    (0x3310, "display_large_hex_value", "Format and draw an uppercase hexadecimal value with the mapped large font", "coordinate0; coordinate1; value; field width; nonzero=space pad, zero=zero pad; color/style", "D0.l=total alpha-cell advance", "normal six-slot veneer sharing the 0x32F2 display tail", "4e56fff0"),
-    (0x332A, "display_large_text_at", "Build a temporary descriptor from coordinates and draw a mapped large-font string", "coordinate0; coordinate1; string pointer; color/style", "D0.l=total alpha-cell advance", "normal four-slot stack ABI", "1f6f0007000a"),
+    (0x32DA, "display_large_decimal_value", "Format and draw a decimal value with the mapped large font", "column byte; row byte; value; field width; nonzero=space pad, zero=zero pad; color/style", "D0.l=total alpha-cell advance", "normal six-slot stack ABI", "4e56fff0"),
+    (0x3310, "display_large_hex_value", "Format and draw an uppercase hexadecimal value with the mapped large font", "column byte; row byte; value; field width; nonzero=space pad, zero=zero pad; color/style", "D0.l=total alpha-cell advance", "normal six-slot veneer sharing the 0x32F2 display tail", "4e56fff0"),
+    (0x332A, "display_large_text_at", "Build a temporary descriptor from coordinates and draw a mapped large-font string", "column byte; row byte; string pointer; color/style", "D0.l=total alpha-cell advance", "normal four-slot stack ABI", "1f6f0007000a"),
     (0x3346, "clear_large_text", "Clear the alpha cells occupied by a mapped large-font descriptor chain", "descriptor pointer", "D0.l=alpha-cell span cleared for the final descriptor", "normal stack ABI", "48e72038"),
     (0x3586, "write_alpha_word", "Write a raw word to one indexed alpha VRAM cell", "cell index long; value word", "void", "normal stack ABI", "41f900905000"),
     (0x359A, "wait_vblanks", "Busy-wait for the requested number of changes to the OS VBLANK counter", "count word", "void", "normal stack ABI", "302f0006"),
-    (0x35B2, "set_text_position", "Set the two leading descriptor coordinates and clear descriptor repeat byte 6", "descriptor pointer; coordinate0; coordinate1", "void", "normal stack ABI", "206f0004"),
+    (0x35B2, "set_text_position", "Set the two leading descriptor coordinates and clear descriptor repeat byte 6", "descriptor pointer; column byte; row byte", "void", "normal stack ABI", "206f0004"),
 )
 
 

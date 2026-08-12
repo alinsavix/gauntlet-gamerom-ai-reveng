@@ -31,51 +31,51 @@ REGIONS = (
     (0x0300, 0x599A, "active_os_implementation", "active OS 68010 code with embedded constants/tables", "mixed", "Verified"),
     (0x599A, 0x6DA8, "active_os_data_image", "diagnostic/operator tables, descriptor chains, strings, and palette source data", "data", "Verified"),
     (0x6DA8, 0x8000, "intermodule_zero_fill", "zero fill between active OS and retained module", "fill", "Verified"),
-    (0x8000, 0x9A10, "retained_game_support_code", "runtime-dead 68010 game-support code with five embedded data islands", "mixed", "Strong inference"),
+    (0x8000, 0x9A10, "retained_game_support_code", "runtime-dead 68010 game-support code with two embedded data islands", "mixed", "Strong inference"),
     (0x9A10, 0xF9FA, "retained_game_support_data", "runtime-dead older-game tables, text, palettes, and graphics data", "data", "Strong inference"),
     (0xF9FA, 0x10000, "trailing_zero_fill", "zero fill to end of ROM", "fill", "Verified"),
 )
 
 # Exact embedded-data islands interrupting the retained module's code.  Their
 # formats are derived from the instructions that index them; original symbol
-# names are absent from the shipped artifact.
+# names are absent from the shipped artifact.  Contradicted and corrected: the
+# former 0x8A84-0x8AE7, 0x8B9E-0x8C35, 0x8D86-0x8F37 and 0x9252-0x9283 islands
+# are executable stack-ABI wrapper functions, not data.  See the code-as-data
+# guards in checked_data_ranges().
 LEGACY_DATA_ISLANDS = (
     (0x860C, 0x8702, "legacy_object_motion_tables", "word offsets, longword picture values, packed MOB attributes, and byte direction records"),
-    (0x8A64, 0x8AE8, "legacy_direction_route_tables", "eight-direction word/byte lookup records and movement masks"),
-    (0x8B9E, 0x8C36, "legacy_mob_bucket_tables", "MOB bucket/link constants and insertion-order records"),
-    (0x8D86, 0x8F38, "legacy_path_probe_tables", "signed neighbor offsets, direction maps, and path-probe constants"),
-    (0x9252, 0x9284, "legacy_recursive_move_tables", "neighbor-order and recursive path-selection constants"),
+    (0x8A64, 0x8A84, "legacy_object_proximity_thresholds", "sixteen per-object-type distance thresholds selected by caller_word / 4 at 0x8780-0x878E and compared against absolute horizontal and vertical deltas at 0x879A/0x87A0"),
 )
 
 ACTIVE_INLINE_DATA = (
     (0x0C86, 0x0C98, "working_ram_error_text", "NUL-terminated early-boot diagnostic string"),
     (0x0F1C, 0x0F7E, "rom_error_descriptor_pointer_tables", "three indexed tables of 16-bit display-descriptor addresses used for ROM lane/socket errors"),
-    (0x2A48, 0x2A5E, "number_format_bit_masks", "eleven words selected by the generic numeric formatter's mode index"),
+    (0x2A48, 0x2A5E, "number_format_separator_masks", "eleven thousands-separator placement bitmasks indexed by field width 0-10; each carry shifted out of the mask emits a comma"),
     (0x2C16, 0x2C22, "text_effect_dispatch_offsets", "six signed word offsets relative to 0x2C16"),
-    (0x33D2, 0x34A2, "large_character_tile_quads", "52 four-byte large-character tile-number records"),
-    (0x34A2, 0x3522, "large_character_clear_maps", "large-character clearing/width lookup records"),
-    (0x44BE, 0x44CA, "eeprom_redundancy_probe_order", "word seed followed by signed byte offsets for redundant-record bit probing"),
-    (0x4736, 0x4746, "eeprom_bit_index_map", "sixteen signed byte mappings from packed bit index to EEPROM record bit"),
+    (0x33D2, 0x34A2, "large_character_tile_quads", "52 four-byte large-character tile-number records indexed by glyph index at 0x326A"),
+    (0x34A2, 0x3522, "large_character_glyph_index_map", "128-byte ASCII-to-glyph-index map read at 0x3228 and 0x334E before the tile quad lookup"),
+    (0x44BE, 0x44CA, "eeprom_redundancy_probe_order", "ten Hamming(15,10) data-bit positions 03,05,06,07,09,0A,0B,0C,0D,0E terminated by 0xFF; position 03 is fetched as a word only to clear the index register's high byte, and every position selects the same XOR-check logic"),
+    (0x4736, 0x4746, "eeprom_bit_index_map", "Hamming syndrome-to-data-byte-index map indexed by the low nibble of the five-bit syndrome; 0xFF marks parity positions where no correction is applied"),
 )
 
 ACTIVE_DATA_GROUPS = (
     (0x599A, 0x5A1A, "motion_test_lookup_tables", "palette words, position/delta words, and 8x8 multiplication bytes for the Motion Object test"),
-    (0x5A1A, 0x5A4A, "diagnostic_pointer_and_endpoint_tables", "error-descriptor pointers plus MOB/alpha/input hardware endpoints"),
+    (0x5A1A, 0x5A4A, "diagnostic_pointer_and_addend_tables", "0x5A1C is a display-descriptor pointer; the longwords at 0x5A3A, 0x5A3E, 0x5A42 and 0x5A46 are addends and base addresses consumed directly by adda.l/add.l in the Motion Object and input paths"),
     (0x5A4A, 0x6114, "selftest_descriptor_and_string_stream", "control labels and chained display descriptors/strings for RAM, switch, display, MOB, and sound tests"),
-    (0x6114, 0x6134, "color_name_pointer_table", "eight big-endian pointers to color-name strings, including a null terminator"),
+    (0x6114, 0x6134, "color_name_descriptor_pointers", "eight non-zero big-endian pointers to eight-byte inline-string display records {column,row,string_ptr,repeat,pad}; no terminator, and the color test cycles only indices 0-5"),
     (0x6134, 0x6174, "display_test_selection_tables", "signed word selection/enable matrices used by self-test and Motion Object test"),
     (0x6174, 0x6184, "display_test_palette_words", "eight palette words for convergence/display tests"),
     (0x6184, 0x6624, "color_test_palette_source_prefix", "packed color-test palette words copied to MOB/shadow/playfield color RAM"),
     (0x6624, 0x6784, "palette_and_rom_error_descriptor_overlap", "tail of the 768-word palette source, simultaneously structured as ROM-error display descriptors and strings"),
     (0x6784, 0x6986, "rom_error_descriptor_stream", "remaining per-socket ROM error descriptors, one-character lane labels, and strings"),
-    (0x6986, 0x698E, "coin_counter_decode_table", "eight packed 2-bit coin-counter decode bytes"),
+    (0x6986, 0x698E, "coin_bonus_threshold_table", "eight bonus-adder coin thresholds indexed by bits 7-5 of coin-config byte +0x0A; index 3 awards two credits, other non-zero entries one, and 0x00 disables the bonus"),
     (0x698E, 0x69A8, "game_config_descriptor_table", "thirteen two-byte packed configuration descriptors"),
     (0x69A8, 0x69AC, "session_difficulty_factors", "four one-byte histogram weighting factors"),
     (0x69AC, 0x6A46, "statistics_prompt_strings", "NUL-terminated histogram/navigation labels and short display fragments"),
     (0x6A46, 0x6B18, "statistics_summary_table", "title, eleven longword string pointers, and NUL-terminated summary labels"),
     (0x6B18, 0x6B66, "statistics_error_and_navigation_descriptors", "EEPROM-error descriptor plus clear/histogram navigation strings"),
     (0x6B66, 0x6B8A, "operator_more_marker_variants", "three glyph-decorated MORE strings used by option navigation"),
-    (0x6B8A, 0x6B9A, "operator_ui_palette", "eight palette words for operator Motion Objects"),
+    (0x6B8A, 0x6B9A, "operator_alpha_palette", "eight alphanumeric palette words copied to color entries 0-7 at 0x910000-0x91000E by 0x4C38"),
     (0x6B9A, 0x6D3A, "operator_option_descriptor_stream", "display descriptors and strings for save/cancel, raw-bit, game, and coin editors"),
     (0x6D3A, 0x6DA8, "built_in_coin_option_stream", "tagged multiplier/bonus-adder prompts and NUL-terminated choices including Free Play"),
 )
@@ -87,7 +87,7 @@ LEGACY_DATA_GROUPS = (
     (0x9A10, 0x9BD8, "legacy_game_option_stream", "tagged option prompts and NUL-terminated choice strings"),
     (0x9BD8, 0x9D1C, "legacy_level_display_tables", "level/status constants, glyph maps, and small animation lookup tables"),
     (0x9D1C, 0xA020, "legacy_status_text_descriptors", "display descriptors, treasure/coin/continue strings, pointer arrays, and status constants"),
-    (0xA020, 0xBD3C, "legacy_gameplay_numeric_tables_a", "word/byte gameplay, movement, object, animation, and tile lookup data"),
+    (0xA020, 0xBD3C, "legacy_pointer_and_numeric_tables_a", "begins with a word-pointer array targeting 0x9D18 onward, then word/byte gameplay, movement, object, animation, and tile lookup data"),
     (0xBD3C, 0xBE7C, "legacy_factory_high_scores", "four 10-entry tables of {score longword, three initials bytes, pad byte}"),
     (0xBE7C, 0xBEF6, "legacy_high_score_text", "display descriptors and NUL-terminated score/name-entry strings"),
     (0xBEF6, 0xC140, "legacy_name_entry_and_gameplay_tables", "name-entry glyph/control stream followed by word/byte gameplay lookup tables"),
@@ -135,6 +135,72 @@ def checked_partition(rows: tuple[tuple[object, ...], ...], start: int, end: int
     return failures
 
 
+# 68010 encodings that only ever appear in executable prologues/epilogues.
+MOVEM_PUSH = 0x48E7          # movem.l <list>,-(a7)
+MOVEM_POP = 0x4CDF           # movem.l (a7)+,<list>
+LINK_A6 = 0x4E56             # link.w a6,#d
+RTS = 0x4E75
+
+
+def checked_data_ranges(rom: bytes, ranges: tuple[tuple[object, ...], ...], executable: tuple[tuple[int, int], ...]) -> list[dict[str, str]]:
+    """Guard declared data ranges against silently swallowing real code.
+
+    A declared range is only accepted when it shows none of the structural
+    signatures of a compiled 68010 routine.  The checks are deliberately
+    structural rather than statistical so that validated tables full of
+    arbitrary bytes cannot trip them: a table only fails if it actually
+    contains a register-save prologue paired with a matching epilogue, or a
+    frame link, or if analysed code branches into it.
+    """
+    failures: list[dict[str, str]] = []
+    word = lambda address: int.from_bytes(rom[address : address + 2], "big")
+    for row in ranges:
+        start, end, name = int(row[0]), int(row[1]), str(row[2])
+        # (1) orphan-prologue guard: a movem.l push whose matching pop and rts
+        # both fall inside the same range is a complete routine, not a table.
+        pushes = [a for a in range(start, end - 1, 2) if word(a) == MOVEM_PUSH]
+        pops = [a for a in range(start, end - 1, 2) if word(a) == MOVEM_POP]
+        for push in pushes:
+            tail = [a for a in pops if a > push]
+            if tail and any(word(a) == RTS for a in range(tail[0], min(tail[0] + 10, end - 1), 2)):
+                failures.append({"address": f"0x{push:04X}", "issue": f"{name} declares data over a movem.l/rts routine"})
+                break
+        # (2) epilogue-pair guard: catches routines whose prologue sits outside
+        # the declared range, which is how a partially misdeclared island hides.
+        for pop in pops:
+            if any(word(a) == RTS for a in range(pop, min(pop + 10, end - 1), 2)):
+                failures.append({"address": f"0x{pop:04X}", "issue": f"{name} declares data over a movem.l (a7)+/rts epilogue"})
+                break
+        # (3) frame-link guard.
+        links = [a for a in range(start, end - 1, 2) if word(a) == LINK_A6]
+        if links:
+            failures.append({"address": f"0x{links[0]:04X}", "issue": f"{name} declares data over a link.w a6 frame prologue"})
+    # (4) branch-target closure: no control transfer from executable bytes may
+    # land inside a declared data range.
+    declared = {address: str(row[2]) for row in ranges for address in range(int(row[0]), int(row[1]))}
+    for low, high in executable:
+        for address in range(low, high - 1, 2):
+            if address in declared:
+                continue
+            opcode = word(address)
+            target: int | None = None
+            if opcode in (0x4EB9, 0x4EF9) and address + 6 <= len(rom):
+                target = int.from_bytes(rom[address + 2 : address + 6], "big")
+            elif 0x6000 <= opcode <= 0x6FFF:
+                displacement = opcode & 0xFF
+                if displacement == 0xFF:
+                    continue
+                if displacement == 0x00:
+                    signed = int.from_bytes(rom[address + 2 : address + 4], "big")
+                    target = address + 2 + (signed - 0x10000 if signed > 0x7FFF else signed)
+                else:
+                    target = address + 2 + (displacement - 0x100 if displacement > 0x7F else displacement)
+            if target is not None and target in declared:
+                failures.append({"address": f"0x{address:04X}", "issue": f"control transfer into declared data {declared[target]} at 0x{target:04X}"})
+                return failures
+    return failures
+
+
 def generated(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
     doc = root / "doc"
     rom = (root / "row9.bin").read_bytes()
@@ -146,6 +212,9 @@ def generated(root: Path) -> tuple[list[dict[str, str]], list[dict[str, str]], l
     failures += checked_partition(REGIONS, 0, ROM_SIZE, "top-level regions")
     failures += checked_partition(ACTIVE_DATA_GROUPS, 0x599A, 0x6DA8, "active data groups")
     failures += checked_partition(LEGACY_DATA_GROUPS, 0x9A10, 0xF9FA, "legacy data groups")
+    # Structural code-as-data guards.  Only the two mixed code/data regions can
+    # hide a routine inside a declared table, so those are the ranges checked.
+    failures += checked_data_ranges(rom, (*ACTIVE_INLINE_DATA, *LEGACY_DATA_ISLANDS), ((0x0300, 0x599A), (0x8000, 0x9A10)))
 
     # The two independently generated control-transfer inventories are the
     # reachability proof for the retained module in this supplied game image.

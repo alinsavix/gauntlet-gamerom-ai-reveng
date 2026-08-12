@@ -64,12 +64,12 @@ def generated(here: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
         "computed_dispatch": sum(row["entry_kind"] == "computed_dispatch" for row in rows),
         "api_veneer": sum(row["entry_kind"] == "api_veneer" for row in rows),
     }
-    expected = {"implementation": 168, "active_image_residue": 5, "retained_module": 21, "computed_dispatch": 6, "api_veneer": 56}
+    expected = {"implementation": 168, "active_image_residue": 5, "retained_module": 34, "computed_dispatch": 6, "api_veneer": 56}
     if counts != expected:
         failures.append({"address": "union", "issue": f"kind counts {counts} != {expected}"})
     rows.sort(key=lambda row: (int(row["address"], 16), row["entry_kind"]))
-    if len(rows) != 256:
-        failures.append({"address": "union", "issue": f"expected 256 rows, found {len(rows)}"})
+    if len(rows) != sum(expected.values()):
+        failures.append({"address": "union", "issue": f"expected {sum(expected.values())} rows, found {len(rows)}"})
     return rows, failures
 
 

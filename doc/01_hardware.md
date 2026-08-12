@@ -199,7 +199,16 @@ flowchart LR
 corpus.
 
 - Each tile is **8×8 pixels**, **4 bits per pixel** (16 colors per tile)
-- Tile data is stored in graphics ROMs, split across 4 ROM chips (one per color bit plane: PLANE 0–3)
+- Tile data is stored in graphics ROMs, **four chips per bank** (one chip per
+  color bit plane, PLANE 0–3), with **three banks** on the board:
+  `{136043-1111.1a, 136043-1113.1l, 136043-1115.2a, 136043-1117.2l}`,
+  `{136037-112.1b, 136037-114.1mn, 136037-116.2b, 136037-118.2mn}`, and
+  `{136043-1123.1c, 136043-1124.1p, 136043-1125.2c, 136043-1126.2p}`. Five
+  tile-bank views index those three banks; `python-gex/src/gex/roms.py`
+  (`TILE_ROMS`, `TILE_ROM_SETS`) is the checked mapping. The former "4 ROM
+  chips" phrasing described a single bank.
+- The alphanumeric character ROM `136043-1104.6p` (8 KB) is a separate part at
+  **2 bits per pixel**, not four; see §9 for its two-bitplane layout
 - Tile color indices index into palette RAM at `0x910000`
 
 ---
@@ -358,10 +367,10 @@ The first 30 MOB slots (IDs 0–29) are reserved:
 | 1–4 | Player shots (one per player) |
 | 5–8 | Demon shots |
 | 9–12 | Lobber shots |
-| 13–16 | Shot explosion animations |
+| 13–16 | Shot explosion animations; also the four sparkle channels `tport_cycle_start` (0x47C0E) reuses for transporter and wall-dissolve effects (`04_game_subsystems.md` §7.1) |
 | 17–20 | Floating score popups |
 | 21–24 | Player exit animations |
-| 25–29 | Transporter animations |
+| 25–29 | Transporter pad animations |
 
 Dynamic maze objects use slots 30–1023.
 
@@ -402,8 +411,8 @@ The OS ROM supports two alpha overlay modes (controlled by `ram.display_mode` at
 
 | Mode | Description |
 |------|-------------|
-| 0 (standard) | 42 columns × 30 rows, sequential row-major addressing |
-| 1 (Gauntlet scrolling) | Column-major addressing (128 bytes per column), enables smooth horizontal scrolling of the text overlay. Set when a Gauntlet game ROM is detected. |
+| 0 (standard) | 42 columns × 30 rows, sequential row-major addressing. **Gauntlet II ships this mode**: `game_rom_type` at 0x40072 is 0x00 (`02_os_rom.md` §4). |
+| 1 (rotated) | Column-major addressing, 128 bytes per column. Selected when the game header's ROM-type byte is non-zero. **Contradicted and corrected:** this mode was formerly described as "Gauntlet scrolling … set when a Gauntlet game ROM is detected"; Gauntlet II never selects it, and the horizontal scrolling of the text overlay does not depend on it. |
 
 ---
 

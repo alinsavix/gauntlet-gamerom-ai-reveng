@@ -264,7 +264,7 @@ mode/player gates represented below.
 | `main_handle_dragon` | YES | YES | YES | YES | **NO** |
 | `main_thief_anim` | YES | YES | YES | YES | **NO** |
 | `main_start_thief` | YES | YES | YES | YES | **NO** |
-| `main_health_countdown` | YES | YES | YES (1/64) | n/a | **NO** |
+| `main_health_countdown` | YES (1/64) | YES (1/64) | YES (1/64) | n/a | **NO** |
 | `main_treasure_timer` | YES | YES | YES | YES | **NO** |
 | `main_handle_death` | YES | YES | YES | YES | **NO** |
 | `main_exit_move` | YES | YES | YES | YES | **NO** |
@@ -409,9 +409,11 @@ control-target, detailed byte-range, and RAM-operand reports.
   final checksum word.
 - **Verified:** `generated/rom_byte_coverage.csv` classifies every byte in both mixed
   code/data regions as analyzed instructions or a named ROM range;
-  `generated/rom_catalog_reconciliation.csv` gives every §5 row an exact matching flag,
-  `generated/rom_flag_reconciliation.csv` gives all 352 non-code ROM flags an exact §5
-  or header-table row, and `generated/rom_range_overlaps.csv` records the 21 intentional
+  `generated/rom_catalog_reconciliation.csv` gives every §5 row an exact matching flag
+  (322 parsed rows over 321 distinct addresses; the one repeat is a deliberate
+  aggregate/subview pair documented in §5),
+  `generated/rom_flag_reconciliation.csv` gives all 347 non-code ROM flags an exact §5
+  or header-table row, and `generated/rom_range_overlaps.csv` records the eight intentional
   nested/alternate table views. No mixed-region byte or analysis failure
   remains unclassified.
 
@@ -427,7 +429,7 @@ The following major data areas were unlabeled but have since been decoded:
 |------|------|---------|
 | Tile sprite descriptors (0x5BAE0–0x5C89F) | 3,520 B | 8-byte 2×2-tile descriptors for floor/wall rendering |
 | Special object tiles (overlapping views 0x5CB48–0x5D2F7) | 1,968 B | Sparse object tile index table + dense animation frame table within the attract tile stream |
-| Tile pattern data + embedded code (0x5D848–0x5F9CE) | ~8.6 KB | Palette ramps, contest strings, connectivity table + tile rendering code |
+| Tile pattern data + embedded code (0x5D848–0x5F9CE) | ~8.6 KB | Neutral unconsumed block at 0x5D848, potion-effect matrix view, contest strings, connectivity table + tile rendering code |
 | Wall/door connectivity and correction tables (0x5EDD4–0x5FC11, interleaved with renderer code) | — | Wall connectivity variants, random descriptor pointers, and exact 3×3 door graphic/position tables |
 | Speech/dialog strings and first-encounter data (0x59736–0x5A37F) | 3,146 B | Hint/tip records, power-up masks/speech, 32 message records, two pointer views, and parallel speech IDs |
 | In-game message/audio data (0x5A380–0x5AC1F) | 2,208 B | Power-up names, monster names, credits, bonus scoring, and treasure-room countdown speech tables |
@@ -445,7 +447,7 @@ ROM range, runtime status, or contents unaccounted.
 
 The four unknowns formerly listed here (dragon path table format, dialog tip boundaries, tile pattern → descriptor mapping, EEPROM bits 5–7/13) have all been resolved by disassembly — see `05_data_reference.md` (data formats, §3.19 bytecodes, §5 ROM tables) and `04_game_subsystems.md` (§8 dragon, §26 shot resolution). The dragon path table turned out to be 5×16 bytes at 0x5D578, with the rest of its formerly claimed 2 KB being playfield palettes and contest strings.
 
-Pointerless blocks are classified as runtime-dead ROM residue rather than unknown live tables. The two large blocks are 0x57BD8–0x57EB9 and 0x5C8B0–0x5CAA7; the completeness pass also isolated the smaller dead blocks at 0x571D8–0x571D9, 0x57332–0x5733F, 0x57358–0x5735F, and 0x5870C–0x58749. Whole-ROM encoded-pointer searches, xrefs, exact-range immediate searches, and surrounding-page immediate searches found no consumer. Their original editor/build-time purpose is not recoverable from runtime code, so apparent geometric layouts are not assigned semantics; `05_data_reference.md` records exact contents and boundaries. The adjacent 0x571DA–0x571F9 bytes are **Verified** live forcefield cycle-delay profiles and are not part of this residue.
+Pointerless blocks are classified as runtime-dead ROM residue rather than unknown live tables. **Confidence: Verified** for the boundaries and the absence of consumers; **Contradicted and corrected:** the former list also named 0x5C8B0–0x5CAA7, 0x57332–0x5733F, and 0x57358–0x5735F, all three of which have live consumers. 0x5C8B0 is `exit_tile_descs`, reached indirectly from `maze_setupnew` through `exit_desc_by_floorpattern`; 0x5732E–0x5733F resolves into the `level_start_row_bytes`/`level_start_attr_words` pair used by the between-level screen; and 0x57358 is `treasure_room_duration`, read directly by `show_level_start_screen` at 0x44F24. The blocks that remain genuinely unreferenced are 0x57BD8–0x57EB9 (`dead_tile_word_block`), 0x571D8–0x571D9 (`forcefield_delay_alignment`), and 0x5870C–0x58749 (`dead_picture_word_block`). Whole-ROM encoded-pointer searches, xrefs, exact-range immediate searches, and surrounding-page immediate searches found no consumer for those three. Their original editor/build-time purpose is not recoverable from runtime code, so apparent geometric layouts are not assigned semantics; `05_data_reference.md` records exact contents and boundaries. The adjacent 0x571DA–0x571F9 bytes are **Verified** live forcefield cycle-delay profiles and are not part of this residue.
 
 For the current list of open questions, see `08_known_issues.md`.
 

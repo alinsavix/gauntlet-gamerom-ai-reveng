@@ -358,7 +358,7 @@ site,owners,kind,opcode,target,target_name,register_source,classification,confid
 0x5384,run_game_settings_bit_editor,jsr,jsr 0x3cf6.l,0x3CF6,write_eeprom_setting,,direct_internal_root,Verified
 0x5416,draw_game_settings_bits,jsr,jsr 0x3044.l,0x3044,write_alpha_char,,direct_internal_root,Verified
 0x5436,draw_game_settings_bits,jsr,jsr 0x3044.l,0x3044,write_alpha_char,,direct_internal_root,Verified
-0x545A,run_statistics_screens,jsr,jsr 0x4c38.l,0x4C38,init_operator_mob_display,,direct_internal_root,Verified
+0x545A,run_statistics_screens,jsr,jsr 0x4c38.l,0x4C38,init_operator_alpha_palette,,direct_internal_root,Verified
 0x5462,run_statistics_screens,jsr,jsr 0x5098.l,0x5098,run_statistics_summary,,direct_internal_root,Verified
 0x546A,run_statistics_screens,jsr,jsr 0x4c66.l,0x4C66,run_statistics_histograms,,direct_internal_root,Verified
 0x54C0,run_option_descriptor_editor,jsr,jsr (a2),0x48B8,display_text_set_cursor,"movea.l 0x48b8, a2",constant_internal_root,Verified
@@ -379,14 +379,14 @@ site,owners,kind,opcode,target,target_name,register_source,classification,confid
 0x5888,run_option_descriptor_editor,jsr,jsr 0x4a44.l,0x4A44,render_option_record,,direct_internal_root,Verified
 0x58AA,run_option_descriptor_editor,jsr,jsr 0x4a44.l,0x4A44,render_option_record,,direct_internal_root,Verified
 0x58CC,run_game_options,jsr,jsr 0x3522.l,0x3522,init_alpha_display,,direct_internal_root,Verified
-0x58D2,run_game_options,jsr,jsr 0x4c38.l,0x4C38,init_operator_mob_display,,direct_internal_root,Verified
+0x58D2,run_game_options,jsr,jsr 0x4c38.l,0x4C38,init_operator_alpha_palette,,direct_internal_root,Verified
 0x58F2,run_game_options,jsr,jsr 0x2e36.l,0x2E36,display_text,,direct_internal_root,Verified
 0x58FE,run_game_options,jsr,jsr 0x522a.l,0x522A,run_game_settings_bit_editor,,direct_internal_root,Verified
 0x5914,run_game_options,jsr,jsr 0x38c0.l,0x38C0,read_game_config,,direct_internal_root,Verified
 0x5920,run_game_options,jsr,jsr 0x5476.l,0x5476,run_option_descriptor_editor,,direct_internal_root,Verified
 0x5930,run_game_options,jsr,jsr 0x3cf6.l,0x3CF6,write_eeprom_setting,,direct_internal_root,Verified
 0x593C,run_coin_options,jsr,jsr 0x3522.l,0x3522,init_alpha_display,,direct_internal_root,Verified
-0x5942,run_coin_options,jsr,jsr 0x4c38.l,0x4C38,init_operator_mob_display,,direct_internal_root,Verified
+0x5942,run_coin_options,jsr,jsr 0x4c38.l,0x4C38,init_operator_alpha_palette,,direct_internal_root,Verified
 0x5962,run_coin_options,jsr,jsr 0x2e36.l,0x2E36,display_text,,direct_internal_root,Verified
 0x596E,run_coin_options,jsr,jsr 0x38c0.l,0x38C0,read_game_config,,direct_internal_root,Verified
 0x597E,run_coin_options,jsr,jsr 0x5476.l,0x5476,run_option_descriptor_editor,,direct_internal_root,Verified

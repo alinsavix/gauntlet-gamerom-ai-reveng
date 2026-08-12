@@ -86,7 +86,7 @@ target,sites,owners,opcodes,confidence
 0x6B66,0x5594,run_option_descriptor_editor,pea.l 0x6b66.l,Verified
 0x6B72,0x5730,run_option_descriptor_editor,"move.l 0x6b72, d0",Verified
 0x6B7E,0x5766,run_option_descriptor_editor,"move.l 0x6b7e, d0",Verified
-0x6B8A,0x4C42,init_operator_mob_display,"movea.l 0x6b8a, a2",Verified
+0x6B8A,0x4C42,init_operator_alpha_palette,"movea.l 0x6b8a, a2",Verified
 0x6B9A,0x4CEE;0x4DAA,run_statistics_histograms,"movea.l 0x6b9a, a0",Verified
 0x6BA0,0x54E8,run_option_descriptor_editor,"move.l 0x6ba0.l, -(a7)",Verified
 0x6BC6,0x54C2,run_option_descriptor_editor,"move.l 0x6bc6.l, -(a7)",Verified

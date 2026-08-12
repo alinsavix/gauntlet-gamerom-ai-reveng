@@ -1,8 +1,8 @@
 address,size_bytes,catalog_name,matching_flags,status,confidence
 0x4009C,9,game_copyright_morse_signature,game.copyright_morse_signature,exact_match,Verified
 0x405C0,8,"Forcefield color table (4 words, one per animation step)",forcefield_color_steps,exact_match,Verified
-0x405C8,16,palette_offset_by_walltype,palette_offset_by_walltype,exact_match,Verified
-0x405D8,16,palette_offset2_by_walltype,palette_offset2_by_walltype,exact_match,Verified
+0x405C8,16,palette_offset_by_floorpattern,palette_offset_by_floorpattern,exact_match,Verified
+0x405D8,16,palette_offset2_by_floorpattern,palette_offset2_by_floorpattern,exact_match,Verified
 0x405E8,64,vscroll_alpha_gradient,vscroll_alpha_gradient,exact_match,Verified
 0x40B58,64,mob_collision_type_filter,mob_collision_type_filter,exact_match,Verified
 0x40B98,24,shot_collision_width,shot_collision_width,exact_match,Verified
@@ -15,18 +15,17 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x40DB2,40,monster_anim_idle_ptrs,monster_anim_idle_ptrs,exact_match,Verified
 0x40DDA,40,monster_anim_moving_ptrs,monster_anim_moving_ptrs,exact_match,Verified
 0x40E1E,40,monster_oddangle_table,monster_oddangle_table,exact_match,Verified
-0x40E66,4,dead_monster_count_tail_words,dead_monster_count_tail_words,exact_match,Verified
+0x40E66,4,monster_spawn_probability_bonus_bytes,monster_spawn_probability_bonus_bytes,exact_match,Verified
 0x41BD0,32,player_character_collision_block_matrix,player_character_collision_block_matrix,exact_match,Verified
 0x40E02,28,monster_level_flag_overrides,monster_level_flag_overrides,exact_match,Verified
-0x40E46,32,monster_count_table,monster_count_table,exact_match,Verified
+0x40E46,32,monster_spawn_probability_table,monster_spawn_probability_table,exact_match,Verified
 0x4A4FA,64,stun_direction_remap,stun_direction_remap,exact_match,Verified
 0x58070,32,invisibility_flash_masks,invisibility_flash_masks,exact_match,Verified
 0x580A8,16,player_speed_normal,player_speed_normal,exact_match,Verified
 0x580B8,16,player_anim_rate,player_anim_rate,exact_match,Verified
 0x580C8,16,lobber_lead_distance,lobber_lead_distance,exact_match,Verified
-0x580D8,16,player_delta_x,player_delta_x,exact_match,Verified
-0x580E8,16,player_delta_y,player_delta_y,exact_match,Verified
-0x580F8,4,player_delta_y,pad_580f8,exact_match,Verified
+0x580D8,18,player_delta_x,player_delta_x,exact_match,Verified
+0x580EA,18,player_delta_y,player_delta_y,exact_match,Verified
 0x580FC,32,joystick_nibble_to_direction,joystick_nibble_to_direction,exact_match,Verified
 0x5850E,125,attract_display_run_ctrl,attract_display_run_ctrl,exact_match,Verified
 0x5858B,1,pad_5858b,pad_5858b,exact_match,Verified
@@ -36,12 +35,11 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x5868C,128,mazeobj_base_picture_tbl,mazeobj_base_picture_tbl,exact_match,Verified
 0x45C46,8,main_open_doors,door_open_direction_jumptbl,exact_match,Verified
 0x49620,20,"Contradicted and corrected: target/monster class 0x12–0x1B is doubled without subtraction; the backward-biased load base 0x495FC maps it to the actual table at 0x49620–0x49633, also the JMP displacement base. The former 28-entry/0–0x1B description included live instructions before the table.",monster_playerhit_jumptbl,exact_match,Verified
-0x4B338,124,"Object type 0–0x3D, doubled; displacement relative to base 0x4B338",resolve_shot_hit_jumptbl,exact_match,Verified
+0x4B338,124,cmpi.w #1,resolve_shot_hit_jumptbl,exact_match,Verified
 0x4FE08,16,"Eight tie/eligibility states, doubled; displacement and JMP base 0x4FE08",richest_player_tie_jumptbl,exact_match,Verified
 0x51200,16,"Object type 0x0A–0x11 is doubled without subtraction; load base is biased to 0x511EC, making the accessed table 0x51200–0x5120F; JMP base 0x51200",player_tile_lowtype_jumptbl,exact_match,Verified
 0x5122A,34,"Object type 0x2E–0x3E, doubled without subtraction; load base 0x511CE biases accesses to 0x5122A–0x5124B; JMP base 0x5122A",player_tile_object_jumptbl,exact_match,Verified
-0x52210,94,"Object type 0x10–0x3E, doubled without subtraction; load base 0x521FC biases accesses to 0x52210–0x5226D; JMP base 0x52210",mob_collision_object_jumptbl,exact_match,Verified
-0x5226E,12,"Six additional valid-looking displacements immediately after the live table. The dispatcher rejects types above 0x3E before indexing, and no other consumer reaches them; retained as runtime-dead compiler/linker residue.",dead_mob_collision_jump_tail,exact_match,Verified
+0x52210,106,cmpi.w #0x0A,mob_collision_object_jumptbl,exact_match,Verified
 0x538FE,10,Signed delta −2…2 indexes around a centered load base 0x53902; JMP base 0x538FE,shot_reflect_center_jumptbl,exact_match,Verified
 0x53924,10,Delta −0x42…−0x3E is normalized by subtracting −0x42; JMP base 0x53924,shot_reflect_neg42_jumptbl,exact_match,Verified
 0x53948,10,Delta −0x22…−0x1E is not normalized; backward-biased load base 0x5398C maps it to 0x53948–0x53951; JMP base 0x53948,shot_reflect_neg22_jumptbl,exact_match,Verified
@@ -50,7 +48,7 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x58090,8,fighting_anim_end,fighting_anim_end,exact_match,Verified
 0x58098,16,Demo initial pointer table,demo_stream_ptrs,exact_match,Verified
 0x5811C,32,fight_direction_map,fight_direction_map,exact_match,Verified
-0x5813C,32,health_drain_table,health_drain_table,exact_match,Verified
+0x5813C,32,forcefield_damage_table,forcefield_damage_table,exact_match,Verified
 0x5874A,256,anim_table_shooting,anim_table_shooting,exact_match,Verified
 0x5870C,62,dead_picture_word_block,dead_picture_word_block,exact_match,Verified
 0x5884A,512,anim_table_fighting,anim_table_fighting,exact_match,Verified
@@ -60,12 +58,10 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x58C0A,128,anim_tiles_sorcerer,anim_tiles_sorcerer,exact_match,Verified
 0x58C8A,16,thief_escape_anim,thief_escape_anim,exact_match,Verified
 0x58C9A,128,thief_walk_anim,thief_walk_anim,exact_match,Verified
-0x58D1A,16,thief_idle_by_direction,thief_idle_by_direction,exact_match,Verified
-0x58D2A,2,thief_walk_anim_compact,pad_58d2a,exact_match,Verified
+0x58D1A,18,thief_idle_by_direction,thief_idle_by_direction,exact_match,Verified
 0x58D2C,64,thief_walk_anim_compact,thief_walk_anim_compact,exact_match,Verified
 0x58D6C,128,mugger_walk_anim,mugger_walk_anim,exact_match,Verified
-0x58DEC,16,mugger_idle_by_direction,mugger_idle_by_direction,exact_match,Verified
-0x58DFC,2,mugger_walk_anim_compact,pad_58dfc,exact_match,Verified
+0x58DEC,18,mugger_idle_by_direction,mugger_idle_by_direction,exact_match,Verified
 0x58DFE,64,mugger_walk_anim_compact,mugger_walk_anim_compact,exact_match,Verified
 0x58E3E,160,special_projectile_picture_table,special_projectile_picture_table,exact_match,Verified
 0x58EDE,66,monster_projectile_picture_table,monster_projectile_picture_table,exact_match,Verified
@@ -141,11 +137,13 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x596C2,12,shot_damage_rand_tbl,shot_damage_rand_tbl,exact_match,Verified
 0x596CE,40,monstshot_damage_tbl,monstshot_damage_tbl,exact_match,Verified
 0x596F6,64,speech_charname_tbl,speech_charname_tbl,exact_match,Verified
-0x56FA8,90,pad_56fa8,pad_56fa8,exact_match,Verified
+0x56FA8,88,pad_56fa8,pad_56fa8,exact_match,Verified
+0x57000,2,residue_word_57000,residue_word_57000,exact_match,Verified
 0x5AC20,14,logo_brightness_seq,logo_brightness_seq,exact_match,Verified
 0x5AC5E,192,fixed_playfield_palette_bank,fixed_playfield_palette_bank,exact_match,Verified
 0x5AC2E,32,logo_motion_program_full,logo_motion_program_full,exact_match,Verified
 0x5AC4E,16,logo_motion_program_short,logo_motion_program_short,exact_match,Verified
+0x5BA5C,12,wall_crumble_stage_ptrs,wall_crumble_stage_ptrs,exact_match,Verified
 0x5BA68,2,logo_outer_timer_init,logo_outer_timer_init,exact_match,Verified
 0x5BA6A,2,logo_inner_timer_init,logo_inner_timer_init,exact_match,Verified
 0x5BA6C,2,logo_bright_min,logo_bright_min,exact_match,Verified
@@ -158,7 +156,7 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x5BBE0,3264,wall_desc_blocks,wall_desc_blocks,exact_match,Verified
 0x5C8A0,8,floor_type10_desc,floor_type10_desc,exact_match,Verified
 0x5C8A8,8,floor_type11_desc,floor_type11_desc,exact_match,Verified
-0x5C8B0,504,dead_sequential_tile_codes,dead_sequential_tile_codes,exact_match,Verified
+0x5C8B0,504,exit_tile_descs,exit_tile_descs,exact_match,Verified
 0x5CAA8,128,floor_type3e_descs,floor_type3e_descs,exact_match,Verified
 0x5CB28,2000,attract_display_tile_stream,attract_display_tile_stream,exact_match,Verified
 0x5CB48,504,special_object_tile_numbers,special_object_tile_numbers,exact_match,Verified
@@ -202,8 +200,7 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x5B724,8,damage_comment_speech_ids,damage_comment_speech_ids,exact_match,Verified
 0x5B72C,8,character_reflect_timer_init,character_reflect_timer_init,exact_match,Verified
 0x5B734,8,character_stun_delay_add,character_stun_delay_add,exact_match,Verified
-0x5B73C,8,tile_effect_sound_ids,tile_effect_sound_ids,exact_match,Verified
-0x5B744,8,tile_effect_sound_ids_alt,tile_effect_sound_ids_alt,exact_match,Verified
+0x5B73C,16,tile_effect_sound_ids,tile_effect_sound_ids,exact_match,Verified
 0x5B74C,40,pickup_score_values,pickup_score_values,exact_match,Verified
 0x5B774,20,pickup_score_popup_types,pickup_score_popup_types,exact_match,Verified
 0x5B788,16,level_exit_sound_ids,level_exit_sound_ids,exact_match,Verified
@@ -214,9 +211,9 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x5B7E4,8,collision_hpos_random_range_by_player,collision_hpos_random_range_by_player,exact_match,Verified
 0x5B7EC,16,collision_bonus_threshold_by_case,collision_bonus_threshold_by_case,exact_match,Verified
 0x5B7FC,32,exit_rotation_offset_by_count,exit_rotation_offset_by_count,exact_match,Verified
-0x5B81C,1024,exit_desc_by_floorpattern,exit_desc_by_floorpattern,exact_match,Verified
+0x5B81C,576,exit_desc_by_floorpattern,exit_desc_by_floorpattern,exact_match,Verified
 0x5D7E8,96,playfield_special_palette_lowwall_view,playfield_special_palette_lowwall_view,exact_match,Verified
-0x5D848,416,"Palette color ramps (13 blocks × 32 bytes, 12 colors + 4 zero words each, one per tileset environment). The apparent code reference to 0x5D978 is a biased address for the later potion-effect table, not a palette access: the first reachable index is object type 0x12 × 16, which lands at 0x5DA98.",palette_color_ramps,exact_match,Verified
+0x5D848,416,unconsumed_block_5d848,unconsumed_block_5d848,exact_match,Verified
 0x5D9E8,176,secretcode_text_recs,secretcode_text_recs,exact_match,Verified
 0x5DA98,448,potion_effect_matrix,potion_effect_matrix,exact_match,Verified
 0x5EDD4,32,wall_pattern_offsets,wall_pattern_offsets,exact_match,Verified
@@ -252,12 +249,11 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x574AC,8,challenge_it_desc,challenge_it_desc,exact_match,Verified
 0x574B4,4,challenge_it_text,challenge_it_text,exact_match,Verified
 0x574B8,102,character_glyph_rows,character_glyph_rows,exact_match,Verified
-0x5751E,2,ui_status_strings,pad_5751e,exact_match,Verified
-0x57520,88,"UI strings: ""SELECT HERO"", ""PRESS START"", ""ADD COIN"", ""INSERT COIN"", ""GAME OVER"", ""ON LEVEL:""; exact range 0x57520–0x57577",ui_status_strings,exact_match,Verified
+0x5751E,90,pea.l 0x5751E,ui_status_strings,exact_match,Verified
 0x5815C,48,dialog_tip_ptrs,dialog_tip_ptrs,exact_match,Verified
 0x5828C,642,dialog_tip_records,dialog_tip_records,exact_match,Verified
-0x57578,192,DIP-switch display records; exact range 0x57578–0x57637,dip_switch_display_records,exact_match,Verified
-0x57638,12,"Continue-screen header data and NUL-terminated ""LEVEL:"" label",continue_screen_header,exact_match,Verified
+0x57578,188,DIP-switch display records; exact range 0x57578–0x57633. The chain's last node begins at 0x57628 with flags 0x0200 and its four-byte back-link 0x0005761C occupies 0x57630–0x57633,dip_switch_display_records,exact_match,Verified
+0x57634,16,text_desc,continue_screen_header,exact_match,Verified
 0x57644,20,continue_blank_line,continue_blank_line,exact_match,Verified
 0x57658,20,continue_press_start,continue_press_start,exact_match,Verified
 0x5766C,20,continue_within_seconds,continue_within_seconds,exact_match,Verified
@@ -273,18 +269,17 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x57222,32,player_color_name_strings,player_color_name_strings,exact_match,Verified
 0x57242,16,character_name_ptrs,character_name_ptrs,exact_match,Verified
 0x57252,40,character_name_strings,character_name_strings,exact_match,Verified
-0x5727A,184,level_start_message_strings,level_start_message_strings,exact_match,Verified
-0x57332,14,dead_header_byte_block,dead_header_byte_block,exact_match,Verified
+0x5727A,180,level_start_message_strings,level_start_message_strings,exact_match,Verified
+0x5732E,6,level_start_row_bytes,level_start_row_bytes,exact_match,Verified
+0x57334,12,level_start_attr_words,level_start_attr_words,exact_match,Verified
 0x57BD8,738,dead_tile_word_block,dead_tile_word_block,exact_match,Verified
 0x57EBA,320,factory_highscore_records,factory_highscore_records,exact_match,Verified
-0x57FFA,6,Zero alignment padding between factory high scores and the 0x58000 display-record block.,pad_57ffa,exact_match,Verified
-0x58000,112,"Score-per-coin display records plus the “Enter your initials:” prompt, exact range 0x58000–0x5806F",score_coin_initials_records,exact_match,Verified
-0x5815C,48,dialog_tip_ptrs,dialog_tip_ptrs,exact_match,Verified
+0x57FFA,118,text_desc,score_coin_initials_records,exact_match,Verified
 0x5818C,256,"Four adjacent demo-player streams through 0x5828B, split by the pointer table at 0x58098 into 56, 150, 2, and 48 bytes. Commands are 2-byte pairs. First byte 0x00–0xFD = frame duration and second byte = recorded input; 0xFF = show dialog tip whose index is the second byte; 0xFE = join/switch demo player encoded by the second byte.",demo_input_streams,exact_match,Verified
 0x59736,80,hint_text_ptrs,hint_text_ptrs,exact_match,Verified
-0x59786,304,"Hint text strings (“TRY TRANSPORTABILITY”, “WATCH WHAT YOU SHOOT”, etc.), exact range 0x59786–0x598B5",hint_text_strings,exact_match,Verified
-0x598B6,330,"Hint records with speech IDs, exact range 0x598B6–0x599FF; records are 10-byte units combining command/speech metadata and a ROM string pointer",hint_speech_records,exact_match,Verified
-0x59A00,340,"Gameplay tip strings (“MORE PLAYERS ALLOWS HIGHER / BONUS MULTIPLIER”, etc.), exact range 0x59A00–0x59B53 before the maze-decompression pointer table",gameplay_tip_strings,exact_match,Verified
+0x59786,306,"Hint text strings (“TRY TRANSPORTABILITY”, “WATCH WHAT YOU SHOOT”, etc.), exact range 0x59786–0x598B7, including the final string's NUL and its even-alignment pad",hint_text_strings,exact_match,Verified
+0x598B8,228,hint_text_desc_records,hint_text_desc_records,exact_match,Verified
+0x5999C,440,"Gameplay tip strings (“MORE PLAYERS ALLOWS HIGHER”, “BONUS MULTIPLIER”, “ADD MORE PLAYERS FOR”, “GREATER FIREPOWER”, “ADD COINS ANYTIME”, …), exact range 0x5999C–0x59B53 before the maze-decompression pointer table",gameplay_tip_strings,exact_match,Verified
 0x59B54,16,maze_decomp_type_ptrs,maze_decomp_type_ptrs,exact_match,Verified
 0x59B64,24,powerup_bit_masks,powerup_bit_masks,exact_match,Verified
 0x59B7C,48,powerup_speech_ids,powerup_speech_ids,exact_match,Verified
@@ -319,11 +314,9 @@ address,size_bytes,catalog_name,matching_flags,status,confidence
 0x5AD1E,128,alpha_palette_init,alpha_palette_init,exact_match,Verified
 0x5AD9E,128,mob_palette_init,mob_palette_init,exact_match,Verified
 0x5AE1E,384,mob_palette_extended,mob_palette_extended,exact_match,Verified
-0x5AFA6,128,aux_palette_init,aux_palette_init,exact_match,Verified
 0x5AF9E,16,character_palette_ptrs,character_palette_ptrs,exact_match,Verified
 0x5AFAE,96,tport_palette_cycle_blocks,tport_palette_cycle_blocks,exact_match,Verified
 0x5B00E,512,"Four character full palettes (128 B each): Warrior, Valkyrie, Wizard, Elf. Each has four 32-byte sub-palettes (normal/poisoned/ghost/invulnerable); exact range 0x5B00E–0x5B20D",character_full_palettes,exact_match,Verified
-0x58098,16,"Initial demo pointer table (4 longwords, one per player)",demo_stream_ptrs,exact_match,Verified
 0x5818C,56,"Player 0 demo input stream (28 command pairs), ending at 0x581C3",demo_player0_input_stream,exact_match,Verified
 0x581C4,150,"Player 1 demo input stream (75 command pairs; primary Elf script), ending at 0x58259",demo_player1_input_stream,exact_match,Verified
 0x5825A,2,Player 2 demo input stream (one minimal command pair),demo_player2_input_stream,exact_match,Verified

@@ -100,9 +100,10 @@ so none is ever allocated.
 Dynamic objects use slots 30 through 1023, and the assignment rule is
 beautiful: **a maze object's slot number is its packed cell address.** The
 ghost standing in row 12, column 20 is MOB 404, because that is the cell it
-occupies. (Maze decoding never emits row 0; its slot numbers, 0 through
-31, cover the reserved range, and the playable maze begins on the second
-row.) The consequences cascade:
+occupies. (Maze decoding never emits row 0, whose slots 0 through 31
+overlap the reserved block. Immediately after decoding, level setup explicitly
+fills those 32 slots with solid-wall markers, keeping the playable maze on the
+second row.) The consequences cascade:
 
 - Finding "whatever stands in that cell" is arithmetic, no searching.
 - Two objects cannot share a cell, enforced by construction.
@@ -124,8 +125,8 @@ low ten bits, a global head variable, and slot 0 terminating the ends. The
 chain holds every active MOB, sorted by depth, meaning vertical screen
 band and draw priority.
 
-Alongside the chain sits a table of 64 entry points, one for each 8-pixel
-horizontal band of the playfield. Atari had a name for these, and it
+Alongside the chain sits a table of 64 entry points, one for every eight
+scanlines of the playfield. Atari had a name for these, and it
 survives: **SLIPs**, starting link points. Ed Logg, who led the original
 Gauntlet, laid out the problem they solve in a 2012 postmortem talk. A
 thousand motion objects can exist at once, and the display hardware has
@@ -176,13 +177,13 @@ pointers, which is why the software maintains draw order as it maintains
 the chain.
 
 **Monster processing** walks the chain too, entering through the SLIP
-table, but on the CPU's budget. Chapter 6 introduced the per-frame monster
-allowance; the walk keeps a resume pointer, processes up to the allowance,
-and picks up next frame where it stopped. A culling rectangle derived from
+table, but on the CPU's budget. The walk starts from a saved pointer that
+rotates the entry point each frame, so no creature is permanently first in
+line, and it runs the chain to completion. A culling rectangle derived from
 the camera position gates expensive behavior, so a monster far offscreen
-does not, for instance, get to shoot. A big crowd is never "all the
-monsters, every frame"; it is a rotating slice of them, sized to what the
-frame can afford.
+does not, for instance, get to shoot. The crowd's cost is bounded by keeping
+each decision tiny and by throttling the generators that create the crowd in
+the first place, not by leaving monsters unprocessed.
 
 **Collision does not walk anything.** A player probing a move asks "what
 occupies the cell I am entering?", and because slot number equals cell
@@ -263,9 +264,9 @@ other:
   monster system its iteration order from the same maintained pointers.
 - SLIPs, fixed effect channels, and direct slot probes keep every
   lookup near constant time regardless of crowd size.
-- The per-frame allowance, resume pointer, culling rectangle, and Chapter
-  6's overflow throttle bound the CPU cost of any crowd, trading monster
-  responsiveness for frame rate under load.
+- The rotating chain entry point, the culling rectangle, and Chapter
+  6's overflow throttle on generator spawning bound the CPU cost of any
+  crowd, trading crowd *growth* for frame rate under load.
 - Per-monster decisions stay tiny (Chapter 11), and the video hardware
   composes the final picture without CPU help.
 
@@ -312,7 +313,9 @@ hundred ghosts at you, this is the machinery underneath.
 >   hardware Gauntlet II reuses.
 > - Monster iteration: `main_move_monsters` (0x49034) →
 >   `monsters_everything` (0x40E6A) with `monster_iter_ptr` (0x904A60),
->   the per-frame allowance `monster_count_table` (0x40E46), and culling
+>   which is written back at 0x41526 and only rotates the chain entry point;
+>   the generator `monster_spawn_probability_table` (0x40E46);
+>   and culling
 >   origins 0x904A62/0x904A64 with the `monster_shooter_in_view` gate:
 >   `doc/04_game_subsystems.md` §3, `doc/05_data_reference.md` §1, §9.
 > - Collision probes: `player_try_move` (0x41BF0) and the `mob_probe_*`

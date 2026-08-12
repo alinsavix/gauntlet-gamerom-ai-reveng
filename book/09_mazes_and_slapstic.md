@@ -158,8 +158,11 @@ and over.
 ## The decoder
 
 Decoding walks a cursor across the 32×32 logical grid from Chapter 8,
-top-left to bottom-right, one slot at a time. (The cursor starts on the
-second row; row 0 is always solid wall.) Each stream byte is a bytecode:
+top-left to bottom-right, one slot at a time. The cursor starts on the second
+row, so the decoder never emits row 0. Immediately after it returns,
+`maze_setupnew` explicitly places 32 type-2 wall markers into slots 0–31;
+the solid top boundary is runtime state, not merely a rendering convention.
+Each stream byte is a bytecode:
 
 | Byte range | Action |
 |-----------|--------|
@@ -173,8 +176,10 @@ Vertical spans write *upward* from the cursor with a stride of one row
 while the cursor itself moves on by a single cell, which is how a stream
 read left-to-right can still erect columns and door frames. Decoding stops
 when the cursor has covered all 1,024 cells; the stream carries no
-terminator for the game's benefit, though every stored record ends with a
-zero delimiter that offline tools use as a sanity check.
+terminator for the game's benefit, though 116 of the 117 stored records end
+with a zero delimiter that offline tools use as a sanity check. Maze 116 is
+the exception: it has none, and its last fifteen bytes run into the bank
+table.
 
 Here is the real opening of maze 0, the first thing every Gauntlet II
 session builds. Its header defines HT1 as "a run of floor, then one
@@ -239,8 +244,8 @@ word. Each call advances the seed with a textbook linear congruential
 step and scales it to the caller's range:
 
 ```text
-seed = (13849 × seed + 23861) mod 65536      # one shared word of state
-return (seed × N) div 65536                  # a value in 0..N-1
+seed = (13849 × seed + 23861) mod 65536             # one shared word of state
+return (N × ((seed + 32768) mod 65536)) div 65536    # 0..N-1 for observed N < 32768
 ```
 
 Everything random in Gauntlet II drinks from this stream: flag flips, food
@@ -298,4 +303,7 @@ when it asks how much of the attract demo repeats.
 >   `get_random_maze_flags` (0x436CC), `doc/04_game_subsystems.md` §5.5.
 > - The RNG: `getrandom` (0x5FC4E) and register variant (0x5FC46), seed
 >   word 0x904BFC; the multiplier/increment constants 0x3619/0x5D35 are
->   verified in the disassembly at 0x5FC2E–0x5FC36.
+>   verified in the disassembly at 0x5FC2E–0x5FC36, and the
+>   `swap`/`asr.l #1`/`add.l` sequence at 0x5FC3A–0x5FC42 adds `N × 32768`
+>   before the high word is taken, which is the `+ 32768` above. The
+>   distribution is unchanged; individual values are not.

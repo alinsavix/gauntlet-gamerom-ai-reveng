@@ -4,7 +4,7 @@ address,name,arguments,return,exceptional_convention,direct_control_sites,confid
 0x4E684,tport_route_connect,"uint16 source_pos, uint16 destination_pos, uint16 approach_pos",void,,0x5087A,Verified
 0x4E73A,tport_route_connect_if_empty,"uint16 source_pos, uint16 destination_pos, uint16 approach_pos",void,,0x4FBD8,Verified
 0x4E7C0,tport_find_id,uint16 packed_maze_pos,D0.l = one-based transporter ID; level_tport_count + 1 when absent,,0x4E69E;0x4E6AC;0x4E754;0x4E762;0x4FAEC;0x50278;0x509FE,Verified
-0x50224,player_tport,"uint16 transporter_pos, uint16 player_index",void,,0x513CE,Verified
+0x50224,player_tport,"uint16 transporter_pos, uint16 player_index","D0.l = 0 when the teleport is aborted for too few clear landing cells, else -2 (0xFFFFFFFE) after the move; consumed by player_tile_interact at 0x513CE",,0x513CE,Verified
 0x50616,tport_player_flash,uint16 player_index,void,,0x47310,Verified
 0x50662,tport_player_move,uint16 player_index,void,,0x47324,Verified
 0x50ADE,tport_check_dest,"uint16 destination_mob_slot, uint16 player_index",D0.l = 1 blocked or 0 usable,,0x50480;0x507F6,Verified

@@ -14,7 +14,7 @@ from pathlib import Path
 # address, name, purpose, arguments, return, exceptional convention, byte prefix
 ROWS = (
     (0x0F7E, "copy_test_tile_rows_to_alpha", "Copy sixteen source words into each selected alpha-display row", "start column word; first row word; last row inclusive word; source word pointer", "void", "", "48e73000302f000e"),
-    (0x113E, "read_debounced_input", "Sample and two-frame-debounce one self-test input word", "input/player index word", "D0.l = stable active-low press edges, with asserted raw high-nibble inputs included", "", "48e73838342f001e"),
+    (0x113E, "read_debounced_input", "Sample and two-frame-debounce one self-test input word; when ram.os_vblank_active is zero it also republishes ram.input_source_ptr from the 0x40042 game hook or the 0x803000 constant at 0x5A46", "input/player index word", "D0.l = stable active-low press edges, with asserted raw high-nibble inputs included", "", "48e73838342f001e"),
     (0x169C, "load_color_test_palettes", "Load the three 256-word color-test palette banks and initialize the test palette", "void", "void", "", "2f02227c00910200"),
     (0x1704, "reset_sound_test_interface", "Synchronize to VBLANK, pulse the sound reset/control line, and clear OS sound-test state", "void", "void", "", "4eb9000021904279"),
     (0x1732, "fill_incrementing_words", "Fill a word buffer with an ascending sequence", "destination word pointer; first word; count long", "void", "", "48e73000206f000c"),

@@ -1,40 +1,37 @@
 start,end_exclusive,size_bytes,name,format_and_purpose,reachability,confidence
 0x0C86,0x0C98,18,working_ram_error_text,NUL-terminated early-boot diagnostic string,active OS,Verified
 0x0F1C,0x0F7E,98,rom_error_descriptor_pointer_tables,three indexed tables of 16-bit display-descriptor addresses used for ROM lane/socket errors,active OS,Verified
-0x2A48,0x2A5E,22,number_format_bit_masks,eleven words selected by the generic numeric formatter's mode index,active OS,Verified
+0x2A48,0x2A5E,22,number_format_separator_masks,eleven thousands-separator placement bitmasks indexed by field width 0-10; each carry shifted out of the mask emits a comma,active OS,Verified
 0x2C16,0x2C22,12,text_effect_dispatch_offsets,six signed word offsets relative to 0x2C16,active OS,Verified
-0x33D2,0x34A2,208,large_character_tile_quads,52 four-byte large-character tile-number records,active OS,Verified
-0x34A2,0x3522,128,large_character_clear_maps,large-character clearing/width lookup records,active OS,Verified
-0x44BE,0x44CA,12,eeprom_redundancy_probe_order,word seed followed by signed byte offsets for redundant-record bit probing,active OS,Verified
-0x4736,0x4746,16,eeprom_bit_index_map,sixteen signed byte mappings from packed bit index to EEPROM record bit,active OS,Verified
+0x33D2,0x34A2,208,large_character_tile_quads,52 four-byte large-character tile-number records indexed by glyph index at 0x326A,active OS,Verified
+0x34A2,0x3522,128,large_character_glyph_index_map,128-byte ASCII-to-glyph-index map read at 0x3228 and 0x334E before the tile quad lookup,active OS,Verified
+0x44BE,0x44CA,12,eeprom_redundancy_probe_order,"ten Hamming(15,10) data-bit positions 03,05,06,07,09,0A,0B,0C,0D,0E terminated by 0xFF; position 03 is fetched as a word only to clear the index register's high byte, and every position selects the same XOR-check logic",active OS,Verified
+0x4736,0x4746,16,eeprom_bit_index_map,Hamming syndrome-to-data-byte-index map indexed by the low nibble of the five-bit syndrome; 0xFF marks parity positions where no correction is applied,active OS,Verified
 0x599A,0x5A1A,128,motion_test_lookup_tables,"palette words, position/delta words, and 8x8 multiplication bytes for the Motion Object test",active OS,Verified
-0x5A1A,0x5A4A,48,diagnostic_pointer_and_endpoint_tables,error-descriptor pointers plus MOB/alpha/input hardware endpoints,active OS,Verified
+0x5A1A,0x5A4A,48,diagnostic_pointer_and_addend_tables,"0x5A1C is a display-descriptor pointer; the longwords at 0x5A3A, 0x5A3E, 0x5A42 and 0x5A46 are addends and base addresses consumed directly by adda.l/add.l in the Motion Object and input paths",active OS,Verified
 0x5A4A,0x6114,1738,selftest_descriptor_and_string_stream,"control labels and chained display descriptors/strings for RAM, switch, display, MOB, and sound tests",active OS,Verified
-0x6114,0x6134,32,color_name_pointer_table,"eight big-endian pointers to color-name strings, including a null terminator",active OS,Verified
+0x6114,0x6134,32,color_name_descriptor_pointers,"eight non-zero big-endian pointers to eight-byte inline-string display records {column,row,string_ptr,repeat,pad}; no terminator, and the color test cycles only indices 0-5",active OS,Verified
 0x6134,0x6174,64,display_test_selection_tables,signed word selection/enable matrices used by self-test and Motion Object test,active OS,Verified
 0x6174,0x6184,16,display_test_palette_words,eight palette words for convergence/display tests,active OS,Verified
 0x6184,0x6624,1184,color_test_palette_source_prefix,packed color-test palette words copied to MOB/shadow/playfield color RAM,active OS,Verified
 0x6624,0x6784,352,palette_and_rom_error_descriptor_overlap,"tail of the 768-word palette source, simultaneously structured as ROM-error display descriptors and strings",active OS,Verified
 0x6784,0x6986,514,rom_error_descriptor_stream,"remaining per-socket ROM error descriptors, one-character lane labels, and strings",active OS,Verified
-0x6986,0x698E,8,coin_counter_decode_table,eight packed 2-bit coin-counter decode bytes,active OS,Verified
+0x6986,0x698E,8,coin_bonus_threshold_table,"eight bonus-adder coin thresholds indexed by bits 7-5 of coin-config byte +0x0A; index 3 awards two credits, other non-zero entries one, and 0x00 disables the bonus",active OS,Verified
 0x698E,0x69A8,26,game_config_descriptor_table,thirteen two-byte packed configuration descriptors,active OS,Verified
 0x69A8,0x69AC,4,session_difficulty_factors,four one-byte histogram weighting factors,active OS,Verified
 0x69AC,0x6A46,154,statistics_prompt_strings,NUL-terminated histogram/navigation labels and short display fragments,active OS,Verified
 0x6A46,0x6B18,210,statistics_summary_table,"title, eleven longword string pointers, and NUL-terminated summary labels",active OS,Verified
 0x6B18,0x6B66,78,statistics_error_and_navigation_descriptors,EEPROM-error descriptor plus clear/histogram navigation strings,active OS,Verified
 0x6B66,0x6B8A,36,operator_more_marker_variants,three glyph-decorated MORE strings used by option navigation,active OS,Verified
-0x6B8A,0x6B9A,16,operator_ui_palette,eight palette words for operator Motion Objects,active OS,Verified
+0x6B8A,0x6B9A,16,operator_alpha_palette,eight alphanumeric palette words copied to color entries 0-7 at 0x910000-0x91000E by 0x4C38,active OS,Verified
 0x6B9A,0x6D3A,416,operator_option_descriptor_stream,"display descriptors and strings for save/cancel, raw-bit, game, and coin editors",active OS,Verified
 0x6D3A,0x6DA8,110,built_in_coin_option_stream,tagged multiplier/bonus-adder prompts and NUL-terminated choices including Free Play,active OS,Verified
 0x860C,0x8702,246,legacy_object_motion_tables,"word offsets, longword picture values, packed MOB attributes, and byte direction records",retained module; unreachable in supplied Gauntlet II,Strong inference
-0x8A64,0x8AE8,132,legacy_direction_route_tables,eight-direction word/byte lookup records and movement masks,retained module; unreachable in supplied Gauntlet II,Strong inference
-0x8B9E,0x8C36,152,legacy_mob_bucket_tables,MOB bucket/link constants and insertion-order records,retained module; unreachable in supplied Gauntlet II,Strong inference
-0x8D86,0x8F38,434,legacy_path_probe_tables,"signed neighbor offsets, direction maps, and path-probe constants",retained module; unreachable in supplied Gauntlet II,Strong inference
-0x9252,0x9284,50,legacy_recursive_move_tables,neighbor-order and recursive path-selection constants,retained module; unreachable in supplied Gauntlet II,Strong inference
+0x8A64,0x8A84,32,legacy_object_proximity_thresholds,sixteen per-object-type distance thresholds selected by caller_word / 4 at 0x8780-0x878E and compared against absolute horizontal and vertical deltas at 0x879A/0x87A0,retained module; unreachable in supplied Gauntlet II,Strong inference
 0x9A10,0x9BD8,456,legacy_game_option_stream,tagged option prompts and NUL-terminated choice strings,retained module; unreachable in supplied Gauntlet II,Strong inference
 0x9BD8,0x9D1C,324,legacy_level_display_tables,"level/status constants, glyph maps, and small animation lookup tables",retained module; unreachable in supplied Gauntlet II,Strong inference
 0x9D1C,0xA020,772,legacy_status_text_descriptors,"display descriptors, treasure/coin/continue strings, pointer arrays, and status constants",retained module; unreachable in supplied Gauntlet II,Strong inference
-0xA020,0xBD3C,7452,legacy_gameplay_numeric_tables_a,"word/byte gameplay, movement, object, animation, and tile lookup data",retained module; unreachable in supplied Gauntlet II,Strong inference
+0xA020,0xBD3C,7452,legacy_pointer_and_numeric_tables_a,"begins with a word-pointer array targeting 0x9D18 onward, then word/byte gameplay, movement, object, animation, and tile lookup data",retained module; unreachable in supplied Gauntlet II,Strong inference
 0xBD3C,0xBE7C,320,legacy_factory_high_scores,"four 10-entry tables of {score longword, three initials bytes, pad byte}",retained module; unreachable in supplied Gauntlet II,Strong inference
 0xBE7C,0xBEF6,122,legacy_high_score_text,display descriptors and NUL-terminated score/name-entry strings,retained module; unreachable in supplied Gauntlet II,Strong inference
 0xBEF6,0xC140,586,legacy_name_entry_and_gameplay_tables,name-entry glyph/control stream followed by word/byte gameplay lookup tables,retained module; unreachable in supplied Gauntlet II,Strong inference

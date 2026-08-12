@@ -14,7 +14,7 @@ evidence.
 
 The target audit does not rely on prologue bytes. The checked
 [`generated/control_targets.csv`](generated/control_targets.csv) independently analyzes all 321
-documented game entries plus the 80 unique destinations proven by the 12
+documented game entries plus the 81 unique destinations proven by the 12
 computed-dispatch tables, and deduplicates overlapping bodies. Its 1,129
 direct sites comprise 996 calls/jumps to documented game entries, 124 calls to
 documented OS API slots, eight calls to the named RAM palette stubs, and the
@@ -59,6 +59,11 @@ no entry-stack argument access in the five frameless entries. Thus all 29
 have the semantic contract `void f(void)` at every identified direct caller.
 They use the normal convention unless listed as an exception below.
 
+Five of the 28 frame services are indexed in other sections rather than the
+table below: `input_debounce` (0x40644), `sound_response` (0x42D0A),
+`character_select_input_update` (0x42DF4), `eeprom_periodic_write` (0x431EE),
+and the one-shot `one_time_init` (0x4327A).
+
 The non-normal control-transfer cases in this group are:
 
 - **Verified:** `g2mainloop` takes no arguments and never returns; it enters an
@@ -74,30 +79,30 @@ The non-normal control-transfer cases in this group are:
 |---------|------|-------------------|
 | 0x42A66 | `g2mainloop` | Main game loop entry point; VBLANK-synchronized frame dispatch |
 | 0x4017E | `game_vblank` | Game-ROM VBLANK interrupt handler: acknowledge watchdog/VBLANK, publish scroll registers, increment the semaphore, update palette effects/timers, and run the per-frame interrupt-side hooks before restoring registers |
-| 0x40528 | `main_cycle_tport_and_ffield` | Advance transporter and forcefield palette-cycle state |
+| 0x40528 | `main_cycle_tport_and_ffield` | Runs two independent palette cycles. Every fourth frame (`tport_cycle_divider` 0x904034 incremented and masked with 3) it adds `tport_cycle_dir` (0x904032) to `tport_cycle_pos` (0x904030) and bounces the direction to +1 at 0 or -1 once the position reaches 5. Independently it decrements `ff_cycle_timer` (0x904048) and, on zero, advances `ff_cycle_index` (0x904049) modulo 8 and reloads the timer with `random_word(8)` plus the profile byte from `ptr_ff_cycle_delay` (0x904042); on even indices `forcefield_color` (0x904046) is taken from the ROM table at 0x405C0 selected by bits 2–3 of `pf_vscroll_hi` (0x904006), and on odd indices it is cleared |
 | 0x42B6A | `coincheck` | Per-frame coin/start input and player-credit handling |
 | 0x44562 | `main_attract` | Attract mode state machine (SCORES→TITLE→DEMO→LEGEND) |
 | 0x457C0 | `main_score_display` | Updates one player's score, health, bonus-multiplier, low-health/acid palette effect, and IT-label HUD state each frame |
-| 0x45C00 | `main_open_doors` | Manages up to 8 concurrent door-opening animations |
+| 0x45C00 | `main_open_doors` | Advances up to 8 door-opening fronts per frame (loop `D4` 0–7 at 0x45E2C–0x45E32), skipping slots whose `door_endpoint_pos` (0x904A76) word is zero; each live slot dispatches on `door_endpoint_dir` (0x904A86, 0–3) through the PC-relative table at 0x45C46, steps the front one cell (±0x20 row, or ±1 column with 0x1F/0x3E0 wrap), removes door tiles whose picture is in 0x9D18–0x9D38 or 0x9D7C–0x9DAC via `moblist_remove_and_clear` through A3, turns the corner, and clears the slot when the run ends |
 | 0x4664C | `main_handle_death` | Advances the per-player forcefield-hurt and Death-touch looping-sound timers, issuing their start and silencer commands |
 | 0x466F6 | `main_health_countdown` | Automatic per-frame health drain; advances the low-health heartbeat/HUD-pulse timer and schedules heartbeat sounds using mask table 0x576A8 |
-| 0x46CAA | `main_scroll_playfield` | Updates playfield scroll based on player positions |
-| 0x46FEA | `main_handle_potions` | Per-frame potion usage processing for all 4 players |
+| 0x46CAA | `main_scroll_playfield` | Recenters the camera each frame while `level_players_active` is set and `game_mode` (0x904918) is 0 or -3: loops the four `active_mob_ids` players reading `mob_hpos`/`mob_vpos`, wraps each into the maze torus by ±0x200, grows a bounding box clamped to a 0x140-pixel span, targets `(min+max)/2`, limits movement to 2 px per frame, and commits through `set_scroll_pos` |
+| 0x46FEA | `main_handle_potions` | Per-frame potion handling for players 0–3: skips empty `active_mob_ids` slots, decodes the command from live `debounce_shift_magic` (0x905F58) or the replayed `demo_ptr` stream, acts only on code 0x1C, plays deny sound 0x44 when `player_potionsnum` (0x904055) is zero or 0x904000 ≥ 0x73, otherwise spends one potion, records `potion_player` (0x904022), plays 0x1D, and applies the effect through `player_inv_update`, `dialog_first_encounter` and `dragon_any_segment_near_screen` |
 | 0x4715E | `main_score_update` | Advances temporary score/effect timers and the thief, transporter, player-transition, and shared effect animations |
 | 0x474F6 | `main_handle_shots` | Per-frame processing for exactly 12 projectile slots (0–3 player, 4–7 ordinary monster, 8–11 special/dragon): decrements each slot's animation/lifetime counter, reloads it from the character/slot-indexed table at 0x578C2 when appropriate, advances the class-specific picture sequence, performs MOB/tile collision and visibility handling, and removes or explodes expired shots |
 | 0x4800C | `main_start_game` | Per-frame game-start and level-transition state machine: waits on presentation timers, initializes normal or secret levels, places active players, and handles join/continue and secret-room bookkeeping |
 | 0x49034 | `main_move_monsters` | Per-frame monster movement/AI dispatch |
-| 0x4A53A | `main_move_players` | Per-frame player input, movement, animation |
+| 0x4A53A | `main_move_players` | Per-frame per-player update looping `D4` 0–3 and setting `current_player` (0x904876): in demo mode (`game_mode` = -3) it decodes the `demo_ptr` byte stream, routing 0xFF to `demo_speech_cmd` and joins to `player_join`; each player then dispatches on `player_status` (0x9049A0) for secret-entry, death, join or active, and the active path ticks the invis/reflect/acid/stun timers, moves via `player_try_move`, fires via `player_create_shot`, tests forcefields via `check_forcefield_collision`, updates the sprite frame, and drives `open_timed_doors` and the 0x5208 escape timeout into `maze_convert_walls_to_exits` |
 | 0x4AE20 | `main_update_sound` | Processes sound queue and sends to sound CPU |
-| 0x4CCBC | `main_msgbox_countdown` | Manages dialog box display timer |
-| 0x4D29E | `main_treasure_timer` | Handles treasure room countdown timer |
-| 0x4DCBA | `main_logo_updcolors` | Logo/title screen color cycling animation |
-| 0x4DEB8 | `main_start_thief` | Countdown to thief deployment; spawns thief when timer expires |
+| 0x4CCBC | `main_msgbox_countdown` | Decrements the dialog timer through the pointer at 0x904A9E and, only on the transition to zero, erases the message box by walking 0x904A9C rows × 0x904A9A columns, clearing each word through the auto-incrementing write pointer at 0x904A96 and advancing it by `(0x40 - width) × 2` per row |
+| 0x4D29E | `main_treasure_timer` | Decrements `treasure_timer` (0x9049E8) each frame while the UI delay, `level_players_active` and `game_mode` allow it and the maze number is below 0x68; `divu.w #0x3C` converts frames to seconds and each new second announces the count through OS `display_large_decimal_value` (0x272) plus `sound_play` using the voice tables at 0x5ABE0/0x5ABF0/0x5AC08, and reaching zero calls `show_level_end_bonus_screen` |
+| 0x4DCBA | `main_logo_updcolors` | Title-screen palette animator: when `game_mode` is -1 it defers to `score_screen_color_cycle`; otherwise it counts `logo_cycle_timer` (0x904A18) down to reload a 10 × 7-word block into color RAM at 0x910204/0x910206, counts `logo_bright_timer` (0x904A1A) down to step `logo_color_dir` clamped by 0x5BA6C/0x5BA6E into 0x910332, and walks the logo motion script at `logo_scroll_ptr` (0x904A10) calling `scroll_apply` |
+| 0x4DEB8 | `main_start_thief` | Ticks `thief_enter_time` (0x904B9E): decrements it while nonzero, parks it at -1 when a thief already exists (`thief_current_pos` 0x904BA4), otherwise tests `thief_start_location` (0x904BBA) with `tile_occupancy_test` and either retries after 0x12C frames or spawns the thief via `mob_create`, `tport_cycle_start` and `thief_compute_path`, sets the timer to 0x3C, and plays sound 0x2D or 0x29 |
 | 0x4E8DC | `main_thief_anim` | Per-frame thief movement/animation state machine |
 | 0x5287C | `main_exit_move` | Handles periodically relocating exits (ExitMoves flag) |
 | 0x54454 | `main_handle_dragon` | Dragon state machine (sleeping/awake/stunned/turning) |
-| 0x5E41A | `main_walls_random_move` | Handles random wall movement animation |
-| 0x5E62A | `main_walls_cyclic_move` | Handles cyclic wall animation |
+| 0x5E41A | `main_walls_random_move` | Random wall animation gated on `game_mode` being 0 or -3: counts down the frame timer at 0x9048A6, scans the attribute table 0x903800 between the cursors at 0x9048A2/0x9048A4 for a cell whose `(byte >> 2)` is 6, then on `random_word(0x20) > 15` toggles that tile's 0x8000 bit in `vram.mob_picture`, calls `refresh_tile_visual`, and reloads the timer to 0x78 or 0x3C |
+| 0x5E62A | `main_walls_cyclic_move` | Cyclic wall animation gated on bit 3 of 0x90491E and nonzero MOB heads at 0x9048C8/0x9048CC: reloads the frame timer 0x90401A to 0x78, advances the 3-phase counter at 0x90401C, plays sound 0x2B while the maze number is below 0x73, then scans the map at 0x910600 over tiles 0x20–0x3FF updating `vram.mob_picture` and `mob_state_link` (0x904066) and redraws each chained cell through `pf_floor_draw_xy` or `wall_place_playfield_update` |
 
 The machine-readable callable/body inventory is
 [`generated/main_loop_contracts.csv`](generated/main_loop_contracts.csv).  Regenerate and verify
@@ -150,6 +155,22 @@ slots remain data rather than callable entries.
 | 0x4051A | `palette_hurt_elf` | D0.w cycle offset, A1 source, A2 destination | void | ROM-pointer frameless leaf |
 | 0x5317C | `game_options_display` | void | void | Passes descriptor stream 0x5318C to OS API 0x248 |
 
+The eight ROM-pointer palette leaves are register-argument two- and three-word
+copies with no bounds check and no return value; `power` variants stride the
+source cycle table by 0x10 per word, `hurt` variants by 2.
+
+| Address | Name | Brief Description |
+|---------|------|-------------------|
+| 0x404A0 | `palette_power_warrior` | Copies the cycle word at `(A1,D0.w)` to `0xA(A2)` and the word 0x10 further into the source table to `0x18(A2)`, advancing the two animated Warrior power entries one step per call |
+| 0x404AE | `palette_hurt_warrior` | Copies `(A1,D0.w)` to `0xA(A2)` and the adjacent word `0x2(A1,D0.w)` to `0x18(A2)`; same destinations as `palette_power_warrior` but a stride-2 source pair |
+| 0x404BC | `palette_power_valkyrie` | Copies the three stride-0x10 source words `(A1,D0.w)`, `+0x10` and `+0x20` into destination slots `0xC(A2)`, `0x10(A2)` and `0x12(A2)` |
+| 0x404D0 | `palette_hurt_valkyrie` | Copies the three consecutive source words `(A1,D0.w)`, `+0x2` and `+0x4` into `0xC(A2)`, `0x10(A2)` and `0x12(A2)` |
+| 0x404E4 | `palette_power_wizard` | Copies the stride-0x10 source words `(A1,D0.w)`, `+0x10` and `+0x20` into `0xC(A2)`, `0x10(A2)` and `0x14(A2)` |
+| 0x404F8 | `palette_hurt_wizard` | Copies the consecutive source words `(A1,D0.w)`, `+0x2` and `+0x4` into `0xC(A2)`, `0x10(A2)` and `0x14(A2)` |
+| 0x4050C | `palette_power_elf` | Copies `(A1,D0.w)` to `0x16(A2)` and the stride-0x10 word `0x10(A1,D0.w)` to `0x18(A2)` |
+| 0x4051A | `palette_hurt_elf` | Copies `(A1,D0.w)` to `0x16(A2)` and the adjacent word `0x2(A1,D0.w)` to `0x18(A2)` |
+| 0x5317C | `game_options_display` | Four-instruction hook reached through veneer 0x40048: pushes the descriptor-stream pointer 0x5318C, calls OS API 0x248 to render the operator options screen, pops the argument and returns; it contains no other logic |
+
 Machine-readable source:
 [`generated/orchestration_sound_contracts.csv`](generated/orchestration_sound_contracts.csv),
 regenerated and body-checked by
@@ -164,8 +185,8 @@ the applicable generated contract catalogs.
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x4014C | `game_start` | Game entry point; called from OS ROM at boot |
-| 0x4327A | `one_time_init` | One-time initialization before first frame loop |
+| 0x4014C | `game_start` | Reset body reached through veneer 0x40000: installs the three playfield colour pointers 0x904036/0x90403A/0x90403E with 0x910520 and the forcefield cycle-delay pointer 0x904042 with `forcefield_cycle_delay_profiles` (0x571DA), sets `SR = 0x2300` (IPL 3, supervisor), and tail-jumps to `g2mainloop`; it never returns |
+| 0x4327A | `one_time_init` | One-shot pre-loop initialization: resets the sound CPU via `sound_system_reset`, clears 0x90400C, calls `init_display(0,0)`, seeds 0x9049E2 from OS 0x236, reads operator switches 0xC and 0xB through OS 0x1A8 into `game_settings` (0x904A24), writes them back through OS 0x1C0 (clearing bit 0x1000 from the ROM default at 0x40070 when set), loads EEPROM config via `eeprom_load_config`, builds the table via `highscore_table_init`, calls OS 0x14E, primes the secret timers 0x904878/0x90487A to 0x14, assigns default characters 0–3 to 0x9048E8–0x9048EE, and enters attract with `start_attract_screen(-2)` |
 | 0x42F86 | `eeprom_load_config` | Read the game's EEPROM configuration block through OS service 0x24E, install defaults on failure, validate maze/difficulty/version fields, and load persistent settings/statistics into RAM |
 | 0x43486 | `init_display` | Initialize main and special playfield palettes from two palette-selector arguments; does not set scroll coordinates |
 | 0x44204 | `start_attract_to_game` | Transitions from attract mode to gameplay |
@@ -173,8 +194,8 @@ the applicable generated contract catalogs.
 | 0x4438E | `load_attract_display_tilemap` | Expand the palette/run control stream at 0x5850E over the 1000 tile words at 0x5CB28 and write a 40×25 playfield display, then initialize scroll to (16,16) |
 | 0x49BD0 | `highscore_table_init` | Load settings/high-score state through the OS EEPROM APIs; when the high-score banks are empty, copy the four class-specific ten-entry factory lists from ROM 0x57EBA, then initialize the four initials work buffers |
 | 0x40644 | `input_debounce` | Sample the four player input ports into 0x904920–0x904926 and rotate each port's first two serial button bits into the eight debounce shift registers at 0x905F58–0x905F66 |
-| 0x431EE | `eeprom_periodic_write` / `eeprom_timer` | 10-minute periodic EEPROM write timer |
-| 0x42D0A | `sound_response` | Processes responses from sound CPU via OS API |
+| 0x431EE | `eeprom_periodic_write` (aka `eeprom_timer`) | Counts the long timer through the pointer at 0x904012 down to zero, then reloads it with 0x8CA0 ticks and compares the six mirrored EEPROM shadow fields at 0x904B8E–0x904B94 against the live values 0x904010, 0x90400E, 0x904018, 0x904016, 0x904B86 and `game_settings` (0x904A24), calling `eeprom_write` only when at least one differs |
+| 0x42D0A | `sound_response` | Per-frame sound-CPU handshake: polls OS API 0x178 for a response byte and, using the counter block at 0x9049EE–0x9049F4, clears retry state on 0xFF, invokes `sound_system_reset` through A2 on no-response and on timeout, re-issues the pending command through OS API 0x172 when the 0xF0-tick delay expires, and gives up after 0xB4 retries |
 | 0x42DF4 | `character_select_input_update` | For each player in status 0x10, decode the active-low direction bits into class 0–3 and redraw that HUD slot when the selection changes; it does not search for an unused class |
 | 0x44A82 | `game_playfield_init` | OS-called playfield-init hook reached through fixed jump-table slot 0x40030: load the attract display tilemap, write words 0x5000–0x500F at 0x901480, and clear OS words reached through vectors 0x1D8/0x1DC |
 
@@ -187,10 +208,10 @@ contracts.
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x40E6A | `monsters_everything` | Entry point: per-frame monster AI, movement, shots, generators |
+| 0x40E6A | `monsters_everything` | Per-frame monster master loop over the depth-bucket heads at `priority_bucket_heads` (0x905F80) starting from the caller's first MOB offset: points A2–A6 at the picture, hpos, vpos, link and state arrays, culls MOBs outside `monster_cull_h_origin`/`_v_origin` (0x904A62/0x904A64), dispatches each survivor on its type word masked 0xFC00, derives generator spawn probability from `game_settings` through `monster_spawn_probability_table` at 0x40E46, and, while `monster_slowmo_timer` (0x9048B2) is nonzero, skips the entire monster pass on even frames |
 | 0x40FAE | `monster_loop_core` | Interior per-MOB loop entry; inherits the `monsters_everything` saved-register/local-stack frame |
-| 0x41750 | `monster_find_and_shoot` | Find nearest player, set direction, maybe shoot |
-| 0x41B16 | `find_unused_shot` | Find empty shot MOB slot |
+| 0x41750 | `monster_find_and_shoot` | Aims one monster at the nearest player: prefers `it_player` (0x9049DC) when valid, else scans the four `active_mob_ids` slots for the minimum `abs(dH) + abs(dV)`, converts the winning delta into an 8-way heading via the table at 0x40D8A, and for shooter types 8 and 0xC inside the 0x14/0x2C range gate calls `monster_shooter_in_view`, `find_unused_shot` and `monster_create_shot`, plays sound 0x49, then writes the heading into `mob_state` masked 0xE3FF |
+| 0x41B16 | `find_unused_shot` | Unrolled four-slot scan from the doubled offset in `D4`: a slot is selected only when both `mob_picture[D4]` and the parallel word at `0x904926+D4` are zero, so a picture-free slot with a live parallel word is skipped; returns the offset in `D4` with `Z` set when a free slot was found |
 | 0x490DC | `monster_create_shot` | Create a monster shot MOB at monster's position |
 | 0x492C0 | `handle_generate` | Generator spawn routine called by `monster_loop_core`: probability/retry gate, scan eight neighboring cells through the padded 12-word direction tables at 0x57B50/68/80, require a traversable empty cell, then create the selected tiered monster |
 | 0x49446 | `death_potion_score` | Select a floating-score variant and score from the parallel Death/potion tables using `death_hits & 7`; draw the popup and return the score |
@@ -198,7 +219,7 @@ contracts.
 | 0x495A6 | `monster_playerhit` | Monster overlapping player: apply damage, play sounds |
 | 0x49A3C | `death_damage_accumulate` | Add damage to one player's Death counter; above 200, start a transporter-cycle effect on the Death MOB and remove it |
 | 0x49A98 | `player_hurt_speech_timer` | Decrement one player's randomized hurt-speech cooldown; on expiry choose a class-specific hurt voice, unless acid-slowed, then reload from the active-player-count timing table |
-| 0x5FDE0 | `supersorc_place` | Find empty spot behind player, place Super Sorcerer |
+| 0x5FDE0 | `supersorc_place` | Searches for an off-screen empty cell behind a player to place the Super Sorcerer: loops the four `active_mob_ids` heads × three directions using the tables at 0x5FDAC/0x5FDB2 and the step tables 0x5B64A/0x5B65C, keeping cells within 0x20–0x3FF, requiring an empty picture word, a false `tile_on_screen_d4`, and no MOB within 0x7C0 on both rendered axes; on success it writes the position and facing into the MOB arrays and `mob_state_link` (0x904066) and returns the packed cell in `D0.w`, else 0 |
 | 0x5FDB8 | `supersorc_place_helper` | Thin wrapper that loads MOB array base pointers then calls supersorc_place |
 
 ### 3.1 Monster / shot-combat callable contracts
@@ -244,35 +265,35 @@ runtime, movement, collision, and path contracts.
 | Address | Name | Brief Description |
 |---------|------|-------------------|
 | 0x43360 | `player_resetcounters` | Reset one player's counters (health, score unchanged, power-ups cleared) |
-| 0x4341E | `player_resetall` | Reset all four player slots |
+| 0x4341E | `player_resetall` | Resets all four player slots 3→0: calls `player_reset(slot)` (0x43360) for each, zeroes that slot's `player_score` (0x904990) and `player_health` (0x904980) longs, then clears `level_players_active` and restores the default character assignments 0, 1, 2, 3 into 0x9048E8–0x9048EE |
 | 0x45866 | `player_it_label_set` | Draw "IT" in one player's HUD and play the character-specific announcement plus transfer/first-IT sound; the caller, not this helper, writes `ram.it_player` |
 | 0x4590E | `player_it_label_clear` | Erase one player's two-tile IT label; the caller owns `ram.it_player` |
 | 0x45ACA | `player_inv_update` | Draw one player's key/potion inventory row and six power-up icons from the per-player bitfield; demo mode suppresses the key/potion row but still refreshes power-up icons |
-| 0x48754 | `speech_welcome` | Play "welcome <character>" speech for joining player |
+| 0x48754 | `speech_welcome` | Plays the join speech for one player through the cooldown counter at 0x904AC6: emits lead-in phrase 0x59 when `level_players_active` is 1 or the counter has reached 0x258, and when the counter is at or above 0x258 pushes the per-character phrase long from the table at 0x596F6 indexed by `player_character[p]*4 + p*4`, calls `sound_speech_play`, and reloads the counter to 0x258 |
 | 0x487CA | `player_lowhealth` | Play a one-shot contextual low-health voice warning for one player; gated by `player_lowhealth_spoken` and the signed respawn/speech timer, then loads that timer with 0x0708 frames |
-| 0x488CA | `player_coindrop` / `player_init_for_coin` | Initialize player slot when a coin is inserted |
+| 0x488CA | `player_coindrop` (aka `player_init_for_coin`) | Initialize player slot when a coin is inserted |
 | 0x48A36 | `player_join_finalize` | Finalize a successful join: optional coin initialization/config persistence, status and on-level state, join sound, HUD redraw, and welcome speech |
 | 0x48BB6 | `player_join` | Byte-index outer wrapper: call `player_start_inner`, then `player_join_finalize` only when placement succeeds |
 | 0x49D0E | `highscore_check` | Rank the player's score-per-coin through OS 0x1C6; load `player_state_timer` with 2700 frames for initials entry or 600 frames for GAME OVER |
 | 0x4D900 | `player_activecount` | Return the count of player statuses 1, 2, 8, or 0x10; statuses 0, 4, 0x20, and other values are excluded |
-| 0x50224 | `player_tport` | Entry point when player touches a transporter tile |
+| 0x50224 | `player_tport` | Handles a player stepping onto a transporter tile: records the source in `player_tport_route_state`, scans `tport_pos_table` (0x910700) up to `level_tport_count` (0x904B84) with `tile_on_screen_test` for the nearest destination, screens candidate landing cells with `tport_check_dest` and `nearby_mob_clearance_test`, and either returns `D0.l` = 0 when too few are clear or performs the move through `handle_tport`, plays sound 0x28, updates `player_tport_type`/`player_tile_or_tport_dest`, and returns -2 |
 | 0x50616 | `tport_player_flash` | Save MOB picture, set flash frame (0x1709) for transport visual |
 | 0x50662 | `tport_player_move` | Full teleport state machine: find destination, animate, move |
 | 0x50B88 | `tport_restore_player_picture` | Stack-argument leaf: map player index through `active_mob_ids` and restore the player's MOB picture from `tport_saved_picture[player]` when transporter movement completes |
 | 0x5214C | `player_add_score_with_mult` | Add score × bonus multiplier to player's score |
-| 0x41BF0 | `player_try_move` | Core collision-checked movement function |
+| 0x41BF0 | `player_try_move` | Frameless entry to the movement core: saves D2–D7/A2–A6, reads `player_index`, `delta` and `movement_flags` from `0x32(A7)`/`0x36(A7)`/`0x3A(A7)`, folds and clears the pending flags at `player_deferred_move_flags` (0x9048B4), points A2/A3/A4 at the picture, hpos and vpos arrays, decrements `movement_type` (0x904BF2), and BSRs into `player_try_move_core` at 0x41C30 |
 | 0x42648 | `tile_lookup_core` | Read mob_picture[d1], compute distance, set carry flag if occupied |
-| 0x4260C | `probe_down` | Boundary check + (Y−0x40) neighbor via tile_lookup_core |
-| 0x425D0 | `probe_up` | Boundary check + (Y+0x40) neighbor via tile_lookup_core |
+| 0x4260C | `probe_down` | Rejects offsets ≥ 0x7C0 (bottom edge), then probes the row below at packed offset +0x40 and its two horizontal neighbours (±2, ±4 with 0x3E column wrap) through `tile_lookup_core`; carry set means blocked |
+| 0x425D0 | `probe_up` | Rejects offsets ≤ 0x7E (top edge), then probes the row above at packed offset −0x40 and its two horizontal neighbours (±2, ±4 with 0x3E column wrap) through `tile_lookup_core`; carry set means blocked |
 | 0x4270C | `probe_right` | Check tile at (X+2) via tile_lookup_core |
 | 0x426D4 | `probe_left` | Check tile at (X−2) via tile_lookup_core |
 | 0x42744 | `squeeze_through_check` | Test pass-through flag, tile type, and corner geometry |
-| 0x406B6 | `mob_probe_up` | Register-preserving leaf probe: test the cell one row above and its two horizontal neighbors; return the first blocking MOB slot or -1 |
-| 0x40732 | `mob_probe_down` | Mirrored leaf probe for the row below and its two horizontal neighbors |
-| 0x4083A | `mob_probe_left` | Leaf probe for the cell to the left plus its two vertical neighbors |
-| 0x408A0 | `mob_probe_right` | Mirrored leaf probe for the cell to the right plus its two vertical neighbors |
+| 0x406B6 | `mob_probe_up` | Register-preserving frameless probe that BSR-calls `mob_probe_candidate` (0x407A6) three times (0x406F2, 0x40706, 0x4071A): tests the cell one row above (packed offset −0x40) and its two horizontal neighbours, returning the first blocking MOB slot or -1 |
+| 0x40732 | `mob_probe_down` | Mirrored frameless probe (three BSRs to `mob_probe_candidate` at 0x4076C, 0x4077E, 0x40790) for the row below at packed offset +0x40 and its two horizontal neighbours |
+| 0x4083A | `mob_probe_left` | Frameless probe (three BSRs to `mob_probe_candidate` at 0x40866, 0x40876, 0x40888) for the cell to the left plus its two vertical neighbours |
+| 0x408A0 | `mob_probe_right` | Mirrored frameless probe (three BSRs to `mob_probe_candidate` at 0x408CC, 0x408DC, 0x408EE) for the cell to the right plus its two vertical neighbours |
 | 0x407A6 | `mob_probe_candidate` | Shared BSR-only helper for the four directional probes: reject an empty candidate, compute wrapped horizontal/vertical separation for an occupied cell, store signed/absolute deltas at 0x904024–0x90402A, and return the distance comparison in condition codes |
-| 0x4FEB2 | `corner_squeeze_geometry` | Test wall corner shape for diagonal squeeze-through |
+| 0x4FEB2 | `corner_squeeze_geometry` | Resolves diagonal squeeze geometry and transporter entry for `packed_slot`/`player_index`: derives a direction from the table at 0x580FC and neighbour offsets from 0x5B64A/0x5B65C, tests the surrounding tile types (0xF, 0x10, 0x11, 0x2F, 0x3C, 0x3E and the range 0x12–0x1B) in `vram.mob_picture`/0x903800, and on a clear diagonal commits via `handle_tport`, `thief_start_tport_anim`, `path_grid_set_high_direction_if_empty` and sound 0x28, returning `D0.l` = -2; a blocked shape returns 0 |
 | 0x4280E | `door_traverse_right` | Ray-march rightward via ray_march_right; spawn passage marker |
 | 0x428A4 | `door_traverse_left` | Ray-march leftward via ray_march_left |
 | 0x4293A | `door_traverse_up` | Ray-march upward via ray_march_up |
@@ -288,7 +309,7 @@ runtime, movement, collision, and path contracts.
 | 0x49DE6 | `player_death_sequence` | Per-frame death/name-entry handler; decrements the reused `player_state_timer` countdown |
 | 0x54FE8 | `secret_name_entry_update` | Per-frame secret-winner name editor selected by `ram.secret_player`; builds and displays the completed secret code |
 | 0x50E34 | `player_damage_sample_update` | Advance one player's 60-frame damage sample, low-health dialog/voice, and pending/average damage bookkeeping |
-| 0x47FAC | `open_timed_doors` | Remove every active type-0x0D/0x0E door object and play sound 0x12 (`Doors Open`) when the idle timer expires |
+| 0x47FAC | `open_timed_doors` | Remove every active type-0x0D/0x0E door object and play sound 0x12 (`Doors Open`) on the caller's idle-timer expiry; the body itself scans unconditionally |
 
 ### 4.1 EEPROM/configuration and player-lifecycle callable contracts
 
@@ -341,11 +362,11 @@ exception.
 | 0x426D4 | `probe_left` | Same as `probe_up` | `D1.w` candidate; carry = blocked | BSR-only register entry |
 | 0x4270C | `probe_right` | Same as `probe_up` | `D1.w` candidate; carry = blocked | BSR-only register entry |
 | 0x42744 | `squeeze_through_check` | `D1.w` candidate, `D2.w` current, `D5.w` doubled player; `A3` H-position array | `D0.l` boolean; Z reflects result | Register entry |
-| 0x4FEB2 | `corner_squeeze_geometry` | `uint16 packed_slot, uint16 player_index` | `D0.l` boolean | — |
-| 0x406B6 | `mob_probe_up` | `uint16 mob_slot` | `D0.w` blocking slot, `-1`, or boundary sentinel `0x0400` | Frameless stack leaf |
-| 0x40732 | `mob_probe_down` | `uint16 mob_slot` | `D0.w` blocking slot, `-1`, or boundary sentinel `0x0400` | Frameless stack leaf |
-| 0x4083A | `mob_probe_left` | `uint16 mob_slot` | `D0.w` blocking slot or `-1` | Frameless stack leaf |
-| 0x408A0 | `mob_probe_right` | `uint16 mob_slot` | `D0.w` blocking slot or `-1` | Frameless stack leaf |
+| 0x4FEB2 | `corner_squeeze_geometry` | `uint16 packed_slot, uint16 player_index` | `D0.l` = 0 or -2 (0xFFFFFFFE); callers test zero/nonzero only | Sets D1 at 0x501EC/0x50216 then `move.l d1,d0` at 0x50218 |
+| 0x406B6 | `mob_probe_up` | `uint16 mob_slot` | `D0.w` blocking slot, `-1`, or boundary sentinel `0x0400` | Frameless stack; BSR-calls `mob_probe_candidate` |
+| 0x40732 | `mob_probe_down` | `uint16 mob_slot` | `D0.w` blocking slot, `-1`, or boundary sentinel `0x0400` | Frameless stack; BSR-calls `mob_probe_candidate` |
+| 0x4083A | `mob_probe_left` | `uint16 mob_slot` | `D0.w` blocking slot or `-1` | Frameless stack; BSR-calls `mob_probe_candidate` |
+| 0x408A0 | `mob_probe_right` | `uint16 mob_slot` | `D0.w` blocking slot or `-1` | Frameless stack; BSR-calls `mob_probe_candidate` |
 | 0x407A6 | `mob_probe_candidate` | `D1.w` candidate, `D2.w` current; `A0-A2` V/H/picture arrays | Carry = blocking; updates distance scratch | BSR-only register entry |
 | 0x52192 | `mob_collision_test` | `uint16 candidate_slot, uint16 player_index` | `D0.l` boolean | — |
 | 0x42598 | `mob_collision_test_preserve_d1_a` | `D1.w` candidate, `D5.w` doubled player | `D0.l` boolean; Z reflects result; preserves `D1` | Register wrapper |
@@ -418,43 +439,42 @@ inference**.
 | 0x42E9A | `maze_randomplace` | Place a tile-type object at a random empty floor tile |
 | 0x4526A | `maze_show` | Clear alpha layer to reveal the level |
 | 0x4529A | `maze_hide` | Fill alpha layer to hide the level |
-| 0x452D0 | `setup_infopanel` | Set up right-side info panel (names, health bars, inventory) |
+| 0x452D0 | `setup_infopanel` | Redraws the right-side info panel: `player_selector` of -1 loops all four players 3→0, any other value draws that player only. It clears the panel VRAM block at 0x905000 with blank tile 0x8000, then per player writes the name/initials and calls `draw_player_score`, `draw_player_health` and `player_inv_update`, substituting `draw_player_initials_entry` when `player_status` is 4, emitting text through the cached OS vectors A2 = `draw_string` (0x25A) and A3 = `display_text` (0x142) |
 | 0x462AE | `dragon_reserve_footprint_cell` | Mark one of the dragon's three secondary 2×2 maze cells with hidden picture 0x8002, computed H/V coordinates, and link word 0xF000 |
-| 0x4631C | `maze_tile_write_at` | Register/position wrapper used by maze placement to write or update the selected tile cell |
+| 0x4631C | `maze_tile_write_at` | Writes a vertical run of `span_length` maze cells upward from `packed_slot`, stepping -0x20 per row and applying the `level_flags` (0x90491C) mirror bits: wall and floor object types stamp `mob_picture`/`hpos`/`vpos`/`link` directly with 0x8000, 0x8001 or 0x8003 and link `type << 10` after `moblist_remove_and_clear`, while other types spawn a MOB through `mob_create` using the per-type tables at 0x5868C/0x5864C/0x5860C; type 0 is a no-op and the routine returns `packed_slot + 1` |
 | 0x52ECA | `maze_checknum` | Validate/wrap maze number; handle end-of-game wraparound |
-| 0x4BE24 | `level_splash` | Display new-level splash screen |
+| 0x4BE24 | `level_splash` | Draws the new-level splash: branches on `mazenum_current` (0x904000) against 0x68/0x73 and on `levelnum_current` (0x904004); level 1 walks a linked list of text records from the pointer at 0x59B2E following the next field at `0xA(A2)`, other levels index the string tables 0x597D8/0x59736/0x5975E with `getrandom`, rendering each record through OS `display_text` (A2 = 0x142) and announcing it via `sound_speech_play` |
 | 0x438AE | `maze_new_level_setup` | New level initialization hub (reset thief, switch slapstic bank, setup maze, etc.) |
 | 0x436FE | `maze_load_pickup_config` | Read pickup-config bytes, assemble into `maze_pickup_config`, apply random flags |
 | 0x436CC | `get_random_maze_flags` | Select random entry from 13-entry ROM table (0x57012) for level randomization |
 | 0x43D8C | `maze_scan_objects` | Multi-mode maze object scanner (formerly `maze_food_mob_consume`): counts exits / player starts / food, implements EXIT_CHOOSEONE + fake-exit marking, clears EXIT_MOVES when one exit remains |
 | 0x43826 | `slapstic_cmd_bitwise` | Issue bank-switch command sequence to Slapstic chip |
-| 0x56E58 | `slapstic_cmd_bank0` | Switch to slapstic bank 0 |
-| 0x56E6E | `slapstic_cmd_bank3` | Switch to slapstic bank 3 |
-| 0x56E84 | `slapstic_cmd_bankX` | Switch to slapstic bank based on input |
+| 0x56E58 | `slapstic_cmd_bank0` | Saves SR, raises to `SR = 0x2700`, then touches Slapstic addresses 0x38000 and 0x38010 in that order to select bank 0 and restores SR; the data written is the saved SR value and is irrelevant, only the address sequence matters |
+| 0x56E6E | `slapstic_cmd_bank3` | Saves SR, raises to `SR = 0x2700`, then touches Slapstic addresses 0x38000 and 0x3801C in that order to select bank 3 and restores SR; only the address sequence is significant |
+| 0x56E84 | `slapstic_cmd_bankX` | Three-instruction register entry that writes D0 to Slapstic address 0x38000 and then to `(A0, D0.w)`, letting the caller supply the bank-select base in A0 and the doubled bank index in D0; it does not touch SR, so callers must mask interrupts themselves |
 | 0x56E90 | `slapstic_cmd_maze_init` | Register-argument Slapstic sequence used only by `maze_init`: reset at 0x38000, then copy the word at A0 to A1 through the shared 0x56E54 tail |
 | 0x56E98 | `slapstic_cmd_bankX_special` | Register-argument Slapstic sequence used by `maze_select_bank_special`: accesses 0x38000, 0x3FB4A, then 0x38010 plus the selected bank offset |
-| 0x56EAA | `slapstic_verify` | Verify slapstic is responding; returns 0x1FFFE if good |
+| 0x56EAA | `slapstic_verify` | Validates the Slapstic by summing OS-ROM bytes from base 0x38000 across four passes (`D4` 0–3) with an inner stride-2 loop to 0x2000, toggling control register 0x803100 to switch banks; even offsets accumulate in D3 and odd in D2, a flag is set when D3 is 0xFF and D2 is 0xFE, and `D0.l` returns `(flag << 16) + (D3 << 8) + D2`, so success is exactly 0x0001FFFE |
 | 0x46C5E | `scroll_to_slot` | Convert MOB slot to scroll coords; center viewport on that tile |
 | 0x46F56 | `set_scroll_pos` | Set playfield H/V scroll registers |
 
 ### 5.1 Maze / Slapstic callable contracts
 
 **Confidence: Verified** for caller locations, stack offsets, returns, and
-exceptional conventions below, except the semantic names of
-`maze_place_object`'s first and third arguments, which remain a **Strong
-inference**. Normal rows use the stack ABI from `03_game_rom_structure.md`;
-only exceptions are called out.
+exceptional conventions below. Normal rows use the stack ABI from
+`03_game_rom_structure.md`; only exceptions are called out. MAME tracing of
+the post-decode row-0 fill verified `maze_place_object`'s counted ABI.
 
 | Address | Name | Arguments | Return | Convention exception |
 |---|---|---|---|---|
 | 0x40C78 | `find_maze` | Maze number in its wrapper caller's first longword | `D1.w` bank offset; writes `ptr_maze_data` | Frameless shared-stack helper; reads 8(A7) after the wrapper's nested JSR |
 | 0x40CC4 | `maze_select_alt_bank` | `uint32 maze_number` | void | Frameless wrapper; `find_maze` consumes its argument |
 | 0x40CF2 | `maze_init` | `uint32 maze_number` | void | Frameless wrapper; `find_maze` consumes its argument |
-| 0x40D24 | `load_level_tileset` | `uint32 maze_number` | void | Frameless wrapper; `find_maze` consumes its argument |
+| 0x40D24 | `maze_select_bank` | `uint32 maze_number` | void | Frameless wrapper; `find_maze` consumes its argument |
 | 0x40D4E | `maze_select_bank_special` | `uint32 maze_number` | void | Frameless wrapper; `find_maze` consumes its argument |
 | 0x44AC2 | `maze_setupnew` | `const uint8_t *maze_record` | void | — |
 | 0x4C1BC | `maze_decode` | `const uint8_t *maze_record` | void | — |
-| 0x45E40 | `maze_place_object` | `uint16 slot_or_offset, uint16 object_type, uint16 scan_base` | void | — |
+| 0x45E40 | `maze_place_object` | `uint16 start_slot, uint16 object_type, uint16 count` | next slot (`start_slot + count`) in `D0.l` | — |
 | 0x43F68 | `maze_addrandompickups` | `uint16 enable_random_pickups` | void | — |
 | 0x42E9A | `maze_randomplace` | `uint16 object_type` | packed slot in `D0.l` | — |
 | 0x4526A | `maze_show` | void | void | — |
@@ -491,16 +511,16 @@ contracts.
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x47CFE | `handle_tport` | Player touching transporter: create explosion anim, hide player |
-| 0x47C0E | `tport_cycle_start` / `spawn_passage_marker` | Initialize transporter animation MOB at frame 0x924 |
+| 0x47CFE | `handle_tport` | Spawns the transporter effect for a player entering a transporter: on effect slot `animation_channel + 0x19` it first removes any stale effect through `mob_depth_remove`, writes the picture word from ROM 0x578F2, positions it at the source MOB's `(hpos & 0xFF80) + 1` and `(vpos & 0xFF80) + 0x12`, and links it into the depth list via `tport_create_splodey`; it only reads the source slot and does not hide or clear the player |
+| 0x47C0E | `tport_cycle_start` (aka `spawn_passage_marker`) | Spawns a transporter passage-marker MOB from `source_mob_slot` on `animation_channel`: claims one of the four fixed slots 0x0D–0x10 by testing 0x90201A–0x902020 and freeing an occupied one with `mob_depth_remove`, writes picture 0x924, positions it at the source cell `(hpos & 0xFF80) + 1` / `(vpos & 0xFF80) + 0x12`, registers it with `mob_place_tport_anim`, and sets `mob_effect_anim_counter` (0x90497C) to 0xFF |
 | 0x47DAE | `shot_impact_spawn` | Spawn an impact/explosion at the target using the first free effect MOB in 0x0D–0x10. If all four are occupied it selects 0x0D + (`shooter_slot` & 3), preserves an active 0x924–0x95A transporter effect, and otherwise replaces that channel. Called throughout `resolve_shot_hit`. (Formerly listed as `tport_cycle_update`/`spawn_explosion`.) |
 | 0x4E7C0 | `tport_find_id` | Search tport_pos_table for entry matching given maze position |
 | 0x50ADE | `tport_check_dest` | Validate potential transport destination |
-| 0x5DF8E | `tport_create_splodey` | Create sparkle/explosion animation at teleport destination |
-| 0x5FC5E | `pf_isff` | Check if given maze coordinate has a forcefield tile |
+| 0x5DF8E | `tport_create_splodey` | Four-instruction frameless entry: saves D3–D7/A5–A6, reads the animation channel from `0x26(A7)`, adds 0x19 to select the explosion slot, and branches into the shared depth-sorted insertion body `insert_mob_depth_sorted` at 0x5DFA6, which uses the source slot at `0x22(A7)` as the depth key |
+| 0x5FC5E | `pf_isff` | Walks the forcefield segment table at 0x910780 until a zero terminator, decoding each word as a base position in bits 0–9, a length minus one in bits 10–13 and orientation/wrap flags in bits 14–15, and testing the packed maze position from `0x16(A7)` against each segment's span; returns `D0.l` = 1 on a hit and 0 otherwise |
 | 0x40528 | `main_cycle_tport_and_ffield` | Per-frame forcefield/transporter palette cycling |
 | 0x53398 | `forcefield_segments_setup` | Scan FORCEFIELDHUB (type 0x3F) tiles, encode segment/graphic state in `mob_state_link`, and build the forcefield segment table at 0x910780 |
-| 0x53346 | `check_forcefield_collision` | Test whether player is touching a forcefield |
+| 0x53346 | `check_forcefield_collision` | Forms the playfield word address `0x900000 + ((pos & 0x1F) << 8) + ((pos & 0x3E0) >> 3)` from the packed position argument, reads that word, and returns `D0.l` = 1 when its picture-type field `word & 0x7000` equals 0x3000, else 0 |
 | 0x52F26 | `maze_forcefield_setup` | Pack groups of four maze object types 7–9 into the spare-color byte table; clear the corresponding hidden marker MOBs and disable the level feature if none were present |
 | 0x52FBE | `consume_forcefield_code` | Return code 1–3 for maze object types 7–9 and clear that marker's picture/position/link fields; return 0 for every other type |
 
@@ -516,7 +536,7 @@ entry conventions below.
 | 0x4E684 | `tport_route_connect` | `uint16 source_pos, uint16 destination_pos, uint16 approach_pos` | void | — |
 | 0x4E73A | `tport_route_connect_if_empty` | Same three packed-position arguments | void | — |
 | 0x4E7C0 | `tport_find_id` | `uint16 packed_maze_pos` | `D0.l`: one-based ID; `level_tport_count+1` when absent | — |
-| 0x50224 | `player_tport` | `uint16 transporter_pos, uint16 player_index` | void | — |
+| 0x50224 | `player_tport` | `uint16 transporter_pos, uint16 player_index` | `D0.l` = 0 (teleport aborted, too few clear landing cells) or -2 (0xFFFFFFFE, teleport performed) | Result is consumed by caller `player_tile_interact` at 0x513CE |
 | 0x50616 | `tport_player_flash` | `uint16 player_index` | void | — |
 | 0x50662 | `tport_player_move` | `uint16 player_index` | void | — |
 | 0x50ADE | `tport_check_dest` | `uint16 destination_mob_slot, uint16 player_index` | `D0.l=1` blocked, zero usable | — |
@@ -549,7 +569,7 @@ movement, segment, and shot contracts.
 | 0x54454 | `main_handle_dragon` | Dragon state machine (sleeping/awake/stunned/turning/fire) |
 | 0x549EA | `dragon_player_proximity` | Check if any player is in aggro range; start wake animation |
 | 0x5496E | `dragon_setup_segments` | Derive and store all four 2×2 dragon segment MOB IDs from the primary cell and initialize dragon state/facing/movement/hit counters |
-| 0x54748 | `dragon_fire_setup` | Fires one dragon fireball: sets fire cooldown (0x90487C) = 8, picks the origin segment MOB via table 0x5D4B8[pose+facing*2] from `dragon_seg_mob_ids` (0x904894), stores shot direction = facing |
+| 0x54748 | `dragon_fire_setup` | Fires one dragon fireball: sets fire cooldown (0x90487C) = 8, picks the origin segment MOB via table 0x5D4B8[(pose>>1)+facing*2] (the pose byte is halved at 0x54790 before the index is formed at 0x5479E) from `dragon_seg_mob_ids` (0x904894), stores shot direction = facing |
 | 0x53E4A | `dragon_choose_move_direction` | Compare the dragon with active players, test candidate maze cells, and update packed movement state/facing toward the best unobstructed direction |
 | 0x53D10 | `dragon_update_segments` | Use the current path-program pose and facing to update the four dragon segment MOB positions/pictures |
 | 0x540E8 | `dragon_find_free_shot_slot` | Scan physical dragon-shot MOB slots 8 down to 5 and return logical subslot 4 down to 1 for the first empty picture (0 if none) |
@@ -563,9 +583,9 @@ collision, route, and transport contracts.
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x4DFF6 | `thief_target_calc` | Calculate player "wealth"; select wealthiest as thief target |
-| 0x4E432 | `thief_setup` | Initialize thief MOB for the level |
-| 0x4E4D8 | `thief_timer_set` | Calculate next thief appearance timer based on wealth and level |
+| 0x4DFF6 | `thief_target_calc` | Scores each player 0–3 into a stack array from the inventory bits at `player_powers + 1` (0x9048E0) — bit 4 adds 1000, bit 0 adds 700, bit 3 adds 500, bit 5 adds 300, bit 1 adds 200, bit 2 adds 100 — plus `player_potionsnum` × 3, `player_bonusmult` and `player_keysnum` × 2, skipping players failing the `player_status`, `player_health` or `active_mob_ids` tests, then stores the highest-scoring index into `thief_victim` (0x904B9A, initialised to -1) |
+| 0x4E432 | `thief_setup` | Per-level thief reset: clears `thief_current_pos`, 0x904BB0 and `thief_mode`, sets `thief_enter_time` to -1 and the reload at 0x904BB4 to 0x7D30; then, only when `game_mode` is non-negative, the maze number is below 0x73, the level is at least 6, and `getrandom(8)` is below `level >> 3`, it runs `thief_target_calc` and, if a victim exists, caches that player's MOB id from `active_mob_ids` into 0x904BBA/0x904B98 and calls `thief_timer_set` |
+| 0x4E4D8 | `thief_timer_set` | For the chosen `thief_victim` it clears `thief_current_pos` and defaults `thief_enter_time` to -1, aborting when the victim is invalid or `thief_mode & 0x30` is already 0x30; otherwise it rewrites `thief_mode` (0x904BA0) and picks `thief_speed` 0x180 or 0x200 via `getrandom(0x20)`, computes `base = (player_score >> 13) / player_coincount`, and stores `(0xA - base + random) × 60` frames into `thief_enter_time` |
 | 0x4E1FE | `thief_steal_from_player` | Resolve contact with a player: choose and remove an inventory item/bonus multiplier (or inflict 100 health damage in mugger mode), update the HUD/dialog, and record the carried item |
 | 0x4E684 | `tport_route_connect` | Add a directed transporter/pathfinding connection between two maze positions in the paired route tables at 0x905C54/0x905D54 |
 | 0x4E73A | `tport_route_connect_if_empty` | Conditional form of `tport_route_connect`; adds the route only when the selected route-table entry has no existing high-nibble connection |
@@ -573,7 +593,7 @@ collision, route, and transport contracts.
 | 0x51000 | `path_grid_set_high_direction_if_empty` | Leaf helper used by score/thief/movement paths: unless thief-mode bit 1 is set, install direction+1 in an empty high nibble while preserving the low nibble |
 | 0x5103E | `path_grid_get_direction` | Leaf helper: read the high or low packed direction nibble selected by thief-mode bit 1; return direction 0–7 or invalid/unset value 8 |
 | 0x5107A | `tport_route_write_pair` | Leaf helper: write forward and reverse 22-cell/0x80-byte padded route-table entries for two nonzero transporter IDs |
-| 0x510BC | `tport_route_read_pair` | Leaf helper: return the selected forward route word in `D0` bits 31–16 and reverse route word in bits 15–0; a zero ID leaves its half zero |
+| 0x510BC | `tport_route_read_pair` | Frameless leaf: each nonzero ID is split by `divu.w #0x16` into a 128-byte row and a word column, indexing the forward table 0x905C54 into `D0` bits 31–16 and the reverse table 0x905D54 into bits 15–0. A zero forward ID leaves `D0` entirely zero, but a zero reverse ID leaves `(forward_id / 22) << 7` residue in the low half; the only caller masks it with 0xFF00 |
 | 0x4E7FC | `thief_test_move_tile` | Validate the thief's next tile, including transporter entry, blocked-direction tests, and corner-squeeze handling |
 | 0x4EE0A | `thief_probe_axis` | Invoke a directional tile-probe callback, reject blocked/colliding results, and apply the supplied coordinate delta to the thief MOB |
 | 0x4F5C8 | `thief_remove_and_drop_loot` | Remove the thief/effect MOBs, award 500 points when appropriate, restore route state, and respawn carried loot at the departure tile |
@@ -593,7 +613,7 @@ checked transition/animation contracts.
 |---------|------|-------------------|
 | 0x52B06 | `exit_get_id` | Return the zero-based index of a packed position in `exit_pos_table`, or `level_exit_count` when absent |
 | 0x52B40 | `player_exit_sequence` | Player exiting state machine; advance to next level when all done |
-| 0x5DF80 | `exit_create_player_anim` | Create player exit animation MOB |
+| 0x5DF80 | `exit_create_player_anim` | Four-instruction frameless entry: saves D3–D7/A5–A6, reads the animation channel from `0x26(A7)`, adds 0x15 to select the exit-animation slot, and branches into the shared depth-sorted insertion body `insert_mob_depth_sorted` at 0x5DFA6, which takes the source slot at `0x22(A7)` as the depth key |
 
 ### 9.1 Dragon / thief / exit callable contracts
 
@@ -651,12 +671,12 @@ selection, and checked contracts.
 | 0x49498 | `playfield_showscore` | Floating score popup over killed monster |
 | 0x49D0E | `highscore_check` | Check if score ranks in top 10; set name-entry state |
 | 0x4C440 | `dialog_first_encounter` | First-encounter dialogs (bitmasked per encounter type); returns whether the selected record has speech |
-| 0x4C70A | `dialog_clear_message` / `fill_buffer_spaces` | Fill dialog message buffer with spaces then null terminator |
+| 0x4C70A | `dialog_clear_message` (aka `fill_buffer_spaces`) | Fill dialog message buffer with spaces then null terminator |
 | 0x4C72A | `player_give_item_with_message` | Give power-up item; display associated dialog message |
-| 0x4CB50 | `dialog_position_box` / `compute_screen_coords` | Position dialog box near player or at center |
+| 0x4CB50 | `dialog_position_box` (aka `compute_screen_coords`) | Position dialog box near player or at center |
 | 0x4D476 | `show_level_end_bonus_screen` | Clear the alpha display, calculate and render ordinary treasure-room or secret-room coin bonuses, remove departing sprites, restore secret-room state, and advance to the saved maze/level |
 | 0x4A124 | `attract_highscores` | Shows 4-way-split high-score-per-coin attract screen |
-| 0x44C7E | `show_continue_prompt` | When no level players remain and all statuses are empty/selecting, draw the six-line PRESS START/WITHIN/TO CONTINUE prompt and seed title state; it does not decrement the active-player count |
+| 0x44C7E | `show_continue_prompt` | When no level players remain and all statuses are empty/selecting, draw the five-line PRESS START/WITHIN/TO CONTINUE prompt and seed title state; it does not decrement the active-player count |
 
 **Confidence: Verified** for caller locations, stack offsets, returns, and
 exceptional conventions below. Normal rows use the stack ABI from
@@ -672,7 +692,7 @@ exceptional conventions below. Normal rows use the stack ABI from
 | 0x459A2 | `draw_player_health` | `uint16 player_index` | void | — |
 | 0x4715E | `main_score_update` | void | void | — |
 | 0x488CA | `player_coindrop` | `uint16 player_index` | void | — |
-| 0x48B58 | `update_monster_bonus_from_score_per_coin` | void | void | — |
+| 0x48B58 | `update_monster_spawn_bonus_from_score_per_coin` | void | void | — |
 | 0x49498 | `playfield_showscore` | `uint16 source_mob_slot, uint16 popup_type_index` | void | — |
 | 0x49BD0 | `highscore_table_init` | void | void | — |
 | 0x49D0E | `highscore_check` | `uint16 player_index` | void | — |
@@ -750,10 +770,10 @@ and checked list/depth contracts.
 | 0x5E584 | `tile_on_screen_test` | Stack-argument entry to the same visibility test; loads packed maze position into D4 before the shared body |
 | 0x5E5D2 | `tile_near_screen_d4` | Register-argument entry to the second, wider playfield visibility predicate used by cyclic walls; packed maze position is already in D4 |
 | 0x5E5D8 | `tile_near_screen_test` | Stack-argument entry to the wider predicate. `dragon_any_segment_near_screen` loads this address into A2 and calls it indirectly for all four dragon segments. |
-| 0x5E7A6 | `maze_place_object_types` | Stack-argument leaf: scan MOB slots for the supplied maze-object type or type−3, optionally require proximity to the screen, stamp every match into the playfield, and return whether any match existed |
-| 0x5E80C | `maze_convert_walls_to_exits` | No-argument leaf called at the escape timeout: convert eligible wall markers (excluding forcefields) to exit type 0x10 and return whether anything changed |
+| 0x5E7A6 | `maze_place_object_types` | Stack-argument routine over playfield indices 0x20–0x3FF: computes `type - 3` into D3, reads each tile's type as `(byte@0x903800[i*2]) >> 2`, and stamps every match of `type` or `type - 3` into the playfield with `mob_place_tile` — optionally rejecting off-screen cells with `tile_near_screen_d4` when bit 2 of 0x90491F is set. `D0.l` is set to 1 only by a `type - 3` match; plain-type matches are stamped but leave the result zero |
+| 0x5E80C | `maze_convert_walls_to_exits` | No-argument routine (calls `mob_place_tile` at 0x5E852) invoked at the escape timeout: scans the wall markers, converts eligible ones — marker 0x20F6, or the 0x8000 bit set with the forcefield type 0x3F excluded at 0x5E844 — to exit type 0x10, and returns `D0.l` = 1 when at least one conversion occurred |
 | 0x5E542 | `pf_stamp_update_regs` | Register-argument entry to the 2×2 descriptor stamper: D0=packed maze position, A0=four-word descriptor, A1=palette/base addend; shared body of `pf_stamp_update` |
-| 0x5EA66 | `pf_is_connectable_floor_xy` | Register-argument neighbor predicate used while choosing floor connectivity: returns 0xFF for an empty/connectable cell and 0 otherwise, accounting for forcefields and level flags |
+| 0x5EA66 | `pf_is_connectable_floor_xy` | Register-argument neighbour predicate for floor connectivity: short-circuits to -1 when `x & 0x1F == 0` (0x5EA6A), otherwise requires picture 0x8000 and object type not 0x3F, then — when either bit of 0x80000800 in `level_flags` (0x90491C) is set — also excludes object types 7, 8 and 9; shares the -1/0 leaves at 0x5EA5E/0x5EA62 with `pf_isblankfloor` |
 | 0x5FC56 | `pf_isff_d0` | Register-argument forcefield query entry with packed maze position already in D0; shares the body of stack-argument `pf_isff` at 0x5FC5E |
 | 0x5DE0A | `move_mob_slot` | Register entry: insert destination, copy source picture/H/V and upper type/state fields, then fall through to unlink-and-clear the source |
 | 0x5DE44 | `moblist_remove_and_clear_regs` | Register entry used by `moblist_remove_and_clear`; repairs links/heads and zeros all five source words |
@@ -811,15 +831,17 @@ inference** as labeled in its contract row.
 | 0x5E542 | `pf_stamp_update_regs` | Register entry that writes a four-word 2×2 descriptor plus a uniform addend to playfield VRAM |
 | 0x5F876 | `pf_door_draw_xy` | Register-args entry (a0=x, a1=y, d0=door type) into `pf_door_draw` |
 | 0x5F880 | `pf_door_draw` | Door tile graphic updater (860 B, was `fcn_5F880`): adjacent-door mask → picture table 0x5F9CE; isolated type-2/3 doors oriented by surrounding floor; stores mask in bits 10–13 of `0x904066[tile]` |
-| 0x5EA2E | `pf_isblankfloor` | Register predicate: return -1 iff x is nonzero, picture is 0x8000, and object type is not 0x3F; otherwise 0. The former polarity/type description was contradicted. |
+| 0x5EA2E | `pf_isblankfloor` | Register predicate with a column-0 short circuit: returns -1 immediately when `x & 0x1F == 0` (`andi.w`/`beq` at 0x5EA2E–0x5EA32); otherwise indexes `vram.mob_picture` (0x902000) at `((x&0x1F)<<5 + (y&0x1F))*2` and returns -1 only when that picture word is 0x8000 and the object type `(byte@0x903800[idx] >> 2)` is not 0x3F, else 0. The relation is a short-circuit OR, not the conjunction previously documented |
 | 0x5E888 | `pf_floor_draw_xy` | Register-args entry into `pf_floor_update` (0x5E892); floor descriptor from 0x5BAE0, tile code += floorpattern×0x30 |
 | 0x5E868 | `maze_special_floor` | No-argument setup leaf used only for wall patterns 6 and 11: scans all 1024 playfield/MOB picture words and converts every special-floor marker 0x8003 to ordinary floor 0x8000; returns with no result |
 | 0x5EA00 | `maze_floor_decor` | No-argument 32×32 initialization pass: calls the register-entry `pf_floor_draw_xy(x,y)` for every maze cell, preserving D2–D3 and returning after exactly 1024 draws |
 | 0x5EA26 | `pf_isblankfloor_stack` | Unreferenced stack-argument wrapper retained in the shipped code: loads `(x,y)` words from 6(A7)/10(A7) and falls through to register-entry `pf_isblankfloor` at 0x5EA2E |
 | 0x5F2C0 | `maze_init_walls` | No-argument 32×32 wall-render pass. Unless level-flags byte 2 bit 7 suppresses it (except level 9999), draws cells whose picture is 0x8000 or 0x8003 through `pf_wall_draw_xy`; preserves D2–D3/A2 |
 | 0x5F7C0 | `maze_doors_setup` | No-argument initial door-render pass over x=1..31 and y=0..31. Calls `pf_isdoor`; for each nonzero door type, passes x/y in A0/A1 and the type in D0 to `pf_door_draw_xy` |
-| 0x5F024 | `wall_place_playfield_update` | Place wall tile; compute 2×2 descriptor; propagate to neighbors |
-| 0x5F310 | `mob_place_tile` | Place tile; remove old MOB; update visuals |
+| 0x5F024 | `wall_place_playfield_update` | Redraws one wall tile from `D0.w` = x, `D1.w` = y: aborts when bit 7 of `level_flags` byte 0x90491D or 0x90491C is set; otherwise builds an 8-bit neighbour-connectivity mask by testing the eight surrounding cells for picture 0x8000 and link types 0x1C00/0x2000/0x2400, selects a four-word descriptor keyed by that mask and `wallpattern` (0x904B5E) — using `random_word` for the randomised pattern sets — and writes only its own quadrants at `0x900000 + (y<<8) + (x<<2)` offsets 0, 0x2, 0x80 and 0x82, each plus the 0x7000 palette addend. It touches no neighbouring tile |
+| 0x5F598 | `refresh_tile_visual_stack` | Two-instruction frameless wrapper: loads `packed_slot` from `6(A7)` and `object_type` from `0xA(A7)` into D0/D1 and falls through into the register body `refresh_tile_visual` at 0x5F5A0; it performs no work of its own |
+| 0x5F644 | `refresh_tile_visual_legacy` | Unreferenced legacy 3×3 refresh: splits the packed slot into x = `D0>>5` and y = `D0&0x1F`, draws the centre cell with `pf_wall_draw` (0x5EAB8) when `D1` = 2 else `pf_floor_draw_xy` (0x5E888), then tests each of the eight neighbours with `pf_isblankfloor` through A2 = 0x5EA2E to choose floor or wall redraw, finishing with `pf_door_update_surrounding_xy`; no caller exists |
+| 0x5F310 | `mob_place_tile` | Shared tile and MOB replacement for packed slot `D0.w` and object type `D1.w`: removes any occupant via `moblist_remove_and_clear`, clears both arrays for type 0, writes marker 0x8000 (types 2, 4–9, 0x3F) or 0x8001 (types 1, 0xA–0xC, 0x10, 0x11, 0x3E) plus the hpos/vpos words from descriptor table 0x5858C for wall types, and otherwise spawns a MOB with `mob_create`; door types 0xD/0xE then call `pf_door_draw_xy` and dragon type 0x3C reserves three cells with `dragon_reserve_footprint_cell`, finishing through `refresh_tile_visual` and `pf_door_update_surrounding_xy` |
 | 0x5EAC2 | `pf_wall_draw_stack` | Shipped normal-stack `(x,y)` wall renderer sharing the 0x5EAB8 body; no discovered direct control site |
 
 ### 13.1 Playfield stamp, visibility, and floor callable contracts
@@ -836,7 +858,7 @@ are exact D0.l results.
 | 0x5E584 | `tile_on_screen_test` | `uint16 packed_position` | D0.l=-1 on screen; 0 outside | Normal-stack wrapper |
 | 0x5E5D2 | `tile_near_screen_d4` | D4.w=packed position | D0.l=-1 near; 0 outside | Register wrapper into shared body |
 | 0x5E5D8 | `tile_near_screen_test` | `uint16 packed_position` | D0.l=-1 near; 0 outside | Called indirectly through A2 by dragon code |
-| 0x5E7A6 | `maze_place_object_types` | `uint8 object_type` | D0.l=1 if any type/type-3 match exists; else 0 | Frameless byte argument at saved A7+0x1B |
+| 0x5E7A6 | `maze_place_object_types` | `uint8 object_type` | D0.l=1 only if a tile of type `object_type - 3` was found; plain `object_type` matches are stamped but do not set the result | Frameless byte argument at saved A7+0x1B; calls `tile_near_screen_d4` and `mob_place_tile` |
 | 0x5E80C | `maze_convert_walls_to_exits` | void | D0.l=1 if any conversion occurred; else 0 | — |
 | 0x5E868 | `maze_special_floor` | void | void | — |
 | 0x5E888 | `pf_floor_draw_xy` | D0.w=x, D1.w=y | void | Register wrapper that skips stack argument loads |
@@ -889,11 +911,11 @@ display, and placement contracts.
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x5FC22 | `random_seeded` | Dormant normal-stack seeded-RNG veneer: upper bound plus caller-supplied seed pointer |
-| 0x5FC26 | `random_bound_stack_core` | Shared entry with upper bound on the inherited caller stack and seed pointer in A0 |
-| 0x5FC2C | `random_core` | Register RNG body: zero-extended bound in D0.l and seed pointer in A0 |
-| 0x5FC4E | `getrandom` / `rand_n` | LCG random: returns value in [0, N). Stack-based. Seed at 0x904BFC |
-| 0x5FC46 | `random_word` / `getrandom_r` | Register-based variant of getrandom |
+| 0x5FC22 | `random_seeded` | Dormant normal-stack seeded-RNG veneer: loads the caller-supplied seed pointer from `8(A7)` into A0 and falls into `random_bound_stack_core`, which reads the upper bound from `6(A7)` |
+| 0x5FC26 | `random_bound_stack_core` | Shared entry that zero-extends the upper bound from `6(A7)` on the inherited caller stack into `D0.l` and falls into `random_core` with the seed pointer already in A0 |
+| 0x5FC2C | `random_core` | Register RNG body (bound word in D0, seed pointer in A0): advances the 16-bit LCG `seed = seed × 0x3619 + 0x5D35` and stores it back. For the observed bounds 0–0x7FFF it returns `bound × ((seed + 0x8000) & 0xFFFF) >> 16` in [0,bound); `MULS.W` treats a bound with bit 15 set as signed, so larger unsigned bounds do not have that range guarantee |
+| 0x5FC4E | `getrandom` (aka `rand_n`) | Normal-stack wrapper: points A0 at the global seed `ram.random_seed` (0x904BFC) and branches to `random_bound_stack_core`; all observed callers pass bounds no greater than 0x7FFF |
+| 0x5FC46 | `random_word` (aka `getrandom_r`) | Two-instruction register veneer: points A0 at the global seed `ram.random_seed` (0x904BFC) and branches to `random_core` with the bound word in D0; all observed callers pass bounds no greater than 0x7FFF |
 | 0x5FCCE | `pf_palette_clear` | Clear saved playfield colors plus alpha, MOB, playfield, and shadow color RAM through `memclear_core`; no arguments and no return value |
 | 0x5FD58 | `memclear` | Clear exactly `count` longwords at ptr using a pre-tested DBRA loop |
 | 0x5FD6A | `copy_longwords` | Copy exactly `count` longwords from src to dst using a pre-tested DBRA loop |
@@ -901,8 +923,8 @@ display, and placement contracts.
 | 0x5FD14 | `display_state_clear` | Clear MOB-list bucket state, reset scroll and first MOB fields, then clear alpha/playfield VRAM through the register-count memory-clear core |
 | 0x5FD64 | `memclear_core` | Register pre-test entry used by display clearing: A0=destination and D0=count, clearing exactly `count` longwords |
 | 0x45BE8 | `string_length` | Return the byte length of a NUL-terminated string in D0.l |
-| 0x510FC | `calc_direction` | Compute direction (0–7) from source to destination position |
-| 0x511AC | `player_tile_interact` / `tile_occupant_interact` | Dispatch by tile type: food/key/enemy/portal/chest handlers |
+| 0x510FC | `calc_direction` | Computes an 8-way octant from the source slot at `0xE(A7)` to the destination at `0x12(A7)`: masks each to row (`& 0x1F`) and column (`>> 5`), applies a +0x20 wrap correction when a delta exceeds 16 and the matching wrap flag is set (bit 5 horizontal, bit 4 vertical, in 0x90491F), derives 0–7 from the delta signs, and returns 8 when the two positions coincide |
+| 0x511AC | `player_tile_interact` (aka `tile_occupant_interact`) | Dispatch by tile type: food/key/enemy/portal/chest handlers |
 | 0x49B44 | `ascii_to_alpha_glyph` | Convert name-entry ASCII/control characters to the alpha-layer font code: A–Z→0x0A–0x23, digits→0–9, selected punctuation→0x24/0x27–0x2C, backspace→0x32, default→0x25 |
 | 0x4D12E | `alpha_clear_rect` | Clear a rectangular region of alpha VRAM; arguments are column, width, row, and height |
 | 0x5554E | `name_entry_step_char_copy` | Byte-identical unreferenced copy of the live routine at 0x55440 |
@@ -918,11 +940,11 @@ shared entries at 0x5FC22/0x5FC26/0x5FC2C.
 
 | Address | Name | Arguments | Return | Convention exception |
 |---|---|---|---|---|
-| 0x5FC22 | `random_seeded` | `uint16 upper_bound, uint16 *seed` | D0.l in [0, upper_bound), or 0 for bound 0 | Dormant normal-stack veneer; no discovered direct site |
-| 0x5FC26 | `random_bound_stack_core` | `uint16 upper_bound` on inherited caller stack; A0=`seed` | D0.l in [0, upper_bound), or 0 for bound 0 | Mixed inherited-stack/register entry reached by `getrandom` |
-| 0x5FC2C | `random_core` | D0.l=zero-extended upper bound; A0=`seed` | D0.l in [0, upper_bound), or 0 for bound 0 | Register shared body; advances the 16-bit seed |
-| 0x5FC46 | `random_word` | D0.l=zero-extended upper bound | D0.l in [0, upper_bound), or 0 for bound 0 | Register wrapper using global seed 0x904BFC |
-| 0x5FC4E | `getrandom` | `uint16 upper_bound` | D0.l in [0, upper_bound), or 0 for bound 0 | Normal-stack wrapper using global seed 0x904BFC |
+| 0x5FC22 | `random_seeded` | word upper bound (observed 0–0x7FFF), `uint16 *seed` | For bounds 0–0x7FFF, `D0.l = upper_bound × ((seed + 0x8000) & 0xFFFF) >> 16`, in [0,upper_bound); bit-15 bounds use signed `MULS.W` behavior | Dormant normal-stack veneer; no discovered direct site |
+| 0x5FC26 | `random_bound_stack_core` | word upper bound (observed 0–0x7FFF) on inherited caller stack; A0=`seed` | Same positive-bound result; bit-15 bounds return the signed arithmetic high word | Mixed inherited-stack/register entry reached by `getrandom` |
+| 0x5FC2C | `random_core` | D0.w=upper bound (observed 0–0x7FFF); A0=`seed` | Same positive-bound result; bit-15 bounds return the signed arithmetic high word | Register shared body; advances the 16-bit seed by `seed × 0x3619 + 0x5D35`, then scales with signed `MULS.W` rather than taking a modulo |
+| 0x5FC46 | `random_word` | D0.w=upper bound (observed 0–0x7FFF) | Same positive-bound result; bit-15 bounds return the signed arithmetic high word | Register wrapper using global seed 0x904BFC |
+| 0x5FC4E | `getrandom` | word upper bound (observed 0–0x7FFF) | Same positive-bound result; bit-15 bounds return the signed arithmetic high word | Normal-stack wrapper using global seed 0x904BFC |
 | 0x5FCCE | `pf_palette_clear` | void | void | Tail-calls `memclear_core` for the final shadow-palette clear |
 | 0x5FD14 | `display_state_clear` | void | void | Tail-calls `memclear_core` for the final playfield clear |
 | 0x5FD58 | `memclear` | `uint16 count, uint32 *destination` | void | Normal-stack pre-tested loop; exactly count longwords |
@@ -954,8 +976,8 @@ API polarity.
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x4AD76 | `sound_play` / `play_sound` | Enqueue sound ID into 8-slot circular ring buffer |
-| 0x4AD4E | `sound_speech_play` / `play_sound_mute_guarded` | Like play_sound but check mute flag first |
+| 0x4AD76 | `sound_play` (aka `play_sound`) | Enqueue sound ID into 8-slot circular ring buffer |
+| 0x4AD4E | `sound_speech_play` (aka `play_sound_mute_guarded`) | Like play_sound but check mute flag first |
 
 ---
 
@@ -966,15 +988,15 @@ tables, and checked return polarity.
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x41B16 | `find_unused_shot` | Scan shot MOB array for slot with mob_picture == 0 |
+| 0x41B16 | `find_unused_shot` | Scan four shot slots for one whose `mob_picture` and parallel 0x904926 word are both zero |
 | 0x490DC | `monster_create_shot` | Create a monster shot MOB; link into shot list |
 | 0x53666 | `player_create_shot` | If the player's shot slot is free, create the direction/class-specific shot or explosion, play its class sound, and consume one supershot charge when present |
 | 0x4AF50 | `resolve_shot_hit` | Full combat resolution for all target types (~0xED4 B, fully analyzed — see `04_game_subsystems.md` §26): `(target, shooter) → 0` shot survives / `-1` shot consumed; computed JMP 0x4B336 with table 0x4B338–0x4BB3; damage tables 0x596B6/0x596C2/0x596CE; monster tier system, generator degradation, secret-wall prizes, supershot/reflect |
-| 0x40906 | `shot_mob_collision` | Bounding-box collision test for shot projectiles |
+| 0x40906 | `shot_mob_collision` | Swept bounding-box collision for the shot slot at `6(A7)` against the shooter at `0xA(A7)`: derives the hitbox from `player_character` or the `mob_hpos` flag bits through the tables at 0x40B98/0x40BC8, then calls `shot_collision_candidate_core` at up to five points stepped along the direction table at 0x40BD8, returning the struck MOB slot in `D0.w` or -1, and invoking `dragon_shot_hitbox_adjust` when the struck tile class is 0x3C |
 | 0x52192 | `mob_collision_test` | Bounding-box overlap + type dispatch for combat/pickup/warp |
 | 0x47DAE | `shot_impact_spawn` | Spawns an impact/explosion effect at the target in shared effect MOB slots 0x0D–0x10 |
 | 0x4AEA0 | `shot_onscreen_check` | Range/visibility check vs scroll registers 0x904026/28; gates door reactions to shots |
-| 0x53818 | `shot_reflect_calc` | Computes the reflected direction when a reflect-power shot hits a wall (result → `0x9049C4[player]`) |
+| 0x53818 | `shot_reflect_calc` | Computed-dispatch reflection body: reads the shot's current direction from `shot_direction` (0x9049C4) indexed by shooter ID, selects one of five PC-relative jump tables (0x538FE/0x53924/0x53948/0x5396A/0x53992) by the signed wall delta, and returns the reflected direction in `D0.w`. It never writes `shot_direction`; the only writer is `dragon_fire_setup` at 0x547D8 |
 | 0x5303A | `wall_crumble` | Applies shot damage to a destructible wall (called from `resolve_shot_hit` with (target, damage)) |
 | 0x54112 | `dragon_shot_hit` | Dragon damage handler: hit counts only while breathing fire and not sleeping/turning; 9th hit kills; on hit picks a new random path program with pose-matched fast-forward |
 
@@ -1028,9 +1050,9 @@ See `02_os_rom.md` for full descriptions. Summary table:
 | 0x200 | `display_large_text` | (text_desc_ptr) | d0 = alpha-cell advance |
 | 0x20C | `display_large_char_at` | (alpha_ptr, glyph_index, color) | d0 = 1 or 2 cells |
 | 0x212 | `display_large_char_raw` | (alpha_ptr, glyph_index, color) | d0 = 1 or 2 cells |
-| 0x218 | `write_alpha_char` | (row, col, char, color) | void |
+| 0x218 | `write_alpha_char` | (column, row, char, color) | void |
 | 0x21E | `write_alpha_word` | (cell_index, value) | void |
-| 0x224 | `calc_alpha_address` | (row, col) | d0 = address |
+| 0x224 | `calc_alpha_address` | (column, row) | d0 = address |
 | 0x230 | `check_and_deduct_credits` | (required: long, player: long) | d0 = 1 consumed/free play, 0 insufficient |
 | 0x236 | `get_coin_multiplier` | () | d0 = multiplier |
 | 0x23C | `send_sound_command_wait` | (command: word) | `D0.l = 1` after accepted |
@@ -1054,9 +1076,9 @@ These functions are called from multiple top-level subsystems:
 | Address | Name | Brief Description |
 |---------|------|-------------------|
 | 0x42DC8 | `sound_system_reset` | Flush sound ring buffer, reset speech counter, send HW reset |
-| 0x4C9A2 | `demo_speech_cmd` | Process 0xFF speech command in demo input stream |
+| 0x4C9A2 | `demo_speech_cmd` | Renders the scripted demo dialog selected by `message_index`: indexes the record table at 0x5815C by index × 4, sets `dialog_timer` (0x904A9E), derives the box width and height from the record fields plus `string_length`, positions it with `dialog_position_box`, emits the glyphs into `dialog_msg_buf` (0x904AA4) through OS `draw_string`, and finally sets the timer to 0x96 or 0x78 according to bit 0x400 of `game_settings`. The 0xFF stream marker is tested by the caller `main_move_players` at 0x4A59E, not here |
 | 0x48BEC | `player_start_inner` | Find a usable spawn tile, install character-specific RAM jump stubs, initialize player state/MOB data (including clearing `player_death_damage_counter`), and return -1 on success or 0 when placement fails. Called for active players during normal level entry and for mid-level joins. |
-| 0x48F12 | `tile_occupancy_test` / `check_tile_passable` | Return -1 only for an in-bounds empty candidate whose eight neighboring cells contain no MOB within 0x7C0 on both rendered axes |
+| 0x48F12 | `tile_occupancy_test` (aka `check_tile_passable`) | Return -1 only for an in-bounds empty candidate whose eight neighboring cells contain no MOB within 0x7C0 on both rendered axes |
 | 0x55440 | `name_entry_step_char` | Increment/decrement and wrap a name-entry character through space, A–Z, and optional backspace |
 | 0x4A44A | `name_entry_draw_large_char` | Draw a 2×2 name-entry character/control glyph using OS 0x224 and 0x20C |
 | 0x554B6 | `name_entry_draw_char` | Draw one name-entry character with OS 0x218, translating backspace to glyph 0x3B and conditionally hiding spaces during cursor-flash palette phases |
@@ -1064,13 +1086,13 @@ These functions are called from multiple top-level subsystems:
 | 0x4DE76 | `score_screen_color_cycle` | Every 16th frame: saves 4 words from 0x910140 area, shifts 11 color RAM entries one slot, writes saved words back to start — creates scrolling rainbow on high-score text |
 | 0x4D956 | `scroll_apply` | Apply signed scroll deltas for title-screen animation. Both deltas zero → writes 0x75 to 5 scroll anchor slots at 0x9038DE (stride 0x24) and returns D0.l=-1. Non-zero → walks MOB list for scroll anchor tiles (picture in range 0x2700–0x2728) and returns D0.l=0 |
 | 0x4DA3E | `title_logo_init` | No-argument TITLE initializer: build the multi-row logo MOBs, initialize brightness/color and full/short motion-program state, then start the logo off-screen with `scroll_apply(-128, 0)` |
-| 0x449D4 | `attract_demo_init` / `demo_setup` | Initialize maze 102 for the DEMO attract screen, set up Elf player 1, and install demo stream pointer 0x581C4 |
-| 0x40D24 | `load_level_tileset` | Load level tile data into VRAM |
+| 0x449D4 | `attract_demo_init` (aka `demo_setup`) | Initialize maze 102 for the DEMO attract screen, set up Elf player 1, and install demo stream pointer 0x581C4 |
+| 0x40D24 | `maze_select_bank` (formerly `load_level_tileset` — corrected) | Frameless Slapstic bank selector: calls `find_maze`, doubles the returned bank index, masks interrupts (`SR = 0x2700`), issues the sequence through `slapstic_cmd_bankX` (0x56E84) with base A0 = 0x38010, restores SR, and stores the command offset at `ram.maze_slapstic_cmd_offset` (0x904B8C). Identical to `maze_select_alt_bank` except it omits the `eori.w #6` on the offset, and it performs no VRAM transfer |
 | 0x4CD1C | `load_legend_page` | Load maze 103 for LEGEND mode and render the overview (selector 0), rules (selector 2), or monsters (other selector) page. The former `load_demo_level` name was contradicted by the body |
 | 0x44DB4 | `show_level_start_screen` | Build the between-level/start display; after a secret-room win, replace the trick ID with a random 0x50–0x5D challenge, select maze 115 for tasks 0x50–0x56 or maze 116 for tasks 0x57–0x5D, set its timer, and show its qualifier |
-| 0x40CF2 | `maze_init` | Maze initialization (called from main_start_game) |
+| 0x40CF2 | `maze_init` | Frameless wrapper: calls `find_maze`, loads the Slapstic bank-select bases 0x380A4 and 0x380C8 + index into A0/A1, masks interrupts (`SR = 0x2700`), runs the sequence through `slapstic_cmd_maze_init` (0x56E90), restores SR, and stores `bank XOR 6` into `ram.maze_slapstic_cmd_offset` (0x904B8C) |
 | 0x4FCF0 | `thief_find_aligned_shooter` | Return the first active player 0–3 whose shot direction is opposite the thief's and whose wrapped position lies exactly on that shot ray; -1 if none |
-| 0x4EE7A | `thief_move_engine` | Core thief movement/direction computation |
+| 0x4EE7A | `thief_move_engine` | Applies one thief move step from the flag word at `0xA(A6)` and the 0x80-biased H/V deltas: adjusts the thief's `mob_hpos`/`mob_vpos` per direction bits 4–7 by calling `thief_probe_axis` with the directional probe callbacks 0x408A0, 0x406B6, 0x40732 and 0x4083A, rejects wall pictures 0x8000/0x8001, steals through `thief_steal_from_player`, relinks the MOB with `moblist_replace` and updates `thief_current_pos`, returning `D0.l` = `thief_collision_direction_code` (0x904BB8) plus a blocked flag |
 | 0x4F912 | `thief_compute_path` | Compute the thief's next maze position/direction, including diagonal alternatives and passability tests |
 | 0x4E1B8 | `thief_begin_dodge` | Enter the shot-dodge submode and repair route state; formerly misnamed `mark_item_stolen` |
 | 0x4E172 | `thief_end_dodge` | Leave the shot-dodge submode and repair route state; formerly misnamed `abort_theft` |
@@ -1082,17 +1104,17 @@ These functions are called from multiple top-level subsystems:
 | 0x54AF8 | `dragon_any_segment_near_screen` | Test the dragon's four segment positions with the indirect stack entry at 0x5E5D8; returns -1 when any segment is within the wider playfield window and 0 otherwise. Used by the potion handler's dragon-effect path. |
 | 0x4D1A4 | `secret_bonus_earned` | Check the active secret-challenge code/progress and return whether the entrant earns the 5,000-per-coin secret-room bonus |
 | 0x489B8 | `remove_dying_player_sprites` | Remove the two auxiliary sprite slots associated with a dying/departing player and clear that player's animation-state word |
-| 0x50B88 | *(score animation phase)* | Score animation phase handler |
-| 0x4119A | `monster_special_handler` | Sorcerer teleport/acid spread/IT chase logic |
+| 0x50B88 | `tport_restore_player_picture` | Stack-argument leaf: maps `player_index` through `ram.active_mob_ids` (0x9048C8), then restores that MOB's picture word in `vram.mob_picture` (0x902000) from `ram.tport_saved_picture` (0x904BC4) when transporter movement completes |
+| 0x4119A | `monster_special_handler` | Per-MOB AI body inside the monster loop (`D2` slot, `D4`/`D5` state, `D6` type): probes four directions with `ray_march_up`/`down`/`left`/`right` using the heading in `mob_state` bits 0x1C00, relocates the MOB into the chosen empty cell with `move_mob_slot`, fires through `monster_find_and_shoot`, damages overlapping players via `monster_playerhit`, and handles the teleport/phase types by adding 0x2000 to the state word plus the acid (0x1C) and IT-chase (0x24) cases driven by `random_word` |
 | 0x40FAE | `monster_loop_core` | Interior per-MOB iteration entry within `monsters_everything`; inherits its saved-register/local-stack frame and MOB-array registers, and is reached by loop-back branches rather than a normal call |
-| 0x46F56 | `scroll_set_position` | Apply scroll X/Y to hardware registers with clamping |
+| 0x46F56 | `set_scroll_pos` | Apply scroll X/Y to hardware registers with clamping |
 | 0x41B7E | `apply_direction_from_delta` | Compute direction code from dx/dy between MOBs |
 | 0x40A78 | `shot_collision_candidate_core` | BSR-only candidate evaluator used by `shot_mob_collision`: reject empty/self/out-of-range slots, handle wrapped MOB coordinates, update signed/absolute separation scratch words, and return the candidate type/result in D2 |
 | 0x41B52 | `monster_shooter_in_view` | BSR-only viewport gate before a monster fires: compare its byte-scale H/V coordinates with the culling origins; return D4=-1 when inside the allowed rectangle and zero otherwise |
 | 0x41C30 | `player_try_move_core` | Internal register-state reentry for `player_try_move`; initializes the active player's MOB slot/coordinates and runs the directional collision/door/squeeze logic. Several branches BSR here to retry movement. |
-| 0x42598 | `mob_collision_test_preserve_d1_a` | First of two byte-identical leaf wrappers: convert doubled MOB offsets D1/D5 back to slot IDs, call `mob_collision_test`, restore D1, and return its boolean in condition codes |
+| 0x42598 | `mob_collision_test_preserve_d1_a` | First of two byte-identical register wrappers: convert doubled MOB offsets D1/D5 back to slot IDs, call `mob_collision_test`, restore D1, and return its boolean in condition codes |
 | 0x425B4 | `mob_collision_test_preserve_d1_b` | Second byte-identical copy of the D1-preserving `mob_collision_test` wrapper, reached by the alternate movement branches |
-| 0x5E888 | `wall_remove_playfield_update` / `refresh_floor_visual` | Refresh floor visual after wall removal |
+| 0x5E888 | `pf_floor_draw_xy` (aka `refresh_floor_visual`) | Refresh floor visual after wall removal |
 | 0x5EAB8 | `pf_wall_draw` (aka `refresh_wall_visual`) | Register `(D0=x,D1=y)` wall renderer: 8-neighbor connectivity mask → variant table 0x5EE24 (0x5EF24 for patterns 6/0xB); descriptor base by `wallpattern` (0–5: 0x5BBE0 + offsets 0x5EDD4; 6: 0x5D2F8; destructible ≥6: 0x5D3D0; 7+: random of 6 sets at 0x5EDF4) |
 | 0x5EAC2 | `pf_wall_draw_stack` | Normal-stack `(uint16 x,uint16 y)` entry to the same wall-rendering body; retained but with no discovered direct control site |
 | 0x4ADD6 | `enqueue_sound` | Low-level sound ID enqueue into ring buffer at 0x90404B; called by play_sound |
@@ -1100,7 +1122,7 @@ These functions are called from multiple top-level subsystems:
 | 0x40D4E | `maze_select_bank_special` | No-prologue callable bank-selection path used by `show_level_start_screen` and `main_start_game`; calls `find_maze` for either secret layout (115/116), executes the 0x38000/0x3FB4A/selected-bank Slapstic sequence through 0x56E98, and stores D1 at 0x904B8C |
 | 0x54B68 | `dragon_shot_hitbox_adjust` | Register-argument leaf called only from `shot_mob_collision` after the candidate type is 0x3C: reset dragon escape/idle timers, test the moving head hitbox using the five-word padded offsets at 0x54BD6, and add 0x1000 to D0 when the shot overlaps the head |
 | 0x449CC | `attract_noop_hook` | Deliberate empty routine called once at the end of the attract-screen timer/display update path |
-| 0x48B58 | `update_monster_bonus_from_score_per_coin` | Sum active players' scores and inserted-coin counts, then add `(total_score >> 14) / total_coins` to the signed monster-cap bonus byte at 0x90405F |
+| 0x48B58 | `update_monster_spawn_bonus_from_score_per_coin` | Sum active players' scores and inserted-coin counts, then add `(total_score >> 14) / total_coins` to the signed generator spawn-probability bonus byte at 0x90405F |
 | 0x4CDB8 | `draw_legend_monsters_page` | Render legend sub-page 1: “MONSTERS”, monster names, and their Fight/Shoot/Magic attributes |
 | 0x4CFAE | `draw_legend_overview_page` | Render legend sub-page 0 from the two formatted text records at 0x5A99C and 0x5AB0E |
 | 0x4CFDA | `draw_legend_rules_page` | Render legend sub-page 2: adjust its decorative MOBs, clear label rectangles, and draw the formatted rule/item text records |

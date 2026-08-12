@@ -38,7 +38,8 @@ Above that sit the **reconciliation reports**, and they are where this project
 gets its confidence. Two matter most. A control-target report resolves every
 call and jump in the image, direct and computed, and reports how many
 destinations remain unexplained: currently 1,129 direct sites, 206 indirect,
-zero unresolved. A RAM-operand report does the same for data, listing every
+81 computed-dispatch destinations, zero unresolved. On the OS side the same
+report carries 392 site/owner rows across 384 distinct control sites. A RAM-operand report does the same for data, listing every
 absolute address the code touches and which functions touch it, with an
 independent linear sweep agreeing on all 318 literals in the game ROM. The
 first tells you whether code is reachable. The second tells you who can
@@ -113,16 +114,20 @@ whole set against the ROM images:
 | Confidence labels | Every chapter section carries a graded claim |
 
 The numbers that suite prints are the audit's actual state: 131,072 game ROM
-bytes with 93,722 identified as instructions across 34 executable ranges, 329
-catalogued data ranges, 352 non-code flags, 318 RAM literals, all 65,536 OS
-bytes classified with 256 contracts, and empty failure sets throughout.
+bytes with 93,722 identified as instructions across 34 executable ranges, 322
+catalogued data rows over 321 distinct addresses, 347 non-code flags, eight
+intentional overlapping views, 318 RAM literals, all 65,536 OS bytes
+classified into 33 segments across 14 top-level regions with 269 contracts and
+42 data ranges, and empty failure sets throughout.
 
 Two habits matter more than the totals. The first is that a **contradicted**
 claim stays visible. An early draft of this project's documentation asserted
 that every function and table was fully understood; later audits disproved it,
 and the correction sits in the index where the boast used to be. The
-`08_known_issues.md` file is a running log of exactly this, and drafting the
-two chapters before this one added nine more entries to it.
+`08_known_issues.md` file is a running log of exactly this, drafting the
+chapters of this book has added entries to it more than once, and anything the
+latest audit raised but could not close is written down in `SOL_ISSUES.md` at
+the repository root.
 
 The second is the confidence grading this book has been quietly obeying
 throughout. Verified means checked against bytes. Strong inference means the
@@ -177,7 +182,7 @@ tables. Speeds, damage, animation frames, palettes, spawn parameters, maze
 records, dragon flight paths, speech phrases, the potion effect matrix, the
 2×2 tile descriptors. The code is a small interpreter for a large pile of
 authored data, which is what let a handful of people tune a game this varied
-inside 128 KB.<!-- ALINSA: is this actually useful or make sense -->
+inside 128 KB.
 
 ## Nine bytes that never run
 
@@ -228,8 +233,8 @@ It is also a graveyard.
 
 Slightly less than half of the 64 KB image is a complete, self-consistent
 software module that Gauntlet II never touches. Its executable partition runs
-from 0x8000 to 0x9A0F, interrupted by five islands of table data, and the
-audit has extracted 21 entry contracts from it: monster updates, direction
+from 0x8000 to 0x9A0F, interrupted by two islands of table data, and the
+audit has extracted 34 entry contracts from it: monster updates, direction
 choosing, object-list insertion and removal, four directional path probes, a
 recursive movement worker, cell-occupancy tests. It is a monster and movement
 engine. Beyond it, most of the rest of the image is data: option menus, status
@@ -258,7 +263,7 @@ own game-support code in its own ROM and leaves its predecessor's asleep in
 the shared part.
 
 Treat that as an archaeological curiosity rather than a load-bearing fact. The
-runtime-dead status, the byte boundaries, and the 21 contracts are Verified.
+runtime-dead status, the byte boundaries, and the 34 contracts are Verified.
 The reading that this is the earlier game's support module is Strong
 inference, since the original link map is gone and no revision stamp survives.
 Comparing this payload against other Atari System 1 era BIOS images is a
@@ -278,9 +283,10 @@ documenting the game to describe what the code does. None of them appeared in
 the original source, and some earlier guesses have been contradicted and
 renamed as the evidence improved.
 
-**Intent behind dead regions** is unrecoverable. The image contains several
-blocks of data with no pointer, no cross-reference, and no consumer anywhere:
-two large ones and four small. Their contents and boundaries are documented
+**Intent behind dead regions** is unrecoverable. The image contains a handful
+of data blocks with no pointer, no cross-reference, and no consumer anywhere:
+one large and two small, after this audit moved three former members of the
+list back into the living. Their contents and boundaries are documented
 exactly. Their purpose is not, and the project's rule is that an appealing
 geometric pattern in a dead block does not earn a semantic label. The same
 applies to 6,196 bytes of solid 0xFF sitting between two live regions, about
@@ -341,8 +347,10 @@ maps the repository, so you know which file answers which kind of question.
 >   which covers the 1985 original rather than this 1986 sequel.
 > - Coverage figures: `doc/03_game_rom_structure.md` §4.1–4.2 and the
 >   `make check` output. The unused block is 0x55620–0x56E53 (§4.5); the
->   runtime-dead residue blocks are 0x57BD8–0x57EB9, 0x5C8B0–0x5CAA7, and
->   four smaller ranges (§4.4).
+>   blocks that remain genuinely unreferenced are 0x57BD8–0x57EB9,
+>   0x571D8–0x571D9, and 0x5870C–0x58749 (§4.4). Three ranges once listed
+>   there — 0x5C8B0, 0x57332, and 0x57358 — turned out to have live
+>   consumers.
 > - Audit generators and artifacts: `doc/generated/`, with the regeneration
 >   entry point `make check` in `doc/`. The loader is
 >   `doc/gauntlet_loader.r2`.
@@ -350,8 +358,8 @@ maps the repository, so you know which file answers which kind of question.
 >   The nine bytes are `AE D6 8C 17 FB 90 6A 33 80`; the 69-bit stream was
 >   re-decoded independently for this chapter and matches, with three zero
 >   padding bits.
-> - Retained OS module: executable partition 0x8000–0x9A0F with five data
->   islands, 21 entry contracts, and stale absolute calls to 0x48064,
+> - Retained OS module: executable partition 0x8000–0x9A0F with two data
+>   islands, 34 entry contracts, and stale absolute calls to 0x48064,
 >   0x49C36, and 0x49572; data partition 0x9A10–0xF9F9 in thirteen groups,
 >   with 0xF9FA–0xFFFF verified zero fill: `doc/02_os_rom.md` §10.5, strings
 >   in §12.4–12.8. The shared part numbers 136037-1307.9a and 136037-1308.9b
@@ -359,6 +367,7 @@ maps the repository, so you know which file answers which kind of question.
 >   `gauntletj`, `gaunt2`, `gaunt22p`, and `gaunt22p1` at identical SHA-1
 >   digests, which match the images used by this project.
 > - Unresolvable questions, stated as such: `doc/08_known_issues.md`, section
->   "Unresolvable from the supplied artifacts".
+>   "Unresolvable from the supplied artifacts"; still-open audit findings:
+>   `SOL_ISSUES.md` at the repository root.
 > - The reimplementation standard in practice: Chapter 13's `secret_code_build`
 >   reproduction, checked against codes generated by the running game.

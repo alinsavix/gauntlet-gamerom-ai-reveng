@@ -2,11 +2,11 @@ address,name,arguments,return,exceptional_convention,direct_control_sites,confid
 0x40C78,find_maze,maze number in wrapper caller's first longword,D1.w bank offset; ptr_maze_data side effect,frameless shared-stack helper; reads 8(A7) after wrapper JSR,0x40CC4;0x40CF2;0x40D24;0x40D4E,Verified
 0x40CC4,maze_select_alt_bank,uint32 maze_number,void,frameless wrapper; argument is consumed by find_maze,0x4421A;0x44EC4;0x48518;0x48618,Verified
 0x40CF2,maze_init,uint32 maze_number,void,frameless wrapper; argument is consumed by find_maze,0x4810A,Verified
-0x40D24,load_level_tileset,uint32 maze_number,void,frameless wrapper; argument is consumed by find_maze,0x44A00;0x4A140;0x4CD36,Verified
+0x40D24,maze_select_bank,uint32 maze_number,void,frameless wrapper; argument is consumed by find_maze,0x44A00;0x4A140;0x4CD36,Verified
 0x40D4E,maze_select_bank_special,uint32 maze_number,void,frameless wrapper; argument is consumed by find_maze,0x44E3E;0x481FE,Verified
 0x44AC2,maze_setupnew,const uint8_t *maze_record,void,,0x400EA;0x43910,Verified
 0x4C1BC,maze_decode,const uint8_t *maze_record,void,,0x44B94,Verified
-0x45E40,maze_place_object,"uint16 slot_or_offset, uint16 object_type, uint16 scan_base",void,,0x44C18,Strong inference
+0x45E40,maze_place_object,"uint16 start_slot, uint16 object_type, uint16 count",uint16 next slot in D0.l,,0x44C18,Verified
 0x43F68,maze_addrandompickups,uint16 enable_random_pickups,void,,0x48358;0x48590;0x48672,Verified
 0x42E9A,maze_randomplace,uint16 object_type,uint16 packed_slot in D0.l,,,Verified
 0x4526A,maze_show,void,void,,0x48364;0x48596;0x4868C,Verified

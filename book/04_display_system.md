@@ -44,14 +44,15 @@ starts there.
 Every piece of art the machine can show is an 8×8-pixel **tile**, stored in
 dedicated graphics ROMs that the video hardware reads directly. Chapter 3
 mentioned that the CPU cannot see these chips at all; its entire artistic
-vocabulary is the tile *number*. Writing "tile 0x2100" into the right table
-makes the dragon's snout appear. Nothing in the address space lets the CPU
-find out what the dragon's snout looks like.
+vocabulary is the tile *number*. Writing picture word 0xA1E0 into the right
+table makes the dragon's head appear: bit 15 is a software flag, so the actual
+tile number is 0x21E0. Nothing in the address space lets the CPU find out what
+the dragon's snout looks like.
 
 Within a tile, each pixel is a 4-bit value from 0 to 15. The graphics ROMs
-split those four bits across four chips, one bit-plane per chip, so each chip
-holds one bit of every pixel in the game's artwork. The video hardware reads
-all four in parallel and reassembles the values on the fly.
+split those four bits across four chips, one bit-plane per chip, and the board
+carries three such banks to cover the whole tile catalog. The video hardware
+reads a bank's four chips in parallel and reassembles the values on the fly.
 
 ## Color by table
 
@@ -240,9 +241,11 @@ and then Chapter 8 opens the invisible half.
 >
 > - Resolution, refresh, layer ordering, and the full per-pixel priority
 >   flowchart: `doc/01_hardware.md` §4. Precise priority list: §4.2.
-> - Tile format (8×8, 4 bpp, one graphics chip per bit-plane):
->   `doc/01_hardware.md` §5. The renderings in this book come from
->   `python-gex`, which reimplements this decoding.
+> - Tile format (8×8, 4 bpp, one graphics chip per bit-plane, three banks of
+>   four): `doc/01_hardware.md` §5; the bank and chip grouping is
+>   `TILE_ROMS`/`TILE_ROM_SETS` in `python-gex/src/gex/roms.py`. The
+>   renderings in this book come from `python-gex`, which reimplements this
+>   decoding.
 > - Color RAM at 0x910000: IRGB entry format, region table (alpha 0–255,
 >   MOB 256–511, playfield shadow 512–639, playfield 640–767, spare above),
 >   and per-layer index formulas: `doc/01_hardware.md` §6.

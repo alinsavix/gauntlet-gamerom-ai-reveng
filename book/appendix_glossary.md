@@ -175,7 +175,7 @@ Chapter 17.
 
 **Score per coin.** Each player's score divided by the coins they inserted.
 This quotient, and not the raw score, is what the high-score table ranks, and
-it feeds back into the monster cap. Chapter 14.
+it feeds back into generator spawn probability. Chapter 14.
 
 **Secret objective.** A hidden per-maze task, called a trick in the data, such
 as avoiding treasure or shooting a particular thing. Completing one earns
@@ -265,6 +265,7 @@ frozen. Chapters 3 and 5.
 | Maze numbering, level progression, record format, level flags | [`doc/06_maze_catalog.md`](../doc/06_maze_catalog.md) |
 | What a named function does and what its arguments are | [`doc/07_function_index.md`](../doc/07_function_index.md) |
 | What is still unknown, and what was corrected when | [`doc/08_known_issues.md`](../doc/08_known_issues.md) |
+| Findings still open from the latest full audit | [`SOL_ISSUES.md`](../SOL_ISSUES.md) |
 | Where to start in the technical docs | [`doc/INDEX.md`](../doc/INDEX.md) |
 | Machine-checked contracts, coverage, and reconciliation tables | [`doc/generated/`](../doc/generated/README.md) |
 | Re-running every audit against your own ROM images | `make check` in [`doc/`](../doc/) |

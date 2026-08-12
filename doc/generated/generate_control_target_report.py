@@ -39,7 +39,7 @@ DISPATCH_TABLES = (
     (0x4FE08, 8, 0x4FE08, "richest_player_tie_jumptbl"),
     (0x51200, 8, 0x51200, "player_tile_lowtype_jumptbl"),
     (0x5122A, 17, 0x5122A, "player_tile_object_jumptbl"),
-    (0x52210, 47, 0x52210, "mob_collision_object_jumptbl"),
+    (0x52210, 53, 0x52210, "mob_collision_object_jumptbl"),
     (0x538FE, 5, 0x538FE, "shot_reflect_center_jumptbl"),
     (0x53924, 5, 0x53924, "shot_reflect_neg42_jumptbl"),
     (0x53948, 5, 0x53948, "shot_reflect_neg22_jumptbl"),

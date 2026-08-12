@@ -164,8 +164,9 @@ screen, where its own first test notices the mode and returns without
 moving anyone, and this book tries to be precise about which is meant. Second, the demo column is nearly identical
 to the normal column, because the attract demo *is* the game engine
 running on recorded inputs, the subject of Chapter 15. The health drain in
-that table is the same in both: one point of health every sixty-fourth
-frame, which is slow enough that the recorded hero survives a two-minute
+that table is the same in both, and in every other mode too: one point of
+health per player every sixty-fourth frame, with no class or difficulty term,
+which is slow enough that the recorded hero survives a two-minute
 demo without any special treatment.
 
 ## Keeping time honestly
@@ -179,14 +180,14 @@ fit inside its sixtieth of a second, and the loop halves whatever
 `frame_overflow` currently holds, so the signal decays to zero after a few
 good frames.
 
-That word is more than a diagnostic. The monster system reads it when
-deciding how many monsters to process this frame, and while it is nonzero
-the per-frame monster allowance drops to zero, shedding the heaviest
-workload until the loop catches its breath. An overloaded Gauntlet II
-slows its crowd for a few frames instead of stuttering its display, and
-the decay guarantees the throttle releases as soon as the load passes.
-Chapter 11 covers the allowance itself, which in normal times scales with
-player count and an operator setting.
+That word is more than a diagnostic. The monster system reads it before any
+generator takes its turn, and while it is nonzero the spawn probability drops
+to zero, so no generator produces anything until the loop catches its breath.
+An overloaded Gauntlet II stops *adding* to the crowd for a few frames instead
+of stuttering its display, and the decay guarantees the throttle releases as
+soon as the load passes. Nothing is left unprocessed: the monster walk still
+visits every creature in the chain. Chapter 11 covers the probability itself,
+which in normal times scales with player count and an operator setting.
 
 ```mermaid
 flowchart TD
@@ -240,9 +241,11 @@ Chapter 7 maps that longest clock from end to end.
 > - `input_debounce` (0x40644): raw words at 0x904920, per-player shift
 >   registers at 0x905F58/0x905F60, `roxl`-based hand-written
 >   implementation: `doc/04_game_subsystems.md` §15.
-> - `frame_overflow` is the word at 0x904916; the monster-cap consumer
->   that zeroes the per-frame allowance while it is nonzero is
->   `monster_count_table` (0x40E46): `doc/05_data_reference.md` §1 and §3.
+> - `frame_overflow` is the word at 0x904916. `monsters_everything` tests it
+>   at 0x40F96 and zeroes the generator spawn probability drawn from
+>   `monster_spawn_probability_table` (0x40E46), so `handle_generate` spawns nothing while
+>   it is set; it does not bound how many monsters are processed:
+>   `doc/05_data_reference.md` §1 and §3, `doc/04_game_subsystems.md` §3.4.
 > - The attract state machine called every frame is `main_attract`
 >   (0x44562), `doc/03_game_rom_structure.md` §2.5; Chapter 15 covers it.
 > - `one_time_init` (0x4327A): `doc/03_game_rom_structure.md` §5.

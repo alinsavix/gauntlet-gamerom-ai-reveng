@@ -54,8 +54,8 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x40CDC,maze_select_alt_bank@0x40CC4,call,jsr 0x56e84.l,0x056E84,slapstic_cmd_bankX,documented_game_entry,Verified
 0x40CF2,maze_init@0x40CF2,call,jsr 0x40c78.l,0x040C78,find_maze,documented_game_entry,Verified
 0x40D0E,maze_init@0x40CF2,call,jsr 0x56e90.l,0x056E90,slapstic_cmd_maze_init,documented_game_entry,Verified
-0x40D24,load_level_tileset@0x40D24,call,jsr 0x40c78.l,0x040C78,find_maze,documented_game_entry,Verified
-0x40D3C,load_level_tileset@0x40D24,call,jsr 0x56e84.l,0x056E84,slapstic_cmd_bankX,documented_game_entry,Verified
+0x40D24,maze_select_bank@0x40D24,call,jsr 0x40c78.l,0x040C78,find_maze,documented_game_entry,Verified
+0x40D3C,maze_select_bank@0x40D24,call,jsr 0x56e84.l,0x056E84,slapstic_cmd_bankX,documented_game_entry,Verified
 0x40D4E,maze_select_bank_special@0x40D4E,call,jsr 0x40c78.l,0x040C78,find_maze,documented_game_entry,Verified
 0x40D66,maze_select_bank_special@0x40D4E,call,jsr 0x56e98.l,0x056E98,slapstic_cmd_bankX_special,documented_game_entry,Verified
 0x40ED8,monsters_everything@0x40E6A,call,jsr 0x4ad76.l,0x04AD76,sound_play,documented_game_entry,Verified
@@ -338,7 +338,7 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x449BC,main_attract@0x44562,call,jsr 0x449cc.l,0x0449CC,attract_noop_hook,documented_game_entry,Verified
 0x449D8,attract_demo_init@0x449D4,call,jsr 0x4529a.l,0x04529A,maze_hide,documented_game_entry,Verified
 0x449E4,attract_demo_init@0x449D4,call,jsr 0x452d0.l,0x0452D0,setup_infopanel,documented_game_entry,Verified
-0x44A00,attract_demo_init@0x449D4,call,jsr 0x40d24.l,0x040D24,load_level_tileset,documented_game_entry,Verified
+0x44A00,attract_demo_init@0x449D4,call,jsr 0x40d24.l,0x040D24,maze_select_bank,documented_game_entry,Verified
 0x44A06,attract_demo_init@0x449D4,call,jsr 0x438ae.l,0x0438AE,maze_new_level_setup,documented_game_entry,Verified
 0x44A20,attract_demo_init@0x449D4,call,jsr 0x43486.l,0x043486,init_display,documented_game_entry,Verified
 0x44A32,attract_demo_init@0x449D4,call,jsr 0x48bb6.l,0x048BB6,player_join,documented_game_entry,Verified
@@ -520,7 +520,7 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x48278,main_start_game@0x4800C,call,jsr 0x452d0.l,0x0452D0,setup_infopanel,documented_game_entry,Verified
 0x482CA,main_start_game@0x4800C,call,jsr 0x48bec.l,0x048BEC,player_start_inner,documented_game_entry,Verified
 0x4833A,main_start_game@0x4800C,call,jsr 0x452d0.l,0x0452D0,setup_infopanel,documented_game_entry,Verified
-0x4834E,main_start_game@0x4800C,call,jsr 0x48b58.l,0x048B58,update_monster_bonus_from_score_per_coin,documented_game_entry,Verified
+0x4834E,main_start_game@0x4800C,call,jsr 0x48b58.l,0x048B58,update_monster_spawn_bonus_from_score_per_coin,documented_game_entry,Verified
 0x48358,main_start_game@0x4800C,call,jsr 0x43f68.l,0x043F68,maze_addrandompickups,documented_game_entry,Verified
 0x4835E,main_start_game@0x4800C,call,jsr 0x4e432.l,0x04E432,thief_setup,documented_game_entry,Verified
 0x48364,main_start_game@0x4800C,call,jsr 0x4526a.l,0x04526A,maze_show,documented_game_entry,Verified
@@ -542,7 +542,7 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x4855C,main_start_game@0x4800C,call,jsr 0x438ae.l,0x0438AE,maze_new_level_setup,documented_game_entry,Verified
 0x48576,main_start_game@0x4800C,call,jsr 0x43486.l,0x043486,init_display,documented_game_entry,Verified
 0x48582,main_start_game@0x4800C,call,jsr 0x48bb6.l,0x048BB6,player_join,documented_game_entry,Verified
-0x48588,main_start_game@0x4800C,call,jsr 0x48b58.l,0x048B58,update_monster_bonus_from_score_per_coin,documented_game_entry,Verified
+0x48588,main_start_game@0x4800C,call,jsr 0x48b58.l,0x048B58,update_monster_spawn_bonus_from_score_per_coin,documented_game_entry,Verified
 0x48590,main_start_game@0x4800C,call,jsr 0x43f68.l,0x043F68,maze_addrandompickups,documented_game_entry,Verified
 0x48596,main_start_game@0x4800C,call,jsr 0x4526a.l,0x04526A,maze_show,documented_game_entry,Verified
 0x485B4,main_start_game@0x4800C,call,jsr 0x48bb6.l,0x048BB6,player_join,documented_game_entry,Verified
@@ -553,7 +553,7 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x4863C,main_start_game@0x4800C,call,jsr 0x438ae.l,0x0438AE,maze_new_level_setup,documented_game_entry,Verified
 0x48656,main_start_game@0x4800C,call,jsr 0x43486.l,0x043486,init_display,documented_game_entry,Verified
 0x48662,main_start_game@0x4800C,call,jsr 0x48bb6.l,0x048BB6,player_join,documented_game_entry,Verified
-0x48668,main_start_game@0x4800C,call,jsr 0x48b58.l,0x048B58,update_monster_bonus_from_score_per_coin,documented_game_entry,Verified
+0x48668,main_start_game@0x4800C,call,jsr 0x48b58.l,0x048B58,update_monster_spawn_bonus_from_score_per_coin,documented_game_entry,Verified
 0x48672,main_start_game@0x4800C,call,jsr 0x43f68.l,0x043F68,maze_addrandompickups,documented_game_entry,Verified
 0x48684,main_start_game@0x4800C,call,jsr 0x48bb6.l,0x048BB6,player_join,documented_game_entry,Verified
 0x4868C,main_start_game@0x4800C,call,jsr 0x4526a.l,0x04526A,maze_show,documented_game_entry,Verified
@@ -631,7 +631,7 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x4A0CA,player_death_sequence@0x49DE6,call,jsr 0x1b4.l,0x0001B4,write_high_score_entry,documented_os_api,Verified
 0x4A10A,player_death_sequence@0x49DE6,call,jsr 0x452d0.l,0x0452D0,setup_infopanel,documented_game_entry,Verified
 0x4A110,player_death_sequence@0x49DE6,call,jsr 0x44c7e.l,0x044C7E,show_continue_prompt,documented_game_entry,Verified
-0x4A140,attract_highscores@0x4A124,call,jsr 0x40d24.l,0x040D24,load_level_tileset,documented_game_entry,Verified
+0x4A140,attract_highscores@0x4A124,call,jsr 0x40d24.l,0x040D24,maze_select_bank,documented_game_entry,Verified
 0x4A146,attract_highscores@0x4A124,call,jsr 0x438ae.l,0x0438AE,maze_new_level_setup,documented_game_entry,Verified
 0x4A160,attract_highscores@0x4A124,call,jsr 0x43486.l,0x043486,init_display,documented_game_entry,Verified
 0x4A180,attract_highscores@0x4A124,call,jsr (a2),,,indirect_call,Strong inference
@@ -813,7 +813,7 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x4CAD8,demo_speech_cmd@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
 0x4CB00,demo_speech_cmd@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
 0x4CB1E,demo_speech_cmd@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
-0x4CD36,load_legend_page@0x4CD1C,call,jsr 0x40d24.l,0x040D24,load_level_tileset,documented_game_entry,Verified
+0x4CD36,load_legend_page@0x4CD1C,call,jsr 0x40d24.l,0x040D24,maze_select_bank,documented_game_entry,Verified
 0x4CD60,load_legend_page@0x4CD1C,call,jsr 0x438ae.l,0x0438AE,maze_new_level_setup,documented_game_entry,Verified
 0x4CD88,load_legend_page@0x4CD1C,call,jsr 0x43486.l,0x043486,init_display,documented_game_entry,Verified
 0x4CD94,load_legend_page@0x4CD1C,call,jsr 0x4cfae.l,0x04CFAE,draw_legend_overview_page,documented_game_entry,Verified
@@ -1139,7 +1139,7 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x527B4,dispatch:mob_collision_object_jumptbl[16]@0x52752,call,jsr 0x5fdb8.l,0x05FDB8,supersorc_place_helper,documented_game_entry,Verified
 0x527CE,dispatch:mob_collision_object_jumptbl[16]@0x52752,call,jsr 0x5dd72.l,0x05DD72,moblist_replace,documented_game_entry,Verified
 0x52826,dispatch:mob_collision_object_jumptbl[16]@0x52752,call,jsr 0x510fc.l,0x0510FC,calc_direction,documented_game_entry,Verified
-0x5286C,dispatch:mob_collision_object_jumptbl[16]@0x52752,call,jsr (a4),,,indirect_call,Strong inference
+0x5286C,dispatch:mob_collision_object_jumptbl[16]@0x52752;dispatch:mob_collision_object_jumptbl[50]@0x52864,call,jsr (a4),,,indirect_call,Strong inference
 0x528D0,main_exit_move@0x5287C,call,jsr 0x52b06.l,0x052B06,exit_get_id,documented_game_entry,Verified
 0x52958,main_exit_move@0x5287C,call,jsr 0x52b40.l,0x052B40,player_exit_sequence,documented_game_entry,Verified
 0x5296E,main_exit_move@0x5287C,call,jsr 0x5ddda.l,0x05DDDA,moblist_remove_and_clear,documented_game_entry,Verified

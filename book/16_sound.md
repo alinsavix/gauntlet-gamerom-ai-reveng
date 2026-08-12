@@ -4,7 +4,8 @@
 music, effects, and a cabinet that talks constantly?
 
 **By the end you will understand:** what lives on the sound board and why it
-is a separate computer, the one-byte wire between the two processors, the
+is a separate computer, the pair of one-byte latches between the two
+processors, the
 small queue and once-per-frame drain on the game side, how the game notices
 a dead sound board and reboots it, why your quarters arrive as answers to a
 sound command, and how the cabinet builds a sentence out of two commands.
@@ -220,8 +221,8 @@ which visitor it is before you can see the sprite.
 
 ## Speech as game design
 
-Of the two hundred and nineteen catalogued commands, one hundred and forty
-are speech, and the phrases are built to be combined. The ROM stores "NOW
+Of the two hundred and nineteen classified commands in the catalogue, one
+hundred and forty are speech, and the phrases are built to be combined. The ROM stores "NOW
 HAS" as one phrase and "EXTRA ARMOR", "LIMITED
 INVISIBILITY", "EXTRA SHOT POWER" and the rest as others. It stores sixteen
 name phrases covering four colors times four classes. It stores "IS IT" and
@@ -338,7 +339,11 @@ images alone.
 >   the OS's use of it is a status/coin poll, and the supplied label for that
 >   entry is a guess rather than a checked identification.
 > - Command list: `refs/soundcmds.csv` (219 entries: 140 speech, 58 effects,
->   9 music, 12 unidentified); the main-loop subset with verified call sites
+>   9 music, 3 control entries, and 9 still unidentified). MAME/6502 tracing
+>   identifies
+>   0x00 as sound-engine reinitialize/stop-all, 0x06 as the command-count query
+>   returning 0xDB, and 0x07 as the diagnostic fault-bitmap query that arms
+>   liveness sentinels; the main-loop subset with verified call sites
 >   is `doc/04_game_subsystems.md` §11.5. The mass-door-open command 0x12 is
 >   pushed at 0x47FF4 after a 0x400-slot scan for vertical-door objects. The
 >   thief/mugger pair shares one call site at 0x4DFC0–0x4DFD8, selecting
