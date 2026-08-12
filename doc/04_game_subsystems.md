@@ -514,11 +514,16 @@ Called when transitioning to a new level:
 
 Decompresses maze data from the slapstic ROM into playfield RAM. See `05_data_reference.md` §3.19 for the verified bytecode encoding (note: 0xC0–0xDF skip *without* adding a wall; only 0xE0–0xFF add one).
 
-Verified decoder mechanics: header bytes 7/8/9/0xA (HT1/HT2/VT1/VT2) are copied to 0x904866/68/6A/6C; the "last type" register initializes to **HT2**; the tile cursor starts at slot 0x20 (row 0 is not emitted by this function); compressed data begins at maze+0xB and game decoding loops until the cursor reaches 0x400. The game does not test a terminator byte. The stored ROM records nevertheless end in a zero delimiter after the final consumed byte; offline extraction uses adjacent pointer-table entries for record length and verifies this delimiter. For bytecodes 0x40–0x7F, `(b>>4)&3` selects HT1/VT1/HT2/VT2 via the pointer table at 0x59B54; the run count always comes from the bytecode's low nibble (+1); the H/V type byte contributes the mode (top 2 bits, §3.20) and the element (low 6 bits). Horizontal runs use `maze_tile_write` (consecutive increasing slots, returns next cursor); vertical runs use `maze_tile_write_at`, which writes successive elements at decreasing slots (`-0x20`, or `-0x1F` in the odd-angle case) while advancing the main cursor by 1. **Confidence: Verified.**
+Verified decoder mechanics: header bytes 7/8/9/0xA (HT1/HT2/VT1/VT2) are copied to 0x904866/68/6A/6C; the "last type" register initializes to **HT2**; the tile cursor starts at slot 0x20 (row 0 is not emitted by this function); compressed data begins at maze+0xB and game decoding loops until the cursor reaches 0x400. Immediately after the decoder returns, `maze_setupnew` calls `maze_place_object(0, 2, 0x20)` at 0x44C18, synthesizing row 0 as 32 solid-wall markers. MAME write watches observed all 32 picture/H/V/link records and no row-0 write inside `maze_decode`. The game does not test a terminator byte. The stored ROM records nevertheless end in a zero delimiter after the final consumed byte; offline extraction uses adjacent pointer-table entries for record length and verifies this delimiter. For bytecodes 0x40–0x7F, `(b>>4)&3` selects HT1/VT1/HT2/VT2 via the pointer table at 0x59B54; the run count always comes from the bytecode's low nibble (+1); the H/V type byte contributes the mode (top 2 bits, §3.20) and the element (low 6 bits). Horizontal runs use `maze_tile_write` (consecutive increasing slots, returns next cursor); vertical runs use `maze_tile_write_at`, which writes successive elements at decreasing slots (`-0x20`, or `-0x1F` in the odd-angle case) while advancing the main cursor by 1. **Confidence: Verified.**
 
 ### 5.4 Maze Object Placement (`maze_place_object`, 0x45E40)
 
 Central dispatcher called by `maze_decode` for each object token. Creates MOBs for:
+
+Its ABI is `maze_place_object(uint16 start_slot, uint16 object_type,
+uint16 count)`, returning the next slot (`start_slot + count`) in `D0.l`.
+Besides decoder tokens, `maze_setupnew` uses this counted form to create the
+32-cell wall row described above.
 
 - **Marker types** (walls, traps, forcefields): writes `mob_picture = 0x8000/0x8001/0x8003`. Post-decode scan renders actual playfield tiles.
 - **Dragon (type 0x3C):** Special multi-slot handling — occupies 2×2 maze cells. Calls dragon setup at 0x5496E. **Suppressed** (written as empty) when `game_mode` == 0 and `levelnum_current` < 12 (and level ≠ 9999) — dragons never spawn from maze data before level 12 in a normal game.
@@ -1110,6 +1115,16 @@ Idle handling, when no byte arrived:
   reloads the timer to 0xF0 (240 frames) and clears retry count 0x9049F4. A
   failed send clears the timer so the next frame retries immediately and
   increments the retry count; above 0xB4 (180) it performs a full reset.
+
+Targeted MAME tracing through the 6502 NMI dispatcher identifies command 0x07
+more precisely: it replies with an eight-bit sound-board fault bitmap, then
+sets foreground-loop and IRQ liveness sentinels that normal execution must
+clear before the next diagnostic poll. The OS sound test decodes bits 0–7 as
+speech, music, interrupt, two RAM, and three ROM failures. Command 0x06 is the
+companion command-count query; it replies 0xDB, the exclusive upper bound for
+the 219 command IDs 0x00–0xDA. Command 0x00 follows the ordinary queue path but
+dispatches to a full engine reinitialization that clears the queue, voice
+links, and all 30 active voice records—its operative result is stop-all.
 
 `sound_system_reset` (0x42DC8) calls OS 0x254 with (0, 0), sets the 180-frame
 holdoff, clears `sound_queue_state` and the retry count, and resets the ring.

@@ -6,6 +6,50 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
 |---|---|---|---|
 | — | — | No active prioritized issue remains in this backlog. Unresolved findings raised by the 2026-08-11 full semantic audit are recorded in the repository-root `SOL_ISSUES.md`; promote one back into this table if it becomes testable from the supplied artifacts. | — |
 
+## Resolved in the 2026-08-12 MAME trace pass
+
+- **SOL-02 resolved:** `maze_decode` still starts at slot 0x20, but
+  `maze_setupnew` immediately follows it with
+  `maze_place_object(0, 2, 0x20)`. MAME write watches captured the resulting
+  32 solid-wall marker records in slots 0–31. The same trace verified that
+  `maze_place_object` takes `(start_slot, object_type, count)` and returns the
+  next slot in `D0.l`.
+- **SOL-09 resolved:** the first active player's character class indexes the
+  four bytes at 0x40E66: Warrior→3, Valkyrie→0, Wizard→4, Elf→0. Four ordinary
+  coin/select/join runs reached all indices; subsequent joins clear the bonus
+  at 0x48F00 rather than reading the table.
+- **SOL-10 resolved:** transporter route cells and character portraits coexist.
+  One-based route IDs 1–32 reach only offsets 0x02–0x2A and 0x00–0x14 in the
+  two padded rows; portrait destinations start at offset 0x36. An original-code
+  route connection left every portrait word intact. This is spatial reuse of
+  unreachable padding, not phase-separated lifetime aliasing.
+- **Operator fields resolved:** MAME's Game Options screen plus the tagged
+  descriptor stream verify bits 8–9 as Coins to Start, bit 12 as Restore
+  Factory Default Settings, and bit 15 as Reset High Score Tables. Normal game
+  code still does not read those fields. The same screen confirms bits 5–7 are
+  Atari's operator-facing “Game Difficulty” setting; disassembly shows its
+  principal gameplay effect is generator spawn probability.
+- **Control labels observed:** the switch test prints the game-supplied labels
+  `WARRIOR <MAGIC> button` and `WARRIOR <FIRE> button`. MAME maps those inputs
+  to Button 2 and Button 1 respectively. This verifies the software/operator
+  label, but not the physical cabinet's silkscreen wording (SOL-01).
+- **Sound controls resolved:** 6502 dispatch and RAM-write traces identify
+  command 0x00 as full engine reinitialize/stop-all, 0x06 as the command-count
+  query replying 0xDB (219 IDs, 0x00–0xDA), and 0x07 as the eight-bit
+  diagnostic fault query that arms foreground and IRQ liveness sentinels.
+- **Enum evidence strengthened:** creation/animation PCs dynamically identify
+  representative fixed-MOB slots in every observed family (player/demon shots,
+  effects, scoring, exits, and transporter animation). The values 0,2,…,0xE
+  formerly called MOB “perspective nibbles” are instead verified direction-
+  derived byte offsets into picture-word tables. No thief appeared in the
+  bounded level-1 attract corpus, so the disputed thief-mode names remain open.
+- **Retained-module non-entry strengthened:** an exact-PC MAME campaign trapped
+  every even address in OS range 0x8000–0x9A0E and recorded zero entries during
+  600 emulated seconds of cold boot/attract/demo, service-at-reset and post-boot
+  service traversals, and an injected-invalid-header diagnostic traversal.
+  This is strong dynamic evidence for the exercised phases, not a universal
+  proof against every possible indirect target or error state (SOL-19).
+
 ## Resolved in the 2026-08-11 full semantic audit
 
 Findings from a whole-image semantic re-derivation of the game and OS ROMs,

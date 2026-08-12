@@ -209,14 +209,14 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | Bits | Meaning |
 |------|---------|
 | 0–4 | COINHEALTH setting: index 0–31 into `health_per_coin_table` (0x57862), giving 100–2000 in 25/50/100-unit steps |
-| 5–7 | "Extra monsters" tuning (0–7): selects the row of `monster_spawn_probability_table` (0x40E46) for each generator's probability out of 32 — `andi.w #0xE0,d3; lsr.w #3,d3; add.w level_players_active,d3; subq.l #1,d3; lea 0x40E46,a0` at 0x40F62–0x40F70. It also scales the solo-play Warrior/Wizard random-pickup reduction in `maze_addrandompickups`. This is **not** the difficulty field; §3.10's `GSETTING_DIFFICULTY_MASK` name for 0x00E0 is retired (verified — all 35 read sites of 0x904A24 examined) |
-| 8–9 | **No reader.** All 35 references to 0x904A24 were disassembled; no instruction masks 0x0300. The former "difficulty level" reading is not grounded in code. **Confidence: Unknown.** |
+| 5–7 | Operator-facing **Game Difficulty** setting (0–7), implemented chiefly as monster-generation tuning: selects the row of `monster_spawn_probability_table` (0x40E46) for each generator's probability out of 32 — `andi.w #0xE0,d3; lsr.w #3,d3; add.w level_players_active,d3; subq.l #1,d3; lea 0x40E46,a0` at 0x40F62–0x40F70. It also scales the solo-play Warrior/Wizard random-pickup reduction in `maze_addrandompickups`. MAME's Game Options screen confirms Atari's label; disassembly establishes the actual effects. |
+| 8–9 | **Coins to Start** in the OS operator editor: values 0–3 display 1–4. MAME's Game Options screen rendered value 0 as “1” from the default word 0xE090. No normal game-code reader masks 0x0300; the meaning is Verified for operator configuration/storage, not as a gameplay consumer. |
 | 10 | **Reduced-text / short-dwell selector**, not a 2-player flag (the two-player config word is `two_player_mode` at 0x9049E2). Eleven read sites mask 0x0400; 0x4523C selects `global_ui_delay_timer` 0xB4 vs 0x96, and §5.6 `first_encounter_alt_message_ptrs` selects the compact message set from the same bit |
 | 11 | Speech disable. Masked at 0x4AD5A gating the `sound_play` at 0x4AD76, and §5.5 `treasure_timeout_speech` forces element 0 from the same bit |
-| 12 | **No reader.** No instruction masks 0x1000 against this word. **Confidence: Unknown.** |
+| 12 | **Restore Factory Default Settings** request in the OS operator editor. MAME rendered the clear default bit as “No.” No normal game-code reader masks 0x1000; the meaning is Verified for the editor/schema. |
 | 13 | Secret-room winner name-entry enable: gates the ENTER-YOUR-NAME flow in `secret_getname` (0x54EC6); when clear, winners get `player_status` = 2 and a short between-level delay (verified — sole reader) |
 | 14 | Music/attract sound enable |
-| 15 | **No reader.** No instruction masks 0x8000 against this word. **Confidence: Unknown.** |
+| 15 | **Reset High Score Tables** request in the OS operator editor. MAME rendered the set default bit as “Yes.” No normal game-code reader masks 0x8000; the meaning is Verified for the editor/schema. |
 
 ### 1.11 Player Extended State
 
@@ -354,8 +354,8 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x905F6D | 1 B | `secret_saved_supershot` | Single-byte secret-room transition scratch. `main_start_game` saves the selected secret entrant's supershot byte here before clearing the ordinary per-player value; `show_level_end_bonus_screen` adds it back to that player on return. The former continue-screen interpretation was contradicted. |
 | 0x905F80 | 2 B × 64 | `priority_bucket_heads` | Complete cumulative head table for the one depth/priority chain, exact range 0x905F80–0x905FFF. Insertion/removal updates entries from the selected band toward element 0; `main_move_monsters` uses element 0 as its fallback head. |
 | 0x905F82 | 2 B × 63 overlapping tail view | `priority_bucket_heads_tail` | Elements 1–63 of `priority_bucket_heads`. Scroll-indexed traversal addresses this tail base. |
-| 0x905C54 | 256 B (2 B cells, 22 per 0x80-B row) | `tport_route_forward` | Forward transporter/pathfinding connection table, exact range 0x905C54–0x905D53. Cell address is `base + (id / 22) * 0x80 + (id % 22) * 2`, verified at `tport_route_write_pair` 0x51082–0x51092 (`lea 0x905C54,a0; divu.w #0x16,d0; asl.w #7,d0; adda.w d0,a0; swap d0; add.w d0,d0`); transporter ids 0–31 therefore occupy two padded rows. Bits 15–8 hold the linked transporter ID and the low nibble holds direction+1 (0 means no route). Written together with the reverse table by 0x5107A; read as a paired longword by 0x510BC. The 44 used bytes of each 128-byte row leave padding that the character-select portrait writes reuse — see `portrait_alpha_dest_ptrs`/`portrait_sprite_dest_ptrs` in §5.6. |
-| 0x905D54 | 256 B (2 B cells, 22 per 0x80-B row) | `tport_route_reverse` | Reverse-direction companion to `tport_route_forward`, exact range 0x905D54–0x905E53, with the same padded-row addressing and word format. `tport_route_connect` (0x4E684) writes both directions; 0x4E73A only fills an empty route. Its row padding is likewise reused by the portrait destination writes. |
+| 0x905C54 | 256 B (2 B cells, 22 per 0x80-B row) | `tport_route_forward` | Forward transporter/pathfinding connection table, exact range 0x905C54–0x905D53. Cell address is `base + (id / 22) * 0x80 + (id % 22) * 2`, verified at `tport_route_write_pair` 0x51082–0x51092. One-based transporter IDs 1–32 reach only row-0 offsets 0x02–0x2A and row-1 offsets 0x00–0x14. Bits 15–8 hold the linked transporter ID and the low nibble holds direction+1 (0 means no route). MAME observed live route cells coexisting with all portrait words: portrait destinations begin at padding offset 0x36, beyond the route index domain. This is safe simultaneous spatial reuse, not lifetime-separated aliasing. |
+| 0x905D54 | 256 B (2 B cells, 22 per 0x80-B row) | `tport_route_reverse` | Reverse-direction companion to `tport_route_forward`, exact range 0x905D54–0x905E53, with the same padded-row addressing, reachable offsets, and word format. `tport_route_connect` (0x4E684) writes both directions; 0x4E73A only fills an empty route. MAME route-call tracing confirmed that its live cells do not overlap the portrait padding. |
 | 0x910700 | 2 B × 32 | `tport_pos_table` | Maze slot index for each transporter |
 | 0x910780 | 2 B × 64 | `ff_segment_table` | Forcefield segment list, exact range 0x910780–0x9107FF. Setup clears all 64 words, emits at most 62 records, and leaves a zero terminator. Record bits: 9–0 start packed maze cell; 13–10 segment length minus one; bit 14 horizontal-wrap correction; bit 15 set for horizontal segments and clear for vertical. |
 
@@ -507,10 +507,13 @@ SLEEPING from STUNNED, TURNING or LOCKED.
 
 ### 3.8 Fixed MOB IDs
 
-**Confidence: Verified** that 1–29 are MOB slot numbers in `vram.mob_picture`;
-**Unknown** for the twenty-nine individual names. They are not indices into any
-documented array — `active_mob_ids` holds twelve entries — and no per-ID
-consumer was traced.
+**Confidence: Verified** that 1–29 are reserved MOB slot numbers in
+`vram.mob_picture`. A 600-second MAME attract trace dynamically identified
+player-shot slots 2/4, demon-shot slot 5, effect slots 13/14, score slot 17,
+exit slots 21/22/24, and transporter slot 26 from their creation and animation
+PCs. Together with the code's `base + player/channel` indexing, these events
+verify the named slot families; not every member became live in that demo
+corpus.
 
 | Name | Value |
 |------|-------|
@@ -563,21 +566,23 @@ the legend lane is reached only through the `tst.w game_mode` / `bge` sign test
 
 ### 3.10 Game Settings (COINHEALTH values)
 
-**Confidence: Verified** for the fields with an observed mask; **Unknown** for
-0x0300, 0x1000 and 0x8000, which no instruction reads. This table and the
-`game_settings` bit layout in §1.10 are the same sixteen bits and must agree.
+**Confidence: Verified** for gameplay fields with an observed mask and for the
+three OS-operator fields observed in MAME. The latter have no normal game-code
+reader; their names describe option-editor/EEPROM semantics. This table and
+the `game_settings` bit layout in §1.10 are the same sixteen bits and must
+agree.
 
 | Name | Value | Evidence |
 |------|-------|----------|
 | GSETTING_COINHEALTH | 0x001F, index 0–31 into `health_per_coin_table` (0x57862) = 100–2000 in 25/50/100 steps | `andi #0xFF` at 0x430A8; table read by `coincheck`/`player_coindrop` |
-| GSETTING_EXTRA_MONSTERS_MASK | 0x00E0 (224) | `andi.w #0xE0` at 0x40F62; selects the `monster_spawn_probability_table` row. Formerly `GSETTING_DIFFICULTY_MASK` — **Contradicted**, it is not the difficulty field |
-| *(unnamed)* | 0x0300 (768) | **Unknown** — no reader; the former `GSETTING_COINTOSTART_MASK` reading is unsupported |
+| GSETTING_DIFFICULTY_MASK | 0x00E0 (224) | OS Game Options field “Game Difficulty”; `andi.w #0xE0` at 0x40F62 selects the `monster_spawn_probability_table` row, so its principal verified gameplay effect is generator spawn probability |
+| GSETTING_COINTOSTART_MASK | 0x0300 (768) | OS Game Options field “Coins to Start,” values 0–3 → 1–4; dynamically verified in MAME, with no normal game-code reader |
 | GSETTING_TEXT_REDUCE | 0x0400 (1024) | 11 read sites, e.g. 0x4523C |
 | GSETTING_SPEECH_DISABLE | 0x0800 (2048) | 0x4AD5A |
-| *(unnamed)* | 0x1000 (4096) | **Unknown** — no reader; former `GSETTING_RESET_FLAG` |
+| GSETTING_RESET_FLAG | 0x1000 (4096) | OS Game Options action “Restore Factory Default Settings”; dynamically verified in MAME, with no normal game-code reader |
 | GSETTING_ALLOW_CONTEST_FLAG | 0x2000 (8192) | sole reader 0x54EE2 in `secret_getname` |
 | GSETTING_ATTRACT_SOUNDS | 0x4000 (16384) | sole reader 0x444E0 gating `sound_play(0x3B)` |
-| *(unnamed)* | 0x8000 (32768) | **Unknown** — no reader; former `GSETTING_SCORE_RESET_FLAG` |
+| GSETTING_SCORE_RESET_FLAG | 0x8000 (32768) | OS Game Options action “Reset High Score Tables”; dynamically verified in MAME, with no normal game-code reader |
 
 ### 3.11 Joystick Input Bits
 
@@ -732,11 +737,14 @@ normalization) is therefore live maze data, not merely an end sentinel.
 | MAZEOBJ_TRANSPORTER | 62 (0x3E) |
 | MAZEOBJ_FORCEFIELDHUB | 63 (0x3F) |
 
-### 3.15 MOB Perspectives
+### 3.15 Direction-table byte offsets
 
-**Confidence: Unknown.** The even values 0x0–0xE are a plausible perspective
-nibble of the MOB picture word, but no ROM table indexes them and no consumer
-was traced. Retained as a naming convention, not a verified encoding.
+**Confidence: Verified.** These even values are `2 * direction`, used as byte
+offsets into picture-word tables, not perspective nibbles encoded in a MOB
+picture word. At 0x4AC1A the player direction is doubled; 0x4AC2A indexes the
+idle picture-word table at 0x58A4A with the result. MAME observed the selected
+words written to live player MOBs. The compass names follow the independently
+verified active-low joystick direction map.
 
 | Direction | Value |
 |-----------|-------|
@@ -1014,10 +1022,10 @@ For ROM data, every catalog start has a matching project flag, and adjacent stru
 | 0x40DB2 | 40 B | `monster_anim_idle_ptrs` — ten longword animation pointers in monster-index order; shared/null entries encode shared banks or no separate bank. |
 | 0x40DDA | 40 B | `monster_anim_moving_ptrs` — ten parallel moving-animation pointers `{NULL, 0x59026, 0x59126, NULL, 0x59226, 0x59026, 0x592B6, 0x593B6, NULL, NULL}`; see §7.2 for the per-type mapping. |
 | 0x40E1E | 40 B | `monster_oddangle_table` — ten four-byte per-type direction-adjustment records consumed by the monster movement path. |
-| 0x40E66 | 4 B | `monster_spawn_probability_bonus_bytes` — live 4-entry **byte** table `{3,0,4,0}`, not two words and not residue. Two consumers load it as an explicit immediate base: `player_start_inner` 0x48EF0 (`movea.l #0x40E66,a1; move.b (a1,d0.w),ram.monster_spawn_probability_bonus`) and `maze_addrandompickups` 0x44110 (`move.b (a0,d0.w),d0; ext.w d0; sub.w d0,d5`, where d5 was loaded from `monster_spawn_probability_bonus` at 0x44106). The next bytes `48 E7 3F 3E` are a `movem.l` prologue, so the table is exactly 0x40E66–0x40E69. The index domain is not yet traced — see the open-issues list. |
+| 0x40E66 | 4 B | `monster_spawn_probability_bonus_bytes` — live character-indexed **byte** table `{3,0,4,0}` = Warrior 3, Valkyrie 0, Wizard 4, Elf 0, not two words and not residue. In `player_start_inner`, only the join that makes `level_players_active == 1` doubles the player index, loads `player_character[player_index]` at 0x48EEC, and uses that class 0–3 at 0x48EF6; every later join clears the bonus at 0x48F00. MAME ordinary coin/select/join runs reached all four indices and a two-player run confirmed the later-join clear. `maze_addrandompickups` at 0x44110 uses the same table while adjusting solo Warrior/Wizard pickups. The next bytes `48 E7 3F 3E` are a `movem.l` prologue, so the table is exactly 0x40E66–0x40E69. **Confidence: Verified.** |
 | 0x41BD0 | 32 B | `player_character_collision_block_matrix` — 4×4 word matrix indexed by moving character ×8 plus encountered character ×2. A nonzero cell defers movement in the corresponding directional player-collision path. |
 | 0x40E02 | 28 B | `monster_level_flag_overrides` — seven four-byte padded records. Only byte 0 of each record is read; bytes 1–3 are zero. The leading bytes are `{0x80,0xC0,0,0,0xA0,0xA0,0x80}`. `monsters_everything` walks the seven bits of `(level_flags_1 & 0x73)` and, for each set bit, copies the corresponding leading byte into the high byte of that class's four-byte stack control value. The default control values retain low word 0x0080 or 0x0100 according to `level_flags_2`; this is a per-class control override table, not a seven-longword speed table. |
-| 0x40E46 | 32 B | `monster_spawn_probability_table` — generator **spawn probability out of 32**: 8 rows (EEPROM settings 0x904A24 **bits 5–7**, the "extra monsters" tuning 0–7 — *not* the difficulty bits 8–9) × 4 columns (players−1). Index = `((settings & 0xE0) >> 3) + players − 1`. Values: v0 = 4,11,15,18 up to v7 = 18,25,29,32. Added to `int8(0x90405F)` per-level bonus. Capped at `level_number * 2` (except level 1). If `frame_overflow` (0x904916) non-zero: forced to 0. `handle_generate` compares the result against `getrandom(32)` (0x49300–0x4930E) and spawns only when the table value wins; the former `monster_count_table` name and "max monsters to process per frame" reading were **Contradicted**. See `04_game_subsystems.md` §3.4. |
+| 0x40E46 | 32 B | `monster_spawn_probability_table` — generator **spawn probability out of 32**: 8 rows (EEPROM settings 0x904A24 **bits 5–7**, labelled “Game Difficulty” by the operator UI) × 4 columns (players−1). Index = `((settings & 0xE0) >> 3) + players − 1`. Values: v0 = 4,11,15,18 up to v7 = 18,25,29,32. Added to `int8(0x90405F)` per-level bonus. Capped at `level_number * 2` (except level 1). If `frame_overflow` (0x904916) non-zero: forced to 0. `handle_generate` compares the result against `getrandom(32)` (0x49300–0x4930E) and spawns only when the table value wins; the former `monster_count_table` name and "max monsters to process per frame" reading were **Contradicted**. See `04_game_subsystems.md` §3.4. |
 | 0x4A4FA | 64 B | `stun_direction_remap` — 4 rows × 16 bytes, ending immediately before `main_move_players` at 0x4A53A; maps the input-direction nibble while a player is stunned |
 | 0x58070 | 32 B | `invisibility_flash_masks` — sixteen phase masks used by the player invisibility flicker path. |
 | 0x580A8 | 16 B | `player_speed_normal` — 8 words indexed by character × normal/powered state |
@@ -1269,8 +1277,8 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x570B4 | 8 B | `portrait_display_offsets` — two four-byte arrays: X positions `{12,5,12,18}` at 0x570B4 and Y positions `{24,26,29,26}` at 0x570B8, indexed by character. |
 | 0x570BC | 8 B | `portrait_alpha_words` — four words `{0x841C,0x841C,0x841E,0x841D}` written to the character-specific alpha destinations in `portrait_alpha_dest_ptrs`. |
 | 0x570C4 | 8 B | `portrait_sprite_words` — four character portrait picture words `{0x841D,0x841E,0x841F,0x841F}` written through `portrait_sprite_dest_ptrs`. |
-| 0x570CC | 16 B | `portrait_alpha_dest_ptrs` — four longword alpha/playfield destination pointers parallel to `portrait_alpha_words`. |
-| 0x570DC | 16 B | `portrait_sprite_dest_ptrs` — four longword destination pointers parallel to `portrait_sprite_words`; exact range ends at 0x570EB. |
+| 0x570CC | 16 B | `portrait_alpha_dest_ptrs` — four longword destinations parallel to `portrait_alpha_words`; MAME observed writes to 0x905C9A, 0x905D16, 0x905D96, and 0x905E1A, all in unreachable transporter-row padding. |
+| 0x570DC | 16 B | `portrait_sprite_dest_ptrs` — four longword destinations parallel to `portrait_sprite_words`; MAME observed writes to 0x905C9C, 0x905D20, 0x905DA0, and 0x905E1C. The ROM range ends at 0x570EB. |
 | 0x570EC | 32 B | `joystick_direction_bitmasks` — 16 words `{00FE,00FC,00FD,00F9,00FB,00F3,00F7,00E7,00EF,00CF,00DF,009F,00BF,003F,007F,007E}`, exact range 0x570EC–0x5710B. **No consumer of any kind exists**: a whole-image 32-bit operand scan finds no reference, and the nearest bound bases (0x570DC and 0x5710C) both index forward. Their complements form a 16-step single-bit/adjacent-pair ring, which contradicts a 4-bit nibble domain, so the former "indexed by the four-bit joystick-direction nibble" claim is withdrawn. **Confidence: Verified** for the bytes and the absence of a consumer; **Unknown** for the index rule and purpose. |
 | 0x5710C | 108 B | `floor_palette_color_indices` — nine floor-pattern rows × six words. `init_display` selects row `floorpattern × 6`; columns 0–2 are used when `wallpattern >= 11`, columns 3–5 otherwise. Each word is a color index added to `(playfield_palette_index << 4)` before reading three palette words. Exact range 0x5710C–0x57177. |
 | 0x57178 | 96 B | `service_instruction_text_chain` — formatted-text nodes and inline strings “CLEARING STATS”, “TO ABORT”, “WARRIOR BUTTONS”, and “PRESS BOTH”, exact range 0x57178–0x571D7. Nodes use the same 8/12-byte linked descriptor format as the legend chains. |

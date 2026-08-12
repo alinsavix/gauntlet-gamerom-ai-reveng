@@ -24,7 +24,7 @@ CONTRACTS = (
     (0x40D4E, "maze_select_bank_special", "uint32 maze_number", "void", "frameless wrapper; argument is consumed by find_maze", ()),
     (0x44AC2, "maze_setupnew", "const uint8_t *maze_record", "void", "", (0x8,)),
     (0x4C1BC, "maze_decode", "const uint8_t *maze_record", "void", "", (0x8,)),
-    (0x45E40, "maze_place_object", "uint16 slot_or_offset, uint16 object_type, uint16 scan_base", "void", "", (0xA, 0xE, 0x12)),
+    (0x45E40, "maze_place_object", "uint16 start_slot, uint16 object_type, uint16 count", "uint16 next slot in D0.l", "", (0xA, 0xE, 0x12)),
     (0x43F68, "maze_addrandompickups", "uint16 enable_random_pickups", "void", "", (0xA,)),
     (0x42E9A, "maze_randomplace", "uint16 object_type", "uint16 packed_slot in D0.l", "", (0xA,)),
     (0x4526A, "maze_show", "void", "void", "", ()),
@@ -119,7 +119,7 @@ def main() -> None:
             "return": return_value,
             "exceptional_convention": convention,
             "direct_control_sites": ";".join(f"0x{site:05X}" for site in sites[address]),
-            "confidence": "Strong inference" if name == "maze_place_object" else "Verified",
+            "confidence": "Verified",
         }
         for address, name, arguments, return_value, convention, _ in CONTRACTS
     ]

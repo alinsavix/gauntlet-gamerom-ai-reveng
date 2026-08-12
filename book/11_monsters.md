@@ -150,9 +150,10 @@ of them per frame.
 
 When a generator's turn arrives, one number decides everything. It comes from a
 thirty-two entry table indexed by the number of active players and by the
-operator's "extra monsters" setting:
+operator's **Game Difficulty** setting. The label is Atari's own service-menu
+wording; the code shows that its principal effect is this spawn probability:
 
-| Extra monsters | 1 player | 2 players | 3 players | 4 players |
+| Game difficulty | 1 player | 2 players | 3 players | 4 players |
 |----------------|----------|-----------|-----------|-----------|
 | 0 (lowest) | 4 | 11 | 15 | 18 |
 | 3 | 10 | 17 | 21 | 24 |

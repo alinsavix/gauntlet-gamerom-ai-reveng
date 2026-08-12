@@ -339,7 +339,11 @@ images alone.
 >   the OS's use of it is a status/coin poll, and the supplied label for that
 >   entry is a guess rather than a checked identification.
 > - Command list: `refs/soundcmds.csv` (219 entries: 140 speech, 58 effects,
->   9 music, 12 unidentified); the main-loop subset with verified call sites
+>   9 music, 3 control entries, and 9 still unidentified). MAME/6502 tracing
+>   identifies
+>   0x00 as sound-engine reinitialize/stop-all, 0x06 as the command-count query
+>   returning 0xDB, and 0x07 as the diagnostic fault-bitmap query that arms
+>   liveness sentinels; the main-loop subset with verified call sites
 >   is `doc/04_game_subsystems.md` §11.5. The mass-door-open command 0x12 is
 >   pushed at 0x47FF4 after a 0x400-slot scan for vertical-door objects. The
 >   thief/mugger pair shares one call site at 0x4DFC0–0x4DFD8, selecting

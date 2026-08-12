@@ -182,7 +182,9 @@ support code, an archaeological curiosity Chapter 17 pokes at.
 The header includes one contribution of pure personality: the game supplies
 the strings the OS uses to label controls in the switch test, so Gauntlet
 II's diagnostics speak of the "WARRIOR joystick" and the "WARRIOR <FIRE>
-button." Even the self-test knows the red position is the Warrior's.
+button" and "WARRIOR <MAGIC> button." A MAME switch-test run displays those
+exact labels and maps Fire to Button 1 and Magic to Button 2. Even the
+self-test knows the red position is the Warrior's.
 
 ## Interrupts, the machine's pulse
 

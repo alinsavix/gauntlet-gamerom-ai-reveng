@@ -191,8 +191,8 @@ bytes), the maze and treasure-room rotation state, and the statistics below.
 The service-mode options editor is the OS's user interface driven by a
 descriptor stream the game supplies, which is how the same OS can present
 different menus for different games. Gauntlet II's stream offers: resetting
-high scores and restoring defaults, attract-mode sound, the difficulty and
-extra-monsters tuning, health per coin, coins to start, the secret-code
+high scores and restoring defaults, attract-mode sound, game difficulty
+(implemented chiefly as monster-generation tuning), health per coin, coins to start, the secret-code
 contest toggle from Chapter 13, speech on or off, and a reduced-text mode.
 A separate screen edits coin pricing, the multipliers and bonus units from
 the top of this chapter.

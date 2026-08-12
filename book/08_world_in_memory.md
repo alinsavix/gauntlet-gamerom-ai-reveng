@@ -101,8 +101,9 @@ Dynamic objects use slots 30 through 1023, and the assignment rule is
 beautiful: **a maze object's slot number is its packed cell address.** The
 ghost standing in row 12, column 20 is MOB 404, because that is the cell it
 occupies. (Maze decoding never emits row 0, whose slots 0 through 31
-overlap the reserved block, and the playable maze begins on the second
-row.) The consequences cascade:
+overlap the reserved block. Immediately after decoding, level setup explicitly
+fills those 32 slots with solid-wall markers, keeping the playable maze on the
+second row.) The consequences cascade:
 
 - Finding "whatever stands in that cell" is arithmetic, no searching.
 - Two objects cannot share a cell, enforced by construction.

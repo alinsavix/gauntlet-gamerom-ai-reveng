@@ -158,9 +158,11 @@ and over.
 ## The decoder
 
 Decoding walks a cursor across the 32×32 logical grid from Chapter 8,
-top-left to bottom-right, one slot at a time. (The cursor starts on the
-second row — the decoder never emits row 0, and the renderings in this book
-treat it as solid wall.) Each stream byte is a bytecode:
+top-left to bottom-right, one slot at a time. The cursor starts on the second
+row, so the decoder never emits row 0. Immediately after it returns,
+`maze_setupnew` explicitly places 32 type-2 wall markers into slots 0–31;
+the solid top boundary is runtime state, not merely a rendering convention.
+Each stream byte is a bytecode:
 
 | Byte range | Action |
 |-----------|--------|

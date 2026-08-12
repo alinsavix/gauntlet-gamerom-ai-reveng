@@ -461,10 +461,9 @@ inference**.
 ### 5.1 Maze / Slapstic callable contracts
 
 **Confidence: Verified** for caller locations, stack offsets, returns, and
-exceptional conventions below, except the semantic names of
-`maze_place_object`'s first and third arguments, which remain a **Strong
-inference**. Normal rows use the stack ABI from `03_game_rom_structure.md`;
-only exceptions are called out.
+exceptional conventions below. Normal rows use the stack ABI from
+`03_game_rom_structure.md`; only exceptions are called out. MAME tracing of
+the post-decode row-0 fill verified `maze_place_object`'s counted ABI.
 
 | Address | Name | Arguments | Return | Convention exception |
 |---|---|---|---|---|
@@ -475,7 +474,7 @@ only exceptions are called out.
 | 0x40D4E | `maze_select_bank_special` | `uint32 maze_number` | void | Frameless wrapper; `find_maze` consumes its argument |
 | 0x44AC2 | `maze_setupnew` | `const uint8_t *maze_record` | void | — |
 | 0x4C1BC | `maze_decode` | `const uint8_t *maze_record` | void | — |
-| 0x45E40 | `maze_place_object` | `uint16 slot_or_offset, uint16 object_type, uint16 scan_base` | void | — |
+| 0x45E40 | `maze_place_object` | `uint16 start_slot, uint16 object_type, uint16 count` | next slot (`start_slot + count`) in `D0.l` | — |
 | 0x43F68 | `maze_addrandompickups` | `uint16 enable_random_pickups` | void | — |
 | 0x42E9A | `maze_randomplace` | `uint16 object_type` | packed slot in `D0.l` | — |
 | 0x4526A | `maze_show` | void | void | — |
