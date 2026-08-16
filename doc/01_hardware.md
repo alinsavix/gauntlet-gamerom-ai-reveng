@@ -230,7 +230,7 @@ The 2 KB hardware window contains **1,024 color entries**. Entries 0–767 have 
 | 512–639 | Playfield Shadow | 8 palettes × 16 colors |
 | 640–767 | Playfield | 8 palettes × 16 colors |
 
-> **Note:** The "Playfield Shadow" palette (512–639) mirrors the Playfield palette but at half intensity. Used when a MOB pixel has color index 1 (shadow behavior).
+> **Note:** The "Playfield Shadow" palette (512–639) mirrors the Playfield palette at reduced intensity. Used when a MOB pixel has color index 1 (shadow behavior). **Exact derivation (Confidence: Verified** by disassembly, capstone `row76.bin`): the game builds all 128 shadow entries from the playfield entries in the copy routine at `0x5FD80` (called from `0x436B8` with `src=0x910500`, `dst=0x910400`, `count=0x80`, `bias=0x7000`). For each 16-bit IRGB entry: `shadow = color − 0x7000` — i.e. subtract 7 from the intensity nibble (bits 15–12), leaving R/G/B untouched; if the subtraction borrows (source intensity ≤ 6), the RGB nibbles are kept and intensity is forced to 1 (`& 0x0FFF | 0x1000`). So a full-intensity color (I=15) drops to I=8 (~half, hence the "half intensity" shorthand), but the operation is a fixed −7 on the intensity nibble with a floor of 1, not an RGB halving or a "subtract 128."
 
 **To get RAM byte offset:** multiply color index by 2.
 
