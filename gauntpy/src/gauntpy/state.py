@@ -174,11 +174,42 @@ class GameState:
     # =========================================================================
     # WP-18 · sound (stubbed)
     # =========================================================================
+    # Outgoing command ring: 8 physical slots at 0x90404B (write head 0x904053,
+    # read head 0x904054), one slot reserved to distinguish full from empty, so
+    # usable capacity is 7 -- doc/04_game_subsystems.md §11.1-11.2.
+    sound_queue: list[int] = field(default_factory=list)
+    # Permanent history of every command main_update_sound has drained. Never
+    # cleared automatically -- this is the WP-18 "test oracle": other packages
+    # (and their tests) assert against it, e.g. "this event played sound 0x37".
+    sound_log: list[int] = field(default_factory=list)
+    # 0x9049EE, sound-board recovery holdoff. Named ``speech_counter`` in the
+    # loader symbols, but corrected in §11.3: the only writer is
+    # sound_system_reset, which loads 0xB4 (180 frames). Nonzero blocks both
+    # sound_play's immediate-send attempt and main_update_sound's drain.
+    sound_holdoff: int = 0
+    # 0x9049F0, low 3 bits are the sound board's own fault report, delivered as
+    # the reply to the diagnostic status query (command 0x07) -- §11.3.
+    sound_queue_state: int = 0
+    # 0x9049F2, idle timer counting down to the next status query (command
+    # 0x07); reloads to 0xF0 (240 frames) on a successful send -- §11.3. Initial
+    # value is not independently documented; matches the post-reset reload.
+    sound_idle_timer: int = 0xF0
+    # 0x9049F4, consecutive failed-status-send retry count; a full reset fires
+    # above 0xB4 (180) -- §11.3.
+    sound_retry_count: int = 0
+    # No real sound board exists in this simulation (WP-18 is stubbed at the
+    # queue boundary), so no reply byte ever arrives from OS 0x178 on its own.
+    # Tests can push bytes here (FIFO) to exercise sound_response's
+    # reply-handling branches -- §11.3.
+    sound_incoming: list[int] = field(default_factory=list)
 
     # =========================================================================
     # WP-19 · EEPROM and configuration
     # =========================================================================
-    game_settings: int = 0          # 0x904A24, EEPROM options word
+    game_settings: int = 0            # 0x904A24, EEPROM options word; bit layout in subsystems/eeprom.py
+    eeprom_write_timer: int = 0x8CA0  # 0x904012 target; §20 periodic-write countdown, 36,000 frames (~10 min @ 60Hz)
+    eeprom_settings_cache: int = 0    # 0x904B94, "last written" shadow of game_settings; §20 change detection
+    eeprom_save_path: str = "gauntpy_eeprom.json"  # no ROM address -- local persistence target, see eeprom.py
 
     # =========================================================================
     # WP-20 · boot and orchestration
