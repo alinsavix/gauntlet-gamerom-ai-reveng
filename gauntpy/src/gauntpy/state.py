@@ -1,0 +1,125 @@
+"""Game state -- the reimplementation's stand-in for working RAM.
+
+Field names match the documented RAM variable names so that any claim in
+``doc/05_data_reference.md`` can be checked against the code by grep. The
+original address is given in a comment on each field; it is documentation,
+not an address we honour.
+
+Types are Python ints, but widths matter: the original stores health and score
+as 32-bit longwords and nearly everything else as 16-bit words. Subsystems must
+mask on write where the original's wraparound is observable.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from .constants import Character, GameMode, PlayerStatus
+from .mob import MobTable
+from .rng import GameRandom
+
+NUM_PLAYERS = 4
+
+
+@dataclass
+class Player:
+    """Per-player state, gathered from the parallel arrays the original used."""
+
+    index: int
+    status: int = PlayerStatus.REMOVED          # 0x9049A0, byte
+    character: int = Character.WARRIOR          # 0x9048E8
+    health: int = 0                             # 0x904980, longword, stride 4
+    score: int = 0                              # 0x904990, longword
+    powers: int = 0                             # 0x9048E0, word
+    keysnum: int = 0                            # 0x90405A, byte
+    potionsnum: int = 0                         # 0x904055, byte
+    bonusmult: int = 1                          # player_bonusmult
+    mob_slot: int = 0                           # active_mob_ids
+    direction: int = 0                          # facing, 0-7
+    anim_counter: int = 0
+    state_timer: int = 0xFFFF                   # 0x904A26, low-health cadence
+    stundelay: int = 0                          # player_stundelay
+    hurt_cooldown: int = 0
+    acid_timer: int = 0
+    supershot: int = 0                          # 0x905F68
+    death_damage_counter: int = 0               # 0x904B3A
+    damage_sample_timer: int = 60               # 60-frame window, §4.3
+    pending_damage: int = 0
+    coin_count: int = 0
+
+    @property
+    def active(self) -> bool:
+        """On the level right now and taking input."""
+        return bool(self.status & PlayerStatus.ALIVE_HERE)
+
+
+@dataclass
+class GameState:
+    """Everything the main loop's 28 per-frame calls read and write."""
+
+    # --- core objects ---------------------------------------------------------
+    mobs: MobTable = field(default_factory=MobTable)
+    rng: GameRandom = field(default_factory=GameRandom)
+    players: list[Player] = field(
+        default_factory=lambda: [Player(index=i) for i in range(NUM_PLAYERS)]
+    )
+
+    # --- frame timing ---------------------------------------------------------
+    vblank_flag: int = 0            # 0x904002, the semaphore
+    frame_counter: int = 0          # 0x904006
+    frame_overflow: int = 0         # 0x904916, generator spawn throttle
+
+    # --- mode and gating ------------------------------------------------------
+    game_mode: int = GameMode.TITLE  # 0x904918
+    dialog_timer: int = 0            # 0x904A9E, gates the 16-call world band
+
+    # --- level ----------------------------------------------------------------
+    mazenum_current: int = 0        # 0x904000
+    levelnum_current: int = 0       # 0x904004
+    level_flags: int = 0            # LFLAG1/2 -- see gex.constants
+    level_flags_2: int = 0
+    level_flags_3: int = 0
+    level_flags_4: int = 0
+    level_players_active: int = 0
+    maze: object | None = None      # gex.mazedecode.Maze once WP-3 lands
+
+    # --- camera ---------------------------------------------------------------
+    scroll_x: int = 0
+    scroll_y: int = 0
+    wrap_h: bool = False            # 0x90491F bit 5
+    wrap_v: bool = False            # 0x90491F bit 4
+
+    # --- input ----------------------------------------------------------------
+    # Switches are active low, so "nothing pressed" is all bits set. Defaulting
+    # these to 0 would mean every button held on frame one.
+    player_input_raw: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)  # 0x904920
+    debounce_shift_magic: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)  # 0x905F58
+    debounce_shift_fire: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)   # 0x905F60
+
+    # --- global actors --------------------------------------------------------
+    player_it: int = 0xFFFF         # 0x9049DC, 0xFFFF = nobody
+    monster_slowmo_timer: int = 0   # 0x9048B2, global monster slow motion
+    monster_iter_ptr: int = 0       # 0x904A60, rotating chain entry point
+    death_hits: int = 0             # 0x904A5C
+    thief_mode: int = 0             # 0x904BA0
+    thief_victim: int = -1
+    thief_enter_time: int = -1
+
+    # --- machine --------------------------------------------------------------
+    game_settings: int = 0          # EEPROM options word, 0x904A24
+    credits: int = 0
+    spawn_probability_bonus: int = 0  # 0x90405F, signed byte
+
+    # --- convenience ----------------------------------------------------------
+
+    @property
+    def active_players(self) -> list[Player]:
+        return [p for p in self.players if p.active]
+
+    @property
+    def players_active_count(self) -> int:
+        return len(self.active_players)
+
+    def getrandom(self, bound: int) -> int:
+        """Shorthand for the game's ``getrandom(bound)``."""
+        return self.rng.getrandom(bound)

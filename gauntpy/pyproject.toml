@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gauntpy"
+version = "0.0.1"
+description = "A Python reimplementation of the Gauntlet II arcade game"
+readme = "README.md"
+license = "GPL-3.0-only"
+requires-python = ">=3.12"
+authors = [ { name = "TDV Alinsa", email = "alinsa-github@lupine.org" } ]
+keywords = ["gauntlet", "arcade", "retrogaming", "reimplementation"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment :: Arcade",
+]
+
+# The simulation core has no dependencies at all -- deliberately, so it stays
+# testable without ROMs or a display. Graphics come in through gex (WP-1) and
+# the display through pygame (WP-2); both are optional extras.
+dependencies = []
+
+[project.optional-dependencies]
+rom = ["gex>=0.1.0"]
+display = ["pygame-ce>=2.4.0"]
+
+[project.scripts]
+gauntpy = "gauntpy.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
