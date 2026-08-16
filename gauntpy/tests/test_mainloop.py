@@ -157,11 +157,23 @@ def test_frame_overflow_sets_then_decays():
         assert state.frame_overflow == expected
 
 
+#: Main-loop calls landed so far. Update this set (never the assertions below
+#: it) when a work package deletes its @stub -- that is the whole point of
+#: this test, and keeping the roster here means concurrent packages landing
+#: in parallel each add one line instead of colliding on a hardcoded count.
+IMPLEMENTED_CALLS = {
+    "input_debounce",         # WP-4
+    "sound_response",         # WP-18
+    "main_update_sound",      # WP-18
+    "eeprom_periodic_write",  # WP-19
+}
+
+
 def test_stub_marker_tracks_progress():
     """Landing a work package means deleting a @stub, and this notices."""
     names = loop_calls()
-    stubbed = [n for n in names if is_stub(getattr(mainloop, n))]
+    stubbed = {n for n in names if is_stub(getattr(mainloop, n))}
 
-    assert "input_debounce" not in stubbed, "WP-4 is implemented"
     assert "main_move_monsters" in stubbed, "WP-8 is not"
-    assert len(stubbed) == len(names) - 1
+    assert stubbed == set(names) - IMPLEMENTED_CALLS
+    assert set(names) - stubbed == IMPLEMENTED_CALLS

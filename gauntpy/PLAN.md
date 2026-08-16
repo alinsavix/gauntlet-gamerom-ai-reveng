@@ -101,6 +101,10 @@ architectural drift. They are not style preferences.
 1. **Subsystem modules never import each other.** Everything shared travels
    through `GameState`, exactly as the original's subsystems shared working
    RAM. This is what makes the work packages independently assignable.
+   `GameState` is partitioned by owner: **append new fields under your own
+   work package's heading**, never into the shared core or another package's
+   block. Two agents appending under different headings anchor on different
+   text and cannot clobber each other.
 2. **Every main-loop call already exists** in `subsystems/`, with the ROM's
    name, its address, and its references. Unimplemented ones are marked
    `@stub` and do nothing. **Finishing a work package means filling in a body
