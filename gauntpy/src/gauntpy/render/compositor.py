@@ -30,7 +30,7 @@ from ..state import GameState
 from .framebuffer import Framebuffer
 from .hud import draw_hud
 from .mobs import SpriteSource, draw_mob_layer
-from .playfield import PlayfieldCache, draw_playfield, playfield_cache_for
+from .playfield import PlayfieldCache, draw_playfield, playfield_cache_for, shadow_source_for
 
 __all__ = [
     "LOGICAL_WIDTH", "LOGICAL_HEIGHT", "PLAYFIELD_VIEWPORT", "HUD_PANEL",
@@ -82,11 +82,20 @@ def render_frame(
     cache = cache or RenderCache()
     fb = Framebuffer(width, height)
 
+    shadow_src = None
     if state.maze is not None:
         cache.playfield = playfield_cache_for(state.maze, cache.playfield)
         draw_playfield(fb, cache.playfield, state.scroll_x, state.scroll_y, PLAYFIELD_VIEWPORT)
+        # Exact MOB shadows: the shadow-palette twin of the playfield the MOB
+        # layer draws over (see playfield.build_playfield_images). Without a
+        # maze there is nothing to shadow, so the MOB layer falls back to its
+        # in-place darkening.
+        shadow_src = shadow_source_for(cache.playfield, state.scroll_x, state.scroll_y, PLAYFIELD_VIEWPORT)
 
-    draw_mob_layer(fb, state, assets, state.scroll_x, state.scroll_y, PLAYFIELD_VIEWPORT)
+    draw_mob_layer(
+        fb, state, assets, state.scroll_x, state.scroll_y, PLAYFIELD_VIEWPORT,
+        shadow_src=shadow_src,
+    )
 
     draw_hud(fb, state, HUD_PANEL)
 

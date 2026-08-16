@@ -134,10 +134,10 @@ class TestFramebuffer:
         fb.blit_indexed_tile(tile, palette, 0, 0)
         assert fb.get_pixel(3, 3) == (200, 100, 50, 255)
 
-    def test_shadow_index_darkens_existing_pixel_instead_of_painting(self):
-        """doc/01_hardware.md §8.6: MOB pixel value 1 is the shadow special
-        case. It must read whatever is already on the framebuffer, not the
-        MOB's own palette.
+    def test_shadow_index_fallback_darkens_existing_pixel(self):
+        """doc/01_hardware.md §4/§6: MOB pixel value 1 is the shadow special
+        case. With no ``shadow_src`` it must read whatever is already on the
+        framebuffer and darken it, never the MOB's own palette.
         """
         fb = Framebuffer(8, 8)
         fb.set_pixel(0, 0, (100, 100, 100, 255))
@@ -146,6 +146,51 @@ class TestFramebuffer:
         palette[1] = (255, 0, 0, 255)  # must NOT be used
         fb.blit_indexed_tile(tile, palette, 0, 0, shadow_index=1, shadow_scale=0.5)
         assert fb.get_pixel(0, 0) == (50, 50, 50, 255)
+
+    def test_shadow_src_supplies_exact_color_over_fallback(self):
+        """When a shadow_src is given, its exact color wins and the in-place
+        scale is not used -- ``shadow_src.at`` is the shadow-palette playfield
+        color (playfield.ShadowSource)."""
+        class _FixedShadow:
+            def at(self, fx, fy):
+                return (7, 8, 9, 255)
+
+        fb = Framebuffer(8, 8)
+        fb.set_pixel(0, 0, (100, 100, 100, 255))  # would scale to (50,50,50)
+        tile = [[1] * 8 for _ in range(8)]
+        palette = [(0, 0, 0, 255)] * 16
+        fb.blit_indexed_tile(
+            tile, palette, 0, 0,
+            shadow_index=1, shadow_scale=0.5, shadow_src=_FixedShadow(),
+        )
+        assert fb.get_pixel(0, 0) == (7, 8, 9, 255)
+
+    def test_shadow_src_off_raster_falls_back_to_scale(self):
+        """A shadow_src reporting None (off-raster, e.g. a wrap seam) falls
+        back to the in-place darkening."""
+        class _NoShadow:
+            def at(self, fx, fy):
+                return None
+
+        fb = Framebuffer(8, 8)
+        fb.set_pixel(0, 0, (100, 100, 100, 255))
+        tile = [[1] * 8 for _ in range(8)]
+        palette = [(0, 0, 0, 255)] * 16
+        fb.blit_indexed_tile(
+            tile, palette, 0, 0,
+            shadow_index=1, shadow_scale=0.5, shadow_src=_NoShadow(),
+        )
+        assert fb.get_pixel(0, 0) == (50, 50, 50, 255)
+
+    def test_irgb_to_shadow_matches_rom_transform(self):
+        """playfield.irgb_to_shadow == the 0x5FD80 routine: subtract 7 from
+        the IRGB intensity nibble, floor at 1 (verified by disassembly)."""
+        from gauntpy.render.playfield import irgb_to_shadow
+        assert irgb_to_shadow(0xFFFF) == 0x8FFF   # I=15 -> 8
+        assert irgb_to_shadow(0x8ABC) == 0x1ABC   # I=8  -> 1
+        assert irgb_to_shadow(0x7000) == 0x0000   # I=7 exactly -> 0
+        assert irgb_to_shadow(0x6ABC) == 0x1ABC   # I=6 borrows -> clamp I=1, RGB kept
+        assert irgb_to_shadow(0x0123) == 0x1123   # I=0 borrows -> I=1
 
     def test_clip_rect_confines_drawing(self):
         fb = Framebuffer(16, 16)
@@ -427,6 +472,38 @@ class TestPlayfieldMatchesGexReference:
         # that left almost nothing comparable.
         assert compared > 150, "sanity: too few terrain-only cells survived the item-bleed exclusion to be a meaningful comparison"
         assert not mismatches, f"{len(mismatches)}/{compared} terrain cells differ from gex's reference: {mismatches[:10]}"
+
+    def test_shadow_raster_is_the_irgb_transform_not_a_scale(self):
+        """build_playfield_images' shadow twin applies the exact ROM intensity
+        transform (playfield.irgb_to_shadow), which is darker than and
+        distinct from a naive RGB *0.5 -- that difference is the whole point
+        of the shadow raster.
+        """
+        from gauntpy.render.playfield import build_playfield_images
+
+        maze = self._decode(1)
+        normal, shadow = build_playfield_images(maze)
+        assert normal.size == shadow.size == (512, 512)
+
+        n_px, s_px = normal.load(), shadow.load()
+        differs_from_half = 0
+        checked = 0
+        for y in range(0, 512, 7):
+            for x in range(0, 512, 7):
+                n = n_px[x, y]
+                if n[:3] == (0, 0, 0):
+                    continue
+                checked += 1
+                s = s_px[x, y]
+                # Shadow never brightens any channel (intensity only drops).
+                assert all(sc <= nc for sc, nc in zip(s[:3], n[:3])), (x, y, s, n)
+                if tuple(int(c * 0.5) for c in n[:3]) != s[:3]:
+                    differs_from_half += 1
+
+        assert checked > 100
+        # The exact transform must visibly diverge from 0.5-scaling on real
+        # playfield colors (it wouldn't, if the transform weren't applied).
+        assert differs_from_half > 0
 
 
 # ---------------------------------------------------------------------------

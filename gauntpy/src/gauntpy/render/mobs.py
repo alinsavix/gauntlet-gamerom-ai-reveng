@@ -119,6 +119,7 @@ def draw_mob_layer(
     viewport: tuple[int, int, int, int],
     *,
     tier_for=None,
+    shadow_src=None,
 ) -> None:
     """Draw every visible MOB, in chain order, onto ``fb``.
 
@@ -161,27 +162,15 @@ def draw_mob_layer(
         for idx, tile in enumerate(stamp.data):
             row, col = divmod(idx, stamp.width)
             # Pixel special cases (doc/01_hardware.md §4/§6, Confidence:
-            # Verified): 0 = transparent (trans0=True), 1 = shadow. Shadow
-            # darkens whatever this layer already painted at that pixel --
-            # i.e. the playfield color, since the playfield layer runs first
-            # (PLAN.md §6 WP-2 build order) -- rather than looking up a color.
-            #
-            # The real hardware shows the underlying playfield pixel through
-            # the half-intensity *shadow palette* bank (color RAM 0x910400),
-            # which the game builds from the playfield palette (0x910500) in
-            # the copy routine at 0x5FD80 (called from 0x436B8): for each
-            # 16-bit IRGB entry, shadow = color - 0x7000 (subtract 7 from the
-            # I nibble, bits 15-12), and if that borrows (I <= 6) the RGB is
-            # kept and I is forced to 1. Verified by disassembly (capstone,
-            # row76.bin). We approximate that palette-space operation as a
-            # per-pixel RGB *0.5 here: the compositor only has the flattened
-            # underlying RGB (= I*channel), not the source I nibble, so the
-            # exact (I-7)*channel result is not recoverable per-pixel; *0.5 is
-            # close for the common full-intensity (I=15 -> 8/15) playfield
-            # colors. An exact implementation would build a shadow-palette
-            # raster in the playfield layer -- see Framebuffer.blit_indexed_tile.
+            # Verified): 0 = transparent (trans0=True), 1 = shadow. A shadow
+            # pixel shows the underlying playfield through the half-intensity
+            # shadow palette (built by playfield.irgb_to_shadow, ROM 0x5FD80).
+            # ``shadow_src`` (the compositor's ShadowSource over the cached
+            # shadow raster) supplies that exact color; without it the blit
+            # falls back to darkening in place. Verified by disassembly
+            # (capstone, row76.bin) -- see playfield.irgb_to_shadow.
             fb.blit_indexed_tile(
                 tile, palette_rgba,
                 screen_x + col * 8, screen_y + row * 8,
-                trans0=True, shadow_index=1, clip=clip,
+                trans0=True, shadow_index=1, shadow_src=shadow_src, clip=clip,
             )

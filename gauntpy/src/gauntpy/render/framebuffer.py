@@ -99,6 +99,7 @@ class Framebuffer:
         trans0: bool = True,
         shadow_index: int | None = None,
         shadow_scale: float = 0.5,
+        shadow_src=None,
         clip: tuple[int, int, int, int] | None = None,
     ) -> None:
         """Blit one 8x8 palette-index tile (gex's ``TileData`` shape: 8 rows
@@ -106,18 +107,21 @@ class Framebuffer:
         ``palette_rgba`` (16 entries) for color.
 
         ``shadow_index``, when given, makes that one index a special case
-        instead of an ordinary color lookup: it darkens whatever is already
-        drawn at that pixel (the underlying playfield color) by
-        ``shadow_scale`` rather than painting a MOB color. This is the MOB
-        layer's use -- pixel value 1 is the hardware's shadow special case
-        (``doc/01_hardware.md`` §4/§6). The real hardware applies a
-        half-intensity *shadow palette* (subtract 7 from each color's IRGB
-        intensity nibble, floor 1; routine at ROM 0x5FD80); the ``shadow_scale``
-        RGB multiply here is a per-pixel approximation of that, because the
-        compositor no longer has the source palette's intensity nibble by the
-        time layers are flattened. See ``render/mobs.py`` for the full
-        derivation. An exact match would render a parallel shadow-palette
-        playfield raster and copy from it here.
+        instead of an ordinary color lookup: pixel value 1 is the hardware's
+        shadow (``doc/01_hardware.md`` §4/§6), which shows the underlying
+        playfield pixel through the half-intensity *shadow palette*.
+
+        When ``shadow_src`` is given (a ``playfield.ShadowSource``), the exact
+        hardware result is used: the shadow-palette color of the playfield
+        pixel at this position is copied straight in -- and, matching the
+        hardware, it reveals the *playfield*, not any MOB drawn earlier at the
+        same pixel. When ``shadow_src`` is absent (no maze, or a ROM-free
+        test), it falls back to darkening whatever is already there by
+        ``shadow_scale`` -- a close approximation for the common full-intensity
+        playfield colors, but the only option once the source intensity nibble
+        is gone. The exact shadow palette is built by ``playfield.irgb_to_shadow``
+        (ROM 0x5FD80). ``shadow_src`` also falls back to ``shadow_scale`` for
+        any pixel it reports off-raster (e.g. a wraparound seam).
 
         ``clip``, when given, is ``(x0, y0, x1, y1)`` (``x1``/``y1``
         exclusive) restricting drawing to that sub-rectangle of the
@@ -150,12 +154,16 @@ class Framebuffer:
                     px[pxx, py] = palette_rgba[0]
                     continue
                 if shadow_index is not None and idx == shadow_index:
-                    under = px[pxx, py]
-                    px[pxx, py] = (
-                        int(under[0] * shadow_scale),
-                        int(under[1] * shadow_scale),
-                        int(under[2] * shadow_scale),
-                        under[3],
-                    )
+                    exact = shadow_src.at(pxx, py) if shadow_src is not None else None
+                    if exact is not None:
+                        px[pxx, py] = exact
+                    else:
+                        under = px[pxx, py]
+                        px[pxx, py] = (
+                            int(under[0] * shadow_scale),
+                            int(under[1] * shadow_scale),
+                            int(under[2] * shadow_scale),
+                            under[3],
+                        )
                     continue
                 px[pxx, py] = palette_rgba[idx]
