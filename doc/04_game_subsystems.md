@@ -538,7 +538,15 @@ Besides decoder tokens, `maze_setupnew` uses this counted form to create the
 
 Assembles maze header bytes 1–4 (`level_flags_1..4`) big-endian into the **level-flags longword at 0x90491C** — the variable historically called `ram.maze_pickup_config` *is* this long (byte 0 = LFLAG1 at 0x90491C, byte 1 = LFLAG2, byte 2 = LFLAG3, byte 3 = LFLAG4; see the §3.12 enums in `05_data_reference.md`, all verified reader-by-reader).
 
-Then randomizes: LFLAG1 bits 2–3 (long bits 26–27) are XOR'd with `getrandom(4)` every level. On deep levels the game ORs in extra hazards: mazes 5–101 with level%400 > 297 → `get_random_maze_flags()` + 0x30 (WrapV|WrapH) unless LFLAG4 bit 2 (TrapsLocal); > 200 → random flags only; > 103 → 0x30 only. Treasure mazes 104–114 use level%160 with 0xB0 (wraps + offscreen).
+The entire randomization below is skipped when `levelnum_current` == 9999 (0x270F) or `game_mode` < 0 (attract mode) — ROM 0x4374C–0x43760, `cmpi.w #0x270F` then `tst.w`/`bge`. In those cases the base header flags are the final value.
+
+Otherwise: LFLAG1 bits 2–3 (long bits 26–27) are XOR'd with `getrandom(4)` every level. On deep levels the game ORs in extra hazards.
+
+**Mazes 5–101** (`level%400`): > 297 → `get_random_maze_flags()`, then + 0x30 (WrapV|WrapH) unless LFLAG4 bit 2 (TrapsLocal); > 200 → random flags only; > 103 → 0x30 (WrapV|WrapH) **unless TrapsLocal** — the >103 tier is gated by the same `btst #2,LFLAG4`/`bne` at 0x437C8 as the >297 tier, not an unconditional OR.
+
+**Treasure mazes 104–114** (`level%160`) — a graduated three-tier threshold, parallel to the mazes-5–101 rule, **not** an unconditional OR: > 120 → 0xB0 (PLAYER_OFFSCREEN | WrapV | WrapH); > 80 → 0x80 (PLAYER_OFFSCREEN only); > 40 → 0x30 (WrapV | WrapH); ≤ 40 → nothing.
+
+**Confidence: Verified** by disassembly (capstone, `row76.bin` @ 0x43774–0x4381A). *Contradicted and corrected:* the former one-line summary gave the treasure rule as unconditional "0xB0 (wraps + offscreen)" and omitted both the level==9999/attract skip guard and the TrapsLocal gate on the mazes-5–101 >103 tier.
 
 `get_random_maze_flags` (0x436CC): selects a random entry from a 13-entry ROM table at 0x57012. If LFLAG4 bit 2 (TrapsLocal) is set and the result is 0x80, overrides to 0x2.
 
