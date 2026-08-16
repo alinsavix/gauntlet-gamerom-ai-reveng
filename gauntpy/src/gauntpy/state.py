@@ -89,10 +89,18 @@ class GameState:
     # =========================================================================
     mazenum_current: int = 0        # 0x904000
     levelnum_current: int = 0       # 0x904004
-    level_flags: int = 0            # LFLAG1/2 -- see gex.constants
-    level_flags_2: int = 0
-    level_flags_3: int = 0
-    level_flags_4: int = 0
+    # The level-flags longword at 0x90491C (doc/04_game_subsystems.md §5.5),
+    # stored as its 4 big-endian bytes rather than one 32-bit field because
+    # the pre-existing wrap_h/wrap_v comments below already read
+    # level_flags_4 as a standalone byte at 0x90491F. gex.constants'
+    # LFLAG1_*/LFLAG2_*/LFLAG3_*/LFLAG4_* masks are longword-relative
+    # (bits 24-31/16-23/8-15/0-7); only LFLAG4 tests directly against its
+    # byte here without shifting -- see gauntpy.maze._split_flags/_join_flags
+    # for the reassembly WP-3 needs internally.
+    level_flags: int = 0            # 0x90491C, LFLAG1 byte
+    level_flags_2: int = 0          # 0x90491D, LFLAG2 byte
+    level_flags_3: int = 0          # 0x90491E, LFLAG3 byte
+    level_flags_4: int = 0          # 0x90491F, LFLAG4 byte
     level_players_active: int = 0
     maze: object | None = None      # gex.mazedecode.Maze once WP-3 lands
     wrap_h: bool = False            # 0x90491F bit 5, from LFLAG4_WRAP_H
