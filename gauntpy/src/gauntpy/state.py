@@ -55,25 +55,38 @@ class Player:
 
 @dataclass
 class GameState:
-    """Everything the main loop's 28 per-frame calls read and write."""
+    """Everything the main loop's 28 per-frame calls read and write.
 
-    # --- core objects ---------------------------------------------------------
+    **Adding fields: append under your own work package's heading below.**
+
+    This is the one file every work package may touch, so it is partitioned by
+    owner. Appending under your own heading means two agents working in
+    parallel anchor on different text and cannot clobber each other. Do not
+    reorder the blocks, and do not add fields to another package's block or to
+    the shared core.
+
+    Every field needs its documented name and its RAM address in a comment. If
+    the docs give no name for it, say so in the comment.
+    """
+
+    # =========================================================================
+    # Shared core -- owned by no work package. Do not append here.
+    # =========================================================================
     mobs: MobTable = field(default_factory=MobTable)
     rng: GameRandom = field(default_factory=GameRandom)
     players: list[Player] = field(
         default_factory=lambda: [Player(index=i) for i in range(NUM_PLAYERS)]
     )
 
-    # --- frame timing ---------------------------------------------------------
-    vblank_flag: int = 0            # 0x904002, the semaphore
-    frame_counter: int = 0          # 0x904006
-    frame_overflow: int = 0         # 0x904916, generator spawn throttle
-
-    # --- mode and gating ------------------------------------------------------
+    vblank_flag: int = 0             # 0x904002, the VBLANK semaphore
+    frame_counter: int = 0           # 0x904006
+    frame_overflow: int = 0          # 0x904916, generator spawn throttle
     game_mode: int = GameMode.TITLE  # 0x904918
     dialog_timer: int = 0            # 0x904A9E, gates the 16-call world band
 
-    # --- level ----------------------------------------------------------------
+    # =========================================================================
+    # WP-3 · maze and level
+    # =========================================================================
     mazenum_current: int = 0        # 0x904000
     levelnum_current: int = 0       # 0x904004
     level_flags: int = 0            # LFLAG1/2 -- see gex.constants
@@ -82,33 +95,94 @@ class GameState:
     level_flags_4: int = 0
     level_players_active: int = 0
     maze: object | None = None      # gex.mazedecode.Maze once WP-3 lands
+    wrap_h: bool = False            # 0x90491F bit 5, from LFLAG4_WRAP_H
+    wrap_v: bool = False            # 0x90491F bit 4, from LFLAG4_WRAP_V
 
-    # --- camera ---------------------------------------------------------------
-    scroll_x: int = 0
-    scroll_y: int = 0
-    wrap_h: bool = False            # 0x90491F bit 5
-    wrap_v: bool = False            # 0x90491F bit 4
-
-    # --- input ----------------------------------------------------------------
+    # =========================================================================
+    # WP-4 · input
+    # =========================================================================
     # Switches are active low, so "nothing pressed" is all bits set. Defaulting
     # these to 0 would mean every button held on frame one.
     player_input_raw: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)  # 0x904920
     debounce_shift_magic: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)  # 0x905F58
     debounce_shift_fire: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)   # 0x905F60
 
-    # --- global actors --------------------------------------------------------
-    player_it: int = 0xFFFF         # 0x9049DC, 0xFFFF = nobody
+    # =========================================================================
+    # WP-5 · player movement and collision
+    # =========================================================================
+    # (per-player movement state that does not belong on Player goes here)
+
+    # =========================================================================
+    # WP-6 · player lifecycle, health, powers, tile interaction
+    # =========================================================================
+    player_it: int = 0xFFFF         # 0x9049DC, 0xFFFF = nobody is IT
+
+    # =========================================================================
+    # WP-7 · shots and hit resolution
+    # =========================================================================
+    death_hits: int = 0             # 0x904A5C, global Death hit counter
+
+    # =========================================================================
+    # WP-8 · monsters and generators
+    # =========================================================================
     monster_slowmo_timer: int = 0   # 0x9048B2, global monster slow motion
     monster_iter_ptr: int = 0       # 0x904A60, rotating chain entry point
-    death_hits: int = 0             # 0x904A5C
+    spawn_probability_bonus: int = 0  # 0x90405F, signed byte
+
+    # =========================================================================
+    # WP-9 · dragon
+    # =========================================================================
+
+    # =========================================================================
+    # WP-10 · thief and mugger
+    # =========================================================================
     thief_mode: int = 0             # 0x904BA0
     thief_victim: int = -1
-    thief_enter_time: int = -1
+    thief_enter_time: int = -1      # frames until entry, -1 = not scheduled
 
-    # --- machine --------------------------------------------------------------
-    game_settings: int = 0          # EEPROM options word, 0x904A24
+    # =========================================================================
+    # WP-11 · living maze (walls, doors, transporters, forcefields)
+    # =========================================================================
+
+    # =========================================================================
+    # WP-12 · potions and magic
+    # =========================================================================
+
+    # =========================================================================
+    # WP-13 · camera
+    # =========================================================================
+    scroll_x: int = 0
+    scroll_y: int = 0
+
+    # =========================================================================
+    # WP-14 · scoring, HUD, dialogs
+    # =========================================================================
+
+    # =========================================================================
+    # WP-15 · exits, treasure rooms, secret rooms
+    # =========================================================================
+
+    # =========================================================================
+    # WP-16 · coins, credits, session lifecycle
+    # =========================================================================
     credits: int = 0
-    spawn_probability_bonus: int = 0  # 0x90405F, signed byte
+
+    # =========================================================================
+    # WP-17 · attract mode and demo playback
+    # =========================================================================
+
+    # =========================================================================
+    # WP-18 · sound (stubbed)
+    # =========================================================================
+
+    # =========================================================================
+    # WP-19 · EEPROM and configuration
+    # =========================================================================
+    game_settings: int = 0          # 0x904A24, EEPROM options word
+
+    # =========================================================================
+    # WP-20 · boot and orchestration
+    # =========================================================================
 
     # --- convenience ----------------------------------------------------------
 
