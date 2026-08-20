@@ -3,7 +3,7 @@
 Not an emulator. The 68010 code is reimplemented at the logic level, keeping
 the original's structure: the same main-loop call order, the same object model,
 the same tables and thresholds. Graphics data is read from the original ROMs
-via ``gex``; sound is stubbed.
+via ``gex``; sound-board commands are modelled through a deterministic host log.
 
 Built from the reverse-engineering documentation in ``../doc`` and ``../book``.
 Names come from those documents: if the docs call it ``main_move_monsters`` or

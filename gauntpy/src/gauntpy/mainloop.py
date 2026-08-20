@@ -40,6 +40,7 @@ from .subsystems.players import (
     main_handle_death,
     main_health_countdown,
     main_move_players,
+    player_hurt_palette_vblank,
 )
 from .subsystems.potions import main_handle_potions
 from .subsystems.score import (
@@ -129,6 +130,7 @@ def tick(state: GameState) -> None:
     """
     state.frame_counter = (state.frame_counter + 1) & 0xFFFF
     state.vblank_flag = 0
+    player_hurt_palette_vblank(state)
 
     game_frame(state)
 

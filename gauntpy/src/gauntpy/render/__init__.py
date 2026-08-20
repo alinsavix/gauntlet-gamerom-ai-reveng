@@ -18,7 +18,13 @@ Quick tour:
 - ``playfield`` -- layer 1, the maze (floor/walls/doors/forcefields).
 - ``mobs`` -- layer 2, every dynamic thing (players, monsters, shots,
   floor items), walked in depth-chain order.
-- ``hud`` -- layer 3, the text overlay (scores, health, message box).
+- ``hud`` -- layer 3, the cabinet's info panel (level, per-player name,
+  score, health, bonus multiplier, inventory) on the ROM's own alpha-grid
+  coordinates, drawing the values ``subsystems/score.py`` latched.
+- ``screens`` -- the front-end overlays (title, high scores, legend,
+  character select, level-end bonus).
+- ``text`` -- the alpha character-ROM blitter both of those draw through;
+  ``romtext`` -- the ROM strings and pre-baked HUD glyph runs they draw.
 - ``compositor.render_frame(state, assets)`` -- assembles all three into one
   ``Framebuffer``; layer 4 (priority/shadowing) falls out of the draw order
   itself (see that module's docstring).
@@ -29,7 +35,7 @@ Quick tour:
 
 from __future__ import annotations
 
-from .compositor import HUD_PANEL, LOGICAL_HEIGHT, LOGICAL_WIDTH, PLAYFIELD_VIEWPORT, RenderCache, render_frame
+from .compositor import HUD_PANEL, HUD_PANEL_X, LOGICAL_HEIGHT, LOGICAL_WIDTH, PLAYFIELD_VIEWPORT, RenderCache, render_frame
 from .framebuffer import Framebuffer
 
 __all__ = [
@@ -40,4 +46,5 @@ __all__ = [
     "LOGICAL_HEIGHT",
     "PLAYFIELD_VIEWPORT",
     "HUD_PANEL",
+    "HUD_PANEL_X",
 ]

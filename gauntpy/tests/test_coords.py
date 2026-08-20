@@ -66,3 +66,49 @@ def test_playfield_block_is_column_first_2x2():
     assert bl == tl + 1, "next word down the column"
     assert tr == tl + 64, "one playfield column across"
     assert br == tl + 65
+
+
+# ---------------------------------------------------------------------------
+# Field widths and wrapping
+# ---------------------------------------------------------------------------
+
+def test_position_fields_are_ten_bits_and_wrap_like_the_hardware():
+    """A sprite-origin correction can push an object at column 0 negative; the
+    hardware word has ten bits and wraps, and so must the encoder rather than
+    producing a Python negative that silently poisons later arithmetic."""
+    assert coords.decode_hpos(coords.encode_hpos(-4))[0] == 0x3FC
+    assert coords.decode_vpos(coords.encode_vpos(-8))[0] == 0x3F8
+    assert coords.decode_hpos(coords.encode_hpos(1024))[0] == 0
+
+
+def test_size_fields_are_three_bits_each():
+    """Width-1 in bits 5-3 and height-1 in 2-0, so 1-8 tiles per axis: the
+    dragon's 4x4 and a monster's 3x3 both fit, and nothing bleeds into Y."""
+    for width in range(1, 9):
+        for height in range(1, 9):
+            word = coords.encode_vpos(160, width=width, height=height)
+            assert coords.decode_vpos(word) == (160, width, height)
+
+
+def test_encoding_never_disturbs_a_neighbouring_field():
+    word = coords.encode_hpos(0x3FF, palette=0xF, flags=0x30)
+    x, flags, palette = coords.decode_hpos(word)
+    assert (x, flags, palette) == (0x3FF, 0x30, 0xF)
+    assert word == 0xFFFF
+
+    word = coords.encode_vpos(0x3FF, width=8, height=8)
+    assert word == 0xFFFF
+
+
+def test_slot_to_pixels_is_the_cell_origin_without_corrections():
+    """Per-object corrections belong to the object constructor (``maze.py``),
+    not here -- otherwise every caller would have to know which of the four
+    master parameter tables applied."""
+    for row, col in ((0, 0), (5, 7), (31, 31)):
+        assert coords.slot_to_pixels(coords.pack_slot(row, col)) == (col * 16, row * 16)
+
+
+def test_pixels_to_slot_is_the_inverse_of_slot_to_pixels():
+    for slot in range(0, 1024, 37):
+        x, y = coords.slot_to_pixels(slot)
+        assert coords.pixels_to_slot(x, y) == slot

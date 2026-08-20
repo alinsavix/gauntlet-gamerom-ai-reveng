@@ -6,13 +6,14 @@ the resulting trace against a stored golden fixture. A one-pixel change in
 where a monster ends up, a one-frame shift in a debounce edge, or a changed
 RNG draw all show up as a loud, specific diff instead of silent drift.
 
-Today, almost every subsystem is ``@stub`` (see PLAN.md §5), so the digest
-mostly captures ``frame_counter``, the RNG seed, and input-debounce state --
-that is expected, not a gap in this harness. As WP-5..WP-20 land and stop
-being no-ops, ``digest_frame`` below already reads their fields (mob chain,
-player health/position/score, credits, ...), so each package inherits
-regression coverage the moment it starts writing to ``GameState`` -- no
-changes needed here.
+Every subsystem is implemented now, so the digest is a genuine cross-section
+of the whole simulation: ``digest_frame`` below reads the mob chain, the SLIP
+heads, player health/position/score, credits and the RNG seed alongside the
+frame and input-debounce bookkeeping. The scripted run itself is deliberately
+narrow -- a bare ``GameState`` with no maze loaded -- so most of those fields
+stay still and the trace stays readable on a diff; what it pins down is the
+frame loop, the input path, and that nothing draws from the shared RNG stream
+when nothing should.
 
 RNG caveat (PLAN.md §21): the original's seed free-runs and is never
 reproducible. We seed ``GameRandom`` explicitly so golden traces *are*
@@ -40,12 +41,12 @@ GOLDEN_SEED = 0xACE1
 #: keyed by the frame index at which the word changes. A player's raw word
 #: holds at its last-set value on frames without an entry -- exactly like a
 #: real host, which keeps driving whatever the joystick currently reads.
-#: Player 0 taps Magic (frames 5-7) then Right (frames 15-16); players 1-3
+#: Player 0 taps Magic (frames 5-7) then Left (frames 15-16); players 1-3
 #: stay idle throughout, to keep the trace small and easy to read on a diff.
 SCRIPTED_INPUTS: dict[int, dict[int, int]] = {
     5: {0: 0xFFFE},   # JOY_IDLE with bit 0 (Magic) cleared -- pressed
     8: {0: 0xFFFF},   # released
-    15: {0: 0xFFDF},  # JOY_IDLE with bit 5 (Right) cleared -- pressed
+    15: {0: 0xFFDF},  # JOY_IDLE with bit 5 (Left) cleared -- pressed
     17: {0: 0xFFFF},  # released
 }
 

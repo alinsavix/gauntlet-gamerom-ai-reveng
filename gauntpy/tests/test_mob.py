@@ -166,3 +166,178 @@ def test_slip_bands_follow_the_playfield_not_the_screen():
     mobs = MobTable()
     slot = place(mobs, 16, 16)
     assert mobs.band_of(slot) == (16 * 16) // 8
+
+
+# ---------------------------------------------------------------------------
+# Ordering: the ROM sorts by packed slot, not by pixel Y (0x5DCFE / 0x5DFE6)
+# ---------------------------------------------------------------------------
+
+def test_the_chain_is_ordered_by_slot_number():
+    """Within one row, ascending column is ascending slot -- the tie-break a
+    band-only sort throws away. Insertion order must not survive."""
+    mobs = MobTable()
+    for col in (20, 4, 11, 31, 0):
+        place(mobs, 6, col)
+    assert list(mobs.iter_chain()) == [
+        coords.pack_slot(6, col) for col in (0, 4, 11, 20, 31)
+    ]
+
+
+def test_ordering_ignores_a_pixel_position_that_disagrees_with_the_slot():
+    """A monster mid-step has a pixel Y between two rows; its depth is still
+    its cell's. Sorting on the live vpos would let two MOBs swap places
+    mid-stride and make the band sequence non-monotonic."""
+    mobs = MobTable()
+    early = place(mobs, 4, 4)
+    late = place(mobs, 5, 4)
+    mobs.vpos[early] = coords.encode_vpos(500)     # dragged far down the screen
+
+    assert list(mobs.iter_chain()) == [early, late]
+    assert mobs.band_of(early) == 8
+
+
+def test_sort_key_is_the_slot_for_dynamic_slots():
+    mobs = MobTable()
+    assert mobs.sort_key(500) == 500
+    assert mobs.band_of(500) == (500 >> 5) * 2
+
+
+def test_a_managed_low_slot_sorts_by_its_depth_key():
+    """Slots 0-0x1F are shots, popups and effect animations: they have no cell
+    of their own, so ``mob_depth_key`` (0x904940) says where in the chain they
+    belong -- typically the slot they were spawned from."""
+    mobs = MobTable()
+    near = place(mobs, 2, 2)
+    far = place(mobs, 20, 2)
+
+    shot = 3
+    mobs.picture[shot] = 0x0900
+    mobs.insert(shot, depth_key=coords.pack_slot(10, 2))
+
+    assert mobs.sort_key(shot) == coords.pack_slot(10, 2)
+    assert mobs.depth_key[shot] == coords.pack_slot(10, 2)
+    assert list(mobs.iter_chain()) == [near, shot, far]
+    assert mobs.band_of(shot) == 20
+
+
+def test_a_low_slot_without_a_depth_key_sorts_to_the_front():
+    """Key 0 is what an uninitialised 0x904940 word holds, and the chain is
+    ascending, so the effect lands at the head -- not at slot 3's own row."""
+    mobs = MobTable()
+    body = place(mobs, 8, 8)
+    mobs.picture[3] = 0x0900
+    mobs.insert(3)
+    assert list(mobs.iter_chain()) == [3, body]
+
+
+def test_slips_stay_monotonic_with_a_depth_keyed_effect_present():
+    mobs = MobTable()
+    place(mobs, 2, 2)
+    place(mobs, 20, 2)
+    mobs.picture[5] = 0x0900
+    mobs.insert(5, depth_key=coords.pack_slot(10, 2))
+
+    bands = [mobs.band_of(s) for s in mobs.iter_chain()]
+    assert bands == sorted(bands)
+    for band, head in enumerate(mobs.slip_heads):
+        if head:
+            assert mobs.band_of(head) >= band
+
+
+# ---------------------------------------------------------------------------
+# mob_create's own insertion guard (0x5DCC0-0x5DCC6)
+# ---------------------------------------------------------------------------
+
+def test_creating_over_a_live_object_rewrites_it_without_relinking():
+    """``moblist_insert`` runs *before* the new picture is written and bails
+    out unless what is there is empty or the 0x8000 wall marker. Linking twice
+    would splice the slot into the chain at two places at once."""
+    mobs = MobTable()
+    slot = place(mobs, 7, 7, MazeObjIds.MONST_GHOST)
+    assert list(mobs.iter_chain()) == [slot]
+
+    place(mobs, 7, 7, MazeObjIds.MONST_DEMON)
+
+    assert list(mobs.iter_chain()) == [slot], "still linked exactly once"
+    assert mobs.obj_type(slot) == MazeObjIds.MONST_DEMON, "the record is replaced"
+
+
+def test_recreating_middle_live_object_preserves_both_chain_links():
+    mobs = MobTable()
+    first = place(mobs, 6, 7, MazeObjIds.MONST_GHOST)
+    middle = place(mobs, 7, 7, MazeObjIds.MONST_GHOST)
+    last = place(mobs, 8, 7, MazeObjIds.MONST_GHOST)
+    assert list(mobs.iter_chain()) == [first, middle, last]
+
+    place(mobs, 7, 7, MazeObjIds.MONST_DEMON)
+
+    assert list(mobs.iter_chain()) == [first, middle, last]
+    assert mobs.prev_slot(middle) == first
+    assert mobs.next_slot(middle) == last
+
+
+def test_creating_over_a_wall_marker_does_link():
+    mobs = MobTable()
+    slot = coords.pack_slot(7, 7)
+    mobs.picture[slot] = 0x8000          # a solid-wall marker, not chain-linked
+    assert not mobs.is_linked(slot)
+
+    place(mobs, 7, 7, MazeObjIds.MONST_GHOST)
+    assert list(mobs.iter_chain()) == [slot]
+
+
+def test_move_slot_will_not_link_a_destination_that_is_already_live():
+    """``move_mob_slot`` links the destination before copying, so the guard
+    sees the destination's *previous* picture (0x5DE0A)."""
+    mobs = MobTable()
+    src = place(mobs, 3, 3, MazeObjIds.MONST_GHOST)
+    dst = place(mobs, 9, 9, MazeObjIds.MONST_GRUNT)
+
+    mobs.move_slot(src, dst)
+
+    chain = list(mobs.iter_chain())
+    assert chain == [dst], "destination linked once, source gone"
+    assert mobs.obj_type(dst) == MazeObjIds.MONST_GHOST
+
+
+def test_is_linked_distinguishes_occupancy_from_membership():
+    mobs = MobTable()
+    slot = coords.pack_slot(5, 5)
+    mobs.picture[slot] = 0x8000
+    mobs.set_obj_type(slot, MazeObjIds.WALL_REGULAR)
+
+    assert mobs.is_occupied(slot)
+    assert not mobs.is_linked(slot)
+    assert list(mobs.iter_chain()) == []
+
+
+def test_unlinking_something_that_is_not_in_the_chain_is_a_no_op():
+    mobs = MobTable()
+    a = place(mobs, 4, 4)
+    b = coords.pack_slot(9, 9)
+
+    mobs.unlink(b)
+    assert list(mobs.iter_chain()) == [a]
+    assert mobs.depth_list_head == a
+
+
+def test_unlink_and_clear_still_zeroes_an_unlinked_marker():
+    mobs = MobTable()
+    slot = coords.pack_slot(5, 5)
+    mobs.picture[slot] = 0x8000
+    mobs.set_obj_type(slot, MazeObjIds.WALL_REGULAR)
+
+    mobs.unlink_and_clear(slot)
+    assert not mobs.is_occupied(slot)
+
+
+def test_a_marker_never_lengthens_the_chain():
+    """Hundreds of walls per maze would otherwise be walked by every
+    per-frame chain scan in the game."""
+    mobs = MobTable()
+    for col in range(32):
+        slot = coords.pack_slot(3, col)
+        mobs.picture[slot] = 0x8000
+        mobs.set_obj_type(slot, MazeObjIds.WALL_REGULAR)
+    monster = place(mobs, 4, 4)
+    assert list(mobs.iter_chain()) == [monster]

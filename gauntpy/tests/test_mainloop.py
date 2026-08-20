@@ -20,7 +20,6 @@ from gauntpy import mainloop
 from gauntpy.constants import GameMode
 from gauntpy.mainloop import check_frame_overflow, game_frame, tick
 from gauntpy.state import GameState
-from gauntpy.subsystems import is_stub
 
 CONTRACTS = Path(__file__).resolve().parents[2] / "doc" / "generated" / "main_loop_contracts.csv"
 
@@ -114,6 +113,18 @@ def test_a_frame_runs():
     assert state.vblank_flag == 0
 
 
+def test_vblank_advances_the_hurt_palette_timer():
+    state = GameState(game_mode=GameMode.TITLE)
+    state.players[0].hurt_cooldown = 0x12
+
+    tick(state)
+    assert state.players[0].hurt_cooldown == 0x0C
+    tick(state)
+    assert state.players[0].hurt_cooldown == 0x06
+    tick(state)
+    assert state.players[0].hurt_cooldown == 0
+
+
 def test_gated_calls_are_skipped_during_a_dialog(monkeypatch):
     """A message box freezes the world band and nothing else."""
     ran: list[str] = []
@@ -157,23 +168,68 @@ def test_frame_overflow_sets_then_decays():
         assert state.frame_overflow == expected
 
 
-#: Main-loop calls landed so far. Update this set (never the assertions below
-#: it) when a work package deletes its @stub -- that is the whole point of
-#: this test, and keeping the roster here means concurrent packages landing
-#: in parallel each add one line instead of colliding on a hardcoded count.
+#: Main-loop calls and the work package that owns each. Every one of the 28 has
+#: a body; this roster is what keeps that claim honest -- deleting an
+#: implementation, or adding a call nobody owns, fails the assertions below.
+#: The former ``@stub`` marker this test used to consult is gone from every
+#: subsystem, so consulting it only ever proved that nothing was marked.
 IMPLEMENTED_CALLS = {
-    "input_debounce",         # WP-4
-    "sound_response",         # WP-18
-    "main_update_sound",      # WP-18
-    "eeprom_periodic_write",  # WP-19
+    "input_debounce",                  # WP-4
+    "sound_response",                  # WP-18
+    "main_update_sound",               # WP-18
+    "eeprom_periodic_write",           # WP-19
+    "main_cycle_tport_and_ffield",     # WP-11
+    "main_open_doors",                 # WP-11
+    "main_walls_cyclic_move",          # WP-11
+    "main_walls_random_move",          # WP-11
+    "main_move_players",               # WP-6
+    "main_health_countdown",           # WP-6
+    "main_handle_death",               # WP-6
+    "main_scroll_playfield",           # WP-13
+    "coincheck",                       # WP-16
+    "character_select_input_update",   # WP-16
+    "main_start_game",                 # WP-16
+    "main_handle_shots",               # WP-7
+    "main_msgbox_countdown",           # WP-14
+    "main_score_update",               # WP-14
+    "main_score_display",              # WP-14
+    "main_treasure_timer",             # WP-15
+    "main_exit_move",                  # WP-15
+    "main_move_monsters",              # WP-8
+    "main_handle_dragon",              # WP-9
+    "main_thief_anim",                 # WP-10
+    "main_start_thief",                # WP-10
+    "main_handle_potions",             # WP-12
+    "main_logo_updcolors",             # WP-17
+    "main_attract",                    # WP-17
 }
 
 
-def test_stub_marker_tracks_progress():
-    """Landing a work package means deleting a @stub, and this notices."""
-    names = loop_calls()
-    stubbed = {n for n in names if is_stub(getattr(mainloop, n))}
+def test_every_loop_call_has_an_owner():
+    """The roster and the loop body must name exactly the same 28 calls."""
+    names = set(loop_calls())
+    assert names - IMPLEMENTED_CALLS == set(), "a main-loop call nobody owns"
+    assert IMPLEMENTED_CALLS - names == set(), "the roster names a call the loop dropped"
 
-    assert "main_move_monsters" in stubbed, "WP-8 is not"
-    assert stubbed == set(names) - IMPLEMENTED_CALLS
-    assert set(names) - stubbed == IMPLEMENTED_CALLS
+
+def test_no_loop_call_is_an_empty_placeholder():
+    """A body of nothing but a docstring (or a bare ``pass``) is a stub in all
+    but name -- the thing the deleted ``@stub`` marker used to track."""
+    import ast as _ast
+
+    empty = []
+    for name in loop_calls():
+        fn = getattr(mainloop, name)
+        try:
+            tree = _ast.parse(textwrap.dedent(inspect.getsource(fn)))
+        except (OSError, SyntaxError):       # pragma: no cover - C or wrapped
+            continue
+        body = tree.body[0].body
+        stripped = [
+            node for node in body
+            if not (isinstance(node, _ast.Expr) and isinstance(node.value, _ast.Constant))
+        ]
+        if not stripped or all(isinstance(node, _ast.Pass) for node in stripped):
+            empty.append(name)
+    assert empty == [], f"main-loop calls with no implementation: {empty}"
+    assert empty == [], f"main-loop calls with no implementation: {empty}"

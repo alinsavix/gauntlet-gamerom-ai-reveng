@@ -143,3 +143,79 @@ def test_the_main_loop_actually_calls_it():
     state.player_input_raw[0] = press(gin.JOY_MAGIC_BIT)
     tick(state)
     assert state.debounce_shift_magic[0] & 1 == 0
+
+
+# ---------------------------------------------------------------------------
+# Bit assignments and the shift itself, against the ROM
+# ---------------------------------------------------------------------------
+
+def test_bit_assignments_match_the_data_reference():
+    """doc/05_data_reference.md §3.11, Verified for bits 0, 1 and 4-7 --
+    ``joystick_nibble_to_direction`` (0x580FC) decoding all eight compass
+    directions is what fixes RIGHT=4, LEFT=5, DOWN=6, UP=7. An earlier reading
+    put the directions at bits 2-5, which read the two unconnected spare lines
+    for UP/DOWN and swapped LEFT/RIGHT.
+    """
+    assert (gin.JOY_MAGIC_BIT, gin.JOY_FIRE_BIT) == (0x01, 0x02)
+    assert (gin.JOY_RIGHT, gin.JOY_LEFT, gin.JOY_DOWN, gin.JOY_UP) == (
+        0x10, 0x20, 0x40, 0x80
+    )
+    assert gin.JOY_DIRECTIONS == 0xF0
+    # Bits 2-3 are JOY_SPARE1/2 and no consumer tests either one.
+    assert gin.JOY_DIRECTIONS & 0x0C == 0
+
+
+def test_the_shift_matches_the_lsr_roxl_pair():
+    """ROM 0x40650-0x4065A per player: ``lsr.w #1,d0`` drops raw bit 0 into X
+    and ``roxl.w`` rotates it into bit 0 of the magic register; the second
+    pair does the same with raw bit 1 and the fire register. Modelled here
+    instruction for instruction so the *order* of the two pairs is pinned --
+    swapping them would put Fire on the start button.
+    """
+    state = GameState()
+    # Both registers boot released (all ones), because the switches are active
+    # low and nothing is pressed.
+    magic = state.debounce_shift_magic[0]
+    fire = state.debounce_shift_fire[0]
+    assert (magic, fire) == (gin.JOY_IDLE, gin.JOY_IDLE)
+
+    words = [0xFFFF, 0xFFFE, 0xFFFD, 0xFFFC, 0xFFFF, 0xAAAA, 0x5555]
+    for word in words:
+        state.player_input_raw[0] = word
+        gin.input_debounce(state)
+
+        d0 = word
+        x = d0 & 1            # lsr.w #1,d0
+        d0 >>= 1
+        magic = ((magic << 1) | x) & 0xFFFF    # roxl.w magic
+        x = d0 & 1            # lsr.w #1,d0
+        fire = ((fire << 1) | x) & 0xFFFF      # roxl.w fire
+
+        assert state.debounce_shift_magic[0] == magic, hex(word)
+        assert state.debounce_shift_fire[0] == fire, hex(word)
+
+
+
+def test_the_raw_word_is_truncated_to_a_hardware_word():
+    """0x803000 is a word port and 0x904920 a word of RAM; a host that writes
+    something wider must not smuggle extra bits into the shift registers."""
+    state = GameState()
+    state.player_input_raw[0] = 0x1_FFFE
+    gin.input_debounce(state)
+    assert state.player_input_raw[0] == 0xFFFE
+    assert state.debounce_shift_magic[0] & 1 == 0
+
+
+def test_read_ports_is_the_host_facing_indirection():
+    """Demo playback works precisely because recorded input arrives through
+    the same array the hardware read would land in (§6.2)."""
+    state = GameState()
+    assert gin.read_ports(state) is state.player_input_raw
+
+
+def test_all_four_players_have_their_own_registers():
+    state = GameState()
+    for player in range(4):
+        state.player_input_raw[player] = press(gin.JOY_MAGIC_BIT) if player == 3 else gin.JOY_IDLE
+    gin.input_debounce(state)
+    assert [state.debounce_shift_magic[p] & 1 for p in range(4)] == [1, 1, 1, 0]

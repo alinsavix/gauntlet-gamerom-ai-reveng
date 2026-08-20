@@ -24,22 +24,23 @@ package's brief even though ``render/`` otherwise never imports
 its bit. Getting this backwards inverts every control in the game, so it is
 asserted in ``tests/test_render.py``'s ROM-free input-mapping test.
 
-**Flagged limitation -- ``vblank_flag`` is not meaningfully driven here.**
-``mainloop.tick()`` (not ours to edit) unconditionally resets
-``state.vblank_flag = 0`` as its first statement, before ``game_frame`` runs,
-and ``check_frame_overflow`` inspects it only afterward. On the real
-hardware that gap is where an asynchronous VBLANK interrupt could re-set the
-flag *while* ``game_frame`` was still executing, signalling "we're now
-behind." A synchronous, single-threaded Python host has no such concurrent
-signal source: anything ``wait_for_vblank`` sets before ``tick()`` runs is
-overwritten by that same reset before ``check_frame_overflow`` ever reads
-it. So under this host ``frame_overflow`` will simply decay to, and stay at,
-zero -- generator spawn throttling (PLAN.md's WP-8 territory) never
-activates from real frame pressure. Fixing this would need a host that
-wraps ``tick()`` itself (to poke the flag *between* the reset and the
-overflow check), which is a different, larger integration than the
-``wait_for_vblank``/``present`` seam ``g2mainloop`` offers -- flagged here
-rather than silently faked.
+**The VBLANK semaphore is a hardware boundary, not a gap.** On the cabinet
+``vblank_flag`` (0x904002) is set by an asynchronous interrupt, so it can be
+re-raised *while* ``game_frame`` is still running -- that is exactly how
+``check_frame_overflow`` learns the frame ran long. ``mainloop.tick()`` clears
+it as its first statement and checks it afterward, so the only way to observe
+an overflow is for something to set the flag between those two points. A
+synchronous, single-threaded host has no such concurrent signal source: by
+construction there is nothing running during ``game_frame`` that could raise
+it. So under this host ``frame_overflow`` stays at zero and the generator
+spawn throttling it gates never activates from real frame pressure.
+
+That is a property of hosting the simulation synchronously, not something
+this module leaves undone, and it is not fixable from the
+``wait_for_vblank``/``present`` seam ``g2mainloop`` offers -- a host would
+have to drive ``game_frame`` itself, or run it on another thread, to have
+anywhere to put the interrupt. Tests that need overflow behaviour set
+``state.frame_overflow`` directly, which is what the subsystems read anyway.
 """
 
 from __future__ import annotations
@@ -72,6 +73,11 @@ DEFAULT_KEYMAP: dict[str, int] = {
     "K_LALT": JOY_MAGIC_BIT,
     "K_RETURN": JOY_MAGIC_BIT,
 }
+
+#: Coin key: an edge (keydown), not a held bit, so it lives outside the JOY_*
+#: keymap. "5" is the classic arcade coin slot. Pressing it bumps the host
+#: player's 2-bit coin counter, exactly the signal ``coincheck`` polls.
+DEFAULT_COIN_KEY = "K_5"
 
 
 class HostShell:
@@ -115,6 +121,7 @@ class HostShell:
 
         keymap = keymap if keymap is not None else DEFAULT_KEYMAP
         self._keymap = {getattr(pygame, name): bit for name, bit in keymap.items()}
+        self._coin_key = getattr(pygame, DEFAULT_COIN_KEY)
 
     # -- the g2mainloop interface --------------------------------------------
 
@@ -128,9 +135,23 @@ class HostShell:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 raise SystemExit(0)
+            if event.type == pygame.KEYDOWN and event.key == self._coin_key:
+                self._insert_coin(state)
 
         self._sample_input(state)
         self.clock.tick(FRAMES_PER_SECOND)
+
+    def _insert_coin(self, state: GameState) -> None:
+        """Bump this host player's 2-bit coin counter (0x904FEC layout).
+
+        A coin is an *edge*: handled on keydown, not per-frame like the held
+        JOY_* keys. ``coincheck`` reads the delta against ``last_coin_state``.
+        """
+        shift = self.player * 2
+        current = (state.coin_counters >> shift) & 3
+        state.coin_counters = (
+            (state.coin_counters & ~(3 << shift)) | (((current + 1) & 3) << shift)
+        )
 
     def present(self, state: GameState) -> None:
         """Render the current state and flip it to the window."""

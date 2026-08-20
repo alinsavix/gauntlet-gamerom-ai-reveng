@@ -11,6 +11,24 @@ Reference: ``doc/04_game_subsystems.md`` §1.3, §23.1-23.3.
   pixels      world pixel coordinates on the 512x512 playfield, 16 px/cell
   playfield   64x64 grid of 8x8 tiles, column-first; one maze cell owns a
               2x2 block
+
+One deliberate divergence, recorded here because this is the module that owns
+the encoding. The hardware's own H/V words are not in whole pixels: the ROM
+builds them as ``slot << 11`` (``maze_place_object`` 0x46192, ``maze_tile_write_at``),
+which puts ``column * 32`` in the position field -- **half-pixels**, two units
+per screen pixel -- and stores Y as ``(31 - row) * 32``, the *bottom* edge of
+the cell counting **up** from the playfield floor. The per-type corrections in
+``mazeobj_hpos_correction_tbl`` are in those same half-pixel units (its only
+nonzero value, 512, is 8 field units = 4 px = half the overhang of a 24 px
+sprite in a 16 px cell), which is what pins the scale down.
+
+gauntpy keeps whole pixels with Y increasing downward, matching
+``doc/04_game_subsystems.md`` §23.2's own ``pixel_x = column x 16`` /
+``pixel_y = row x 16`` and every subsystem and renderer built on it. The two
+representations are related by ``field = 2 * pixels`` horizontally and
+``field = 2 * (512 - pixels - height)`` vertically, so nothing is lost -- but a
+raw H/V word lifted straight out of a MAME trace will not compare equal to one
+of ours, and ``maze.py`` converts the correction tables on the way in.
 """
 
 from __future__ import annotations
@@ -59,6 +77,17 @@ def pixels_to_slot(x: int, y: int) -> int:
 #
 # mob_hpos: bits 15-6 X position, bits 5-4 software flags, bits 3-0 palette
 # mob_vpos: bits 15-6 Y position, bits 5-3 width-1,        bits 2-0 height-1
+#
+# The ROM splits the same words one bit higher -- position in bits 15-7 over a
+# seven-bit low field -- so every ROM site that rebuilds a position word masks
+# with 0xFF80 and keeps 0x7F of the old one.  These are that pair, restated at
+# gauntpy's shift; the low field keeps the ROM's own bit numbers, so a ROM
+# constant that lands *in* it (a palette nibble, a packed sprite size) carries
+# over unchanged while a constant that lands in the position field is >> 7 into
+# whole pixels.
+
+POS_FIELD_MASK = 0xFFC0
+POS_LOW_MASK = 0x003F
 
 HPOS_FLAG_MOVING = 0x20   # bit 5
 HPOS_FLAG_ATTACK = 0x10   # bit 4
