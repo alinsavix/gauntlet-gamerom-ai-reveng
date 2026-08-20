@@ -2041,7 +2041,7 @@ fs *
 fs *
 'f damage_comment_speech_ids 8 0x0005b724
 fs *
-'f character_reflect_timer_init 8 0x0005b72c
+'f character_repulse_timer_init 8 0x0005b72c
 fs *
 'f character_stun_delay_add 8 0x0005b734
 fs *

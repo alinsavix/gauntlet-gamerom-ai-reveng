@@ -455,6 +455,7 @@ af+ 0x53e4a dragon_choose_move_direction
 af+ 0x540e8 dragon_find_free_shot_slot
 af+ 0x54112 dragon_shot_hit
 af+ 0x54454 main_handle_dragon
+af+ 0x545fa dragon_head_pose_update
 af+ 0x54748 dragon_fire_setup
 af+ 0x5496e dragon_setup_segments
 af+ 0x549ea dragon_player_proximity
@@ -1152,7 +1153,7 @@ f mugger_player_speech_ids 8 0x0005b702
 f thief_direction_step_size 18 0x0005b70a
 f tport_direction_rotation 8 0x0005b71c
 f damage_comment_speech_ids 8 0x0005b724
-f character_reflect_timer_init 8 0x0005b72c
+f character_repulse_timer_init 8 0x0005b72c
 f character_stun_delay_add 8 0x0005b734
 f tile_effect_sound_ids 16 0x0005b73c
 f pickup_score_values 40 0x0005b74c

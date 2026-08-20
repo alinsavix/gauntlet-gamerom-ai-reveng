@@ -5,6 +5,7 @@ address,name,arguments,return,exceptional_convention,direct_control_sites,confid
 0x54748,dragon_fire_setup,"uint16 shot_mob_slot, uint16 variant_flag",void,,0x546EC,Verified
 0x53E4A,dragon_choose_move_direction,void,void,,0x546F2,Verified
 0x53D10,dragon_update_segments,void,void,,0x54732,Verified
+0x545FA,dragon_head_pose_update,A2 points to the dragon animation counter word,void,register-only internal entry,,Verified
 0x540E8,dragon_find_free_shot_slot,void,"D0.l = free dragon-shot subslot 1-4, or 0 when full",,0x546CA,Verified
 0x54AF8,dragon_any_segment_near_screen,void,"D0.l = -1 when any segment is near the screen, or 0 otherwise",calls tile_near_screen_test four times indirectly through A2,0x470D2,Verified
 0x4DFF6,thief_target_calc,void,void,,0x4E498,Verified

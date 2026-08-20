@@ -1189,10 +1189,10 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x54404,dragon_shot_hit@0x54112,call,jsr 0x5dc58.l,0x05DC58,mob_create,documented_game_entry,Verified
 0x54524,main_handle_dragon@0x54454,call,jsr 0x5fc4e.l,0x05FC4E,getrandom,documented_game_entry,Verified
 0x54590,main_handle_dragon@0x54454,call,jsr 0x5fc4e.l,0x05FC4E,getrandom,documented_game_entry,Verified
-0x546CA,main_handle_dragon@0x54454,call,jsr 0x540e8.l,0x0540E8,dragon_find_free_shot_slot,documented_game_entry,Verified
-0x546EC,main_handle_dragon@0x54454,call,jsr 0x54748.l,0x054748,dragon_fire_setup,documented_game_entry,Verified
-0x546F2,main_handle_dragon@0x54454,call,jsr 0x53e4a.l,0x053E4A,dragon_choose_move_direction,documented_game_entry,Verified
-0x54732,main_handle_dragon@0x54454,call,jsr 0x53d10.l,0x053D10,dragon_update_segments,documented_game_entry,Verified
+0x546CA,dragon_head_pose_update@0x545FA,call,jsr 0x540e8.l,0x0540E8,dragon_find_free_shot_slot,documented_game_entry,Verified
+0x546EC,dragon_head_pose_update@0x545FA,call,jsr 0x54748.l,0x054748,dragon_fire_setup,documented_game_entry,Verified
+0x546F2,dragon_head_pose_update@0x545FA,call,jsr 0x53e4a.l,0x053E4A,dragon_choose_move_direction,documented_game_entry,Verified
+0x54732,dragon_head_pose_update@0x545FA;main_handle_dragon@0x54454,call,jsr 0x53d10.l,0x053D10,dragon_update_segments,documented_game_entry,Verified
 0x5495E,dragon_fire_setup@0x54748,call,jsr 0x5df68.l,0x05DF68,mob_place_shot,documented_game_entry,Verified
 0x54AE8,dragon_player_proximity@0x549EA,call,jsr 0x4ad76.l,0x04AD76,sound_play,documented_game_entry,Verified
 0x54B1C,dragon_any_segment_near_screen@0x54AF8,call,jsr (a2),,,indirect_call,Strong inference

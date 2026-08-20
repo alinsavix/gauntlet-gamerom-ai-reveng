@@ -16,8 +16,9 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   next slot in `D0.l`.
 - **SOL-09 resolved:** the first active player's character class indexes the
   four bytes at 0x40E66: Warrior→3, Valkyrie→0, Wizard→4, Elf→0. Four ordinary
-  coin/select/join runs reached all indices; subsequent joins clear the bonus
-  at 0x48F00 rather than reading the table.
+  coin/select/join runs reached all indices; 0x48EF6 writes the selected byte
+  to `monster_spawn_probability_bonus`, and subsequent joins clear that byte
+  at 0x48F00. It is not a write to `player_bonusmult`.
 - **SOL-10 resolved:** transporter route cells and character portraits coexist.
   One-based route IDs 1–32 reach only offsets 0x02–0x2A and 0x00–0x14 in the
   two padded rows; portrait destinations start at offset 0x36. An original-code
@@ -510,3 +511,6 @@ paths while drafting the corresponding book chapters. All were checked against
 - **Verified:** a fourth attack-state special case was missing from §3.3. At 0x41208–0x4121E the lobber (offset 0x0C) selects `anim_tiles_lobber_throw` where every other family selects `anim_tiles_monster_special_attack`.
 - **Verified:** `monster_oddangle_table` (0x40E1E) is ten four-byte records whose bytes have distinct roles: +0 an attack-transition selector tested for zero and sign (0x4143C), +1 a frame rate mask (0x413FA/0x41460), +2 an animation-counter addend whose bit 0 also gates entry into the attack state with picture 0x1709 (0x41424, 0x4146E–0x4148A), and +3 the moving-state animation-counter addend (0x411C0). The former "per-type direction adjustment" summary covered only part of that.
 - **Verified:** the bit-4 monster state is an attack-animation state rather than a distinct pursuit mode. It advances the counter by 0x2000 per step and calls `monster_find_and_shoot` on carry; the idle state reaches the same routine after the `((slot | 2) ^ frame) & 0x1E` turn stagger, and both fall through to the movement body that writes the H/V words and calls `move_mob_slot` or `monster_playerhit` (0x41336–0x413C2).
+- **Contradicted and corrected:** the short OS RAM test does not apply its walking-one/zero patterns across each requested range. The watchdog `MOVE.W` at 0x0B1E clears carry after `CMPA` and before `BCS`, limiting both high-bit-first stages to A1. The full service-mode test shares that defect in four high-bit-first stages (the restore worker has the analogous write at 0x0BA8), but its low-bit-first and per-word inversion workers still traverse the complete range.
+- **Strong inference:** the decoded `0x800000–0x801FFF` main-RAM aperture is physically unfitted on Gauntlet II. The external schematic-derived FPGA reconstruction records those sockets as populated only for Vindicators II, surviving Gauntlet board photographs show empty sockets, and neither shipped ROM contains an ordinary operand reference into the aperture. Gauntlet II uses `0x904000–0x904FFF` video spare RAM for its stack and general variables.
+- **Verified on original hardware:** horizontal control PROM 4R intentionally clips wide MOBs near the right edge and suppresses them beyond the drawable region. An external FPGA signal trace isolated the PROM behavior and a real-PCB diagnostic photograph reproduced the clipping; MAME's complete diagnostic squares are therefore visually cleaner but hardware-inaccurate. Gameplay normally covers that region with the alpha status panel.

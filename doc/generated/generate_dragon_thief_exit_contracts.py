@@ -24,6 +24,7 @@ CONTRACTS = (
     (0x54748, "dragon_fire_setup", "uint16 shot_mob_slot, uint16 variant_flag", "void", "", "Verified", ("move.w 0xa(a6), d2", "move.w 0xe(a6), d3", "subq.w 0x1, d5")),
     (0x53E4A, "dragon_choose_move_direction", "void", "void", "", "Verified", ("link.w a6, 0xfff8", "move.w 0xf0, -0x4(a6)", "move.w -0x2(a6), d1")),
     (0x53D10, "dragon_update_segments", "void", "void", "", "Verified", ("movem.l d2-d5/a2, -(a7)", "moveq 0x3, d1", "andi.w 0xfff7, (a2)")),
+    (0x545FA, "dragon_head_pose_update", "A2 points to the dragon animation counter word", "void", "register-only internal entry", "Verified", ("move.w (a2), d0", "move.b (a0, d0.w), d3", "move.w d0, 0x904882.l")),
     (0x540E8, "dragon_find_free_shot_slot", "void", "D0.l = free dragon-shot subslot 1-4, or 0 when full", "", "Verified", ("moveq 0x4, d1", "subq.w 0x1, d1", "move.w d1, d0")),
     (0x54AF8, "dragon_any_segment_near_screen", "void", "D0.l = -1 when any segment is near the screen, or 0 otherwise", "calls tile_near_screen_test four times indirectly through A2", "Verified", ("movem.l a2, -(a7)", "jsr (a2)", "moveq 0xff, d0", "moveq 0x0, d0")),
     (0x4DFF6, "thief_target_calc", "void", "void", "", "Verified", ("link.w a6, 0xfff8", "move.w d2, -0x8(a6, d0.w)", "cmp.w -0x8(a6, d0.w), d2")),

@@ -33,8 +33,8 @@ Plus one software-only parallel array:
 |----------|---------|
 | 0 | Linked-list null terminator |
 | 1–4 | Player shots |
-| 5–8 | Demon shots |
-| 9–12 | Lobber shots |
+| 5–8 | Demon shots — also where `dragon_fire_setup` puts the dragon's fire |
+| 9–12 | Lobber shots (the only channels that use the 0x479C2 arc accumulator) |
 | 13–16 | Shot explosion animations |
 | 17–20 | Floating score popups |
 | 21–24 | Player exit animations |
@@ -75,13 +75,30 @@ Bits 9–0 always hold the previous MOB ID in the software depth-sorted list. A 
 
 ### 2.2 Player Animation Modes
 
-Players have three animation modes:
+Players have four animation modes, selected by `main_move_players` at
+0x4AB08–0x4AC2A after movement/forcefield processing. `direction` below is the
+ROM-facing value (up, up-right, right, ... up-left), and every table is indexed
+by character first:
 
-1. **Standing/idle:** Tile from `anim_table_idle` (0x58A4A), indexed by `(direction, char_type × 8)`. Stationary, no fight/shoot.
+1. **Standing/idle:** Tile from `anim_table_idle` (0x58A4A), indexed by
+   `(direction, char_type × 8)`. The counter does not advance.
 
-2. **Walking:** Tile from `anim_table_walking` (0x58A8A), indexed by `(anim_counter/4 & 3, direction, char_type × 32)`. Counter increments each frame of movement.
+2. **Walking:** Tile from `anim_table_walking` (0x58A8A), indexed by
+   `(anim_counter/4 & 3, direction, char_type × 32)`. The counter increments
+   after the lookup only when `player_try_move` did move.
 
-3. **Fighting/shooting:** Tile from `anim_table_shooting` (0x5874A), indexed by `(anim_counter/4 & 3, direction, char_type × 64)`. At end of shooting animation: calls `player_create_shot`.
+3. **Fighting:** A nonzero `player_fighting_dir` selects
+   `anim_table_fighting` (0x5884A), indexed by
+   `(anim_counter/2 & 7, direction, char_type × 64)`, then increments the
+   counter. The fighting-direction word is the active-combat latch; the picture
+   table uses the current facing.
+
+4. **Shooting:** `player_shooting` selects `anim_table_shooting` (0x5874A),
+   indexed by `(anim_counter/4 & 3, direction, char_type × 32)`. The
+   held-Fire gate in `main_handle_shots` (0x47B72–0x47BF6) resets the counter
+   and arms this state; `main_move_players` increments it and calls
+   `player_create_shot` when the prior counter equals that player's
+   `fighting_anim_end` word (the shipped values are all 3).
 
 **Invisibility flickering:** When the invisibility power-up is active with a short timer remaining, the `invisibility_flash_masks` table (0x58070) ANDs a frame-dependent mask with the frame counter. When the result is zero, the player's MOB picture is set to `0x1709` (blank/invisible) — creating a flickering effect.
 
@@ -266,8 +283,19 @@ Finds the nearest player within range. Sets monster facing direction. Calls `fin
 - **Range gate (0x41946–0x41960).** Throw only when at least one absolute axis delta is ≥0x14 *and* both are <0x2C — a mid-range annulus. Too close reverses direction and bails (0x41876); too far bails outright.
 - **Lead vector (0x41980–0x419CA).** For the chosen target (offset in `-0xC(a6)`), read `player_character` (0x9048E8→`d1`) and `player_joystick` — the target's last/facing direction — (0x9048F0→`d6`). A power bit (`btst #0,0x19(a1,d0)` at 0x4198A) adds 8 to the character index, selecting the powered half of `lobber_lead_distance` (0x580C8). The scalar `0x580C8[character]` is multiplied by the facing unit vector `player_delta_x`/`player_delta_y` (0x580D8/0x580EA, indexed by direction via `joystick_nibble_to_direction`) to form the lead. The final aim is `4×(current axis delta) + lead`, computed at 0x419B4–0x419CA.
 - **Velocity store (0x419E4–0x41A10).** After `monster_create_shot`, the per-direction seed `lobber_shot_spawn_h_offset`/`_v_offset` (0x57BB8/0x57BC8) is scaled and subtracted from the aim to yield the launch velocity, written to `lobber_shot_vec_h`/`_v` (0x9048F8/0x904900) for the chosen shot slot. A lobber-throw sound (0x49) is played at 0x41A14.
+- **Flight (0x479C2–0x47A58).** A lobber channel is the one projectile class that never reads `shot_velocity_x/y`. `monster_create_shot` seeds `lobber_shot_h_accum`/`_v_accum` (0x904A66/0x904A6E, indexed by `shot_slot - 9`) with the masked spawn position at 0x49216/0x4922A, and every frame `main_handle_shots` does `accum += vec`, then rebuilds the MOB word as `(accum & 0xFF80) + (word & 0x7F)` — position field from the accumulator, palette/flags (H) and packed sprite size (V) left exactly as they were. The seven bits under the position field are the sub-pixel remainder, which is what lets a lead of, say, 0xC0 per frame advance 1.5 pixels a frame instead of rounding to 1 or 2.
 
 The demon branch (0x41A2E) uses `monster_shooter_in_view` and a maze-cell line-of-fire walk but no character/facing lead; it fires along `d3`'s compass direction.
+
+**Shot spawn geometry (`monster_create_shot`, 0x49192–0x49270).** The projectile inherits only the shooter's *position*: 0x49192/0x491A2 mask `mob_hpos`/`mob_vpos` with 0xFF80 before anything else, so the shooter's palette (which for a monster is its health nibble) and its 3×3 packed sprite size are discarded. The per-direction muzzle offset is added on top, and then three small constants land **under** the position field, replacing the low byte:
+
+| constant | site | branch | meaning |
+|---|---|---|---|
+| `+0xD` | 0x491BA | demon only | palette bits 3–0, combined with the shared `+1` below |
+| `+1` | 0x49258 | both | H low byte becomes 0xE for a demon shot and 1 for a lobbed rock; strength bits 0x30 stay clear |
+| `+9` | 0x4926E | both | V low byte = packed sprite size, width−1 = height−1 = 1, i.e. a 2×2-tile 16×16 px projectile |
+
+They are not pixel offsets — reading `+0xD`/`+9` as a 13 px right and 9 px up displacement misplaces every demon fireball by most of a cell and gives it the shooter's palette instead of its own.
 
 ### 3.6 Death (`death_potion_score`, 0x49446 and `death_damage_accumulate`, 0x49A3C)
 
@@ -350,7 +378,10 @@ Processes all 4 player slots each frame. Four main sections:
    - Status `0x20` (secret winner name entry): run `secret_name_entry_update`
    - Status `0x04` (dying): run death sequence
    - Status `0x08` (dead/respawn wait): cycle idle animation; when counter reaches 0x20, transition to removed and call `show_continue_prompt` if no players remain
-   - Active gameplay: update the 60-frame damage sample, power-up timers, input, movement, tile interactions, shooting, and animation
+   - Active gameplay: update the 60-frame damage sample, power-up timers,
+     input, movement, tile interactions, shooting, and the per-player ROM
+     picture selection in §2.2. This happens for every active slot, not in a
+     host-only presentation pass.
 
 4. **Post-loop:** When the idle timer exceeds its configured threshold,
    `open_timed_doors` removes every active type-0x0D/0x0E door object and plays
@@ -387,7 +418,20 @@ The four `mob_probe_*` stack leaves take `uint16 mob_slot` and return the first
 blocking slot in `D0.w`, or `-1` when clear. The up/down probes can instead
 return `0x0400` at the vertical boundary; callers therefore must not treat all
 nonnegative values as actual MOB slots. Their shared candidate helper is a
-BSR-only register entry and returns its blocking predicate in carry.
+BSR-only register entry and returns its blocking predicate in carry. A named
+neighbour is not automatically blocking: `mob_probe_candidate` (0x407A6)
+requires the candidate and proposed player anchors to be less than 0x7C0 apart
+on **both** axes. Software wall markers first pass through the rounded
+`((H+0x280)&0xF800)-0x200` / `(V+0x100)&0xF800` anchor conversion. Omitting
+that distance gate turns each three-cell probe into a coarse whole-row/column
+barrier.
+
+Unless `LFLAG4_PLAYER_OFFSCREEN` is set, each proposed axis also has to remain
+inside the hardware window. The H anchor minus `scroll_hpos_origin` must be
+below 0x7000; the V anchor minus `scroll_vpos_origin` must be below 0x7400
+(0x41C52-0x41C6A, 0x42092-0x420AA, and their other-direction twins). These are
+the gates that keep a hero out of the alpha/HUD region and prevent walking past
+the bottom of the visible playfield.
 
 Door traversal is a register/shared-stack convention: `D2.w` is the current
 offset, `A2-A4` are MOB arrays, and the helper reads the caller's saved `D5`
@@ -515,6 +559,23 @@ Called when transitioning to a new level:
 Decompresses maze data from the slapstic ROM into playfield RAM. See `05_data_reference.md` §3.19 for the verified bytecode encoding (note: 0xC0–0xDF skip *without* adding a wall; only 0xE0–0xFF add one).
 
 Verified decoder mechanics: header bytes 7/8/9/0xA (HT1/HT2/VT1/VT2) are copied to 0x904866/68/6A/6C; the "last type" register initializes to **HT2**; the tile cursor starts at slot 0x20 (row 0 is not emitted by this function); compressed data begins at maze+0xB and game decoding loops until the cursor reaches 0x400. Immediately after the decoder returns, `maze_setupnew` calls `maze_place_object(0, 2, 0x20)` at 0x44C18, synthesizing row 0 as 32 solid-wall markers. MAME write watches observed all 32 picture/H/V/link records and no row-0 write inside `maze_decode`. The game does not test a terminator byte. The stored ROM records nevertheless end in a zero delimiter after the final consumed byte; offline extraction uses adjacent pointer-table entries for record length and verifies this delimiter. For bytecodes 0x40–0x7F, `(b>>4)&3` selects HT1/VT1/HT2/VT2 via the pointer table at 0x59B54; the run count always comes from the bytecode's low nibble (+1); the H/V type byte contributes the mode (top 2 bits, §3.20) and the element (low 6 bits). Horizontal runs use `maze_tile_write` (consecutive increasing slots, returns next cursor); vertical runs use `maze_tile_write_at`, which writes successive elements at decreasing slots (`-0x20`, or `-0x1F` in the odd-angle case) while advancing the main cursor by 1. **Confidence: Verified.**
+
+**Reserved row-0 alias and shot-boundary behavior.** Maze row 0 would occupy
+MOB slots 0–31, but the same low slots are reserved at runtime: slot 0 is the
+null link, slots 1–12 are the player/demon/lobber shots, and slots 13–29 hold
+shot explosions, score popups, exit animations, and transporter effects. The
+row-0 wall fill above supplies the initial static-wall markers used to render
+the playfield; those MOB records are subsequently free to be overwritten by
+their reserved effects. The shot collision code therefore cannot use row 0 as
+an ordinary MOB collision row. `shot_collision_candidate_core` (0x40A78)
+rejects a doubled candidate offset below 0x40, while its off-maze path folds an
+eligible wrapped probe by one complete 0x800-byte MOB-array span. For the
+reachable top-edge case this lands on slots 0x3E0–0x3FF, maze row 31. Thus row
+31 supplies the opposite-edge collision records that a naive 32×32 lookup
+would expect to find in row 0. This is a collision/probe alias, not duplicate
+maze data: rows 0 and 31 are not stored as identical rows. **Confidence:
+Verified** from 0x40A78–0x40AA6, the fixed low-slot assignments, and the
+setup-time row-0 writes.
 
 ### 5.4 Maze Object Placement (`maze_place_object`, 0x45E40)
 
@@ -816,18 +877,43 @@ updates the four dragon segment MOB positions/pictures from the pose tables,
 and clears the turning/update bit when the segments reach the required
 alignment.
 
-`dragon_fire_setup` (0x54748, formerly `_x100`/`dragon_fire_attack`): fires one fireball. Sets `dragon_fire_cooldown` (0x90487C) = 8; the fireball's origin segment is `dragon_seg_mob_ids[tbl_0x5D4B8[pose + facing*2]]` (a signed-byte index into the 4-word segment MOB-id array at 0x904894); the shot direction array `0x9049C4[shot_slot]` receives `dragon_facing`.
+`dragon_fire_setup` (0x54748, formerly `_x100`/`dragon_fire_attack`): fires one projectile into the monster-shot channel `dragon_find_free_shot_slot` handed it. Sets `dragon_fire_cooldown` (0x90487C) = 8; the *owner* recorded in `active_mob_ids` (0x9048C8) is `dragon_seg_mob_ids[tbl_0x5D4B8[pose + facing*2]]` (a signed-byte index into the 4-word segment MOB-id array at 0x904894), while the spawn position is masked (`& 0xFF80`) out of `dragon_seg_mob_ids[0]` at 0x547DC/0x547EE. Every per-channel word is indexed by `shot_slot - 1`, not by the MOB slot: `active_mob_ids[shot_slot-1]` (0x547CA), `shot_direction[shot_slot-1] = dragon_facing` (0x9049C4, 0x547D8) and `shot_anim_lifetime_counter[shot_slot-1]` (0x904B02, 0x54816/0x548AE).
 
-`dragon_find_free_shot_slot` (0x540E8) scans physical dragon-shot MOB slots
+**Two branches, chosen by the caller (0x546D6–0x546E2).** The caller sign-extends `dragon_move_state`'s high byte — the winning candidate's cross-axis distance in cells, stored as `dist << 4` at 0x5406A — and passes 1 when it is ≤ 3:
+
+| | close-range breath (0x5480A) | long-range fireball (0x54894) |
+|---|---|---|
+| `shot_anim_lifetime_counter` | 0x13 | `shot_counter_reload[shot_slot-1]` |
+| picture table | `special_projectile_picture_table` (0x58E3E) at `(facing & 6)*10 + counter` | `projectile_picture_table` (0x58B8A) at `facing*2 + 0x20 + counter` |
+| H word low byte | `0x30 + 8` = 0x38 — the **max-tier** strength bits plus palette 8 | `0x20 + 0xE` = 0x2E — tier-2 bits plus palette 0xE |
+| V word low byte | 0x12 (3×3 tiles) | 0x09 (2×2 tiles) |
+| H muzzle offset | `tbl_0x5D428[facing>>1] + tbl_0x5D4C8[pose]` | `tbl_0x5D4C8[pose]` |
+| V muzzle offset | `tbl_0x5D430[facing>>1] + tbl_0x5D4E8[pose]` | `tbl_0x5D4E8[pose]` |
+
+Because the breath's H word carries 0x30, `main_handle_shots` treats it exactly as a max-tier monster shot: the fixed large collision box (0x4094C), the 0x50 velocity block, motion only on even frames (0x478CE), the `special_projectile_picture_table` animation, removal when the counter reaches zero (0x477E8), and the tier-3 row of `monstshot_damage_tbl` — the row that raises the "shoot the dragon's head" dialog and spends the *Don't Get Hit* objective. The setup finishes by depth-placing the channel from the words it has just written (0x54952).
+
+`dragon_find_free_shot_slot` (0x540E8) scans the **ordinary monster-shot** MOB slots
 8 down to 5 and returns the corresponding logical subslot 4 down to 1, or zero
-when all four are occupied. It is called when the current path byte's fire bit
-is set, `dragon_fire_cooldown` == 0, and `(dragon_move_state & 0xF) < 4`.
+when all four are occupied; the caller adds 4 back to recover the MOB slot. The
+dragon therefore has no projectile channels of its own — its fire shares slots
+5–8 with demon fireballs, and never uses the lobber channels 9–12. It is called
+when the current path byte's fire bit is set, `dragon_fire_cooldown` == 0, and
+`(dragon_move_state & 0xF) < 4`.
 
 ### 8.3 Dragon Path System (fully decoded)
 
 The path table at 0x5D578 is **5 path programs × 16 bytes** (0x5D578–0x5D5C7), *not* 128×16. The current program is `dragon_path_num` (0x904886, 0–4); the byte index is `dragon_anim_ctr` (0x904892) >> 3, so the path phase advances every 8 frames and wraps at 128.
 
-**Path byte format:** bit 0 = fire trigger; the **pose is `byte >> 1`** (0–3), not the raw byte. Head rendering per phase boundary: `idx = (byte >> 1) + facing*2` → picture from 0x5D528, hpos delta from 0x5D438, vpos delta from 0x5D478 (deltas are added to the dragon MOB position and produce `dragon_head_hpos/vpos` 0x904882/84). **Contradicted and corrected:** the index was formerly given as `byte + facing*4`, which conflated the packed path byte with the pose and doubled the facing stride. Verified by disassembly at 0x53D5C–0x53D70.
+**Path byte format:** bit 0 = fire trigger; the **pose is `byte >> 1`** (0–3). The ROM builds *two different indices* out of that byte, and they are not interchangeable:
+
+| index | formula | width | tables | disassembly |
+|---|---|---|---|---|
+| pose index | `(byte >> 1) + facing*2` | 16 | `dragon_fire_segment_tbl` 0x5D4B8, `dragon_pose_hdelta/vdelta` 0x5D4C8/0x5D4E8 | 0x53D5C–0x53D70, 0x54790–0x5479E |
+| head index | `byte + facing*4` | 32 | `dragon_head_pics` 0x5D528, `dragon_head_hdelta/vdelta` 0x5D438/0x5D478 | 0x54616–0x54626 |
+
+The head index is exactly `2 × pose index + fire bit`, so each (pose, facing) owns an adjacent **mouth-closed / mouth-open** pair, and the delta tables differ within each pair along the facing axis: the head lengthens in the direction the dragon is facing when it opens its mouth (facing 0/4, the vertical pair, move in V; facing 2/6 move in H). Reading the head tables with the 16-entry pose index therefore both picks the wrong frame and can never reach the second half of the table.
+
+Head rendering per phase boundary writes `mob_picture[dragon_seg_mob_ids[0]]` from 0x5D528 and produces `dragon_head_hpos/vpos` (0x904882/84) as `(delta + segment word) & 0xFF80` — position field only, no palette and no sprite size (0x5466C/0x5469E). **Contradicted and corrected (twice):** an early note gave `byte + facing*4` for *everything*, which is wrong for the fire/segment tables; the correction then applied `(byte >> 1) + facing*2` to everything, which is wrong for the head tables — it was verified against 0x53D5C–0x53D70, the *fire* path, and never against 0x54616.
 
 **Sustained fire:** while locked-in (state bit 3), a fire byte at a phase boundary holds the counter until the fire cooldown expires (continuous flame), otherwise the counter advances mod 128.
 
@@ -837,12 +923,14 @@ The path table at 0x5D578 is **5 path programs × 16 bytes** (0x5D578–0x5D5C7)
 
 | ROM Address | Content |
 |-------------|---------|
-| 0x5D438 | `dragon_head_hdelta` — head hpos deltas, indexed by `(path byte >> 1) + facing*2` |
-| 0x5D478 | `dragon_head_vdelta` — head vpos deltas, same index |
+| 0x5D438 | `dragon_head_hdelta` — 32 head hpos delta words, indexed by `path byte + facing*4` |
+| 0x5D478 | `dragon_head_vdelta` — 32 head vpos delta words, same index. The V axis grows upward, so a positive entry walks the head *up* the screen |
 | 0x5D4B8 | `dragon_fire_segment_tbl` — 16 signed bytes: which segment MOB the fireball spawns from, indexed by `(path byte >> 1) + facing*2` |
-| 0x5D4C8/0x5D4E8 | `dragon_pose_hdelta` / `dragon_pose_vdelta` — 16 pose/facing position words per axis |
+| 0x5D4C8/0x5D4E8 | `dragon_pose_hdelta` / `dragon_pose_vdelta` — 16 pose/facing muzzle-offset words per axis, same 16-entry index |
+| 0x5D428/0x5D430 | `dragon_breath_hdelta` / `dragon_breath_vdelta` — 4 words each, indexed by `facing >> 1`; only the close-range breath branch adds them |
 | 0x5D508 | `dragon_body_pics` — 16 animation/facing picture words |
-| 0x5D528 | `dragon_head_pics` — head picture words, indexed by `(path byte >> 1) + facing*2`; values run 0xA180–0xA2F0 |
+| 0x5D528 | `dragon_head_pics` — 32 head picture words, indexed by `path byte + facing*4`; values run 0xA100–0xA2F0 |
+| 0x5D568 | 8 further picture words, selected outside the per-phase head update |
 | 0x5D578 | `dragon_path_programs` — 5 × 16-byte path programs (see 8.3) |
 | 0x54BD6 | `dragon_head_hitbox_offsets` — five padded words forming four overlapping H/V pairs for the cardinal head hitbox |
 
@@ -1619,6 +1707,13 @@ pixel_y = row × 16       (stored in mob_vpos bits 15-6)
 ```
 
 Values are pre-shifted left by 6 bits in VRAM (with size/palette in lower bits).
+The vertical word is the bottom edge of the object's 16-pixel maze cell, not
+the top edge of an arbitrarily tall stamp. The motion-object hardware draws
+extra tile rows upward: a 3×3 hero or monster begins at `pixel_y - 8`, and a
+4×4 dragon at `pixel_y - 16`. Horizontally the ROM applies the separate
+`mazeobj_hpos_correction_tbl`; 3×3 heroes and monsters begin four pixels left
+of the cell. Simulation cell lookup must undo that `-4` H correction, while
+rendering must undo the vertical overhang.
 
 ### 23.3 Playfield RAM Mapping
 
@@ -1759,7 +1854,7 @@ handlers, reflection, and wall/item effects.
 
 **Player victims** (target hpos & 0xF ≥ 0xC; victim = `0x904066[slot] >> 10`): LFLAG4 bit 0 (ShotStun) → `player_stundelay` += 0x28 (clamp 0x5A), fighting dir cleared, `hurt_cooldown` = 0x12; LFLAG4 bit 1 (ShotHurt) → −2 HP; a supershot shooter does −10 HP; acid-slowed victims are immune. Monster shots use `monstshot_damage_tbl` (0x596CE)[character + 4×armor + shot-tier (shot hpos bits 4–5: +0x10/+0x18/+0x20) + 8×(class ≥ 8)] — per-character defense (Valkyrie best, Wizard worst).
 
-**Monsters:** health/tier = the target's own **hpos low nibble**; per-type horizontal-size/tier bases are in `mazeobj_hsize_tier_tbl` (0x5864C: ghost/grunt/aux 4, demon 8, lobber/sorc/supersorc 0xB, generators 5). Damage is subtracted from hpos; if the nibble leaves [base−2, base] the monster is destroyed (`shot_impact_spawn` 0x47DAE sparkle + `moblist_remove_and_clear`), otherwise it survives as a weaker tier. Score = damage × class multiplier (ghost 10, grunt-class 5, Death/IT 1) via `player_add_score_with_mult`. Sorcerers are immune while blinking (hpos bit 12) unless supershot. Supershot pierces monsters (returns 0) except Death and IT.
+**Monsters:** health/tier = the target's own **hpos low nibble**; per-type horizontal-size/tier bases are in `mazeobj_hsize_tier_tbl` (0x5864C: ghost/grunt/aux 4, demon 8, lobber/sorc/supersorc 0xB, generators 5). Damage is subtracted from hpos; if the nibble leaves [base−2, base] the monster is destroyed (`shot_impact_spawn` 0x47DAE sparkle + `moblist_remove_and_clear`), otherwise it survives as a weaker tier. Score = damage × class multiplier (ghost 10, grunt-class 5, Death/IT 1) via `player_add_score_with_mult`. Sorcerers are immune while their hpos phase flag (bit 4) is set unless hit by a supershot. Supershot pierces monsters (returns 0) except Death and IT.
 
 **Death:** every player shot increments the separate global `death_hits`
 (0x904A5C), but an ordinary shot does not add to the per-player Death-damage

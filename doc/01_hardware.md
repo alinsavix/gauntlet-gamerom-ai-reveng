@@ -30,7 +30,7 @@ under the table.
 | **Slapstic ROM** | `0x038000–0x03FFFF` | 32 KB | Level data (bank-switched, 4 × 8 KB banks) |
 | **Game ROM image** | `0x040000–0x05FFFF` | 128 KB | Populated `row76.bin` main-game image |
 | **Unpopulated main-ROM decode** | `0x060000–0x07FFFF` | 128 KB | Decoded main-program ROM aperture with no bytes in this Gauntlet II set; not a mirror |
-| **Main RAM** | `0x800000–0x801FFF` | 8 KB | General-purpose RAM |
+| **Main-RAM decode (unfitted)** | `0x800000–0x801FFF` | 8 KB aperture | Board decode for optional program RAM; no shipped Gauntlet II ROM reference uses it, and surviving-board/FPGA evidence indicates the sockets were populated only for Vindicators II |
 | **EEPROM** | `0x802000–0x8023FF` | 1 KB CPU aperture | 28C04A, 4 Kbit (512 × 8); high scores, settings, and statistics occupy the low byte lane (odd byte addresses `0x802001–0x8023FF`) |
 | **Hardware I/O** | `0x803000–0x8031FF` | 512 B | Input ports, watchdog, sound, LEDs |
 | **Playfield RAM** | `0x900000–0x901FFF` | 8 KB | Playfield tile map |
@@ -51,6 +51,16 @@ set supplies bytes only through `0x05FFFF`; neither describes a mirror.
 MAME also decodes `0x000000–0x037FFF` as ROM. Exact electrical
 data returned by an empty socket is board-state dependent and is not modeled
 as a separate device response.
+
+**Confidence: Strong inference** for the unfitted main-RAM aperture. The
+third-party [Gauntlet FPGA investigation](https://github.com/d18c7db/Gauntlet_FPGA/blob/677c12cdb106d3cc057cf36921124d1d144969ec/MiSTer/doc/readme.md#L497-L499)
+reports empty sockets at board positions 11A, 11B, 12A, and 12B, while its
+[schematic-derived RTL](https://github.com/d18c7db/Gauntlet_FPGA/blob/677c12cdb106d3cc057cf36921124d1d144969ec/MiSTer/rtl/gauntlet/MAIN.vhd#L406-L418)
+records that RAM in this aperture was fitted only for Vindicators II. The
+independent software evidence agrees: neither shipped ROM has a normal
+operand reference in `0x800000–0x801FFF`; the stack and general working
+variables instead occupy video spare RAM at `0x904000–0x904FFF`. The decode
+can therefore exist even though Gauntlet II has no usable RAM behind it.
 
 ### 2.2 Video RAM Sub-Regions
 
@@ -141,6 +151,14 @@ ordering.
 - **Resolution:** 336×240, 60 Hz
 - **Playfield (maze):** 512×512 pixels; only ~240×240 is visible at once
 - **Scroll registers:** vertical at `0x905F6E`, horizontal at `0x930000`
+
+The independent
+[FPGA RTL reconstruction](https://github.com/d18c7db/Gauntlet_FPGA/blob/677c12cdb106d3cc057cf36921124d1d144969ec/MiSTer/rtl/gauntlet/VIDEO.vhd#L446-L455)
+loads the playfield vertical counter from the vertical-scroll word at VSYNC
+and then increments it. Its low nine coordinate bits naturally roll over
+every 512 pixels; the same nine-bit coordinate participates in MOB vertical
+matching. This corroborates hardware coordinate wraparound. It does **not**
+make playfield or maze row 31 the same stored row as row 0.
 
 The display hardware resolves one output pixel by testing the alpha and MOB
 layers over the scrolled playfield. MOB pixel value 1 is not an ordinary
@@ -374,6 +392,18 @@ The first 30 MOB slots (IDs 0–29) are reserved:
 
 Dynamic maze objects use slots 30–1023.
 
+### 8.8 Right-edge MOB clipping
+
+**Confidence: Verified on original hardware** by the external FPGA
+investigation's simulation trace and photographed PCB comparison. Horizontal
+control PROM 4R deliberately shortens the draw count for wide MOBs as their
+starting X coordinate approaches the right edge, then suppresses MOB output
+past the drawable region. Large diagnostic squares are consequently clipped
+on a real board even though MAME renders them whole. Ordinary gameplay hides
+this area beneath the right-side alpha status panel, so the discrepancy is
+normally visible only in diagnostics. See the
+[PROM analysis and board result](https://github.com/d18c7db/Gauntlet_FPGA/blob/677c12cdb106d3cc057cf36921124d1d144969ec/MiSTer/doc/readme.md#L530-L577).
+
 ---
 
 ## 9. Alphanumeric (Text) RAM (`0x905000`)
@@ -419,7 +449,9 @@ The OS ROM supports two alpha overlay modes (controlled by `ram.display_mode` at
 ## 10. Scroll Registers
 
 **Confidence: Verified** from direct game/OS accesses. The vertical register
-overlays the last alpha-RAM word by hardware design.
+overlays the last alpha-RAM word by hardware design. The vertical counter
+rollover described in §4 is independent of the game-level horizontal and
+vertical wrap flags.
 
 | Address | Description |
 |---------|-------------|
