@@ -922,6 +922,12 @@ found. It removes/recreates the player there and calls `handle_tport` again at
 MAME 0.179 confirms the shipped demo moves player 1 from slot 492 `(180,240)`
 to slot 486 `(92,240)`; the effect changes to the destination on phase 22.
 
+**Display-origin clarification.** `scroll_hpos_origin` at 0x904AC2 remains
+`(pf_hscroll - 8) << 7` for player/shot boundary arithmetic. It is not the
+tilemap crop origin. Updated MAME 0.289 screenshots and RAM traces align visible
+playfield pixels directly at `pf_hscroll`: demo value 5 has zero pixel offset
+against gauntpy only when the renderer also starts at world X=5.
+
 ### 7.3 Forcefield Segment Format
 
 Each entry in the forcefield segment table at `0x910780` is a 16-bit word (terminated by 0):

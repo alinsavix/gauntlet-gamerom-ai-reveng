@@ -44,10 +44,11 @@ start).
 ### Eleventh-pass presentation/attract regressions (S-71 … S-75)
 
 - **S-71 · bounded right edges lost the repeated left-wall strip.** The S-70
-  clamp was made symmetric, but the ROM's right scroll limit intentionally
-  exposes four wrapped playfield pixels beneath the edge of the visible maze.
-  Non-wrapping rendering now clamps only the negative left origin; the right
-  edge repeats the left wall while MOBs remain non-wrapping.
+  clamp was made symmetric. Updated MAME 0.289 comparison then exposed the
+  deeper error: visible playfield cropping uses `pf_hscroll`, while
+  `(pf_hscroll - 8) << 7` is only the collision-window origin. At the ROM's
+  clamps, X=5 cuts the left edge correctly and X=292 wraps twelve pixels of the
+  left boundary wall onto the right; MOBs remain non-wrapping.
 - **S-72 · shootable secret walls used the special preview palette.** Secret
   walls must be visually indistinguishable from their level's regular walls.
   They now retain the level wall palette, as destructible walls already do.

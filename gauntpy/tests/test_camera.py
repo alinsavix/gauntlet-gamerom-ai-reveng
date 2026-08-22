@@ -369,8 +369,8 @@ class TestViewportConversion:
         _active_player(state, 0, slot=500, px=256, py=256)
         snap_camera(state)
         vx, vy = viewport_scroll(state, 240, 240)
-        assert (vx, vy) == (144, 140)
-        assert (256 - vx, 256 - vy) == (112, 116)
+        assert (vx, vy) == (152, 140)
+        assert (256 - vx, 256 - vy) == (104, 116)
 
     def test_viewport_is_a_wrapped_hardware_origin(self):
         for px, py in [(0, 0), (512, 512), (256, 0), (0, 256), (448, 448)]:
@@ -385,16 +385,16 @@ class TestViewportConversion:
         state = _gameplay_state()
         state.wrap_h = False
         state.scroll_x = 5
-        assert viewport_scroll(state, 232, 240)[0] == 0
+        assert viewport_scroll(state, 232, 240)[0] == 5
 
         state.scroll_x = 0x124
-        assert viewport_scroll(state, 232, 240)[0] == 0x124 - 8
+        assert viewport_scroll(state, 232, 240)[0] == 0x124
 
     def test_wrapping_horizontal_view_keeps_the_hardware_seam(self):
         state = _gameplay_state()
         state.wrap_h = True
         state.scroll_x = 5
-        assert viewport_scroll(state, 232, 240)[0] == 509
+        assert viewport_scroll(state, 232, 240)[0] == 5
 
     def test_low_player_is_still_on_screen(self):
         """The upward V register used to push a low player off-screen (the

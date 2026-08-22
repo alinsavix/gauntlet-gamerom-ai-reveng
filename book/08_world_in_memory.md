@@ -247,12 +247,14 @@ negotiation. Each frame, the scroll system:
    far, snapping only when within a couple of pixels, then clamps to the
    playfield's legal scroll range.
 
-On a non-wrapping horizontal axis, the hardware's eight-pixel scroll bias is
-asymmetric at the two clamps. The negative left origin is clipped to zero, so
-the far-right maze cannot leak onto the left edge. At the right clamp, four
-playfield pixels deliberately cross X=511 and repeat the left boundary wall;
-the alpha panel hides the rest. MOBs do not follow that seam unless the level's
-horizontal-wrap flag is set.
+The visible tilemap begins at `pf_hscroll` itself. The separate
+`(pf_hscroll - 8) << 7` word is a player/shot boundary-test origin, not the
+renderer crop origin. At the non-wrapping clamps this means the left view begins
+at world X=5, while the right view begins at X=292 and wraps its final twelve
+pixels to the left boundary wall. MOBs do not follow that seam unless the
+level's horizontal-wrap flag is set. MAME 0.289 pixel comparison pins this
+directly: at demo `hscroll=5`, gauntpy and MAME wall pixels align with zero
+horizontal offset.
 
 The result is the familiar feel of the party dragging a shared window
 around the dungeon, and the screen edge itself becoming a leash.

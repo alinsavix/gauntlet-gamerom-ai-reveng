@@ -1804,21 +1804,21 @@ class TestPlayfieldEdgeRule:
         assert fb.get_pixel(10, 216) == (255, 0, 0, 255)
         assert fb.get_pixel(10, 232) == (0, 255, 0, 255)
 
-    def test_bounded_right_clamp_repeats_only_the_left_wall_strip(self):
+    def test_bounded_right_clamp_repeats_the_left_wall_strip(self):
         from PIL import Image
         from gauntpy.render.playfield import PlayfieldCache, draw_playfield
 
         image = Image.new("RGBA", (512, 512), (0, 0, 0, 255))
         for y in range(512):
-            for x in range(4):
+            for x in range(16):
                 image.putpixel((x, y), (255, 0, 0, 255))
         cache = PlayfieldCache(image=image, shadow_image=image.copy())
         fb = Framebuffer(232, 16)
 
-        draw_playfield(fb, cache, 0x124 - 8, 0, (0, 0, 232, 16))
+        draw_playfield(fb, cache, 0x124, 0, (0, 0, 232, 16))
 
-        assert fb.get_pixel(227, 0) == (0, 0, 0, 255)
-        assert fb.get_pixel(228, 0) == (255, 0, 0, 255)
+        assert fb.get_pixel(219, 0) == (0, 0, 0, 255)
+        assert fb.get_pixel(220, 0) == (255, 0, 0, 255)
         assert fb.get_pixel(231, 0) == (255, 0, 0, 255)
 
     def test_in_range_lookups_are_untouched(self):
