@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2262 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2268 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -41,6 +41,28 @@ start).
 
 ## Resolved issues
 
+### Eleventh-pass presentation/attract regressions (S-71 … S-75)
+
+- **S-71 · bounded right edges lost the repeated left-wall strip.** The S-70
+  clamp was made symmetric, but the ROM's right scroll limit intentionally
+  exposes four wrapped playfield pixels beneath the edge of the visible maze.
+  Non-wrapping rendering now clamps only the negative left origin; the right
+  edge repeats the left wall while MOBs remain non-wrapping.
+- **S-72 · shootable secret walls used the special preview palette.** Secret
+  walls must be visually indistinguishable from their level's regular walls.
+  They now retain the level wall palette, as destructible walls already do.
+- **S-73 · the IT label was absent from the host HUD.** The compositor now draws
+  the ROM's literal `I`/`T` glyphs at alpha column 0x24 on the tracked player's
+  SCORE/HEALTH row.
+- **S-74 · demo transport used a hand-tuned landing and one sparkle.** A retained
+  MAME 0.179 trace proves maze 102 moves player 1 from slot 492 `(180,240)` to
+  slot 486 `(92,240)`: source dissolve through phase 21, destination effect from
+  phase 22. The ROM direction-rotation search and second `handle_tport` call are
+  now ported; the demo-only four-cell offset is gone.
+- **S-75 · position-0 joystick input restarted the demo attract screen.** On the
+  single-keyboard host, pressing a direction during DEMO now advances to LEGEND
+  instead of reinitializing maze 102.
+
 ### Tenth-pass rendering regressions (S-69 … S-70)
 
 - **S-69 · horizontal doors had a lower protrusion.** The playfield renderer
@@ -51,10 +73,9 @@ start).
   refreshes its surviving neighbours.
 - **S-70 · bounded left edges exposed wrapped world pixels.** The hardware
   scroll conversion subtracts eight pixels; masking that origin unconditionally
-  turned the bounded left clamp into world X=509. The renderer now clamps the
-  visible 232-pixel maze window and disables opposite-edge MOB candidates on
-  non-wrapping horizontal axes while preserving the hardware seam on wrapping
-  levels.
+  turned the bounded left clamp into world X=509. The renderer now clamps that
+  negative origin and disables opposite-edge MOB candidates on non-wrapping
+  horizontal axes while preserving the hardware seam on wrapping levels.
 
 ### Ninth-pass live-play regressions (S-65 … S-68)
 

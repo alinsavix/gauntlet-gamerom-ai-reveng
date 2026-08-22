@@ -149,6 +149,12 @@ ordinary gameplay: collision, damage, generators, the thief's schedule, the
 camera. A demo Elf who walks into a ghost loses health for the same reason
 you would.
 
+The transporter selection is visible in a retained MAME trace: the blue Elf
+starts dissolving at slot 492 `(180,240)`, then the live LEFT record selects
+slot 486 `(92,240)` beside destination pad 487. The per-player sparkle channel
+stays at the source through phase 21 and is recreated at the destination from
+phase 22 until the transition retires.
+
 ![The recorded demo scripts](img/ch15_demo_script.png)
 
 *All three demo streams on the script clock. The blue Elf runs alone for the
@@ -190,6 +196,11 @@ The twelve messages are worth reading as a set:
 > HEALTH · HAVE FRIENDS JOIN IN ANY TIME · MONSTERS FOLLOW PLAYER WHO IS IT ·
 > SOME WALLS MOVE RANDOMLY · MONSTERS MAY MOVE DIFFERENTLY · TAG, YOU'RE IT
 
+The cabinet's attract shortcuts are split across four control positions. The
+single-keyboard host maps its position-0 direction shortcut to DEMO from other
+screens and to the next LEGEND screen while DEMO is already active; otherwise
+the only available joystick would simply restart the demo forever.
+
 Each of the twelve is used exactly once across the three streams, and the
 maze in the picture above was stocked to contain a working example of almost
 every one. Two of the twelve are about IT, the tag mechanic Chapter 10
@@ -201,6 +212,8 @@ uses a transporter, waits for two scripted joins, spends the potion, and takes
 the exit. Demo joins receive the full 2000 health and later actors use the
 ordinary adjacent-player spawn search. Approximate pickup cells, spawning, or
 viewport clipping break the timing and leave the Elf below the final wall.
+The recording itself is finite; reaching its final input pair is not evidence
+that the cabinet necessarily exits the maze before the attract timer advances.
 
 The Elf is player position 1, so its status panel and sprite are both blue.
 Hardware MOB palette slots 12–15 select color variants 0–3 within the chosen

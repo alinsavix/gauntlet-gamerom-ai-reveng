@@ -31,7 +31,7 @@ from __future__ import annotations
 __all__ = [
     "CHARACTER_NAMES", "CHARACTER_NAME_PLURALS", "PLAYER_COLOR_NAMES",
     "PLAYER_COLOR_RGBA", "CHARACTER_HUD_GLYPHS", "LABEL_SCORE_GLYPHS",
-    "LABEL_HEALTH_GLYPHS", "GLYPH_KEY", "GLYPH_POTION",
+    "LABEL_HEALTH_GLYPHS", "LABEL_IT_GLYPHS", "GLYPH_KEY", "GLYPH_POTION",
     "TEXT_LEVEL", "TEXT_INSERT_COIN", "TEXT_PRESS_START", "TEXT_SELECT_HERO",
     "TEXT_GAME_OVER", "TEXT_ADD_COIN", "TEXT_ADD_COINS", "TEXT_ATARI_GAMES",
     "TEXT_COPYRIGHT", "TEXT_ON_LEVEL", "CHARACTER_SELECT_LINES",
@@ -86,6 +86,8 @@ CHARACTER_HUD_GLYPHS = (
 #: cells, "HEALTH".
 LABEL_SCORE_GLYPHS = (0xA8, 0xA9, 0xAA)
 LABEL_HEALTH_GLYPHS = (0xA4, 0xA5, 0xA6, 0xA7)
+# player_it_label_set writes the literal alpha codes for "IT" at 0x458BE.
+LABEL_IT_GLYPHS = (0x49, 0x54)
 
 #: Inventory cell glyphs written by ``player_inv_update`` (0x45ACA): character
 #: 0xA1 per held key, 0xA3 per held potion.

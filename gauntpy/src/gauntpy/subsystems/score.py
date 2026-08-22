@@ -142,6 +142,7 @@ SCORE_DIGITS = 7
 HEALTH_COLUMN = 0x25
 HEALTH_DIGITS = 5
 BONUSMULT_COLUMN = 31        # 0x90503E -> byte 0x3E of the row -> word 31
+IT_LABEL_COLUMN = 0x24       # 0x905048, two ASCII glyph cells between labels
 INVENTORY_COLUMN = 30
 INVENTORY_CELLS = 12
 

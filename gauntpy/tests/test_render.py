@@ -921,6 +921,24 @@ class TestHud:
             "an active player's block (alpha rows 7-10) must draw something"
         )
 
+    def test_it_label_appears_between_score_and_health_for_it_player(self):
+        state = self._state()
+        state.players[0].status = PlayerStatus.ALIVE_HERE
+        state.frame_counter = 0
+        main_score_display(state)
+
+        plain = Framebuffer(336, 240)
+        draw_hud(plain, state, HUD_PANEL)
+        state.player_it = 0
+        tagged = Framebuffer(336, 240)
+        draw_hud(tagged, state, HUD_PANEL)
+
+        x, y = cell_xy(
+            HUD_PANEL, score.IT_LABEL_COLUMN, score.PLAYER_LABEL_ROW,
+        )
+        box = (x, y, x + 2 * 8, y + 8)
+        assert tagged.image.crop(box).tobytes() != plain.image.crop(box).tobytes()
+
     def test_removed_player_block_is_blank_but_the_level_header_is_not(self):
         """setup_infopanel dispatches on player status: a REMOVED player has no
         name, score or health on the panel -- only the whole-panel header
@@ -1786,6 +1804,23 @@ class TestPlayfieldEdgeRule:
         assert fb.get_pixel(10, 216) == (255, 0, 0, 255)
         assert fb.get_pixel(10, 232) == (0, 255, 0, 255)
 
+    def test_bounded_right_clamp_repeats_only_the_left_wall_strip(self):
+        from PIL import Image
+        from gauntpy.render.playfield import PlayfieldCache, draw_playfield
+
+        image = Image.new("RGBA", (512, 512), (0, 0, 0, 255))
+        for y in range(512):
+            for x in range(4):
+                image.putpixel((x, y), (255, 0, 0, 255))
+        cache = PlayfieldCache(image=image, shadow_image=image.copy())
+        fb = Framebuffer(232, 16)
+
+        draw_playfield(fb, cache, 0x124 - 8, 0, (0, 0, 232, 16))
+
+        assert fb.get_pixel(227, 0) == (0, 0, 0, 255)
+        assert fb.get_pixel(228, 0) == (255, 0, 0, 255)
+        assert fb.get_pixel(231, 0) == (255, 0, 0, 255)
+
     def test_in_range_lookups_are_untouched(self):
         from gex.adjacency import whatis
 
@@ -1804,6 +1839,30 @@ class TestPlayfieldEdgeRule:
         # dx = -1 probes: 0x01 (up-left), 0x08 (left), 0x20 (down-left).
         assert checkwalladj8(seam, 0, 5) & 0x29 == 0x29, "the seam must connect"
         assert checkwalladj8(middle, 0, 5) & 0x29 == 0, "and only across a seam"
+
+    def test_shootable_wall_types_use_the_levels_wall_palette(self):
+        maze = self._maze({
+            (5, 5): int(MazeObjIds.WALL_SECRET),
+            (6, 5): int(MazeObjIds.WALL_DESTRUCTABLE),
+        })
+        maze.wallpattern = 3
+        maze.wallcolor = 4
+        maze.floorpattern = 0
+        maze.floorcolor = 0
+
+        secret, _ = playfield._terrain_stamp(
+            maze, 5, 5, int(MazeObjIds.WALL_SECRET),
+            playfield.SeededRandom(5),
+        )
+        destructible, _ = playfield._terrain_stamp(
+            maze, 6, 5, int(MazeObjIds.WALL_DESTRUCTABLE),
+            playfield.SeededRandom(5),
+        )
+
+        assert (secret.ptype, secret.pnum) == ("wall", maze.wallcolor)
+        assert (destructible.ptype, destructible.pnum) == (
+            "wall", maze.wallcolor,
+        )
 
     def test_the_forcefield_ray_wraps_too(self):
         """ff_mark/ff_make_map read cells through the same masked accessor, so
@@ -2089,13 +2148,17 @@ class TestPlayfieldMatchesGexReference:
         dynamic_cells = {
             (x, y)
             for y in range(32) for x in range(32)
-            if whatis(maze_ours, x, y) not in TERRAIN_TYPES
+            if (
+                whatis(maze_ours, x, y) not in TERRAIN_TYPES
+                or whatis(maze_ours, x, y) == MazeObjIds.WALL_SECRET
+            )
         }
         contaminated = set(dynamic_cells)
         for dx, dy in dynamic_cells:
             dynamic_type = whatis(maze_ours, dx, dy)
             radius = 0 if dynamic_type in (
                 MazeObjIds.DOOR_HORIZ, MazeObjIds.DOOR_VERT,
+                MazeObjIds.WALL_SECRET,
             ) else 2
             for oy in range(-radius, radius + 1):
                 for ox in range(-radius, radius + 1):

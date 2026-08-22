@@ -914,6 +914,14 @@ installs the player in that slot. This is why Transportability can land on and
 replace monsters (including the secret-task demon/Death cases), as well as
 collect or clear other object types accepted by `tport_check_dest`.
 
+The move milestone is iterative, not an instantaneous jump to a preselected
+cell. `tport_player_move` rotates the live joystick direction through the
+eight-entry table at 0x5B71C until a usable neighbour of the destination pad is
+found. It removes/recreates the player there and calls `handle_tport` again at
+0x509DE, moving the reappearance sparkle from the source to the destination.
+MAME 0.179 confirms the shipped demo moves player 1 from slot 492 `(180,240)`
+to slot 486 `(92,240)`; the effect changes to the destination on phase 22.
+
 ### 7.3 Forcefield Segment Format
 
 Each entry in the forcefield segment table at `0x910780` is a 16-bit word (terminated by 0):
@@ -2045,7 +2053,7 @@ placement resets it on normal level entry or player join. This implements the
 
 **Generators:** tier 1 destroyed by any hit; tiers 2/3 need damage ≥ 2/3, else they degrade: `mob_link -= damage << 10` (becomes the next weaker generator) with a picture update.
 
-**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces. The row-zero branch at 0x40A9A returns `0x400 + cell` for a shot entering the top boundary (rather than indexing the reserved MOB slots 0–31); that tagged playfield hit is what sends the top wall through the same reflection path.
+**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls use the ordinary level wall palette until hit, then play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls use pattern 5 with the level's wall color and crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces. The row-zero branch at 0x40A9A returns `0x400 + cell` for a shot entering the top boundary (rather than indexing the reserved MOB slots 0–31); that tagged playfield hit is what sends the top wall through the same reflection path.
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 

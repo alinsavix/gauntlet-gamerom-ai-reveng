@@ -388,7 +388,7 @@ class TestViewportConversion:
         assert viewport_scroll(state, 232, 240)[0] == 0
 
         state.scroll_x = 0x124
-        assert viewport_scroll(state, 232, 240)[0] == 512 - 232
+        assert viewport_scroll(state, 232, 240)[0] == 0x124 - 8
 
     def test_wrapping_horizontal_view_keeps_the_hardware_seam(self):
         state = _gameplay_state()

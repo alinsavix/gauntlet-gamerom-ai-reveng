@@ -370,7 +370,18 @@ def _check_attract_interrupt(state: GameState, mode: int) -> bool:
         return True
 
     # Block 3 (positions 0, 3): joystick direction -> DEMO.
-    if _direction_pressed(state, 0) or _direction_pressed(state, 3):
+    if _direction_pressed(state, 0):
+        # A single-player host can only drive position 0. Once DEMO is already
+        # selected, treat the same cabinet shortcut as "next" so it reaches the
+        # LEGEND screen instead of reinitializing maze 102 forever.
+        destination = (
+            int(GameMode.LEGEND)
+            if mode == int(GameMode.DEMO)
+            else int(GameMode.DEMO)
+        )
+        start_attract_screen(state, destination)
+        return True
+    if _direction_pressed(state, 3):
         start_attract_screen(state, int(GameMode.DEMO))
         return True
 

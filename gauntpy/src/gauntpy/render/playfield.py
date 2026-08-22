@@ -229,9 +229,8 @@ def _terrain_stamp(maze: MazeLike, x: int, y: int, obj: int, rand) -> tuple[Stam
 
     if obj == MazeObjIds.WALL_SECRET:
         adj = checkwalladj8(maze, x, y)
-        return dataclasses.replace(
-            wall_get_stamp(maze.wallpattern, adj, maze.wallcolor, rand),
-            ptype="secret", pnum=0,
+        return wall_get_stamp(
+            maze.wallpattern, adj, maze.wallcolor, rand,
         ), 0
 
     if obj in _WALL_TILE_DOTS:

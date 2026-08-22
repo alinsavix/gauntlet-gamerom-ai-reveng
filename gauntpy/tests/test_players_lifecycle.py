@@ -3051,6 +3051,7 @@ class TestTransportTransition:
 
     def test_the_hero_dissolves_then_moves_then_re_forms(self):
         state, _, source = self._world()
+        state.player_input_raw[0] = 0xFFFF & ~0x20  # LEFT
         gp.player_tport(state, 0, source)
         trace = self._run(state)
 
@@ -3060,9 +3061,12 @@ class TestTransportTransition:
         # The move lands at the milestone phase and not before.
         moved = next(i for i, t in enumerate(trace) if (t[2], t[3]) != (88, 88))
         assert trace[moved][0] >= gp._TRANSITION_MOVE_PHASE
-        assert (trace[moved][2], trace[moved][3]) == (10 * 16 - 4, 4 * 16)
+        assert (trace[moved][2], trace[moved][3]) == (8 * 16 - 4, 5 * 16)
         # The flash frame persists for the whole flight.
         assert trace[moved][1] == 0x1709
+        effect_slot = 0x19
+        assert hpos_x(state.mobs.hpos[effect_slot]) == 8 * 16 - 4
+        assert vpos_y(state.mobs.vpos[effect_slot]) == 5 * 16
         # Step 0x10 (phase 32) puts the picture back.
         restore = next(i for i, t in enumerate(trace) if t[0] == 32)
         assert trace[restore][1] == self._HERO_PICTURE
@@ -3198,6 +3202,24 @@ class TestCornerSqueezeUsesTheSameTransition:
         slot = state.players[0].mob_slot
         assert hpos_x(state.mobs.hpos[slot]) == (target & 0x1F) * 16 - 4
         assert vpos_y(state.mobs.vpos[slot]) == (target >> 5) * 16
+
+    def test_held_direction_does_not_redirect_corner_squeeze_landing(self):
+        from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
+        from gauntpy.subsystems.score import main_score_update
+
+        state, player = self._world()
+        gp.corner_squeeze_geometry(state, player.mob_slot, 0, JOY_RIGHT)
+        target = state.player_tile_pos[0]
+        state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
+
+        for frame in range(80):
+            state.frame_counter = frame
+            gp.main_move_players(state)
+            main_score_update(state)
+            if state.player_tport_phase[0] < 0:
+                break
+
+        assert state.players[0].mob_slot == target
 
 
 # =============================================================================

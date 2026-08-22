@@ -136,6 +136,13 @@ def _draw_player_block(fb, state: GameState, panel, index: int) -> None:
         fb.image, x + advance + 2 * CELL, y, romtext.LABEL_HEALTH_GLYPHS,
         _DIM_RGBA, fallback="HEALTH",
     )
+    if state.player_it == index:
+        x, y = cell_xy(
+            panel, score.IT_LABEL_COLUMN, base + score.PLAYER_LABEL_ROW,
+        )
+        draw_glyph_run(
+            fb.image, x, y, romtext.LABEL_IT_GLYPHS, colour, fallback="IT",
+        )
 
     # Same row, columns 31-32: the bonus multiplier, only above one.
     if field.bonusmult > 1:

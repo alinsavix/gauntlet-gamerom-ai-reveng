@@ -195,5 +195,8 @@ def viewport_scroll(state: GameState, viewport_w: int, viewport_h: int) -> tuple
     if state.wrap_h:
         origin_x &= 0x1FF
     else:
-        origin_x = max(0, min(origin_x, WORLD_PIXELS - viewport_w))
+        # The left clamp suppresses the negative three-pixel seam. The ROM's
+        # asymmetric right clamp deliberately leaves four pixels beyond X=511;
+        # playfield fetch wraps those to column 0, repeating the left boundary.
+        origin_x = max(0, origin_x)
     return origin_x, state.scroll_y & 0x1FF

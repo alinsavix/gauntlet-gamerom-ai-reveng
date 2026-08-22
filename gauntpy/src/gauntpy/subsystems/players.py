@@ -1249,13 +1249,6 @@ def player_tport(state: GameState, player_index: int,
     diagonal_cells = {_direction_neighbor(destination, d) for d in (1, 3, 5, 7)}
     diagonals = [c for c in clear_cells if c in diagonal_cells]
     landing = diagonals[0] if diagonals else clear_cells[0]
-    if state.game_mode == int(GameMode.DEMO):
-        # tport_player_move continues consuming the recorded LEFT input while
-        # the ROM transition resolves. In maze 102 that leaves the Elf four
-        # cells left of the destination pad (MAME: slot 483, x=44). This port's
-        # milestone mover is instantaneous, so fold that transition motion into
-        # its landing cell.
-        landing = (destination & 0x3E0) | ((destination - 4) & 0x1F)
 
     # 0x509E4: the "visit every transporter" objective records *both* ends of
     # the hop -- the source pad was ORed in at 0x5027E, and the pad just
@@ -3535,7 +3528,33 @@ def tport_player_move(state: GameState, player_index: int) -> None:
     panning towards.
     """
     landing = state.player_tile_pos[player_index] & 0x3FF
-    _move_player_to_slot(state, player_index, landing)
+    destination_pad = state.player_tport_type[player_index] & 0x3FF
+    direction = _direction_from_input(
+        _joystick_direction_bits(state, player_index),
+    )
+    if destination_pad and destination_pad != landing and direction < 8:
+        # 0x50708 indexes tport_direction_rotation (0x5B71C): requested
+        # direction, then alternating left/right offsets until a usable
+        # neighbour of the destination pad is found.
+        for rotation in (0, 7, 1, 6, 2, 5, 3, 4):
+            candidate = _direction_neighbor(
+                destination_pad, (direction + rotation) & 7,
+            )
+            if candidate < FIRST_PLAYABLE_SLOT:
+                continue
+            if not _tile_on_screen_test(state, candidate):
+                continue
+            if tport_check_dest(state, candidate, player_index):
+                continue
+            if not nearby_mob_clearance_test(state, candidate, player_index):
+                continue
+            landing = candidate
+            state.player_tile_pos[player_index] = candidate
+            break
+    if _move_player_to_slot(state, player_index, landing):
+        # 0x509DE creates the arrival sparkle from the newly installed player
+        # record. The earlier 0x5050A effect remains at the source for dissolve.
+        handle_tport(state, landing, player_index)
 
 
 def squeeze_through_check(state: GameState, candidate_slot: int,

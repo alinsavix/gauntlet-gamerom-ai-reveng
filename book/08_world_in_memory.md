@@ -247,10 +247,12 @@ negotiation. Each frame, the scroll system:
    far, snapping only when within a couple of pixels, then clamps to the
    playfield's legal scroll range.
 
-On a non-wrapping horizontal axis, the visible 232-pixel maze window is clamped
-inside the 512-pixel world after converting the hardware's eight-pixel scroll
-bias. The extra playfield pixels generated beneath the alpha panel cannot leak
-the opposite maze edge into the visible left or right boundary.
+On a non-wrapping horizontal axis, the hardware's eight-pixel scroll bias is
+asymmetric at the two clamps. The negative left origin is clipped to zero, so
+the far-right maze cannot leak onto the left edge. At the right clamp, four
+playfield pixels deliberately cross X=511 and repeat the left boundary wall;
+the alpha panel hides the rest. MOBs do not follow that seam unless the level's
+horizontal-wrap flag is set.
 
 The result is the familiar feel of the party dragging a shared window
 around the dungeon, and the screen edge itself becoming a leash.
