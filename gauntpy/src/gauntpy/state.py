@@ -786,6 +786,14 @@ class GameState:
     eeprom_save_path: str = "gauntpy_eeprom.json"  # no ROM address -- local persistence target, see eeprom.py
 
     # =========================================================================
+    # Display memory · alpha VRAM and color RAM
+    # =========================================================================
+    # 0x905000-0x905EFF: 64 columns x 30 visible alpha rows.
+    alpha_ram: list[int] = field(default_factory=lambda: [0] * (64 * 30))
+    # 0x910000-0x9101FF: 256 16-bit IRGB alpha color entries.
+    alpha_color_ram: list[int] = field(default_factory=lambda: [0] * 256)
+
+    # =========================================================================
     # WP-20 · boot and orchestration
     # =========================================================================
     # Level-transition scratch, written by player_exit_sequence / maze_checknum

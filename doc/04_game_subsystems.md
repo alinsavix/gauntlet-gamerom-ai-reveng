@@ -1580,8 +1580,11 @@ player status and shares the numeric score/health renderers at 0x45940 and
 services in A2/A3 for its many calls.
 
 The four player positions use opaque dark red, blue, yellow, and green alpha
-backgrounds even while inactive. MAME 0.289 measures their host RGB values as
-`(50,0,0)`, `(0,0,50)`, `(33,33,0)`, and `(0,50,0)`; the name row uses the
+backgrounds even while inactive. `init_display` copies ROM 0x5AD1E into alpha
+color RAM 0x910000 and 0x910100; `setup_infopanel` fills alpha RAM with opaque
+spaces carrying attributes 0xD000/0xD400/0xD800/0xDC00. Resolving color zero
+through those live palettes yields `(50,0,0)`, `(0,0,50)`, `(33,33,0)`, and
+`(0,50,0)` under the hardware/MAME IRGB conversion. The name row uses the
 central six cells and the following three rows fill all thirteen panel cells.
 
 ### 14.2 Score Display (`main_score_display`, 0x457C0)

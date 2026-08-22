@@ -24,7 +24,9 @@ evidence remains in `../doc/`, generated contracts, and the book.
    state field. Never infer the victim solely from a picture or color.
 7. **Palette routing.** MOB palette nibbles 12–15 are player-color slots.
    Player and demon/dragon projectiles use the appropriate character palette;
-   lobber rocks use base palette 1.
+   lobber rocks use base palette 1. Alpha/HUD code writes attribute words and
+   IRGB entries to `GameState.alpha_ram` / `alpha_color_ram` and resolves them
+   through `subsystems.display`; never use sampled UI RGBA constants.
 8. **Simulation/render boundary.** Simulation writes native state. Rendering
    reads it and performs screen-coordinate conversion; rendering state never
    feeds gameplay.

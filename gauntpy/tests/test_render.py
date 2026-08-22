@@ -890,7 +890,13 @@ class TestHud:
     def _state() -> GameState:
         """main_score_display skips TITLE/SCORES (§14.2), so HUD latch tests
         need a gameplay mode."""
-        return GameState(game_mode=GameMode.NORMAL)
+        from gauntpy.subsystems.display import init_alpha_color_ram
+        from gauntpy.subsystems.players import setup_infopanel
+
+        state = GameState(game_mode=GameMode.NORMAL)
+        init_alpha_color_ram(state)
+        setup_infopanel(state, -1)
+        return state
 
     @staticmethod
     def _ink_in_rows(fb, panel, first_row, last_row) -> bool:
@@ -941,7 +947,7 @@ class TestHud:
 
     def test_removed_player_block_is_blank_but_the_level_header_is_not(self):
         """A removed player keeps its colored alpha background but no text."""
-        state = GameState()   # all players default to PlayerStatus.REMOVED
+        state = self._state()  # all players default to PlayerStatus.REMOVED
         fb = Framebuffer(336, 240)
         draw_hud(fb, state, HUD_PANEL)
 
@@ -949,23 +955,57 @@ class TestHud:
         assert self._ink_in_rows(fb, HUD_PANEL, first, last)
         assert self._ink_in_rows(fb, HUD_PANEL, score.LEVEL_ROW, score.LEVEL_ROW)
 
-    def test_player_sections_use_mame_alpha_background_colors(self):
-        state = GameState()
+    def test_player_sections_resolve_rom_alpha_color_ram(self):
+        from gauntpy.subsystems.display import alpha_color_rgba
+
+        state = self._state()
         fb = Framebuffer(336, 240)
         draw_hud(fb, state, HUD_PANEL)
 
-        expected = (
-            (50, 0, 0, 255),
-            (0, 0, 50, 255),
-            (33, 33, 0, 255),
-            (0, 50, 0, 255),
-        )
-        for index, color in enumerate(expected):
+        assert tuple(
+            state.alpha_color_ram[128 + palette * 4]
+            for palette in range(4, 8)
+        ) == (0x3F00, 0x300F, 0x2FF0, 0x30F0)
+        for index in range(4):
             x, y = cell_xy(
                 HUD_PANEL, score.PANEL_COLUMN,
                 index * score.PLAYER_BLOCK_STRIDE + score.PLAYER_LABEL_ROW,
             )
-            assert fb.get_pixel(x, y) == color
+            attribute = score.PLAYER_TEXT_PALETTE_WORDS[index]
+            assert fb.get_pixel(x, y) == alpha_color_rgba(
+                state, attribute, 0,
+            )
+
+    def test_live_alpha_color_ram_write_changes_the_panel_background(self):
+        from gauntpy.subsystems.display import alpha_color_rgba
+
+        state = self._state()
+        attribute = score.PLAYER_TEXT_PALETTE_WORDS[0]
+        color_index = 128 + 4 * 4
+        state.alpha_color_ram[color_index] = 0xF00F
+        fb = Framebuffer(336, 240)
+
+        draw_hud(fb, state, HUD_PANEL)
+
+        x, y = cell_xy(HUD_PANEL, score.PANEL_COLUMN, score.PLAYER_LABEL_ROW)
+        assert fb.get_pixel(x, y) == alpha_color_rgba(state, attribute, 0)
+
+    @requires_roms
+    def test_multicolor_name_glyphs_use_all_live_alpha_palette_shades(self):
+        state = self._state()
+        state.players[0].status = PlayerStatus.ALIVE_HERE
+        before = Framebuffer(336, 240)
+        draw_hud(before, state, HUD_PANEL)
+
+        base = 128 + 4 * 4
+        state.alpha_color_ram[base + 1] = 0xF0F0
+        state.alpha_color_ram[base + 2] = 0xF00F
+        after = Framebuffer(336, 240)
+        draw_hud(after, state, HUD_PANEL)
+
+        x, y = cell_xy(HUD_PANEL, score.PLAYER_NAME_COLUMN, score.PLAYER_NAME_ROW)
+        box = (x, y, x + 4 * 8, y + 8)
+        assert before.image.crop(box).tobytes() != after.image.crop(box).tobytes()
 
     def test_each_player_block_lands_on_its_rom_rows(self):
         """Player p's block is rows p*5+7 .. p*5+10 -- the ROM's ``d4 = p*5+7``
@@ -1053,9 +1093,9 @@ class TestMessageBox:
 
         real = hud_mod.draw_text
 
-        def spy(image, x, y, text, rgba, *, scale=1):
+        def spy(image, x, y, text, rgba, *, scale=1, **kwargs):
             seen.append(text)
-            return real(image, x, y, text, rgba, scale=scale)
+            return real(image, x, y, text, rgba, scale=scale, **kwargs)
 
         monkeypatch.setattr(hud_mod, "draw_text", spy)
         fb = Framebuffer(336, 240)
@@ -1144,15 +1184,19 @@ class TestPanelGeometryMatchesTheRom:
         assert cell_xy(HUD_PANEL, score.HEALTH_COLUMN, 14) == (296, 112)
 
     def test_inventory_keys_use_the_dedicated_gold_alpha_palette(self):
-        from gex.palettes import IRGB
-        from gauntpy.render import hud
-
-        assert hud._KEY_PALETTE_RGBA == tuple(
-            IRGB(value).to_rgba()
-            for value in (0x0000, 0xFFA0, 0xF08E, 0xF00C)
+        from gauntpy.subsystems.display import (
+            alpha_palette_words, init_alpha_color_ram,
         )
-        assert hud._KEY_PALETTE_RGBA != tuple(
-            hud._player_rgba(0) for _ in range(4)
+
+        state = GameState()
+        init_alpha_color_ram(state)
+        assert alpha_palette_words(
+            state, score.KEY_PALETTE_WORDS[0],
+        ) == (0x3F00, 0xFFA0, 0xF08E, 0xF00C)
+        assert alpha_palette_words(
+            state, score.KEY_PALETTE_WORDS[0],
+        ) != alpha_palette_words(
+            state, score.PLAYER_TEXT_PALETTE_WORDS[0],
         )
 
     def test_debug_frame_counter_uses_the_lower_right_panel_corner(self):

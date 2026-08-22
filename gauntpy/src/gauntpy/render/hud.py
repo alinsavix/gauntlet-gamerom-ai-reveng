@@ -25,11 +25,10 @@ palette, for as long as ``dialog_timer`` runs.
 
 from __future__ import annotations
 
-from gex.palettes import IRGB
-
 from ..constants import PlayerStatus
 from ..state import GameState
 from ..subsystems import score
+from ..subsystems.display import alpha_color_rgba, alpha_palette_rgba
 from . import romtext
 from .text import GLYPH_W, draw_glyph_run, draw_text
 
@@ -45,22 +44,6 @@ _TEXT_RGBA = (255, 255, 255, 255)
 _DIM_RGBA = (128, 128, 136, 255)
 _BOX_RGBA = (200, 200, 200, 255)
 _PANEL_BG = (0, 0, 0, 255)
-# MAME 0.289 capture of alpha palettes 4-7, background entry used by each
-# player block (red, blue, yellow, green).
-_PLAYER_BLOCK_BG = (
-    (50, 0, 0, 255),
-    (0, 0, 50, 255),
-    (33, 33, 0, 255),
-    (0, 50, 0, 255),
-)
-_KEY_PALETTE_RGBA = tuple(
-    IRGB(value).to_rgba() for value in (0x0000, 0xFFA0, 0xF08E, 0xF00C)
-)
-_POTION_PALETTE_RGBA = tuple(
-    IRGB(value).to_rgba() for value in (0x0000, 0xF226, 0xF33D, 0xF66F)
-)
-
-
 def cell_xy(panel: tuple[int, int, int, int], column: int, row: int) -> tuple[int, int]:
     """Framebuffer pixel of alpha cell ``(column, row)``.
 
@@ -72,14 +55,15 @@ def cell_xy(panel: tuple[int, int, int, int], column: int, row: int) -> tuple[in
     return px + (column - score.PANEL_COLUMN) * CELL, py + row * CELL
 
 
-def _player_rgba(index: int, *, dim: bool = False) -> tuple[int, int, int, int]:
-    """The player's RED/BLUE/YELLOW/GREEN identity colour (romtext), dimmed
-    when ``draw_player_health`` shifted the attribute word for the low-health
-    pulse or an acid slow."""
-    r, g, b, a = romtext.PLAYER_COLOR_RGBA[index & 3]
-    if dim:
-        return (r // 2, g // 2, b // 2, a)
-    return (r, g, b, a)
+def _player_rgba(
+    state: GameState, index: int, attribute: int | None = None,
+) -> tuple[int, int, int, int]:
+    """Player text color 3 resolved through live alpha color RAM."""
+    attr = (
+        score.PLAYER_TEXT_PALETTE_WORDS[index & 3]
+        if attribute is None else attribute
+    )
+    return alpha_color_rgba(state, attr, 3)
 
 
 def _draw_level_header(fb, state: GameState, panel) -> None:
@@ -95,7 +79,9 @@ def _draw_level_header(fb, state: GameState, panel) -> None:
     )
 
 
-def _draw_inventory(fb, panel, index: int, keys: int, potions: int, colour) -> None:
+def _draw_inventory(
+    fb, state: GameState, panel, index: int, keys: int, potions: int, colour,
+) -> None:
     """``player_inv_update`` (0x45ACA): fill up to ``INVENTORY_CELLS`` cells
     with key glyphs, blanks, then potion glyphs -- keys left-aligned, potions
     right-aligned, both clamped to the row."""
@@ -106,15 +92,20 @@ def _draw_inventory(fb, panel, index: int, keys: int, potions: int, colour) -> N
     for i in range(used):
         draw_glyph_run(
             fb.image, x + i * CELL, y, (romtext.GLYPH_KEY,),
-            _KEY_PALETTE_RGBA[3], fallback="K", palette=_KEY_PALETTE_RGBA,
+            alpha_color_rgba(state, score.KEY_PALETTE_WORDS[index], 3),
+            fallback="K",
+            palette=alpha_palette_rgba(state, score.KEY_PALETTE_WORDS[index]),
         )
 
     first_potion = max(used, cells - max(0, potions))
     for i in range(first_potion, cells):
         draw_glyph_run(
             fb.image, x + i * CELL, y, (romtext.GLYPH_POTION,),
-            _POTION_PALETTE_RGBA[3], fallback="P",
-            palette=_POTION_PALETTE_RGBA,
+            alpha_color_rgba(state, score.POTION_PALETTE_WORDS[index], 3),
+            fallback="P",
+            palette=alpha_palette_rgba(
+                state, score.POTION_PALETTE_WORDS[index],
+            ),
         )
 
 
@@ -125,14 +116,16 @@ def _draw_player_block(fb, state: GameState, panel, index: int) -> None:
     player = state.players[index]
     field = score.info_panel(state).players[index]
     base = index * score.PLAYER_BLOCK_STRIDE
-    colour = _player_rgba(index)
+    player_attr = score.PLAYER_TEXT_PALETTE_WORDS[index]
+    player_palette = alpha_palette_rgba(state, player_attr)
+    colour = _player_rgba(state, index)
 
     # Row p*5+7, column 0x23: the pre-baked character-name glyph run.
     klass = int(player.character) & 3
     x, y = cell_xy(panel, score.PLAYER_NAME_COLUMN, base + score.PLAYER_NAME_ROW)
     draw_glyph_run(
         fb.image, x, y, romtext.CHARACTER_HUD_GLYPHS[klass], colour,
-        fallback=romtext.CHARACTER_NAMES[klass],
+        fallback=romtext.CHARACTER_NAMES[klass], palette=player_palette,
     )
 
     # Row p*5+8, column 0x21: "SCORE" then two blank cells then "HEALTH".
@@ -150,54 +143,71 @@ def _draw_player_block(fb, state: GameState, panel, index: int) -> None:
         )
         draw_glyph_run(
             fb.image, x, y, romtext.LABEL_IT_GLYPHS, colour, fallback="IT",
+            palette=player_palette,
         )
 
     # Same row, columns 31-32: the bonus multiplier, only above one.
     if field.bonusmult > 1:
         x, y = cell_xy(panel, score.BONUSMULT_COLUMN, base + score.PLAYER_LABEL_ROW)
-        draw_text(fb.image, x, y, f"{min(field.bonusmult, 9)}x", colour)
+        draw_text(
+            fb.image, x, y, f"{min(field.bonusmult, 9)}x", colour,
+            palette=player_palette,
+        )
 
     # Row p*5+9: the two latched numeric fields.
     x, y = cell_xy(panel, score.SCORE_COLUMN, base + score.PLAYER_VALUE_ROW)
     draw_text(
         fb.image, x, y, score.format_field(field.score, score.SCORE_DIGITS), colour,
+        palette=alpha_palette_rgba(state, field.score_attr),
     )
-    dim = field.health_attr != score.PLAYER_TEXT_PALETTE_WORDS[index]
     x, y = cell_xy(panel, score.HEALTH_COLUMN, base + score.PLAYER_VALUE_ROW)
     draw_text(
         fb.image, x, y, score.format_field(field.health, score.HEALTH_DIGITS),
-        _player_rgba(index, dim=dim),
+        _player_rgba(state, index, field.health_attr),
+        palette=alpha_palette_rgba(state, field.health_attr),
     )
 
     # Row p*5+10: keys from the left, potions from the right, 12 cells.
-    _draw_inventory(fb, panel, index, player.keysnum, player.potionsnum, colour)
+    _draw_inventory(
+        fb, state, panel, index, player.keysnum, player.potionsnum, colour,
+    )
 
 
-def _draw_player_background(fb, panel, index: int) -> None:
-    """The opaque alpha cells setup_infopanel fills with player palette 4-7."""
+def _draw_player_background(
+    fb, state: GameState, panel, index: int,
+) -> None:
+    """Render setup_infopanel's opaque alpha-RAM space cells."""
     from PIL import ImageDraw
 
     draw = ImageDraw.Draw(fb.image)
     base = index * score.PLAYER_BLOCK_STRIDE
-    color = _PLAYER_BLOCK_BG[index & 3]
-    name_x, name_y = cell_xy(
-        panel, score.PLAYER_NAME_COLUMN - 1, base + score.PLAYER_NAME_ROW,
-    )
-    draw.rectangle(
-        [name_x, name_y, name_x + 6 * CELL - 1, name_y + CELL - 1],
-        fill=color,
-    )
-    block_x, block_y = cell_xy(
-        panel, score.PANEL_COLUMN, base + score.PLAYER_LABEL_ROW,
-    )
-    draw.rectangle(
-        [
-            block_x, block_y,
-            block_x + score.PANEL_WIDTH * CELL - 1,
-            block_y + 3 * CELL - 1,
-        ],
-        fill=color,
-    )
+    cells = [
+        *(
+            (column, base + score.PLAYER_NAME_ROW)
+            for column in range(
+                score.PLAYER_NAME_COLUMN - 1, score.PLAYER_NAME_COLUMN + 5,
+            )
+        ),
+        *(
+            (column, row)
+            for row in range(
+                base + score.PLAYER_LABEL_ROW,
+                base + score.PLAYER_INV_ROW + 1,
+            )
+            for column in range(
+                score.PANEL_COLUMN, score.PANEL_COLUMN + score.PANEL_WIDTH,
+            )
+        ),
+    ]
+    for column, row in cells:
+        word = state.alpha_ram[row * score.ALPHA_ROW_STRIDE + column]
+        if not word & 0x8000:
+            continue
+        x, y = cell_xy(panel, column, row)
+        draw.rectangle(
+            [x, y, x + CELL - 1, y + CELL - 1],
+            fill=alpha_color_rgba(state, word, 0),
+        )
 
 
 def draw_message_box(fb, state: GameState, viewport: tuple[int, int, int, int]) -> None:
@@ -237,11 +247,21 @@ def draw_message_box(fb, state: GameState, viewport: tuple[int, int, int, int]) 
     # -0x1000 on the attribute word is the dim shade; the owning player's
     # colour identifies whose message it is (-1 = nobody, so plain white).
     if 0 <= state.dialog_player < 4:
-        colour = _player_rgba(state.dialog_player, dim=True)
+        attribute = (
+            score.PLAYER_TEXT_PALETTE_WORDS[state.dialog_player] - 0x1000
+        )
+        colour = _player_rgba(state, state.dialog_player, attribute)
     else:
         colour = _DIM_RGBA
     for i, line in enumerate(state.dialog_message):
-        draw_text(fb.image, box_x + CELL, box_y + (i + 1) * CELL, line, colour)
+        draw_text(
+            fb.image, box_x + CELL, box_y + (i + 1) * CELL, line, colour,
+            palette=(
+                alpha_palette_rgba(state, attribute)
+                if 0 <= state.dialog_player < 4 else None
+            ),
+            opaque=0 <= state.dialog_player < 4,
+        )
 
 
 def draw_hud(fb, state: GameState, panel: tuple[int, int, int, int]) -> None:
@@ -268,7 +288,7 @@ def draw_hud(fb, state: GameState, panel: tuple[int, int, int, int]) -> None:
         last_row = index * score.PLAYER_BLOCK_STRIDE + score.PLAYER_INV_ROW
         if last_row >= rows_available:
             break
-        _draw_player_background(fb, panel, index)
+        _draw_player_background(fb, state, panel, index)
         if player.status == PlayerStatus.REMOVED:
             continue
         _draw_player_block(fb, state, panel, index)

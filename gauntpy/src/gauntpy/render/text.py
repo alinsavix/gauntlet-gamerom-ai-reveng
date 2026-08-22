@@ -60,25 +60,42 @@ def text_width(text: str, *, scale: int = 1) -> int:
     return len(text) * GLYPH_W * scale
 
 
-def draw_text(image, x, y, text: str, rgba, *, scale: int = 1) -> int:
+def draw_text(
+    image, x, y, text: str, rgba, *, scale: int = 1, palette=None,
+    opaque: bool = False,
+) -> int:
     """Draw ASCII ``text`` with its top-left at ``(x, y)`` onto a PIL RGBA
     ``image``. Returns the advance width. Uses the ROM font when available,
     else PIL.
     """
     glyphs = _rom_glyphs()
     if glyphs is None:
+        if opaque and palette is not None:
+            from PIL import ImageDraw
+
+            ImageDraw.Draw(image).rectangle(
+                [
+                    int(x), int(y),
+                    int(x) + text_width(text, scale=scale) - 1,
+                    int(y) + GLYPH_H * scale - 1,
+                ],
+                fill=palette[0],
+            )
         _draw_text_pil(image, x, y, text, rgba, scale)
         return text_width(text, scale=scale)
 
     cx = int(x)
     top = int(y)
     for ch in text:
-        if ch == " ":
+        if ch == " " and not opaque:
             # ASCII 32 in the ROM is an *opaque* block (the "black screen" fill,
             # doc/01 §9); as a word separator a space is a blank gap.
             cx += GLYPH_W * scale
             continue
-        _blit_glyph(image, glyphs(ch), cx, top, rgba, scale)
+        _blit_glyph(
+            image, glyphs(ch), cx, top, rgba, scale,
+            palette=palette, opaque=opaque,
+        )
         cx += GLYPH_W * scale
     return cx - int(x)
 
@@ -96,7 +113,9 @@ def draw_glyph_run(
     if _rom_glyphs() is None:
         if not fallback:
             return 0
-        return draw_text(image, x, y, fallback, rgba, scale=scale)
+        return draw_text(
+            image, x, y, fallback, rgba, scale=scale, palette=palette,
+        )
 
     cx = int(x)
     top = int(y)
@@ -115,7 +134,7 @@ def glyph_run_width(codes, *, scale: int = 1) -> int:
 
 
 def _blit_glyph(image, gl, x: int, y: int, rgba, scale: int, *,
-                palette=None) -> None:
+                palette=None, opaque: bool = False) -> None:
     """Blit one decoded 8x8 2-bit glyph, clipped to ``image``."""
     px = image.load()
     width, height = image.size
@@ -125,8 +144,10 @@ def _blit_glyph(image, gl, x: int, y: int, rgba, scale: int, *,
         for gx in range(GLYPH_W):
             v = row[gx]
             if not v:
-                continue
-            if palette is None:
+                if not opaque or palette is None:
+                    continue
+                col = palette[0]
+            elif palette is None:
                 f = v / 3.0
                 col = (int(r * f), int(g * f), int(b * f), a)
             else:

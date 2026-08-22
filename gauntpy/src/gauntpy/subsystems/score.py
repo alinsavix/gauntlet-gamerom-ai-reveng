@@ -145,6 +145,8 @@ BONUSMULT_COLUMN = 31        # 0x90503E -> byte 0x3E of the row -> word 31
 IT_LABEL_COLUMN = 0x24       # 0x905048, two ASCII glyph cells between labels
 INVENTORY_COLUMN = 30
 INVENTORY_CELLS = 12
+ALPHA_ROW_STRIDE = 64
+ALPHA_SPACE_GLYPH = 0x20
 
 #: Health redraw also fires below this value every time the player is selected,
 #: which is what makes the low-health warning pulse (§14.2).
@@ -179,6 +181,18 @@ def info_panel(state: GameState):
     nothing to create here.
     """
     return state.info_panel
+
+
+def write_player_panel_background(state: GameState, player_index: int) -> None:
+    """Write setup_infopanel's opaque player-colored space cells to alpha RAM."""
+    attribute = PLAYER_TEXT_PALETTE_WORDS[player_index] | ALPHA_SPACE_GLYPH
+    base = player_index * PLAYER_BLOCK_STRIDE
+    name_row = base + PLAYER_NAME_ROW
+    for column in range(PLAYER_NAME_COLUMN - 1, PLAYER_NAME_COLUMN + 5):
+        state.alpha_ram[name_row * ALPHA_ROW_STRIDE + column] = attribute
+    for row in range(base + PLAYER_LABEL_ROW, base + PLAYER_INV_ROW + 1):
+        start = row * ALPHA_ROW_STRIDE + PANEL_COLUMN
+        state.alpha_ram[start:start + PANEL_WIDTH] = [attribute] * PANEL_WIDTH
 
 
 # ---------------------------------------------------------------------------

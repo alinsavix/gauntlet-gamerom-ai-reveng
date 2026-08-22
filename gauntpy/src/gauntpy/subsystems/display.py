@@ -1,0 +1,63 @@
+"""Display-memory initialization and alpha palette lookup."""
+
+from __future__ import annotations
+
+from ..state import GameState
+
+# alpha_palette_init, ROM 0x5AD1E. init_display (0x434C2-0x434EC) copies the
+# first 0x20 longwords to 0x910000 and the second 0x20 to 0x910100.
+ALPHA_PALETTE_INIT = (
+    0x0000, 0xFFFF, 0xDFFF, 0xAFFF, 0x0000, 0x2F00, 0x7F00, 0xFF00,
+    0x0000, 0x208F, 0x708F, 0xF08F, 0x0000, 0x2FF0, 0x7FF0, 0xFFF0,
+    0x0000, 0x20F0, 0x70F0, 0xF0F0, 0x0000, 0x0000, 0xF888, 0xF00F,
+    0x0000, 0x0000, 0x0000, 0xFF00, 0x0000, 0xFC80, 0xFCA4, 0x0000,
+    0x0000, 0xF532, 0xFB63, 0xFFFF, 0x0000, 0x0000, 0x0000, 0xFFFF,
+    0x0000, 0x0000, 0xFFF0, 0xFF60, 0x0000, 0xF050, 0xF080, 0xF0F0,
+    0x3F00, 0x5FFF, 0xFFFF, 0xFFFF, 0x300F, 0x5FFF, 0xFFFF, 0xFFFF,
+    0x2FF0, 0x5FFF, 0xFFFF, 0xFFFF, 0x30F0, 0x5FFF, 0xFFFF, 0xFFFF,
+    0x3F00, 0xFFFF, 0xDFFF, 0xAFFF, 0x300F, 0xFFFF, 0xDFFF, 0xAFFF,
+    0x2FF0, 0xFFFF, 0xDFFF, 0xAFFF, 0x30F0, 0xFFFF, 0xDFFF, 0xAFFF,
+    0x3F00, 0x2F00, 0x7F00, 0xFF00, 0x300F, 0x208F, 0x708F, 0xF08F,
+    0x2FF0, 0x2FF0, 0x7FF0, 0xFFF0, 0x30F0, 0x20F0, 0x70F0, 0xF0F0,
+    0x3F00, 0xFFA0, 0xF08E, 0xF00C, 0x300F, 0xFFA0, 0xF08E, 0xF00C,
+    0x2FF0, 0xFFA0, 0xF08E, 0xF00C, 0x30F0, 0xFFA0, 0xF08E, 0xF00C,
+    0x3F00, 0xF226, 0xF33D, 0xF66F, 0x300F, 0xF226, 0xF33D, 0xF66F,
+    0x2FF0, 0xF226, 0xF33D, 0xF66F, 0x30F0, 0xF226, 0xF33D, 0xF66F,
+)
+
+
+def init_alpha_color_ram(state: GameState) -> None:
+    """Perform init_display's two ROM-to-color-RAM copies."""
+    state.alpha_ram[:] = [0] * (64 * 30)
+    state.alpha_color_ram[:] = [0] * 256
+    state.alpha_color_ram[0:64] = ALPHA_PALETTE_INIT[0:64]
+    state.alpha_color_ram[128:192] = ALPHA_PALETTE_INIT[64:128]
+
+
+def alpha_palette_words(state: GameState, attribute: int) -> tuple[int, ...]:
+    """Resolve an alpha attribute word to its four live color-RAM entries."""
+    bank = (attribute >> 14) & 1
+    palette = (attribute >> 10) & 0x0F
+    base = bank * 128 + palette * 4
+    return tuple(state.alpha_color_ram[base:base + 4])
+
+
+def alpha_palette_rgba(state: GameState, attribute: int) -> tuple[tuple[int, int, int, int], ...]:
+    return tuple(_irgb_rgba(word) for word in alpha_palette_words(state, attribute))
+
+
+def alpha_color_rgba(
+    state: GameState, attribute: int, pixel: int,
+) -> tuple[int, int, int, int]:
+    return alpha_palette_rgba(state, attribute)[pixel & 3]
+
+
+def _irgb_rgba(word: int) -> tuple[int, int, int, int]:
+    """MAME's 4-bit intensity × channel conversion, with 8-bit truncation."""
+    intensity = ((word >> 12) & 0x0F) * 17
+    channels = (
+        ((word >> 8) & 0x0F) * 17,
+        ((word >> 4) & 0x0F) * 17,
+        (word & 0x0F) * 17,
+    )
+    return tuple((channel * intensity) >> 8 for channel in channels) + (255,)

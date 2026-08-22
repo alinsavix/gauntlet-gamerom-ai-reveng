@@ -125,8 +125,11 @@ or the initials editor.
 
 Each position owns a dark version of its player color behind the text: red,
 blue, yellow, and green. These are opaque alpha cells, not a host UI panel, and
-they remain even when the position says INSERT COIN. MAME 0.289 measures the
-background RGB values as `(50,0,0)`, `(0,0,50)`, `(33,33,0)`, and `(0,50,0)`.
+they remain even when the position says INSERT COIN. Boot copies the alpha
+palette table from ROM into color RAM; the panel writes opaque spaces selecting
+palettes 4–7, and the display resolves their color-zero entries. The hardware
+IRGB conversion yields `(50,0,0)`, `(0,0,50)`, `(33,33,0)`, and `(0,50,0)`,
+matching MAME 0.289.
 
 What keeps the panel cheap is that almost nothing is redrawn on any given
 frame. The per-frame display routine services exactly one player per frame,

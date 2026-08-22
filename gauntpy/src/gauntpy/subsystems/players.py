@@ -739,6 +739,7 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     else:
         return
     for i in targets:
+        score.write_player_panel_background(state, i)
         score._draw_player_score(state, i)     # 0x45940
         score._draw_player_health(state, i)    # 0x459A2
         player_inv_update(state, i)            # 0x45522

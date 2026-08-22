@@ -104,11 +104,13 @@ def build_state(level: int, character: int) -> GameState:
     from . import maze
 
     from .subsystems.eeprom import GAME_DEFAULT_SETTINGS
+    from .subsystems.display import init_alpha_color_ram
 
     state = GameState(
         game_mode=GameMode.NORMAL,
         game_settings=GAME_DEFAULT_SETTINGS,
     )
+    init_alpha_color_ram(state)
     if level > 5:
         # Past the opening act there is no fixed level -> maze rule (doc/06
         # §3.2), so ``load_level`` reads ``mazenum_current``. Seed it with the
@@ -117,6 +119,8 @@ def build_state(level: int, character: int) -> GameState:
         state.mazenum_current = min(level - 1, MAX_MAZE_NUM)
     maze.load_level(state, level)           # places objects with their pictures
     _spawn_player(state, character)
+    from .subsystems.players import setup_infopanel
+    setup_infopanel(state, -1)
     return state
 
 
