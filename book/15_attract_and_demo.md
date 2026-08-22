@@ -195,6 +195,18 @@ maze in the picture above was stocked to contain a working example of almost
 every one. Two of the twelve are about IT, the tag mechanic Chapter 10
 covered, which is a fair measure of how much the designers wanted it noticed.
 
+The recording is an integration test disguised as theater. Its Elf pushes the
+opening wall, reveals and collects a potion while straddling a row boundary,
+uses a transporter, waits for two scripted joins, spends the potion, and takes
+the exit. Demo joins receive the full 2000 health and later actors use the
+ordinary adjacent-player spawn search. Approximate pickup cells, spawning, or
+viewport clipping break the timing and leave the Elf below the final wall.
+
+The Elf is player position 1, so its status panel and sprite are both blue.
+Hardware MOB palette slots 12–15 select color variants 0–3 within the chosen
+hero class. Treating slot 13 as an out-of-range Elf palette and falling back to
+variant zero paints a red Elf beside a blue panel.
+
 ## How much of this repeats
 
 A recording of joystick positions is only a recording of joystick positions.

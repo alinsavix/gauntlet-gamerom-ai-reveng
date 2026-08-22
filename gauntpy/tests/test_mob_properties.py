@@ -51,7 +51,7 @@ def _random_table(seed: int, num_ops: int = 300) -> tuple[MobTable, set[int]]:
                 slot,
                 tile=0x100,
                 hpos=coords.encode_hpos(0),
-                vpos=coords.encode_vpos(y),
+                vpos=coords.encode_vpos_at_y(y),
                 obj_type=MazeObjIds.MONST_GHOST,
             )
             active.add(slot)

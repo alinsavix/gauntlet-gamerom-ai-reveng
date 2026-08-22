@@ -1,19 +1,32 @@
-"""Sound -- WP-18. Stubbed: the queue is real, the audio is not.
+"""Sound -- WP-18. The command engine is real; the audio output is a log.
 
-Implement the command queue, not the synthesis. Every emitted command gets
-logged, which turns sound into a **test oracle** for the other packages ("this
-event plays sound 0x37") rather than dead weight.
+The command engine, the eight-attempt drain with its busy-latch retry, the
+board recovery/holdoff machine, the status-query retry ladder and the operator
+speech gate are all implemented against §11. What the port does not do is
+*synthesise* audio: the emitted command stream is the output, recorded in
+``state.sound_log``. That is the one hardware boundary this package replaces
+rather than reimplements -- the sound board is a separate 6502 with its own
+ROMs -- and it doubles as a **test oracle** for the rest of the game ("this
+event plays sound 0x37").
 
 219 command IDs (0x00-0xDA); command 0x00 is reinitialize/stop-all, 0x06 the
 command-count query (replies 0xDB), 0x07 the diagnostic fault query.
 
-The original's ``sound_play`` (§11.1) has a hardware fast path: when the
-sound-board latch is free it sends the command immediately instead of queuing
-it. There is no real latch in this simulation -- no code ever reports
-"busy" -- so that optimization has nothing to bypass. Per the WP-18 brief
-("``sound_play(id)`` appends, the drain call consumes"), every command here
-always takes the ring path; capacity and drop-when-full behaviour are
-preserved exactly.
+``sound_play`` (§11.1) is ROM-faithful, fast path included: when the recovery
+holdoff is zero it offers the byte straight to the board and an accepted
+command is *never* queued; only a busy latch (or a nonzero holdoff) falls back
+to the seven-entry ring. So ``sound_log`` -- not ``sound_queue`` -- is what
+"the board was told", and it is where every emitted command shows up exactly
+once, whether it went out immediately or was drained later. Capacity and
+drop-when-full behaviour on the ring path are preserved exactly.
+
+**The two board-facing sends are seams.** Everything the documented
+queue/retry logic branches on is a *send result*. ``try_send_sound_command``
+(OS 0x242) and ``send_status_query`` (OS 0x172) return ``True`` for the log
+backend and can be substituted by a real board model -- or a test -- to
+exercise the busy and failed-send ladders. The gates themselves (the
+eight-attempt budget, the read head staying put on a busy result, the retry
+count, the 0xB4 reset threshold, the speech-disable bit) are all implemented.
 
 Reference: ``doc/04_game_subsystems.md`` §11; ``refs/soundcmds.csv``;
 ``book/16_sound.md``.
@@ -22,6 +35,16 @@ Reference: ``doc/04_game_subsystems.md`` §11; ``refs/soundcmds.csv``;
 from __future__ import annotations
 
 from ..state import GameState
+
+__all__ = [
+    "SOUND_REINITIALIZE", "SOUND_COMMAND_COUNT_QUERY", "SOUND_DIAGNOSTIC_QUERY",
+    "SOUND_QUEUE_CAPACITY", "SOUND_DRAIN_MAX_ATTEMPTS", "SOUND_RESET_HOLDOFF",
+    "SOUND_IDLE_RELOAD", "SOUND_RETRY_LIMIT", "GAME_SETTINGS_SPEECH_DISABLED",
+    "SOUND_NO_RESPONSE",
+    "try_send_sound_command", "send_status_query",
+    "enqueue_sound", "sound_play", "sound_speech_play", "sound_system_reset",
+    "sound_response", "main_update_sound",
+]
 
 # --- catalog (refs/soundcmds.csv; doc §11.3, §11.5) -------------------------
 #
@@ -48,7 +71,8 @@ SOUND_RESET_HOLDOFF = 0xB4
 #: Idle-timer reload after a successful status-query send -- 240 frames. §11.3.
 SOUND_IDLE_RELOAD = 0xF0
 
-#: Consecutive failed-send retry threshold before a full reset. §11.3.
+#: Consecutive failed-send retry threshold before a full reset. §11.3: "above
+#: 0xB4 (180) it performs a full reset".
 SOUND_RETRY_LIMIT = 0xB4
 
 #: game_settings (0x904A24) bit 11 -- the operator "Disable Speech" setting.
@@ -60,24 +84,65 @@ GAME_SETTINGS_SPEECH_DISABLED = 1 << 11
 SOUND_NO_RESPONSE = 0xFFFF
 
 
-def sound_play(state: GameState, sound_id: int) -> None:
-    """0x4AD76 -- queue a sound command. Called from all over the game.
+# ---------------------------------------------------------------------------
+# The board-facing sends. See the module docstring: these exist so the
+# documented busy/failure ladders are real code rather than commentary.
+# ---------------------------------------------------------------------------
 
-    Corresponds to the ring fallback path (``enqueue_sound``, 0x4ADD6): append
-    if there is room, otherwise drop silently. See the module docstring for
-    why the immediate-dispatch fast path is not modelled.
+def try_send_sound_command(state: GameState, command: int) -> bool:
+    """OS ``try_send_sound_command`` (0x242) -- offer one byte to the sound
+    board's command latch. ``True`` = accepted, ``False`` = the latch is busy.
+
+    Nothing in this simulation owns a latch, so the offer always succeeds.
     """
-    sound_id &= 0xFF
+    return True
+
+
+def send_status_query(state: GameState) -> bool:
+    """OS 0x172 -- send the diagnostic status query (command
+    ``SOUND_DIAGNOSTIC_QUERY``) with a one-byte reply directed at 0x9049F1.
+    ``True`` = sent, ``False`` = the send failed. §11.3.
+
+    Always succeeds here for the same reason ``try_send_sound_command`` does.
+    """
+    return True
+
+
+def enqueue_sound(state: GameState, sound_id: int) -> None:
+    """0x4ADD6 -- the ring fallback: append if there is room, otherwise drop
+    the byte silently. Usable capacity is 7 (§11.1-11.2).
+    """
     if len(state.sound_queue) < SOUND_QUEUE_CAPACITY:
-        state.sound_queue.append(sound_id)
+        state.sound_queue.append(sound_id & 0xFF)
     # else: ring full, command dropped without complaint (§11.2)
 
 
-def sound_speech_play(state: GameState, speech_id: int) -> None:
-    """0x4AD4E -- queue a speech command. See §11.4.
+def sound_play(state: GameState, sound_id: int) -> None:
+    """0x4AD76 -- play a sound command. Called from all over the game.
 
-    Calls ``sound_play`` only when the "Disable Speech" operator setting
-    (game_settings bit 11) is clear.
+    §11.1: with the recovery holdoff (0x9049EE, tested at 0x4AD7E) clear, the
+    byte is offered straight to the board through ``try_send_sound_command``
+    and an accepted command is **not** queued. A busy latch falls back to the
+    ring (``enqueue_sound``, 0x4ADD6); a nonzero holdoff skips the immediate
+    attempt and queues directly.
+
+    An accepted immediate send *is* the board receiving the byte, so for the
+    log backend it is recorded in ``sound_log`` here and exactly once --
+    ``main_update_sound`` only logs the commands it drains out of the ring.
+    """
+    sound_id &= 0xFF
+    if not state.sound_holdoff and try_send_sound_command(state, sound_id):
+        state.sound_log.append(sound_id)
+        return
+    enqueue_sound(state, sound_id)
+
+
+def sound_speech_play(state: GameState, speech_id: int) -> None:
+    """0x4AD4E -- play a speech command. See §11.4.
+
+    Calls ``sound_play`` -- immediate send or ring, whichever §11.1 selects --
+    only when the "Disable Speech" operator setting (game_settings bit 11) is
+    clear. A disabled setting emits nothing at all.
     """
     if not (state.game_settings & GAME_SETTINGS_SPEECH_DISABLED):
         sound_play(state, speech_id)
@@ -134,14 +199,23 @@ def sound_response(state: GameState) -> None:
         return
 
     state.sound_idle_timer -= 1
-    if state.sound_idle_timer < 0:
-        state.sound_queue_state = 0
-        # Status query (command 0x07) sent through OS 0x172. No real sound
-        # board exists in this simulation, so the send always succeeds --
-        # the documented failed-send/retry-count path (§11.3) has nothing to
-        # trigger it here and is not modelled.
+    if state.sound_idle_timer >= 0:
+        return
+
+    # Time for the periodic diagnostic poll. The word is cleared first so the
+    # reply's low three fault bits are the board's, not last poll's (§11.3).
+    state.sound_queue_state = 0
+    if send_status_query(state):
         state.sound_idle_timer = SOUND_IDLE_RELOAD
         state.sound_retry_count = 0
+        return
+
+    # Failed send: clear the timer so the next frame retries immediately, count
+    # the attempt, and reset the whole engine once the count passes 0xB4.
+    state.sound_idle_timer = 0
+    state.sound_retry_count += 1
+    if state.sound_retry_count > SOUND_RETRY_LIMIT:
+        sound_system_reset(state)
 
 
 def main_update_sound(state: GameState) -> None:
@@ -149,19 +223,24 @@ def main_update_sound(state: GameState) -> None:
 
     Skips entirely when ``frame_overflow`` or the recovery holdoff is
     nonzero. Otherwise makes at most eight attempts, stopping early if the
-    ring empties first. Every drained command is appended to ``sound_log``,
-    the permanent oracle other packages assert against.
+    ring empties first. Every command the board accepts here is appended to
+    ``sound_log``, the permanent oracle other packages assert against -- which
+    is also where ``sound_play``'s immediately-accepted commands go, so the log
+    holds every emitted command exactly once regardless of the path it took.
 
-    The documented busy-latch retry (§11.2, "Contradicted and corrected":
-    a busy result costs an attempt but leaves the read head alone) has no
-    counterpart here -- there is no real latch to report busy, so every
-    attempt succeeds and consumes one queue entry.
+    §11.2's "Contradicted and corrected": a busy result from
+    ``try_send_sound_command`` does **not** end the drain. It costs one of the
+    eight attempts and leaves the read head alone, so the same byte is offered
+    again on the next attempt (and, if the eight run out, next frame).
     """
     if state.frame_overflow or state.sound_holdoff:
         return
 
     attempts = 0
     while state.sound_queue and attempts < SOUND_DRAIN_MAX_ATTEMPTS:
-        command = state.sound_queue.pop(0)
-        state.sound_log.append(command)
         attempts += 1
+        command = state.sound_queue[0]
+        if not try_send_sound_command(state, command):
+            continue        # busy: the byte stays at the head of the ring
+        state.sound_queue.pop(0)
+        state.sound_log.append(command)

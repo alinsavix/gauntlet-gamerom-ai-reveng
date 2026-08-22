@@ -283,6 +283,16 @@ through to `main_init_cont`. **Contradicted and corrected:** the former
 `quick`/`thorough` names were reversed: 0xA2C is the short three-stage test,
 while 0xA6A is the full extended suite used by the self-test-switch boot.
 
+The short test contains a shipped control-flow bug. Its initial fill covers
+the requested range, but each subsequent high-bit-first walking-pattern stage
+tests only the first word. At 0x0B1C the code compares A0 with the inclusive
+end in A2, then 0x0B1E executes `move.w D0,0x803100.l` to pet the watchdog
+before the `bcs 0x0B04` at 0x0B24. On a 68010, `MOVE` clears C, so that branch
+can never repeat the outer per-word loop. This was first identified by the
+[Gauntlet FPGA investigation](https://github.com/d18c7db/Gauntlet_FPGA/blob/677c12cdb106d3cc057cf36921124d1d144969ec/MiSTer/doc/readme.md#L506-L528)
+and is independently verified here from the `row9.bin` instruction bytes and
+68010 condition-code semantics.
+
 ### 5.4 Main Init Continuation (`0x70C`)
 
 ```
@@ -359,23 +369,27 @@ testers take the inclusive word range in A1/A2 and a completion/failure
 continuation in A4. They never use RTS: a failed comparison sets D4.w=1 and
 jumps through A4 immediately; success reaches the final A6 stage with D4.w=0,
 which also jumps through A4. A6 links the individual pattern stages below.
-D6 counts completed stages and the inner workers pet the watchdog.
+D6 counts completed stages and the inner workers pet the watchdog. The four
+high-bit-first workers routed through 0x0AF4/0x0AF8 and 0x0B7C/0x0B80 have
+the watchdog/carry bug described in §5.3 and operate on only A1. The full test
+is not wholly defeated: its low-bit-first workers and final per-word inversion
+stage use unaffected loops and still traverse the complete range.
 
 | Address | Entry | Stage |
 |---:|---|---|
-| `0x0A2C` | `mem_test_short` | Clear status, fill the range with zero, then run high-bit-first walking-one and walking-zero passes |
-| `0x0A42` | `mem_test_short_walk_ones` | Schedule walking ones over zero base |
-| `0x0A52` | `mem_test_short_walk_zeroes` | Schedule walking zeroes over 0xFFFF base |
+| `0x0A2C` | `mem_test_short` | Clear status and fill the range with zero, then attempt the two bug-limited high-bit-first passes |
+| `0x0A42` | `mem_test_short_walk_ones` | Schedule walking ones over zero base; only A1 is tested because 0x0B1E clears C |
+| `0x0A52` | `mem_test_short_walk_zeroes` | Schedule walking zeroes over 0xFFFF base; only A1 is tested because 0x0B1E clears C |
 | `0x0A62` | `mem_test_short_done` | Return D4 status through A4 |
 | `0x0A6A` | `mem_test_full` | Start the full extended destructive suite used by the self-test-switch boot |
-| `0x0A7A` | `mem_test_full_walk_ones_highbit` | High-bit-first walking ones |
-| `0x0A84` | `mem_test_full_walk_zeroes_highbit` | High-bit-first walking zeroes |
+| `0x0A7A` | `mem_test_full_walk_ones_highbit` | High-bit-first walking ones; bug-limited to A1 |
+| `0x0A84` | `mem_test_full_walk_zeroes_highbit` | High-bit-first walking zeroes; bug-limited to A1 |
 | `0x0A8E` | `mem_test_full_walk_ones_lowbit` | Low-bit-first walking ones |
 | `0x0A98` | `mem_test_full_walk_zeroes_lowbit` | Low-bit-first walking zeroes |
-| `0x0AA2` | `mem_test_full_restore_ones_highbit` | High-bit walking-one pass that restores the zero base |
+| `0x0AA2` | `mem_test_full_restore_ones_highbit` | High-bit walking-one restore pass; bug-limited to A1 by the analogous watchdog write at 0x0BA8 |
 | `0x0AAC` | `mem_test_full_restore_ones_lowbit` | Low-bit walking-one pass that restores the zero base |
 | `0x0AB6` | `mem_test_full_fill_ones` | Fill the full range with 0xFFFF |
-| `0x0AC2` | `mem_test_full_restore_zeroes_highbit` | High-bit walking-zero pass that restores 0xFFFF |
+| `0x0AC2` | `mem_test_full_restore_zeroes_highbit` | High-bit walking-zero restore pass; bug-limited to A1 by the analogous watchdog write at 0x0BA8 |
 | `0x0ACC` | `mem_test_full_restore_zeroes_lowbit` | Low-bit walking-zero pass that restores 0xFFFF |
 | `0x0AD6` | `mem_test_full_toggle_words` | For each word, verify inversion to 0 and back to 0xFFFF |
 | `0x0AE0` | `mem_test_full_done` | Return D4 status through A4 |

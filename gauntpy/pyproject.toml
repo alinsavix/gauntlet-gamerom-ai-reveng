@@ -22,16 +22,29 @@ classifiers = [
 ]
 
 # The simulation core has no dependencies at all -- deliberately, so it stays
-# testable without ROMs or a display. Graphics come in through gex (WP-1) and
-# the display through pygame (WP-2); both are optional extras.
+# testable without ROMs or a display. Graphics come in through gex (WP-1, which
+# reads the ROMs and renders tiles via Pillow) and the display through pygame
+# (WP-2); both are optional extras, so `uv run gauntpy` (the headless demo) and
+# the test suite need nothing installed beyond the dev group.
 dependencies = []
 
 [project.optional-dependencies]
-rom = ["gex>=0.1.0"]
+# ROM reading + software tile/maze rendering. gex depends on Pillow, but the
+# render layer imports PIL directly too, so it is declared here as well.
+rom = ["gex>=0.1.0", "Pillow>=10.0.0"]
+# pygame host shell (interactive window). pygame is imported lazily, so it is
+# only needed for the graphical host.
 display = ["pygame-ce>=2.4.0"]
+
+# gex is the sibling package in this repository, not a PyPI release, so uv
+# resolves it from the local path. The editable install means edits to
+# ../python-gex are picked up without reinstalling.
+[tool.uv.sources]
+gex = { path = "../python-gex", editable = true }
 
 [project.scripts]
 gauntpy = "gauntpy.__main__:main"
+gauntpy-play = "gauntpy.play:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

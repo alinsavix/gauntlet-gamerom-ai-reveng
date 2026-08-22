@@ -29,11 +29,16 @@ from ..state import NUM_PLAYERS, GameState
 JOY_MAGIC_BIT = 0x01  # bit 0 -> shift register A (0x905F58)
 JOY_FIRE_BIT = 0x02   # bit 1 -> shift register B (0x905F60)
 
-JOY_UP = 0x04
-JOY_DOWN = 0x08
-JOY_LEFT = 0x10
-JOY_RIGHT = 0x20
-JOY_DIRECTIONS = JOY_UP | JOY_DOWN | JOY_LEFT | JOY_RIGHT
+# Direction bits per 05_data_reference.md §3.11: RIGHT=4, LEFT=5, DOWN=6, UP=7.
+# Bits 2-3 (JOY_SPARE1/2) are unconnected.  A former reading placed the four
+# directions at bits 2-5, which read the spare lines for UP/DOWN and swapped
+# LEFT/RIGHT -- corrected here to match §3.11, §6.2 (demo format), and §22
+# (character select).
+JOY_RIGHT = 0x10  # bit 4
+JOY_LEFT = 0x20   # bit 5
+JOY_DOWN = 0x40   # bit 6
+JOY_UP = 0x80     # bit 7
+JOY_DIRECTIONS = JOY_UP | JOY_DOWN | JOY_LEFT | JOY_RIGHT  # 0xF0
 
 #: All bits high = nothing pressed, because the switches are active low.
 JOY_IDLE = 0xFFFF

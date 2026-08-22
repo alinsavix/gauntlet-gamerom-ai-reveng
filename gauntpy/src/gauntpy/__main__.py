@@ -3,19 +3,16 @@
     python -m gauntpy
 
 Prints what a frame does, shows the dialog gate freezing exactly the sixteen
-gameplay calls, shows the frame-overflow decay, and reports how much of the
-game is still stubbed.
+gameplay calls, and shows the frame-overflow decay.
 """
 
 from __future__ import annotations
 
 import inspect
 
-from . import mainloop
 from .constants import GameMode
 from .mainloop import check_frame_overflow, game_frame, tick
 from .state import GameState
-from .subsystems import is_stub
 
 
 def _loop_calls() -> list[str]:
@@ -60,11 +57,9 @@ def main() -> None:
         tick(state)
         print(f"  good frame     -> frame_overflow = {state.frame_overflow}")
 
-    stubbed = [n for n in names if is_stub(getattr(mainloop, n))]
-    done = len(names) - len(stubbed)
-    print(f"\n{done}/{len(names)} main-loop calls implemented, "
-          f"{len(stubbed)} still stubbed.")
-    print("See PLAN.md for the work packages that fill these in.")
+    print(f"\nall {len(names)} main-loop calls are implemented.")
+    print("Run `gauntpy-play` for the playable runner; see ISSUES.md for the")
+    print("completed reverse-engineering record.")
 
 
 if __name__ == "__main__":

@@ -234,6 +234,7 @@ address,name,catalogs,confidence
 0x540E8,dragon_find_free_shot_slot,dragon_thief_exit_contracts.csv,Verified
 0x54112,dragon_shot_hit,monster_combat_contracts.csv,Verified
 0x54454,main_handle_dragon,dragon_thief_exit_contracts.csv;main_loop_contracts.csv,Verified
+0x545FA,dragon_head_pose_update,dragon_thief_exit_contracts.csv,Verified
 0x54748,dragon_fire_setup,dragon_thief_exit_contracts.csv,Verified
 0x5496E,dragon_setup_segments,dragon_thief_exit_contracts.csv,Verified
 0x549EA,dragon_player_proximity,dragon_thief_exit_contracts.csv,Verified

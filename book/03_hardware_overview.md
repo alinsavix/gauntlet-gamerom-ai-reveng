@@ -80,7 +80,7 @@ returning to:
 | OS ROM | `0x000000–0x00FFFF` | 64 KB | Boot, self-test, shared services (Ch. 5) |
 | Slapstic ROM | `0x038000–0x03FFFF` | 32 KB | Level data, bank-switched (Ch. 9) |
 | Game ROM | `0x040000–0x05FFFF` | 128 KB | The game itself |
-| Main RAM | `0x800000–0x801FFF` | 8 KB | Working variables |
+| Main-RAM aperture | `0x800000–0x801FFF` | 8 KB decoded | Unfitted on Gauntlet II; populated only on Vindicators II hardware |
 | EEPROM | `0x802000–0x8023FF` | 512 usable bytes | High scores, settings, statistics |
 | Hardware I/O | `0x803000–0x8031FF` | 512 B | Inputs, watchdog, sound latches, LEDs |
 | Playfield RAM | `0x900000–0x901FFF` | 8 KB | The maze tile grid (Ch. 4) |
@@ -90,17 +90,24 @@ returning to:
 | Color RAM | `0x910000–0x9107FF` | 2 KB | Palettes (Ch. 4) |
 | Scroll register | `0x930000` | 2 B | Playfield horizontal scroll (Ch. 4) |
 
-Two things about this map deserve a moment of appreciation. First, look at
-how little RAM there is. General-purpose variables get 8 KB of main RAM plus
-a 4 KB spare corner of video memory that the designers pressed into service,
-and inside that roughly 12 KB live four players' full records, hundreds of
-monsters' worth of state, the camera, the thief's plans, the demo playback
-machinery, and everything else the coming chapters describe. The video RAM
-regions hold additional world state in the form of the tile grid and sprite
-tables themselves, and Chapter 8 shows how the software treats those hardware
-tables as its own data structures to stretch the budget.
+Three things about this map deserve a moment of appreciation. First, look at
+how little general working RAM there is. Four players' full records, hundreds
+of monsters' worth of state, the camera, the thief's plans, the demo playback
+machinery, and everything else the coming chapters describe all share the
+4 KB spare corner of video memory. The other video RAM regions hold additional
+world state in the tile grid and sprite tables themselves, and Chapter 8 shows
+how the software treats those hardware tables as its own data structures to
+stretch the budget.
 
-Second, notice that video memory is shared territory. The CPU writes the
+Second, notice that the nominal 8 KB main-RAM aperture is not where this game
+keeps its variables. Board photographs and a schematic-derived FPGA
+reconstruction indicate that its four RAM sockets are empty on Gauntlet
+hardware and populated only for Vindicators II; the Gauntlet II ROMs likewise
+contain no ordinary reference to that range. The stack and general variables
+instead use the 4 KB spare-video-RAM window. This is an unusually literal case
+of the game borrowing memory from the display system.
+
+Third, notice that video memory is shared territory. The CPU writes the
 playfield grid, the sprite tables, the text overlay, and the palettes as if
 they were ordinary RAM; the video circuitry reads the same memory as its
 instructions for painting. That shared memory is the machine's entire

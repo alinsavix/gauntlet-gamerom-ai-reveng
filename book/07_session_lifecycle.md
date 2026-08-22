@@ -185,6 +185,12 @@ the button whose input line the game calls Magic.) Letting the countdown expire 
 there is no prompt, since continuing and starting over would be the same
 thing.
 
+The coin that accepts a continue is a new-player credit transaction, not the
+mid-life "buy more health" transaction. It restores the complete configured
+starting-health value (or 2000 on the demo/free-play path), resets the
+multiplier baseline, and returns the position to selection. Applying only the
+per-coin increment leaves the continued hero nearly dead.
+
 ## The ceremony
 
 A finished player's score gets one last computation, and it is the game's

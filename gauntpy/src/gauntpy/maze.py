@@ -1,16 +1,18 @@
 """Maze and level system -- WP-3.
 
 The public entry point is ``load_level(state, level_number)``, called at
-level transitions. This package owns no main-loop call -- WP-20 boot will
-call ``load_level`` once it exists; nothing calls it today.
+level transitions: WP-20's boot/front-end path (``session.main_start_game``
+via ``reset_and_load_level``), WP-15's exit sequence, WP-17's attract demo,
+and the ``gauntpy-play`` runner all reach the maze through it.
 
 Like ``assets.py``, this is a bridge module: it is allowed to import ``gex``
 (the sibling ``../python-gex`` project) but must not import any gauntpy
 subsystem module. gex already implements the Slapstic ROM reader and the
 maze bytecode decompressor -- this module *reuses* both rather than porting
 them (PLAN.md WP-3), and adds the game-specific layer gex has no reason to
-know about: level selection, level-flag randomization, row-0 wall fill, and
-turning decoded tokens into ``MobTable`` records.
+know about: level selection, level-flag randomization and the maze mirroring
+it drives, row-0 wall fill, and turning decoded tokens into ``MobTable``
+records.
 
 Reference: ``doc/04_game_subsystems.md`` section 5; ``doc/06_maze_catalog.md``;
 ``book/09_mazes_and_slapstic.md``; ``../python-gex/src/gex/{roms,mazedecode}.py``.
@@ -41,6 +43,7 @@ silently porting a level->maze formula the doc says does not exist.
 from __future__ import annotations
 
 import struct
+from dataclasses import replace
 from typing import NamedTuple
 
 from gex.constants import (
@@ -50,6 +53,13 @@ from gex.constants import (
     MAX_MAZE_NUM,
 )
 from gex.mazedecode import Maze, maze_decompress
+from gex.objparams import (
+    PICTURE_MARKER,
+    base_picture,
+    hpos_correction,
+    hsize_tier,
+    vpos_offset,
+)
 from gex.roms import (
     GexError,
     coderom_get_bytes,
@@ -60,6 +70,7 @@ from gex.roms import (
 
 from . import coords
 from .constants import FIRST_PLAYABLE_SLOT, GameMode, MazeObjIds
+from .mob import MobTable
 from .state import GameState
 
 __all__ = [
@@ -68,12 +79,19 @@ __all__ = [
     "find_maze",
     "decode_maze",
     "maze_for_level",
+    "level_flags_long",
+    "mirror_slot",
+    "mirror_maze",
     "maze_place_object",
     "place_decoded_objects",
     "get_random_maze_flags",
     "maze_load_pickup_config",
     "load_level",
+    "reset_and_load_level",
+    "set_cell_descriptor",
+    "clear_cell_descriptor",
 ]
+
 
 
 class MazeError(Exception):
@@ -82,6 +100,25 @@ class MazeError(Exception):
     pattern -- callers of this module never need to catch gex's own
     ``GexError``.
     """
+
+
+def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
+    """Write one living-maze descriptor.
+
+    The original updates playfield RAM together with the MOB record. The port's
+    renderer rebuilds terrain from ``state.maze.data``, so live terrain writers
+    must keep this descriptor view in step.
+    """
+    data = getattr(state.maze, "data", None)
+    if data is None or slot < FIRST_PLAYABLE_SLOT:
+        return
+    row, col = coords.unpack_slot(slot)
+    data[(col, row)] = int(object_type)
+
+
+def clear_cell_descriptor(state: GameState, slot: int) -> None:
+    """Replace one living-maze descriptor with floor."""
+    set_cell_descriptor(state, slot, int(MazeObjIds.TILE_FLOOR))
 
 
 # ---------------------------------------------------------------------------
@@ -152,8 +189,191 @@ def maze_for_level(level_number: int) -> int | None:
 
 
 # ---------------------------------------------------------------------------
+# Level-flag mirroring (maze_place_object 0x45E9A-0x45FD0)
+# ---------------------------------------------------------------------------
+#
+# Two of the level-flags longword's bits flip the whole maze as it is placed,
+# and they are exactly the two bits ``maze_load_pickup_config`` re-randomizes
+# on every level (doc/04 sec 5.5: "LFLAG1 bits 2-3 (long bits 26-27) are XOR'd
+# with getrandom(4) every level"). That is why the same maze number never
+# quite plays the same way twice, and why ``doc/07_function_index.md``'s
+# ``maze_tile_write_at`` entry speaks of "the level_flags (0x90491C) mirror
+# bits" without naming them: verified by disassembly at ROM 0x45E9E-0x45FBC
+# and 0x45F42-0x45FBC, bit 26 mirrors horizontally and bit 27 vertically.
+#
+# gex names the same two bits ``LFLAG1_ODDANGLE_DEMONS`` / ``_LOBBERS`` and
+# doc/05 sec 3.12 lists them the same way; the odd-angle override table
+# (0x40E02) covers ghosts/grunts/sorcerers/aux-grunts/Death, not demons and
+# lobbers, so the placement use is the one with evidence behind it. Named
+# here for what the code does with them, cross-referenced rather than
+# renamed in gex.
+
+MIRROR_H_FLAG = 1 << 26   # LFLAG1 bit 2
+MIRROR_V_FLAG = 1 << 27   # LFLAG1 bit 3
+
+#: ``levelnum_current`` sentinel (0x270F) used by the secret/treasure rooms:
+#: with it set, placement is never mirrored and the flags are never
+#: randomized (ROM 0x45FC4-0x45FCC, 0x4374C).
+LEVEL_SENTINEL = 9999
+
+
+def level_flags_long(state: GameState) -> int:
+    """The four level-flags bytes as the one longword at 0x90491C."""
+    return _join_flags(
+        state.level_flags, state.level_flags_2, state.level_flags_3, state.level_flags_4
+    )
+
+
+def mirror_slot(state: GameState, slot: int) -> int:
+    """Apply the level's mirror flags to a packed slot (ROM 0x45F3E-0x45FD0).
+
+    Horizontal first, then vertical -- the ROM's order, though each preserves
+    the other's axis so it does not matter:
+
+      * horizontal: ``col -> (base - col) & 0x1F`` with ``base`` 0x1F when
+        LFLAG4 WrapH is set and 0x20 otherwise, so a wrapping level mirrors
+        about the seam and a non-wrapping one keeps column 0 (its border wall)
+        in place;
+      * vertical: ``row -> 32 - row``, which is why row 0 -- the reserved
+        block the decoder never emits -- has no mirror image.
+
+    Slots below ``FIRST_PLAYABLE_SLOT`` (the row-0 wall fill) and the
+    ``levelnum_current == 9999`` sentinel bypass mirroring entirely
+    (0x45FBC-0x45FCC).
+    """
+    if slot < FIRST_PLAYABLE_SLOT or state.levelnum_current == LEVEL_SENTINEL:
+        return slot
+
+    flags = level_flags_long(state)
+    if flags & MIRROR_H_FLAG:
+        base = 0x1F if state.level_flags_4 & LFLAG4_WRAP_H else 0x20
+        slot = (slot & 0x3E0) | ((base - slot) & 0x1F)
+    if flags & MIRROR_V_FLAG:
+        slot = (slot & 0x1F) + (0x400 - (slot & 0x3E0))
+    return slot
+
+
+def _placement_slot(state: GameState, slot: int, object_type: int) -> int:
+    """Mirror one placement and correct a dragon's 2x2 anchor."""
+    slot = mirror_slot(state, slot)
+    if object_type != int(MazeObjIds.MONST_DRAGON):
+        return slot
+    flags = level_flags_long(state)
+    if flags & MIRROR_H_FLAG:
+        slot = (slot & 0x3E0) | ((slot - 1) & 0x1F)
+    if flags & MIRROR_V_FLAG:
+        slot = (slot + 0x20) & 0x3FF
+    return slot
+
+
+def mirror_maze(state: GameState, maze: Maze) -> Maze:
+    """A copy of ``maze`` with ``data`` moved through ``mirror_slot``.
+
+    ``maze_place_object`` mirrors each cell as it places it, so the MobTable
+    is already correct without this. The *terrain* is a second consumer:
+    ``render/playfield.py`` builds its tile image straight from
+    ``state.maze.data``, and the original mirrors that too (the same flags are
+    applied by ``maze_tile_write``/``maze_tile_write_at`` inside
+    ``maze_decode``, ``doc/07_function_index.md`` 0x4631C). Storing the
+    mirrored view keeps the drawn walls and the walls you collide with the
+    same walls.
+    """
+    mirrored = {}
+    for (col, row), object_type in maze.data.items():
+        slot = _placement_slot(
+            state, coords.pack_slot(row, col), int(object_type),
+        )
+        new_row, new_col = coords.unpack_slot(slot)
+        mirrored[(new_col, new_row)] = object_type
+    return replace(maze, data=mirrored)
+
+
+# ---------------------------------------------------------------------------
 # maze_place_object (0x45E40) and MobTable population
 # ---------------------------------------------------------------------------
+#
+# The dispatcher splits its 64 object types three ways (doc/04 sec 5.4,
+# verified at ROM 0x45FD2-0x4610A):
+#
+#   * solid-wall markers write ``mob_picture`` 0x8000 straight into the five
+#     arrays -- no ``mob_create``, and so never a member of the depth chain;
+#   * tile markers do the same with 0x8001;
+#   * everything else is a real sprite built by ``mob_create`` from the master
+#     parameter tables.
+
+#: Types whose marker word is 0x8000 (ROM 0x45FD2-0x4600E). Forcefield hubs
+#: are solid endpoints; contact damage comes from the beam segment cells between
+#: hubs, not by walking through a hub.
+_SOLID_WALL_MARKERS = frozenset((
+    int(MazeObjIds.WALL_REGULAR),
+    int(MazeObjIds.WALL_SECRET),
+    int(MazeObjIds.WALL_DESTRUCTABLE),
+    int(MazeObjIds.WALL_RANDOM),
+    int(MazeObjIds.WALL_TRAPCYC1),
+    int(MazeObjIds.WALL_TRAPCYC2),
+    int(MazeObjIds.WALL_TRAPCYC3),
+    int(MazeObjIds.FORCEFIELDHUB),
+))
+
+#: Types whose marker word is 0x8001 (ROM 0x460B8-0x46100) -- floor-level
+#: things drawn by the playfield layer or by their own animated MOB in a fixed
+#: slot, never by a base sprite. Marker records never enter the MOB depth chain,
+#: so the sprite renderer does not see these words.
+_TILE_MARKERS = frozenset((
+    int(MazeObjIds.TILE_STUN),
+    int(MazeObjIds.TILE_TRAP1),
+    int(MazeObjIds.TILE_TRAP2),
+    int(MazeObjIds.TILE_TRAP3),
+    int(MazeObjIds.EXIT),
+    int(MazeObjIds.EXITTO6),
+    int(MazeObjIds.TRANSPORTER),
+))
+
+#: Every type the ROM stamps as a marker. Their
+#: ``mazeobj_hpos_correction_tbl`` entries are dead data (the marker branch
+#: uses a fixed word instead), which matters because entry 0x3F holds 8000 --
+#: 62 px of "correction" that would fling the hub across the maze.
+_ROM_MARKER_TYPES = _SOLID_WALL_MARKERS | _TILE_MARKERS
+
+#: The solid-wall marker word (doc/04 sec 5.4; ``players._slot_is_blocking``).
+WALL_MARKER_PICTURE = 0x8000
+#: Floor/animated marker word (ROM 0x460B8-0x46100).
+TILE_MARKER_PICTURE = 0x8001
+
+# ``getrandom(3)`` picks the invulnerable-food picture from a three-word ROM
+# table at 0x58F20 (doc/04 sec 5.4; ROM 0x46150-0x46168). Read through gex's
+# generic code-ROM reader and cached, like the level-flags table below --
+# never transcribed by hand.
+_FOOD_INVULN_PICTURES_ADDR = 0x58F20
+_FOOD_INVULN_PICTURES_COUNT = 3
+_food_invuln_pictures: tuple[int, ...] | None = None
+
+
+def _food_invuln_pictures_read() -> tuple[int, ...]:
+    global _food_invuln_pictures
+    if _food_invuln_pictures is None:
+        raw = coderom_get_bytes(
+            _FOOD_INVULN_PICTURES_ADDR, _FOOD_INVULN_PICTURES_COUNT * 2
+        )
+        _food_invuln_pictures = struct.unpack(f">{_FOOD_INVULN_PICTURES_COUNT}H", raw)
+    return _food_invuln_pictures
+
+
+def _dragon_suppressed(state: GameState, object_type: int) -> bool:
+    """Dragons never spawn from maze data before level 12 of a normal game.
+
+    ROM 0x45E6A-0x45E8A: type 0x3C with ``game_mode == 0``,
+    ``levelnum_current < 12`` and the level not the 9999 sentinel is written
+    as empty -- ``maze_place_object`` returns ``start_slot + count`` without
+    touching a single array.
+    """
+    return (
+        object_type == MazeObjIds.MONST_DRAGON
+        and state.game_mode == GameMode.NORMAL
+        and state.levelnum_current < 12
+        and state.levelnum_current != LEVEL_SENTINEL
+    )
+
 
 def maze_place_object(state: GameState, start_slot: int, object_type: int, count: int) -> int:
     """``maze_place_object`` (0x45E40): create ``count`` MOBs of
@@ -163,80 +383,185 @@ def maze_place_object(state: GameState, start_slot: int, object_type: int, count
     in D0.l"). The original returns this in D0.l; here it is a normal
     Python return.
 
+    Two whole-call escapes come first (ROM 0x45E64-0x45E96): ``TILE_FLOOR``
+    places nothing, and a suppressed dragon places nothing -- both still
+    return ``start_slot + count``, so a decoder run keeps its cursor.
+
+    Each slot is then run through ``mirror_slot`` before anything is written.
+    The returned cursor is always the *unmirrored* one, which is what makes
+    the mirror invisible to callers.
+
     Used both for individual decoded tokens (``count`` always 1 -- gex's
     decoder has already expanded runs into individual cells, see
     ``place_decoded_objects``) and, critically, for ``maze_setupnew``'s
     row-0 fill (``load_level`` below calls this with
     ``count=FIRST_PLAYABLE_SLOT`` to stamp slots 0-31 as solid walls).
     """
+    object_type = int(object_type)
+    if object_type == MazeObjIds.TILE_FLOOR or _dragon_suppressed(state, object_type):
+        return start_slot + count
+
     for slot in range(start_slot, start_slot + count):
-        _create_generic(state, slot, object_type)
+        _place_one(state, _placement_slot(state, slot, object_type), object_type)
     return start_slot + count
 
 
+def _place_one(state: GameState, slot: int, object_type: int) -> None:
+    """Write one object at an already-mirrored slot."""
+    if object_type in _SOLID_WALL_MARKERS:
+        _write_marker(state, slot, object_type, WALL_MARKER_PICTURE)
+    elif object_type in _TILE_MARKERS:
+        _write_marker(state, slot, object_type, TILE_MARKER_PICTURE)
+    else:
+        _create_generic(state, slot, object_type)
+
+
+def _write_marker(state: GameState, slot: int, object_type: int, picture: int) -> None:
+    """Stamp a marker straight into the five arrays (ROM 0x46012-0x460B4).
+
+    No ``mob_create``, so no depth-chain membership: walls and floor markers
+    are drawn by the playfield layer, and a maze's several hundred of them
+    would otherwise swamp the one list every per-frame chain walk traverses.
+    Any previous occupant is unlinked first, exactly as
+    ``mob_place_tile`` (0x5F310) does.
+    """
+    mobs = state.mobs
+    mobs.unlink(slot)
+    x, y = coords.slot_to_pixels(slot)
+    mobs.picture[slot] = picture
+    mobs.hpos[slot] = coords.encode_hpos(x)
+    mobs.vpos[slot] = coords.encode_vpos_at_y(y)
+    mobs.set_obj_type(slot, object_type)
+    mobs.set_state(slot, 0)
+
+
+def placement_picture(state: GameState, object_type: int) -> int:
+    """The ``mob_picture`` a decoded object of ``object_type`` is created with.
+
+    From the master ``mazeobj_base_picture_tbl`` (0x5868C, doc/05 §5.2) via
+    gex's ``objparams.base_picture``, except for invulnerable food, whose
+    picture is one of three drawn with ``getrandom(3)`` (ROM 0x46150).
+
+    ``PICTURE_MARKER`` (0x8001) entries reaching here belong to types the ROM
+    would have stamped as markers; they are left at picture 0 for the reason
+    given on ``_TILE_MARKERS``.
+    """
+    if object_type == MazeObjIds.FOOD_INVULN:
+        # The draw happens even when the table cannot be read, so the shared
+        # RNG stream stays in step with the real game either way (PLAN.md's
+        # "route randomness through state.getrandom()" rule).
+        variant = state.getrandom(_FOOD_INVULN_PICTURES_COUNT)
+        try:
+            return _food_invuln_pictures_read()[variant]
+        except GexError:
+            return base_picture(object_type)
+
+    pic = base_picture(object_type)
+    return 0 if pic == PICTURE_MARKER else pic
+
+
+def placement_base_picture(object_type: int) -> int:
+    """The literal mazeobj_base_picture_tbl entry, without placement RNG."""
+    return base_picture(object_type)
+
+
+def placement_geometry(object_type: int, slot: int) -> tuple[int, int]:
+    """``(hpos, vpos)`` words for a decoded object -- ROM 0x4617C-0x461CC.
+
+    Three of the four master parameter tables meet here:
+
+      * ``mazeobj_hsize_tier_tbl`` (0x5864C) is the low nibble OR'd into hpos.
+        doc/08 corrects its name: that nibble is the **MOB palette number**,
+        and for a monster it is simultaneously its health tier -- which is why
+        ``shots``, ``monsters`` and ``potions`` all read the hpos nibble as
+        remaining health. Placing monsters without it left every maze-placed
+        creature at tier 0.
+      * ``mazeobj_vpos_offset_tbl`` (0x5860C) is the packed size: bits 5-3
+        width-1, bits 2-0 height-1. Monsters are 3x3 tiles, pickups 2x2, the
+        dragon 4x4.
+      * ``mazeobj_hpos_correction_tbl`` (0x5858C) centers a sprite wider than
+        its cell. Its entries are native hpos field units -- the same units
+        gauntpy stores -- so a correction is subtracted from the word
+        directly; the one value that occurs, 512, is 4 px, exactly half the
+        overhang of a 24 px sprite in a 16 px cell. Marker types skip it: the
+        ROM's marker branch uses a fixed word instead, so their table entries
+        are dead data.
+
+    Vertically the ROM stores ``(31 - row) * 16`` px with no per-type addend at
+    all -- its V field counts up from the playfield floor, which makes the
+    stored value the cell's *bottom* edge, and gauntpy stores exactly that
+    word. Whether a taller sprite then hangs upward from that edge is the
+    display hardware's business, and ``coords.sprite_top_y`` is where the
+    renderer settles it. Only the packed size travels from
+    ``mazeobj_vpos_offset_tbl``; its position bits are zero for every one of
+    the 64 types, so nothing is being dropped.
+    """
+    size = vpos_offset(object_type) & 0x3F
+    width = ((size >> 3) & 0x07) + 1
+    height = (size & 0x07) + 1
+
+    x, y = coords.slot_to_pixels(slot)
+    hpos = coords.encode_hpos(x, hsize_tier(object_type) & 0x0F)
+    if object_type not in _ROM_MARKER_TYPES:
+        hpos = (hpos - hpos_correction(object_type)) & 0xFFFF
+
+    return hpos, coords.encode_vpos_at_y(y, width, height)
+
+
 def _create_generic(state: GameState, slot: int, object_type: int) -> None:
-    """Create one MOB at ``slot`` with geometry only -- no ROM picture
-    lookup. See KNOWN GAP below.
+    """``mob_create`` one decoded object: picture, geometry, type (ROM 0x46260).
 
     Slot 0 is never linked into the depth chain: ``constants.NULL_SLOT`` is
     0, the chain's own terminator/"empty" sentinel (``mob.py``'s
     ``depth_list_head`` and every ``next``/``prev`` pointer use 0 to mean
     "nothing here"), so inserting a real record *at* slot 0 makes the chain
     unable to tell "list is empty" from "slot 0 is the head" and corrupts
-    traversal (confirmed: ``MobTable.insert`` raises "cycle detected"
-    immediately). This is exactly the row-0 wall fill's slot range, and it
-    lines up with doc/04 section 5.4's own observation that wall/trap/
-    forcefield "marker types" write ``mob_picture`` directly rather than
-    going through ``mob_create`` -- i.e. the original never chain-links
-    slot 0 either, it just gets there by a different, un-ported code path.
+    traversal. Slot 0 is inside the row-0 wall fill, which the original
+    stamps as a marker anyway, so nothing reaches here with slot 0 in
+    practice -- the guard is belt and braces.
+
+    Dragons also reserve the other three cells of their 2x2 footprint exactly
+    as 0x46206-0x4625C does before creating the primary record.
     """
-    x, y = coords.slot_to_pixels(slot)
+    hpos, vpos = placement_geometry(object_type, slot)
+    picture = placement_picture(state, object_type)
+    # objects.c seeds ordinary monsters with ROM direction 4 (down). The
+    # monster subsystem's internal compass is rotated by two, so that is 2.
+    mob_state = 2 if (
+        int(MazeObjIds.MONST_GHOST)
+        <= object_type
+        <= int(MazeObjIds.MONST_IT)
+    ) else 0
+    if (object_type == int(MazeObjIds.MONST_SUPERSORC)
+            and state.levelnum_current != LEVEL_SENTINEL
+            and state.game_mode != int(GameMode.LEGEND)):
+        hpos |= 0x10
+        picture = 0x1709
+    if object_type == int(MazeObjIds.MONST_DRAGON):
+        row = slot & 0x3E0
+        right = row | ((slot + 1) & 0x1F)
+        for reserved in ((slot - 0x20) & 0x3FF, right,
+                         (right - 0x20) & 0x3FF):
+            state.mobs.unlink_and_clear(reserved)
+            x, y = coords.slot_to_pixels(reserved)
+            state.mobs.picture[reserved] = 0x8002
+            state.mobs.hpos[reserved] = coords.encode_hpos(x)
+            state.mobs.vpos[reserved] = coords.encode_vpos_at_y(y, 2, 2)
+            state.mobs.set_obj_type(reserved, object_type)
+            state.mobs.set_state(reserved, 0)
     state.mobs.create(
         slot,
-        # KNOWN GAP (flagged, not guessed): the real placement picture comes
-        # from the master parameter tables at 0x5858C-0x5870B
-        # (mazeobj_base_picture_tbl / mazeobj_hsize_tier_tbl /
-        # mazeobj_hpos_correction_tbl / mazeobj_vpos_offset_tbl,
-        # doc/05_data_reference.md section 5.2), which is out of WP-3's
-        # doc-read scope (limited to doc/04 section 5 and doc/06). Object
-        # *type* and *position* (this function's actual job, per the task
-        # brief) are exact; the *tile*/*picture* number is left 0 until a
-        # follow-up work package wires the parameter tables through
-        # AssetStore -- see PLAN.md WP-1/WP-2.
-        0,
-        hpos=coords.encode_hpos(x),
-        vpos=coords.encode_vpos(y),
+        picture,
+        hpos=hpos,
+        vpos=vpos,
         obj_type=object_type,
+        state=mob_state,
         link_into_chain=slot != 0,
     )
+    if object_type == int(MazeObjIds.MONST_DRAGON):
+        from .subsystems.dragon import setup_dragon_segments
 
-
-def _place_decoded(state: GameState, slot: int, object_type: int) -> None:
-    """Apply ``maze_place_object``'s two token-specific special cases
-    (doc/04 section 5.4) before falling through to the shared placement
-    primitive.
-    """
-    if object_type == MazeObjIds.MONST_DRAGON:
-        # Suppressed (written as empty) when game_mode == 0 and
-        # levelnum_current < 12 (and level != 9999) -- dragons never spawn
-        # from maze data before level 12 of a normal game (doc/04 sec 5.4).
-        suppressed = (
-            state.game_mode == GameMode.NORMAL
-            and state.levelnum_current < 12
-            and state.levelnum_current != 9999
-        )
-        if suppressed:
-            return
-    elif object_type == MazeObjIds.FOOD_INVULN:
-        # Random variant selection via getrandom(3) from the three-word
-        # table at 0x58F20 (doc/04 sec 5.4). The variant only changes the
-        # *picture*, which is the KNOWN GAP in _create_generic above -- the
-        # draw is still made so the shared RNG stream stays in step with
-        # the real game, per PLAN.md's "route randomness through
-        # state.getrandom()" rule.
-        state.getrandom(3)
-
-    maze_place_object(state, slot, object_type, 1)
+        setup_dragon_segments(state, slot)
 
 
 def place_decoded_objects(state: GameState, maze: Maze) -> None:
@@ -247,7 +572,9 @@ def place_decoded_objects(state: GameState, maze: Maze) -> None:
     gex keys ``Maze.data`` by ``(x, y)`` = ``(col, row)`` -- see
     ``gex.mazedecode.index2xy``. gex's own linear decode cursor is already
     ``row * 32 + col``, which is exactly ``coords.pack_slot(row, col)``, so
-    no coordinate translation beyond a swap is needed.
+    no coordinate translation beyond a swap is needed. Cells are placed in
+    ascending slot order so that the depth chain is built the way the
+    original's decoder builds it, front to back.
 
     Row 0 (``row == 0``, i.e. slots 0-31) is skipped: gex's
     ``maze_decompress`` bakes a row-0 wall border directly into
@@ -259,15 +586,17 @@ def place_decoded_objects(state: GameState, maze: Maze) -> None:
     row is instead filled by a separate, later call
     (``maze_place_object(0, 2, 0x20)``, doc/04 sections 5.2-5.3), which
     ``load_level`` issues itself below. Placing it here too would
-    double-create slots 0-31 -- and for slot 0 specifically, corrupt the
-    depth chain, since ``constants.NULL_SLOT`` is 0 and a slot can only be
-    chain-linked once (see ``_create_generic``).
+    double-create slots 0-31 -- and row 0 has no mirror image, so it must not
+    go through the mirroring path either.
     """
-    for (col, row), object_type in maze.data.items():
-        if row == 0:
-            continue
-        slot = coords.pack_slot(row, col)
-        _place_decoded(state, slot, object_type)
+    cells = sorted(
+        ((coords.pack_slot(row, col), object_type)
+         for (col, row), object_type in maze.data.items()
+         if row != 0),
+    )
+    for slot, object_type in cells:
+        maze_place_object(state, slot, object_type, 1)
+
 
 
 # ---------------------------------------------------------------------------
@@ -348,9 +677,11 @@ def maze_load_pickup_config(state: GameState, maze: Maze) -> None:
     # in attract mode (game_mode < 0). ROM 0x4374C-0x43760: cmpi.w #0x270F on
     # levelnum, then tst.w/bge on game_mode -- verified by disassembly. In
     # those cases the base header flags stored above are the final value.
-    if state.levelnum_current != 9999 and state.game_mode >= 0:
+    if state.levelnum_current != LEVEL_SENTINEL and state.game_mode >= 0:
         # LFLAG1 bits 2-3 (longword bits 26-27) XOR'd with getrandom(4), every
-        # level (doc/04 sec 5.5; ROM 0x43764-0x43772).
+        # level (doc/04 sec 5.5; ROM 0x43764-0x43772). These are the two
+        # placement mirror bits -- see MIRROR_H_FLAG/MIRROR_V_FLAG -- so this
+        # single draw is what re-flips the maze on each new level.
         state.level_flags ^= (state.getrandom(4) << 2) & 0x0C
 
         longword = _join_flags(
@@ -406,42 +737,62 @@ def maze_load_pickup_config(state: GameState, maze: Maze) -> None:
 # load_level -- the public entry point
 # ---------------------------------------------------------------------------
 
-def load_level(state: GameState, level_number: int) -> None:
+def load_level(state: GameState, level_number: int, maze_number: int | None = None) -> None:
     """Load and set up the maze for ``level_number`` (PLAN.md sec 6 WP-3).
-    Owns no main-loop call; called at level transitions -- WP-20 boot will
-    wire this in once it exists. Nothing calls this function today.
+
+    Owns no main-loop call; it is called at level transitions -- WP-20 boot
+    and the front end (``session.main_start_game``), WP-15's exit sequence,
+    WP-17's attract demo, and the ``gauntpy-play`` runner all arrive here,
+    usually through ``reset_and_load_level`` below.
 
     Ports ``maze_new_level_setup``'s (0x438AE) decode+setup order (doc/04
     sec 5.2) for the steps that are WP-3's own job:
 
         4. slapstic_cmd_bitwise bank switch + maze_setupnew(cur_maze_ptr)
            -- here, decode via gex (``decode_maze``).
-        5. (folded into the same pass) maze_load_pickup_config.
+        5. maze_load_pickup_config, which must run *before* placement: it
+           settles the two mirror bits every cell is then placed through.
         6. Populate MobTable from the decoded tokens.
         7. Row-0 fill: maze_place_object(0, 2, 0x20).
+       10. Rebuild the exit table from the placed MOBs
+           (``exits.exit_scan_level``).
 
-    Steps 1-3 and 8-10 of the documented order (thief timer/target reset,
+    (The original calls ``maze_load_pickup_config`` from ``maze_setupnew``
+    only for the 9999 sentinel and attract -- ROM 0x44B30-0x44B4E -- and from
+    the game-start and level-splash paths otherwise, 0x4521C/0x48556/0x48636.
+    Calling it unconditionally here is the same net effect for a single
+    consolidated entry point, and it is the only way the flags are set at all
+    in normal play.)
+
+    Steps 1-3, 8 and the transporter half of 9-10 (thief timer/target reset,
     dragon-encounter flag clear, random treasure-level timer, scroll-to-slot
-    camera centering, transporter/exit table scans) touch state that
-    belongs to other work packages (WP-9, WP-10, WP-11, WP-13, WP-15, WP-16)
-    and does not exist under their GameState headings yet. Ground rule 1
-    forbids adding fields to another package's block, so those steps are
-    left for those packages to wire in when they land, rather than guessed
-    at here.
+    camera centering, the transporter position table) touch state that belongs
+    to other work packages (WP-9, WP-10, WP-11, WP-13, WP-16) and does not
+    exist under their GameState headings yet. Ground rule 1 forbids adding
+    fields to another package's block, so those steps are left for those
+    packages to wire in when they land, rather than guessed at here.
     """
     state.levelnum_current = level_number
+    from .subsystems.maze_objects import select_forcefield_delay_profile
+    select_forcefield_delay_profile(state)
+    state.level_treasures = 0            # fresh level: reset the bonus tally count
+    state.special_bonus_score = 100      # 0x44166, ordinary score-bag value
 
-    mazenum = maze_for_level(level_number)
-    if mazenum is None:
-        # No fixed rule past the opening act (doc/06 sec 3.2) -- trust that
-        # the caller (eventually WP-15's exit sequence via WP-20 boot) has
-        # already advanced state.mazenum_current. See module docstring
-        # "Scope note".
-        mazenum = state.mazenum_current
+    if maze_number is not None:
+        # Caller pins a specific maze (attract demo/legend, treasure rooms) that
+        # is not the level's fixed maze.
+        mazenum = maze_number
+    else:
+        mazenum = maze_for_level(level_number)
+        if mazenum is None:
+            # No fixed rule past the opening act (doc/06 sec 3.2) -- trust that
+            # the caller (eventually WP-15's exit sequence via WP-20 boot) has
+            # already advanced state.mazenum_current. See module docstring
+            # "Scope note".
+            mazenum = state.mazenum_current
     state.mazenum_current = mazenum
 
     maze = decode_maze(mazenum)
-    state.maze = maze
 
     maze_load_pickup_config(state, maze)
 
@@ -451,3 +802,44 @@ def load_level(state: GameState, level_number: int) -> None:
     # maze_setupnew calls maze_place_object(0, 2, 0x20)").
     place_decoded_objects(state, maze)
     maze_place_object(state, 0, MazeObjIds.WALL_REGULAR, FIRST_PLAYABLE_SLOT)
+
+    # The renderer draws terrain from state.maze, not from the MobTable, so it
+    # gets the mirrored view the objects were placed through.
+    state.maze = mirror_maze(state, maze)
+
+    # maze_new_level_setup step 10: rebuild the exit table from the MOBs just
+    # placed (0x43B3A-0x43B9A). It has to live on the common load path, not in
+    # each caller: the runner's mid-level drop went straight to load_level, so
+    # exit_slots stayed empty, exit_open_id stayed zero, and main_exit_move
+    # returned at its first gate -- moving exits never moved. WP-15 owns the
+    # scan; this is the call site the ROM puts it at. Function-local because
+    # exits.py reaches back into this module for its own reload, and it must
+    # run last: the scan reads the placed EXIT MOBs and the level flags.
+    from .subsystems.exits import exit_scan_level
+    exit_scan_level(state)
+
+
+def reset_and_load_level(
+    state: GameState, level_number: int, maze_number: int | None = None
+) -> bool:
+    """Start a fresh level: drop the old maze's MOBs, reset the active-player
+    count, and load ``level_number`` (the ``maze_new_level_setup`` framing --
+    the ROM rebuilds the whole MOB table on a level change). Pass
+    ``maze_number`` to pin a specific maze (attract demo/legend, treasure rooms)
+    instead of the level's fixed maze.
+
+    Returns ``True`` on success. On a decode failure -- most commonly no ROMs
+    configured -- the previous MOB table is restored and ``False`` is returned,
+    so callers (the attract->game start, the exit sequence) advance their level
+    counters but do not crash a ROM-less environment. Players are re-placed by
+    the caller after a successful load.
+    """
+    old_mobs = state.mobs
+    state.mobs = MobTable()
+    state.level_players_active = 0
+    try:
+        load_level(state, level_number, maze_number)
+    except MazeError:
+        state.mobs = old_mobs
+        return False
+    return True

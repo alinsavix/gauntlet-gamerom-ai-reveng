@@ -34,12 +34,14 @@ from .subsystems.maze_objects import (
     main_open_doors,
     main_walls_cyclic_move,
     main_walls_random_move,
+    playfield_palette_vblank,
 )
 from .subsystems.monsters import main_move_monsters
 from .subsystems.players import (
     main_handle_death,
     main_health_countdown,
     main_move_players,
+    player_hurt_palette_vblank,
 )
 from .subsystems.potions import main_handle_potions
 from .subsystems.score import (
@@ -129,6 +131,8 @@ def tick(state: GameState) -> None:
     """
     state.frame_counter = (state.frame_counter + 1) & 0xFFFF
     state.vblank_flag = 0
+    player_hurt_palette_vblank(state)
+    playfield_palette_vblank(state)
 
     game_frame(state)
 

@@ -27,7 +27,29 @@ from __future__ import annotations
 
 from PIL import Image
 
-__all__ = ["Framebuffer"]
+__all__ = ["Framebuffer", "SHADOW_RATIO"]
+
+#: The shadow fallback's scale, as an exact integer ratio rather than a round
+#: number -- and it is the hardware's own, not a guess.
+#:
+#: A shadow pixel shows the underlying playfield color through the shadow
+#: palette, which the game builds with ``playfield.irgb_to_shadow`` (ROM
+#: 0x5FD80): intensity ``I`` becomes ``I - 7``, or 1 if that borrows, with the
+#: R/G/B nibbles untouched. gex renders an IRGB word as ``(R*I, G*I, B*I)``
+#: (``gex.palettes.IRGB.to_rgba``), so the shadow color is the original scaled
+#: by exactly ``I' / I`` -- a ratio that depends only on the source intensity.
+#: For the full-intensity colors the playfield overwhelmingly uses, ``I = 15``
+#: and ``I' = 8``, giving **8/15**, and because ``R*15 * 8 // 15 == R*8`` the
+#: integer arithmetic is exact rather than approximate.
+#:
+#: What the fallback still cannot do is recover ``I`` from an already-resolved
+#: RGB triple (``r = R*I`` has many factorizations), so a source at some other
+#: intensity is scaled by the wrong ratio -- 8/15 instead of 1/8 at ``I = 8``,
+#: for instance. That is not a modelling gap: with no playfield underneath
+#: there is no hardware answer to reproduce, because the case cannot arise on
+#: real hardware. Whenever a maze exists the compositor supplies a
+#: ``ShadowSource`` and this path is never taken.
+SHADOW_RATIO: tuple[int, int] = (8, 15)
 
 
 class Framebuffer:
@@ -98,7 +120,7 @@ class Framebuffer:
         *,
         trans0: bool = True,
         shadow_index: int | None = None,
-        shadow_scale: float = 0.5,
+        shadow_ratio: tuple[int, int] = SHADOW_RATIO,
         shadow_src=None,
         clip: tuple[int, int, int, int] | None = None,
     ) -> None:
@@ -116,11 +138,10 @@ class Framebuffer:
         pixel at this position is copied straight in -- and, matching the
         hardware, it reveals the *playfield*, not any MOB drawn earlier at the
         same pixel. When ``shadow_src`` is absent (no maze, or a ROM-free
-        test), it falls back to darkening whatever is already there by
-        ``shadow_scale`` -- a close approximation for the common full-intensity
-        playfield colors, but the only option once the source intensity nibble
-        is gone. The exact shadow palette is built by ``playfield.irgb_to_shadow``
-        (ROM 0x5FD80). ``shadow_src`` also falls back to ``shadow_scale`` for
+        test), it falls back to scaling whatever is already there by
+        ``shadow_ratio`` -- see that constant for why 8/15 is the hardware's
+        own number rather than an arbitrary dimming, and for the one thing the
+        fallback cannot know. ``shadow_src`` also falls back to the ratio for
         any pixel it reports off-raster (e.g. a wraparound seam).
 
         ``clip``, when given, is ``(x0, y0, x1, y1)`` (``x1``/``y1``
@@ -133,6 +154,7 @@ class Framebuffer:
         """
         px = self._pixels
         w, h = self.width, self.height
+        shadow_num, shadow_den = shadow_ratio
         cx0, cy0, cx1, cy1 = clip if clip is not None else (0, 0, w, h)
         # Always clamp to the framebuffer's own bounds too, even if a caller
         # passes a clip rectangle that overshoots them -- PIL's pixel access
@@ -160,9 +182,9 @@ class Framebuffer:
                     else:
                         under = px[pxx, py]
                         px[pxx, py] = (
-                            int(under[0] * shadow_scale),
-                            int(under[1] * shadow_scale),
-                            int(under[2] * shadow_scale),
+                            under[0] * shadow_num // shadow_den,
+                            under[1] * shadow_num // shadow_den,
+                            under[2] * shadow_num // shadow_den,
                             under[3],
                         )
                     continue

@@ -24,8 +24,8 @@ their way around this codebase by name.
 
 **Out of scope**
 
-- **Sound.** Stubbed at the queue boundary (WP-18). The command IDs are
-  recorded so audio can be added later without touching gameplay code.
+- **Audio synthesis.** WP-18 models the command queue, speech gates, retries,
+  and deterministic host log; waveform generation remains a host concern.
 - **CPU or hardware emulation.** We reimplement behaviour, not instructions.
   No 68010, no MMU, no cycle counting.
 - **The OS ROM's operator UI**, self-test screens, and diagnostics. The EEPROM
@@ -46,14 +46,14 @@ Two facts shape the whole plan:
 
 1. **The graphics half is already solved.** `../python-gex` extracts and renders
    tiles, stamps, floors, walls, items, monsters, and all 117 mazes from the
-   ROMs, with a 420-test regression suite and pixel-exact golden images. We
+   ROMs, with a comprehensive regression suite and pixel-exact golden images. We
    consume it as a library and do not reinvent any of it.
 2. **The logic half is documented at specification depth.** `doc/08_known_issues.md`
    has an empty active backlog. What is documented is pinned to exact addresses,
    tables, and thresholds — enough to port from, not merely to summarize.
 
-The residual work is translation plus the one thing the docs cannot give us: a
-software renderer, since the original's compositor was silicon.
+The completed port translates that specification into simulation subsystems and
+a software compositor for the original hardware's video behavior.
 
 ---
 
@@ -98,18 +98,12 @@ follow a frame top to bottom. ROM addresses live in comments beside each call.
 These exist so twenty work packages can land without merge conflicts or
 architectural drift. They are not style preferences.
 
-1. **Subsystem modules never import each other.** Everything shared travels
-   through `GameState`, exactly as the original's subsystems shared working
-   RAM. This is what makes the work packages independently assignable.
-   `GameState` is partitioned by owner: **append new fields under your own
-   work package's heading**, never into the shared core or another package's
-   block. Two agents appending under different headings anchor on different
-   text and cannot clobber each other.
-2. **Every main-loop call already exists** in `subsystems/`, with the ROM's
-   name, its address, and its references. Unimplemented ones are marked
-   `@stub` and do nothing. **Finishing a work package means filling in a body
-   and deleting a decorator** — you never wire anything up, and you never edit
-   a file another package also edits.
+1. **Reuse subsystem APIs.** The temporary implementation-wave isolation rule
+   has been lifted. Shared persistent state still belongs in `GameState`;
+   behavior owned by another subsystem should be called rather than copied.
+2. **Every main-loop call is implemented** in `subsystems/`, with the ROM's
+   name, address, and references. `mainloop.py` wires all 28 calls directly in
+   ROM order.
 3. **Use the documentation's names.** See §4 — this is the rule most likely to
    be broken by accident, so it has its own section.
 4. **Cite every non-obvious constant** in a comment: the doc section, the ROM
@@ -139,25 +133,26 @@ gauntpy/
     state.py           GameState / Player              DONE
     mainloop.py        g2mainloop / game_frame / tick  DONE
     assets.py          gex bridge                      WP-1
+    maze.py            gex maze/ROM-data bridge        WP-3
     render/            compositor + host shell         WP-2
     subsystems/
-      __init__.py      the @stub marker                DONE
+      __init__.py      subsystem package               DONE
       input.py         WP-4, the worked example        DONE
-      players.py       WP-5 + WP-6            \
-      shots.py         WP-7                    |
-      monsters.py      WP-8                    |  all present,
-      dragon.py        WP-9                    |  every call
-      thief.py         WP-10                   |  stubbed with
-      maze_objects.py  WP-11                   |  its address
-      potions.py       WP-12                   |  and references
-      camera.py        WP-13                   |
-      score.py         WP-14                   |
-      exits.py         WP-15                   |
-      session.py       WP-16                   |
-      attract.py       WP-17                   |
-      sound.py         WP-18                   |
-      eeprom.py        WP-19                   |
-      boot.py          WP-20                  /
+      players.py       WP-5 + WP-6                     DONE
+      shots.py         WP-7                            DONE
+      monsters.py      WP-8                            DONE
+      dragon.py        WP-9                            DONE
+      thief.py         WP-10                           DONE
+      maze_objects.py  WP-11                           DONE
+      potions.py       WP-12                           DONE
+      camera.py        WP-13                           DONE
+      score.py         WP-14                           DONE
+      exits.py         WP-15                           DONE
+      session.py       WP-16                           DONE
+      attract.py       WP-17                           DONE
+      sound.py         WP-18                           DONE
+      eeprom.py        WP-19                           DONE
+      boot.py          WP-20                           DONE
   tests/
 ```
 
@@ -221,8 +216,8 @@ documented name that means something else.
   ≤ 0x7FFF.
 - `game_frame`: all 28 calls in ROM order as straight-line code, the dialog
   gate as a literal `if`, and `check_frame_overflow`'s set-and-decay.
-- All 16 subsystem modules, with every main-loop call present, `@stub`-marked,
-  and carrying its ROM address and doc references.
+- All subsystem modules and main-loop calls, carrying their ROM addresses and
+  documentation references.
 - `subsystems/input.py`: `input_debounce` implemented — the worked example.
 
 Run it:
@@ -357,7 +352,7 @@ level→maze selection reproduces the documented table.
 
 **Owns:** `input_debounce`. See `subsystems/input.py` — the reference for what
 a finished package looks like: ROM names, cited constants, the polarity pinned
-down in tests, and no `@stub` left on the implemented call.
+down in tests, and no empty implementation body.
 
 ---
 
@@ -686,7 +681,9 @@ select 115, 0x57–0x5D select 116).
   `(debounce_magic & 0x1F) == 0x1C`. Not Fire — this was a documented
   correction. `subsystems/input.py` already provides `magic_press_edge`.
 - First active player's class indexes the four bytes at 0x40E66: Warrior→3,
-  Valkyrie→0, Wizard→4, Elf→0; later joins clear the bonus instead.
+  Valkyrie→0, Wizard→4, Elf→0 and writes the result to
+  `monster_spawn_probability_bonus`; later joins clear that byte. It does not
+  initialize `player_bonusmult`, which remains at the reset value 1.
 
 **References:** `doc/04_game_subsystems.md` §10.1, §22, §6.4;
 `book/07_session_lifecycle.md`.
@@ -719,13 +716,22 @@ screen switches but never blocks a coin.
 
 ---
 
-#### WP-18 · Sound (stubbed) · **S** · deps: none
+#### WP-18 · Sound · **DONE**
 
 **Owns:** `sound_response` (0x42D0A), `main_update_sound` (0x4AE20).
 
-Implement the **queue**, not the audio: `sound_play(id)` appends, the drain call
-consumes, and every command is logged. This keeps the call sites honest so real
-audio can land later without touching gameplay.
+Implement the **command engine**, not the audio: `sound_play(id)` follows §11.1
+exactly — with the recovery holdoff clear it hands the byte straight to the
+board through `try_send_sound_command` and does *not* queue it; a busy latch or
+a nonzero holdoff falls back to the seven-entry ring that the drain call
+consumes. Either way the command is logged. This keeps the call sites honest so
+real audio can land later without touching gameplay.
+
+*Corrected:* the first pass read this brief as "`sound_play(id)` appends, the
+drain call consumes" and always took the ring path. `doc/04_game_subsystems.md`
+§11.1 (Verified) documents the immediate-send fast path, so `sound_log` — not
+`sound_queue` — is the record of what the board was told, and tests assert
+against the log.
 
 - 219 command IDs (0x00–0xDA); command 0x00 = reinitialize/stop-all.
 - Speech via `sound_speech_play`.
@@ -895,11 +901,9 @@ it needs an r2 shim and `PYTHONUTF8` set on Windows.
 > Working directory: `<repo>/gauntpy`. Read `PLAN.md` §3 (ground rules), §4
 > (names), and your package's entry in §6 before writing any code.
 >
-> Your module already exists: `src/gauntpy/subsystems/<name>.py`. It contains
-> your main-loop calls as `@stub` functions with their ROM addresses and
-> references. **Fill in the bodies and delete the `@stub` decorators.** Do not
-> create the module, do not register anything, do not edit `mainloop.py` — it
-> already imports and calls your functions by name.
+> Your module already exists: `src/gauntpy/subsystems/<name>.py`. Preserve its
+> ROM-addressed contracts, reuse existing subsystem APIs and `GameState`, and
+> do not alter `mainloop.py`'s ROM-ordered call sequence.
 >
 > Also write `tests/test_<name>.py`.
 >

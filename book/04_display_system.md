@@ -216,6 +216,21 @@ punch holes or cast shade instead of painting. Sixty times a second the
 hardware runs this cascade for every one of the 80,640 pixels while the CPU
 touches none of them.
 
+Several pictures only make sense while their colors move. Trap and stun-floor
+tiles use two playfield palettes that VBLANK drives back and forth between fixed
+IRGB bounds on alternating fields. Transporter pads are 2×2 playfield stamps,
+not sprites; every fourth frame their six highlighted entries advance through
+one of six palette records and then bounce back. The title wordmark is more
+elaborate still: colors shift through ten MOB palettes while a new endpoint
+color rises and falls in intensity. A renderer that caches any of these as
+finished RGBA pixels has accidentally cached one instant of an animation.
+
+Two other 0x8001 markers are settled playfield stamps. The ordinary exit uses
+tiles 0x39E, 0x39F, 6, 6; EXIT TO LEVEL 6 shares the upper pair but uses
+0x3A0 and 0x3A1 below. Those lower tiles are the only visible distinction, so
+substituting the ordinary descriptor erases information the level designer put
+on the floor.
+
 ## Where rendering stops
 
 Everything above describes appearance, and appearance is all it describes. A

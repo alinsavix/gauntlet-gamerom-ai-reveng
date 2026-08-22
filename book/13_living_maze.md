@@ -117,6 +117,11 @@ looping-sound timer that plays the buzz on first touch and a silencer sound
 when you break away. A forcefield never blocks movement the way a wall does.
 The whole design is a timing puzzle: watch the flicker, cross in the dark.
 
+The hubs themselves use the 0x8000 marker picture, so setup must recognize a
+far hub before applying the ordinary marker-blocker test. Reversing that order
+records no segment: the colors still cycle, but every later lit phase is
+harmless because collision has no beam to find.
+
 ## Walls that misbehave
 
 Gauntlet II's signature trick is that a wall is a *claim*, and several
@@ -375,6 +380,22 @@ One quirk worth recording: only the low four bits of the trick number survive
 the packing, so tricks 16 and 17 encode identically to 0 and 1. Atari could
 not have told a Don't Hurt Friends winner from a Transportability winner by
 the code alone, and nothing in the routine suggests they minded.
+
+Three display details are easy to mistake for gameplay objects. A transporter
+pad is a 2×2 playfield stamp whose six bright colors bounce through six phases;
+its arrival sparkle is the separate MOB. EXIT TO LEVEL 6 uses lower tiles
+0x3A0/0x3A1 instead of an ordinary exit's blank lower pair. Trap and stun
+floors pulse through live playfield palettes rather than fixed colors.
+
+Trap walls also expose a setup rule: types 7–9 become cyclic assignments only
+when the level's cyclic-wall flag is set. Otherwise they must survive setup as
+the groups removed by matching trap types 10–12. Consuming those markers
+unconditionally makes the wall absent before the player can trigger it.
+
+A mirrored dragon needs one more correction than a one-cell object: horizontal
+mirroring shifts its anchor one column left, and vertical mirroring one row
+down, before the other three cells are reserved. Without that adjustment the
+2×2 body overwrites neighboring maze objects on half the mirrored layouts.
 
 The maze has now done everything a maze can do: moved its walls, lied about
 its exits, staged its own game shows, and issued you a receipt. Chapter 14
