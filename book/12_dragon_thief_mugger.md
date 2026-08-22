@@ -129,6 +129,26 @@ level's secret objective happened to be the one called "Don't Get Hit," and the
 player who landed the blow has not already been disqualified by taking a hit,
 their progress is marked complete. Chapter 13 explains what that earns.
 
+The dragon's target word decides which attack appears. Its low nibble names a
+player, its next nibble holds compass direction 0/2/4/6, and its high byte
+measures forward distance in 16-pixel cells. No target has its own sentinel.
+Within three cells the dragon uses the large, max-strength 3×3 flame; farther
+away it throws the ordinary 2×2 fireball.
+
+Close range alone does not sustain the flame. The muzzle must also line up with
+the target by roughly one sprite width. That sets the lock bit and holds the
+current fire phase instead of advancing the path program. Leaving either the
+packed distance or this alignment update unwritten reduces the encounter to
+isolated long-range shots.
+
+On the ninth accepted hit the four-segment body is replaced by two prizes at
+facing-dependent neighboring cells: a score bag and a randomized hidden potion.
+The bag's carried value is set to 2000, replacing the ordinary level value of
+100, so its floating popup and eventual multiplied award agree. The second
+prize offset accumulates from the first, keeping both drops in the dragon's
+just-cleared 2×2 footprint, while the dissolve itself is centered eight pixels
+inside that footprint.
+
 ## The thief
 
 ![The thief and the mugger](img/ch12_thief_mugger.png)

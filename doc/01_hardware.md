@@ -318,17 +318,26 @@ T+W, T+W+1, ..., T+2W-1
 
 | Bits | Meaning |
 |------|---------|
-| 15–6 | Horizontal position on playfield (0–511) |
-| 5–4 | Software-only flags |
+| 15–7 | Horizontal position on playfield (0–511) |
+| 6–4 | Software-only flags |
 | 3–0 | Palette number (0–15, into MOB palettes at color index 256+) |
 
 ### 8.3 MOB Vertical Position (`0x903000`)
 
 | Bits | Meaning |
 |------|---------|
-| 15–6 | Vertical position on playfield (0–511) |
+| 15–7 | Vertical position on playfield (0–511), measured **up** from the playfield floor to the bottom edge of the object |
+| 6 | Not used by the game |
 | 5–3 | Horizontal size in tiles minus 1 (0 = 1 tile, 7 = 8 tiles) |
 | 2–0 | Vertical size in tiles minus 1 (0 = 1 tile, 7 = 8 tiles) |
+
+The nine-bit position fields are corroborated by the game code itself: every
+site that rebuilds one of these words masks with `0xFF80` and keeps `0x7F` of
+the old word (for example `main_handle_shots` at 0x479EA/0x479FA and
+`monster_create_shot` at 0x49192/0x491A2), and by MAME's schematic-backed
+motion-object configuration, whose X and Y position masks are both `0xff80`.
+One screen pixel is therefore 0x80 field units, which is what makes
+`maze_place_object`'s `slot << 11` land on whole 16-pixel cell boundaries.
 
 ### 8.4 MOB Link (`0x903800`)
 

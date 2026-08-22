@@ -78,14 +78,17 @@ One cell traced through all three:
 | Maze cell | row 12, column 20 |
 | Packed slot | (12 << 5) OR 20 = 0x194, decimal 404 |
 | World pixels | x = 20 × 16 = 320, y = 12 × 16 = 192 |
-| MOB position words | those pixels, shifted into each word's high ten bits |
+| MOB position words | those pixels shifted into each word's top nine bits — but the vertical one measures *up* from the playfield floor, so it holds 512 − 192 − 16 = 304 |
 | Playfield block | 2×2 tiles with top-left at playfield column 40, row 24 |
 
 The pixel conversion is a shift and the playfield conversion is a doubling,
-so crossing between systems costs a few instructions. One wrinkle deserves
-notice: an object's pixel position is its cell's origin plus a small
+so crossing between systems costs a few instructions. Two wrinkles deserve
+notice. An object's pixel position is its cell's origin plus a small
 per-type correction from ROM tables, because a 24-pixel monster and a
-16-pixel key sit differently on a 16-pixel cell.
+16-pixel key sit differently on a 16-pixel cell. And the vertical word runs
+the other way from the screen: it is the distance from the bottom of the
+playfield up to the bottom edge of the object's cell, which is why the last
+maze row stores zero and the sprite hardware draws upward from that anchor.
 
 ## Who gets which slot
 
@@ -223,13 +226,15 @@ Everything above locates objects in the world; the camera decides which
 piece of world everyone sees, and with four independent humans that is a
 negotiation. Each frame, the scroll system:
 
-1. Collects the active players' positions and computes their bounding
-   extent, honoring wraparound levels where the maze is a torus.
-2. Applies the **rubber band**: the extent may not expand more than 200
-   pixels, so one adventurous player cannot yank the camera away from
-   three cooperating ones. Past that limit, the far player is simply held
-   at the screen edge by the camera refusing to follow.
-3. Targets the midpoint of the (possibly clamped) extent, offset so the
+1. Seeds the extent with the current camera center, then folds each active
+   player into the 512-pixel window around the current scroll register. That
+   camera-relative fold is what makes a party crossing the world seam look
+   close rather than 512 pixels apart.
+2. Applies the **rubber band** only when an outlier is more than 0x140
+   (320) pixels from the opposite extreme. The outlier is shifted by 200
+   pixels for the extent calculation; the whole box is not clamped to a
+   200-pixel width.
+3. Targets the midpoint of the adjusted extent, offset so the
    maze viewport centers rather than the full screen.
 4. Moves toward the target smoothly, two pixels per axis per frame when
    far, snapping only when within a couple of pixels, then clamps to the
@@ -328,6 +333,7 @@ hundred ghosts at you, this is the machinery underneath.
 >   `mob_probe_candidate` (0x407A6) exactly three times.
 > - Direction/path grid (0x905054, two nibbles per byte, thief mode) and
 >   door endpoint records: `doc/04_game_subsystems.md` §23.4.
-> - Camera: `main_scroll_playfield` (0x46CAA) with the ±0xC8 rubber band,
->   midpoint offsets, 2-pixel smoothing, wrap flags (0x90491F bits 4–5),
+> - Camera: `main_scroll_playfield` (0x46CAA) with the 0x140 outlier threshold
+>   and 200-pixel adjustment, midpoint offsets, 2-pixel smoothing, camera-
+>   relative seam folding, wrap flags (0x90491F bits 4–5),
 >   and `scroll_set_position` clamps: `doc/04_game_subsystems.md` §17.

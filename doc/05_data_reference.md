@@ -1043,7 +1043,7 @@ Four parallel 64-entry tables (one entry per maze object type, indexed 0–63). 
 
 | Table Address | Element / Total Size | Name | Content |
 |---------------|----------------------|------|---------|
-| 0x5858C | word / 128 B | `mazeobj_hpos_correction_tbl` | Per-type centering/correction word subtracted from the packed horizontal position |
+| 0x5858C | word / 128 B | `mazeobj_hpos_correction_tbl` | Per-type centering/correction word subtracted from the packed horizontal position. Native position units (0x80 per pixel), so its only nonzero entry, 512, is 4 px — half the overhang of a 24 px sprite in a 16 px cell |
 | 0x5860C | byte / 64 B | `mazeobj_vpos_offset_tbl` | Low-byte vertical-position addend/size encoding |
 | 0x5864C | byte / 64 B | `mazeobj_hsize_tier_tbl` | Low nibble ORed into the packed horizontal-position word. Per `01_hardware.md` §8.2 that field is the **MOB palette number** (bits 3–0); horizontal size lives in the vertical-position word. For monsters the same nibble is also the three-step health/tier value used by combat, so a monster's remaining health *is* its palette. Verified bases: ghost/grunt/aux grunt 4, generators 5, demon 8, lobber/sorcerer/Super Sorcerer 11, IT 8, acid 1, Death 0; live range is `[base−2, base]`. These match the per-monster stamp palettes in `python-gex`. |
 | 0x5868C | word / 128 B | `mazeobj_base_picture_tbl` | Base picture word for each object type; ends at 0x5870B |

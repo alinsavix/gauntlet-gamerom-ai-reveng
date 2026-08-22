@@ -411,6 +411,19 @@ Chapter 13 carries the name "Don't Hurt Friends," and the shot-resolution code
 files its report the instant you shoot a teammate, which means the machine
 keeps score on your sportsmanship.
 
+Two geometry details tie the whole player system together. The first hero
+claims the level's PLAYERSTART; later heroes try the four cells beside each
+existing hero and accept the first empty on-screen location. The join finalizer
+also owns full health: paid starts and continues take the operator-selected
+starting-health value, while demo and free-play joins take 2000. A coin fed to
+somebody already alive is the separate, smaller health increment.
+
+Pickups follow the 24×24 hero's logical center, not merely its upper-left pixel.
+That distinction is visible whenever the sprite straddles two 16-pixel rows:
+the center may already be over food, a potion, or a transporter. Both food
+types and both potion types disappear when collected; their shot resistance
+does not make them permanent inventory fountains.
+
 A player, then, is a character number indexing a stack of tables, a MOB in the
 crowd, a dozen timers, a power word, and a health number spending itself sixty
 ticks a second. Chapter 11 takes the other side of the collision, the horde.

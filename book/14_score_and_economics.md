@@ -136,6 +136,24 @@ a different dimmed palette entirely. The score multiplier appears beside the
 health once it exceeds one, and when somebody is IT, the two-character IT
 label is stamped into their column in their color and announced out loud.
 
+The playfield has a second, brief score display. Four fixed MOB channels can
+float a value over its source object for 60 frames. Adaptive food chooses a +25
+through +200 picture from a byte table parallel to its twenty health values. A
+special score bag derives its popup from the value it carries in RAM and awards
+that same value through the multiplier. A fresh level seeds 100; killing the
+dragon changes the value to 2000 before dropping its bag. Updating the numeric score without
+allocating this MOB leaves the panel right but the maze visually silent.
+
+Potion-killed Death has its own eight-entry sequence: the global Death hit
+counter selects both the awarded score and its matching floating picture.
+gauntpy also shows the ordinary 100-point treasure pickup through the same
+four-channel popup mechanism.
+
+`gauntpy` also writes the current decimal frame in the lower-right status-panel
+corner as a host debugging aid. It deliberately uses host text, is not a game
+asset, and has no claimed arcade counterpart.
+When the host loop is paused, `PAUSED` appears immediately above it.
+
 ## Messages, advice, and the continue offer
 
 The message boxes that freeze the action, Chapter 6's dialog gate, are fed by

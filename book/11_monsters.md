@@ -54,7 +54,7 @@ inside its cell, and how strong it starts out.
 
 Here is the trick that makes a crowd affordable. A monster does not carry a
 health variable anywhere. Look back at the MOB horizontal-position word from
-Chapter 8: the top ten bits are the position, and the bottom four bits are the
+Chapter 8: the top nine bits are the position, and the bottom four bits are the
 palette number the hardware will use to draw the sprite. Combat reads and
 writes that palette number as the creature's remaining health.
 
@@ -116,6 +116,16 @@ and a commit or a stall. Nothing in the monster system searches for a route
 around an obstacle, which is why a grunt that walks into a wall corner sits
 there grinding against it and why herding monsters into dead ends works.
 
+The chain walk is narrowed by a camera-sized culling rectangle, but its edges
+are toroidal. The arcade's positions occupy a full 16-bit word at two units per
+pixel, so ordinary unsigned overflow is exactly one 512-pixel maze. In a
+whole-pixel port the equivalent wrap is 15 bits. Missing that scale change has
+a dramatic symptom on the horizontally wrapped seventh-level layout: as the
+camera crosses the left seam, creatures that are plainly visible at columns
+0–14 appear numerically half a word away and stop receiving turns. Lobber rocks
+then fail the same screen-window test. Both the monster rectangle and projectile
+window must wrap at the maze boundary.
+
 **The per-frame configuration.** Before the walk begins,
 `monsters_everything` builds a small seven-entry table on its own stack, one
 entry per monster family, and fills it with a default speed. It then consults
@@ -136,6 +146,10 @@ look. An acid puddle acts only on one frame in thirty-two, from a rate mask
 that gives it its slow ooze. IT reads its own rate mask from the same per-family
 table and switches to a separate chase animation. A lobber selects its throwing
 animation where every other family selects the shared attack one.
+
+Its prediction follows movement the target actually achieved, not persistent
+facing. A stationary or blocked hero leaves an all-ones movement nibble, which
+selects the zero-padded vector row and adds no running lead.
 
 ## The population controller
 
