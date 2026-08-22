@@ -302,6 +302,12 @@ loaded purely as scenery. The routine that builds a page always fills a
 Chapter 4 described, so the maze behind it never shows through where the
 text goes.
 
+That maze persists into the following high-score screen. The four score boxes
+are opaque alpha rectangles, but the cells between them are transparent, so
+maze 103's cyan floor pattern is visible around the ladder. Updated MAME 0.289
+captures distinguish these cases: SCORES visibly retains the maze; LEGEND is
+intentionally black across its 29-column curtain.
+
 The pages come in reverse order of their numbering. The first is headed
 LEGEND and shows the item and terrain vocabulary: wall and floor types,
 movable and destructible walls, potions, food, exits, traps, stun tiles,

@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2268 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2273 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -40,6 +40,22 @@ start).
 ---
 
 ## Resolved issues
+
+### Twelfth-pass attract/HUD/wall presentation (S-76 … S-78)
+
+- **S-76 · damaged destructible walls jumped to unrelated static palettes.**
+  The ROM's `7-stage` value indexes live color RAM, not gex's wall-palette list.
+  The overlay now keeps the level wall palette instead of turning pink/green
+  after the first hit; the exact damage stage remains in simulation state.
+- **S-77 · player status blocks lacked their alpha-palette backgrounds.** MAME
+  0.289 captures pin the four opaque backgrounds to dark red `(50,0,0)`, blue
+  `(0,0,50)`, yellow `(33,33,0)`, and green `(0,50,0)`. All four positions,
+  including INSERT COIN slots, now draw those ROM-layout rectangles.
+- **S-78 · the SCORES overlay erased its maze scenery.** MAME shows score boxes
+  over maze 103, retained from LEGEND. LEGEND now loads maze 103 and SCORES no
+  longer clears the framebuffer. MAME also confirms LEGEND's 29-column opaque
+  alpha curtain is intentionally black; its maze remains loaded as scenery
+  behind that curtain rather than visibly filling the text area.
 
 ### Eleventh-pass presentation/attract regressions (S-71 … S-75)
 

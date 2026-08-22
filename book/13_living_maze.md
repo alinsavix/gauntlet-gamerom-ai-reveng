@@ -167,6 +167,10 @@ power, projectiles pass through walls entirely, and a player with the reflect
 power bounces shots off them at computed angles instead of losing them.
 Secret shootable walls keep the ordinary level-wall palette until revealed;
 a brighter special palette would give the secret away.
+On ordinary wall sets, damage advances a live color-RAM nibble rather than
+selecting another static wall-color theme. A host without that mutable palette
+bank must keep the level wall palette; interpreting the nibble as a theme index
+produces unrelated pink or green walls after one hit.
 
 **Secret walls.** One wall type exists to be shot. A hit plays its own sound,
 converts the wall to floor, and rolls dice on what was behind it. The odds of

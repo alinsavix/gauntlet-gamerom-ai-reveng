@@ -290,6 +290,15 @@ class TestStartAttractScreen:
         start_attract_screen(state, int(GameMode.LEGEND))
         assert all(p.score_drawn for p in state.info_panel.players)
 
+    @requires_roms
+    def test_legend_loads_maze_103_as_attract_scenery(self):
+        state = GameState()
+
+        start_attract_screen(state, int(GameMode.LEGEND))
+
+        assert state.mazenum_current == 103
+        assert state.maze is not None
+
     def test_demo_rebuilds_the_whole_info_panel(self):
         """attract_demo_init 0x449DE-0x449E4, and it clears the first-encounter
         dialog flags at 0x449F6."""

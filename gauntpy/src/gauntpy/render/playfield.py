@@ -767,7 +767,11 @@ def draw_wall_crumble(fb, cache: PlayfieldCache, state, scroll_x: int, scroll_y:
             palette = _stamp_palette_rgba(stamp, None)
             _blit_descriptor(fb, descriptor, slot, palette, scroll_x, scroll_y, viewport)
         elif stamp is not None:
-            palette = _stamp_palette_rgba(stamp, wall_crumble_palette(state, slot))
+            # The ROM's 7-stage nibble indexes live playfield color RAM, not
+            # gex's static wall-color list. Using it as a gex palette index
+            # turns the first hit pink/green. Keep the level wall palette; the
+            # simulation still retains the exact crumble stage/nibble.
+            palette = _stamp_palette_rgba(stamp, None)
             _blit_descriptor(
                 fb, tuple(stamp.numbers[:4]), slot, palette, scroll_x, scroll_y, viewport,
             )

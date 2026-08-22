@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import dataclasses
 
+from ..constants import GameMode
 from ..state import GameState
 from ..subsystems import score
 from ..subsystems.camera import viewport_scroll
@@ -140,7 +141,8 @@ def render_frame(
         shadow_src=shadow_src,
     )
 
-    draw_hud(fb, state, HUD_PANEL)
+    if int(state.game_mode) != int(GameMode.SCORES):
+        draw_hud(fb, state, HUD_PANEL)
 
     # Front-end screens use the cabinet's full 336x240 raster. This is required
     # by the native 328px title wordmark and also covers the gameplay HUD during

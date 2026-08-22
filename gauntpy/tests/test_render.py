@@ -940,22 +940,40 @@ class TestHud:
         assert tagged.image.crop(box).tobytes() != plain.image.crop(box).tobytes()
 
     def test_removed_player_block_is_blank_but_the_level_header_is_not(self):
-        """setup_infopanel dispatches on player status: a REMOVED player has no
-        name, score or health on the panel -- only the whole-panel header
-        ("LEVEL n" at row 6) is unconditional."""
+        """A removed player keeps its colored alpha background but no text."""
         state = GameState()   # all players default to PlayerStatus.REMOVED
         fb = Framebuffer(336, 240)
         draw_hud(fb, state, HUD_PANEL)
 
         first, last = self._player_block_rows(0)
-        assert not self._ink_in_rows(fb, HUD_PANEL, first, last)
+        assert self._ink_in_rows(fb, HUD_PANEL, first, last)
         assert self._ink_in_rows(fb, HUD_PANEL, score.LEVEL_ROW, score.LEVEL_ROW)
+
+    def test_player_sections_use_mame_alpha_background_colors(self):
+        state = GameState()
+        fb = Framebuffer(336, 240)
+        draw_hud(fb, state, HUD_PANEL)
+
+        expected = (
+            (50, 0, 0, 255),
+            (0, 0, 50, 255),
+            (33, 33, 0, 255),
+            (0, 50, 0, 255),
+        )
+        for index, color in enumerate(expected):
+            x, y = cell_xy(
+                HUD_PANEL, score.PANEL_COLUMN,
+                index * score.PLAYER_BLOCK_STRIDE + score.PLAYER_LABEL_ROW,
+            )
+            assert fb.get_pixel(x, y) == color
 
     def test_each_player_block_lands_on_its_rom_rows(self):
         """Player p's block is rows p*5+7 .. p*5+10 -- the ROM's ``d4 = p*5+7``
-        and its four-row clear loop. Drawing player 2 must not touch player 1's
-        rows."""
+        and its four-row clear loop. Drawing player 2 must not alter another
+        position's colored background."""
         state = self._state()
+        baseline = Framebuffer(336, 240)
+        draw_hud(baseline, state, HUD_PANEL)
         state.players[2].status = PlayerStatus.ALIVE_HERE
         state.players[2].score = 7654321
         state.frame_counter = 2
@@ -966,9 +984,17 @@ class TestHud:
 
         for other in (0, 1, 3):
             first, last = self._player_block_rows(other)
-            assert not self._ink_in_rows(fb, HUD_PANEL, first, last), other
+            box = (
+                HUD_PANEL[0], first * 8,
+                HUD_PANEL[0] + HUD_PANEL[2], (last + 1) * 8,
+            )
+            assert fb.image.crop(box).tobytes() == baseline.image.crop(box).tobytes()
         first, last = self._player_block_rows(2)
-        assert self._ink_in_rows(fb, HUD_PANEL, first, last)
+        box = (
+            HUD_PANEL[0], first * 8,
+            HUD_PANEL[0] + HUD_PANEL[2], (last + 1) * 8,
+        )
+        assert fb.image.crop(box).tobytes() != baseline.image.crop(box).tobytes()
 
     def test_hud_draws_the_latched_score_not_the_live_one(self):
         """The panel is a latch: a score change only reaches the HUD when
@@ -1270,6 +1296,25 @@ class TestFrontEndOverlay:
             state = GameState()
             state.game_mode = mode
             assert self._overlay_changes_viewport(state), mode
+
+    def test_scores_preserve_the_maze_between_opaque_score_boxes(self):
+        from PIL import Image
+
+        fb = Framebuffer(336, 240)
+        fb.image.paste(Image.new("RGBA", (336, 240), (12, 34, 56, 255)))
+        state = GameState(game_mode=GameMode.SCORES)
+
+        draw_front_end_overlay(fb, state, (0, 0, 336, 240), _FakeAssets())
+
+        assert fb.get_pixel(0, 239) == (12, 34, 56, 255)
+        assert fb.get_pixel(8, 0) == (0, 0, 0, 255)
+
+    def test_scores_compositor_does_not_leak_gameplay_hud_backgrounds(self):
+        state = GameState(game_mode=GameMode.SCORES)
+
+        fb, _cache = render_frame(state, _FakeAssets())
+
+        assert fb.get_pixel(232, 80) != (50, 0, 0, 255)
 
     def test_character_select_draws_before_the_game_starts(self):
         state = GameState()
@@ -1953,8 +1998,8 @@ class TestWallCrumble:
         assert self._capture(state, self._cache(self._stamp())) == []
 
     def test_a_damaged_wall_on_a_plain_set_restamps_its_own_tiles(self):
-        """Below the shrub patterns the crumble is a palette walk, so the tiles
-        are the wall's own and only the palette changes."""
+        """The ROM nibble is not an index into gex's static wall palette list."""
+        from gex.palettes import GAUNTLET_PALETTES
         from gauntpy.subsystems.shots import wall_crumble_palette
 
         state = GameState()
@@ -1966,6 +2011,27 @@ class TestWallCrumble:
 
         assert stamped == [(slot, (0x100, 0x101, 0x102, 0x103))]
         assert wall_crumble_palette(state, slot) == 5      # 7 - stage
+        stamp = self._stamp(pnum=1)
+        assert playfield._stamp_palette_rgba(stamp, None) == [
+            color.to_rgba() for color in GAUNTLET_PALETTES["wall"][1]
+        ]
+
+    def test_plain_crumble_overlay_keeps_the_stamp_palette(self, monkeypatch):
+        state = GameState()
+        state.maze = type("M", (), {"wallpattern": 4})()
+        slot = coords.pack_slot(4, 4)
+        state.destructible_wall_stage = {slot: 1}
+        requested = []
+        real = playfield._stamp_palette_rgba
+
+        def capture(stamp, pnum):
+            requested.append(pnum)
+            return real(stamp, pnum)
+
+        monkeypatch.setattr(playfield, "_stamp_palette_rgba", capture)
+        self._capture(state, self._cache(self._stamp(pnum=4)))
+
+        assert requested == [None]
 
     def test_a_damaged_wall_on_a_shrub_set_uses_the_rom_descriptor(self):
         from gauntpy.subsystems.shots import wall_crumble_descriptor

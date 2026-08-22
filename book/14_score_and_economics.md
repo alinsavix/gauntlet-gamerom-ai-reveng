@@ -123,6 +123,11 @@ shows INSERT COIN, a joining one shows the character-selection prompt, a live
 one shows class name, score, and health, and a finished one shows GAME OVER
 or the initials editor.
 
+Each position owns a dark version of its player color behind the text: red,
+blue, yellow, and green. These are opaque alpha cells, not a host UI panel, and
+they remain even when the position says INSERT COIN. MAME 0.289 measures the
+background RGB values as `(50,0,0)`, `(0,0,50)`, `(33,33,0)`, and `(0,50,0)`.
+
 What keeps the panel cheap is that almost nothing is redrawn on any given
 frame. The per-frame display routine services exactly one player per frame,
 rotating through the four positions, and within that column it repaints only

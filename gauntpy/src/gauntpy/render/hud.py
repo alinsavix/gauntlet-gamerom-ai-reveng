@@ -45,6 +45,14 @@ _TEXT_RGBA = (255, 255, 255, 255)
 _DIM_RGBA = (128, 128, 136, 255)
 _BOX_RGBA = (200, 200, 200, 255)
 _PANEL_BG = (0, 0, 0, 255)
+# MAME 0.289 capture of alpha palettes 4-7, background entry used by each
+# player block (red, blue, yellow, green).
+_PLAYER_BLOCK_BG = (
+    (50, 0, 0, 255),
+    (0, 0, 50, 255),
+    (33, 33, 0, 255),
+    (0, 50, 0, 255),
+)
 _KEY_PALETTE_RGBA = tuple(
     IRGB(value).to_rgba() for value in (0x0000, 0xFFA0, 0xF08E, 0xF00C)
 )
@@ -165,6 +173,33 @@ def _draw_player_block(fb, state: GameState, panel, index: int) -> None:
     _draw_inventory(fb, panel, index, player.keysnum, player.potionsnum, colour)
 
 
+def _draw_player_background(fb, panel, index: int) -> None:
+    """The opaque alpha cells setup_infopanel fills with player palette 4-7."""
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(fb.image)
+    base = index * score.PLAYER_BLOCK_STRIDE
+    color = _PLAYER_BLOCK_BG[index & 3]
+    name_x, name_y = cell_xy(
+        panel, score.PLAYER_NAME_COLUMN - 1, base + score.PLAYER_NAME_ROW,
+    )
+    draw.rectangle(
+        [name_x, name_y, name_x + 6 * CELL - 1, name_y + CELL - 1],
+        fill=color,
+    )
+    block_x, block_y = cell_xy(
+        panel, score.PANEL_COLUMN, base + score.PLAYER_LABEL_ROW,
+    )
+    draw.rectangle(
+        [
+            block_x, block_y,
+            block_x + score.PANEL_WIDTH * CELL - 1,
+            block_y + 3 * CELL - 1,
+        ],
+        fill=color,
+    )
+
+
 def draw_message_box(fb, state: GameState, viewport: tuple[int, int, int, int]) -> None:
     """Draw the message box over ``viewport`` while ``dialog_timer`` runs.
 
@@ -233,6 +268,7 @@ def draw_hud(fb, state: GameState, panel: tuple[int, int, int, int]) -> None:
         last_row = index * score.PLAYER_BLOCK_STRIDE + score.PLAYER_INV_ROW
         if last_row >= rows_available:
             break
+        _draw_player_background(fb, panel, index)
         if player.status == PlayerStatus.REMOVED:
             continue
         _draw_player_block(fb, state, panel, index)

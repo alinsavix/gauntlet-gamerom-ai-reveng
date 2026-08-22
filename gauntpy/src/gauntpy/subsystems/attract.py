@@ -293,9 +293,13 @@ def start_attract_screen(state: GameState, mode: int) -> None:
     elif mode == int(GameMode.DEMO):
         attract_demo_init(state)
     elif mode == int(GameMode.LEGEND):
+        from .. import maze
         from .players import setup_infopanel
 
         state.attract_legend = 2
+        maze.reset_and_load_level(
+            state, state.levelnum_current, maze_number=_LEGEND_MAZE,
+        )
         setup_infopanel(state, -1)                 # 0x4453C-0x44542
 
 

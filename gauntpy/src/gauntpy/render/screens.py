@@ -123,7 +123,9 @@ def draw_front_end_overlay(
         _fill(fb, viewport)
         _draw_title(fb, state, assets, viewport, cx)
     elif mode == int(GameMode.SCORES):
-        _fill(fb, viewport)
+        # The score quadrants are opaque alpha boxes, but the cells between
+        # them are transparent and show the maze 103 scenery retained from
+        # LEGEND (MAME 0.289).
         _draw_scores(fb, state, viewport, cx)
     elif mode == int(GameMode.LEGEND):
         _fill(fb, viewport)
@@ -214,6 +216,18 @@ def _draw_scores(fb, state: GameState, viewport, cx) -> None:
     """``attract_highscores`` (0x4A124) -- the four-way-split score-per-coin
     screen, at the ROM's own descriptor coordinates (0x57FFA)."""
     ladders = score.high_scores(state)
+    from PIL import ImageDraw
+
+    vx, vy, _vw, _vh = viewport
+    draw = ImageDraw.Draw(fb.image)
+    # MAME 0.289: four opaque alpha boxes, with maze 103 visible in the gaps.
+    for box in (
+        (vx + 8, vy, vx + 143, vy + 107),
+        (vx + 160, vy, vx + 327, vy + 107),
+        (vx + 8, vy + 136, vx + 143, vy + 231),
+        (vx + 160, vy + 136, vx + 327, vy + 231),
+    ):
+        draw.rectangle(box, fill=_BLACK)
 
     col, row = romtext.TEXT_SCORE_PER_COIN_POS
     x, y = _cell(viewport, col, row)
