@@ -8,7 +8,7 @@ generated contracts; and ROM routines 0x40528, 0x45C00, 0x52F26, 0x53346,
 from __future__ import annotations
 
 from ..constants import FIRST_PLAYABLE_SLOT, GameMode, MazeObjIds, NUM_MOB_SLOTS
-from ..coords import encode_hpos, encode_vpos, slot_to_pixels
+from ..coords import encode_hpos, encode_vpos_at_y, slot_to_pixels
 from ..state import GameState
 from .sound import sound_play as _sound_play
 
@@ -204,6 +204,34 @@ def main_cycle_tport_and_ffield(state: GameState) -> None:
     _write_forcefield_color(state)
 
 
+def playfield_palette_vblank(state: GameState) -> None:
+    """0x403C4-0x40454 -- pulse the trap and stun playfield colors."""
+    if state.frame_counter & 1:
+        return
+
+    if state.palette_pulse_dir_a < 0:
+        state.palette_pulse_a -= 0x1110
+        if state.palette_pulse_a <= 0x2220:
+            state.palette_pulse_a = 0x2220
+            state.palette_pulse_dir_a = 0
+    else:
+        state.palette_pulse_a += 0x1110
+        if state.palette_pulse_a >= 0xEEE0:
+            state.palette_pulse_a = 0xEEE0
+            state.palette_pulse_dir_a = -1
+
+    if state.palette_pulse_dir_b < 0:
+        state.palette_pulse_b -= 0x1011
+        if state.palette_pulse_b <= 0x4044:
+            state.palette_pulse_b = 0x4044
+            state.palette_pulse_dir_b = 0
+    else:
+        state.palette_pulse_b += 0x1011
+        if state.palette_pulse_b >= 0xA0AA:
+            state.palette_pulse_b = 0xA0AA
+            state.palette_pulse_dir_b = -1
+
+
 # ---------------------------------------------------------------------------
 # Door opening
 # ---------------------------------------------------------------------------
@@ -312,13 +340,13 @@ def maze_forcefield_setup(state: GameState) -> None:
 
 def main_walls_cyclic_move(state: GameState) -> None:
     """0x5E62A -- remove the old cycle phase and place the next one."""
+    if not (state.level_flags_3 & 0x08):
+        return
     if not state.cyclic_wall_setup_ready:
         if any(state.cyclic_wall_assign):
             state.cyclic_wall_setup_ready = True
         else:
             maze_forcefield_setup(state)
-    if not (state.level_flags_3 & 0x08):
-        return
     if not any(player.mob_slot for player in state.players):
         return
 
@@ -359,7 +387,7 @@ def main_walls_cyclic_move(state: GameState) -> None:
             x, y = slot_to_pixels(tile)
             state.mobs.picture[tile] = 0x8000
             state.mobs.hpos[tile] = encode_hpos(x)
-            state.mobs.vpos[tile] = encode_vpos(y, 2, 2)
+            state.mobs.vpos[tile] = encode_vpos_at_y(y, 2, 2)
             state.mobs.link[tile] = (6 + new_phase) << 10
             state.mobs.state_link[tile] = 0
             set_cell_descriptor(state, tile, 6 + new_phase)
@@ -501,22 +529,21 @@ def forcefield_segments_setup(state: GameState) -> None:
                 if candidate_data is None:
                     break
                 candidate, wrapped = candidate_data
+                if candidate in hubs:
+                    if distance > 1:
+                        segments.append(
+                            (0x8000 if horizontal else 0)
+                            | (0x4000 if wrapped else 0)
+                            | ((distance - 1) << 10)
+                            | hub
+                        )
+                    break
                 object_type = state.mobs.obj_type(candidate)
                 if (
                     object_type in _FORCEFIELD_BLOCKERS
                     or state.mobs.picture[candidate] in (0x8000, 0x8001)
                 ):
                     break
-                if candidate not in hubs:
-                    continue
-                if distance > 1:
-                    segments.append(
-                        (0x8000 if horizontal else 0)
-                        | (0x4000 if wrapped else 0)
-                        | ((distance - 1) << 10)
-                        | hub
-                    )
-                break
     state.forcefield_segments = segments
     state.forcefield_segments_ready = True
 

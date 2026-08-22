@@ -13,6 +13,7 @@ from ..constants import (
     MazeObjIds,
     PlayerStatus,
 )
+from ..coords import POS_FIELD_MASK
 from ..state import NUM_PLAYERS, GameState
 from .sound import sound_play, sound_speech_play
 
@@ -935,10 +936,11 @@ def player_exit_sequence(state: GameState, player_index: int,
         state.mobs.unlink_and_clear(anim_slot)
     state.mobs.picture[anim_slot] = picture
     state.mobs.hpos[anim_slot] = (
-        ((state.mobs.hpos[exit_mob_slot] - 0x200) & 0xFF80) + 0x0C + player_index
+        ((state.mobs.hpos[exit_mob_slot] - 0x200) & POS_FIELD_MASK)
+        + 0x0C + player_index
     ) & 0xFFFF                                     # 0x52C88-0x52CA2
     state.mobs.vpos[anim_slot] = (
-        (state.mobs.vpos[exit_mob_slot] & 0xFF80) + 0x12
+        (state.mobs.vpos[exit_mob_slot] & POS_FIELD_MASK) + 0x12
     ) & 0xFFFF                                     # 0x52CC6-0x52CD0
     state.mobs.insert(anim_slot, depth_key=exit_mob_slot)
 

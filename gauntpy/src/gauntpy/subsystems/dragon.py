@@ -14,7 +14,14 @@ damage row -- is ``shots.py``'s demon path acting on the H word written here.
 from __future__ import annotations
 
 from ..constants import MazeObjIds
-from ..coords import POS_FIELD_MASK, decode_hpos, decode_vpos
+from ..coords import (
+    POS_FIELD_MASK,
+    POS_SHIFT,
+    hpos_x,
+    pack_slot,
+    vpos_v,
+    vpos_y,
+)
 from ..state import GameState
 from .sound import sound_play as _sound_play
 
@@ -39,8 +46,10 @@ _DRAGON_PATH_PROGRAMS = (
     (0, 3, 4, 7, 6, 5, 2, 1, 2, 4, 7, 5, 4, 2, 3, 1),
 )
 
-# ROM 0x5D438 / 0x5D478, converted from signed 1/128-pixel words to the
-# simulation's world pixels.  These are **32-entry** tables indexed by
+# ROM 0x5D438 / 0x5D478, in whole world pixels (the raw words are all
+# multiples of 0x80, one native position unit per pixel) and in the hardware's
+# own axes, so a positive V delta walks the head *up* the screen.  These are
+# **32-entry** tables indexed by
 # ``raw path byte + facing * 4`` (0x54616-0x54626) -- not the 16-entry
 # ``pose + facing*2`` index the fire/segment tables use.  Each (pose, facing)
 # therefore owns *two* adjacent entries, selected by the path byte's fire bit:
@@ -61,8 +70,9 @@ _HEAD_VDELTA = (
 # ``dragon_fire_segment_tbl`` (0x5D4B8) picks which of the four 2x2 segment
 # MOBs owns the shot; the two pose tables (0x5D4C8/0x5D4E8) and the two facing
 # tables (0x5D428/0x5D430) are the muzzle offset.  Every entry is a multiple of
-# 0x80 -- a whole ROM pixel -- so ``>> 7`` converts them exactly, the same way
-# ``_HEAD_HDELTA`` above is converted.
+# 0x80 -- a whole pixel -- so the tables are stated in pixels here and shifted
+# back by ``POS_SHIFT`` on use, the same way ``_HEAD_HDELTA`` above is.
+# Both axes keep the hardware's sense, so a positive V entry walks *up*.
 _DRAGON_FIRE_SEGMENT_TBL = (
     3, 3, 1, 1, 3, 3, 2, 2,
     2, 2, 0, 0, 1, 1, 0, 0,
@@ -102,6 +112,9 @@ _FIREBALL_COUNTER = 0x01
 # within three cells of its firing line.  ``dragon_move_state``'s high byte is
 # that cross-axis distance in cells (0x5406A builds it as ``dist << 4``).
 _BREATH_RANGE_CELLS = 3
+_DRAGON_TARGET_LIMIT = 16 * 15
+_DRAGON_PROBE_OFFSETS_A = (0, -0x40, 2, -0x20, 1, 0x20, -1, 0)
+_DRAGON_PROBE_OFFSETS_B = (1, -0x40, 2, 0, 0, 0x20, -1, -0x20)
 _DRAGON_HEAD_PICS = (
     # dragon_head_picture_tbl (0x5D528), 32 words on the same
     # ``raw byte + facing*4`` index as the two head delta tables.
@@ -211,24 +224,23 @@ def _update_dragon_pose(state: GameState, head_slot: int) -> None:
 
     The ROM rebuilds both head words as ``(delta + segment word) & 0xFF80``,
     so they carry a position field and nothing else -- no palette, no sprite
-    size.  Its vertical axis grows upward, so a positive V delta walks the
-    head *up* the screen and gauntpy has to subtract it, the same inversion
-    ``_dragon_fire_setup`` applies to the muzzle offset.
+    size.  Its vertical axis grows upward, and so does the stored V word, so a
+    positive V delta simply adds.
     """
     index = _head_index(state)
     state.mobs.picture[head_slot] = _DRAGON_HEAD_PICS[index]
     state.dragon_head_hpos = (
-        state.mobs.hpos[head_slot] + (_HEAD_HDELTA[index] << 6)
+        state.mobs.hpos[head_slot] + (_HEAD_HDELTA[index] << POS_SHIFT)
     ) & POS_FIELD_MASK
     state.dragon_head_vpos = (
-        state.mobs.vpos[head_slot] - (_HEAD_VDELTA[index] << 6)
+        state.mobs.vpos[head_slot] + (_HEAD_VDELTA[index] << POS_SHIFT)
     ) & POS_FIELD_MASK
 
 
 def _player_cell(state: GameState, player_index: int) -> tuple[int, int]:
     player = state.players[player_index]
-    x, _, _ = decode_hpos(state.mobs.hpos[player.mob_slot])
-    y, _, _ = decode_vpos(state.mobs.vpos[player.mob_slot])
+    x = hpos_x(state.mobs.hpos[player.mob_slot])
+    y = vpos_y(state.mobs.vpos[player.mob_slot])
     return y >> 4, x >> 4
 
 
@@ -278,59 +290,127 @@ def _advance_wake_or_turn(state: GameState, head_slot: int) -> bool:
     return False
 
 
-def _nearest_player(state: GameState, head_slot: int) -> int | None:
-    x, _, _ = decode_hpos(state.mobs.hpos[head_slot])
-    y, _, _ = decode_vpos(state.mobs.vpos[head_slot])
-    closest: int | None = None
-    closest_distance: int | None = None
-    for player in state.players:
-        if not player.active or player.mob_slot == 0:
-            continue
-        px, _, _ = decode_hpos(state.mobs.hpos[player.mob_slot])
-        py, _, _ = decode_vpos(state.mobs.vpos[player.mob_slot])
-        dx = abs(px - x)
-        dy = abs(py - y)
-        if state.wrap_h:
-            dx = min(dx, 512 - dx)
-        if state.wrap_v:
-            dy = min(dy, 512 - dy)
-        distance = dx + dy
-        if closest_distance is None or distance < closest_distance:
-            closest = player.index
-            closest_distance = distance
-    return closest
+def _dragon_probe_open(state: GameState, head_slot: int, direction: int) -> bool:
+    """Test the two leading footprint cells used by 0x53E4A."""
+    slots = []
+    for offsets in (_DRAGON_PROBE_OFFSETS_A, _DRAGON_PROBE_OFFSETS_B):
+        col = (head_slot + offsets[direction]) & 0x1F
+        row = ((head_slot & 0x3E0) + offsets[direction + 1]) & 0x7FF
+        slots.append((row + col) & 0x7FF)
+    if slots[0] < 0x20:
+        return False
+    return all(
+        slot < len(state.mobs.picture)
+        and state.mobs.picture[slot] != 0x8000
+        for slot in slots
+    )
 
 
 def _choose_move_direction(state: GameState, head_slot: int) -> None:
-    """Select the nearest party-directed cardinal candidate (0x53E4A)."""
-    player_index = _nearest_player(state, head_slot)
-    if player_index is None:
+    """Pack the closest legal player, facing, and distance exactly as 0x53E4A."""
+    dragon_x = hpos_x(state.mobs.hpos[head_slot]) + 16
+    dragon_y = vpos_y(state.mobs.vpos[head_slot])
+    chosen_player = 4
+    chosen_direction = state.dragon_facing & 0x06
+    chosen_distance = _DRAGON_TARGET_LIMIT
+
+    for player in reversed(state.players):
+        if not player.active or player.mob_slot == 0 or player.health <= 0:
+            continue
+        player_x = hpos_x(state.mobs.hpos[player.mob_slot]) + 12
+        player_y = vpos_y(state.mobs.vpos[player.mob_slot]) + 8
+        dx = player_x - dragon_x
+        dy = player_y - dragon_y
+        if dx > 0x100:
+            dx -= 0x200
+        elif dx < -0x100:
+            dx += 0x200
+        abs_x, abs_y = abs(dx), abs(dy)
+
+        if abs_x < abs_y:
+            direction = 4 if dy > 0 else 0
+            distance = abs_y
+        elif abs_y < abs_x:
+            direction = 2 if dx > 0 else 6
+            distance = abs_x
+        else:
+            direction = state.dragon_facing & 0x06
+            distance = abs_y if direction in (0, 4) else abs_x
+
+        if (
+            distance < chosen_distance
+            and _dragon_probe_open(state, head_slot, direction)
+        ):
+            chosen_player = player.index
+            chosen_direction = direction
+            chosen_distance = distance
+
+    if chosen_player == 4:
+        packed = 4 | ((state.dragon_facing & 0x06) << 4) | 0x1000
+    else:
+        packed = (
+            chosen_player
+            | (chosen_direction << 4)
+            | ((chosen_distance << 4) & 0xFF00)
+        )
+    if packed == state.dragon_move_state:
+        return
+    state.dragon_move_state = packed
+
+    old_direction = state.dragon_facing & 0x06
+    if chosen_player == 4 or chosen_direction == old_direction:
+        return
+    turn = old_direction - chosen_direction
+    if turn == -6:
+        turn = 2
+    elif turn == 6:
+        turn = -2
+    state.dragon_anim_ctr = turn << 3
+    state.dragon_anim_ctr += 1 if state.dragon_anim_ctr > 0 else -1
+    state.dragon_facing = chosen_direction
+    state.dragon_state |= _ST_TURNING
+
+
+def _update_fire_lock(state: GameState, head_slot: int) -> None:
+    """Hold a close firing pose while its selected player stays on the line."""
+    player_index = state.dragon_move_state & 0x0F
+    facing = state.dragon_facing & 0x06
+    if (
+        player_index >= len(state.players)
+        or (state.dragon_move_state >> 8) > _BREATH_RANGE_CELLS
+        or ((state.dragon_move_state >> 4) & 0x0F) != facing
+    ):
+        state.dragon_state &= ~_ST_LOCKED
         return
 
-    x, _, _ = decode_hpos(state.mobs.hpos[head_slot])
-    y, _, _ = decode_vpos(state.mobs.vpos[head_slot])
-    px, _, _ = decode_hpos(state.mobs.hpos[state.players[player_index].mob_slot])
-    py, _, _ = decode_vpos(state.mobs.vpos[state.players[player_index].mob_slot])
-    dx = px - x
-    dy = py - y
-    if state.wrap_h and abs(dx) > 256:
-        dx -= 512 if dx > 0 else -512
-    if state.wrap_v and abs(dy) > 256:
-        dy -= 512 if dy > 0 else -512
-
-    if abs(dx) > abs(dy):
-        direction = 0 if dx > 0 else 4
-    elif abs(dy) > abs(dx):
-        direction = 2 if dy > 0 else 6
+    pose = _pose_index(state)
+    muzzle_x = (
+        hpos_x(state.mobs.hpos[head_slot])
+        + _FIRE_H_BY_POSE[pose]
+        + _FIRE_H_BY_FACING[facing >> 1]
+    )
+    muzzle_v = (
+        vpos_v(state.mobs.vpos[head_slot])
+        + _FIRE_V_BY_POSE[pose]
+        + _FIRE_V_BY_FACING[facing >> 1]
+    )
+    player = state.players[player_index]
+    player_x = hpos_x(state.mobs.hpos[player.mob_slot])
+    player_v = vpos_v(state.mobs.vpos[player.mob_slot])
+    delta_x = muzzle_x - player_x
+    if delta_x > 0x100:
+        delta_x -= 0x200
+    elif delta_x < -0x100:
+        delta_x += 0x200
+    aligned = (
+        -17 < delta_x < 18
+        if facing in (0, 4)
+        else -17 < (muzzle_v - player_v) < 17
+    )
+    if aligned:
+        state.dragon_state |= _ST_LOCKED
     else:
-        direction = state.dragon_facing & 0x06
-
-    if direction != state.dragon_facing:
-        state.dragon_facing = direction
-        state.dragon_state |= _ST_TURNING
-        state.dragon_anim_ctr = 8 if direction in (0, 2) else -8
-    else:
-        state.dragon_move_state &= ~0x0F
+        state.dragon_state &= ~_ST_LOCKED
 
 
 def _dragon_find_free_shot_slot(state: GameState) -> int | None:
@@ -391,10 +471,7 @@ def _dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     head_slot = segments[0] or source_slot
 
     facing = state.dragon_facing & 0x06
-    # ``shot_direction`` is on the ROM compass (0 = up, clockwise); the port's
-    # dragon faces on gauntpy's (0 = right), the same +2 rotation
-    # ``monster_create_shot`` applies.
-    rom_dir = (facing + 2) & 0x07
+    rom_dir = facing
 
     state.dragon_fire_cooldown = _FIRE_COOLDOWN         # 0x54764
     state.shot_owner_mob[channel] = source_slot         # 0x547CA
@@ -406,7 +483,9 @@ def _dragon_fire_setup(state: GameState, shot_slot: int) -> None:
         off_v = _FIRE_V_BY_FACING[facing >> 1] + _FIRE_V_BY_POSE[pose]
         hpos_low, vpos_low = _BREATH_HPOS_LOW, _BREATH_VPOS_LOW
     else:
-        counter = _FIREBALL_COUNTER
+        from .shots import _SHOT_COUNTER_RELOAD
+
+        counter = _SHOT_COUNTER_RELOAD[channel]
         off_h = _FIRE_H_BY_POSE[pose]
         off_v = _FIRE_V_BY_POSE[pose]
         hpos_low, vpos_low = _FIREBALL_HPOS_LOW, _FIREBALL_VPOS_LOW
@@ -415,12 +494,14 @@ def _dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     # The H word must carry its strength bits before anything reads the tier,
     # so write the MOB words first and pick the picture from them.
     state.mobs.hpos[shot_slot] = (
-        (state.mobs.hpos[head_slot] & POS_FIELD_MASK) + (off_h << 6) + hpos_low
+        (state.mobs.hpos[head_slot] & POS_FIELD_MASK)
+        + (off_h << POS_SHIFT) + hpos_low
     ) & 0xFFFF
-    # The ROM's V axis grows upward, so its muzzle offset is subtracted here,
-    # the same inversion ``monster_create_shot`` applies to its own spawn.
+    # Both the ROM's muzzle offsets and the stored V word grow upward, so the
+    # offset simply adds.
     state.mobs.vpos[shot_slot] = (
-        (state.mobs.vpos[head_slot] & POS_FIELD_MASK) - (off_v << 6) + vpos_low
+        (state.mobs.vpos[head_slot] & POS_FIELD_MASK)
+        + (off_v << POS_SHIFT) + vpos_low
     ) & 0xFFFF
     state.mobs.picture[shot_slot] = shot_picture(state, channel, counter)
 
@@ -431,8 +512,8 @@ def _dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     state.mobs.insert(shot_slot, depth_key=shot_cell(state, shot_slot))
 
     dx, dy = shot_velocity(state, channel, rom_dir)
-    state.shot_dx[shot_slot] = dx >> 6
-    state.shot_dy[shot_slot] = dy >> 6
+    state.shot_dx[shot_slot] = dx >> POS_SHIFT
+    state.shot_dy[shot_slot] = dy >> POS_SHIFT
     state.shot_lifetime[shot_slot] = 0      # port-side frame count, no ROM word
 
 
@@ -448,6 +529,7 @@ def _run_active_path(state: GameState, head_slot: int) -> None:
         state.dragon_fire_cooldown = 0
 
     if state.dragon_anim_ctr & 7:
+        _update_fire_lock(state, head_slot)
         return
 
     _update_dragon_pose(state, head_slot)
@@ -460,6 +542,7 @@ def _run_active_path(state: GameState, head_slot: int) -> None:
         if shot_slot is not None:
             _dragon_fire_setup(state, shot_slot)
     _choose_move_direction(state, head_slot)
+    _update_fire_lock(state, head_slot)
 
 
 def main_handle_dragon(state: GameState) -> None:
@@ -493,6 +576,28 @@ def _switch_path_matching_byte(state: GameState, old_byte: int) -> None:
 
 
 def _dragon_die(state: GameState, shooter_id: int) -> None:
+    primary = _segments(state)[0]
+    dragon_x = hpos_x(state.mobs.hpos[primary])
+    dragon_y = vpos_y(state.mobs.vpos[primary])
+    facing_index = (state.dragon_facing & 0x06) >> 1
+    loot_a_h = (0, 16, 0, 0)
+    loot_a_v = (-16, 0, 0, 0)
+    loot_b_h = (0, -16, 0, 16)
+    loot_b_v = (16, 0, -16, 0)
+
+    from .shots import tport_cycle_start
+
+    original_hpos = state.mobs.hpos[primary]
+    original_vpos = state.mobs.vpos[primary]
+    state.mobs.hpos[primary] = (
+        (original_hpos & POS_FIELD_MASK) + (8 << POS_SHIFT)
+    ) & 0xFFFF
+    state.mobs.vpos[primary] = (
+        (original_vpos & POS_FIELD_MASK) + (8 << POS_SHIFT)
+    ) & 0xFFFF
+    tport_cycle_start(state, primary, shooter_id)
+    state.mobs.hpos[primary] = original_hpos
+    state.mobs.vpos[primary] = original_vpos
     for slot in _segments(state):
         if slot:
             state.mobs.unlink_and_clear(slot)
@@ -501,6 +606,28 @@ def _dragon_die(state: GameState, shooter_id: int) -> None:
     state.dragon_state = 0
     state.dragon_head_hpos = 0
     state.dragon_head_vpos = 0
+
+    from ..maze import placement_base_picture, placement_geometry
+
+    def spawn_loot(obj_type: MazeObjIds, x: int, y: int, picture: int) -> None:
+        slot = pack_slot(((y + 8) >> 4) & 0x1F, ((x + 8) >> 4) & 0x1F)
+        hpos, vpos = placement_geometry(int(obj_type), slot)
+        state.mobs.create(slot, picture, hpos, vpos, int(obj_type), 0)
+
+    spawn_loot(
+        MazeObjIds.TREASURE_BAG,
+        dragon_x + loot_a_h[facing_index],
+        dragon_y + loot_a_v[facing_index],
+        placement_base_picture(int(MazeObjIds.TREASURE_BAG)),
+    )
+    spawn_loot(
+        MazeObjIds.HIDDENPOT,
+        dragon_x + loot_a_h[facing_index] + loot_b_h[facing_index],
+        dragon_y + loot_a_v[facing_index] + loot_b_v[facing_index],
+        0xA728 + (state.getrandom(6) << 2),
+    )
+    state.secret_need_hint = 1
+    state.special_bonus_score = 2000
 
     # 0x54420: finishing the dragon completes the "Don't Get Hit" objective
     # unless this shooter was already disqualified (flag value 1).

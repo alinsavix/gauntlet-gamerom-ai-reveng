@@ -27,6 +27,7 @@ Four ROM facts shape every test below:
 from __future__ import annotations
 
 from gauntpy.constants import (
+    GENERATOR_TYPES,
     SLOT_DEMON_SHOTS,
     SLOT_LOBBER_SHOTS,
     GameMode,
@@ -36,10 +37,13 @@ from gauntpy.constants import (
 )
 from gauntpy.coords import (
     decode_hpos,
-    decode_vpos,
+    decode_vpos_at_y,
     encode_hpos,
-    encode_vpos,
+    encode_vpos_at_y,
+    hpos_x,
+    native_v,
     pack_slot,
+    vpos_y,
 )
 from gauntpy.state import GameState
 from gauntpy.subsystems.exits import (
@@ -82,6 +86,7 @@ from gauntpy.subsystems.monsters import (
     _dispatch_monster,
     _handle_generator,
     _in_cull_rect,
+    _lobber_lead,
     _monster_move_engine,
     _monster_animation_index,
     _monster_speed,
@@ -91,6 +96,7 @@ from gauntpy.subsystems.monsters import (
     _shooter_in_view,
     _spawn_probability,
     _supersorc_dispatch,
+    _tile_on_screen,
     _update_cull_rect,
     GENERATOR_RETRY_RELOAD,
     generator_candidate_slot,
@@ -154,7 +160,7 @@ def _place_monster(state: GameState, slot: int, obj_type: int,
         slot,
         tile=1,
         hpos=encode_hpos(x, palette=health, flags=flags),
-        vpos=encode_vpos(y),
+        vpos=encode_vpos_at_y(y),
         obj_type=obj_type,
         state=direction & 0x07,
     )
@@ -163,7 +169,7 @@ def _place_monster(state: GameState, slot: int, obj_type: int,
 def _place_wall(state: GameState, slot: int) -> None:
     row, col = slot >> 5, slot & 0x1F
     state.mobs.create(slot, tile=1, hpos=encode_hpos(col * 16),
-                      vpos=encode_vpos(row * 16),
+                      vpos=encode_vpos_at_y(row * 16),
                       obj_type=int(MazeObjIds.WALL_REGULAR), state=0)
 
 
@@ -175,7 +181,7 @@ def _place_player(state: GameState, index: int, slot: int) -> None:
     row, col = slot >> 5, slot & 0x1F
     state.mobs.create(slot, tile=0x100,
                       hpos=encode_hpos(col * 16, palette=0x0C + index),
-                      vpos=encode_vpos(row * 16),
+                      vpos=encode_vpos_at_y(row * 16),
                       obj_type=int(MazeObjIds.PLAYERSTART), state=0)
     state.level_players_active = max(state.level_players_active, index + 1)
     state.player_in_maze[index] = 1
@@ -187,7 +193,7 @@ def _camera_on(state: GameState, slot: int) -> None:
     chain walk covers its band."""
     x, y = (slot & 0x1F) * 16, (slot >> 5) * 16
     state.scroll_x = x - 0x68            # midX = scroll_x + 0x68
-    state.scroll_y = 0x17C - y           # midY = 0x17C - scroll_y
+    state.scroll_y = y - 0x74            # midY = scroll_y + 0x74
 
 
 def _arena(state: GameState, focus_slot: int, players: int = 1) -> None:
@@ -327,8 +333,88 @@ class TestCullingRectangle:
         state.scroll_x = 0x100
         state.scroll_y = 0x80
         _update_cull_rect(state)
-        assert state.cull_rect_x == ((0x100 - 0x17) << 6)
-        assert state.cull_rect_y == ((0xF9 - 0x80) << 6)
+        assert state.cull_rect_x == ((0x100 - 0x17) << 7)
+        assert state.cull_rect_y == ((0xF9 - 0x80) << 7)
+
+    def test_wrapped_left_camera_keeps_right_seam_monsters_live(self):
+        """Level 7 wraps horizontally; scroll 0 must include column 31."""
+        state = GameState(wrap_h=True)
+        slot = pack_slot(10, 31)
+        _place_monster(state, slot, MazeObjIds.MONST_GRUNT)
+        state.scroll_x = 0
+        state.scroll_y = 10 * 16 - 0x74
+
+        _update_cull_rect(state)
+
+        assert state.cull_rect_x == ((-0x17 << 7) & 0xFFFF)
+        assert _in_cull_rect(state, slot)
+
+    def test_the_cull_window_wraps_on_the_16_bit_word_itself(self):
+        """``512 << 7`` is 0x10000, so one maze *is* one 16-bit word and the
+        ROM's unsigned subtraction wraps at the seam with no extra masking.
+        Column 31 sits 0x10 px left of a camera anchored at column 0."""
+        state = GameState(wrap_h=True)
+        state.scroll_x = 0
+        state.scroll_y = 10 * 16 - 0x74
+        _update_cull_rect(state)
+        seam = pack_slot(10, 31)
+        _place_monster(state, seam, MazeObjIds.MONST_GRUNT)
+        delta = (state.mobs.hpos[seam] - state.cull_rect_x) & 0xFFFF
+        assert delta < 0x7F80, "inside the ROM's 255 px window across the seam"
+        assert _in_cull_rect(state, seam)
+
+    def test_the_vertical_cull_origin_is_the_roms_upward_one(self):
+        """0x49052: ``(0xF9 - pf_vscroll_lo) << 7``, subtracted straight from
+        the MOB's own upward V word -- no flip on either side."""
+        state = GameState()
+        state.scroll_y = 10 * 16 - 0x74
+        state.scroll_x = 0x100
+        _update_cull_rect(state)
+        slot = pack_slot(10, 10)
+        _place_monster(state, slot, MazeObjIds.MONST_GRUNT)
+        assert state.cull_rect_y == ((0xF9 - state.scroll_y) << 7) & 0xFFFF
+        assert ((state.mobs.vpos[slot] - state.cull_rect_y) & 0xFFFF) < 0x8380
+
+    def test_level_seven_seam_lobber_is_processed_and_throws(self):
+        state = GameState(
+            game_mode=GameMode.NORMAL,
+            level_players_active=1,
+            wrap_h=True,
+            scroll_x=504,
+            scroll_y=22 * 16 - 0x74,
+        )
+        lobber = pack_slot(22, 3)
+        player = pack_slot(22, 6)
+        _place_monster(
+            state, lobber, MazeObjIds.MONST_LOBBER, health=0x0B,
+        )
+        _place_player(state, 0, player)
+        state.frame_counter = _stagger_frame(lobber)
+
+        main_move_monsters(state)
+
+        assert any(state.mobs.picture[slot] for slot in SLOT_LOBBER_SHOTS)
+
+    def test_tile_visibility_wraps_across_the_level_seven_seam(self):
+        state = GameState(scroll_x=480, scroll_y=10 * 16)
+
+        assert _tile_on_screen(state, pack_slot(10, 2))
+        assert not _tile_on_screen(state, pack_slot(10, 20))
+
+    @requires_roms
+    def test_level_seven_left_seam_keeps_its_visible_generator_active(self):
+        from gauntpy import maze
+
+        state = GameState(game_mode=GameMode.NORMAL)
+        maze.load_level(state, 7, maze_number=6)
+        generator = pack_slot(16, 2)
+        assert state.mobs.obj_type(generator) in GENERATOR_TYPES
+        state.scroll_x = 504
+        state.scroll_y = 16 * 16 - 0x74
+
+        _update_cull_rect(state)
+
+        assert _in_cull_rect(state, generator)
 
     def test_monster_inside_the_box_is_processed(self):
         state = GameState()
@@ -384,7 +470,7 @@ class TestCullingRectangle:
         _update_cull_rect(state)
         _place_monster(state, slot, MazeObjIds.MONST_DEMON)
         assert _shooter_in_view(state, slot)
-        edge_x = (state.cull_rect_x >> 6) + 8
+        edge_x = (state.cull_rect_x >> 7) + 8
         state.mobs.hpos[slot] = encode_hpos(edge_x)
         assert _in_cull_rect(state, slot)
         assert not _shooter_in_view(state, slot)
@@ -398,7 +484,7 @@ class TestCullingRectangle:
         _place_player(state, 0, pack_slot(10, 16))
         x, y = (slot & 0x1F) * 16, (slot >> 5) * 16
         state.scroll_x = x - 8 + 0x17            # 8 px inside the left edge
-        state.scroll_y = 0x17C - y
+        state.scroll_y = y - 0x74
         _update_cull_rect(state)
         assert _in_cull_rect(state, slot)
         monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_DEMON))
@@ -415,10 +501,10 @@ class TestMovementEngine:
         slot = pack_slot(10, 10)
         _arena(state, slot)
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=0)
-        h, v, d6, clear, blocker = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 6)
+        h, v, d6, clear, blocker = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 7)
         assert clear and blocker is None
-        assert (h >> 6) - 160 == _MONSTER_SPEED_BASE
-        assert (v >> 6) == 160
+        assert hpos_x(h) - 160 == _MONSTER_SPEED_BASE
+        assert vpos_y(v) == 160
         assert ((d6 >> 10) - 2) & 7 == 0, "heading unchanged when nothing blocks"
 
     def test_diagonal_slides_along_a_wall(self):
@@ -429,10 +515,10 @@ class TestMovementEngine:
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=1)  # down-right
         _place_wall(state, pack_slot(10, 11))
         _place_wall(state, pack_slot(11, 11))
-        h, v, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 6)
+        h, v, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 7)
         assert clear
-        assert (h >> 6) == 160, "horizontal component blocked"
-        assert (v >> 6) == 160 + _MONSTER_SPEED_BASE, "vertical component taken"
+        assert hpos_x(h) == 160, "horizontal component blocked"
+        assert vpos_y(v) == 160 + _MONSTER_SPEED_BASE, "vertical component taken"
 
     def test_wall_dead_ahead_refuses_the_step(self):
         state = GameState()
@@ -440,9 +526,9 @@ class TestMovementEngine:
         _arena(state, slot)
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=0)
         _place_wall(state, pack_slot(10, 11))
-        h, v, _d6, clear, blocker = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 6)
+        h, v, _d6, clear, blocker = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 7)
         assert not clear and blocker is None
-        assert (h >> 6) == 160 and (v >> 6) == 160
+        assert hpos_x(h) == 160 and vpos_y(v) == 160
 
     def test_flanking_cells_block_too(self):
         """A march checks the cell ahead *and* both of its neighbours, so a
@@ -453,7 +539,7 @@ class TestMovementEngine:
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=2)   # down
         state.mobs.hpos[slot] = encode_hpos(160 + 8, palette=4)  # drifted right
         _place_wall(state, pack_slot(11, 11))          # only the flank
-        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 6)
+        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 7)
         assert not clear
 
     def test_flank_out_of_reach_does_not_block(self):
@@ -462,7 +548,7 @@ class TestMovementEngine:
         _arena(state, slot)
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=2)
         _place_wall(state, pack_slot(11, 11))          # a full cell away
-        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 6)
+        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 7)
         assert clear
 
     def test_top_edge_guard(self):
@@ -471,7 +557,7 @@ class TestMovementEngine:
         slot = pack_slot(0, 10)
         _arena(state, slot)
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=6)   # up
-        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 6)
+        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 7)
         assert not clear
 
     def test_bottom_edge_guard(self):
@@ -480,7 +566,7 @@ class TestMovementEngine:
         slot = pack_slot(31, 10)
         _arena(state, slot)
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=2)   # down
-        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 6)
+        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 7)
         assert not clear
 
     def test_maze_seam_is_toroidal(self):
@@ -491,16 +577,16 @@ class TestMovementEngine:
         _arena(state, slot)
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=0)   # right
         _place_wall(state, pack_slot(10, 0))
-        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 6)
+        _, _, _d6, clear, _b = _probe_phase(state, slot, _MONSTER_SPEED_BASE << 7)
         assert not clear, "the wrapped column should block"
 
     def test_destination_cell_uses_the_sprite_bias(self):
         """0x41358: the cell a position belongs to is read with a +12 px
         horizontal and +8 px vertical sprite-origin bias."""
-        assert _destination_cell(encode_hpos(160), encode_vpos(160)) == pack_slot(10, 10)
-        assert _destination_cell(encode_hpos(164), encode_vpos(160)) == pack_slot(10, 11)
-        assert _destination_cell(encode_hpos(160), encode_vpos(168)) == pack_slot(10, 10)
-        assert _destination_cell(encode_hpos(160), encode_vpos(172)) == pack_slot(11, 10)
+        assert _destination_cell(encode_hpos(160), encode_vpos_at_y(160)) == pack_slot(10, 10)
+        assert _destination_cell(encode_hpos(164), encode_vpos_at_y(160)) == pack_slot(10, 11)
+        assert _destination_cell(encode_hpos(160), encode_vpos_at_y(168)) == pack_slot(10, 10)
+        assert _destination_cell(encode_hpos(160), encode_vpos_at_y(172)) == pack_slot(11, 10)
 
     def test_relocation_follows_the_position(self):
         state = GameState()
@@ -515,7 +601,7 @@ class TestMovementEngine:
         slot = pack_slot(10, 10)
         _arena(state, slot)
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=0)
-        state.mobs.hpos[slot] = encode_hpos(162, palette=4)
+        state.mobs.hpos[slot] = encode_hpos(163, palette=4)
         state.mobs.picture[slot] = 1
 
         _monster_move_engine(
@@ -755,9 +841,10 @@ class TestOddAngleOverride:
         assert _SHOOT_AXIS_THRESHOLDS[7] == (0, 0)                    # acid
 
     def test_default_picker_uses_cardinals(self):
+        # (u, v) are hardware-axis deltas: v positive means the target is above.
         assert _aim_direction(40, 0, 0, 2) == 0
-        assert _aim_direction(0, 40, 0, 2) == 2
-        assert _aim_direction(-40, -40, 0, 2) == 5
+        assert _aim_direction(0, -40, 0, 2) == 2
+        assert _aim_direction(-40, 40, 0, 2) == 5
 
     def test_odd_angle_never_returns_a_cardinal(self):
         for override, threshold in ((0x80, 8), (0xA0, 4), (0xC0, 4)):
@@ -1193,10 +1280,29 @@ class TestShotSpawnPicture:
         _place_monster(state, slot, MazeObjIds.MONST_LOBBER, direction=0)
         _place_player(state, 0, pack_slot(10, 8))
         state.players[0].direction = 2                 # the hero runs downward
+        state.player_walk_dirs[0] = 0xB0              # achieved DOWN movement
         monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_LOBBER))
         channel = next(s for s in range(9, 13) if state.mobs.picture[s])
         assert state.lobber_shot_vec_h[channel - 9] != 0
-        assert state.shot_dy[channel] > 0, "the rock is thrown ahead of the hero"
+        assert state.shot_dy[channel] < 0, "the rock is thrown ahead of the hero"
+
+    def test_lobber_lead_is_converted_from_rom_words(self):
+        state = GameState()
+        state.players[0].character = 0
+        state.players[0].direction = 0
+        state.player_walk_dirs[0] = 0xE0              # achieved RIGHT movement
+
+        # Raw 0x41978 arithmetic yields (0x138, -0x28) and both components are
+        # stored as the ROM computes them.
+        assert _lobber_lead(state, 0, 0, 0, 30, -10) == (0x138, -0x28)
+
+    def test_stationary_target_has_no_velocity_lead(self):
+        state = GameState()
+        state.players[0].character = 0
+        state.players[0].direction = 0
+        state.player_walk_dirs[0] = 0xF0
+
+        assert _lobber_lead(state, 0, 0, 0, 30, -10) == (0x78, -0x28)
 
     def test_lobber_arc_accumulators_start_at_the_rock(self):
         """0x49216/0x4922A seeds the *masked* spawn position, palette-free."""
@@ -1273,7 +1379,7 @@ class TestShotSpawnGeometry:
         _arena(state, self.SHOOTER)
         _place_monster(state, self.SHOOTER, MazeObjIds.MONST_DEMON,
                        direction=direction, health=4)
-        state.mobs.vpos[self.SHOOTER] = encode_vpos(160, 3, 3)   # a 3x3 body
+        state.mobs.vpos[self.SHOOTER] = encode_vpos_at_y(160, 3, 3)   # a 3x3 body
         monster_create_shot(state, self.SHOOTER, direction, shot_slot, lead)
         return state
 
@@ -1281,19 +1387,21 @@ class TestShotSpawnGeometry:
         for direction in range(8):
             state = self._fire(direction)
             rom_dir = (direction + 2) & 0x07
-            off_h = _MONSTER_SHOT_SPAWN_H[rom_dir] >> 7
-            off_v = _MONSTER_SHOT_SPAWN_V[rom_dir] >> 7
-            assert state.mobs.hpos[5] == ((160 + off_h) << 6) + 0x0E, direction
-            assert state.mobs.vpos[5] == ((160 - off_v) << 6) + 0x09, direction
+            off_h = _MONSTER_SHOT_SPAWN_H[rom_dir]
+            off_v = _MONSTER_SHOT_SPAWN_V[rom_dir]
+            base_v = native_v(160) << 7
+            assert state.mobs.hpos[5] == ((160 << 7) + off_h + 0x0E) & 0xFFFF, direction
+            assert state.mobs.vpos[5] == (base_v + off_v + 0x09) & 0xFFFF, direction
 
     def test_a_lobbed_rock_rebuilds_the_exact_rom_words(self):
         for direction in range(8):
             state = self._fire(direction, shot_slot=9, lead=(0x100, 0x100))
             rom_dir = (direction + 2) & 0x07
-            off_h = _LOBBER_SHOT_SPAWN_H[rom_dir] >> 7
-            off_v = _LOBBER_SHOT_SPAWN_V[rom_dir] >> 7
-            assert state.mobs.hpos[9] == ((160 + off_h) << 6) + 0x01, direction
-            assert state.mobs.vpos[9] == ((160 - off_v) << 6) + 0x09, direction
+            off_h = _LOBBER_SHOT_SPAWN_H[rom_dir]
+            off_v = _LOBBER_SHOT_SPAWN_V[rom_dir]
+            base_v = native_v(160) << 7
+            assert state.mobs.hpos[9] == ((160 << 7) + off_h + 0x01) & 0xFFFF, direction
+            assert state.mobs.vpos[9] == (base_v + off_v + 0x09) & 0xFFFF, direction
 
     def test_the_palette_is_the_class_constant_not_the_shooters_health(self):
         assert self._fire(0).mobs.hpos[5] & 0x0F == 0x0E
@@ -1310,13 +1418,13 @@ class TestShotSpawnGeometry:
         """0x4926E's +9: width-1 = height-1 = 1, whatever the shooter was."""
         for shot_slot, lead in ((5, None), (9, (0, 0))):
             state = self._fire(0, shot_slot, lead)
-            assert decode_vpos(state.mobs.vpos[self.SHOOTER])[1:] == (3, 3)
-            assert decode_vpos(state.mobs.vpos[shot_slot])[1:] == (2, 2)
+            assert decode_vpos_at_y(state.mobs.vpos[self.SHOOTER])[1:] == (3, 3)
+            assert decode_vpos_at_y(state.mobs.vpos[shot_slot])[1:] == (2, 2)
 
     def test_the_muzzle_offsets_stay_per_direction(self):
         """The removed +13/+9 bias used to swamp them; they must still differ."""
         spots = {d: (decode_hpos(self._fire(d).mobs.hpos[5])[0],
-                     decode_vpos(self._fire(d).mobs.vpos[5])[0])
+                     decode_vpos_at_y(self._fire(d).mobs.vpos[5])[0])
                  for d in range(8)}
         assert len(set(spots.values())) > 1
         # ROM compass 2 (right) is the largest rightward muzzle, 0x600 = 12 px.
@@ -1420,7 +1528,7 @@ class TestIterationAndContact:
         state.level_players_active = 1
         state.mobs.create(spawn_slot, tile=0x100,
                           hpos=encode_hpos(6 * 16, palette=0),
-                          vpos=encode_vpos(5 * 16),
+                          vpos=encode_vpos_at_y(5 * 16),
                           obj_type=int(MazeObjIds.PLAYERSTART), state=0)
 
         monster_slot = pack_slot(5, 5)        # directly left of the current cell
@@ -1441,7 +1549,7 @@ class TestIterationAndContact:
         state.mobs.hpos[player_slot] = encode_hpos(
             10 * 16 - 4, palette=0x0C,
         )
-        state.mobs.vpos[player_slot] = encode_vpos(10 * 16, 3, 3)
+        state.mobs.vpos[player_slot] = encode_vpos_at_y(10 * 16, 3, 3)
         state.players[0].health = 1000
 
         placements = (
@@ -1460,7 +1568,7 @@ class TestIterationAndContact:
             state.mobs.hpos[slot] = encode_hpos(
                 x, palette=4, flags=_HPOS_FLAG_MOVING,
             )
-            state.mobs.vpos[slot] = encode_vpos(y, 3, 3)
+            state.mobs.vpos[slot] = encode_vpos_at_y(y, 3, 3)
             _monster_move_engine(
                 state, slot, int(MazeObjIds.MONST_GRUNT), 1, 0,
             )
@@ -1930,7 +2038,7 @@ _ROM_GEN_CANDIDATES = (
 
 def _place_generator(state: GameState, slot: int,
                      obj_type: int = int(MazeObjIds.GEN_GHOST1)) -> None:
-    """A generator placed exactly as ``maze._placement_geometry`` places one.
+    """A generator placed exactly as ``maze.placement_geometry`` places one.
 
     The 4 px sprite-centering correction is the point: ``tile_occupancy_test``
     measures candidate cells from that same biased origin (the ROM's
@@ -1941,7 +2049,7 @@ def _place_generator(state: GameState, slot: int,
     state.mobs.create(
         slot, tile=1,
         hpos=encode_hpos(col * 16 - 4, palette=5),   # mazeobj_hsize_tier[28..45]
-        vpos=encode_vpos(row * 16, 3, 3),            # mazeobj_vpos_offset 0x12
+        vpos=encode_vpos_at_y(row * 16, 3, 3),            # mazeobj_vpos_offset 0x12
         obj_type=obj_type, state=0,
     )
 
@@ -1963,7 +2071,7 @@ def _place_wall_marker(state: GameState, slot: int) -> None:
     row, col = slot >> 5, slot & 0x1F
     state.mobs.picture[slot] = 0x8000
     state.mobs.hpos[slot] = encode_hpos(col * 16)
-    state.mobs.vpos[slot] = encode_vpos(row * 16)
+    state.mobs.vpos[slot] = encode_vpos_at_y(row * 16)
     state.mobs.set_obj_type(slot, int(MazeObjIds.WALL_REGULAR))
 
 
@@ -2180,7 +2288,7 @@ class TestGeneratorSpawnRecord:
         x, _flags, tier = decode_hpos(state.mobs.hpos[spawned])
         assert x == 11 * 16 - 4, "the 0x200 sprite correction of 0x493CE"
         assert tier == 4 - _GENERATOR_TIER_PENALTY[0]
-        _y, width, height = decode_vpos(state.mobs.vpos[spawned])
+        _y, width, height = decode_vpos_at_y(state.mobs.vpos[spawned])
         size = _MAZEOBJ_VSIZE[int(MazeObjIds.MONST_GHOST)]
         assert (width, height) == (((size >> 3) & 7) + 1, (size & 7) + 1)
 
@@ -2296,9 +2404,10 @@ class TestTileOccupancyTest:
         assert not tile_occupancy_test(state, candidate)
 
     def test_the_vertical_window_is_exactly_0x7c0(self):
-        """``|vpos - candidate_v| <= 0x7C0`` in ROM units, halved here.  A
-        creature settled in the cell above clears it by 0x10 units; one pixel
-        of travel towards the candidate is enough to fail it."""
+        """``|vpos - candidate_v| <= 0x7C0`` in native position units.  A
+        creature settled in the cell above clears it by 0x40 units (0x800 apart
+        against a 0x7C0 window); one pixel of travel towards the candidate is
+        enough to fail it."""
         candidate = pack_slot(10, 10)
         for dy in range(0, 17):
             state = GameState()
@@ -2338,7 +2447,7 @@ class TestTileOccupancyTest:
         candidate, record = pack_slot(10, 10), pack_slot(20, 20)
         _place_player(state, 0, record)
         state.mobs.hpos[record] = encode_hpos(10 * 16, palette=0x0C)
-        state.mobs.vpos[record] = encode_vpos(10 * 16)
+        state.mobs.vpos[record] = encode_vpos_at_y(10 * 16)
 
         assert not tile_occupancy_test(state, candidate)
 
@@ -2364,7 +2473,7 @@ def _place_monster_corrected(state: GameState, slot: int,
     state.mobs.create(
         slot, tile=1,
         hpos=encode_hpos(col * 16 - 4 + dx, palette=4),
-        vpos=encode_vpos(row * 16 + dy, 3, 3),
+        vpos=encode_vpos_at_y(row * 16 + dy, 3, 3),
         obj_type=int(MazeObjIds.MONST_GHOST), state=0,
     )
 

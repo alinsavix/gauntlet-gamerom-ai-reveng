@@ -62,7 +62,7 @@ from gex.projectiles import (
 )
 from gex.render import Stamp, TileData, gen_stamp_from_array, get_parsed_tile
 from gex.roms import GexError, TILE_ROMS, _rom_dir
-from gex.title_logo import title_logo_image
+from gex.title_logo import title_logo_image, title_logo_image_with_palettes
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -71,6 +71,46 @@ __all__ = [
     "AssetError", "AssetStore", "SpriteFrame", "TileBlock", "HERO_NAMES",
     "EFFECT_PICTURES", "TPORT_TRANSITION_PICTURES", "MAX_BLOCK_TILES",
 ]
+
+_TITLE_LOGO_COLOR_SEQUENCE = (
+    0x000F, 0x0077, 0x00F0, 0x0770, 0x0F00, 0x0707,
+)
+
+
+def _title_logo_palette_words(shift_count: int) -> tuple[tuple[int, ...], ...]:
+    """Rebuild the title's ten live MOB palettes after ``shift_count`` ticks."""
+    palettes = [
+        [color.irgb for color in palette]
+        for palette in GAUNTLET_PALETTES["base"][:11]
+    ]
+    intensity = 0
+    intensity_step = 1
+    intensity_wait = 2
+    color_index = 0
+    color_word = _TITLE_LOGO_COLOR_SEQUENCE[color_index]
+
+    for _ in range(max(0, shift_count)):
+        for palette_index in range(10):
+            palette = palettes[palette_index]
+            palette[2:9] = palette[3:10]
+            palette[9] = palettes[palette_index + 1][2]
+
+        intensity_wait -= 1
+        if intensity_wait < 0:
+            intensity_wait = 2
+            intensity += intensity_step
+            if intensity > 0x0F:
+                intensity = 0x0F
+                intensity_step = -intensity_step
+            elif intensity < 2:
+                intensity = 2
+                intensity_step = -intensity_step
+                intensity += intensity_step
+                color_index = (color_index + 1) % len(_TITLE_LOGO_COLOR_SEQUENCE)
+                color_word = _TITLE_LOGO_COLOR_SEQUENCE[color_index]
+        palettes[9][9] = (intensity << 12) | color_word
+
+    return tuple(tuple(palette) for palette in palettes[:10])
 
 
 class AssetError(Exception):
@@ -237,6 +277,16 @@ NPC_KIND = "npc"
 #: ``heroes.jsonc`` keys are those four classes -- so this tuple is the whole
 #: translation between ``Player.character`` and ``AssetStore.sprite(kind=...)``.
 HERO_NAMES: tuple[str, ...] = ("warrior", "valkyrie", "wizard", "elf")
+
+
+def _projectile_palette_bank(
+    kind: str | None, palette: int | None,
+) -> tuple[str, int]:
+    """Resolve a projectile's hardware palette nibble to a gex palette bank."""
+    nibble = SHOT_PNUM if palette is None else palette & 0x0F
+    if kind in HERO_NAMES and nibble >= 0x0C:
+        return kind, nibble - 0x0C
+    return SHOT_PTYPE, nibble
 
 _FAMILIES: dict[str, dict] = {
     MONSTER_KIND: MONSTERS,
@@ -492,6 +542,15 @@ class AssetStore:
         except GexError as exc:
             raise AssetError(f"Could not decode the title logo: {exc}") from exc
 
+    def title_logo_for_frame(self, frame: int) -> Image.Image:
+        """The title wordmark rendered through its frame-shifted live palettes."""
+        try:
+            return title_logo_image_with_palettes(
+                _title_logo_palette_words(frame)
+            )
+        except GexError as exc:
+            raise AssetError(f"Could not decode the title logo: {exc}") from exc
+
     # -- multi-tile sprites ---------------------------------------------
 
     def stamp(
@@ -672,11 +731,19 @@ class AssetStore:
         # gex constants keeps every shot and dragon segment on the shared
         # cache instead of allocating one per frame.
         if masked in PROJECTILE_TILES:
-            return self._block_stamp(masked, SHOT_XSIZE, SHOT_YSIZE, SHOT_PTYPE, SHOT_PNUM)
+            # MOB palettes 12-15 are the four player-colour banks. The selected
+            # character decides the class table; the low two bits select
+            # red/blue/yellow/green. Base palettes 0-11 map directly.
+            ptype, requested = _projectile_palette_bank(kind, palette)
+            pnum = self._bank_index(ptype, SHOT_PNUM, requested)
+            return self._block_stamp(
+                masked, SHOT_XSIZE, SHOT_YSIZE, ptype, pnum,
+            )
         # Dragon head/body segments are 4x4 base-palette sprites.
         if masked in DRAGON_SEGMENT_TILES:
             return self._block_stamp(
-                masked, SEGMENT_XSIZE, SEGMENT_YSIZE, SEGMENT_PTYPE, SEGMENT_PNUM
+                masked, SEGMENT_XSIZE, SEGMENT_YSIZE, SEGMENT_PTYPE,
+                self._bank_index(SEGMENT_PTYPE, SEGMENT_PNUM, palette),
             )
         # Effects: score popups, the floating score star, the two impact
         # bursts and the transporter sparkle. Flat ROM picture tables like the
@@ -694,7 +761,14 @@ class AssetStore:
         if frame is not None:
             entity = _ENTITIES[frame.monster_type]
             default_pnum = _entity_default_pnum(frame.monster_type, entity, tier)
-            pal_num = self._bank_index(entity.ptype, default_pnum, palette)
+            requested = palette
+            if (
+                frame.monster_type in HERO_NAMES
+                and palette is not None
+                and (palette & 0x0F) >= 0x0C
+            ):
+                requested = (palette & 0x0F) - 0x0C
+            pal_num = self._bank_index(entity.ptype, default_pnum, requested)
             tiles = tuple(range(masked, masked + entity.xsize * entity.ysize))
             return self.stamp(tiles, entity.xsize, entity.ptype, pal_num)
         # Placed maze objects: treasure, keys, potions, food, power-ups, etc.

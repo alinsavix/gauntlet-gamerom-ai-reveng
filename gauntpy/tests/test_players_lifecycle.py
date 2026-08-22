@@ -28,7 +28,8 @@ checked against ``row76.bin`` rather than the prose docs:
 from __future__ import annotations
 
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
-from gauntpy.coords import decode_hpos, decode_vpos, slot_to_pixels
+from gauntpy.coords import hpos_x, native_v, vpos_y
+from gauntpy.coords import decode_hpos, decode_vpos_at_y, slot_to_pixels
 from gauntpy.state import GameState, Player
 from gauntpy.subsystems import players as gp
 from gauntpy.subsystems.sound import main_update_sound
@@ -72,13 +73,15 @@ def _make_food_slot(state: GameState, destructable: bool = True,
                     poisoned: bool = False) -> int:
     """Insert a food MOB into slot 32 and return its slot number.
 
-    The *picture* is what tells wholesome food from poisoned (ROM 0x51B86):
-    0x277B is the good one, anything else is the bad one.
+    Only PFOD001 is poisoned; ordinary FOOD000 and FOOD001-3 are good.
     """
     slot = 32
     obj_type = (int(MazeObjIds.FOOD_DESTRUCTABLE) if destructable
                 else int(MazeObjIds.FOOD_INVULN))
-    picture = 0 if poisoned else gp._WHOLESOME_FOOD_PICTURE
+    picture = (
+        gp._POISONED_FOOD_PICTURE if poisoned
+        else gp._WHOLESOME_FOOD_PICTURE
+    )
     state.mobs.create(slot, tile=picture, hpos=0, vpos=0, obj_type=obj_type)
     return slot
 
@@ -319,13 +322,25 @@ class TestPlayerTileInteract:
         gp.player_tile_interact(state, slot, 0)
         assert not state.mobs.is_occupied(slot)
 
-    def test_invuln_food_stays_in_table(self):
-        """FOOD_INVULN must NOT be removed -- it can be eaten repeatedly."""
+    def test_invuln_food_is_removed_after_pickup(self):
+        """Non-destructible food resists shots, but collect() still deletes it."""
         state = _active_state()
         _make_player_active(state, 0, health=100)
         slot = _make_food_slot(state, destructable=False)
         gp.player_tile_interact(state, slot, 0)
-        assert state.mobs.is_occupied(slot)
+        assert not state.mobs.is_occupied(slot)
+
+    def test_adaptive_food_uses_the_low_health_word_modulo_twenty(self):
+        state = _active_state()
+        p = _make_player_active(state, 0, health=7)
+        slot = _make_food_slot(state)
+        state.mobs.picture[slot] = gp._RANDOM_FOOD_PICTURE
+
+        gp.player_tile_interact(state, slot, 0)
+
+        assert p.health == 207  # table[7] = 200
+        assert state.score_display_timer[0] == 60
+        assert state.mobs.picture[0x11] == 0x25FE
 
     def test_key_increments_keysnum(self):
         """Key tile increments player.keysnum (§4.6)."""
@@ -543,11 +558,11 @@ class TestForcefieldDamageTable:
     def _stand_on_forcefield(state: GameState, p) -> None:  # noqa: ANN001
         """Place the player on a beam between two forcefield hubs."""
         from gauntpy.constants import MazeObjIds
-        from gauntpy.coords import encode_hpos, encode_vpos, pack_slot
+        from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
         slot = pack_slot(5, 5)
         p.mob_slot = 30
         state.mobs.hpos[p.mob_slot] = encode_hpos(5 * 16)
-        state.mobs.vpos[p.mob_slot] = encode_vpos(5 * 16)
+        state.mobs.vpos[p.mob_slot] = encode_vpos_at_y(5 * 16)
         for hub in (pack_slot(5, 3), pack_slot(5, 7)):
             state.mobs.create(
                 hub, tile=1, hpos=0, vpos=0,
@@ -617,14 +632,14 @@ class TestForcefieldDamageTable:
         assert state.forcefield_hurt_timer[0] == 0x10
 
     def test_unpaired_hub_does_not_hurt(self):
-        from gauntpy.coords import encode_hpos, encode_vpos, pack_slot
+        from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 
         state = _active_state()
         state.forcefield_color = 1
         p = _make_player_active(state, 0, health=1000)
         p.mob_slot = 30
         state.mobs.hpos[p.mob_slot] = encode_hpos(5 * 16)
-        state.mobs.vpos[p.mob_slot] = encode_vpos(5 * 16)
+        state.mobs.vpos[p.mob_slot] = encode_vpos_at_y(5 * 16)
         state.mobs.create(
             pack_slot(5, 5), tile=1, hpos=0, vpos=0,
             obj_type=MazeObjIds.FORCEFIELDHUB,
@@ -1402,8 +1417,8 @@ class TestRedrawBitsOnEveryValueChange:
         state = _active_state()
         state.forcefield_color = 1
         p = _make_player_active(state, 0, health=1000)
-        state.mobs.hpos[p.mob_slot] = (5 * 16) << 6
-        state.mobs.vpos[p.mob_slot] = (5 * 16) << 6
+        state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
+        state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         for hub in (pack_slot(5, 3), pack_slot(5, 7)):
             state.mobs.create(hub, tile=1, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.FORCEFIELDHUB))
@@ -1572,8 +1587,8 @@ class TestMazeConvertWallsToExits:
         slot = (7 << 5) | 9
         self._wall(state, slot, int(MazeObjIds.WALL_SECRET))
         gp.maze_convert_walls_to_exits(state)
-        assert (state.mobs.hpos[slot] >> 6) == 9 * 16
-        assert (state.mobs.vpos[slot] >> 6) == 7 * 16
+        assert hpos_x(state.mobs.hpos[slot]) == 9 * 16
+        assert vpos_y(state.mobs.vpos[slot]) == 7 * 16
 
     def test_escape_timeout_fires_and_plays_sound_0x27(self):
         """0x4AD06-0x4AD3C: convert, announce, reset, clear the level flags."""
@@ -1651,8 +1666,8 @@ class TestPlayerTport:
     def _world(self, pads=((5, 5), (5, 9))) -> tuple[GameState, int]:
         state = _active_state()
         p = _make_player_active(state, 0, health=500, mob_slot=30)
-        state.mobs.hpos[30] = (5 * 16 + 8) << 6
-        state.mobs.vpos[30] = (5 * 16 + 8) << 6
+        state.mobs.hpos[30] = (5 * 16 + 8) << 7
+        state.mobs.vpos[30] = native_v(5 * 16 + 8) << 7
         for row, col in pads:
             state.mobs.create(_pack(row, col), tile=0, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.TRANSPORTER))
@@ -1726,6 +1741,12 @@ class TestPlayerTport:
         state.players[0].keysnum = 1
         assert gp.tport_check_dest(state, slot, 0) == 0
 
+    def test_transporter_visibility_wraps_across_the_maze_seam(self):
+        state = GameState(scroll_x=480, scroll_y=4 * 16)
+
+        assert gp._tile_on_screen_test(state, _pack(4, 2))
+        assert not gp._tile_on_screen_test(state, _pack(4, 20))
+
     def test_another_players_sprite_blocks_a_landing_cell(self):
         state, _ = self._world()
         slot = _pack(4, 10)
@@ -1737,8 +1758,8 @@ class TestPlayerTport:
     def test_clearance_test_rejects_a_cell_another_player_stands_on(self):
         state, _ = self._world()
         other = _make_player_active(state, 1, health=500, mob_slot=31)
-        state.mobs.hpos[31] = (10 * 16 + 8) << 6
-        state.mobs.vpos[31] = (4 * 16 + 8) << 6
+        state.mobs.hpos[31] = (10 * 16 + 8) << 7
+        state.mobs.vpos[31] = native_v(4 * 16 + 8) << 7
         assert not gp.nearby_mob_clearance_test(state, _pack(4, 10), 0)
         assert gp.nearby_mob_clearance_test(state, _pack(4, 10), 1)
 
@@ -1809,14 +1830,18 @@ class TestShotSpawnGeometry:
     def _shooter(self, direction: int, character: int = Character.WARRIOR):
         state = _active_state()
         p = _make_player_active(state, 0, character=character, mob_slot=30)
-        state.mobs.hpos[30] = (100) << 6
-        state.mobs.vpos[30] = (200) << 6
+        state.mobs.hpos[30] = (100) << 7
+        state.mobs.vpos[30] = native_v(200) << 7
         p.direction = direction
         return state, p
 
     def test_tables_match_the_rom_image(self):
-        assert gp._SHOT_SPAWN_DX == [4, 10, 12, 6, 4, -1, -4, -2]
-        assert gp._SHOT_SPAWN_DY == [-14, -6, -3, 1, 2, 5, -3, -7]
+        assert gp._SHOT_SPAWN_DH == [
+            0x0200, 0x0500, 0x0600, 0x0300, 0x0200, -0x0080, -0x0200, -0x0100,
+        ]
+        assert gp._SHOT_SPAWN_DV == [
+            0x0700, 0x0300, 0x0180, -0x0080, -0x0100, -0x0280, 0x0180, 0x0380,
+        ]
         assert gp._PORT_DIR_TO_ROM_DIR == [2, 3, 4, 5, 6, 7, 0, 1]
         assert gp._PLAYER_SHOT_PICTURE[:8] == [
             0x1C9F, 0x1CA7, 0x1CAF, 0x1CB7, 0x1CBF, 0x1CC7, 0x1CCF, 0x1C97,
@@ -1835,27 +1860,27 @@ class TestShotSpawnGeometry:
     def test_spawn_offset_is_applied(self):
         state, _ = self._shooter(direction=0)          # right -> ROM dir 2
         gp.player_create_shot(state, 0)
-        assert (state.mobs.hpos[1] >> 6) == 100 + 12
-        assert (state.mobs.vpos[1] >> 6) == 200 - 3
+        assert hpos_x(state.mobs.hpos[1]) == 100 + 12
+        assert vpos_y(state.mobs.vpos[1]) == 200 - 3
 
     def test_upward_shot_spawns_above_the_player(self):
         state, _ = self._shooter(direction=6)          # up -> ROM dir 0
         gp.player_create_shot(state, 0)
-        assert (state.mobs.hpos[1] >> 6) == 100 + 4
-        assert (state.mobs.vpos[1] >> 6) == 200 - 14
+        assert hpos_x(state.mobs.hpos[1]) == 100 + 4
+        assert vpos_y(state.mobs.vpos[1]) == 200 - 14
 
     def test_palette_identifies_the_owning_player(self):
         state = _active_state()
         p = _make_player_active(state, 2, mob_slot=32)
-        state.mobs.hpos[32] = 100 << 6
-        state.mobs.vpos[32] = 200 << 6
+        state.mobs.hpos[32] = 100 << 7
+        state.mobs.vpos[32] = native_v(200) << 7
         gp.player_create_shot(state, 2)
         assert (state.mobs.hpos[3] & 0x0F) == gp._SHOT_PALETTE_BASE + 2
 
     def test_shot_is_two_tiles_square(self):
         state, _ = self._shooter(direction=0)
         gp.player_create_shot(state, 0)
-        assert (state.mobs.vpos[1] & 0x3F) == 9      # width 2, height 2
+        assert (state.mobs.vpos[1] & 0x7F) == 9      # width 2, height 2
 
     def test_channel_stays_busy_until_the_shot_clears(self):
         state, _ = self._shooter(direction=0)
@@ -1936,11 +1961,26 @@ class TestDeathAnimationSeed:
         assert state.death_touch_timer[0] == 0
         assert state.secret_tricks_flags[0] == 0xFF
         x, _flags, palette = decode_hpos(state.mobs.hpos[p.mob_slot])
-        y, width, height = decode_vpos(state.mobs.vpos[p.mob_slot])
+        y, width, height = decode_vpos_at_y(state.mobs.vpos[p.mob_slot])
         cell_x, cell_y = slot_to_pixels(p.mob_slot)
         assert (x, y) == (cell_x - 4, cell_y)
         assert palette == 0x0C
         assert (width, height) == (3, 3)
+
+    def test_player_start_records_the_victim_index_for_shot_damage(self):
+        state = _active_state()
+        state.maze = object()
+        slots = [60, 61, 62, 63]
+        for slot in slots:
+            state.mobs.create(
+                slot, tile=0, hpos=0, vpos=0,
+                obj_type=int(MazeObjIds.PLAYERSTART),
+            )
+
+        for player_index in range(4):
+            assert gp.player_start_inner(state, player_index) == -1
+            slot = state.players[player_index].mob_slot
+            assert state.mobs.state(slot) == player_index
 
 
 # =============================================================================
@@ -1962,8 +2002,8 @@ class TestForcefieldUsesTheSegmentTable:
         state = _active_state()
         state.forcefield_color = 1
         p = _make_player_active(state, 0, health=1000)
-        state.mobs.hpos[p.mob_slot] = (5 * 16) << 6
-        state.mobs.vpos[p.mob_slot] = (5 * 16) << 6
+        state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
+        state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         for hub in (pack_slot(5, 3), pack_slot(5, 7)):
             state.mobs.create(hub, tile=1, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.FORCEFIELDHUB))
@@ -1982,8 +2022,8 @@ class TestForcefieldUsesTheSegmentTable:
         state = _active_state()
         state.forcefield_color = 1
         p = _make_player_active(state, 0, health=1000)
-        state.mobs.hpos[p.mob_slot] = (5 * 16) << 6
-        state.mobs.vpos[p.mob_slot] = (5 * 16) << 6
+        state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
+        state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         # horizontal, length 4, hub at (5,3) -- see doc/04 §7.3.
         state.forcefield_segments = [0x8000 | (3 << 10) | pack_slot(5, 3)]
         state.forcefield_segments_ready = True
@@ -1999,8 +2039,8 @@ class TestForcefieldUsesTheSegmentTable:
         state = _active_state()
         state.forcefield_color = 1
         p = _make_player_active(state, 0, health=1000)
-        state.mobs.hpos[p.mob_slot] = (1 * 16) << 6
-        state.mobs.vpos[p.mob_slot] = (5 * 16) << 6
+        state.mobs.hpos[p.mob_slot] = (1 * 16) << 7
+        state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         # horizontal + wrap, length 4, hub at (5,30): covers 31, 0, 1.
         state.forcefield_segments = [
             0x8000 | 0x4000 | (3 << 10) | pack_slot(5, 30)
@@ -2244,24 +2284,24 @@ class TestDemoDrivesMovementAndFire:
         p.status = int(PlayerStatus.ALIVE_HERE)
         p.health = 500
         p.mob_slot = 40
-        state.mobs.hpos[40] = (8 * 16 + 8) << 6
-        state.mobs.vpos[40] = (8 * 16 + 8) << 6
+        state.mobs.hpos[40] = (8 * 16 + 8) << 7
+        state.mobs.vpos[40] = native_v(8 * 16 + 8) << 7
         return p
 
     def test_recorded_direction_moves_the_hero(self):
         # 0xE3: bit 4 (RIGHT) clear -> right held, buttons released.
         state = _demo_state([[], [40, 0xE3], [], []])
         p = self._elf(state)
-        x0 = state.mobs.hpos[40] >> 6
+        x0 = hpos_x(state.mobs.hpos[40])
         gp.main_move_players(state)
-        assert (state.mobs.hpos[40] >> 6) > x0
+        assert hpos_x(state.mobs.hpos[40]) > x0
 
     def test_idle_record_moves_nothing(self):
         state = _demo_state([[], [40, 0xF3], [], []])
         self._elf(state)
-        x0 = state.mobs.hpos[40] >> 6
+        x0 = hpos_x(state.mobs.hpos[40])
         gp.main_move_players(state)
-        assert (state.mobs.hpos[40] >> 6) == x0
+        assert hpos_x(state.mobs.hpos[40]) == x0
 
     def test_recorded_fire_plays_the_throw_before_creating_a_shot(self):
         # 0xF1: bit 1 (FIRE) clear -> fire held.
@@ -2278,9 +2318,9 @@ class TestDemoDrivesMovementAndFire:
         state = _demo_state([[], [40, 0xF3], [], []])
         self._elf(state)
         state.player_input_raw[1] = 0xFFFF & ~0x10   # RIGHT held on the cabinet
-        x0 = state.mobs.hpos[40] >> 6
+        x0 = hpos_x(state.mobs.hpos[40])
         gp.main_move_players(state)
-        assert (state.mobs.hpos[40] >> 6) == x0
+        assert hpos_x(state.mobs.hpos[40]) == x0
 
 
 class TestDemoJoinRecords:
@@ -2452,6 +2492,8 @@ class TestTreasureAttribution:
         slot = self._treasure(state, 50, MazeObjIds.TREASURE)
         gp.player_tile_interact(state, slot, 2)
         assert state.player_treascount == [0, 0, 1, 0]
+        assert state.score_display_timer[0] == 0x3C
+        assert state.mobs.picture[0x11] == 0x1DB4
 
     def test_treasure_bag_credits_the_collector(self):
         state = _active_state()
@@ -2518,9 +2560,11 @@ class TestTreasureAttribution:
         gp.player_tile_interact(
             state, self._treasure(state, 80, MazeObjIds.TREASURE), 0)
         assert p.score == 100
+        state.special_bonus_score = 200
         gp.player_tile_interact(
             state, self._treasure(state, 81, MazeObjIds.TREASURE_BAG), 0)
         assert p.score == 300
+        assert state.score_display_timer[0] == 60
         # A locked chest pays nothing at all from the walk path.
         p.keysnum = 1
         assert gp.player_tile_interact(
@@ -2598,8 +2642,8 @@ class TestPickupDialogs:
         state = _active_state()
         state.forcefield_color = 1
         p = _make_player_active(state, 0, health=1000)
-        state.mobs.hpos[p.mob_slot] = (5 * 16) << 6
-        state.mobs.vpos[p.mob_slot] = (5 * 16) << 6
+        state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
+        state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         for hub in (pack_slot(5, 3), pack_slot(5, 7)):
             state.mobs.create(hub, tile=1, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.FORCEFIELDHUB))
@@ -2889,8 +2933,8 @@ class TestTransportTransition:
     def _world(self):
         state = _active_state()
         p = _make_player_active(state, 0, health=500, mob_slot=30)
-        state.mobs.hpos[30] = (5 * 16 + 8) << 6
-        state.mobs.vpos[30] = (5 * 16 + 8) << 6
+        state.mobs.hpos[30] = (5 * 16 + 8) << 7
+        state.mobs.vpos[30] = native_v(5 * 16 + 8) << 7
         state.mobs.picture[30] = self._HERO_PICTURE
         for row, col in ((5, 5), (5, 9)):
             state.mobs.create(_pack(row, col), tile=0, hpos=0, vpos=0,
@@ -2913,8 +2957,8 @@ class TestTransportTransition:
             trace.append((
                 state.player_tport_phase[0],
                 state.mobs.picture[30],
-                state.mobs.hpos[30] >> 6,
-                state.mobs.vpos[30] >> 6,
+                hpos_x(state.mobs.hpos[30]),
+                vpos_y(state.mobs.vpos[30]),
                 state.mobs.picture[0x19],
             ))
             if state.player_tport_phase[0] < 0:
@@ -2952,7 +2996,7 @@ class TestTransportTransition:
         trace = self._run(state)
         assert trace[-1][0] < 0, "phase returns to its idle sentinel"
         assert state.mobs.picture[0x19] == 0, "the animation MOB is released"
-        assert (state.mobs.hpos[30] >> 6, state.mobs.vpos[30] >> 6) == (
+        assert hpos_x(state.mobs.hpos[30]), vpos_y(state.mobs.vpos[30]) == (
             10 * 16 - 4, 4 * 16,
         )
 
@@ -2998,7 +3042,7 @@ class TestTransportTransition:
         assert gp.player_tport(state, 0, _pack(5, 9)) == -2
         trace = self._run(state)
         assert trace[-1][0] < 0
-        assert (state.mobs.hpos[30] >> 6, state.mobs.vpos[30] >> 6) == (
+        assert hpos_x(state.mobs.hpos[30]), vpos_y(state.mobs.vpos[30]) == (
             6 * 16 - 4, 4 * 16,
         )
 
@@ -3014,7 +3058,7 @@ class TestTransportTransition:
                 break
         assert state.player_tport_phase[0] < 0
         assert state.mobs.picture[30] == self._HERO_PICTURE
-        assert (state.mobs.hpos[30] >> 6, state.mobs.vpos[30] >> 6) == (
+        assert hpos_x(state.mobs.hpos[30]), vpos_y(state.mobs.vpos[30]) == (
             10 * 16 - 4, 4 * 16,
         )
 
@@ -3027,8 +3071,8 @@ class TestCornerSqueezeUsesTheSameTransition:
         state = _active_state()
         p = _make_player_active(state, 0, health=500, mob_slot=30)
         p.powers = int(PlayerPower.TRANSPORT)
-        state.mobs.hpos[30] = (5 * 16 + 8) << 6
-        state.mobs.vpos[30] = (5 * 16 + 8) << 6
+        state.mobs.hpos[30] = (5 * 16 + 8) << 7
+        state.mobs.vpos[30] = native_v(5 * 16 + 8) << 7
         state.mobs.picture[30] = 0x1E0D
         state.movement_type = 1
         return state, p
@@ -3058,8 +3102,8 @@ class TestCornerSqueezeUsesTheSameTransition:
             if state.player_tport_phase[0] < 0:
                 break
         assert state.player_tport_phase[0] < 0
-        assert (state.mobs.hpos[30] >> 6) == (target & 0x1F) * 16 - 4
-        assert (state.mobs.vpos[30] >> 6) == (target >> 5) * 16
+        assert hpos_x(state.mobs.hpos[30]) == (target & 0x1F) * 16 - 4
+        assert vpos_y(state.mobs.vpos[30]) == (target >> 5) * 16
 
 
 # =============================================================================
@@ -3411,8 +3455,8 @@ class TestTransporterObjectiveSites:
     def _world(self, trick_id: int):
         state = _trick_state(trick_id)
         _make_player_active(state, 0, mob_slot=30)
-        state.mobs.hpos[30] = (5 * 16 + 8) << 6
-        state.mobs.vpos[30] = (5 * 16 + 8) << 6
+        state.mobs.hpos[30] = (5 * 16 + 8) << 7
+        state.mobs.vpos[30] = native_v(5 * 16 + 8) << 7
         for row, col in ((5, 5), (5, 9)):
             state.mobs.create(_pack(row, col), tile=0, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.TRANSPORTER))
@@ -3481,8 +3525,8 @@ class TestTransporterArrivalInteracts:
     def _world(self):
         state = _active_state()
         _make_player_active(state, 0, mob_slot=30)
-        state.mobs.hpos[30] = (5 * 16 + 8) << 6
-        state.mobs.vpos[30] = (5 * 16 + 8) << 6
+        state.mobs.hpos[30] = (5 * 16 + 8) << 7
+        state.mobs.vpos[30] = native_v(5 * 16 + 8) << 7
         for row, col in ((5, 5), (5, 9)):
             state.mobs.create(_pack(row, col), tile=0, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.TRANSPORTER))
@@ -3541,7 +3585,7 @@ class TestTransporterArrivalInteracts:
                           obj_type=int(MazeObjIds.KEY))
         assert gp.player_tport(state, 0, source) == -2
         assert state.player_tport_phase[0] == 0
-        assert (state.mobs.hpos[30] >> 6) == 5 * 16 + 8, "no immediate move"
+        assert hpos_x(state.mobs.hpos[30]) == 5 * 16 + 8, "no immediate move"
 
 
 # =============================================================================
@@ -3602,8 +3646,8 @@ class TestStunDelayGate:
 
         state, p = self._moving_state(stundelay=5)
         state.forcefield_color = 1
-        state.mobs.hpos[p.mob_slot] = (5 * 16) << 6
-        state.mobs.vpos[p.mob_slot] = (5 * 16) << 6
+        state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
+        state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         state.forcefield_segments = [0x8000 | (3 << 10) | pack_slot(5, 3)]
         state.forcefield_segments_ready = True
 
@@ -3625,15 +3669,15 @@ class TestForcefieldIsChargedAfterTheMove:
         state = _active_state()
         p = _make_player_active(state, 0, health=1000)
         # The hero starts one cell to the left of the beam.
-        state.mobs.hpos[p.mob_slot] = (4 * 16) << 6
-        state.mobs.vpos[p.mob_slot] = (5 * 16) << 6
+        state.mobs.hpos[p.mob_slot] = (4 * 16) << 7
+        state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         state.forcefield_color = 1
         state.forcefield_segments = [0x8000 | (3 << 10) | pack_slot(5, 3)]
         state.forcefield_segments_ready = True
         state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
 
         def _step(st, index, delta, flags):
-            st.mobs.hpos[st.players[index].mob_slot] = (5 * 16) << 6
+            st.mobs.hpos[st.players[index].mob_slot] = (5 * 16) << 7
 
         monkeypatch.setattr(gp, "player_try_move", _step)
 
@@ -4059,8 +4103,8 @@ class TestHeroPictures:
         )
         player.direction = direction
         state.mobs.picture[slot] = TestHeroPictures._PLAYERSTART_PICTURE
-        state.mobs.hpos[slot] = (((slot & 0x1F) * 16) + 8) << 6
-        state.mobs.vpos[slot] = (((slot >> 5) * 16) + 8) << 6
+        state.mobs.hpos[slot] = (((slot & 0x1F) * 16) + 8) << 7
+        state.mobs.vpos[slot] = native_v(((slot >> 5) * 16) + 8) << 7
         return player
 
     def test_literal_animation_tables_match_the_rom_dimensions_and_sentinels(self):
@@ -4201,16 +4245,16 @@ class TestPostLoopIsNormalPlayOnly:
         p.status = int(PlayerStatus.ALIVE_HERE)
         p.health = 500
         p.mob_slot = 40
-        state.mobs.hpos[40] = (8 * 16 + 8) << 6
-        state.mobs.vpos[40] = (8 * 16 + 8) << 6
+        state.mobs.hpos[40] = (8 * 16 + 8) << 7
+        state.mobs.vpos[40] = native_v(8 * 16 + 8) << 7
         return p
 
     def _normal_hero(self, state: GameState) -> Player:
         from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
 
         p = _make_player_active(state, 1, health=500, mob_slot=40)
-        state.mobs.hpos[40] = (8 * 16 + 8) << 6
-        state.mobs.vpos[40] = (8 * 16 + 8) << 6
+        state.mobs.hpos[40] = (8 * 16 + 8) << 7
+        state.mobs.vpos[40] = native_v(8 * 16 + 8) << 7
         state.player_input_raw[1] = JOY_IDLE & ~JOY_RIGHT
         return p
 
@@ -4219,9 +4263,9 @@ class TestPostLoopIsNormalPlayOnly:
     def test_the_demo_hero_still_moves(self):
         state = _demo_state([[], [40, self._RIGHT_HELD], [], []])
         self._demo_hero(state)
-        x0 = state.mobs.hpos[40] >> 6
+        x0 = hpos_x(state.mobs.hpos[40])
         gp.main_move_players(state)
-        assert (state.mobs.hpos[40] >> 6) > x0, (
+        assert hpos_x(state.mobs.hpos[40]) > x0, (
             "the demo arm at 0x4A8F2 rejoins the common path at 0x4A908"
         )
 
@@ -4229,7 +4273,11 @@ class TestPostLoopIsNormalPlayOnly:
         state = _demo_state([[], [40, 0xF3], [], []])
         p = self._demo_hero(state)
         # The cell the hero is standing in, which the tile pass will visit.
-        state.mobs.create(8 * 32 + 8, tile=gp._WHOLESOME_FOOD_PICTURE,
+        food_slot = gp._pixel_to_slot(
+            hpos_x(state.mobs.hpos[p.mob_slot]),
+            vpos_y(state.mobs.vpos[p.mob_slot]),
+        )
+        state.mobs.create(food_slot, tile=gp._WHOLESOME_FOOD_PICTURE,
                           hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.FOOD_DESTRUCTABLE))
         gp.main_move_players(state)

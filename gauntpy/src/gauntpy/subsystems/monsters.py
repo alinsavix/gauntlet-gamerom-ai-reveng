@@ -56,8 +56,13 @@ from ..constants import (
 )
 from ..coords import (
     POS_FIELD_MASK,
+    POS_LOW_MASK,
+    POS_SHIFT,
     encode_hpos,
-    encode_vpos,
+    encode_vpos_at_y,
+    hpos_x,
+    native_v,
+    vpos_y,
 )
 from ..state import GameState
 from .exits import TRICK_NOUSEINVUL, secret_trick_progress, secret_trick_set
@@ -75,12 +80,10 @@ from .sound import sound_play as _sound_play
 _HPOS_FLAG_MOVING = 0x20
 _HPOS_FLAG_ATTACK = 0x10
 
-# Base per-frame movement in pixels; families start at ROM speed 0x80 which is
-# two world pixels once the <<6 fixed-point is removed.  A "fast" family runs at
-# 0x100 (four pixels) but only on frames where bit 1 of the frame word is set,
-# so it averages ~1.5x -- §3.3.
-_MONSTER_SPEED_BASE = 2
-_MONSTER_SPEED_FAST = 4
+# Base per-step movement in pixels; the ROM's 0x80/0x100 words are one and two
+# native position pixels.
+_MONSTER_SPEED_BASE = 1
+_MONSTER_SPEED_FAST = 2
 
 # Slow-motion looping-sound cues (§3.3, refs/soundcmds.csv).  The ROM plays
 # 0x38 as the timer passes 0x1E and 0x39 as it reaches 0 (0x40EC0/0x40ED2);
@@ -230,14 +233,11 @@ _TRICK_TASK_WHILE_IT = 0x5C     # exits._CHALLENGE_WHILE_IT; passes on any bump
 # main_move_monsters derives two origins from the camera:
 #     monster_cull_h_origin = (pf_hscroll - 0x17) << 7
 #     monster_cull_v_origin = (0xF9 - pf_vscroll_lo) << 7
-# The <<7 is <<1 (the ROM's MOB words count half-pixels) plus the <<6 of the
-# position field.  gauntpy's MOB words count whole pixels, so the shift here is
-# <<6 and the ROM's window widths halve with it: 0x7F80 -> 255 px across and
-# 0x8380 -> 263 px down, a screen-sized box centred on the camera midpoint.
+# and both are stored, and compared against, as native position words.
 _CULL_H_BIAS = 0x17
 _CULL_V_BIAS = 0xF9
-_CULL_WIDTH = 0x7F80 >> 1       # 255 px, in gauntpy hpos units
-_CULL_HEIGHT = 0x8380 >> 1      # 263 px, in gauntpy vpos units
+_CULL_WIDTH = 0x7F80        # 255 px across
+_CULL_HEIGHT = 0x8380       # 263 px down: a screen-sized box on the camera
 # monster_shooter_in_view compares the *high bytes*, i.e. 2-pixel units, and
 # rejects the outer margin of that same box.
 _VIEW_H_MIN, _VIEW_H_MAX = 0x06, 0x79
@@ -369,10 +369,10 @@ _GENERATOR_TIER_PENALTY = (2, 1, 0)
 # ``mazeobj_hpos_correction_tbl`` (0x5858C) is 0x200 for every creature type,
 # and 0x493CE bakes it straight into the spawn position: the H word is
 # ``(column << 11) - 0x200``, i.e. the 24 px sprite centred in its 16 px cell.
-# Halved into gauntpy's whole-pixel words that is 4 px, exactly what
-# ``maze._placement_geometry`` subtracts for a maze-placed creature -- and the
-# clearance test below compares against the same biased origin, so the two have
-# to agree or a generator starts blocking its own candidate cells.
+# That is 4 px, exactly what ``maze.placement_geometry`` subtracts for a
+# maze-placed creature -- and the clearance test below compares against the
+# same biased origin, so the two have to agree or a generator starts blocking
+# its own candidate cells.
 _SPAWN_HPOS_CORRECTION = 4
 
 # ``monster_anim_walk_tbl`` (0x40DB2) -- ten longword pointers, one per creature
@@ -747,16 +747,16 @@ def _delta_units(target_word: int, source_word: int) -> int:
     as bytes and then sign-extended, so the delta wraps to the shorter way
     round a 512-pixel maze.
     """
-    return _signed_byte((target_word >> 7) - (source_word >> 7))
+    return _signed_byte((target_word >> 8) - (source_word >> 8))
 
 
-def _aim_direction(dx: int, dy: int, override: int = 0, threshold: int = 0) -> int:
-    """Direction to face along (``dx``, ``dy``), 0x41810-0x4192C.
+def _aim_direction(u: int, v: int, override: int = 0, threshold: int = 0) -> int:
+    """Direction to face along (``u``, ``v``), 0x41810-0x4192C.
 
-    ``dx``/``dy`` are gauntpy screen deltas (``dy`` positive = target below).
-    The ROM's vertical axis grows *upward*, so it works with ``v = -dy``, and
-    its compass is ``0=up, 1=up-right, 2=right ...`` (``player_facing_dir``);
-    gauntpy's is ``0=right, 1=down-right, ...``, i.e. ROM = gauntpy + 2.
+    ``u``/``v`` are deltas in the hardware's own axes, so ``v`` positive means
+    the target is *above*.  The ROM's compass is ``0=up, 1=up-right, 2=right
+    ...`` (``player_facing_dir``); gauntpy's is ``0=right, 1=down-right, ...``,
+    i.e. ROM = gauntpy + 2.
 
     ``override`` is the family's ``monster_level_flag_overrides`` byte, zero
     unless that ODDANGLE level flag is set.  Every non-zero value yields an odd
@@ -764,13 +764,11 @@ def _aim_direction(dx: int, dy: int, override: int = 0, threshold: int = 0) -> i
 
     * ``0xC0`` rounds the cardinal direction counter-clockwise (0x41882),
     * ``0xA0`` rounds it clockwise (0x418B8),
-    * ``0x80`` picks by |dx|/|dy| against ``threshold`` (0x418EA).
+    * ``0x80`` picks by |u|/|v| against ``threshold`` (0x418EA).
 
     With no override the picker is the cardinal/diagonal one at 0x4181A:
     diagonal unless one axis is inside ``threshold``.
     """
-    u, v = dx, -dy
-
     if override & 0x40:                     # 0xC0
         if v < u:
             rom = 1 if v >= -u else 3
@@ -827,8 +825,8 @@ def _oddangle_override(state: GameState, obj_type: int) -> int:
 
 def _update_cull_rect(state: GameState) -> None:
     """0x49052-0x49076 -- re-anchor the culling rectangle on the camera."""
-    state.cull_rect_x = ((state.scroll_x - _CULL_H_BIAS) << 6) & 0xFFFF
-    state.cull_rect_y = ((_CULL_V_BIAS - state.scroll_y) << 6) & 0xFFFF
+    state.cull_rect_x = ((state.scroll_x - _CULL_H_BIAS) << POS_SHIFT) & 0xFFFF
+    state.cull_rect_y = ((_CULL_V_BIAS - state.scroll_y) << POS_SHIFT) & 0xFFFF
 
 
 def _in_cull_rect(state: GameState, slot: int) -> bool:
@@ -844,10 +842,10 @@ def _shooter_in_view(state: GameState, slot: int) -> bool:
     Byte comparisons against the same origins, so the units are 2 pixels and
     the arithmetic wraps once per 512-pixel maze.
     """
-    du = ((state.mobs.hpos[slot] >> 7) - (state.cull_rect_x >> 7)) & 0xFF
+    du = ((state.mobs.hpos[slot] >> 8) - (state.cull_rect_x >> 8)) & 0xFF
     if du <= _VIEW_H_MIN or du >= _VIEW_H_MAX:
         return False
-    dv = ((state.mobs.vpos[slot] >> 7) - (state.cull_rect_y >> 7)) & 0xFF
+    dv = ((state.mobs.vpos[slot] >> 8) - (state.cull_rect_y >> 8)) & 0xFF
     return not (dv <= _VIEW_V_MIN or dv >= _VIEW_V_MAX)
 
 
@@ -869,8 +867,8 @@ def _player_in_cell(state: GameState, slot: int) -> int | None:
             continue
         # A 3x3 hero's stored H origin is four pixels left of its logical cell
         # (player_start_inner 0x48DDC-0x48DE0).
-        px = (state.mobs.hpos[p.mob_slot] >> 6) + 4
-        py = state.mobs.vpos[p.mob_slot] >> 6
+        px = hpos_x(state.mobs.hpos[p.mob_slot]) + 4
+        py = vpos_y(state.mobs.vpos[p.mob_slot])
         if (px >> 4) == col and (py >> 4) == row:
             return p.index
     return None
@@ -993,13 +991,13 @@ def _dispatch_chain_entry(state: GameState, slot: int, frame_word: int) -> None:
 # by design (see mob.py), so the same window is re-derived from the camera
 # midpoint instead of from ``pf_vscroll_lo`` directly.
 _WALK_HALF_SPAN = 144
-_CAM_MID_BASE = 0x17C           # midY = 0x17C - scroll_y (camera.py)
+_CAM_MID_OFFSET = 0x88          # midpoint of ROM's scroll-8 .. scroll+280 arc
 _SLIP_BAND_PIXELS = 8
 
 
 def _walk_band_head(state: GameState, offset: int) -> int:
     """The chain entry ``offset`` pixels from the camera midpoint."""
-    mid_y = _CAM_MID_BASE - state.scroll_y
+    mid_y = state.scroll_y + _CAM_MID_OFFSET
     band = (mid_y + offset) // _SLIP_BAND_PIXELS
     heads = state.mobs.slip_heads
     if band < 0:
@@ -1167,24 +1165,22 @@ def _monster_speed(state: GameState, obj_type: int, frame_word: int) -> int:
 # makes a diagonal walker slide along a wall -- one component is refused, the
 # other still moves.
 #
-# Coordinates: the ROM's position words count half-pixels and its vertical axis
-# grows *upward*, gauntpy's count whole pixels downward.  Distances therefore
-# halve (0x7C0 -> 0x3E0) and the vertical probes swap: the ROM's "down" march
-# (vpos += speed, cell slot-32) is gauntpy's step towards row 0.
+# Coordinates are the hardware's: the V axis grows *up* the screen, so probe 1
+# (towards row 0) adds to the V word and probe 2 subtracts, exactly as the ROM
+# writes them.
 
 #: 0x4126E -- two MOBs overlap when both axis separations are inside this.
-_OVERLAP = 0x7C0 >> 1
+_OVERLAP = 0x7C0
 #: 0x5E1BC etc -- software MOBs (picture bit 15) carry a shifted origin.
-_SOFTWARE_MOB_BIAS = 0x200 >> 1
+_SOFTWARE_MOB_BIAS = 0x200
 #: 0x41358/0x41366 -- the sprite-origin biases the destination cell is read
-#: with, halved into gauntpy pixels: +8 px vertically, +12 px horizontally.
-_CELL_BIAS_V = 8
-_CELL_BIAS_H = 12
-#: 0x5E112 / 0x5E1DE -- the vertical edge guards.  The ROM tests its own V word
-#: (``<= 0xF080`` near row 0, ``>= 0`` on row 31); in gauntpy pixels those are
-#: "at least 15 px down from the top" and "no further than the last row".
-_EDGE_TOP_LIMIT = 15
-_EDGE_BOTTOM_LIMIT = 496
+#: with: +0x400 vertically (8 px), +0x600 horizontally (12 px).
+_CELL_BIAS_V = 0x400
+_CELL_BIAS_H = 0x600
+#: 0x5E112 / 0x5E1DE -- the vertical edge guards, on the V word itself: a march
+#: towards row 0 stops unless the word is at or below 0xF080, and a march
+#: towards row 31 stops once the word has gone negative through the floor.
+_EDGE_TOP_LIMIT = 0xF080
 
 # Probe descriptors: (row step, column step) of the cell straight ahead, and
 # the axis the two flanking cells are taken along.
@@ -1206,10 +1202,9 @@ def _march_cell_blocks(state: GameState, cell: int, h: int, v: int) -> bool:
     stored H by 0x200 first; otherwise both axis separations have to be inside
     ``_OVERLAP`` for the cell to block.
 
-    The separations are taken *modulo the maze*: the ROM's position words span
-    exactly one maze in 16 bits, so its subtraction wraps at the seam and a
-    creature on column 31 sees column 0 as its neighbour.  gauntpy's words are
-    half that, hence the explicit 15-bit wrap here.
+    The separations are taken *modulo the maze*: the position words span
+    exactly one maze in 16 bits, so the subtraction wraps at the seam on its
+    own and a creature on column 31 sees column 0 as its neighbour.
 
     One divergence the port has to bridge: the ROM relocates a walking hero's
     record into the cell they occupy, so a probe finds them by cell.  gauntpy
@@ -1229,15 +1224,9 @@ def _march_cell_blocks(state: GameState, cell: int, h: int, v: int) -> bool:
     cell_h = state.mobs.hpos[occupant]
     if picture & 0x8000:
         cell_h = (cell_h - _SOFTWARE_MOB_BIAS) & 0xFFFF
-    if abs(_s15(cell_h - h)) >= _OVERLAP:
+    if abs(_s16(cell_h - h)) >= _OVERLAP:
         return False
-    return abs(_s15(v - state.mobs.vpos[occupant])) < _OVERLAP
-
-
-def _s15(value: int) -> int:
-    """Signed difference that wraps once per 512-pixel maze."""
-    value &= 0x7FFF
-    return value - 0x8000 if value & 0x4000 else value
+    return abs(_s16(v - state.mobs.vpos[occupant])) < _OVERLAP
 
 
 def _s16(value: int) -> int:
@@ -1256,14 +1245,13 @@ def _ray_march(state: GameState, slot: int, probe: tuple[int, int],
     """
     row, col = slot >> 5, slot & 0x1F
     d_row, d_col = probe
-    y = _s16(v) >> 6                            # signed: a probe can underflow
 
     if d_row:                                   # vertical march
         if d_row < 0:                           # 0x5E10C: towards row 0
             if row < 2:                         # cmpi.w #0x80,d2
-                return None if y >= _EDGE_TOP_LIMIT else slot
+                return None if (v & 0xFFFF) <= _EDGE_TOP_LIMIT else slot
         elif row >= 31:                         # 0x5E1D8: cmpi.w #0x7C0,d2
-            return None if y <= _EDGE_BOTTOM_LIMIT else slot
+            return None if _s16(v) >= 0 else slot
         ahead_row = row + d_row
         cells = (_cell_at(ahead_row, col),
                  _cell_at(ahead_row, col - 1),
@@ -1299,12 +1287,12 @@ def _probe_phase(state: GameState, slot: int, step: int,
 
     # --- probe 1 (0x41288): the "up the screen" component -------------------
     if d6 < 0xC00:
-        v = (v - step) & 0xFFFF
+        v = (v + step) & 0xFFFF
         blocker = _ray_march(state, slot, _PROBE_UP, h, v)
         if blocker is None:
             clear = True
         else:
-            v = (v + step) & 0xFFFF
+            v = (v - step) & 0xFFFF
             d6 = (2 * d6 - 0x400) & 0xFFFF
             if _is_player_cell(state, blocker):
                 return h, v, d6, clear, blocker
@@ -1312,12 +1300,12 @@ def _probe_phase(state: GameState, slot: int, step: int,
 
     # --- probe 2 (0x412B4): the "down the screen" component -----------------
     if d6 < 0xC00:
-        v = (v + step) & 0xFFFF
+        v = (v - step) & 0xFFFF
         blocker = _ray_march(state, slot, _PROBE_DOWN, h, v)
         if blocker is None:
             clear = True
         else:
-            v = (v - step) & 0xFFFF
+            v = (v + step) & 0xFFFF
             d6 = (2 * d6 - 0x400) & 0xFFFF
             if _is_player_cell(state, blocker):
                 return h, v, d6, clear, blocker
@@ -1367,7 +1355,7 @@ def _monster_move_engine(state: GameState, slot: int, obj_type: int, index: int,
     creature turns away from what it hit.
     """
     speed = _monster_speed(state, obj_type, frame_word)
-    h, v, d6, clear, blocker = _probe_phase(state, slot, speed << 6)
+    h, v, d6, clear, blocker = _probe_phase(state, slot, speed << POS_SHIFT)
     if blocker is not None:
         _march_hit_player(state, slot, blocker)
         return
@@ -1419,8 +1407,8 @@ def _face_after_contact(state: GameState, slot: int, victim_cell: int) -> None:
         state.players[victim].mob_slot if victim is not None else victim_cell
     )
     dx = _delta_units(state.mobs.hpos[target_slot], state.mobs.hpos[slot])
-    dy = _delta_units(state.mobs.vpos[target_slot], state.mobs.vpos[slot])
-    _set_direction(state, slot, _aim_direction(dx, dy, 0, 4))
+    dv = _delta_units(state.mobs.vpos[target_slot], state.mobs.vpos[slot])
+    _set_direction(state, slot, _aim_direction(dx, dv, 0, 4))
 
 
 def _write_direction(state: GameState, slot: int, d6: int) -> None:
@@ -1432,13 +1420,13 @@ def _destination_cell(h: int, v: int) -> int:
     """0x41358-0x41374 -- which cell a position belongs to, sprite bias and all.
 
     The ROM adds 0x400 to V and 0x600 to H before slicing out the row and
-    column, and its rows run the other way; in gauntpy pixels that is the +8
-    and +12 bias below, with the row taken from the far edge of the maze.
+    column, and its rows run the other way -- which is exactly what the stored
+    words do too, so this is the ROM's own arithmetic.
     """
-    x = (h >> 6) & 0x3FF
-    y = _s16(v) >> 6
-    col = ((x + _CELL_BIAS_H) >> 4) & 0x1F
-    row = (31 - ((496 + _CELL_BIAS_V - y) >> 4)) & 0x1F
+    x = ((h + _CELL_BIAS_H) >> POS_SHIFT) & 0x1FF
+    up = ((v + _CELL_BIAS_V) >> POS_SHIFT) & 0x1FF
+    col = (x >> 4) & 0x1F
+    row = (31 - (up >> 4)) & 0x1F
     return (row << 5) | col
 
 
@@ -1548,18 +1536,18 @@ def monster_find_and_shoot(state: GameState, slot: int, obj_type: int) -> None:
         return
     p = state.players[target]
     dx = _delta_units(state.mobs.hpos[p.mob_slot], state.mobs.hpos[slot])
-    dy = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[slot])
+    dv = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[slot])
 
     override = _oddangle_override(state, obj_type)
     thresholds = _SHOOT_AXIS_THRESHOLDS[index]
     threshold = thresholds[0] if override == 0x80 else thresholds[1]
-    direction = _aim_direction(dx, dy, override, threshold)
+    direction = _aim_direction(dx, dv, override, threshold)
     repulsive = bool(p.powers & _POWER_REPULSE)
 
     if obj_type == int(MazeObjIds.MONST_LOBBER):
-        direction = _lobber_throw(state, slot, direction, dx, dy, target)
+        direction = _lobber_throw(state, slot, direction, dx, dv, target)
     elif obj_type == int(MazeObjIds.MONST_DEMON):
-        if not _demon_shoot(state, slot, direction, dx, dy) and repulsive:
+        if not _demon_shoot(state, slot, direction, dx, dv) and repulsive:
             direction ^= 4
     elif repulsive:
         direction ^= 4
@@ -1568,7 +1556,7 @@ def monster_find_and_shoot(state: GameState, slot: int, obj_type: int) -> None:
 
 
 def _lobber_throw(state: GameState, slot: int, direction: int,
-                  dx: int, dy: int, target: int) -> int:
+                  dx: int, dv: int, target: int) -> int:
     """0x41946 -- range-gated rock throw; returns the direction to face.
 
     Inside 0x14 units (40 px) on *both* axes the lobber backs away instead of
@@ -1576,24 +1564,24 @@ def _lobber_throw(state: GameState, slot: int, direction: int,
     box, it just stands and faces.  A thrown rock is given the lead arc of
     0x419E4, not a straight direction step.
     """
-    adx, ady = abs(dx), abs(dy)
-    if adx < _LOBBER_MIN_RANGE and ady < _LOBBER_MIN_RANGE:
+    adx, adv = abs(dx), abs(dv)
+    if adx < _LOBBER_MIN_RANGE and adv < _LOBBER_MIN_RANGE:
         return direction ^ 4            # too close: turn away (0x41876)
-    if adx >= _LOBBER_MAX_RANGE or ady >= _LOBBER_MAX_RANGE:
+    if adx >= _LOBBER_MAX_RANGE or adv >= _LOBBER_MAX_RANGE:
         return direction
     if not _shooter_in_view(state, slot):
         return direction
     shot_slot = _find_free_shot_slot(state, SLOT_LOBBER_SHOTS)
     if shot_slot is None:
         return direction
-    lead = _lobber_lead(state, slot, direction, target, dx, dy)
+    lead = _lobber_lead(state, slot, direction, target, dx, dv)
     monster_create_shot(state, slot, direction, shot_slot, lead=lead)
     _sound_play(state, _SOUND_LOBBER_THROW)
     return direction
 
 
 def _demon_shoot(state: GameState, slot: int, direction: int,
-                 dx: int, dy: int) -> bool:
+                 dx: int, dv: int) -> bool:
     """0x41A2E -- fireball if in view, in range, and the muzzle cell is clear.
 
     The axis gate depends on the facing: a diagonal shot also needs the two
@@ -1608,14 +1596,14 @@ def _demon_shoot(state: GameState, slot: int, direction: int,
     if not _demon_muzzle_clear(state, slot, direction):
         return False
 
-    adx, ady = abs(dx), abs(dy)
+    adx, adv = abs(dx), abs(dv)
     if direction & 1:                                   # diagonal
-        if adx < _DEMON_MIN_RANGE or abs(adx - ady) >= _DEMON_DIAG_SKEW:
+        if adx < _DEMON_MIN_RANGE or abs(adx - adv) >= _DEMON_DIAG_SKEW:
             return False
     elif direction in (0, 4):                           # left/right
         if adx < _DEMON_MIN_RANGE:
             return False
-    elif ady < _DEMON_MIN_RANGE:                        # up/down
+    elif adv < _DEMON_MIN_RANGE:                        # up/down
         return False
 
     monster_create_shot(state, slot, direction, shot_slot)
@@ -1670,8 +1658,8 @@ def _find_target_player(state: GameState, slot: int) -> int:
         if not p.active or (p.powers & _POWER_INVIS):
             continue
         dx = _delta_units(state.mobs.hpos[p.mob_slot], state.mobs.hpos[slot])
-        dy = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[slot])
-        dist = abs(dx) + abs(dy)
+        dv = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[slot])
+        dist = abs(dx) + abs(dv)
         if best_dist is None or dist <= best_dist:
             best_dist = dist
             best = p.index
@@ -1710,9 +1698,9 @@ def _shot_gate_word(state: GameState, slot: int) -> int:
 # Per-direction muzzle offsets, raw ROM position words indexed by the ROM
 # compass.  ``monster_shot_spawn_h_offset`` (0x57B98) / ``..._v_offset``
 # (0x57BA8) are the demon pair, ``lobber_shot_spawn_h/v_offset`` (0x57BB8/
-# 0x57BC8) the lobber pair.  Every entry is a multiple of 0x100 -- a whole ROM
-# pixel is 0x80 -- so ``>> 7`` converts one to pixels exactly, and none of them
-# can disturb the low field of the word they are added to.
+# 0x57BC8) the lobber pair.  Every entry is a multiple of 0x100 -- a whole
+# pixel is 0x80 -- so none of them can disturb the low field of the word they
+# are added to, and they are added exactly as the ROM writes them.
 _MONSTER_SHOT_SPAWN_H = (0x200, 0x500, 0x600, 0x200, 0x200, 0x000, -0x200, -0x100)
 _MONSTER_SHOT_SPAWN_V = (0x500, 0x400, 0x000, 0x000, -0x200, -0x100, 0x000, 0x400)
 _LOBBER_SHOT_SPAWN_H = (0x500, 0x300, 0x200, 0x000, 0x000, 0x000, 0x200, 0x300)
@@ -1742,8 +1730,13 @@ _SHOT_COOLDOWN = 0x3C
 #: separation.  ``player_speed_normal`` (0x580C8) and the per-direction
 #: components at 0x580D8/0x580EA build the first term.
 _LEAD_PLAYER_SPEED = (0x60, 0x70, 0x60, 0x80, 0x80, 0x80, 0x80, 0xA0)
-_LEAD_COS = (0, 2, 2, 2, 0, -2, -2, -2)     # 0x580D8, ROM compass
-_LEAD_SIN = (2, 2, 0, -2, -2, -2, 0, 2)     # 0x580EA, ROM compass (V grows up)
+_LEAD_COS = (0, 2, 2, 2, 0, -2, -2, -2, 0)  # 0x580D8, index 8 = still
+_LEAD_SIN = (2, 2, 0, -2, -2, -2, 0, 2, 0)  # 0x580EA, index 8 = still
+# ``joystick_nibble_to_direction`` (0x580FC), indexed by the achieved-movement
+# word at 0x9048F0. A neutral 0xF nibble selects 8, the zero-padded table row.
+_WALK_NIBBLE_TO_DIRECTION = (
+    8, 8, 8, 8, 8, 7, 1, 0, 8, 5, 3, 4, 8, 6, 2, 8,
+)
 _LEAD_DELTA_SCALE = 4                        # 0x419BC/0x419C6
 _LEAD_SPAWN_SCALE = 4                        # 0x419F4/0x41A0C
 
@@ -1762,9 +1755,10 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
     The spawn position is rebuilt in whole ROM words rather than decoded and
     re-encoded, because the ROM's ``+0xD``/``+1``/``+9`` tails land in the low
     field, not the position field: they are the projectile's palette and its
-    packed sprite size, not a pixel offset.
+    packed sprite size, not a pixel offset.  The muzzle offsets are position
+    words in the hardware's own axes, so they simply add.
     """
-    from .shots import lobber_accumulator_seed   # WP-7 owns the arc accumulator
+    from .shots import lobber_accumulator_seed, shot_velocity
 
     channel = shot_slot - 1                    # shooter id, ROM's shot slot - 1
     rom_dir = (direction + 2) & 0x07
@@ -1786,23 +1780,22 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
     base_h = state.mobs.hpos[slot] & POS_FIELD_MASK
     base_v = state.mobs.vpos[slot] & POS_FIELD_MASK
     if lead is None:
-        off_h = _MONSTER_SHOT_SPAWN_H[rom_dir] >> 7
-        off_v = _MONSTER_SHOT_SPAWN_V[rom_dir] >> 7
+        off_h = _MONSTER_SHOT_SPAWN_H[rom_dir]
+        off_v = _MONSTER_SHOT_SPAWN_V[rom_dir]
         hpos_low = _DEMON_SHOT_HPOS_LOW
     else:
-        off_h = _LOBBER_SHOT_SPAWN_H[rom_dir] >> 7
-        off_v = _LOBBER_SHOT_SPAWN_V[rom_dir] >> 7
+        off_h = _LOBBER_SHOT_SPAWN_H[rom_dir]
+        off_v = _LOBBER_SHOT_SPAWN_V[rom_dir]
         hpos_low = _LOBBER_SHOT_HPOS_LOW
-    # The ROM's V offsets are measured up the screen; gauntpy's grows down.
-    state.mobs.hpos[shot_slot] = (base_h + (off_h << 6) + hpos_low) & 0xFFFF
-    state.mobs.vpos[shot_slot] = (base_v - (off_v << 6) + _SHOT_VPOS_LOW) & 0xFFFF
+    state.mobs.hpos[shot_slot] = (base_h + off_h + hpos_low) & 0xFFFF
+    state.mobs.vpos[shot_slot] = (base_v + off_v + _SHOT_VPOS_LOW) & 0xFFFF
     state.mobs.picture[shot_slot] = _spawn_shot_picture(state, channel)
     _depth_place_shot(state, shot_slot)
 
     if lead is None:
-        step_x, step_y = _DIR_DELTAS[direction]
-        state.shot_dx[shot_slot] = step_x * _MONSTER_SPEED_BASE
-        state.shot_dy[shot_slot] = step_y * _MONSTER_SPEED_BASE
+        vec_h, vec_v = shot_velocity(state, channel, rom_dir)
+        state.shot_dx[shot_slot] = vec_h >> POS_SHIFT
+        state.shot_dy[shot_slot] = vec_v >> POS_SHIFT
     else:
         vec_h, vec_v = lead
         state.lobber_shot_vec_h[shot_slot - 9] = vec_h
@@ -1811,8 +1804,8 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
         lobber_accumulator_seed(state, channel)
         # WP-7 moves shots by whole pixels, so round rather than truncate: a
         # lob that leads by 1.5 px/frame otherwise degenerates to 1.
-        state.shot_dx[shot_slot] = _round_div(vec_h, 64)
-        state.shot_dy[shot_slot] = _round_div(vec_v, 64)
+        state.shot_dx[shot_slot] = _round_div(vec_h, 128)
+        state.shot_dy[shot_slot] = _round_div(vec_v, 128)
 
 
 def _depth_place_shot(state: GameState, shot_slot: int) -> None:
@@ -1859,7 +1852,7 @@ def _round_div(value: int, divisor: int) -> int:
 
 
 def _lobber_lead(state: GameState, slot: int, direction: int, target: int,
-                 dx: int, dy: int) -> tuple[int, int]:
+                 dx: int, dv: int) -> tuple[int, int]:
     """0x41978-0x41A10 -- where the rock is thrown, not where the player is.
 
     The arc vector is the target's *current* walking velocity plus four times
@@ -1870,20 +1863,20 @@ def _lobber_lead(state: GameState, slot: int, direction: int, target: int,
     speed_row = ((p.character & 0x03)
                  + (4 if p.powers & PlayerPower.SPEED else 0))
     speed = _LEAD_PLAYER_SPEED[speed_row]
-    rom_move = (p.direction + 2) & 0x07 if p.direction is not None else 0
+    move_nibble = (state.player_walk_dirs[target] >> 4) & 0x0F
+    rom_move = _WALK_NIBBLE_TO_DIRECTION[move_nibble]
     vec_h = speed * _LEAD_COS[rom_move]
     vec_v = speed * _LEAD_SIN[rom_move]
 
     # The separation terms: the ROM adds 2 to the horizontal delta first
-    # (0x419BA) and works in its own upward V axis.
-    vec_h += (dx + 2) * _LEAD_DELTA_SCALE * 2
-    vec_v += (-dy) * _LEAD_DELTA_SCALE * 2
+    # (0x419BA); both deltas are already in its own axes.
+    vec_h += (dx + 2) * _LEAD_DELTA_SCALE
+    vec_v += dv * _LEAD_DELTA_SCALE
 
     rom_dir = (direction + 2) & 0x07
-    vec_h -= (_LOBBER_SHOT_SPAWN_H[rom_dir] >> 8) * _LEAD_SPAWN_SCALE * 2
-    vec_v -= (_LOBBER_SHOT_SPAWN_V[rom_dir] >> 8) * _LEAD_SPAWN_SCALE * 2
-    # gauntpy's V axis points down.
-    return _s16(vec_h // 2), _s16(-vec_v // 2)
+    vec_h -= (_LOBBER_SHOT_SPAWN_H[rom_dir] >> 8) * _LEAD_SPAWN_SCALE
+    vec_v -= (_LOBBER_SHOT_SPAWN_V[rom_dir] >> 8) * _LEAD_SPAWN_SCALE
+    return _s16(vec_h), _s16(vec_v)
 
 
 # =============================================================================
@@ -2031,12 +2024,17 @@ def _acid_windup(state: GameState, player_index: int, monster_slot: int,
             damage = _MONSTER_CONTACT_DAMAGE_TBL[row * 4 + (p.character & 0x03)]
             p.health = max(0, p.health - damage)
             state.health_dirty[player_index] = 1
+            dialog_first_encounter(
+                state, player_index,
+                _FIRST_ENCOUNTER_MASK[int(MazeObjIds.MONST_ACID)],
+                damage,
+            )
         return
 
     p.stundelay = 0x20
     dx = _delta_units(state.mobs.hpos[p.mob_slot], state.mobs.hpos[monster_slot])
-    dy = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[monster_slot])
-    _set_direction(state, monster_slot, _aim_direction(dx, dy, 0, 4))
+    dv = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[monster_slot])
+    _set_direction(state, monster_slot, _aim_direction(dx, dv, 0, 4))
     if p.acid_timer == 0:
         _sound_play(state, _SOUND_ACID_SLIME)   # 0x36
 
@@ -2225,19 +2223,19 @@ def tile_occupancy_test(state: GameState, slot: int) -> bool:
     software MOB neighbour (picture bit 15) has its own 0x200 taken back off
     (0x48FD8) so both sides are measured from the same edge.
 
-    In gauntpy's whole-pixel words every one of those distances halves, exactly
-    as ``_OVERLAP``/``_SOFTWARE_MOB_BIAS`` already do for the ray march, and the
-    separations are taken modulo the maze: the ROM's position words span exactly
-    one maze in 16 bits so its subtraction wraps at the seam on its own, while
-    gauntpy's span half that and need the explicit ``_s15``.
+    In the hardware's own words all of those distances are the ROM's literal
+    constants, exactly as ``_OVERLAP``/``_SOFTWARE_MOB_BIAS`` already are for
+    the ray march, and the separations are taken modulo the maze: the position
+    words span exactly one maze in 16 bits, so the subtraction wraps at the
+    seam on its own.
     """
     if not _OCCUPANCY_MIN_SLOT < slot < _OCCUPANCY_MAX_SLOT:
         return False
     if _rendered_occupant(state, slot)[1]:
         return False
 
-    candidate_h = (((slot & 0x1F) << 10) - _SOFTWARE_MOB_BIAS) & 0xFFFF
-    candidate_v = ((slot >> 5) & 0x1F) << 10
+    candidate_h = (((slot & 0x1F) << 11) - _SOFTWARE_MOB_BIAS) & 0xFFFF
+    candidate_v = (native_v(((slot >> 5) & 0x1F) * 16) << POS_SHIFT) & 0xFFFF
 
     for index in range(8):
         neighbour = ((slot & 0x3E0) + _OCCUPANCY_NEIGHBOUR_ROW[index]
@@ -2247,12 +2245,12 @@ def tile_occupancy_test(state: GameState, slot: int) -> bool:
         occupant, picture = _rendered_occupant(state, neighbour)
         if not picture:
             continue
-        delta_h = _s15(state.mobs.hpos[occupant] - candidate_h)
+        delta_h = _s16(state.mobs.hpos[occupant] - candidate_h)
         if picture & 0x8000:
             delta_h -= _SOFTWARE_MOB_BIAS
         if abs(delta_h) > _OVERLAP:
             continue
-        if abs(_s15(state.mobs.vpos[occupant] - candidate_v)) <= _OVERLAP:
+        if abs(_s16(state.mobs.vpos[occupant] - candidate_v)) <= _OVERLAP:
             return False
     return True
 
@@ -2284,7 +2282,7 @@ def _spawn_monster(state: GameState, slot: int, monster_type: int,
         slot,
         tile=monster_walk_picture(monster_type, direction),
         hpos=encode_hpos(x, palette=health, flags=0),
-        vpos=encode_vpos(y, ((size >> 3) & 0x07) + 1, (size & 0x07) + 1),
+        vpos=encode_vpos_at_y(y, ((size >> 3) & 0x07) + 1, (size & 0x07) + 1),
         obj_type=monster_type,
         state=direction,
     )
@@ -2300,26 +2298,24 @@ def _spawn_monster(state: GameState, slot: int, monster_type: int,
 _SUPERSORC_BIAS = (0, -1, 1)
 _SUPERSORC_RUN = (4, 3, 3)
 # Proximity rejection (0x5FF06/0x5FF1C): a destination is refused when another
-# MOB sits within 0x7C0 *position units* of it on both axes.  Those are the
-# ROM's half-pixel units, so the gauntpy-word equivalent is half that -- 0x3E0,
-# a hair under one 16-pixel cell.
-_SUPERSORC_PROXIMITY = 0x7C0 >> 1
+# MOB sits within 0x7C0 *position units* of it on both axes -- a hair under one
+# 16-pixel cell.
+_SUPERSORC_PROXIMITY = 0x7C0
 # ``tile_on_screen_d4`` (0x5E57E): every probed cell has to be on screen.
 # 0x6C00 and 0x7000 position units are 216 and 224 pixels; the vertical test is
-# against ``scroll_vpos_origin = (0x108 - pf_vscroll_lo) << 7`` (0x46FCE),
-# which in gauntpy's un-inverted world reduces to ``row*16 + scroll_y - 264``.
-_ONSCREEN_H_SPAN = 0x6C00 >> 7
-_ONSCREEN_V_SPAN = 0x7000 >> 7
-_ONSCREEN_V_BIAS = 0x108
+# against ``scroll_vpos_origin = (0x108 - pf_vscroll_lo) << 7`` (0x46FCE).
+# In downward world Y, a cell is visible at ``scroll <= y <= scroll+224``.
+_ONSCREEN_H_SPAN = 0x6C00 >> POS_SHIFT
+_ONSCREEN_V_SPAN = 0x7000 >> POS_SHIFT
 
 
 def _tile_on_screen(state: GameState, slot: int) -> bool:
     """``tile_on_screen_d4`` (0x5E57E) -- is this cell inside the viewport?"""
-    dx = (slot & 0x1F) * 16 - state.scroll_x
-    if not 0 <= dx <= _ONSCREEN_H_SPAN:
+    dx = ((slot & 0x1F) * 16 - state.scroll_x) & 0x1FF
+    if dx > _ONSCREEN_H_SPAN:
         return False
-    dy = (slot >> 5) * 16 + state.scroll_y - _ONSCREEN_V_BIAS
-    return 0 <= dy <= _ONSCREEN_V_SPAN
+    dy = ((slot >> 5) * 16 - state.scroll_y) & 0x1FF
+    return dy <= _ONSCREEN_V_SPAN
 
 
 def _supersorc_dispatch(state: GameState, slot: int, frame_word: int) -> None:
@@ -2402,8 +2398,8 @@ def _supersorc_place(state: GameState, slot: int) -> int | None:
         if not p.active:
             continue
 
-        px = state.mobs.hpos[p.mob_slot] >> 6
-        py = state.mobs.vpos[p.mob_slot] >> 6
+        px = hpos_x(state.mobs.hpos[p.mob_slot])
+        py = vpos_y(state.mobs.vpos[p.mob_slot])
         prow, pcol = py >> 4, px >> 4
         behind = (p.direction + 4) & 0x07
 
@@ -2423,8 +2419,8 @@ def _supersorc_place(state: GameState, slot: int) -> int | None:
     if target >= 0:
         tp = state.players[target]
         dx = _delta_units(state.mobs.hpos[tp.mob_slot], state.mobs.hpos[slot])
-        dy = _delta_units(state.mobs.vpos[tp.mob_slot], state.mobs.vpos[slot])
-        _set_direction(state, slot, _aim_direction(dx, dy, 0, 4))
+        dv = _delta_units(state.mobs.vpos[tp.mob_slot], state.mobs.vpos[slot])
+        _set_direction(state, slot, _aim_direction(dx, dv, 0, 4))
     return None                              # 0x5FF8C: nowhere to go
 
 
@@ -2462,13 +2458,14 @@ def _supersorc_too_crowded(state: GameState, dest: int, self_slot: int) -> bool:
     close enough to matter is in one of those cells, so the depth-chain scan
     here reaches the same set.
     """
-    dest_h = ((dest & 0x1F) * 16) << 6
-    dest_v = ((dest >> 5) * 16) << 6
+    dest_h = ((dest & 0x1F) * 16) << POS_SHIFT
+    dest_v = native_v((dest >> 5) * 16) << POS_SHIFT
     for s in state.mobs.iter_chain():
         if s == self_slot or state.mobs.picture[s] == 0:
             continue
-        if (abs((state.mobs.hpos[s] & ~0x3F) - dest_h) <= _SUPERSORC_PROXIMITY
-                and abs((state.mobs.vpos[s] & ~0x3F) - dest_v) <= _SUPERSORC_PROXIMITY):
+        if (abs((state.mobs.hpos[s] & POS_FIELD_MASK) - dest_h) <= _SUPERSORC_PROXIMITY
+                and abs((state.mobs.vpos[s] & POS_FIELD_MASK) - dest_v)
+                <= _SUPERSORC_PROXIMITY):
             return True
     return False
 
@@ -2477,8 +2474,8 @@ def _supersorc_relocate(state: GameState, slot: int, dest: int,
                         direction: int) -> None:
     """Move the Super Sorcerer's record to ``dest`` and face ``direction``.
 
-    0x5FF2C keeps the low six bits of both position words -- the flags and the
-    palette/tier nibble -- and only rewrites the cell part.
+    0x5FF2C keeps the low seven bits of both position words -- the flags and
+    the palette/tier nibble -- and only rewrites the cell part.
     """
     if dest == slot:
         _set_direction(state, slot, direction)
@@ -2487,11 +2484,11 @@ def _supersorc_relocate(state: GameState, slot: int, dest: int,
         return
     if state.monster_iter_ptr == slot:      # 0x410A6: keep the walk marker live
         state.monster_iter_ptr = dest
-    low_h = state.mobs.hpos[slot] & 0x3F
-    low_v = state.mobs.vpos[slot] & 0x3F
+    low_h = state.mobs.hpos[slot] & POS_LOW_MASK
+    low_v = state.mobs.vpos[slot] & POS_LOW_MASK
     x = (dest & 0x1F) * 16
     y = (dest >> 5) * 16
     state.mobs.move_slot(slot, dest)
-    state.mobs.hpos[dest] = ((x & 0x3FF) << 6) | low_h
-    state.mobs.vpos[dest] = ((y & 0x3FF) << 6) | low_v
+    state.mobs.hpos[dest] = ((x & 0x1FF) << POS_SHIFT) | low_h
+    state.mobs.vpos[dest] = (native_v(y) << POS_SHIFT) | low_v
     _set_direction(state, dest, direction)

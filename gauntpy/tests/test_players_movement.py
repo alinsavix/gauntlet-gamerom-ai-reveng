@@ -10,9 +10,18 @@ Acceptance criteria from PLAN.md §6 WP-5:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
-from gauntpy.constants import Character, MazeObjIds, PlayerStatus, FIRST_PLAYABLE_SLOT
+from gauntpy.constants import (
+    FIRST_PLAYABLE_SLOT,
+    Character,
+    GameMode,
+    MazeObjIds,
+    PlayerStatus,
+)
+from gauntpy.coords import hpos_x, native_v, vpos_y
 from gauntpy.state import GameState, Player
 from gauntpy.subsystems import players as gp
 from gauntpy.subsystems.players import (
@@ -53,8 +62,8 @@ def _active_player_at(state: GameState, player_index: int, slot: int) -> Player:
     col = slot & 0x1F
     x = col * 16 - 4
     y = row * 16
-    state.mobs.hpos[slot] = x << 6
-    state.mobs.vpos[slot] = y << 6
+    state.mobs.hpos[slot] = x << 7
+    state.mobs.vpos[slot] = native_v(y) << 7
     # Geometry unit tests are about walls rather than the independent
     # player-offscreen flag. Dedicated tests below cover the screen gate.
     state.level_flags_4 |= 0x80
@@ -75,7 +84,7 @@ class TestMobProbeUp:
         wall_slot = (4 << 5) | 5   # row 4, col 5
         state = _state_with_wall(wall_slot)
         result = mob_probe_up(
-            state, (5 << 5) | 5, hpos=76 << 6, vpos=78 << 6,
+            state, (5 << 5) | 5, hpos=76 << 7, vpos=native_v(78) << 7,
         )
         assert result == wall_slot
 
@@ -91,7 +100,7 @@ class TestMobProbeUp:
         left_flank = (4 << 5) | 4
         state = _state_with_wall(left_flank)
         result = mob_probe_up(
-            state, (5 << 5) | 5, hpos=74 << 6, vpos=78 << 6,
+            state, (5 << 5) | 5, hpos=74 << 7, vpos=native_v(78) << 7,
         )
         assert result == left_flank
 
@@ -99,7 +108,7 @@ class TestMobProbeUp:
         right_flank = (4 << 5) | 6
         state = _state_with_wall(right_flank)
         result = mob_probe_up(
-            state, (5 << 5) | 5, hpos=78 << 6, vpos=78 << 6,
+            state, (5 << 5) | 5, hpos=78 << 7, vpos=native_v(78) << 7,
         )
         assert result == right_flank
 
@@ -117,7 +126,7 @@ class TestMobProbeDown:
         wall_slot = (6 << 5) | 5
         state = _state_with_wall(wall_slot)
         assert mob_probe_down(
-            state, (5 << 5) | 5, hpos=76 << 6, vpos=82 << 6,
+            state, (5 << 5) | 5, hpos=76 << 7, vpos=native_v(82) << 7,
         ) == wall_slot
 
     def test_bottom_row_returns_vertical_boundary_sentinel(self):
@@ -129,7 +138,7 @@ class TestMobProbeDown:
         left_flank = (6 << 5) | 4
         state = _state_with_wall(left_flank)
         assert mob_probe_down(
-            state, (5 << 5) | 5, hpos=74 << 6, vpos=82 << 6,
+            state, (5 << 5) | 5, hpos=74 << 7, vpos=native_v(82) << 7,
         ) == left_flank
 
 
@@ -146,7 +155,7 @@ class TestMobProbeLeft:
         wall_slot = (5 << 5) | 4
         state = _state_with_wall(wall_slot)
         assert mob_probe_left(
-            state, (5 << 5) | 5, hpos=74 << 6, vpos=80 << 6,
+            state, (5 << 5) | 5, hpos=74 << 7, vpos=native_v(80) << 7,
         ) == wall_slot
 
     def test_no_boundary_sentinel_at_left_edge(self):
@@ -160,7 +169,7 @@ class TestMobProbeLeft:
         upper_flank = (4 << 5) | 4
         state = _state_with_wall(upper_flank)
         assert mob_probe_left(
-            state, (5 << 5) | 5, hpos=74 << 6, vpos=78 << 6,
+            state, (5 << 5) | 5, hpos=74 << 7, vpos=native_v(78) << 7,
         ) == upper_flank
 
 
@@ -177,7 +186,7 @@ class TestMobProbeRight:
         wall_slot = (5 << 5) | 6
         state = _state_with_wall(wall_slot)
         assert mob_probe_right(
-            state, (5 << 5) | 5, hpos=78 << 6, vpos=80 << 6,
+            state, (5 << 5) | 5, hpos=78 << 7, vpos=native_v(80) << 7,
         ) == wall_slot
 
     def test_no_boundary_sentinel_at_right_edge(self):
@@ -189,7 +198,7 @@ class TestMobProbeRight:
         lower_flank = (6 << 5) | 6
         state = _state_with_wall(lower_flank)
         assert mob_probe_right(
-            state, (5 << 5) | 5, hpos=78 << 6, vpos=82 << 6,
+            state, (5 << 5) | 5, hpos=78 << 7, vpos=native_v(82) << 7,
         ) == lower_flank
 
 
@@ -208,46 +217,59 @@ class TestPlayerTryMoveWallCollision:
     def test_blocked_up(self):
         state, pi = self._player_at_slot((5 << 5) | 5)
         state.mobs.picture[(4 << 5) | 5] = _WALL_PICTURE   # wall above
-        y_before = state.mobs.vpos[state.players[pi].mob_slot] >> 6
+        y_before = vpos_y(state.mobs.vpos[state.players[pi].mob_slot])
         player_try_move(state, pi, gin.JOY_UP, 0)
-        y_after = state.mobs.vpos[state.players[pi].mob_slot] >> 6
+        y_after = vpos_y(state.mobs.vpos[state.players[pi].mob_slot])
         assert y_after == y_before, "should not move into wall above"
 
     def test_blocked_down(self):
         state, pi = self._player_at_slot((5 << 5) | 5)
         state.mobs.picture[(6 << 5) | 5] = _WALL_PICTURE
-        y_before = state.mobs.vpos[state.players[pi].mob_slot] >> 6
+        y_before = vpos_y(state.mobs.vpos[state.players[pi].mob_slot])
         player_try_move(state, pi, gin.JOY_DOWN, 0)
-        y_after = state.mobs.vpos[state.players[pi].mob_slot] >> 6
+        y_after = vpos_y(state.mobs.vpos[state.players[pi].mob_slot])
         assert y_after == y_before
 
     def test_blocked_left(self):
         state, pi = self._player_at_slot((5 << 5) | 5)
         state.mobs.picture[(5 << 5) | 4] = _WALL_PICTURE
-        x_before = state.mobs.hpos[state.players[pi].mob_slot] >> 6
+        x_before = hpos_x(state.mobs.hpos[state.players[pi].mob_slot])
         player_try_move(state, pi, gin.JOY_LEFT, 0)
-        x_after = state.mobs.hpos[state.players[pi].mob_slot] >> 6
+        x_after = hpos_x(state.mobs.hpos[state.players[pi].mob_slot])
         assert x_after == x_before
 
     def test_blocked_right(self):
         state, pi = self._player_at_slot((5 << 5) | 5)
         state.mobs.picture[(5 << 5) | 6] = _WALL_PICTURE
-        x_before = state.mobs.hpos[state.players[pi].mob_slot] >> 6
+        x_before = hpos_x(state.mobs.hpos[state.players[pi].mob_slot])
         player_try_move(state, pi, gin.JOY_RIGHT, 0)
-        x_after = state.mobs.hpos[state.players[pi].mob_slot] >> 6
+        x_after = hpos_x(state.mobs.hpos[state.players[pi].mob_slot])
         assert x_after == x_before
 
-    def test_movable_wall_blocks_despite_real_sprite(self):
-        """A movable wall carries a real sprite picture (0x20F6), not the 0x8000
-        marker, but still blocks -- collision keys off obj_type for it."""
+    def test_return_word_records_only_axes_that_actually_moved(self):
+        state, pi = self._player_at_slot((5 << 5) | 5)
+        assert player_try_move(
+            state, pi, gin.JOY_RIGHT, 0,
+        ) == 0xE0
+
+        state, pi = self._player_at_slot((5 << 5) | 5)
+        state.mobs.picture[(5 << 5) | 6] = _WALL_PICTURE
+        assert player_try_move(
+            state, pi, gin.JOY_RIGHT, 0,
+        ) == 0xF0
+
+    def test_movable_wall_pushes_one_pixel_with_the_player(self):
         from gauntpy.constants import MazeObjIds
         state, pi = self._player_at_slot((5 << 5) | 5)
         slot = (5 << 5) | 6
-        state.mobs.create(slot, tile=0x20F6, hpos=0, vpos=0,
+        state.mobs.create(slot, tile=0x20F6, hpos=92 << 7,
+                          vpos=native_v(80) << 7,
                           obj_type=int(MazeObjIds.WALL_MOVABLE))
-        x_before = state.mobs.hpos[state.players[pi].mob_slot] >> 6
+        x_before = hpos_x(state.mobs.hpos[state.players[pi].mob_slot])
+        wall_before = hpos_x(state.mobs.hpos[slot])
         player_try_move(state, pi, gin.JOY_RIGHT, 0)
-        assert state.mobs.hpos[state.players[pi].mob_slot] >> 6 == x_before
+        assert hpos_x(state.mobs.hpos[state.players[pi].mob_slot]) == x_before
+        assert hpos_x(state.mobs.hpos[slot]) == wall_before + 1
 
     def test_returns_0x00f0_when_blocked(self):
         state, pi = self._player_at_slot((5 << 5) | 5)
@@ -262,9 +284,9 @@ class TestPlayerTryMoveWallCollision:
 
     def test_position_updates_when_clear(self):
         state, pi = self._player_at_slot((5 << 5) | 5)
-        y_before = state.mobs.vpos[state.players[pi].mob_slot] >> 6
+        y_before = vpos_y(state.mobs.vpos[state.players[pi].mob_slot])
         player_try_move(state, pi, gin.JOY_UP, 0)
-        y_after = state.mobs.vpos[state.players[pi].mob_slot] >> 6
+        y_after = vpos_y(state.mobs.vpos[state.players[pi].mob_slot])
         assert y_after < y_before, "player should move up when clear"
 
     def test_flank_wall_does_not_block_parallel_empty_floor(self):
@@ -272,10 +294,10 @@ class TestPlayerTryMoveWallCollision:
         state, pi = self._player_at_slot((5 << 5) | 5)
         flank = (4 << 5) | 6
         state.mobs.picture[flank] = _WALL_PICTURE
-        before = state.mobs.hpos[state.players[pi].mob_slot] >> 6
+        before = hpos_x(state.mobs.hpos[state.players[pi].mob_slot])
 
         assert player_try_move(state, pi, gin.JOY_RIGHT, 0) != _NO_MOVE
-        assert state.mobs.hpos[state.players[pi].mob_slot] >> 6 > before
+        assert hpos_x(state.mobs.hpos[state.players[pi].mob_slot]) > before
 
 
 # ---------------------------------------------------------------------------
@@ -290,11 +312,11 @@ class TestDiagonalMovement:
         state = GameState()
         player = _active_player_at(state, 0, (5 << 5) | 5)
         state.mobs.picture[(4 << 5) | 5] = _WALL_PICTURE  # wall directly above
-        y_before = state.mobs.vpos[player.mob_slot] >> 6
-        x_before = state.mobs.hpos[player.mob_slot] >> 6
+        y_before = vpos_y(state.mobs.vpos[player.mob_slot])
+        x_before = hpos_x(state.mobs.hpos[player.mob_slot])
         player_try_move(state, 0, gin.JOY_UP | gin.JOY_RIGHT, 0)
-        y_after = state.mobs.vpos[player.mob_slot] >> 6
-        x_after = state.mobs.hpos[player.mob_slot] >> 6
+        y_after = vpos_y(state.mobs.vpos[player.mob_slot])
+        x_after = hpos_x(state.mobs.hpos[player.mob_slot])
         assert y_after == y_before, "should not move up into wall"
         assert x_after > x_before, "should still move right"
 
@@ -305,6 +327,353 @@ class TestDiagonalMovement:
         state.mobs.picture[(5 << 5) | 6] = _WALL_PICTURE   # wall right
         result = player_try_move(state, 0, gin.JOY_UP | gin.JOY_RIGHT, 0)
         assert result == _NO_MOVE
+
+
+class TestHandToHandGenerators:
+    def _state(self, character=Character.WARRIOR, generator=MazeObjIds.GEN_GHOST1):
+        state = GameState()
+        player = _active_player_at(state, 0, (5 << 5) | 5)
+        player.character = character
+        slot = (5 << 5) | 6
+        state.mobs.create(
+            slot, tile=0x09AB, hpos=92 << 7, vpos=native_v(80) << 7,
+            obj_type=int(generator),
+        )
+        return state, player, slot
+
+    def test_collision_starts_fighting_and_blocks_movement(self):
+        state, player, _slot = self._state()
+        before = state.mobs.hpos[player.mob_slot]
+        state.movement_type = 2
+
+        assert player_try_move(state, 0, gin.JOY_RIGHT, 0) == _NO_MOVE
+        assert state.mobs.hpos[player.mob_slot] == before
+        assert state.player_fighting_dir[0] == player.direction + 1
+
+    def test_warrior_can_destroy_tier_one_generator(self):
+        state, player, slot = self._state()
+        state.movement_type = 2
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)  # arm fight
+        state.rng = type("ZeroRng", (), {
+            "getrandom": staticmethod(lambda _bound: 0),
+        })()
+        state.movement_type = 2
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+
+        assert state.mobs.picture[slot] == 0
+        assert player.score == 10
+
+    def test_wizard_cannot_fight_generators(self):
+        state, player, slot = self._state(character=Character.WIZARD)
+        state.movement_type = 2
+        before = state.mobs.hpos[player.mob_slot]
+
+        assert player_try_move(state, 0, gin.JOY_RIGHT, 0) == _NO_MOVE
+        assert state.mobs.hpos[player.mob_slot] == before
+        assert state.player_fighting_dir[0] == 0
+        assert state.mobs.picture[slot] != 0
+
+
+class TestLockedTreasureCollision:
+    @staticmethod
+    def _state(keys: int = 1) -> tuple[GameState, Player, int]:
+        state = GameState()
+        player = _active_player_at(state, 0, (5 << 5) | 5)
+        player.keysnum = keys
+        state.level_players_active = 1
+        slot = (5 << 5) | 6
+        state.mobs.create(
+            slot, tile=0x25E4, hpos=92 << 7, vpos=native_v(80) << 7,
+            obj_type=int(MazeObjIds.TREASURE_LOCKED),
+        )
+        return state, player, slot
+
+    def test_a_key_opens_the_chest_and_stuns_the_player(self):
+        state, player, slot = self._state()
+        state.rng = type("FixedRng", (), {
+            "getrandom": staticmethod(lambda _bound: 0),
+        })()
+        state.movement_type = 2
+
+        assert player_try_move(state, 0, gin.JOY_RIGHT, 0) == _NO_MOVE
+        assert player.keysnum == 0
+        assert player.stundelay == 30
+        assert state.mobs.obj_type(slot) == int(MazeObjIds.KEY)
+        assert state.sound_log[-1] == 0x2A
+
+    @pytest.mark.parametrize(("roll", "reward"), (
+        (1, MazeObjIds.MONST_DEATH),
+        (3, MazeObjIds.TREASURE_BAG),
+        (7, MazeObjIds.POT_DESTRUCTABLE),
+        (8, MazeObjIds.FOOD_DESTRUCTABLE),
+    ))
+    def test_reward_table_matches_the_rom(self, roll, reward):
+        state, _player, slot = self._state()
+        state.rng = type("FixedRng", (), {
+            "getrandom": staticmethod(lambda _bound: roll),
+        })()
+        state.movement_type = 2
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+
+        assert state.mobs.obj_type(slot) == int(reward)
+
+    def test_demo_always_reveals_coins(self):
+        state, _player, slot = self._state()
+        state.game_mode = int(GameMode.DEMO)
+        state.rng = type("FixedRng", (), {
+            "getrandom": staticmethod(lambda _bound: 1),
+        })()
+        state.movement_type = 2
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+
+        assert state.mobs.obj_type(slot) == int(MazeObjIds.TREASURE_BAG)
+
+    def test_without_a_key_the_chest_remains_and_shows_the_hint(self):
+        state, player, slot = self._state(keys=0)
+        state.movement_type = 2
+
+        assert player_try_move(state, 0, gin.JOY_RIGHT, 0) == _NO_MOVE
+        assert player.keysnum == 0
+        assert state.mobs.obj_type(slot) == int(MazeObjIds.TREASURE_LOCKED)
+        assert state.dialog_first_encounter_flags & (1 << 27)
+
+
+class TestFloorTriggers:
+    def test_trap_drops_its_wall_group_without_stunning(self):
+        state = GameState()
+        player = _active_player_at(state, 0, (8 << 5) | 3)
+        trigger = (8 << 5) | 4
+        wall = (8 << 5) | 5
+        other_trigger = (9 << 5) | 4
+        for slot, kind, picture in (
+            (trigger, MazeObjIds.TILE_TRAP1, 0x8001),
+            (wall, MazeObjIds.WALL_TRAPCYC1, 0x8000),
+            (other_trigger, MazeObjIds.TILE_TRAP1, 0x8001),
+        ):
+            state.mobs.create(
+                slot, tile=picture, hpos=0, vpos=0,
+                obj_type=int(kind), link_into_chain=False,
+            )
+        state.maze = SimpleNamespace(data={
+            (4, 8): int(MazeObjIds.TILE_TRAP1),
+            (5, 8): int(MazeObjIds.WALL_TRAPCYC1),
+            (4, 9): int(MazeObjIds.TILE_TRAP1),
+        })
+
+        assert gp.player_tile_interact(state, trigger, 0) == -1
+
+        assert player.stundelay == 0
+        assert all(state.mobs.picture[slot] == 0 for slot in (
+            trigger, wall, other_trigger,
+        ))
+        assert set(state.maze.data.values()) == {int(MazeObjIds.TILE_FLOOR)}
+        assert 0x27 in state.sound_log
+        assert state.dialog_first_encounter_flags & (1 << 23)
+
+    @pytest.mark.parametrize(("character", "delay", "sound"), (
+        (Character.WARRIOR, 120, 0x32),
+        (Character.VALKYRIE, 45, 0x34),
+        (Character.WIZARD, 120, 0x32),
+        (Character.ELF, 60, 0x33),
+    ))
+    def test_stun_floor_uses_character_table(self, character, delay, sound):
+        state = GameState()
+        player = _active_player_at(state, 0, (8 << 5) | 3)
+        player.character = int(character)
+        tile = (8 << 5) | 4
+        state.mobs.create(
+            tile, tile=0x8001, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.TILE_STUN), link_into_chain=False,
+        )
+
+        assert gp.player_tile_interact(state, tile, 0) == -1
+
+        assert player.stundelay == delay
+        assert state.death_touch_timer[0] == -delay
+        assert state.mobs.picture[tile] == 0
+        assert sound in state.sound_log
+        assert state.dialog_first_encounter_flags & (1 << 26)
+
+
+class TestMobCollisionDispatch:
+    def test_pass_through_marker_does_not_trigger_from_the_adjacent_cell(self):
+        state = GameState()
+        state.game_mode = int(GameMode.NORMAL)
+        player = _active_player_at(state, 0, (10 << 5) | 10)
+        player.health = 500
+        state.mobs.hpos[player.mob_slot] = 156 << 7
+        state.mobs.vpos[player.mob_slot] = native_v(160) << 7
+        state.player_tile_pos[0] = (10 << 5) | 10
+        marker = (10 << 5) | 11
+        state.mobs.create(
+            marker, tile=0x8001, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.TILE_STUN), link_into_chain=False,
+        )
+        state.movement_type = 2
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+
+        assert player.stundelay == 0
+        assert state.mobs.picture[marker] == 0x8001
+
+    def test_nonconsumed_pickup_fires_only_on_the_cell_entry_edge(self):
+        state = GameState()
+        state.game_mode = int(GameMode.NORMAL)
+        player = _active_player_at(state, 0, (10 << 5) | 10)
+        player.health = 500
+        state.mobs.hpos[player.mob_slot] = 156 << 7
+        state.mobs.vpos[player.mob_slot] = native_v(160) << 7
+        state.player_tile_pos[0] = (10 << 5) | 10
+        potion = (10 << 5) | 11
+        state.mobs.create(
+            potion, tile=0x89FC, hpos=176 << 7, vpos=native_v(160) << 7,
+            obj_type=int(MazeObjIds.POT_INVULN),
+        )
+        state.player_input_raw[0] = 0xFFFF & ~gin.JOY_RIGHT
+
+        for _ in range(40):
+            gp.main_move_players(state)
+
+        assert player.potionsnum == 1
+        assert state.mobs.picture[potion] == 0
+
+    def test_death_is_not_melee_killed(self):
+        state = GameState()
+        _active_player_at(state, 0, (10 << 5) | 10)
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x1A75, hpos=176 << 7,
+            vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_DEATH),
+        )
+        state.player_fighting_dir[0] = 1
+
+        assert gp._player_fight_collision(state, 0, slot) == 0
+        assert state.mobs.picture[slot] != 0
+        assert state.players[0].score == 0
+
+    def test_fighting_super_sorcerer_stays_put_and_blocks(self):
+        state = GameState()
+        _active_player_at(state, 0, (10 << 5) | 10)
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x1A75, hpos=(176 << 7) | 0x2B,
+            vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_SUPERSORC),
+        )
+
+        assert gp._player_fight_collision(state, 0, slot) == 0
+        assert state.mobs.picture[slot] != 0
+        assert state.mobs.hpos[slot] & 0x30 == 0x20
+
+    def test_invisible_sorcerer_reveals_without_taking_melee_damage(self):
+        state = GameState()
+        _active_player_at(state, 0, (10 << 5) | 10)
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x1E13, hpos=(176 << 7) | 0x1B,
+            vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_SORC),
+        )
+        state.player_fighting_dir[0] = 1
+
+        assert gp._player_fight_collision(state, 0, slot) == 1
+        assert state.mobs.hpos[slot] & 0x0F == 0x0B
+        assert not state.mobs.hpos[slot] & 0x10
+        assert state.players[0].score == 0
+
+    def test_zero_random_hand_damage_still_advances_the_shared_rng(self):
+        state = GameState()
+        _active_player_at(state, 0, (10 << 5) | 10)
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x2000, hpos=(176 << 7) | 4,
+            vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_GRUNT),
+        )
+        state.player_fighting_dir[0] = 1
+        seed_before = state.rng.seed
+
+        gp._player_fight_collision(state, 0, slot)
+
+        assert state.rng.seed != seed_before
+
+    def test_two_pixel_frame_latches_acid_only_once(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        player = _active_player_at(state, 0, (5 << 5) | 5)
+        player.health = 1000
+        state.mobs.hpos[player.mob_slot] = 81 << 7
+        acid = (5 << 5) | 6
+        state.mobs.create(
+            acid, tile=0x2300, hpos=(92 << 7) | 1,
+            vpos=native_v(80) << 7, obj_type=int(MazeObjIds.MONST_ACID),
+        )
+        state.frame_counter = 1  # Warrior's +1 px animation boost: 2 px total.
+        state.movement_type = 2
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+
+        assert player.health == 1000
+        assert player.stundelay == 0x20
+        assert state.mobs.picture[acid] != 0
+
+    def test_diagonal_frame_keeps_one_contact_per_axis(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        player = _active_player_at(state, 0, (5 << 5) | 5)
+        player.health = 1000
+        state.mobs.hpos[player.mob_slot] = 80 << 7
+        state.mobs.vpos[player.mob_slot] = native_v(81) << 7
+        acid = (6 << 5) | 6
+        state.mobs.create(
+            acid, tile=0x2300, hpos=(92 << 7) | 1,
+            vpos=native_v(96) << 7, obj_type=int(MazeObjIds.MONST_ACID),
+        )
+        state.frame_counter = 1
+        state.movement_type = 2
+
+        player_try_move(
+            state, 0, gin.JOY_RIGHT | gin.JOY_DOWN, 0,
+        )
+
+        assert player.health < 1000
+        assert state.mobs.picture[acid] == 0
+
+    def test_fighting_thief_removes_it_and_pays_the_bounty(self):
+        state = GameState()
+        _active_player_at(state, 0, (10 << 5) | 10)
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x0F09, hpos=(176 << 7) | 1,
+            vpos=native_v(160) << 7, obj_type=int(MazeObjIds.PLAYERSTART),
+        )
+        state.thief_mob_slot = slot
+        state.thief_current_pos = slot
+        state.player_fighting_dir[0] = 1
+
+        assert gp._player_fight_collision(state, 0, slot) == -1
+        assert state.mobs.obj_type(slot) != int(MazeObjIds.PLAYERSTART)
+        assert state.thief_mob_slot == 0
+        assert state.players[0].score == 500
+
+    def test_pass_through_item_does_not_hide_a_flank_wall(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        player = _active_player_at(state, 0, (5 << 5) | 5)
+        player.health = 500
+        state.mobs.hpos[player.mob_slot] = 81 << 7
+        state.mobs.vpos[player.mob_slot] = native_v(84) << 7
+        key = (5 << 5) | 6
+        wall = (6 << 5) | 6
+        state.mobs.create(
+            key, tile=0x8AFC, hpos=96 << 7, vpos=native_v(80) << 7,
+            obj_type=int(MazeObjIds.KEY),
+        )
+        state.mobs.create(
+            wall, tile=0x8000, hpos=96 << 7, vpos=native_v(96) << 7,
+            obj_type=int(MazeObjIds.WALL_REGULAR), link_into_chain=False,
+        )
+        state.movement_type = 2
+
+        assert player_try_move(state, 0, gin.JOY_RIGHT, 0) == _NO_MOVE
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 81
 
 
 # ---------------------------------------------------------------------------
@@ -323,13 +692,13 @@ class TestCornerSqueezeGeometry:
         state.mobs.set_obj_type(flank_wall, int(MazeObjIds.WALL_REGULAR))
         # Near the upper-right corner, an upward probe overlaps the diagonal
         # wall even though the cell directly above is clear.
-        state.mobs.hpos[player.mob_slot] = 170 << 6
+        state.mobs.hpos[player.mob_slot] = 170 << 7
         state.movement_type = 2
 
         result = player_try_move(state, 0, gin.JOY_UP, 0)
 
         assert result != _NO_MOVE
-        assert state.player_tile_pos[0] == ((9 << 5) | 10)
+        assert state.player_tile_pos[0] == ((8 << 5) | 11)
         assert state.sound_log[-1] == 0x28
 
     def test_invulnerable_player_phases_through_one_cell_wall(self):
@@ -400,10 +769,10 @@ class TestThiefRouteTracking:
         state.thief_victim = 0
         state.thief_victim_pos = start
 
-        for _ in range(8):
+        for _ in range(16):
             player_try_move(state, 0, gin.JOY_RIGHT, 0)
 
-        assert state.mobs.hpos[player.mob_slot] >> 6 == 172
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 172
         assert state.thief_victim_pos == ((10 << 5) | 11)
         assert path_grid_get_direction(state, start) == 2
 
@@ -425,7 +794,7 @@ class TestDoorTraversal:
         state = self._state_with_door(door_slot)
         player = _active_player_at(state, 0, (5 << 5) | 5)
         player.keysnum = 1
-        y_before = state.mobs.vpos[player.mob_slot] >> 6
+        y_before = vpos_y(state.mobs.vpos[player.mob_slot])
         result = player_try_move(state, 0, gin.JOY_UP, 0)
         assert result != _NO_MOVE, "should be able to move through opened door"
         assert state.players[0].keysnum == 0, "key should be consumed"
@@ -488,12 +857,12 @@ class TestPlayerScreenWindow:
         state.level_flags_4 &= ~0x80
         # Put the ROM screen origins at x=100, y=80.
         state.scroll_x = 108
-        state.scroll_y = 0x108 - 80
+        state.scroll_y = 80
         return state, player
 
     def test_player_cannot_walk_under_the_hud(self):
         state, player = self._state()
-        state.mobs.hpos[player.mob_slot] = ((100 + 223) << 6)
+        state.mobs.hpos[player.mob_slot] = ((100 + 207) << 7)
         before = state.mobs.hpos[player.mob_slot]
 
         assert player_try_move(state, 0, gin.JOY_RIGHT, 0) == _NO_MOVE
@@ -501,7 +870,7 @@ class TestPlayerScreenWindow:
 
     def test_player_cannot_walk_past_the_bottom_screen_edge(self):
         state, player = self._state()
-        state.mobs.vpos[player.mob_slot] = ((80 + 231) << 6)
+        state.mobs.vpos[player.mob_slot] = (native_v(80 + 232) << 7)
         before = state.mobs.vpos[player.mob_slot]
 
         assert player_try_move(state, 0, gin.JOY_DOWN, 0) == _NO_MOVE
@@ -510,8 +879,8 @@ class TestPlayerScreenWindow:
     def test_player_offscreen_flag_bypasses_both_screen_edges(self):
         state, player = self._state()
         state.level_flags_4 |= 0x80
-        state.mobs.hpos[player.mob_slot] = ((100 + 223) << 6)
-        state.mobs.vpos[player.mob_slot] = ((80 + 231) << 6)
+        state.mobs.hpos[player.mob_slot] = ((100 + 207) << 7)
+        state.mobs.vpos[player.mob_slot] = (native_v(80 + 231) << 7)
 
         assert player_try_move(
             state, 0, gin.JOY_RIGHT | gin.JOY_DOWN, 0
@@ -547,11 +916,11 @@ class TestWraparound:
         state = GameState()
         state.wrap_h = True
         player = _active_player_at(state, 0, (10 << 5) | 31)  # rightmost column
-        x_before = state.mobs.hpos[player.mob_slot] >> 6
+        x_before = hpos_x(state.mobs.hpos[player.mob_slot])
         # Move right many times to cross the boundary
-        for _ in range(10):
+        for _ in range(24):
             player_try_move(state, 0, gin.JOY_RIGHT, 0)
-        x_after = state.mobs.hpos[player.mob_slot] >> 6
+        x_after = hpos_x(state.mobs.hpos[player.mob_slot])
         # With wrap, position should be small (wrapped around)
         assert x_after < x_before, "x should have wrapped around"
 
@@ -560,10 +929,10 @@ class TestWraparound:
         state = GameState()
         state.wrap_h = False
         player = _active_player_at(state, 0, (10 << 5) | 31)
-        x_before = state.mobs.hpos[player.mob_slot] >> 6
+        x_before = hpos_x(state.mobs.hpos[player.mob_slot])
         for _ in range(20):
             player_try_move(state, 0, gin.JOY_RIGHT, 0)
-        x_after = state.mobs.hpos[player.mob_slot] >> 6
+        x_after = hpos_x(state.mobs.hpos[player.mob_slot])
         assert x_after >= x_before, "should not go negative when wrap disabled"
 
 
@@ -589,36 +958,36 @@ class TestRawInputBitLayout:
     def test_raw_up_press_moves_player_up(self):
         state = GameState()
         player = _active_player_at(state, 0, (10 << 5) | 10)
-        y_before = state.mobs.vpos[player.mob_slot] >> 6
+        y_before = vpos_y(state.mobs.vpos[player.mob_slot])
         # Active low: clear bit 7 (UP) in the raw word.
         state.player_input_raw[0] = 0xFFFF & ~gin.JOY_UP
         player_try_move(state, 0, gin.direction_bits(state, 0), 0)
-        y_after = state.mobs.vpos[player.mob_slot] >> 6
+        y_after = vpos_y(state.mobs.vpos[player.mob_slot])
         assert y_after < y_before, "raw UP press (bit 7) must move the player up"
 
     def test_raw_right_press_moves_player_right(self):
         state = GameState()
         player = _active_player_at(state, 0, (10 << 5) | 10)
-        x_before = state.mobs.hpos[player.mob_slot] >> 6
+        x_before = hpos_x(state.mobs.hpos[player.mob_slot])
         state.player_input_raw[0] = 0xFFFF & ~gin.JOY_RIGHT   # clear bit 4
         player_try_move(state, 0, gin.direction_bits(state, 0), 0)
-        x_after = state.mobs.hpos[player.mob_slot] >> 6
+        x_after = hpos_x(state.mobs.hpos[player.mob_slot])
         assert x_after > x_before, "raw RIGHT press (bit 4) must move the player right"
 
     def test_spare_bits_do_not_move_player(self):
         """Clearing the spare lines (bits 2-3) must not cause movement."""
         state = GameState()
         player = _active_player_at(state, 0, (10 << 5) | 10)
-        x_before = state.mobs.hpos[player.mob_slot] >> 6
-        y_before = state.mobs.vpos[player.mob_slot] >> 6
+        x_before = hpos_x(state.mobs.hpos[player.mob_slot])
+        y_before = vpos_y(state.mobs.vpos[player.mob_slot])
         state.player_input_raw[0] = 0xFFFF & ~0x0C   # clear bits 2 and 3
         player_try_move(state, 0, gin.direction_bits(state, 0), 0)
-        assert state.mobs.hpos[player.mob_slot] >> 6 == x_before
-        assert state.mobs.vpos[player.mob_slot] >> 6 == y_before
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == x_before
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == y_before
 
 
 class TestPerCharacterSpeed:
-    """player_speed_normal (ROM 0x580A8): Elf 4 px, others 2 px; power doubles."""
+    """ROM 0x80/0x100 are 1 and 2 px in the native position words."""
 
     def _step_right(self, character: int, powers: int = 0) -> int:
         from gauntpy.constants import Character  # noqa: F401
@@ -626,18 +995,18 @@ class TestPerCharacterSpeed:
         player = _active_player_at(state, 0, (10 << 5) | 10)
         player.character = character
         player.powers = powers
-        x_before = state.mobs.hpos[player.mob_slot] >> 6
+        x_before = hpos_x(state.mobs.hpos[player.mob_slot])
         player_try_move(state, 0, gin.JOY_RIGHT, 0)
-        return (state.mobs.hpos[player.mob_slot] >> 6) - x_before
+        return hpos_x(state.mobs.hpos[player.mob_slot]) - x_before
 
-    def test_warrior_moves_two_pixels(self):
-        assert self._step_right(0) == 2
+    def test_warrior_moves_one_pixel(self):
+        assert self._step_right(0) == 1
 
-    def test_elf_moves_four_pixels(self):
-        assert self._step_right(3) == 4, "Elf base speed is 0x100 -> 4 px"
+    def test_elf_moves_two_pixels(self):
+        assert self._step_right(3) == 2
 
     def test_speed_power_doubles_warrior(self):
-        assert self._step_right(0, powers=0x01) == 4, "POWER_SPEED_BIT -> 4 px"
+        assert self._step_right(0, powers=0x01) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -693,7 +1062,7 @@ class TestPlayerSpeedTables:
         p.character = int(Character.ELF)
         assert gp._player_speed_units(state, p) == 0x180
 
-    def test_special_mazes_run_everyone_at_0x100(self):
+    def test_special_mazes_run_everyone_at_converted_0x100(self):
         state = GameState()
         state.mazenum_current = gp._SPECIAL_MAZE_FIRST
         p = state.players[0]
@@ -701,18 +1070,46 @@ class TestPlayerSpeedTables:
         state.frame_counter = 1
         assert gp._player_speed_units(state, p) == 0x100
 
+    def test_two_pixel_step_cannot_stop_inside_a_wall_and_block_sliding(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        player = _active_player_at(state, 0, (4 << 5) | 4)
+        player.character = int(Character.WARRIOR)
+        state.mobs.hpos[player.mob_slot] = 60 << 7
+        state.mobs.vpos[player.mob_slot] = native_v(65) << 7
+        for col in range(1, 14):
+            slot = (8 << 5) | col
+            state.mobs.create(
+                slot, tile=_WALL_PICTURE, hpos=0, vpos=0,
+                obj_type=int(MazeObjIds.WALL_REGULAR),
+                link_into_chain=False,
+            )
+
+        for _ in range(80):
+            state.movement_type = 2
+            player_try_move(state, 0, gin.JOY_DOWN, 0)
+            state.frame_counter += 1
+
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == 112
+        x_before = hpos_x(state.mobs.hpos[player.mob_slot])
+        for _ in range(8):
+            state.movement_type = 2
+            player_try_move(state, 0, gin.JOY_DOWN | gin.JOY_RIGHT, 0)
+            state.frame_counter += 1
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) > x_before
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == 112
+
     def test_boost_reaches_player_try_move(self):
-        """A boosted Warrior frame moves 3 px, an unboosted one 2 px."""
+        """A boosted Warrior frame moves 2 px, an unboosted one 1 px."""
         state = GameState()
         _active_player_at(state, 0, (5 << 5) | 5)
         state.frame_counter = 0
-        x0 = state.mobs.hpos[state.players[0].mob_slot] >> 6
+        x0 = hpos_x(state.mobs.hpos[state.players[0].mob_slot])
         player_try_move(state, 0, gin.JOY_RIGHT, 0)
-        assert (state.mobs.hpos[state.players[0].mob_slot] >> 6) - x0 == 2
+        assert (hpos_x(state.mobs.hpos[state.players[0].mob_slot])) - x0 == 1
 
         state = GameState()
         _active_player_at(state, 0, (5 << 5) | 5)
         state.frame_counter = 1
-        x0 = state.mobs.hpos[state.players[0].mob_slot] >> 6
+        x0 = hpos_x(state.mobs.hpos[state.players[0].mob_slot])
         player_try_move(state, 0, gin.JOY_RIGHT, 0)
-        assert (state.mobs.hpos[state.players[0].mob_slot] >> 6) - x0 == 4
+        assert (hpos_x(state.mobs.hpos[state.players[0].mob_slot])) - x0 == 2

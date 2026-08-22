@@ -34,6 +34,7 @@ A window opens on a real Gauntlet II maze with your hero's genuine class sprite.
 | **Ctrl / Space** | fire |
 | **Alt / Enter** | Magic (also start / commit a character) |
 | **5** | insert a coin |
+| **P** | pause / resume |
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
 you pick up items and open doors, you fire, and walking into an **exit loads the
@@ -44,6 +45,13 @@ By default the runner drops you straight into a level. Options:
 
 ```bash
 uv run --all-extras gauntpy-play --level 2 --character elf --scale 3
+```
+
+For uninterrupted testing, suppress first-encounter pop-up boxes (speech and
+gameplay effects still occur):
+
+```bash
+uv run --all-extras gauntpy-play --no-first-encounter-messages
 ```
 
 Or boot through the **real front end** — attract → coin → character select →
@@ -83,7 +91,7 @@ cd gauntpy && GEX_ROM_DIR=../ROMs PYTHONPATH=src python -m gauntpy.play
 
 | Module | What it is |
 |--------|-----------|
-| [`coords.py`](src/gauntpy/coords.py) | The three coordinate systems: maze cells, packed slots, world pixels, and the playfield tile grid |
+| [`coords.py`](src/gauntpy/coords.py) | The three coordinate systems: maze cells, packed slots, world pixels, and the playfield tile grid — plus the native MOB H/V word encoding (position in bits 15-7, vertical measured up from the playfield floor) |
 | [`mob.py`](src/gauntpy/mob.py) | The MOB slot table — five parallel arrays, the doubly linked depth chain, and the 64 SLIP band heads |
 | [`rng.py`](src/gauntpy/rng.py) | The game's LCG, ported from `random_core` (0x5FC2C) |
 | [`state.py`](src/gauntpy/state.py) | `GameState` — the stand-in for working RAM, with the original's variable names |

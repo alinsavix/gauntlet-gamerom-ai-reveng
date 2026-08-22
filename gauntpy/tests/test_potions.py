@@ -7,7 +7,7 @@ produce the documented outcome; a potion always kills Death.
 from __future__ import annotations
 
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
-from gauntpy.coords import encode_hpos, encode_vpos, pack_slot
+from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.state import GameState
 from gauntpy.subsystems.monsters import _in_cull_rect, _update_cull_rect
 from gauntpy.subsystems.potions import (
@@ -23,14 +23,14 @@ def _active(state: GameState, index: int, slot: int,
     p.character = character
     p.mob_slot = slot
     state.mobs.hpos[slot] = encode_hpos((slot & 0x1F) * 16)
-    state.mobs.vpos[slot] = encode_vpos((slot >> 5) * 16)
+    state.mobs.vpos[slot] = encode_vpos_at_y((slot >> 5) * 16)
 
 
 def _place(state: GameState, slot: int, obj_type: int, tier: int = 4) -> None:
     state.mobs.create(
         slot, tile=1,
         hpos=encode_hpos((slot & 0x1F) * 16, palette=tier),
-        vpos=encode_vpos((slot >> 5) * 16),
+        vpos=encode_vpos_at_y((slot >> 5) * 16),
         obj_type=obj_type, state=0,
     )
 
@@ -45,7 +45,7 @@ def _camera_on(state: GameState, slot: int) -> None:
     """
     x, y = (slot & 0x1F) * 16, (slot >> 5) * 16
     state.scroll_x = x - 0x68            # midX = scroll_x + 0x68
-    state.scroll_y = 0x17C - y           # midY = 0x17C - scroll_y
+    state.scroll_y = y - 0x74            # midY = scroll_y + 0x74
 
 
 #: Every blast test below aims here; it covers rows 1-17 and columns 2-16.
@@ -118,6 +118,20 @@ class TestBlastOutcomes:
             potion_blast(state, 0)
             assert state.mobs.obj_type(death_slot) == 0, \
                 f"Death must die for character {character}"
+
+    def test_death_potion_kill_awards_and_displays_the_rom_score(self):
+        state = GameState()
+        _active(state, 0, pack_slot(5, 5), character=Character.WIZARD)
+        death_slot = pack_slot(9, 9)
+        _place(state, death_slot, MazeObjIds.MONST_DEATH)
+        state.death_hits = 1
+        _camera_on(state, _FOCUS)
+
+        potion_blast(state, 0)
+
+        assert state.players[0].score == 4000
+        assert state.score_display_timer[0] == 0x3C
+        assert state.mobs.picture[0x11] == 0x1DC0
 
     def test_it_is_immune(self):
         state = GameState()

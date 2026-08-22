@@ -15,7 +15,7 @@ def place(mobs: MobTable, row: int, col: int, obj_type=MazeObjIds.MONST_GHOST) -
         slot,
         tile=0x100,
         hpos=coords.encode_hpos(x, palette=3),
-        vpos=coords.encode_vpos(y, width=3, height=3),
+        vpos=coords.encode_vpos_at_y(y, width=3, height=3),
         obj_type=obj_type,
     )
 
@@ -28,7 +28,7 @@ def test_packed_fields_roundtrip():
     assert mobs.obj_type(slot) == MazeObjIds.MONST_GRUNT
     assert mobs.position(slot) == (320, 192)
     assert coords.decode_hpos(mobs.hpos[slot])[2] == 3     # palette
-    assert coords.decode_vpos(mobs.vpos[slot])[1:] == (3, 3)  # width, height
+    assert coords.decode_vpos_at_y(mobs.vpos[slot])[1:] == (3, 3)  # width, height
 
 
 def test_type_and_link_share_one_word():
@@ -190,7 +190,7 @@ def test_ordering_ignores_a_pixel_position_that_disagrees_with_the_slot():
     mobs = MobTable()
     early = place(mobs, 4, 4)
     late = place(mobs, 5, 4)
-    mobs.vpos[early] = coords.encode_vpos(500)     # dragged far down the screen
+    mobs.vpos[early] = coords.encode_vpos_at_y(500)     # dragged far down the screen
 
     assert list(mobs.iter_chain()) == [early, late]
     assert mobs.band_of(early) == 8

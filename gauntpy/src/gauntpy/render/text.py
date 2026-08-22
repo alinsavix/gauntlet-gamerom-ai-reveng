@@ -83,7 +83,10 @@ def draw_text(image, x, y, text: str, rgba, *, scale: int = 1) -> int:
     return cx - int(x)
 
 
-def draw_glyph_run(image, x, y, codes, rgba, *, fallback: str = "", scale: int = 1) -> int:
+def draw_glyph_run(
+    image, x, y, codes, rgba, *, fallback: str = "", scale: int = 1,
+    palette=None,
+) -> int:
     """Draw raw alpha-ROM glyph indices -- the pre-baked HUD words the info
     panel is made of (``render/romtext.py``). Returns the advance width.
 
@@ -98,7 +101,10 @@ def draw_glyph_run(image, x, y, codes, rgba, *, fallback: str = "", scale: int =
     cx = int(x)
     top = int(y)
     for code in codes:
-        _blit_glyph(image, _raw_glyph_fn(int(code)), cx, top, rgba, scale)
+        _blit_glyph(
+            image, _raw_glyph_fn(int(code)), cx, top, rgba, scale,
+            palette=palette,
+        )
         cx += GLYPH_W * scale
     return cx - int(x)
 
@@ -108,7 +114,8 @@ def glyph_run_width(codes, *, scale: int = 1) -> int:
     return len(tuple(codes)) * GLYPH_W * scale
 
 
-def _blit_glyph(image, gl, x: int, y: int, rgba, scale: int) -> None:
+def _blit_glyph(image, gl, x: int, y: int, rgba, scale: int, *,
+                palette=None) -> None:
     """Blit one decoded 8x8 2-bit glyph, clipped to ``image``."""
     px = image.load()
     width, height = image.size
@@ -119,8 +126,11 @@ def _blit_glyph(image, gl, x: int, y: int, rgba, scale: int) -> None:
             v = row[gx]
             if not v:
                 continue
-            f = v / 3.0
-            col = (int(r * f), int(g * f), int(b * f), a)
+            if palette is None:
+                f = v / 3.0
+                col = (int(r * f), int(g * f), int(b * f), a)
+            else:
+                col = palette[v]
             bx = x + gx * scale
             by = y + gy * scale
             for sy in range(scale):

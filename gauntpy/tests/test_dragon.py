@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from gauntpy.constants import MazeObjIds, PlayerStatus
-from gauntpy.coords import decode_hpos, decode_vpos, encode_hpos, encode_vpos, pack_slot
+from gauntpy.coords import decode_hpos, decode_vpos_at_y, encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.state import GameState
 from gauntpy.subsystems.dragon import (
     _DRAGON_FIRE_SEGMENT_TBL,
@@ -59,7 +59,7 @@ def _place_dragon(state: GameState, primary: int = pack_slot(10, 10)) -> int:
             slot,
             tile=0xA000 + number,
             hpos=encode_hpos(160 + number * 16),
-            vpos=encode_vpos(160 + number * 16),
+            vpos=encode_vpos_at_y(160 + number * 16),
             obj_type=MazeObjIds.MONST_DRAGON,
         )
     setup_dragon_segments(state, primary)
@@ -69,9 +69,10 @@ def _place_dragon(state: GameState, primary: int = pack_slot(10, 10)) -> int:
 def _place_player(state: GameState, x: int, y: int) -> None:
     player = state.players[0]
     player.status = PlayerStatus.ALIVE_HERE
+    player.health = 100
     player.mob_slot = 20
     state.mobs.hpos[20] = encode_hpos(x)
-    state.mobs.vpos[20] = encode_vpos(y)
+    state.mobs.vpos[20] = encode_vpos_at_y(y)
 
 
 class TestSetupAndWake:
@@ -91,7 +92,7 @@ class TestSetupAndWake:
             primary,
             tile=0xA2E0,
             hpos=encode_hpos(160),
-            vpos=encode_vpos(160),
+            vpos=encode_vpos_at_y(160),
             obj_type=MazeObjIds.MONST_DRAGON,
         )
 
@@ -155,7 +156,7 @@ class TestPoseAndAttack:
         assert state.mobs.picture[primary] == 0xA2F0   # mouth open, not 0xA2E0
         assert decode_hpos(state.dragon_head_hpos)[0] == 180  # 160 + ROM 20
         # ROM V grows upward, so its +18 walks the head up the screen.
-        assert decode_vpos(state.dragon_head_vpos)[0] == 142  # 160 - ROM 18
+        assert decode_vpos_at_y(state.dragon_head_vpos)[0] == 142  # 160 - ROM 18
 
     def test_a_mouth_closed_phase_takes_the_even_head_entry(self):
         state = GameState()
@@ -170,14 +171,14 @@ class TestPoseAndAttack:
 
         assert state.mobs.picture[primary] == 0xA2C0   # index 2
         assert decode_hpos(state.dragon_head_hpos)[0] == 172  # 160 + ROM 12
-        assert decode_vpos(state.dragon_head_vpos)[0] == 152  # 160 - ROM 8
+        assert decode_vpos_at_y(state.dragon_head_vpos)[0] == 152  # 160 - ROM 8
 
     def test_the_head_words_carry_no_palette_or_sprite_size(self):
         """0x5466C/0x5469E mask both results with 0xFF80."""
         state = GameState()
         primary = _place_dragon(state)
         state.mobs.hpos[primary] = encode_hpos(160, palette=0x0B, flags=0x30)
-        state.mobs.vpos[primary] = encode_vpos(160, 3, 3)
+        state.mobs.vpos[primary] = encode_vpos_at_y(160, 3, 3)
         state.dragon_state = 0
         state.dragon_facing = 0
         state.dragon_move_state = 0
@@ -185,8 +186,8 @@ class TestPoseAndAttack:
 
         main_handle_dragon(state)
 
-        assert state.dragon_head_hpos & 0x3F == 0
-        assert state.dragon_head_vpos & 0x3F == 0
+        assert state.dragon_head_hpos & 0x7F == 0
+        assert state.dragon_head_vpos & 0x7F == 0
 
     def test_the_head_extends_along_the_facing_when_the_mouth_opens(self):
         """The 32-entry tables' whole point: index+1 is the open-mouth frame."""
@@ -218,10 +219,10 @@ class TestPoseAndAttack:
         assert state.dragon_anim_ctr == 8  # locked fire holds the phase
         # Slot 8 is the topmost *demon* channel (0x540E8 scans 8 down to 5), so
         # the shot's own channel index is 7.
-        assert state.mobs.picture[8] == 0x27D4    # special table, (2&6)*10+0x13
+        assert state.mobs.picture[8] == 0x27EF
         assert state.dragon_fire_cooldown == 8
         assert state.shot_anim_lifetime_counter[7] == 0x13   # 0x54814
-        assert state.shot_direction[7] == 2                  # facing 0 -> ROM 2
+        assert state.shot_direction[7] == 0
         # 0x547CA records the *pose-selected* segment as the owner even though
         # 0x547DC takes the position from segment 0.
         assert state.shot_owner_mob[7] == state.dragon_seg_mob_ids[3]
@@ -238,12 +239,12 @@ class TestPoseAndAttack:
 
         main_handle_dragon(state)
 
-        assert state.mobs.hpos[8] & 0x3F == 0x38
+        assert state.mobs.hpos[8] & 0x7F == 0x38
         assert decode_hpos(state.mobs.hpos[8])[1] == 0x30     # max-tier bits
         assert decode_hpos(state.mobs.hpos[8])[2] == 8        # palette
-        assert state.mobs.vpos[8] & 0x3F == 0x12
-        assert decode_vpos(state.mobs.vpos[8])[1:] == (3, 3)  # 3x3 tiles
-        assert decode_vpos(state.mobs.vpos[8])[0] == 131      # 160 - (5 + 24)
+        assert state.mobs.vpos[8] & 0x7F == 0x12
+        assert decode_vpos_at_y(state.mobs.vpos[8])[1:] == (3, 3)  # 3x3 tiles
+        assert decode_vpos_at_y(state.mobs.vpos[8])[0] == 131      # 160 - (5 + 24)
 
     def test_long_range_fire_is_the_tier_two_fireball(self):
         """0x546DC: past three cells of the firing line the ROM takes 0x54894."""
@@ -256,11 +257,11 @@ class TestPoseAndAttack:
 
         main_handle_dragon(state)
 
-        assert state.mobs.hpos[8] & 0x3F == 0x2E
-        assert state.mobs.vpos[8] & 0x3F == 0x09
+        assert state.mobs.hpos[8] & 0x7F == 0x2E
+        assert state.mobs.vpos[8] & 0x7F == 0x09
         assert state.shot_anim_lifetime_counter[7] == 0x01    # 0x578C2 row 7
         # projectile_picture_table[dir*2 + 0x20 + counter] = entry 0x25
-        assert state.mobs.picture[8] == 0x1CEB
+        assert state.mobs.picture[8] == 0x1CDB
         assert decode_hpos(state.mobs.hpos[8])[0] == 180      # no facing term
 
     def test_fire_is_depth_placed_at_its_own_cell(self):
@@ -301,7 +302,7 @@ class TestPoseAndAttack:
         main_handle_dragon(state)
 
         assert state.mobs.picture[5] not in (0, 0x1234), "fired into channel 4"
-        assert state.shot_direction[4] == 2
+        assert state.shot_direction[4] == 0
         assert state.shot_anim_lifetime_counter[4] == 0x13
         assert state.shot_direction[5] == 6
         assert state.shot_direction[8] == 6
@@ -324,10 +325,10 @@ class TestPoseAndAttack:
 
         head_index = _head_index(state)
         pose = _pose_index(state)
-        seg_y = decode_vpos(state.mobs.vpos[state.dragon_seg_mob_ids[0]])[0]
-        assert decode_vpos(state.dragon_head_vpos)[0] == \
+        seg_y = decode_vpos_at_y(state.mobs.vpos[state.dragon_seg_mob_ids[0]])[0]
+        assert decode_vpos_at_y(state.dragon_head_vpos)[0] == \
             seg_y - _HEAD_VDELTA[head_index]
-        assert decode_vpos(state.mobs.vpos[8])[0] == \
+        assert decode_vpos_at_y(state.mobs.vpos[8])[0] == \
             seg_y - (_FIRE_V_BY_FACING[0] + _FIRE_V_BY_POSE[pose])
 
     def test_fire_skips_occupied_top_channel(self):
@@ -342,7 +343,7 @@ class TestPoseAndAttack:
         main_handle_dragon(state)
 
         assert state.mobs.picture[8] == 0x1234
-        assert state.mobs.picture[7] == 0x27D4
+        assert state.mobs.picture[7] == 0x27EF
 
     def test_direction_change_enters_the_turn_transition(self):
         state = GameState()
@@ -355,8 +356,37 @@ class TestPoseAndAttack:
 
         main_handle_dragon(state)
 
-        assert state.dragon_facing == 0
+        assert state.dragon_facing == 2
         assert state.dragon_state & _ST_TURNING
+
+    def test_close_aligned_player_selects_breath_and_locks_the_flame(self):
+        state = GameState()
+        _place_dragon(state)
+        _place_player(state, 176, 184)
+        state.dragon_state = 0
+        state.dragon_facing = 4
+        state.dragon_move_state = 0x0240
+        state.dragon_anim_ctr = 7
+
+        main_handle_dragon(state)
+
+        assert state.dragon_move_state == 0x0240
+        assert state.shot_anim_lifetime_counter[7] == 0x13
+        assert state.shot_direction[7] == 4
+        assert state.dragon_state & _ST_LOCKED
+
+    def test_no_live_player_publishes_the_no_target_sentinel(self):
+        state = GameState()
+        _place_dragon(state)
+        state.dragon_state = 0
+        state.dragon_facing = 2
+        state.dragon_move_state = 0
+        state.dragon_anim_ctr = 7
+
+        main_handle_dragon(state)
+
+        assert state.dragon_move_state == 0x1024
+        assert state.dragon_move_state & 0x0F == 4
 
     def test_stun_freezes_path_but_the_shared_countdown_still_decrements(self):
         state = GameState()
@@ -420,7 +450,30 @@ class TestDamage:
 
         assert state.dragon_mob_slot == 0
         assert state.dragon_seg_mob_ids == [0, 0, 0, 0]
-        assert all(state.mobs.picture[slot] == 0 for slot in (primary, primary - 0x20, primary + 1, primary - 0x1F))
+        assert not any(
+            state.mobs.obj_type(slot) == int(MazeObjIds.MONST_DRAGON)
+            for slot in (primary, primary - 0x20, primary + 1, primary - 0x1F)
+        )
+        assert state.special_bonus_score == 2000
+        assert state.secret_need_hint == 1
+        assert {
+            state.mobs.obj_type(slot) for slot in range(32, 1024)
+        } >= {
+            int(MazeObjIds.TREASURE_BAG),
+            int(MazeObjIds.HIDDENPOT),
+        }
+        assert state.mobs.obj_type(pack_slot(9, 10)) == int(
+            MazeObjIds.TREASURE_BAG
+        )
+        assert state.mobs.obj_type(pack_slot(10, 10)) == int(
+            MazeObjIds.HIDDENPOT
+        )
+        effect = next(
+            slot for slot in range(0x0D, 0x11)
+            if state.mobs.picture[slot]
+        )
+        assert decode_hpos(state.mobs.hpos[effect])[0] == 168
+        assert decode_vpos_at_y(state.mobs.vpos[effect])[0] == 152
 
     def test_dragon_kill_sets_no_get_hit_progress_to_two(self):
         state, primary = self._exposed_dragon()

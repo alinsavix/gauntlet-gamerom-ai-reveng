@@ -129,13 +129,8 @@ def draw_front_end_overlay(
         _fill(fb, viewport)
         _draw_legend(fb, state, viewport, cx)
     elif mode == int(GameMode.DEMO):
-        # Nothing. The DEMO screen *is* the maze playing itself, with the
-        # cabinet's own info panel over it; the only extra text it shows is
-        # the demo stream's dialog tips (the 0xFF stream command, whose index
-        # selects one of the ROM hint strings at 0x59786/0x5999C). Nothing on
-        # GameState records which tip is up -- reported as a needed
-        # shared-state change -- so there is nothing truthful to draw, and the
-        # old "DEMO" caption was invented copy.
+        # The DEMO screen is the live maze and info panel. Its 0xFF stream
+        # records are rendered through the ordinary message-box layer.
         return
 
 
@@ -195,7 +190,12 @@ def _draw_title(
     fb, state: GameState, assets: TitleLogoSource, viewport, cx
 ) -> None:
     vx, vy, vw, vh = viewport
-    logo = assets.title_logo()
+    animated_logo = getattr(assets, "title_logo_for_frame", None)
+    logo = (
+        animated_logo(state.logo_color_timer)
+        if animated_logo is not None
+        else assets.title_logo()
+    )
     logo_x = round(cx - logo.width / 2)
     fb.image.paste(logo, (logo_x, vy + _title_logo_y(state)), logo)
     # ROM strings 0x57556 / 0x5752C (their padding is for the cabinet's own

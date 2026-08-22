@@ -29,7 +29,12 @@ from gauntpy import coords
 from gauntpy.constants import GameMode, MazeObjIds, PlayerStatus
 from gauntpy.render.compositor import HUD_PANEL, PLAYFIELD_VIEWPORT, render_frame
 from gauntpy.render.framebuffer import Framebuffer
-from gauntpy.render.hud import cell_xy, draw_hud, draw_message_box
+from gauntpy.render.hud import (
+    cell_xy,
+    draw_debug_frame_counter,
+    draw_hud,
+    draw_message_box,
+)
 from gauntpy.render.mobs import draw_mob_layer, iter_visible_mobs, strength_tier
 from gauntpy.render import playfield, romtext
 from gauntpy.render.screens import _title_logo_y, draw_front_end_overlay
@@ -114,7 +119,7 @@ def _place(mobs, row: int, col: int, picture: int, obj_type=MazeObjIds.MONST_GHO
         slot,
         tile=picture,
         hpos=coords.encode_hpos(x),
-        vpos=coords.encode_vpos(y, width=size, height=size),
+        vpos=coords.encode_vpos_at_y(y, width=size, height=size),
         obj_type=obj_type,
     )
 
@@ -273,6 +278,19 @@ def test_player_hurt_palette_whitens_the_rom_selected_entries():
             assert flashed[index] == expected
 
 
+def test_projectile_palette_12_to_15_resolves_through_player_colour_banks():
+    from gauntpy.render.mobs import sprite_kind
+
+    state = GameState()
+    state.mobs.hpos[1] = 0x0C
+    state.mobs.hpos[5] = 0x0E
+    state.mobs.hpos[9] = 0x01
+
+    assert sprite_kind(state, 1) == "warrior"
+    assert sprite_kind(state, 5) == "wizard"
+    assert sprite_kind(state, 9) is None
+
+
 class TestMobDrawOrder:
     def test_visible_mobs_yielded_in_chain_order_ascending_band(self):
         """Chain order IS draw priority (PLAN.md §6 WP-2 step 2). The chain
@@ -297,10 +315,11 @@ class TestMobDrawOrder:
         _place(state.mobs, row=1, col=2, picture=0x10)   # near the top
         low_slot = _place(state.mobs, row=25, col=2, picture=0x20)  # near the bottom
 
-        # Scroll far enough down that only the low MOB's band is visible.
+        # The 240px window crosses the 512px seam, so row 1 wraps in below the
+        # low MOB; the full-chain fallback must preserve chain order.
         infos = list(iter_visible_mobs(state, scroll_x=0, scroll_y=350, viewport_w=240, viewport_h=240))
 
-        assert [info.slot for info in infos] == [low_slot]
+        assert [info.slot for info in infos] == [coords.pack_slot(1, 2), low_slot]
 
     def test_mob_entirely_below_viewport_is_excluded(self):
         state = GameState()
@@ -310,6 +329,20 @@ class TestMobDrawOrder:
 
         assert infos == []
 
+    def test_top_edge_includes_a_sprite_wrapped_from_world_bottom(self):
+        state = GameState()
+        state.wrap_v = True
+        slot = coords.pack_slot(31, 2)
+        state.mobs.create(
+            slot, tile=0x100, hpos=coords.encode_hpos(32),
+            vpos=coords.encode_vpos_at_y(504, 3, 3),
+            obj_type=MazeObjIds.MONST_GHOST,
+        )
+
+        infos = list(iter_visible_mobs(state, 0, 0, 240, 240))
+
+        assert [info.slot for info in infos] == [slot]
+
     def test_zero_picture_slot_is_never_drawn(self):
         """Picture 0 is 'nothing to draw' -- also what the chain's own null
         terminator and unpainted placeholder slots use.
@@ -317,7 +350,7 @@ class TestMobDrawOrder:
         state = GameState()
         slot = coords.pack_slot(5, 5)
         x, y = coords.slot_to_pixels(slot)
-        state.mobs.create(slot, tile=0, hpos=coords.encode_hpos(x), vpos=coords.encode_vpos(y, 3, 3), obj_type=MazeObjIds.WALL_REGULAR)
+        state.mobs.create(slot, tile=0, hpos=coords.encode_hpos(x), vpos=coords.encode_vpos_at_y(y, 3, 3), obj_type=MazeObjIds.WALL_REGULAR)
 
         infos = list(iter_visible_mobs(state, 0, 0, 240, 240))
 
@@ -341,6 +374,38 @@ class TestMobDrawOrder:
         assert fb.get_pixel(top_x + 4, top_y + 4) == expected_rgba
 
 
+class TestTheRendererDecodesTheNativeVWord:
+    """The MOB V word counts up from the playfield floor and the hardware draws
+    upward from it, so the renderer's one job at this boundary is
+    ``coords.sprite_top_y``."""
+
+    def test_a_cell_sized_sprite_sits_exactly_on_its_cell(self):
+        state = GameState()
+        slot = _place(state.mobs, row=10, col=10, picture=0x100, size=2)
+        assert state.mobs.vpos[slot] == ((31 - 10) << 11) | 0x09
+        info = next(iter(iter_visible_mobs(state, 0, 96, 240, 240)))
+        assert (info.x, info.y) == (10 * 16, 10 * 16)
+
+    def test_a_three_tile_sprite_begins_eight_pixels_above_its_cell(self):
+        state = GameState()
+        _place(state.mobs, row=10, col=10, picture=0x100, size=3)
+        info = next(iter(iter_visible_mobs(state, 0, 96, 240, 240)))
+        assert (info.x, info.y) == (10 * 16, 10 * 16 - 8)
+
+    def test_a_four_tile_dragon_begins_sixteen_pixels_above_its_cell(self):
+        state = GameState()
+        _place(state.mobs, row=10, col=10, picture=0x100, size=4)
+        info = next(iter(iter_visible_mobs(state, 0, 96, 240, 240)))
+        assert (info.x, info.y) == (10 * 16, 10 * 16 - 16)
+
+    def test_the_last_maze_row_stores_a_zero_v_word(self):
+        state = GameState()
+        slot = _place(state.mobs, row=31, col=3, picture=0x100, size=2)
+        assert state.mobs.vpos[slot] & coords.POS_FIELD_MASK == 0
+        info = next(iter(iter_visible_mobs(state, 0, 272, 240, 240)))
+        assert info.y == 31 * 16
+
+
 class TestVisibleMobsCoverEverythingOnScreen:
     """``iter_visible_mobs`` is an optimisation over the obvious answer -- walk
     the whole depth chain, keep whatever overlaps the viewport -- so the two
@@ -362,11 +427,27 @@ class TestVisibleMobsCoverEverythingOnScreen:
             if not state.mobs.is_occupied(slot) or state.mobs.picture[slot] & 0x7FFF == 0:
                 continue
             x, _flags, _pal = coords.decode_hpos(state.mobs.hpos[slot])
-            y, width, height = coords.decode_vpos(state.mobs.vpos[slot])
-            y -= max(0, height * 8 - coords.CELL_PIXELS)
-            if x + width * 8 <= scroll_x or x >= scroll_x + viewport_w:
+            v, width, height = coords.decode_vpos(state.mobs.vpos[slot])
+            y = coords.sprite_top_y(v, height * 8)
+            draw_x = next(
+                (
+                    candidate for candidate in (x - 512, x, x + 512)
+                    if candidate + width * 8 > scroll_x
+                    and candidate < scroll_x + viewport_w
+                ),
+                None,
+            )
+            if draw_x is None:
                 continue
-            if y + height * 8 <= scroll_y or y >= scroll_y + viewport_h:
+            draw_y = next(
+                (
+                    candidate for candidate in (y - 512, y, y + 512)
+                    if candidate + height * 8 > scroll_y
+                    and candidate < scroll_y + viewport_h
+                ),
+                None,
+            )
+            if draw_y is None:
                 continue
             found.append(slot)
         return found
@@ -416,8 +497,8 @@ class TestVisibleMobsCoverEverythingOnScreen:
         band above the one its record names."""
         state = GameState()
         slot = _place(state.mobs, row=4, col=4, picture=0x200, size=3)
-        y, width, height = coords.decode_vpos(state.mobs.vpos[slot])
-        state.mobs.vpos[slot] = coords.encode_vpos(y - 8, width, height)
+        y, width, height = coords.decode_vpos_at_y(state.mobs.vpos[slot])
+        state.mobs.vpos[slot] = coords.encode_vpos_at_y(y - 8, width, height)
         for scroll_y in range(0, 56, 4):
             assert self._visible(state, 0, scroll_y) == self._reference(state, 0, scroll_y), scroll_y
 
@@ -429,7 +510,7 @@ class TestVisibleMobsCoverEverythingOnScreen:
         assert (MAX_MOB_TILES, MAX_MOB_PIXELS) == (8, 64)
         state = GameState()
         slot = _place(state.mobs, row=6, col=6, picture=0x300, size=MAX_MOB_TILES)
-        y, _w, _h = coords.decode_vpos(state.mobs.vpos[slot])
+        y, _w, _h = coords.decode_vpos_at_y(state.mobs.vpos[slot])
         assert self._visible(state, 0, y + coords.CELL_PIXELS - 1) == [slot]
         assert self._visible(state, 0, y + coords.CELL_PIXELS) == []
 
@@ -449,7 +530,7 @@ class TestVisibleMobsCoverEverythingOnScreen:
         player.mob_slot = slot
         player.status = int(PlayerStatus.ALIVE_HERE)
 
-        state.mobs.vpos[slot] = coords.encode_vpos(320, 3, 3)   # walked 18 rows down
+        state.mobs.vpos[slot] = coords.encode_vpos_at_y(320, 3, 3)   # walked 18 rows down
         assert state.mobs.band_of(slot) == 4, "the record never left row 2"
 
         for scroll_y in (0, 100, 200, 272):
@@ -612,7 +693,7 @@ class TestMobStrengthTier:
                 state.mobs.create(
                     slot, tile=0x100,
                     hpos=coords.encode_hpos(x) | nibble,
-                    vpos=coords.encode_vpos(y, 3, 3),
+                    vpos=coords.encode_vpos_at_y(y, 3, 3),
                     obj_type=obj_type,
                 )
                 tier = strength_tier(state, slot)
@@ -625,7 +706,7 @@ class TestMobStrengthTier:
         x, y = coords.slot_to_pixels(slot)
         state.mobs.create(
             slot, tile=0x100, hpos=coords.encode_hpos(x) | 0xF,
-            vpos=coords.encode_vpos(y, 3, 3), obj_type=MazeObjIds.MONST_GHOST,
+            vpos=coords.encode_vpos_at_y(y, 3, 3), obj_type=MazeObjIds.MONST_GHOST,
         )
         assert strength_tier(state, slot) == 3       # nibble 0xF is above base
         state.mobs.hpos[slot] = coords.encode_hpos(x) | 0x0
@@ -652,7 +733,7 @@ class TestLivePaletteReachesTheAssetStore:
         state.mobs.create(
             slot, tile=0x100,
             hpos=coords.encode_hpos(x) | nibble,
-            vpos=coords.encode_vpos(y, 3, 3),
+            vpos=coords.encode_vpos_at_y(y, 3, 3),
             obj_type=obj_type,
         )
         assets = _FakeAssets()
@@ -677,7 +758,7 @@ class TestLivePaletteReachesTheAssetStore:
         x, y = coords.slot_to_pixels(slot)
         state.mobs.create(
             slot, tile=0x100, hpos=coords.encode_hpos(x) | 0x4,
-            vpos=coords.encode_vpos(y, 3, 3), obj_type=MazeObjIds.MONST_GHOST,
+            vpos=coords.encode_vpos_at_y(y, 3, 3), obj_type=MazeObjIds.MONST_GHOST,
         )
         assets = _FakeAssets()
         draw_mob_layer(Framebuffer(240, 240), state, assets, 0, 0, PLAYFIELD_VIEWPORT)
@@ -710,7 +791,7 @@ class TestTheMobSizeReachesTheAssetStore:
         x, y = coords.slot_to_pixels(slot)
         state.mobs.create(
             slot, tile=0x100, hpos=coords.encode_hpos(x),
-            vpos=coords.encode_vpos(y, width, height),
+            vpos=coords.encode_vpos_at_y(y, width, height),
             obj_type=MazeObjIds.MONST_GHOST,
         )
         assets = _FakeAssets()
@@ -728,12 +809,12 @@ class TestTheMobSizeReachesTheAssetStore:
         x, y = coords.slot_to_pixels(slot)
         state.mobs.create(
             slot, tile=0x100, hpos=coords.encode_hpos(x),
-            vpos=coords.encode_vpos(y, 3, 2), obj_type=MazeObjIds.MONST_GHOST,
+            vpos=coords.encode_vpos_at_y(y, 3, 2), obj_type=MazeObjIds.MONST_GHOST,
         )
         info = next(iter_visible_mobs(state, 0, 0, 240, 240))
         assert (info.width_px, info.height_px) == (24, 16)
         assert info.size_tiles == (3, 2)
-        assert coords.decode_vpos(state.mobs.vpos[slot])[1:] == info.size_tiles
+        assert coords.decode_vpos_at_y(state.mobs.vpos[slot])[1:] == info.size_tiles
 
     def test_sprite_stamp_is_clipped_to_the_hardware_size_word(self):
         from gex.render import Stamp
@@ -751,7 +832,7 @@ class TestTheMobSizeReachesTheAssetStore:
         x, y = coords.slot_to_pixels(slot)
         state.mobs.create(
             slot, tile=0x100, hpos=coords.encode_hpos(x),
-            vpos=coords.encode_vpos(y, 3, 2),
+            vpos=coords.encode_vpos_at_y(y, 3, 2),
             obj_type=MazeObjIds.MONST_LOBBER,
         )
         fb = Framebuffer(240, 240)
@@ -768,7 +849,7 @@ def strength_tier_of(nibble: int) -> int:
     x, y = coords.slot_to_pixels(slot)
     state.mobs.create(
         slot, tile=0x100, hpos=coords.encode_hpos(x) | nibble,
-        vpos=coords.encode_vpos(y, 3, 3), obj_type=MazeObjIds.MONST_GHOST,
+        vpos=coords.encode_vpos_at_y(y, 3, 3), obj_type=MazeObjIds.MONST_GHOST,
     )
     return strength_tier(state, slot)
 
@@ -937,8 +1018,8 @@ class TestMessageBox:
         vx, vy, vw, vh = PLAYFIELD_VIEWPORT
         expected_h = state.dialog_box_rows * 8
         expected_w = (state.dialog_box_width + 2) * 8
-        top = vy + (vh - expected_h) // 2
-        left = vx + (vw - expected_w) // 2
+        top = vy + state.dialog_box_row * 8
+        left = vx + state.dialog_box_column * 8
         assert fb.get_pixel(left, top) == (200, 200, 200, 255), "box outline"
         assert fb.get_pixel(left + expected_w - 1, top) == (200, 200, 200, 255)
 
@@ -971,6 +1052,11 @@ class TestPanelGeometryMatchesTheRom:
         assert HUD_PANEL[0] == score.PANEL_COLUMN * 8 == 232
         assert PLAYFIELD_VIEWPORT[2] == 232, "playfield ends where the panel starts"
 
+    def test_hardware_playfield_exists_behind_all_alpha_columns(self):
+        from gauntpy.render.compositor import _HARDWARE_VIEWPORT
+
+        assert _HARDWARE_VIEWPORT == (0, 0, 336, 240)
+
     def test_panel_is_thirteen_alpha_columns_ending_on_the_last_shown_one(self):
         assert score.PANEL_WIDTH == 13
         assert HUD_PANEL[2] == 13 * 8 == 104
@@ -989,6 +1075,43 @@ class TestPanelGeometryMatchesTheRom:
         # draw_player_score's row for player 1 is 1*5+9 = 14 -> y = 112.
         assert cell_xy(HUD_PANEL, score.SCORE_COLUMN, 14) == (232, 112)
         assert cell_xy(HUD_PANEL, score.HEALTH_COLUMN, 14) == (296, 112)
+
+    def test_inventory_keys_use_the_dedicated_gold_alpha_palette(self):
+        from gex.palettes import IRGB
+        from gauntpy.render import hud
+
+        assert hud._KEY_PALETTE_RGBA == tuple(
+            IRGB(value).to_rgba()
+            for value in (0x0000, 0xFFA0, 0xF08E, 0xF00C)
+        )
+        assert hud._KEY_PALETTE_RGBA != tuple(
+            hud._player_rgba(0) for _ in range(4)
+        )
+
+    def test_debug_frame_counter_uses_the_lower_right_panel_corner(self):
+        state = GameState()
+        state.frame_counter = 123
+        fb = Framebuffer(336, 240)
+
+        draw_debug_frame_counter(fb, state, HUD_PANEL)
+
+        assert any(
+            fb.get_pixel(x, y) != (0, 0, 0, 255)
+            for y in range(220, 240)
+            for x in range(300, 336)
+        )
+
+    def test_pause_indicator_appears_above_the_frame_counter(self):
+        state = GameState(frame_counter=123)
+        fb = Framebuffer(336, 240)
+
+        draw_debug_frame_counter(fb, state, HUD_PANEL, paused=True)
+
+        assert any(
+            fb.get_pixel(x, y) != (0, 0, 0, 255)
+            for y in range(205, 229)
+            for x in range(285, 336)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1020,6 +1143,25 @@ class TestRomText:
         fb = Framebuffer(24, 12)
         draw_text(fb.image, 1, 1, " ", (255, 255, 255, 255))
         assert not self._any_nonblack(fb, (0, 0, 24, 12))
+
+    def test_raw_glyph_can_use_all_three_hardware_palette_colours(self):
+        from gauntpy.render.text import _blit_glyph
+
+        palette = (
+            (0, 0, 0, 255),
+            (10, 20, 30, 255),
+            (40, 50, 60, 255),
+            (70, 80, 90, 255),
+        )
+        glyph = [[1, 2, 3, 0, 0, 0, 0, 0]] + [[0] * 8 for _ in range(7)]
+        fb = Framebuffer(8, 8)
+
+        _blit_glyph(
+            fb.image, glyph, 0, 0, (255, 255, 255, 255), 1,
+            palette=palette,
+        )
+
+        assert [fb.get_pixel(x, 0) for x in range(3)] == list(palette[1:])
 
     def test_width_is_monospace_eight_px_times_scale(self):
         from gauntpy.render.text import text_width
@@ -1294,6 +1436,7 @@ class TestExitAnimation:
         return PlayfieldCache(
             image=None, shadow_image=None, floorpattern=0,
             exit_palette=palette or [(0, 0, 0, 255)] * 16,
+            transporter_palette=palette or [(0, 0, 0, 255)] * 16,
         )
 
     def _state(self, **kw):
@@ -1310,6 +1453,109 @@ class TestExitAnimation:
         before = fb.image.tobytes()
         playfield.draw_exit_animation(fb, self._cache(), state, 0, 0, PLAYFIELD_VIEWPORT)
         assert fb.image.tobytes() == before
+
+    def test_an_ordinary_live_exit_is_drawn_without_a_moving_exit(self):
+        state = GameState()
+        slot = coords.pack_slot(4, 4)
+        state.mobs.create(
+            slot, tile=0x8001, hpos=0, vpos=0,
+            obj_type=MazeObjIds.EXIT, link_into_chain=False,
+        )
+
+        assert self._capture(state) == [(slot, playfield.EXIT_SETTLED_DESC)]
+
+    def test_exit_to_six_uses_its_distinct_destination_graphic(self):
+        state = GameState()
+        slot = coords.pack_slot(7, 7)
+        state.mobs.create(
+            slot, tile=0x8001, hpos=0, vpos=0,
+            obj_type=MazeObjIds.EXITTO6, link_into_chain=False,
+        )
+
+        assert self._capture(state) == [(slot, playfield.EXITTO6_SETTLED_DESC)]
+
+    def test_transporter_marker_is_a_playfield_stamp(self):
+        state = GameState()
+        slot = coords.pack_slot(7, 7)
+        state.mobs.create(
+            slot, tile=0x8001, hpos=0, vpos=0,
+            obj_type=MazeObjIds.TRANSPORTER, link_into_chain=False,
+        )
+        stamped = []
+        real = playfield._blit_descriptor
+        playfield._blit_descriptor = (
+            lambda fb, descriptor, cell, palette, sx, sy, viewport, **kwargs:
+            stamped.append((cell, tuple(descriptor)))
+        )
+        try:
+            playfield.draw_transporter_tiles(
+                Framebuffer(240, 240), self._cache(), state,
+                0, 0, PLAYFIELD_VIEWPORT,
+            )
+        finally:
+            playfield._blit_descriptor = real
+
+        assert stamped == [(slot, playfield.TRANSPORTER_DESC)]
+
+    def test_transporter_stamp_consumes_the_live_cycle_phase(self):
+        from gex.palettes import IRGB
+
+        state = GameState()
+        slot = coords.pack_slot(7, 7)
+        state.mobs.create(
+            slot, tile=0x8001, hpos=0, vpos=0,
+            obj_type=MazeObjIds.TRANSPORTER, link_into_chain=False,
+        )
+        palettes = []
+        real = playfield._blit_descriptor
+        playfield._blit_descriptor = (
+            lambda fb, descriptor, cell, palette, sx, sy, viewport, **kwargs:
+            palettes.append(tuple(palette))
+        )
+        try:
+            for phase in (0, 5):
+                state.tport_cycle_pos = phase
+                playfield.draw_transporter_tiles(
+                    Framebuffer(240, 240), self._cache(), state,
+                    0, 0, PLAYFIELD_VIEWPORT,
+                )
+        finally:
+            playfield._blit_descriptor = real
+
+        assert palettes[0][13] == IRGB(0xFFFF).to_rgba()
+        assert palettes[1][13] == IRGB(0x8F00).to_rgba()
+
+    def test_trap_and_stun_palettes_use_the_vblank_pulse_words(self):
+        from gex.palettes import IRGB, S_COLORS_1, S_COLORS_2
+
+        trap = playfield._animated_floor_palette("trap", 0, 0x4044)
+        stun = playfield._animated_floor_palette("stun", 0, 0xEEE0)
+
+        for index in (0, S_COLORS_1[0], S_COLORS_2[0]):
+            assert trap[index] == IRGB(0x4044).to_rgba()
+            assert stun[index] == IRGB(0xEEE0).to_rgba()
+
+    def test_exit_overlay_wraps_with_the_hardware_viewport(self, monkeypatch):
+        import gex.render
+
+        calls = []
+
+        class Capture:
+            def blit_indexed_tile(self, tile, palette, x, y, **kwargs):
+                calls.append((x, y))
+
+        monkeypatch.setattr(
+            gex.render, "get_parsed_tile",
+            lambda _word: [[1] * 8 for _ in range(8)],
+        )
+        playfield._blit_descriptor(
+            Capture(), playfield.EXIT_SETTLED_DESC,
+            coords.pack_slot(5, 5), [(0, 0, 0, 255)] * 16,
+            509, 509, (0, 0, 336, 240),
+        )
+
+        assert calls[0] == (83, 83)
+        assert calls[-1] == (91, 91)
 
     def test_the_settled_exit_is_drawn_while_the_timer_is_positive(self):
         state = self._state(exit_move_timer=0x12C, exit_anim_frame=0)
@@ -1443,6 +1689,25 @@ class TestPlayfieldEdgeRule:
         assert whatis(maze, -1, 5) == 22     # off the left edge  -> column 31
         assert whatis(maze, 7, 32) == 33     # off the bottom     -> row 0
         assert whatis(maze, 7, -1) == 44     # off the top        -> row 31
+
+    def test_bottom_clamp_shows_row_31_then_wraps_row_zero(self):
+        from PIL import Image
+        from gauntpy.render.playfield import PlayfieldCache, draw_playfield
+
+        image = Image.new("RGBA", (512, 512), (0, 0, 0, 255))
+        for y in range(496, 512):
+            for x in range(512):
+                image.putpixel((x, y), (255, 0, 0, 255))
+        for y in range(16):
+            for x in range(512):
+                image.putpixel((x, y), (0, 255, 0, 255))
+        cache = PlayfieldCache(image=image, shadow_image=image.copy())
+        fb = Framebuffer(336, 240)
+
+        draw_playfield(fb, cache, 0, 280, (0, 0, 336, 240))
+
+        assert fb.get_pixel(10, 216) == (255, 0, 0, 255)
+        assert fb.get_pixel(10, 232) == (0, 255, 0, 255)
 
     def test_in_range_lookups_are_untouched(self):
         from gex.adjacency import whatis
@@ -2144,7 +2409,7 @@ class TestTheLayerNoLongerDropsEffectsAndDissolves:
         x, y = coords.slot_to_pixels(source)
         state.mobs.picture[slot] = picture
         state.mobs.hpos[slot] = coords.encode_hpos(x) | palette
-        state.mobs.vpos[slot] = coords.encode_vpos(y, width, height)
+        state.mobs.vpos[slot] = coords.encode_vpos_at_y(y, width, height)
         state.mobs.insert(slot, depth_key=source)
 
     def _draw_one_effect(self, picture, block, assets=None):
@@ -2156,6 +2421,32 @@ class TestTheLayerNoLongerDropsEffectsAndDissolves:
         fb = Framebuffer(240, 240)
         draw_mob_layer(fb, state, assets, 0, 0, PLAYFIELD_VIEWPORT)
         return assets, fb
+
+    def test_treasure_bag_pickup_popup_reaches_the_visible_mob_walk(self):
+        from gauntpy.subsystems.players import player_tile_interact
+
+        state = GameState()
+        state.level_players_active = 1
+        state.players[0].status = int(PlayerStatus.ALIVE_HERE)
+        source = coords.pack_slot(*self._SOURCE_CELL)
+        x, y = coords.slot_to_pixels(source)
+        state.mobs.create(
+            source, tile=0x1234,
+            hpos=coords.encode_hpos(x),
+            vpos=coords.encode_vpos_at_y(y, 2, 2),
+            obj_type=MazeObjIds.TREASURE_BAG,
+        )
+
+        player_tile_interact(state, source, 0)
+
+        visible = list(
+            iter_visible_mobs(
+                state, 0, 0,
+                PLAYFIELD_VIEWPORT[2], PLAYFIELD_VIEWPORT[3],
+            )
+        )
+        assert state.score_display_timer[0] == 0x3C
+        assert any(info.slot == 0x11 for info in visible)
 
     def test_every_effect_picture_reaches_the_framebuffer(self):
         """All 28 of gex's effect pictures plus the six transporter transition
@@ -2229,7 +2520,7 @@ class TestTheHeroDissolveIsDrawnToTheEnd:
         x, y = coords.slot_to_pixels(slot)
         state.mobs.create(
             slot, tile=picture, hpos=coords.encode_hpos(x),
-            vpos=coords.encode_vpos(y, 3, 3), obj_type=MazeObjIds.PLAYERSTART,
+            vpos=coords.encode_vpos_at_y(y, 3, 3), obj_type=MazeObjIds.PLAYERSTART,
         )
         player = state.players[0]
         player.mob_slot = slot
@@ -2331,7 +2622,7 @@ class TestAWizardRendersAsAWizard:
         tile = HEROES[HERO_NAMES[int(character)]].anims["walk"]["down"][0]
         state.mobs.create(
             slot, tile=tile, hpos=coords.encode_hpos(x),
-            vpos=coords.encode_vpos(y, 3, 3), obj_type=MazeObjIds.PLAYERSTART,
+            vpos=coords.encode_vpos_at_y(y, 3, 3), obj_type=MazeObjIds.PLAYERSTART,
         )
         player = state.players[0]
         player.mob_slot = slot
@@ -2496,6 +2787,26 @@ class TestHostShellInput:
             state = GameState()
             shell.wait_for_vblank(state)
             shell.present(state)
+        finally:
+            shell.close()
+
+    def test_p_key_toggles_host_pause(self):
+        from gauntpy.render.host import HostShell
+
+        shell = HostShell(assets=_FakeAssets())
+        try:
+            pygame = shell._pygame
+            state = GameState()
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_p)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.paused
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_p)
+            )
+            shell.wait_for_vblank(state)
+            assert not shell.paused
         finally:
             shell.close()
 

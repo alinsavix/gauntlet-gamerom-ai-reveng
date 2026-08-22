@@ -25,13 +25,18 @@ palette, for as long as ``dialog_timer`` runs.
 
 from __future__ import annotations
 
+from gex.palettes import IRGB
+
 from ..constants import PlayerStatus
 from ..state import GameState
 from ..subsystems import score
 from . import romtext
 from .text import GLYPH_W, draw_glyph_run, draw_text
 
-__all__ = ["draw_hud", "draw_message_box", "CELL", "cell_xy"]
+__all__ = [
+    "draw_hud", "draw_message_box", "draw_debug_frame_counter",
+    "CELL", "cell_xy",
+]
 
 #: One alpha character cell is 8x8 pixels (doc/01_hardware.md §9, §5).
 CELL = GLYPH_W
@@ -40,6 +45,12 @@ _TEXT_RGBA = (255, 255, 255, 255)
 _DIM_RGBA = (128, 128, 136, 255)
 _BOX_RGBA = (200, 200, 200, 255)
 _PANEL_BG = (0, 0, 0, 255)
+_KEY_PALETTE_RGBA = tuple(
+    IRGB(value).to_rgba() for value in (0x0000, 0xFFA0, 0xF08E, 0xF00C)
+)
+_POTION_PALETTE_RGBA = tuple(
+    IRGB(value).to_rgba() for value in (0x0000, 0xF226, 0xF33D, 0xF66F)
+)
 
 
 def cell_xy(panel: tuple[int, int, int, int], column: int, row: int) -> tuple[int, int]:
@@ -85,11 +96,18 @@ def _draw_inventory(fb, panel, index: int, keys: int, potions: int, colour) -> N
     used = min(max(0, keys), cells)
     x, y = cell_xy(panel, score.INVENTORY_COLUMN, row)
     for i in range(used):
-        draw_glyph_run(fb.image, x + i * CELL, y, (romtext.GLYPH_KEY,), colour, fallback="K")
+        draw_glyph_run(
+            fb.image, x + i * CELL, y, (romtext.GLYPH_KEY,),
+            _KEY_PALETTE_RGBA[3], fallback="K", palette=_KEY_PALETTE_RGBA,
+        )
 
     first_potion = max(used, cells - max(0, potions))
     for i in range(first_potion, cells):
-        draw_glyph_run(fb.image, x + i * CELL, y, (romtext.GLYPH_POTION,), colour, fallback="P")
+        draw_glyph_run(
+            fb.image, x + i * CELL, y, (romtext.GLYPH_POTION,),
+            _POTION_PALETTE_RGBA[3], fallback="P",
+            palette=_POTION_PALETTE_RGBA,
+        )
 
 
 def _draw_player_block(fb, state: GameState, panel, index: int) -> None:
@@ -161,8 +179,12 @@ def draw_message_box(fb, state: GameState, viewport: tuple[int, int, int, int]) 
     rows = max(state.dialog_box_rows, len(state.dialog_message) + 2)
     cols = max(state.dialog_box_width, 1) + 2
     box_w, box_h = cols * CELL, rows * CELL
-    box_x = vx + max(0, (vw - box_w) // 2)
-    box_y = vy + max(0, (vh - box_h) // 2)
+    if state.dialog_box_column >= 0 and state.dialog_box_row >= 0:
+        box_x = vx + state.dialog_box_column * CELL
+        box_y = vy + state.dialog_box_row * CELL
+    else:
+        box_x = vx + max(0, (vw - box_w) // 2)
+        box_y = vy + max(0, (vh - box_h) // 2)
 
     draw = ImageDraw.Draw(fb.image)
     draw.rectangle(
@@ -207,3 +229,32 @@ def draw_hud(fb, state: GameState, panel: tuple[int, int, int, int]) -> None:
         if player.status == PlayerStatus.REMOVED:
             continue
         _draw_player_block(fb, state, panel, index)
+
+
+def draw_debug_frame_counter(
+    fb, state: GameState, panel: tuple[int, int, int, int], *,
+    paused: bool = False,
+) -> None:
+    """Host-only decimal frame counter in the panel's lower-right corner."""
+    from PIL import ImageDraw, ImageFont
+
+    px, py, pw, ph = panel
+    text = str(state.frame_counter & 0xFFFF)
+    draw = ImageDraw.Draw(fb.image)
+    font = ImageFont.load_default()
+    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    width, height = right - left, bottom - top
+    draw.text(
+        (px + pw - width - 2, py + ph - height - 2),
+        text, fill=(255, 255, 0, 255), font=font,
+    )
+    if paused:
+        pause_text = "PAUSED"
+        left, top, right, bottom = draw.textbbox(
+            (0, 0), pause_text, font=font,
+        )
+        pause_width = right - left
+        draw.text(
+            (px + pw - pause_width - 2, py + ph - 2 * height - 4),
+            pause_text, fill=(255, 80, 80, 255), font=font,
+        )

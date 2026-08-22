@@ -7,7 +7,14 @@ and the checked ``row76.bin`` routines at 0x4DEB8-0x4FEB0.
 from __future__ import annotations
 
 from ..constants import MazeObjIds
-from ..coords import decode_hpos, decode_vpos, encode_hpos, encode_vpos
+from ..coords import (
+    decode_hpos,
+    decode_vpos,
+    encode_hpos,
+    encode_vpos_at_y,
+    hpos_x,
+    vpos_y,
+)
 from ..state import GameState
 from .sound import sound_play as _sound_play
 
@@ -24,6 +31,7 @@ THIEF_ENTER_OK = 16
 THIEF_ENTER_OK_MUGGER = 32
 THIEF_IS_MUGGER = 128
 
+# thief_speed / mugger_speed, ROM 3*0x80 and 4*0x80 native position words.
 _SPEED_MUGGER = 0x180
 _SPEED_THIEF = 0x200
 _THIEF_MAZE_LIMIT = 0x73
@@ -248,8 +256,8 @@ def thief_compute_path(state: GameState) -> None:
 def _player_packed_cell(state: GameState, player_index: int) -> int:
     """Use the live player pixels; a player's MOB slot remains fixed."""
     slot = state.players[player_index].mob_slot
-    x, _, _ = decode_hpos(state.mobs.hpos[slot])
-    y, _, _ = decode_vpos(state.mobs.vpos[slot])
+    x = hpos_x(state.mobs.hpos[slot])
+    y = vpos_y(state.mobs.vpos[slot])
     return ((y >> 4) & 0x1F) << 5 | ((x >> 4) & 0x1F)
 
 
@@ -380,7 +388,7 @@ def _thief_deploy(state: GameState) -> None:
         slot,
         _spawn_picture(state),
         encode_hpos(col * 16, palette=palette),
-        encode_vpos(row * 16, width=3, height=3),
+        encode_vpos_at_y(row * 16, width=3, height=3),
         MazeObjIds.PLAYERSTART,
     )
     state.thief_mob_slot = slot
@@ -572,13 +580,12 @@ def thief_remove_and_drop_loot(
             state.mobs.unlink_and_clear(drop_slot)
         # This exact path indexes the base-picture table directly, rather than
         # using maze placement's randomized invulnerable-food picture variant.
-        from gex.objparams import base_picture
-        from ..maze import _placement_geometry
+        from ..maze import placement_base_picture, placement_geometry
 
-        hpos, vpos = _placement_geometry(item_type, drop_slot)
+        hpos, vpos = placement_geometry(item_type, drop_slot)
         state.mobs.create(
             drop_slot,
-            base_picture(item_type),
+            placement_base_picture(item_type),
             hpos,
             vpos,
             item_type,
@@ -684,7 +691,8 @@ def _move_thief_axis(state: GameState, dx: int, dy: int) -> tuple[bool, bool]:
     if not slot:
         return False, True
     x, flags, palette = decode_hpos(state.mobs.hpos[slot])
-    y, width, height = decode_vpos(state.mobs.vpos[slot])
+    _, width, height = decode_vpos(state.mobs.vpos[slot])
+    y = vpos_y(state.mobs.vpos[slot])
     old_cell = _pixel_to_slot(x, y)
     new_x = _clamp_or_wrap(x + dx, state.wrap_h)
     new_y = _clamp_or_wrap(y + dy, state.wrap_v)
@@ -712,7 +720,7 @@ def _move_thief_axis(state: GameState, dx: int, dy: int) -> tuple[bool, bool]:
                 )
 
     state.mobs.hpos[slot] = encode_hpos(new_x, palette, flags)
-    state.mobs.vpos[slot] = encode_vpos(new_y, width, height)
+    state.mobs.vpos[slot] = encode_vpos_at_y(new_y, width, height)
     return True, False
 
 
@@ -737,8 +745,8 @@ def thief_move_engine(
     direction = _direction_from_move_flags(move_flags)
     if direction != 8:
         state.thief_direction = direction
-    horizontal_speed = max(0, horizontal_delta_bias >> 6)
-    vertical_speed = max(0, vertical_delta_bias >> 6)
+    horizontal_speed = max(0, horizontal_delta_bias >> 7)
+    vertical_speed = max(0, vertical_delta_bias >> 7)
     dx, dy = _axis_delta(move_flags, horizontal_speed, vertical_speed)
 
     blocked = False
@@ -806,8 +814,8 @@ def thief_find_aligned_shooter(state: GameState) -> int:
     slot = _slot_for_thief(state)
     if not slot:
         return -1
-    thief_x, _, _ = decode_hpos(state.mobs.hpos[slot])
-    thief_y, _, _ = decode_vpos(state.mobs.vpos[slot])
+    thief_x = hpos_x(state.mobs.hpos[slot])
+    thief_y = vpos_y(state.mobs.vpos[slot])
     for player_index in range(4):
         shot_slot = player_index + 1
         if not state.mobs.picture[shot_slot]:
@@ -815,8 +823,8 @@ def thief_find_aligned_shooter(state: GameState) -> int:
         direction = _shot_direction(state, player_index)
         if not 0 <= direction <= 7 or (direction ^ state.thief_direction) != 4:
             continue
-        shot_x, _, _ = decode_hpos(state.mobs.hpos[shot_slot])
-        shot_y, _, _ = decode_vpos(state.mobs.vpos[shot_slot])
+        shot_x = hpos_x(state.mobs.hpos[shot_slot])
+        shot_y = vpos_y(state.mobs.vpos[shot_slot])
         dx = _trunc_div(_wrapped_axis_delta(thief_x - shot_x, state.wrap_h), 16)
         dy = _trunc_div(_wrapped_axis_delta(thief_y - shot_y, state.wrap_v), 16)
         if _shot_ray_matches(direction, dx, dy):

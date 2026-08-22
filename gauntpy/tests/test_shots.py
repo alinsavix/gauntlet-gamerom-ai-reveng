@@ -20,6 +20,7 @@ from __future__ import annotations
 import pytest
 
 from gauntpy.constants import Character, MazeObjIds, PlayerStatus
+from gauntpy.coords import hpos_x, native_v, vpos_y
 from gauntpy.state import GameState, Player
 from gauntpy.subsystems import shots
 from gauntpy.subsystems.shots import (
@@ -63,9 +64,9 @@ def _place_monster(state: GameState, slot: int,
     """
     # link encodes obj_type in upper 6 bits; leave chain bits = 0.
     state.mobs.link[slot] = (int(obj_type) << 10) & 0xFFFF
-    # hpos: x=4 → hpos bits 15-6 = 4; bit 12 = 0 (no blink).  palette = health_nibble.
-    state.mobs.hpos[slot] = ((4 & 0x3FF) << 6) | (health_nibble & 0xF)
-    state.mobs.vpos[slot] = (4 & 0x3FF) << 6
+    # hpos: x=4 occupies bits 15-7; palette = health_nibble.
+    state.mobs.hpos[slot] = ((4 & 0x1FF) << 7) | (health_nibble & 0xF)
+    state.mobs.vpos[slot] = native_v(4 & 0x1FF) << 7
     state.mobs.picture[slot] = 1   # non-zero = active
     # Insert into the depth chain so unlink_and_clear works cleanly.
     state.mobs.insert(slot)
@@ -74,8 +75,8 @@ def _place_monster(state: GameState, slot: int,
 def _place_wall(state: GameState, slot: int) -> None:
     """Insert a WALL_MOVABLE MOB at ``slot``."""
     state.mobs.link[slot] = (int(MazeObjIds.WALL_MOVABLE) << 10) & 0xFFFF
-    state.mobs.hpos[slot] = (100 << 6)
-    state.mobs.vpos[slot] = (100 << 6)
+    state.mobs.hpos[slot] = (100 << 7)
+    state.mobs.vpos[slot] = (native_v(100) << 7)
     state.mobs.picture[slot] = 1
     state.mobs.insert(slot)
 
@@ -287,8 +288,8 @@ class TestEffectSpawning:
     def test_impact_preserves_full_pool_transporter_channel(self):
         state = _make_state()
         target = 90
-        state.mobs.hpos[target] = 100 << 6
-        state.mobs.vpos[target] = 100 << 6
+        state.mobs.hpos[target] = 100 << 7
+        state.mobs.vpos[target] = native_v(100) << 7
         for channel, slot in enumerate(range(0x0D, 0x11)):
             state.mobs.picture[slot] = 0x0924
             state.mob_effect_anim_counter[channel] = 0xFF
@@ -571,8 +572,8 @@ class TestGenerators:
         SLOT = 130
         # GEN_GHOST1 = 28 → tier ((28-28)%3)+1 = 1
         state.mobs.link[SLOT] = (int(MazeObjIds.GEN_GHOST1) << 10) & 0xFFFF
-        state.mobs.hpos[SLOT] = (100 << 6)
-        state.mobs.vpos[SLOT] = (100 << 6)
+        state.mobs.hpos[SLOT] = (100 << 7)
+        state.mobs.vpos[SLOT] = (native_v(100) << 7)
         state.mobs.picture[SLOT] = 1
         state.mobs.insert(SLOT)
 
@@ -586,8 +587,8 @@ class TestGenerators:
         SLOT = 131
         # GEN_GHOST3 = 30 → tier ((30-28)%3)+1 = 3
         state.mobs.link[SLOT] = (int(MazeObjIds.GEN_GHOST3) << 10) & 0xFFFF
-        state.mobs.hpos[SLOT] = (100 << 6)
-        state.mobs.vpos[SLOT] = (100 << 6)
+        state.mobs.hpos[SLOT] = (100 << 7)
+        state.mobs.vpos[SLOT] = (native_v(100) << 7)
         state.mobs.picture[SLOT] = 1
         state.mobs.insert(SLOT)
 
@@ -607,8 +608,8 @@ class TestGenerators:
         state = _make_state()
         SLOT = 132
         state.mobs.link[SLOT] = (int(MazeObjIds.GEN_GRUNT1) << 10) & 0xFFFF
-        state.mobs.hpos[SLOT] = (100 << 6)
-        state.mobs.vpos[SLOT] = (100 << 6)
+        state.mobs.hpos[SLOT] = (100 << 7)
+        state.mobs.vpos[SLOT] = (native_v(100) << 7)
         state.mobs.picture[SLOT] = 1
         state.mobs.insert(SLOT)
         state.players[0].character = Character.ELF   # damage 1
@@ -620,8 +621,8 @@ class TestGenerators:
         state = _make_state()
         SLOT = 133
         state.mobs.link[SLOT] = (int(MazeObjIds.GEN_SORC1) << 10) & 0xFFFF
-        state.mobs.hpos[SLOT] = (100 << 6)
-        state.mobs.vpos[SLOT] = (100 << 6)
+        state.mobs.hpos[SLOT] = (100 << 7)
+        state.mobs.vpos[SLOT] = (native_v(100) << 7)
         state.mobs.picture[SLOT] = 1
         state.mobs.insert(SLOT)
         state.escape_timer = 5000
@@ -653,8 +654,8 @@ def _place_player_mob(state: GameState, slot: int, player_index: int,
                       x: int = 160, y: int = 160) -> None:
     """A player MOB: hpos palette >= 0xC is what marks the slot as a player."""
     state.mobs.link[slot] = 0
-    state.mobs.hpos[slot] = ((x & 0x3FF) << 6) | 0x0C
-    state.mobs.vpos[slot] = (y & 0x3FF) << 6
+    state.mobs.hpos[slot] = ((x & 0x1FF) << 7) | 0x0C
+    state.mobs.vpos[slot] = native_v(y & 0x1FF) << 7
     state.mobs.picture[slot] = 1
     state.mobs.set_state(slot, player_index)
     state.mobs.insert(slot)
@@ -665,8 +666,8 @@ def _arm_monster_shot(state: GameState, shooter_id: int, tier: int = 0) -> None:
     """Give a monster channel a live shot MOB carrying ``tier`` in hpos 4-5."""
     slot = shooter_id + 1
     state.mobs.picture[slot] = 1
-    state.mobs.hpos[slot] = (160 << 6) | (tier & 0x30)
-    state.mobs.vpos[slot] = 160 << 6
+    state.mobs.hpos[slot] = (160 << 7) | (tier & 0x30)
+    state.mobs.vpos[slot] = native_v(160) << 7
 
 
 class TestMonsterShotDamageIndex:
@@ -731,6 +732,41 @@ class TestMonsterShotDamageIndex:
         _arm_monster_shot(state, 4)
         resolve_shot_hit(state, 302, 4)
         assert state.players[1].health == 0
+
+    def test_collision_finds_a_roaming_player_outside_their_fixed_record_cell(self):
+        state = _make_state()
+        victim = state.players[1]
+        victim.status = int(PlayerStatus.ALIVE_HERE)
+        victim.health = 100
+        _place_player_mob(state, 33, 1, x=160, y=160)
+        _arm_monster_shot(state, 4)
+
+        hit = shot_mob_collision(state, (10 << 5) | 10, 4)
+
+        assert hit == 33
+        resolve_shot_hit(state, hit, 4)
+        assert victim.health < 100
+
+    @pytest.mark.parametrize("victim_index", range(4))
+    def test_monster_shot_damages_the_player_named_by_mob_state(
+        self, victim_index,
+    ):
+        state = _make_state()
+        for player in state.players:
+            player.status = int(PlayerStatus.ALIVE_HERE)
+            player.health = 100
+        slot = 300 + victim_index
+        _place_player_mob(state, slot, victim_index)
+        _arm_monster_shot(state, 4)
+
+        resolve_shot_hit(state, slot, 4)
+
+        assert state.players[victim_index].health < 100
+        assert all(
+            player.health == 100
+            for index, player in enumerate(state.players)
+            if index != victim_index
+        )
 
 
 class TestAcidImmunity:
@@ -835,8 +871,8 @@ def _place_typed(state: GameState, slot: int, obj_type, *,
                  picture: int = 1, x: int = 160, y: int = 160,
                  palette: int = 0) -> None:
     state.mobs.link[slot] = (int(obj_type) << 10) & 0xFFFF
-    state.mobs.hpos[slot] = ((x & 0x3FF) << 6) | (palette & 0x0F)
-    state.mobs.vpos[slot] = (y & 0x3FF) << 6
+    state.mobs.hpos[slot] = ((x & 0x1FF) << 7) | (palette & 0x0F)
+    state.mobs.vpos[slot] = native_v(y & 0x1FF) << 7
     state.mobs.picture[slot] = picture
     state.mobs.insert(slot)
 
@@ -878,7 +914,7 @@ class TestDispatchLeaves:
         SLOT = 343
         _place_typed(state, SLOT, MazeObjIds.WALL_REGULAR)
         state.mobs.picture[5] = 1
-        state.mobs.hpos[5] = (160 << 6) | 0x30
+        state.mobs.hpos[5] = (160 << 7) | 0x30
         assert resolve_shot_hit(state, SLOT, 4) == 0
 
     def test_playfield_tile_code_takes_the_wall_path(self):
@@ -1032,7 +1068,7 @@ class TestDispatchLeaves:
         SLOT = 356
         _place_typed(state, SLOT, MazeObjIds.MONST_DRAGON, palette=8)
         state.mobs.picture[5] = 1
-        state.mobs.hpos[5] = 160 << 6
+        state.mobs.hpos[5] = 160 << 7
         assert resolve_shot_hit(state, SLOT, 4) == -1
         assert state.mobs.picture[5] == 0
         assert state.mobs.picture[SLOT] != 0, "the dragon is untouched"
@@ -1163,8 +1199,8 @@ def _arm_player_shot(state: GameState, shooter_id: int = 0,
                      x: int = 160, y: int = 160, tier: int = 0) -> int:
     slot = shooter_id + 1
     state.mobs.picture[slot] = 1
-    state.mobs.hpos[slot] = ((x & 0x3FF) << 6) | (tier & 0x30)
-    state.mobs.vpos[slot] = (y & 0x3FF) << 6
+    state.mobs.hpos[slot] = ((x & 0x1FF) << 7) | (tier & 0x30)
+    state.mobs.vpos[slot] = native_v(y & 0x1FF) << 7
     state.shot_direction[shooter_id] = 2      # heading right
     return slot
 
@@ -1176,9 +1212,45 @@ class TestShotCollision:
         _arm_player_shot(state)
         cell = (10 << 5) | 10                      # pixel (160, 160)
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[cell] = (160 << 6) | 4
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (160 << 7) | 4
+        state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, cell, 0) == cell
+
+    def test_close_sorcerer_wins_over_the_shooters_overlay_record(self):
+        state = _make_state()
+        hero_record = (4 << 5) | 4
+        cell = (10 << 5) | 10
+        player = state.players[0]
+        player.mob_slot = hero_record
+        player.status = PlayerStatus.ALIVE_HERE
+        state.mobs.picture[hero_record] = 0x100
+        state.mobs.hpos[hero_record] = (160 << 7) | 0x0C
+        state.mobs.vpos[hero_record] = native_v(160) << 7
+        _arm_player_shot(state)
+        _place_monster(
+            state, cell, MazeObjIds.MONST_SORC, health_nibble=0x0B,
+        )
+        state.mobs.hpos[cell] = (160 << 7) | 0x0B
+        state.mobs.vpos[cell] = native_v(160) << 7
+
+        assert shot_mob_collision(state, cell, 0) == cell
+
+    def test_empty_cell_still_finds_a_roaming_player_overlay(self):
+        state = _make_state()
+        hero_record = (4 << 5) | 4
+        cell = (10 << 5) | 10
+        player = state.players[0]
+        player.mob_slot = hero_record
+        player.status = PlayerStatus.ALIVE_HERE
+        state.mobs.picture[hero_record] = 0x100
+        state.mobs.hpos[hero_record] = (160 << 7) | 0x0C
+        state.mobs.vpos[hero_record] = native_v(160) << 7
+        state.mobs.picture[5] = 1
+        state.mobs.hpos[5] = 160 << 7
+        state.mobs.vpos[5] = native_v(160) << 7
+        state.shot_direction[4] = 2
+
+        assert shot_mob_collision(state, cell, 4) == hero_record
 
     def test_never_hits_its_own_shooter(self):
         """0x40AA6: active_mob_ids[shooter] is excluded from every probe."""
@@ -1187,8 +1259,8 @@ class TestShotCollision:
         state.players[0].mob_slot = cell
         _arm_player_shot(state)
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[cell] = (160 << 6) | 4
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (160 << 7) | 4
+        state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, cell, 0) == -1
 
     def test_a_reflected_shot_may_hit_its_shooter(self):
@@ -1199,8 +1271,8 @@ class TestShotCollision:
         state.reflect_count[0] = 3
         _arm_player_shot(state)
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[cell] = (160 << 6) | 4
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (160 << 7) | 4
+        state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, cell, 0) == cell
 
     def test_a_target_too_far_right_is_rejected(self):
@@ -1210,8 +1282,8 @@ class TestShotCollision:
         _arm_player_shot(state)
         cell = (10 << 5) | 11                      # the first probe for dir 2
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[cell] = (176 << 6) | 4     # 16 px right: outside
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (176 << 7) | 4     # 16 px right: outside
+        state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, cell - 1, 0) == -1
 
     def test_the_probe_ring_reaches_the_next_cell(self):
@@ -1220,8 +1292,8 @@ class TestShotCollision:
         _arm_player_shot(state, x=170)
         cell = (10 << 5) | 11
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[cell] = (172 << 6) | 4     # 2 px right of the shot
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (172 << 7) | 4     # 2 px right of the shot
+        state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, (10 << 5) | 10, 0) == cell
 
     def test_empty_slots_are_skipped(self):
@@ -1235,24 +1307,24 @@ class TestShotCollision:
         state = _make_state()
         cell = (10 << 5) | 10
         state.mobs.picture[5] = 1
-        state.mobs.hpos[5] = (160 << 6) | 0x30
-        state.mobs.vpos[5] = 160 << 6
+        state.mobs.hpos[5] = (160 << 7) | 0x30
+        state.mobs.vpos[5] = native_v(160) << 7
         state.shot_direction[4] = 2
         _place_monster(state, cell, MazeObjIds.MONST_DEATH, health_nibble=0)
-        state.mobs.hpos[cell] = 160 << 6
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = 160 << 7
+        state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, cell, 4) == -1
 
     def test_max_tier_shot_still_hits_a_ghost(self):
         state = _make_state()
         cell = (10 << 5) | 10
         state.mobs.picture[5] = 1
-        state.mobs.hpos[5] = (160 << 6) | 0x30
-        state.mobs.vpos[5] = 160 << 6
+        state.mobs.hpos[5] = (160 << 7) | 0x30
+        state.mobs.vpos[5] = native_v(160) << 7
         state.shot_direction[4] = 2
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[cell] = (160 << 6) | 4
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (160 << 7) | 4
+        state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, cell, 4) == cell
 
     def test_collision_publishes_the_separations_for_the_door_check(self):
@@ -1261,10 +1333,10 @@ class TestShotCollision:
         _arm_player_shot(state)
         cell = (10 << 5) | 10
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[cell] = (160 << 6) | 4
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (160 << 7) | 4
+        state.mobs.vpos[cell] = native_v(160) << 7
         shot_mob_collision(state, cell, 0)
-        assert state.shot_sep_h == 0x100      # the ROM's +0x200, halved
+        assert state.shot_sep_h == 0x200      # the ROM's +0x200
         assert state.shot_sep_v == 0
 
 
@@ -1275,7 +1347,7 @@ class TestShotCollision:
 def _centre_camera(state: GameState, x: int = 160, y: int = 160) -> None:
     """Put the shot window over ``(x, y)`` so nothing is culled off-screen."""
     state.scroll_x = x + 8
-    state.scroll_y = 0x1F0 - y - 0x80
+    state.scroll_y = y - 0x68
 
 
 class TestMainHandleShots:
@@ -1301,36 +1373,36 @@ class TestMainHandleShots:
     def test_warrior_shot_uses_its_own_velocity_row(self):
         state, slot = self._running_shot()
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 166   # 0x180 >> 6
+        assert hpos_x(state.mobs.hpos[slot]) == 163   # ROM 0x180 >> 7
 
     def test_elf_shot_is_faster(self):
         state, slot = self._running_shot(character=Character.ELF)
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 170   # 0x280 >> 6
+        assert hpos_x(state.mobs.hpos[slot]) == 165   # ROM 0x280 >> 7
 
     def test_shot_power_selects_the_0x28_row_block(self):
         state, slot = self._running_shot(powers=0x08)
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 168   # 0x200 >> 6
+        assert hpos_x(state.mobs.hpos[slot]) == 164   # ROM 0x200 >> 7
 
     def test_diagonals_are_slower_per_axis(self):
         state, slot = self._running_shot(direction=1)         # up-right
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 164    # 0x100 >> 6
-        assert (state.mobs.vpos[slot] >> 6) & 0x3FF == 156    # upward
+        assert hpos_x(state.mobs.hpos[slot]) == 162    # ROM 0x100 >> 7
+        assert vpos_y(state.mobs.vpos[slot]) == 158    # upward
 
     def test_direction_zero_moves_up_the_maze(self):
         state, slot = self._running_shot(direction=0)
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 160
-        assert (state.mobs.vpos[slot] >> 6) & 0x3FF == 154
+        assert hpos_x(state.mobs.hpos[slot]) == 160
+        assert vpos_y(state.mobs.vpos[slot]) == 157
 
     def _monster_shot(self, tier, shooter_id=4):
         state = _make_state()
         slot = shooter_id + 1
         state.mobs.picture[slot] = 1
-        state.mobs.hpos[slot] = (160 << 6) | (tier & 0x30)
-        state.mobs.vpos[slot] = 160 << 6
+        state.mobs.hpos[slot] = (160 << 7) | (tier & 0x30)
+        state.mobs.vpos[slot] = native_v(160) << 7
         state.shot_direction[shooter_id] = 2
         state.mobs.insert(slot, depth_key=(10 << 5) | 10)
         state.shot_owner_mob[shooter_id] = 0x3FF
@@ -1341,21 +1413,33 @@ class TestMainHandleShots:
     def test_ordinary_monster_shot_uses_the_0x20_row(self):
         state, slot = self._monster_shot(0)
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 166    # 0x180 >> 6
+        assert hpos_x(state.mobs.hpos[slot]) == 163    # ROM 0x180 >> 7
+
+    def test_live_monster_channel_damages_a_roaming_fixed_record_player(self):
+        state, slot = self._monster_shot(0)
+        victim = state.players[1]
+        victim.status = int(PlayerStatus.ALIVE_HERE)
+        victim.health = 100
+        _place_player_mob(state, 33, 1, x=160, y=160)
+
+        main_handle_shots(state)
+
+        assert victim.health < 100
+        assert state.mobs.picture[slot] == 0
 
     def test_tier_two_monster_shot_uses_the_0x48_row(self):
         state, slot = self._monster_shot(0x20)
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 170    # 0x280 >> 6
+        assert hpos_x(state.mobs.hpos[slot]) == 165    # ROM 0x280 >> 7
 
     def test_max_tier_monster_shot_only_moves_on_even_frames(self):
         state, slot = self._monster_shot(0x30)
         state.frame_counter = 1
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 160    # held still
+        assert hpos_x(state.mobs.hpos[slot]) == 160    # held still
         state.frame_counter = 2
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 164    # 0x100 >> 6
+        assert hpos_x(state.mobs.hpos[slot]) == 162    # ROM 0x100 >> 7
 
     def test_animation_counter_reloads_from_the_rom_table(self):
         state, slot = self._running_shot()
@@ -1382,8 +1466,8 @@ class TestMainHandleShots:
         state = _make_state()
         slot = 9
         state.mobs.picture[slot] = 1
-        state.mobs.hpos[slot] = 160 << 6
-        state.mobs.vpos[slot] = 160 << 6
+        state.mobs.hpos[slot] = 160 << 7
+        state.mobs.vpos[slot] = native_v(160) << 7
         state.shot_direction[8] = 2
         state.mobs.insert(slot, depth_key=(10 << 5) | 10)
         state.shot_owner_mob[8] = 0x3FF
@@ -1399,8 +1483,8 @@ class TestMainHandleShots:
         state = _make_state()
         slot = 9
         state.mobs.picture[slot] = 1
-        state.mobs.hpos[slot] = 160 << 6
-        state.mobs.vpos[slot] = 160 << 6
+        state.mobs.hpos[slot] = 160 << 7
+        state.mobs.vpos[slot] = native_v(160) << 7
         state.shot_dx[slot] = 4
         state.shot_dy[slot] = 0
         state.frame_counter = 1                  # not this channel's anim frame
@@ -1414,8 +1498,8 @@ class TestMainHandleShots:
         state = _make_state()
         slot = 5
         state.mobs.picture[slot] = 1
-        state.mobs.hpos[slot] = 160 << 6
-        state.mobs.vpos[slot] = 160 << 6
+        state.mobs.hpos[slot] = 160 << 7
+        state.mobs.vpos[slot] = native_v(160) << 7
         state.shot_dx[slot] = 6
         state.shot_dy[slot] = 0
         state.frame_counter = 1                  # (1 ^ 4) & 1 == 1: not eligible
@@ -1429,8 +1513,8 @@ class TestMainHandleShots:
         cell = (10 << 5) | 10
         slot = 9
         state.mobs.picture[slot] = 1
-        state.mobs.hpos[slot] = 160 << 6
-        state.mobs.vpos[slot] = 160 << 6
+        state.mobs.hpos[slot] = 160 << 7
+        state.mobs.vpos[slot] = native_v(160) << 7
         state.shot_direction[8] = 2
         state.mobs.insert(slot, depth_key=cell)
         state.shot_owner_mob[8] = 0x3FF
@@ -1438,10 +1522,29 @@ class TestMainHandleShots:
         state.frame_counter = 1
         _centre_camera(state)
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[cell] = (160 << 6) | 4
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (160 << 7) | 4
+        state.mobs.vpos[cell] = native_v(160) << 7
         main_handle_shots(state)
         assert state.mobs.picture[cell] != 0, "no collision above counter 5"
+
+    def test_the_screen_origins_are_the_roms_verbatim(self):
+        """0x904AC2/4: ``(pf_hscroll - 8) << 7`` and
+        ``(0x108 - pf_vscroll_lo) << 7``, both compared as ``word - origin``
+        over a 16-bit maze that needs no explicit modulus."""
+        state = _make_state()
+        state.scroll_x = 0x100
+        state.scroll_y = 0x80
+        origin_h, origin_v = shots._screen_origins(state)
+        assert origin_h == ((0x100 - 8) << 7) & 0xFFFF
+        assert origin_v == ((0x108 - 0x80) << 7) & 0xFFFF
+
+        # A shot at the top-left of that window has a small unsigned delta on
+        # both axes, straight off the stored words.
+        slot = 1
+        state.mobs.hpos[slot] = (0x100 - 8) << 7
+        state.mobs.vpos[slot] = ((0x108 - 0x80) << 7) & 0xFFFF
+        assert (state.mobs.hpos[slot] - origin_h) & 0xFFFF == 0
+        assert (state.mobs.vpos[slot] - origin_v) & 0xFFFF == 0
 
     def test_a_shot_that_leaves_the_window_is_removed(self):
         state, slot = self._running_shot()
@@ -1456,9 +1559,33 @@ class TestMainHandleShots:
         state, slot = self._running_shot(direction=2)   # moving right
         # Put the window just to the right of the shot, inside the tolerance.
         state.scroll_x = 160 + 8 + 12
-        state.scroll_y = 0x1F0 - 160 - 0x80
+        state.scroll_y = 160 - 0x68
         main_handle_shots(state)
         assert state.mobs.picture[slot] != 0
+
+    def test_lobber_rock_survives_the_wrapped_left_camera(self):
+        """The level-7 seam window starts near x=496 and continues at x=0."""
+        state = _make_state()
+        shooter_id = 8
+        slot = shooter_id + 1
+        state.mobs.picture[slot] = 1
+        state.mobs.hpos[slot] = 44 << 7
+        state.mobs.vpos[slot] = native_v(160) << 7
+        state.shot_direction[shooter_id] = 2
+        state.shot_anim_lifetime_counter[shooter_id] = 0x20
+        state.lobber_shot_h_accum[0] = state.mobs.hpos[slot]
+        state.lobber_shot_v_accum[0] = state.mobs.vpos[slot]
+        state.lobber_shot_vec_h[0] = 0x80
+        state.mobs.insert(slot, depth_key=(10 << 5) | 3)
+        state.shot_owner_mob[shooter_id] = (10 << 5) | 3
+        state.scroll_x = 504
+        state.scroll_y = 160 - 0x68
+        state.frame_counter = 1
+
+        main_handle_shots(state)
+
+        assert state.mobs.picture[slot] != 0
+        assert hpos_x(state.mobs.hpos[slot]) & 0x1FF == 45
 
     def test_crossing_into_a_new_cell_rekeys_the_depth_entry(self):
         state, slot = self._running_shot()
@@ -1478,8 +1605,8 @@ class TestMainHandleShots:
         state, slot = self._running_shot(character=Character.ELF)
         cell = (10 << 5) | 10
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[cell] = (160 << 6) | 4
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (160 << 7) | 4
+        state.mobs.vpos[cell] = native_v(160) << 7
         main_handle_shots(state)
         assert state.mobs.hpos[cell] & 0xF == 3, "ghost took one damage"
         assert state.mobs.picture[slot] == 0, "the shot was consumed"
@@ -1497,8 +1624,8 @@ def _arm_lobber(state: GameState, shooter_id: int = 8, x: int = 160,
 
     slot = shooter_id + 1
     state.mobs.picture[slot] = 1
-    state.mobs.hpos[slot] = ((x & 0x3FF) << 6) | palette
-    state.mobs.vpos[slot] = ((y & 0x3FF) << 6) | size
+    state.mobs.hpos[slot] = ((x & 0x1FF) << 7) | palette
+    state.mobs.vpos[slot] = (native_v(y & 0x1FF) << 7) | size
     state.shot_direction[shooter_id] = direction
     state.mobs.insert(slot, depth_key=_cell_of(x, y))
     state.shot_owner_mob[shooter_id] = 0x3FF
@@ -1509,7 +1636,7 @@ def _arm_lobber(state: GameState, shooter_id: int = 8, x: int = 160,
     # Put the shot well inside the disposal window on both axes, so only the
     # motion under test decides whether it survives.
     state.scroll_x = x - 128 + 8
-    state.scroll_y = 0x1F0 - y - 0x80
+    state.scroll_y = y - 0x68
     return slot
 
 
@@ -1523,34 +1650,34 @@ class TestLobberArc:
         for _ in range(frames):
             main_handle_shots(state)
             state.frame_counter += 1
-            seen.append(((state.mobs.hpos[slot] >> 6) & 0x3FF,
-                         (state.mobs.vpos[slot] >> 6) & 0x3FF))
+            seen.append((hpos_x(state.mobs.hpos[slot]),
+                         vpos_y(state.mobs.vpos[slot])))
         return seen
 
     def test_the_accumulator_carries_the_sub_pixel_remainder(self):
-        """0x479DE-0x47A06: 0x60 per frame is 1.5 px, and the half is kept."""
+        """0x479DE-0x47A06: 0xC0 per frame is 1.5 px, and the half is kept."""
         state = _make_state()
-        slot = _arm_lobber(state, vec_h=0x60, vec_v=-0x30)
+        slot = _arm_lobber(state, vec_h=0xC0, vec_v=0x60)
 
         assert self._run(state, slot, 4) == [
-            (161, 159), (163, 158), (164, 157), (166, 157),
+            (161, 160), (163, 159), (164, 158), (166, 157),
         ]
 
     def test_the_accumulator_itself_advances_by_the_raw_vector(self):
         state = _make_state()
-        slot = _arm_lobber(state, vec_h=0x60, vec_v=-0x30)
+        slot = _arm_lobber(state, vec_h=0xC0, vec_v=0x60)
         base_h = state.lobber_shot_h_accum[0]
         base_v = state.lobber_shot_v_accum[0]
 
         self._run(state, slot, 3)
 
-        assert state.lobber_shot_h_accum[0] == base_h + 3 * 0x60
-        assert state.lobber_shot_v_accum[0] == base_v - 3 * 0x30
+        assert state.lobber_shot_h_accum[0] == base_h + 3 * 0xC0
+        assert state.lobber_shot_v_accum[0] == base_v + 3 * 0x60
 
     def test_a_sub_pixel_lead_still_moves_the_rock_eventually(self):
         """A vector under one whole pixel per frame cannot survive rounding."""
         state = _make_state()
-        slot = _arm_lobber(state, vec_h=0x10)          # 1/4 px per frame
+        slot = _arm_lobber(state, vec_h=0x20)          # 1/4 px per frame
 
         positions = [x for x, _ in self._run(state, slot, 8)]
 
@@ -1558,22 +1685,22 @@ class TestLobberArc:
 
     def test_a_negative_vector_walks_the_accumulator_down(self):
         state = _make_state()
-        slot = _arm_lobber(state, x=200, y=200, vec_h=-0x60, vec_v=0x30,
+        slot = _arm_lobber(state, x=200, y=200, vec_h=-0xC0, vec_v=-0x60,
                            direction=6)
 
         assert self._run(state, slot, 4) == [
-            (198, 200), (197, 201), (195, 202), (194, 203),
+            (198, 201), (197, 202), (195, 203), (194, 203),
         ]
 
     def test_the_low_bits_of_both_words_survive_every_step(self):
-        """0x479FE keeps ``hpos & 0x7F``; gauntpy's field is ``& 0x3F``."""
+        """0x479FE keeps ``hpos & 0x7F`` -- the native low field."""
         state = _make_state()
-        slot = _arm_lobber(state, vec_h=0x60, vec_v=-0x30, palette=0xB, size=0x12)
+        slot = _arm_lobber(state, vec_h=0xC0, vec_v=0x60, palette=0xB, size=0x12)
 
         self._run(state, slot, 5)
 
-        assert state.mobs.hpos[slot] & 0x3F == 0x0B
-        assert state.mobs.vpos[slot] & 0x3F == 0x12
+        assert state.mobs.hpos[slot] & 0x7F == 0x0B
+        assert state.mobs.vpos[slot] & 0x7F == 0x12
 
     def test_a_lobber_never_falls_back_to_the_velocity_tables(self):
         """0x478B4 branches away before ``shot_velocity_x/y`` is ever read."""
@@ -1583,39 +1710,39 @@ class TestLobberArc:
 
         self._run(state, slot, 3)
 
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 160
-        assert (state.mobs.vpos[slot] >> 6) & 0x3FF == 160
+        assert hpos_x(state.mobs.hpos[slot]) == 160
+        assert vpos_y(state.mobs.vpos[slot]) == 160
 
     def test_the_arc_ignores_the_tier_bits_a_velocity_row_would_use(self):
         state = _make_state()
-        slot = _arm_lobber(state, vec_h=0x60, palette=0x30 | 5)
+        slot = _arm_lobber(state, vec_h=0xC0, palette=0x30 | 5)
 
         self._run(state, slot, 2)
 
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 163      # still 1.5 px
-        assert state.mobs.hpos[slot] & 0x3F == 0x35
+        assert hpos_x(state.mobs.hpos[slot]) == 163      # still 1.5 px
+        assert state.mobs.hpos[slot] & 0x7F == 0x35
 
     def test_a_channel_armed_by_hand_gets_its_accumulator_latched(self):
         """0x49216's seed, replayed by the go-live latch for anything else."""
         state = _make_state()
         slot = 9
         state.mobs.picture[slot] = 1
-        state.mobs.hpos[slot] = (160 << 6) | 1
-        state.mobs.vpos[slot] = (160 << 6) | 9
-        state.lobber_shot_vec_h[0] = 0x80
+        state.mobs.hpos[slot] = (160 << 7) | 1
+        state.mobs.vpos[slot] = (native_v(160) << 7) | 9
+        state.lobber_shot_vec_h[0] = 0x100
         state.frame_counter = 1
         _centre_camera(state)
 
         main_handle_shots(state)
 
-        assert state.lobber_shot_h_accum[0] == (160 << 6) + 0x80
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 162
-        assert state.mobs.hpos[slot] & 0x3F == 1
+        assert state.lobber_shot_h_accum[0] == (160 << 7) + 0x100
+        assert hpos_x(state.mobs.hpos[slot]) == 162
+        assert state.mobs.hpos[slot] & 0x7F == 1
 
     def test_shot_dx_is_left_to_the_creator(self):
         """The vector never changes in flight, so nothing needs refreshing."""
         state = _make_state()
-        slot = _arm_lobber(state, vec_h=0x60, vec_v=-0x30)
+        slot = _arm_lobber(state, vec_h=0xC0, vec_v=0x60)
         state.shot_dx[slot] = 2               # monster_create_shot's rounding
         state.shot_dy[slot] = -1
 
@@ -1625,28 +1752,24 @@ class TestLobberArc:
         assert state.shot_dy[slot] == -1
 
 
-def _rom_arc(pixel: int, low: int, vector: int, frames: int,
-             shift: int) -> list[int]:
-    """0x479DE-0x47A0C transcribed literally, at a parameterised word shift.
+def _rom_arc(pixel: int, low: int, vector: int, frames: int) -> list[int]:
+    """0x479DE-0x47A0C transcribed literally, in the ROM's own words.
 
-    ``shift`` is 7 for the ROM's own words and 6 for gauntpy's, which is the
-    only difference between the two -- the position mask is ``-1 << shift`` and
-    the low field is everything under it.  Returns the pixel the routine's
-    ``lsr.w`` would have produced on each frame.
+    The position mask is 0xFF80 and the low field everything under it.
+    Returns the pixel the routine's ``lsr.w`` would have produced each frame.
     """
-    field = (0xFFFF << shift) & 0xFFFF
-    accum = (pixel << shift) & 0xFFFF
+    accum = (pixel << 7) & 0xFFFF
     word = accum | low
     out = []
     for _ in range(frames):
         accum = (accum + vector) & 0xFFFF
-        word = ((accum & field) + (word & ~field & 0xFFFF)) & 0xFFFF
-        out.append(word >> shift)
+        word = ((accum & 0xFF80) + (word & 0x007F)) & 0xFFFF
+        out.append(word >> 7)
     return out
 
 
 class TestLobberArcAgainstRom:
-    """Differential: the port must be 0x479C2 restated one bit lower down."""
+    """Differential: the port must be 0x479C2, word for word."""
 
     VECTORS = (0x10, 0x30, 0x60, 0x80, 0xC0, 0x140, -0x10, -0x60, -0x140)
 
@@ -1654,38 +1777,35 @@ class TestLobberArcAgainstRom:
         """Advance ``frames`` times, keeping the disposal window out of it."""
         out = []
         for _ in range(frames):
-            x = (state.mobs.hpos[slot] >> 6) & 0x3FF
-            y = (state.mobs.vpos[slot] >> 6) & 0x3FF
+            x = hpos_x(state.mobs.hpos[slot])
+            y = vpos_y(state.mobs.vpos[slot])
             state.scroll_x = x - 128 + 8          # the shot sits well inside
-            state.scroll_y = 0x1F0 - y - 0x80
+            state.scroll_y = y - 0x68
             main_handle_shots(state)
             state.frame_counter += 1
-            out.append((state.mobs.hpos[slot] >> 6) & 0x3FF)
+            out.append(hpos_x(state.mobs.hpos[slot]))
         return out
 
-    def test_the_port_matches_the_rom_routine_run_at_gauntpys_shift(self):
+    def test_the_port_runs_the_same_accumulator_algorithm(self):
         for vector in self.VECTORS:
             state = _make_state()
             slot = _arm_lobber(state, x=160, y=160, vec_h=vector, palette=0x0B)
-            expected = _rom_arc(160, 0x0B, vector, 6, shift=6)
+            expected = _rom_arc(160, 0x0B, vector, 6)
             assert self._run(state, slot, 6) == expected, f"vector {vector:#x}"
 
-    def test_the_rom_shift_is_the_documented_half_speed(self):
-        """gauntpy runs the whole world at the doubled word scale (module §1)."""
-        for vector in self.VECTORS:
-            port = _rom_arc(160, 0x0B, vector, 6, shift=6)
-            rom = _rom_arc(160, 0x0B, vector, 6, shift=7)
-            assert port == [160 + (n + 1) * vector // 64 for n in range(6)]
-            assert rom == [160 + (n + 1) * vector // 128 for n in range(6)]
+    def test_a_whole_pixel_vector_lands_on_whole_pixels(self):
+        """0x80 is exactly one pixel, so no remainder ever accumulates."""
+        assert _rom_arc(160, 0x0B, 0x80, 4) == [161, 162, 163, 164]
+        assert _rom_arc(160, 0x0B, -0x80, 4) == [159, 158, 157, 156]
 
     def test_the_low_field_is_never_disturbed(self):
-        for low in (0x00, 0x05, 0x1F, 0x38, 0x3F):
+        for low in (0x00, 0x05, 0x1F, 0x38, 0x7F):
             state = _make_state()
-            slot = _arm_lobber(state, vec_h=0x60, vec_v=-0x60,
+            slot = _arm_lobber(state, vec_h=0xC0, vec_v=-0xC0,
                                palette=low, size=low)
             self._run(state, slot, 5)
-            assert state.mobs.hpos[slot] & 0x3F == low
-            assert state.mobs.vpos[slot] & 0x3F == low
+            assert state.mobs.hpos[slot] & 0x7F == low
+            assert state.mobs.vpos[slot] & 0x7F == low
 
 
 # =============================================================================
@@ -1697,8 +1817,8 @@ def _arm_dragon_fire(state: GameState, shooter_id: int = 7, x: int = 160,
     """The channel state ``dragon_fire_setup``'s breath branch leaves behind."""
     slot = shooter_id + 1
     state.mobs.picture[slot] = 0x27D4
-    state.mobs.hpos[slot] = ((x & 0x3FF) << 6) | 0x38     # tier 0x30, palette 8
-    state.mobs.vpos[slot] = ((y & 0x3FF) << 6) | 0x12     # 3x3 tiles
+    state.mobs.hpos[slot] = ((x & 0x1FF) << 7) | 0x38     # tier 0x30, palette 8
+    state.mobs.vpos[slot] = (native_v(y & 0x1FF) << 7) | 0x12     # 3x3 tiles
     state.shot_direction[shooter_id] = direction
     state.shot_anim_lifetime_counter[shooter_id] = 0x13
     state.shot_owner_mob[shooter_id] = 0x3FF
@@ -1720,19 +1840,19 @@ class TestDragonFireChannel:
 
         state.frame_counter = 1
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 160, "held still"
+        assert hpos_x(state.mobs.hpos[slot]) == 160, "held still"
 
         state.frame_counter = 2
         main_handle_shots(state)
-        assert (state.mobs.hpos[slot] >> 6) & 0x3FF == 164   # 0x100 >> 6
+        assert hpos_x(state.mobs.hpos[slot]) == 162   # ROM 0x100 >> 7
 
     def test_it_keeps_its_tier_and_palette_while_it_flies(self):
         state = _make_state()
         slot = _arm_dragon_fire(state)
         state.frame_counter = 2
         main_handle_shots(state)
-        assert state.mobs.hpos[slot] & 0x3F == 0x38
-        assert state.mobs.vpos[slot] & 0x3F == 0x12
+        assert state.mobs.hpos[slot] & 0x7F == 0x38
+        assert state.mobs.vpos[slot] & 0x7F == 0x12
 
     def test_it_does_not_expire_on_its_first_tick(self):
         """0x477E8 kills a max-tier channel at counter 0; 0x54814 seeds 0x13."""
@@ -1781,14 +1901,14 @@ class TestDragonFireChannel:
         _arm_dragon_fire(state)
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
         # 12 px away: outside the 0x480/2 demon box, inside the 0x880/2 one.
-        state.mobs.hpos[cell] = (172 << 6) | 4
-        state.mobs.vpos[cell] = 160 << 6
+        state.mobs.hpos[cell] = (172 << 7) | 4
+        state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, cell, 7) == cell
 
         # The same geometry on an ordinary demon channel misses.
         state.mobs.picture[7] = 1
-        state.mobs.hpos[7] = (160 << 6) | 0x08
-        state.mobs.vpos[7] = 160 << 6
+        state.mobs.hpos[7] = (160 << 7) | 0x08
+        state.mobs.vpos[7] = native_v(160) << 7
         state.shot_direction[6] = 2
         state.shot_owner_mob[6] = 0x3FF
         assert shot_mob_collision(state, cell, 6) == -1
@@ -1801,8 +1921,8 @@ class TestDragonFireChannel:
         victim.mob_slot = 0x30
         victim.health = 500
         state.mobs.link[0x30] = 0
-        state.mobs.hpos[0x30] = (160 << 6) | 0x0C
-        state.mobs.vpos[0x30] = 160 << 6
+        state.mobs.hpos[0x30] = (160 << 7) | 0x0C
+        state.mobs.vpos[0x30] = native_v(160) << 7
         state.mobs.picture[0x30] = 1
         state.mobs.state_link[0x30] = 0
 
@@ -1821,8 +1941,8 @@ class TestDragonFireChannel:
         victim.mob_slot = 0x30
         victim.health = 500
         state.mobs.link[0x30] = 0
-        state.mobs.hpos[0x30] = (160 << 6) | 0x0C
-        state.mobs.vpos[0x30] = 160 << 6
+        state.mobs.hpos[0x30] = (160 << 7) | 0x0C
+        state.mobs.vpos[0x30] = native_v(160) << 7
         state.mobs.picture[0x30] = 1
 
         resolve_shot_hit(state, 0x30, 7)
@@ -1835,16 +1955,16 @@ class TestDragonFireChannel:
         state = _make_state()
         slot = 7
         state.mobs.picture[slot] = 1
-        state.mobs.hpos[slot] = (160 << 6) | 0x08
-        state.mobs.vpos[slot] = 160 << 6
+        state.mobs.hpos[slot] = (160 << 7) | 0x08
+        state.mobs.vpos[slot] = native_v(160) << 7
         state.shot_direction[6] = 2
         victim = state.players[0]
         victim.character = Character.WARRIOR
         victim.mob_slot = 0x30
         victim.health = 500
         state.mobs.link[0x30] = 0
-        state.mobs.hpos[0x30] = (160 << 6) | 0x0C
-        state.mobs.vpos[0x30] = 160 << 6
+        state.mobs.hpos[0x30] = (160 << 7) | 0x0C
+        state.mobs.vpos[0x30] = native_v(160) << 7
         state.mobs.picture[0x30] = 1
 
         resolve_shot_hit(state, 0x30, 6)
@@ -1955,8 +2075,8 @@ class TestHudLatches:
         _clear_latches(state)
         SLOT = 403
         state.mobs.link[SLOT] = (int(MazeObjIds.GEN_GHOST1) << 10) & 0xFFFF
-        state.mobs.hpos[SLOT] = 100 << 6
-        state.mobs.vpos[SLOT] = 100 << 6
+        state.mobs.hpos[SLOT] = 100 << 7
+        state.mobs.vpos[SLOT] = native_v(100) << 7
         state.mobs.picture[SLOT] = 1
         state.mobs.insert(SLOT)
         resolve_shot_hit(state, SLOT, 0)
@@ -2076,8 +2196,8 @@ class TestScoreEffectAnimationInterop:
 
         state = _make_state()
         source = 412
-        state.mobs.hpos[source] = 160 << 6
-        state.mobs.vpos[source] = 160 << 6
+        state.mobs.hpos[source] = 160 << 7
+        state.mobs.vpos[source] = native_v(160) << 7
         tport_cycle_start(state, source, 0)
         assert state.mobs.picture[0x0D] == 0x0924
         assert state.mob_effect_anim_counter[0] == 0xFF
@@ -2225,11 +2345,13 @@ class TestEncounterRecords:
         )
         assert not raised & contact_only
 
-    def test_a_record_the_port_has_no_message_for_returns_zero(self):
-        """The ROM's NULL-record path: flag set, nothing shown, returns 0."""
+    def test_player_shot_record_shows_the_rom_message_without_speech(self):
         state = _make_state()
         assert shots._dialog(state, 0, shots._DIALOG_PLAYER_SHOT) == 0
-        assert state.dialog_message == []
+        assert state.dialog_message == [
+            "  SHOTS DO NOT HURT  ",
+            " OTHER PLAYERS (YET) ",
+        ]
         assert shots._DIALOG_PLAYER_SHOT in _records_raised(state)
 
 
@@ -2301,7 +2423,7 @@ class TestProbeWrapWindows:
         state = _make_state()
         for y, expected in ((0, False), (8, False), (9, True),
                             (240, True), (241, False), (500, False)):
-            state.mobs.vpos[1] = (y & 0x3FF) << 6
+            state.mobs.vpos[1] = native_v(y & 0x1FF) << 7
             assert shots._wrap_allowed(state, 0) is expected, y
 
     def test_a_genuine_downward_overflow_needs_cell_row_31(self):
@@ -2319,7 +2441,7 @@ class TestProbeWrapWindows:
         rows = 0
         for y in range(512):
             state.mobs.hpos[1] = 0
-            state.mobs.vpos[1] = y << 6
+            state.mobs.vpos[1] = native_v(y) << 7
             if shots._shot_cell(state, 1) >> 5 != 31:
                 continue
             rows += 1
@@ -2368,8 +2490,8 @@ class TestProbeWrapWindows:
             if slot in (1, 0x3FF):
                 continue
             state.mobs.picture[slot] = 1
-            state.mobs.hpos[slot] = 160 << 6
-            state.mobs.vpos[slot] = 4 << 6
+            state.mobs.hpos[slot] = 160 << 7
+            state.mobs.vpos[slot] = native_v(4) << 7
         assert shot_mob_collision(state, (0 << 5) | 10, 0) == -1
 
     def test_the_wrap_returns_the_cell_without_a_hitbox_test(self):
@@ -2380,8 +2502,8 @@ class TestProbeWrapWindows:
         state.shot_direction[0] = 0
         target = (31 << 5) | 10
         _place_monster(state, target, MazeObjIds.MONST_GHOST, health_nibble=4)
-        state.mobs.hpos[target] = (0 << 6) | 4        # nowhere near the shot
-        state.mobs.vpos[target] = 0 << 6
+        state.mobs.hpos[target] = (0 << 7) | 4        # nowhere near the shot
+        state.mobs.vpos[target] = native_v(0) << 7
         assert shot_mob_collision(state, (0 << 5) | 10, 0) == target
 
 
@@ -2558,8 +2680,8 @@ class TestPlayfieldShowscore:
         shots._playfield_showscore(state, SLOT, 0)
         assert state.score_display_timer == [0x3C, 0, 0, 0]
         assert state.mobs.picture[0x11] == 0x1C88
-        assert state.mobs.hpos[0x11] == ((160 << 6) & 0xFFC0) + 5
-        assert state.mobs.vpos[0x11] == ((160 << 6) & 0xFFC0) + 0x200 + 0x10
+        assert state.mobs.hpos[0x11] == ((160 << 7) & 0xFF80) + 5
+        assert state.mobs.vpos[0x11] == ((native_v(160) << 7) & 0xFF80) + 0x400 + 0x10
 
     def test_a_busy_channel_is_skipped(self):
         state = _make_state()
@@ -2587,8 +2709,8 @@ class TestPlayfieldShowscore:
         _place_typed(state, SLOT, MazeObjIds.MONST_GHOST, x=160, y=160)
         shots._playfield_showscore(state, SLOT, 10)
         assert state.mobs.picture[0x11] == 0x25F6
-        assert state.mobs.hpos[0x11] == ((160 << 6) & 0xFFC0) + 1
-        assert state.mobs.vpos[0x11] == ((160 << 6) & 0xFFC0) + 0x200 + 8
+        assert state.mobs.hpos[0x11] == ((160 << 7) & 0xFF80) + 1
+        assert state.mobs.vpos[0x11] == ((native_v(160) << 7) & 0xFF80) + 0x400 + 8
 
     def test_the_popup_joins_the_depth_chain_at_the_source(self):
         state = _make_state()
@@ -2781,16 +2903,16 @@ class TestPfReplace:
         shots._pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
         assert state.mobs.picture[SLOT] == 0
         assert state.mobs.link[SLOT] == 0
-        assert state.mobs.hpos[SLOT] == 160 << 6
-        assert state.mobs.vpos[SLOT] == 160 << 6
+        assert state.mobs.hpos[SLOT] == 160 << 7
+        assert state.mobs.vpos[SLOT] == native_v(160) << 7
 
     def test_an_empty_cell_is_left_alone(self):
         """0x5F362: a zero picture falls straight through."""
         state = _make_state()
         SLOT = (9 << 5) | 9
-        state.mobs.hpos[SLOT] = 160 << 6
+        state.mobs.hpos[SLOT] = 160 << 7
         shots._pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
-        assert state.mobs.hpos[SLOT] == 160 << 6
+        assert state.mobs.hpos[SLOT] == 160 << 7
 
 
 class TestWallDestroyPosition:
@@ -2807,7 +2929,7 @@ class TestWallDestroyPosition:
         assert resolve_shot_hit(state, SLOT, 0) == -1
         effects = [s for s in range(0x0D, 0x11) if state.mobs.picture[s]]
         assert effects
-        assert state.mobs.hpos[effects[-1]] >> 6 == 160
+        assert hpos_x(state.mobs.hpos[effects[-1]]) == 160
 
     def test_lflag2_clears_all_four_mob_words(self):
         """0x5305C-0x53092 zeroes link, vpos, hpos and picture in that order."""

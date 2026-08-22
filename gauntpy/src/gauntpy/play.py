@@ -21,11 +21,12 @@ import sys
 from pathlib import Path
 
 from .constants import Character, GameMode, MazeObjIds, PlayerStatus
-from .coords import encode_hpos, encode_vpos, pack_slot, slot_to_pixels
+from .coords import encode_hpos, encode_vpos_at_y, pack_slot, slot_to_pixels
 from .mainloop import tick
 from .state import GameState
 from .subsystems.camera import snap_camera
 from .subsystems.players import player_join, update_player_sprite
+from .subsystems.session import configured_start_health
 
 #: Highest maze number the Slapstic image holds (gex's own bound, restated so
 #: ``--level`` can be clamped without importing gex at module import time --
@@ -74,7 +75,7 @@ def _spawn_player(state: GameState, character: int) -> int:
     """
     p = state.players[0]
     p.character = character
-    p.health = 800
+    p.health = configured_start_health(state)
 
     player_join(state, 0)                   # positioned spawn + finalize
 
@@ -83,7 +84,7 @@ def _spawn_player(state: GameState, character: int) -> int:
         px, py = slot_to_pixels(start)
         state.mobs.unlink_and_clear(start)
         state.mobs.create(
-            start, tile=0, hpos=encode_hpos(px), vpos=encode_vpos(py),
+            start, tile=0, hpos=encode_hpos(px), vpos=encode_vpos_at_y(py),
             obj_type=MazeObjIds.PLAYERSTART, state=0,
         )
         p.status = PlayerStatus.ALIVE_HERE
@@ -102,7 +103,12 @@ def build_state(level: int, character: int) -> GameState:
     """Load ``level`` and spawn a hero directly (the mid-level drop)."""
     from . import maze
 
-    state = GameState(game_mode=GameMode.NORMAL)
+    from .subsystems.eeprom import GAME_DEFAULT_SETTINGS
+
+    state = GameState(
+        game_mode=GameMode.NORMAL,
+        game_settings=GAME_DEFAULT_SETTINGS,
+    )
     if level > 5:
         # Past the opening act there is no fixed level -> maze rule (doc/06
         # §3.2), so ``load_level`` reads ``mazenum_current``. Seed it with the
@@ -115,7 +121,8 @@ def build_state(level: int, character: int) -> GameState:
 
 
 def run(level: int = 1, character: int = Character.WARRIOR, scale: int = 2,
-        from_attract: bool = False) -> None:
+        from_attract: bool = False,
+        suppress_first_encounter_messages: bool = False) -> None:
     """Open a window and run the game loop until the player closes it.
 
     Two entries: the default mid-level drop (``build_state``), or -- with
@@ -156,13 +163,16 @@ def run(level: int = 1, character: int = Character.WARRIOR, scale: int = 2,
                 "dump (file list in python-gex/README.md)."
             )
 
+    state.suppress_first_encounter_messages = suppress_first_encounter_messages
+
     # mainloop.g2mainloop's body: pump input, run a frame, present. The camera
     # (main_scroll_playfield) runs inside tick() and the compositor converts its
     # scroll to the viewport (I-23), so no runner-side camera fix-up is needed.
     try:
         while True:
             host.wait_for_vblank(state)     # pump events + sample keyboard + coins
-            tick(state)                     # one full 60 Hz game frame
+            if not host.paused:
+                tick(state)                 # one full 60 Hz game frame
             host.present(state)             # composite + flip
     except SystemExit:
         pass
@@ -190,6 +200,10 @@ def main(argv: list[str] | None = None) -> None:
         help="boot into attract and start via the real front end "
              "(press 5 to insert a coin, arrows to pick a class, Enter to start)",
     )
+    parser.add_argument(
+        "--no-first-encounter-messages", action="store_true",
+        help="suppress first-encounter pop-up boxes without changing gameplay",
+    )
     args = parser.parse_args(argv)
 
     _ensure_rom_dir()
@@ -202,7 +216,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(2)
 
     run(level=args.level, character=_CHARACTERS[args.character], scale=args.scale,
-        from_attract=args.attract)
+        from_attract=args.attract,
+        suppress_first_encounter_messages=args.no_first_encounter_messages)
 
 
 

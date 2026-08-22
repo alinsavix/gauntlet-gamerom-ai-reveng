@@ -8,7 +8,8 @@ from __future__ import annotations
 import pytest
 
 from gauntpy.constants import PlayerStatus
-from gauntpy.coords import encode_hpos, encode_vpos, pack_slot
+from gauntpy.coords import hpos_x, vpos_y
+from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.constants import MazeObjIds
 from gauntpy.state import GameState
 from gauntpy.subsystems.thief import (
@@ -83,7 +84,7 @@ def _active(state: GameState, index: int, slot: int) -> None:
     p.mob_slot = slot
     row, col = slot >> 5, slot & 0x1F
     state.mobs.hpos[slot] = encode_hpos(col * 16)
-    state.mobs.vpos[slot] = encode_vpos(row * 16)
+    state.mobs.vpos[slot] = encode_vpos_at_y(row * 16)
 
 
 class TestScheduling:
@@ -143,7 +144,7 @@ class TestScheduling:
         _active(state, 0, pack_slot(6, 6))
         player_slot = state.players[0].mob_slot
         state.mobs.hpos[player_slot] = encode_hpos(9 * 16 + 7)
-        state.mobs.vpos[player_slot] = encode_vpos(8 * 16 + 3)
+        state.mobs.vpos[player_slot] = encode_vpos_at_y(8 * 16 + 3)
 
         thief_setup(state)
 
@@ -465,14 +466,14 @@ class TestRouteGridMovement:
         state.thief_mode = THIEF_PURSUE
         state.thief_speed = _SPEED_THIEF
         state.mobs.hpos[thief_slot] = encode_hpos(10 * 16)
-        state.mobs.vpos[thief_slot] = encode_vpos(10 * 16)
+        state.mobs.vpos[thief_slot] = encode_vpos_at_y(10 * 16)
         path_grid_set_low_direction(state, thief_slot, 2)
 
         main_thief_anim(state)
 
         assert state.thief_path_direction == 2
         assert state.thief_next_pos == pack_slot(10, 11)
-        assert state.mobs.hpos[thief_slot] >> 6 == 10 * 16 + 8
+        assert hpos_x(state.mobs.hpos[thief_slot]) == 10 * 16 + 4
 
     def test_crossing_a_route_cell_records_reverse_escape_direction(self):
         state = GameState()
@@ -486,11 +487,11 @@ class TestRouteGridMovement:
         state.thief_mode = THIEF_PURSUE
         state.thief_speed = _SPEED_THIEF
         state.mobs.hpos[thief_slot] = encode_hpos(10 * 16)
-        state.mobs.vpos[thief_slot] = encode_vpos(10 * 16)
+        state.mobs.vpos[thief_slot] = encode_vpos_at_y(10 * 16)
         path_grid_set_low_direction(state, thief_slot, 2)
 
-        main_thief_anim(state)
-        main_thief_anim(state)
+        for _ in range(4):
+            main_thief_anim(state)
 
         destination = pack_slot(10, 11)
         assert state.thief_mob_slot == destination
@@ -507,7 +508,7 @@ def _thief_at(state: GameState, slot: int, direction: int = 8) -> None:
     state.thief_direction = direction
     state.thief_enter_time = -1
     state.mobs.hpos[slot] = encode_hpos(col * 16)
-    state.mobs.vpos[slot] = encode_vpos(row * 16)
+    state.mobs.vpos[slot] = encode_vpos_at_y(row * 16)
     state.mobs.picture[slot] = 1
 
 
@@ -667,7 +668,7 @@ class TestRemoveAndDropLoot:
             replacement,
             1,
             encode_hpos(12 * 16),
-            encode_vpos(12 * 16),
+            encode_vpos_at_y(12 * 16),
             MazeObjIds.TREASURE,
         )
 
@@ -769,7 +770,7 @@ class TestShotDodge:
         state.thief_previous_pos = pack_slot(10, 9)
         state.mobs.picture[1] = 1
         state.mobs.hpos[1] = encode_hpos(8 * 16)
-        state.mobs.vpos[1] = encode_vpos(10 * 16)
+        state.mobs.vpos[1] = encode_vpos_at_y(10 * 16)
         state.shot_direction[0] = 2
         return state
 
@@ -777,7 +778,7 @@ class TestShotDodge:
         state = self._aligned_state()
         state.mobs.picture[2] = 1
         state.mobs.hpos[2] = encode_hpos(7 * 16)
-        state.mobs.vpos[2] = encode_vpos(10 * 16)
+        state.mobs.vpos[2] = encode_vpos_at_y(10 * 16)
         state.shot_direction[1] = 2
 
         assert thief_find_aligned_shooter(state) == 0
@@ -787,7 +788,7 @@ class TestShotDodge:
         _thief_at(diagonal, pack_slot(10, 10), direction=5)
         diagonal.mobs.picture[1] = 1
         diagonal.mobs.hpos[1] = encode_hpos(9 * 16)
-        diagonal.mobs.vpos[1] = encode_vpos(11 * 16)
+        diagonal.mobs.vpos[1] = encode_vpos_at_y(11 * 16)
         diagonal.shot_direction[0] = 1
         assert thief_find_aligned_shooter(diagonal) == 0
 
@@ -866,13 +867,16 @@ class TestMoveEngineCollisionAndAnimation:
         _thief_at(state, start)
         state.thief_mode = THIEF_PURSUE
 
-        thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[3], _SPEED_THIEF, _SPEED_THIEF)
-        thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[3], _SPEED_THIEF, _SPEED_THIEF)
+        for _ in range(4):
+            thief_move_engine(
+                state, _THIEF_DIRECTION_STEP_FLAGS[3],
+                _SPEED_THIEF, _SPEED_THIEF,
+            )
 
         destination = pack_slot(11, 11)
         assert state.thief_mob_slot == destination
-        assert state.mobs.hpos[destination] >> 6 == 11 * 16
-        assert state.mobs.vpos[destination] >> 6 == 11 * 16
+        assert hpos_x(state.mobs.hpos[destination]) == 11 * 16
+        assert vpos_y(state.mobs.vpos[destination]) == 11 * 16
 
     def test_engine_blocks_solid_tile_without_crossing_the_cell(self):
         state = GameState()
@@ -880,7 +884,7 @@ class TestMoveEngineCollisionAndAnimation:
         destination = pack_slot(10, 11)
         _thief_at(state, start)
         state.thief_mode = THIEF_PURSUE
-        state.mobs.hpos[start] = encode_hpos(10 * 16 + 8)
+        state.mobs.hpos[start] = encode_hpos(10 * 16 + 12)
         state.mobs.picture[destination] = 0x8000
         state.mobs.set_obj_type(destination, MazeObjIds.WALL_REGULAR)
 
@@ -888,7 +892,7 @@ class TestMoveEngineCollisionAndAnimation:
 
         assert result == 1
         assert state.thief_mob_slot == start
-        assert state.mobs.hpos[start] >> 6 == 10 * 16 + 8
+        assert hpos_x(state.mobs.hpos[start]) == 10 * 16 + 12
 
     def test_collision_removes_eligible_pickup_before_retrying_the_move(self):
         state = GameState()
@@ -896,8 +900,8 @@ class TestMoveEngineCollisionAndAnimation:
         destination = pack_slot(10, 11)
         _thief_at(state, start)
         state.thief_mode = THIEF_PURSUE
-        state.mobs.hpos[start] = encode_hpos(10 * 16 + 8)
-        state.mobs.create(destination, 1, encode_hpos(11 * 16), encode_vpos(10 * 16), MazeObjIds.TREASURE)
+        state.mobs.hpos[start] = encode_hpos(10 * 16 + 12)
+        state.mobs.create(destination, 1, encode_hpos(11 * 16), encode_vpos_at_y(10 * 16), MazeObjIds.TREASURE)
 
         assert thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF) == 1
         assert state.mobs.picture[destination] == 0
@@ -910,12 +914,12 @@ class TestMoveEngineCollisionAndAnimation:
         destination = pack_slot(10, 11)
         _thief_at(state, start)
         state.thief_mode = THIEF_PURSUE
-        state.mobs.hpos[start] = encode_hpos(10 * 16 + 8)
-        state.mobs.create(destination, 1, encode_hpos(11 * 16), encode_vpos(10 * 16), MazeObjIds.TILE_STUN)
+        state.mobs.hpos[start] = encode_hpos(10 * 16 + 12)
+        state.mobs.create(destination, 1, encode_hpos(11 * 16), encode_vpos_at_y(10 * 16), MazeObjIds.TILE_STUN)
 
         assert thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF) == 0
         assert state.thief_mob_slot == start
-        assert state.mobs.hpos[start] >> 6 == 11 * 16
+        assert hpos_x(state.mobs.hpos[start]) == 11 * 16
 
     def test_engine_contacts_the_pixel_cell_not_the_players_fixed_mob_slot(self):
         state = GameState()
@@ -924,7 +928,7 @@ class TestMoveEngineCollisionAndAnimation:
         _active(state, 0, player_slot)
         state.players[0].keysnum = 2
         state.mobs.hpos[player_slot] = encode_hpos(10 * 16)
-        state.mobs.vpos[player_slot] = encode_vpos(10 * 16)
+        state.mobs.vpos[player_slot] = encode_vpos_at_y(10 * 16)
         _thief_at(state, thief_slot)
         state.thief_mode = THIEF_PURSUE
 
@@ -954,7 +958,7 @@ class TestMoveEngineCollisionAndAnimation:
         _active(state, 0, player_slot)
         state.players[0].health = 100
         state.mobs.hpos[player_slot] = encode_hpos(10 * 16)
-        state.mobs.vpos[player_slot] = encode_vpos(10 * 16)
+        state.mobs.vpos[player_slot] = encode_vpos_at_y(10 * 16)
         _thief_at(state, thief_slot, direction=2)
         state.thief_mode = THIEF_ESCAPE
         state.thief_stolen_item = 0x10
@@ -974,7 +978,7 @@ class TestMoveEngineCollisionAndAnimation:
         state.thief_speed = _SPEED_THIEF
         state.thief_next_pos = destination
         state.thief_previous_pos = pack_slot(10, 9)
-        state.mobs.hpos[start] = encode_hpos(10 * 16 + 8)
+        state.mobs.hpos[start] = encode_hpos(10 * 16 + 12)
         state.mobs.picture[destination] = 0x8000
         state.mobs.set_obj_type(destination, MazeObjIds.WALL_REGULAR)
 
@@ -1041,7 +1045,7 @@ class TestCollisionAgainstHighObjectTypes:
         start, destination = pack_slot(10, 10), pack_slot(10, 11)
         _thief_at(state, start)
         state.thief_mode = THIEF_PURSUE
-        state.mobs.hpos[start] = encode_hpos(10 * 16 + 8)
+        state.mobs.hpos[start] = encode_hpos(10 * 16 + 12)
         return start, destination
 
     def _step(self, state: GameState) -> int:
@@ -1053,7 +1057,7 @@ class TestCollisionAgainstHighObjectTypes:
         state = GameState()
         start, destination = self._thief_stepping_right(state)
         state.mobs.create(destination, 1, encode_hpos(11 * 16),
-                          encode_vpos(10 * 16), MazeObjIds.POWER_SUPERSHOT)
+                          encode_vpos_at_y(10 * 16), MazeObjIds.POWER_SUPERSHOT)
 
         assert self._step(state) == 1, "the removal costs the thief this frame"
         assert state.mobs.picture[destination] == 0
@@ -1067,7 +1071,7 @@ class TestCollisionAgainstHighObjectTypes:
         state = GameState()
         start, destination = self._thief_stepping_right(state)
         state.mobs.create(destination, 1, encode_hpos(11 * 16),
-                          encode_vpos(10 * 16), MazeObjIds.HIDDENPOT)
+                          encode_vpos_at_y(10 * 16), MazeObjIds.HIDDENPOT)
 
         assert self._step(state) == 1
         assert state.mobs.obj_type(destination) == 0
@@ -1081,26 +1085,26 @@ class TestCollisionAgainstHighObjectTypes:
         state = GameState()
         start, destination = self._thief_stepping_right(state)
         state.mobs.create(destination, 0x8001, encode_hpos(11 * 16),
-                          encode_vpos(10 * 16), MazeObjIds.TRANSPORTER)
+                          encode_vpos_at_y(10 * 16), MazeObjIds.TRANSPORTER)
 
         assert self._step(state) == 0, "not blocked"
         assert state.mobs.obj_type(destination) == int(MazeObjIds.TRANSPORTER)
         assert state.mobs.picture[destination] == 0x8001
         assert state.thief_mob_slot == start, "an occupied cell keeps the slot"
-        assert state.mobs.hpos[start] >> 6 == 11 * 16, "but the pixels move"
+        assert hpos_x(state.mobs.hpos[start]) == 11 * 16, "but the pixels move"
 
     def test_a_forcefield_hub_blocks_and_survives(self):
         """Flag 0 and the 0x8000 wall marker: solid, and still there after."""
         state = GameState()
         start, destination = self._thief_stepping_right(state)
         state.mobs.create(destination, 0x8000, encode_hpos(11 * 16),
-                          encode_vpos(10 * 16), MazeObjIds.FORCEFIELDHUB)
+                          encode_vpos_at_y(10 * 16), MazeObjIds.FORCEFIELDHUB)
 
         assert self._step(state) == 1, "blocked"
         assert state.mobs.obj_type(destination) == int(MazeObjIds.FORCEFIELDHUB)
         assert state.mobs.picture[destination] == 0x8000
         assert state.thief_mob_slot == start
-        assert state.mobs.hpos[start] >> 6 == 10 * 16 + 8, "no pixels moved"
+        assert hpos_x(state.mobs.hpos[start]) == 10 * 16 + 12, "no pixels moved"
 
     def test_the_lookup_covers_every_object_type(self):
         """0x4F8EC indexes with a six-bit field, so all 64 have to resolve."""
@@ -1109,5 +1113,5 @@ class TestCollisionAgainstHighObjectTypes:
         for obj_type in range(64):
             state.mobs.unlink_and_clear(slot)
             state.mobs.create(slot, 1, encode_hpos(11 * 16),
-                              encode_vpos(10 * 16), obj_type)
+                              encode_vpos_at_y(10 * 16), obj_type)
             assert thief_handle_tile_collision(state, slot) in (0, -1)

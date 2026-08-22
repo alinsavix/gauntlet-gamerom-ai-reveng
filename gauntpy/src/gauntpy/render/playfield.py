@@ -48,11 +48,10 @@ transporter pad). Those are drawn from the live ``MobTable`` by
 ``render/mobs.py`` once a maze's objects are placed into it (WP-3).
 
 **The exit is neither.** It is not baked into the world raster and it is not
-a MOB: ``main_exit_move`` (0x5287C) stamps it straight into playfield RAM
-through ``pf_stamp_update`` (0x5E536), moving it between cells and running an
-eight-step open/close script as it goes. It is therefore drawn by
-``draw_exit_animation`` below -- a per-frame overlay on top of the cached
-raster, indexed by ``state.exit_anim_frame``.
+drawn as a MOB: its marker identifies the live cell, while the visible 2x2
+descriptor is stamped into playfield RAM. ``draw_exit_animation`` therefore
+draws every live exit marker as the settled descriptor and overlays the moving
+exit's open/close script when ``main_exit_move`` is active.
 
 This split is also why the acceptance test (``tests/test_render.py``)
 cannot byte-for-byte match a full ``genpfimage`` PNG: gex's reference draws
@@ -79,7 +78,10 @@ from gex.adjacency import (
 from gex.door import DOOR_HORIZ, DOOR_VERT, door_get_stamp
 from gex.floor import floor_get_stamp
 from gex.items import item_get_stamp
-from gex.palettes import GAUNTLET_PALETTES, IRGB, palette_make_special
+from gex.palettes import (
+    GAUNTLET_PALETTES, IRGB, S_COLORS_1, S_COLORS_2,
+    palette_make_special,
+)
 from gex.rand import SeededRandom
 from gex.render import Stamp, blank_image, write_stamp_to_image
 from gex.wall import ff_get_stamp, wall_get_destructable_stamp, wall_get_stamp
@@ -92,8 +94,10 @@ __all__ = [
     "build_playfield_image", "build_playfield_images", "build_rand",
     "draw_playfield", "irgb_to_shadow", "shadow_source_for",
     "EXIT_ANIM_STAGES", "EXIT_ANIM_FRAMES", "EXIT_DESC_TILE_BASE",
-    "EXIT_DESC_RECORD", "EXIT_SETTLED_DESC", "exit_descriptor",
-    "draw_exit_animation", "draw_wall_crumble",
+    "EXIT_DESC_RECORD", "EXIT_SETTLED_DESC", "EXITTO6_SETTLED_DESC",
+    "TRANSPORTER_DESC", "exit_descriptor",
+    "draw_animated_floor_tiles", "draw_exit_animation",
+    "draw_transporter_tiles", "draw_wall_crumble",
 ]
 
 #: ``gex.mazedecode.Maze``'s own default seed, restated for the one case where
@@ -130,7 +134,7 @@ _WALL_TILE_DOTS: dict[int, int] = {
 #: not in this set is a dynamic MOB and is left to ``render/mobs.py`` --
 #: see the module docstring's "terrain only" decision.
 TERRAIN_TYPES: frozenset[int] = frozenset(
-    {MazeObjIds.TILE_FLOOR, MazeObjIds.WALL_MOVABLE, MazeObjIds.WALL_SECRET,
+    {MazeObjIds.TILE_FLOOR, MazeObjIds.WALL_SECRET,
      MazeObjIds.WALL_DESTRUCTABLE, MazeObjIds.DOOR_HORIZ, MazeObjIds.DOOR_VERT,
      MazeObjIds.FORCEFIELDHUB}
     | set(_FLOOR_TILE_INFO) | set(_WALL_TILE_DOTS)
@@ -239,15 +243,9 @@ def _terrain_stamp(maze: MazeLike, x: int, y: int, obj: int, rand) -> tuple[Stam
         return wall_get_stamp(maze.wallpattern, adj, maze.wallcolor, rand), _WALL_TILE_DOTS[obj]
 
     if obj == MazeObjIds.WALL_MOVABLE:
-        # Rendered as a single named stamp, not adjacency-shaped -- a
-        # pushwall doesn't blend into the wall run around it. Matches
-        # gex.pfrender's own _ITEM_STAMP_NAMES["pushwall"] entry; kept here
-        # (rather than dropped into the "not terrain" bucket) because a
-        # movable wall's *position changes* happen through the same
-        # tile-descriptor rewrite path as any other wall
-        # (doc/04_game_subsystems.md §13; WP-11 owns the actual movement),
-        # not through the MOB table.
-        return item_get_stamp("pushwall"), 0
+        # A pushwall moves by sub-cell pixels and is therefore drawn from its
+        # live MOB H/V record, not baked into the static terrain raster.
+        return None, 0
 
     if isdoor(obj):
         adj = checkdooradj4(maze, x, y)
@@ -530,6 +528,7 @@ class PlayfieldCache:
     shadow_image: object  # PIL.Image.Image -- the shadow-palette twin
     floorpattern: int = 0
     exit_palette: list | None = None
+    transporter_palette: list | None = None
     signature: tuple = ()
     cells: dict | None = None
     crumble_stamps: dict | None = None
@@ -691,6 +690,9 @@ def playfield_cache_for(maze: MazeLike, cache: PlayfieldCache | None) -> Playfie
         shadow_image=shadow,
         floorpattern=signature[0],
         exit_palette=[c.to_rgba() for c in GAUNTLET_PALETTES["floor"][0]],
+        transporter_palette=[
+            c.to_rgba() for c in GAUNTLET_PALETTES["teleff"][0]
+        ],
         signature=signature,
         cells=dict(maze.data),
         crumble_stamps=crumble_stamps,
@@ -722,13 +724,10 @@ class ShadowSource:
 
     def at(self, fx: int, fy: int):
         """Shadow-palette RGBA of the playfield pixel under framebuffer
-        (fx, fy), or ``None`` if that world position is off the raster
-        (e.g. a wraparound seam) -- the caller falls back to scaling there."""
-        wx = fx + self._ox
-        wy = fy + self._oy
-        if 0 <= wx < self._w and 0 <= wy < self._h:
-            return self._px[wx, wy]
-        return None
+        (fx, fy), with the hardware's 9-bit playfield wrap."""
+        wx = (fx + self._ox) % self._w
+        wy = (fy + self._oy) % self._h
+        return self._px[wx, wy]
 
 
 def shadow_source_for(
@@ -803,11 +802,34 @@ def draw_playfield(fb, cache: PlayfieldCache, scroll_x: int, scroll_y: int, view
     ``viewport`` is ``(dest_x, dest_y, width, height)`` in framebuffer
     pixels -- where on screen the playfield goes and how big it is. Camera
     scroll is applied here, at blit time, per PLAN.md §6 WP-2 step 1: a
-    plain crop of the 512x512 cache, no tile recomputation.
+    toroidal crop of the 512x512 cache, no tile recomputation.
     """
     dest_x, dest_y, width, height = viewport
-    box = (scroll_x, scroll_y, scroll_x + width, scroll_y + height)
-    fb.paste_region(cache.image, box, (dest_x, dest_y))
+    world_w, world_h = cache.image.size
+    remaining_h = height
+    source_y = scroll_y % world_h
+    out_y = dest_y
+    while remaining_h:
+        chunk_h = min(remaining_h, world_h - source_y)
+        remaining_w = width
+        source_x = scroll_x % world_w
+        out_x = dest_x
+        while remaining_w:
+            chunk_w = min(remaining_w, world_w - source_x)
+            fb.paste_region(
+                cache.image,
+                (
+                    source_x, source_y,
+                    source_x + chunk_w, source_y + chunk_h,
+                ),
+                (out_x, out_y),
+            )
+            remaining_w -= chunk_w
+            out_x += chunk_w
+            source_x = 0
+        remaining_h -= chunk_h
+        out_y += chunk_h
+        source_y = 0
 
 
 # ---------------------------------------------------------------------------
@@ -857,6 +879,23 @@ EXIT_DESC_RECORD = (0, 0, 1, 2, 3, 4, 5, 6, 6, 6, 5, 4, 3, 2, 1, 0)
 #: ``floor_type10_desc`` (0x5C8A0) -- the resting exit's 2x2 block.
 EXIT_SETTLED_DESC = (0x039E, 0x039F, 0x0006, 0x0006)
 
+#: ``floor_type11_desc`` (0x5C8A8) -- the distinct EXIT TO LEVEL 6 block.
+EXITTO6_SETTLED_DESC = (0x039E, 0x039F, 0x03A0, 0x03A1)
+
+#: The transporter's playfield-stamped 2x2 block (gex ``tport`` ROM record).
+TRANSPORTER_DESC = (0x049E, 0x049F, 0x04A0, 0x04A1)
+
+# ``tport_palette_cycle_blocks`` (0x5AFAE), six 16-byte records. VBLANK copies
+# the first six words of the selected record to playfield palette 4 entries 8-13.
+_TRANSPORTER_PALETTE_CYCLE = (
+    (0x8F00, 0xCF21, 0xFF76, 0xFF98, 0xFFDD, 0xFFFF),
+    (0x8F00, 0x8F00, 0xCF21, 0xFF76, 0xFF98, 0xFFDD),
+    (0x8F00, 0x8F00, 0x8F00, 0xCF21, 0xFF76, 0xFF98),
+    (0x8F00, 0x8F00, 0x8F00, 0x8F00, 0xCF21, 0xFF76),
+    (0x8F00, 0x8F00, 0x8F00, 0x8F00, 0x8F00, 0xCF21),
+    (0x8F00, 0x8F00, 0x8F00, 0x8F00, 0x8F00, 0x8F00),
+)
+
 #: Playfield words are ``tile 11-0 | palette 14-12`` (doc/01_hardware.md §7).
 #: Every exit descriptor word is below 0x1000, so its palette field is 0 -- the
 #: same "floor" palette 0 gex's ``exit`` stamp declares.
@@ -875,7 +914,10 @@ def exit_descriptor(floorpattern: int, record_entry: int) -> tuple[int, int, int
     return (first, first + 1, first + 2, first + 3)
 
 
-def _blit_descriptor(fb, descriptor, cell: int, palette_rgba, scroll_x, scroll_y, viewport) -> None:
+def _blit_descriptor(
+    fb, descriptor, cell: int, palette_rgba, scroll_x, scroll_y, viewport,
+    *, trans0: bool = False,
+) -> None:
     """Stamp one 2x2 descriptor over ``cell`` (a packed ``row<<5 | col`` slot).
 
     Mirrors ``pf_stamp_update``: word 0 is the top-left 8x8 tile, then
@@ -887,12 +929,20 @@ def _blit_descriptor(fb, descriptor, cell: int, palette_rgba, scroll_x, scroll_y
     clip = (dest_x, dest_y, dest_x + vw, dest_y + vh)
     world_x = (cell & 0x1F) * 16
     world_y = ((cell >> 5) & 0x1F) * 16
-    screen_x = dest_x + (world_x - scroll_x)
-    screen_y = dest_y + (world_y - scroll_y)
-    if screen_x + 16 <= dest_x or screen_x >= dest_x + vw:
+
+    def visible_delta(world: int, scroll: int, viewport_size: int) -> int | None:
+        wrapped = (world - scroll) % WORLD_PIXELS
+        for delta in (wrapped, wrapped - WORLD_PIXELS):
+            if delta + 16 > 0 and delta < viewport_size:
+                return delta
+        return None
+
+    delta_x = visible_delta(world_x, scroll_x, vw)
+    delta_y = visible_delta(world_y, scroll_y, vh)
+    if delta_x is None or delta_y is None:
         return
-    if screen_y + 16 <= dest_y or screen_y >= dest_y + vh:
-        return
+    screen_x = dest_x + delta_x
+    screen_y = dest_y + delta_y
 
     for i, word in enumerate(descriptor):
         try:
@@ -903,13 +953,13 @@ def _blit_descriptor(fb, descriptor, cell: int, palette_rgba, scroll_x, scroll_y
         fb.blit_indexed_tile(
             tile, palette_rgba,
             screen_x + col * 8, screen_y + row * 8,
-            trans0=False, clip=clip,
+            trans0=trans0, clip=clip,
         )
 
 
 def draw_exit_animation(fb, cache: PlayfieldCache, state, scroll_x: int, scroll_y: int,
                         viewport: tuple[int, int, int, int]) -> None:
-    """Draw the moving exit over the cached playfield.
+    """Draw live settled exits and the moving exit animation over the cache.
 
     ``main_exit_move`` keeps two cells in play: ``exit_open_id``, which is
     becoming an exit, and ``exit_close_id``, the one it vacated. While
@@ -919,11 +969,32 @@ def draw_exit_animation(fb, cache: PlayfieldCache, state, scroll_x: int, scroll_
     here means simply not drawing over it, since the cached raster already has
     floor everywhere an exit is not baked in (EXIT is not in ``TERRAIN_TYPES``).
     """
-    if cache is None or not getattr(state, "exit_open_id", 0):
+    if cache is None:
         return
 
     palette_rgba = cache.exit_palette
     if palette_rgba is None:
+        return
+
+    moving_open = int(getattr(state, "exit_open_id", 0))
+    for slot in range(0x20, len(state.mobs.picture)):
+        if slot == moving_open or state.mobs.picture[slot] == 0:
+            continue
+        if state.mobs.obj_type(slot) not in (
+            int(MazeObjIds.EXIT), int(MazeObjIds.EXITTO6),
+        ):
+            continue
+        descriptor = (
+            EXITTO6_SETTLED_DESC
+            if state.mobs.obj_type(slot) == int(MazeObjIds.EXITTO6)
+            else EXIT_SETTLED_DESC
+        )
+        _blit_descriptor(
+            fb, descriptor, slot, palette_rgba,
+            scroll_x, scroll_y, viewport,
+        )
+
+    if not moving_open:
         return
 
     frame = max(0, min(EXIT_ANIM_FRAMES - 1, int(state.exit_anim_frame)))
@@ -937,8 +1008,81 @@ def draw_exit_animation(fb, cache: PlayfieldCache, state, scroll_x: int, scroll_
                 state.exit_close_id, palette_rgba, scroll_x, scroll_y, viewport,
             )
     else:
-        opening = EXIT_SETTLED_DESC
+        opening = (
+            EXITTO6_SETTLED_DESC
+            if state.mobs.obj_type(moving_open) == int(MazeObjIds.EXITTO6)
+            else EXIT_SETTLED_DESC
+        )
 
     _blit_descriptor(
-        fb, opening, state.exit_open_id, palette_rgba, scroll_x, scroll_y, viewport,
+        fb, opening, moving_open, palette_rgba, scroll_x, scroll_y, viewport,
     )
+
+
+def draw_transporter_tiles(
+    fb, cache: PlayfieldCache, state, scroll_x: int, scroll_y: int,
+    viewport: tuple[int, int, int, int],
+) -> None:
+    """Stamp every live transporter marker through playfield palette 4."""
+    if cache is None or cache.transporter_palette is None:
+        return
+    phase = max(0, min(5, int(state.tport_cycle_pos)))
+    palette = list(cache.transporter_palette)
+    palette[8:14] = [
+        IRGB(word).to_rgba() for word in _TRANSPORTER_PALETTE_CYCLE[phase]
+    ]
+    for slot in range(0x20, len(state.mobs.picture)):
+        if (state.mobs.picture[slot]
+                and state.mobs.obj_type(slot) == int(MazeObjIds.TRANSPORTER)):
+            _blit_descriptor(
+                fb, TRANSPORTER_DESC, slot, palette,
+                scroll_x, scroll_y, viewport, trans0=True,
+            )
+
+
+def draw_animated_floor_tiles(
+    fb, cache: PlayfieldCache, state, scroll_x: int, scroll_y: int,
+    viewport: tuple[int, int, int, int],
+) -> None:
+    """Re-stamp trap/stun cells through the two VBLANK-pulsed palettes."""
+    if cache is None or cache.maze_object is None:
+        return
+
+    floorpattern = cache.floorpattern % len(S_COLORS_1)
+    animated = {
+        int(MazeObjIds.TILE_TRAP1): ("trap", state.palette_pulse_b),
+        int(MazeObjIds.TILE_TRAP2): ("trap", state.palette_pulse_b),
+        int(MazeObjIds.TILE_TRAP3): ("trap", state.palette_pulse_b),
+        int(MazeObjIds.TILE_STUN): ("stun", state.palette_pulse_a),
+    }
+    for (x, y), obj in (cache.cells or {}).items():
+        live = animated.get(int(obj))
+        if live is None:
+            continue
+        ptype, color_word = live
+        slot = pack_slot(y, x)
+        replay_rand = _ReplayRand((cache.terrain_rolls or {}).get(slot, ()), slot)
+        stamp, _dots = _terrain_stamp(
+            cache.maze_object, x, y, int(obj), replay_rand,
+        )
+        if stamp is None:
+            continue
+        palette = _animated_floor_palette(
+            ptype, floorpattern, color_word,
+        )
+        _blit_descriptor(
+            fb, tuple(stamp.numbers), slot, palette,
+            scroll_x, scroll_y, viewport,
+        )
+
+
+def _animated_floor_palette(
+    ptype: str, floorpattern: int, color_word: int,
+) -> list[tuple[int, int, int, int]]:
+    palette = [color.to_rgba() for color in GAUNTLET_PALETTES[ptype][0]]
+    live_rgba = IRGB(color_word).to_rgba()
+    for color_index in (
+        0, S_COLORS_1[floorpattern], S_COLORS_2[floorpattern],
+    ):
+        palette[color_index] = live_rgba
+    return palette

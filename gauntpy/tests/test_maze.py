@@ -13,7 +13,7 @@ import pytest
 
 from gauntpy import maze as gm
 from gauntpy.constants import FIRST_PLAYABLE_SLOT, GameMode, MazeObjIds
-from gauntpy.coords import decode_hpos, decode_vpos, pack_slot
+from gauntpy.coords import POS_SHIFT, decode_hpos, decode_vpos_at_y, pack_slot
 from gauntpy.state import GameState
 
 from gex.constants import LFLAG3_EXIT_MOVES, MAX_MAZE_NUM
@@ -36,6 +36,30 @@ requires_roms = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 # maze_for_level -- the one fixed level->maze rule (doc/06 §3.1)
 # ---------------------------------------------------------------------------
+
+@requires_roms
+def test_first_level_ordinary_food_heals_and_is_not_poison():
+    from gauntpy.constants import GameMode, PlayerStatus
+    from gauntpy.state import GameState
+    from gauntpy.subsystems.players import (
+        _POISONED_FOOD_PICTURE, player_tile_interact,
+    )
+
+    state = GameState(game_mode=GameMode.NORMAL, levelnum_current=1)
+    assert gm.reset_and_load_level(state, 1, maze_number=0)
+    slot = next(
+        slot for slot in range(32, 1024)
+        if state.mobs.obj_type(slot) == int(MazeObjIds.FOOD_INVULN)
+    )
+    assert state.mobs.picture[slot] != _POISONED_FOOD_PICTURE
+    player = state.players[0]
+    player.status = PlayerStatus.ALIVE_HERE
+    player.health = 500
+
+    assert player_tile_interact(state, slot, 0) == -1
+    assert player.health == 600
+    assert state.mobs.picture[slot] == 0
+
 
 class TestMazeForLevel:
     def test_opening_act_levels_map_to_mazes_0_through_4_in_order(self):
@@ -174,7 +198,7 @@ class TestPlacementGeometry:
         gm.maze_place_object(state, slot, MazeObjIds.MONST_GHOST, 1)
 
         x, _, palette = decode_hpos(state.mobs.hpos[slot])
-        y, width, height = decode_vpos(state.mobs.vpos[slot])
+        y, width, height = decode_vpos_at_y(state.mobs.vpos[slot])
         assert (width, height) == (3, 3)
         # 24 px sprite in a 16 px cell: half the overhang each side, which is
         # exactly the table's 512-unit hpos correction.
@@ -188,21 +212,21 @@ class TestPlacementGeometry:
         gm.maze_place_object(state, slot, MazeObjIds.KEY, 1)
 
         x, _, _ = decode_hpos(state.mobs.hpos[slot])
-        y, width, height = decode_vpos(state.mobs.vpos[slot])
+        y, width, height = decode_vpos_at_y(state.mobs.vpos[slot])
         assert (width, height) == (2, 2)
         assert (x, y) == (7 * 16, 6 * 16)   # 16 px sprite, 16 px cell: no correction
 
     def test_the_correction_is_exactly_half_the_overhang(self):
-        """Which is what pins the ROM's hpos units at half-pixels: the only
-        nonzero correction in the table, 512, is 8 field units, and every type
-        carrying it is 3 tiles (24 px) wide."""
+        """Which is what pins the hpos units at whole pixels: the only nonzero
+        correction in the table, 512, is 4 px, and every type carrying it is
+        3 tiles (24 px) wide -- half the overhang in a 16 px cell."""
         from gex.objparams import hpos_correction, vpos_offset
 
         for object_type in range(64):
             correction = hpos_correction(object_type)
             width = ((vpos_offset(object_type) >> 3) & 0x07) + 1
             if correction and object_type not in gm._ROM_MARKER_TYPES:
-                assert correction >> gm._HPOS_CORRECTION_SHIFT == (width * 8 - 16) // 2
+                assert correction >> POS_SHIFT == (width * 8 - 16) // 2
 
     def test_markers_keep_the_plain_cell_origin(self):
         """Marker types never reach the correction table -- entry 0x3F holds
@@ -213,7 +237,7 @@ class TestPlacementGeometry:
         gm.maze_place_object(state, slot, MazeObjIds.WALL_REGULAR, 1)
         assert state.mobs.picture[slot] == gm.WALL_MARKER_PICTURE
         assert decode_hpos(state.mobs.hpos[slot])[0] == 8 * 16
-        assert decode_vpos(state.mobs.vpos[slot])[0] == 8 * 16
+        assert decode_vpos_at_y(state.mobs.vpos[slot])[0] == 8 * 16
 
         gm.maze_place_object(state, slot + 1, MazeObjIds.FORCEFIELDHUB, 1)
         assert state.mobs.picture[slot + 1] == gm.WALL_MARKER_PICTURE
@@ -221,6 +245,27 @@ class TestPlacementGeometry:
 
         gm.maze_place_object(state, slot + 2, MazeObjIds.TRANSPORTER, 1)
         assert state.mobs.picture[slot + 2] == gm.TILE_MARKER_PICTURE
+
+    def test_a_marker_stores_the_roms_own_slot_shifted_eleven(self):
+        """``maze_tile_write_at`` builds both words from ``slot << 11``: the H
+        word is ``column * 16 << 7`` and the V word ``(31 - row) * 16 << 7``,
+        counting up from the playfield floor."""
+        state = GameState()
+        for row, col in ((1, 0), (8, 8), (31, 31)):
+            slot = pack_slot(row, col)
+            gm.maze_place_object(state, slot, MazeObjIds.WALL_REGULAR, 1)
+            assert state.mobs.hpos[slot] == col << 11
+            assert state.mobs.vpos[slot] == (31 - row) << 11
+
+    def test_a_placed_creature_keeps_the_native_low_fields(self):
+        """The H correction lands in the position field and the packed size in
+        the low field, so the two never disturb each other."""
+        state = GameState()
+        slot = pack_slot(5, 7)
+        gm.maze_place_object(state, slot, MazeObjIds.MONST_GHOST, 1)
+        hpos, vpos = state.mobs.hpos[slot], state.mobs.vpos[slot]
+        assert hpos == ((7 * 16 - 4) << 7) | 4          # 0x200 correction, tier 4
+        assert vpos == ((31 - 5) << 11) | 0x12          # 3x3 tiles, no V addend
 
 
 class TestMazeMirroring:
@@ -294,12 +339,29 @@ class TestMazeMirroring:
         assert not state.mobs.is_occupied(pack_slot(5, 7))
         assert cursor == pack_slot(5, 7) + 1, "the cursor is the unmirrored one"
 
+    def test_mirrored_dragon_corrects_its_two_by_two_anchor(self):
+        horizontal = self._state(flags1=0x04, levelnum=12)
+        gm.maze_place_object(
+            horizontal, pack_slot(5, 7), MazeObjIds.MONST_DRAGON, 1,
+        )
+        assert horizontal.mobs.obj_type(pack_slot(5, 24)) == int(
+            MazeObjIds.MONST_DRAGON
+        )
+
+        vertical = self._state(flags1=0x08, levelnum=12)
+        gm.maze_place_object(
+            vertical, pack_slot(5, 7), MazeObjIds.MONST_DRAGON, 1,
+        )
+        assert vertical.mobs.obj_type(pack_slot(28, 7)) == int(
+            MazeObjIds.MONST_DRAGON
+        )
+
     def test_mirrored_object_is_positioned_at_its_new_cell(self):
         state = self._state(flags1=0x08)
         gm.maze_place_object(state, pack_slot(2, 9), MazeObjIds.KEY, 1)
         destination = pack_slot(30, 9)
         assert decode_hpos(state.mobs.hpos[destination])[0] == 9 * 16
-        assert decode_vpos(state.mobs.vpos[destination])[0] == 30 * 16
+        assert decode_vpos_at_y(state.mobs.vpos[destination])[0] == 30 * 16
 
     def test_mirror_maze_matches_what_placement_did(self):
         """``state.maze`` feeds the terrain renderer while the MobTable feeds
@@ -453,6 +515,48 @@ class TestPlaceDecodedObjectsMatchesGex:
         for slot, object_type in monsters:
             slot = gm.mirror_slot(state, slot)
             assert state.mobs.hpos[slot] & 0x0F == hsize_tier(object_type)
+
+    def test_placed_monsters_start_facing_down(self):
+        state = GameState()
+        maze = gm.decode_maze(0)
+        gm.place_decoded_objects(state, maze)
+
+        monsters = [
+            pack_slot(row, col)
+            for (col, row), object_type in maze.data.items()
+            if row != 0 and 18 <= object_type <= 27
+        ]
+        assert monsters
+        assert all(state.mobs.state(slot) == 2 for slot in monsters)
+
+    def test_super_sorcerer_starts_invisible_during_play(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        slot = pack_slot(8, 8)
+
+        gm.maze_place_object(
+            state, slot, int(MazeObjIds.MONST_SUPERSORC), 1,
+        )
+
+        assert state.mobs.picture[slot] == 0x1709
+        assert state.mobs.hpos[slot] & 0x10
+
+    def test_dragon_reserves_its_full_footprint_during_placement(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        state.levelnum_current = 12
+        slot = pack_slot(10, 10)
+
+        gm.maze_place_object(
+            state, slot, int(MazeObjIds.MONST_DRAGON), 1,
+        )
+
+        expected = [slot, slot - 0x20, slot + 1, slot - 0x1F]
+        assert state.dragon_seg_mob_ids == expected
+        assert state.mobs.picture[slot] != 0x8002
+        assert all(state.mobs.picture[cell] == 0x8002 for cell in expected[1:])
+        assert all(
+            state.mobs.obj_type(cell) == int(MazeObjIds.MONST_DRAGON)
+            for cell in expected
+        )
 
     def test_invulnerable_food_picture_is_one_of_the_three_rom_variants(self):
         """getrandom(3) into the three-word table at 0x58F20 (ROM 0x46150)."""

@@ -329,7 +329,8 @@ def attract_demo_init(state: GameState) -> None:
 
     from .. import maze
     from .exits import exit_scan_level
-    from .players import player_join_finalize, player_start_inner, setup_infopanel
+    from .players import player_join, setup_infopanel
+    from .session import player_init_for_coin
 
     setup_infopanel(state, -1)                     # 0x449DE-0x449E4
     state.dialog_first_encounter_flags = 0         # 0x449F6
@@ -337,16 +338,14 @@ def attract_demo_init(state: GameState) -> None:
     # Player 1 is the Elf hero driving the standard demo (§6.3).
     elf = state.players[_DEMO_ACTIVE_PLAYER]
     elf.character = _DEMO_ELF_CLASS
-    elf.health = 800
+    player_init_for_coin(state, _DEMO_ACTIVE_PLAYER)
 
     # Load the demo maze and place the Elf, so the recorded inputs have a world
     # to move through. Guarded so a ROM-less environment still sets up the demo
     # state (it just has no maze). maze.reset_and_load_level resets the MOB table.
     if maze.reset_and_load_level(state, state.levelnum_current, maze_number=_DEMO_MAZE):
         exit_scan_level(state)
-        elf.status = PlayerStatus.ALIVE_HERE
-        if player_start_inner(state, _DEMO_ACTIVE_PLAYER) == -1:
-            player_join_finalize(state, _DEMO_ACTIVE_PLAYER)
+        player_join(state, _DEMO_ACTIVE_PLAYER)
 
 
 # =============================================================================

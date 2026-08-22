@@ -6,17 +6,17 @@ Reference: ``doc/04_game_subsystems.md`` §17; ``book/08_world_in_memory.md``.
 from __future__ import annotations
 
 from ..constants import GameMode
-from ..coords import WORLD_PIXELS
+from ..coords import WORLD_PIXELS, hpos_x, vpos_y
 from ..state import GameState
 
 
-#: The camera writes the ROM's *hardware* scroll registers. Horizontal is a
-#: viewport offset shifted by the hardware centering (0x68); vertical is the
-#: *inverted* register ``scroll_y = 0x1E8 - midY - 0x6C``. ``render`` wants a
-#: plain viewport-top-left in world pixels -- ``render.compositor`` converts
-#: these back with ``_CAM_X_SHIFT`` / ``_CAM_Y_BASE`` (see I-23).
+#: The camera writes the ROM's hardware scroll registers. MOB V words count up
+#: from the playfield floor, so the party extent is taken in ordinary downward
+#: screen pixels (``coords.vpos_y``). Applying that conversion to
+#: ``0x1E8 - rom_midY - 0x6C`` yields ``world_midY - 0x74``.
+#: The renderer's exact world origin is therefore ``(scroll_x - 8, scroll_y)``.
 CAM_X_SHIFT = 0x68              # 104: midX = scroll_x + CAM_X_SHIFT
-CAM_Y_BASE = 0x1E8 - 0x6C       # 380: midY = CAM_Y_BASE - scroll_y
+CAM_Y_SHIFT = 0x74              # 116: midY = scroll_y + CAM_Y_SHIFT
 
 # ``scroll_set_position`` (0x46F56) has asymmetric, display-geometry-specific
 # limits.  They are register limits, not generic 512px world limits.
@@ -26,71 +26,92 @@ _SCROLL_Y_MIN = 0x001
 _SCROLL_Y_MAX = 0x118
 
 
-def _camera_target(state: GameState) -> tuple[int, int] | None:
+def _camera_target(
+    state: GameState, *, include_camera: bool = True,
+) -> tuple[int, int] | None:
     """The scroll target (hardware-register form) the party wants this frame,
     or ``None`` when there is nothing to track. Steps 1-2 of §17 (extent with
     wrap + rubber band, then the offset/inverted target); the smoothing and
     clamp are the caller's.
     """
-    # --- Step 1: compute player extent with wrap and rubber-band ---
-    # Collect pixel positions, adjusting for horizontal seam wraparound.
-    # On a toroidal level player positions may exceed 511 (the 10-bit MOB
-    # field allows 0-1023); when one player is near x=0 and another is near
-    # x=512 their raw difference can exceed 0x200 (the world width), so we
-    # fold the far one back to compare correctly across the seam.  §17.
-    px_list: list[int] = []
-    py_list: list[int] = []
-    ref_x: int | None = None
+    # The current camera centre participates in the extent. Besides giving the
+    # original's half-rate approach, this is the reference frame that makes
+    # seam folding stable when the 9-bit scroll register is near 0/511.
+    min_x = max_x = state.scroll_x + CAM_X_SHIFT
+    min_y = max_y = state.scroll_y + CAM_Y_SHIFT
+    if not include_camera:
+        min_x = max_x = None
+        min_y = max_y = None
+    tracked = False
+    window_left = state.scroll_x - 0x98
+    window_top = state.scroll_y - 0x8C
 
     for i, player in enumerate(state.players):
         if state.player_in_maze[i] == 0:
             continue
+        tracked = True
 
-        px = state.mobs.hpos[player.mob_slot] >> 6   # pixel_x = hpos / 64
-        py = state.mobs.vpos[player.mob_slot] >> 6   # pixel_y = vpos / 64
+        px = hpos_x(state.mobs.hpos[player.mob_slot])
+        py = vpos_y(state.mobs.vpos[player.mob_slot])
 
-        if ref_x is None:
-            ref_x = px
-        elif state.wrap_h:
-            # Fold across the seam so all positions are comparable (§17).
-            if px - ref_x > 0x200:       # player is >512 px right of reference
-                px -= 0x200
-            elif ref_x - px > 0x200:     # player is >512 px left of reference
-                px += 0x200
+        if include_camera or state.wrap_h:
+            if px < window_left:
+                px += WORLD_PIXELS
+            elif px >= window_left + WORLD_PIXELS:
+                px -= WORLD_PIXELS
+        if include_camera or state.wrap_v:
+            if py < window_top:
+                py += WORLD_PIXELS
+            elif py >= window_top + WORLD_PIXELS:
+                py -= WORLD_PIXELS
 
-        px_list.append(px)
-        py_list.append(py)
+        if min_x is None:
+            min_x = max_x = px
+            min_y = max_y = py
+            continue
 
-    if not px_list:
+        if px > max_x:
+            if px - min_x > 0x140:
+                px -= 200
+            else:
+                max_x = px
+        if py > max_y:
+            if py - min_y > 0x140:
+                py -= 200
+            else:
+                max_y = py
+        if px < min_x:
+            if max_x - px > 0x140:
+                px += 200
+                max_x = max(max_x, px)
+            else:
+                min_x = px
+        if py < min_y:
+            if max_y - py > 0x140:
+                py += 200
+                max_y = max(max_y, py)
+            else:
+                min_y = py
+
+    if not tracked:
         return  # no players tracked -- nothing to scroll toward
-
-    min_x = min(px_list)
-    max_x = max(px_list)
-    min_y = min(py_list)
-    max_y = max(py_list)
-
-    # Rubber band: clamp extent to at most 0xC8 (200 px) per axis.
-    # Past this limit the far player is held at the screen edge instead of
-    # dragging the camera further (§17; book §08 "One camera, four players").
-    if max_x - min_x > 0xC8:   # 0xC8 = 200 px rubber-band limit
-        max_x = min_x + 0xC8
-    if max_y - min_y > 0xC8:
-        max_y = min_y + 0xC8
+    assert min_x is not None and max_x is not None
+    assert min_y is not None and max_y is not None
 
     # --- Step 2: compute target scroll position ---
-    # Midpoint of the (clamped) extent, offset so the maze viewport centres
-    # rather than the full 336x240 screen.  Y is inverted: scroll_y increases
-    # as the view moves up.  §17.
-    target_x = (min_x + max_x) // 2 - 0x68   # 0x68 = 104 px half-viewport offset
-    target_y = 0x1E8 - (min_y + max_y) // 2 - 0x6C  # 0x1E8 = 488; 0x6C = 108
+    # Midpoint of the adjusted extent, offset so the maze viewport centres
+    # rather than the full 336x240 screen. The upward MOB V word has already
+    # been converted to downward screen Y, leaving a simple offset.
+    target_x = (min_x + max_x) // 2 - 0x68
+    target_y = (min_y + max_y) // 2 - CAM_Y_SHIFT
     return target_x, target_y
 
 
 def main_scroll_playfield(state: GameState) -> None:
     """0x46CAA -- move the shared camera toward the party.
 
-    Bounding extent of the active players (honouring wraparound), the +/-0xC8
-    rubber band so one adventurous player cannot yank the camera away from
+    Bounding extent of the active players (honouring wraparound), the 0x140
+    outlier threshold so one adventurous player cannot yank the camera away from
     three cooperating ones, a target at the midpoint offset so the maze
     viewport centres rather than the full screen, 2 px per axis per frame with
     a snap when close, then ``scroll_set_position`` clamps.
@@ -136,7 +157,7 @@ def snap_camera(state: GameState) -> None:
     party immediately at level start (so the view does not pan in from 0,0).
     Writes the same hardware-register scroll the smoothed path converges to.
     """
-    target = _camera_target(state)
+    target = _camera_target(state, include_camera=False)
     if target is None:
         return
     state.scroll_x, state.scroll_y = target
@@ -161,22 +182,12 @@ def _scroll_set_position(state: GameState) -> None:
 
 
 def viewport_scroll(state: GameState, viewport_w: int, viewport_h: int) -> tuple[int, int]:
-    """Convert the hardware scroll registers the camera writes into the
-    **renderer's viewport top-left** in world pixels (I-23).
+    """Return the hardware playfield's toroidal world origin.
 
-    The camera keeps the ROM's hardware registers -- X shifted by the hardware
-    centering, Y *inverted* -- because that is what the original writes. The
-    software renderer instead wants the world-pixel corner of its
-    ``viewport_w x viewport_h`` window, centred on the party. Recover the
-    midpoint the camera encoded (``CAM_X_SHIFT`` / ``CAM_Y_BASE``), re-centre
-    for this viewport, and clamp to the 512px maze. This is the single place the
-    two conventions meet, so the camera stays ROM-faithful and the renderer
-    stays a plain viewport consumer.
+    ``set_scroll_pos`` writes ``hmin = (hscroll - 8) << 7`` and the vertical
+    scroll is already the downward world origin after coordinate conversion.
+    Do not clamp the window to 512: the hardware wraps the raster at either
+    edge, including the eight scanlines after row 31 at the bottom clamp.
     """
-    mid_x = state.scroll_x + CAM_X_SHIFT
-    mid_y = CAM_Y_BASE - state.scroll_y
-    view_x = mid_x - viewport_w // 2
-    view_y = mid_y - viewport_h // 2
-    max_x = max(0, WORLD_PIXELS - viewport_w)
-    max_y = max(0, WORLD_PIXELS - viewport_h)
-    return max(0, min(view_x, max_x)), max(0, min(view_y, max_y))
+    del viewport_w, viewport_h
+    return (state.scroll_x - 8) & 0x1FF, state.scroll_y & 0x1FF

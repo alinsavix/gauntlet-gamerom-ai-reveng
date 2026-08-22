@@ -707,9 +707,17 @@ def test_dialog_clear_message_empties_the_record() -> None:
 
 
 def test_every_dialog_record_has_between_one_and_three_lines() -> None:
-    assert len(DIALOG_MESSAGES) == 16
+    assert len(DIALOG_MESSAGES) == 32
     assert all(1 <= len(lines) <= 3 for lines in DIALOG_MESSAGES)
-    assert len(DIALOG_SPEECH_IDS) == 16
+    assert len(DIALOG_SPEECH_IDS) == 32
+
+
+def test_inventory_palette_words_are_distinct_from_player_text() -> None:
+    assert score_mod.KEY_PALETTE_WORDS == (0xE000, 0xE400, 0xE800, 0xEC00)
+    assert score_mod.POTION_PALETTE_WORDS == (0xF000, 0xF400, 0xF800, 0xFC00)
+    assert set(score_mod.KEY_PALETTE_WORDS).isdisjoint(
+        score_mod.PLAYER_TEXT_PALETTE_WORDS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -736,12 +744,12 @@ def test_transition_loops_idle_while_their_animation_mob_is_empty() -> None:
 def test_player_transition_advances_only_on_even_counts() -> None:
     state = _normal_state()
     state.mobs.picture[_ANIM_SLOT] = 0x1DCF
-    state.player_tport_phase[0] = -1
+    state.player_tport_phase[0] = 0
 
     main_score_update(state)
-    assert state.player_tport_phase[0] == 0      # even -> milestone 0 acted on
-    main_score_update(state)
     assert state.player_tport_phase[0] == 1      # odd -> skipped
+    main_score_update(state)
+    assert state.player_tport_phase[0] == 2      # even -> milestone 1
 
 
 def test_player_transition_saves_and_restores_the_hero_picture() -> None:
@@ -749,9 +757,9 @@ def test_player_transition_saves_and_restores_the_hero_picture() -> None:
     state.players[0].mob_slot = 0x120
     state.mobs.picture[0x120] = 0x7A5
     state.mobs.picture[_ANIM_SLOT] = 0x1DCF
-    state.player_tport_phase[0] = -1
+    state.player_tport_phase[0] = 0
 
-    _run_frames(state, 11)                       # counter 10 -> milestone 5
+    _run_frames(state, 10)                       # counter 10 -> milestone 5
     assert state.player_tport_saved_picture[0] == 0x7A5
     assert state.mobs.picture[0x120] == 0x1709, "the hero flashes mid-transport"
 
@@ -767,9 +775,9 @@ def test_player_transition_cleans_up_past_the_last_milestone() -> None:
     state.mobs.picture[_ANIM_SLOT] = 0x1DCF
     state.mobs.insert(_ANIM_SLOT)                # the animation MOB's own entry
     state.mobs.insert(_ANIM_SLOT - 1)            # its neighbour must survive
-    state.player_tport_phase[0] = -1
+    state.player_tport_phase[0] = 0
 
-    _run_frames(state, 48)                       # counter 46 -> step 0x17
+    _run_frames(state, 46)                       # counter 46 -> step 0x17
 
     assert state.mobs.picture[_ANIM_SLOT] == 0
     assert state.player_tport_phase[0] == -1
@@ -782,20 +790,25 @@ def test_mob_depth_remove_applies_the_roms_plus_one_bias() -> None:
     """0x5E064 takes ``physical_slot_minus_one``. Pinning it directly keeps the
     three call sites in this module honest."""
     state = _normal_state()
-    state.mobs.insert(0x40)
-    state.mobs.insert(0x41)
+    state.mobs.insert(0x18, depth_key=0x120)
+    state.mobs.insert(0x19, depth_key=0x121)
+    state.mobs.link[0x19] |= 0xA000
+    state.mobs.state_link[0x19] |= 0xB000
 
-    score_mod._mob_depth_remove(state, 0x40)
+    state.mobs.depth_remove(0x18)
 
     chain = list(state.mobs.iter_chain())
-    assert 0x41 not in chain
-    assert 0x40 in chain
+    assert 0x19 not in chain
+    assert 0x18 in chain
+    assert state.mobs.depth_key[0x19] == 0
+    assert state.mobs.link[0x19] == 0
+    assert state.mobs.state_link[0x19] == 0
 
 
 def test_player_transition_steps_the_rom_sparkle_cycle() -> None:
     state = _normal_state()
     state.mobs.picture[_ANIM_SLOT] = 0x1DCF
-    state.player_tport_phase[0] = -1
+    state.player_tport_phase[0] = 0
 
     seen = []
     for _ in range(24):
@@ -812,9 +825,9 @@ def test_thief_transition_hides_moves_and_restores_the_thief() -> None:
     state.thief_tport_dest = 0x180
     state.mobs.create(0x140, tile=0x1234, hpos=0, vpos=0, obj_type=0)
     state.mobs.picture[_THIEF_ANIM] = 0x1DCF
-    state.thief_tport_timer = -1
+    state.thief_tport_timer = 0
 
-    _run_frames(state, 11)                       # milestone 5
+    _run_frames(state, 10)                       # milestone 5
     assert state.thief_tport_saved_picture == 0x1234
     assert state.mobs.picture[0x140] == 0
     assert state.thief_current_pos == 0x180
@@ -834,9 +847,9 @@ def test_thief_transition_restamps_fixed_animation_slot_at_destination() -> None
     state.mobs.hpos[0x180] = 0x3000
     state.mobs.vpos[0x180] = 0x4000
     state.mobs.picture[_THIEF_ANIM] = 0x1DCF
-    state.thief_tport_timer = -1
+    state.thief_tport_timer = 0
 
-    _run_frames(state, 23)                       # milestone 0x0B
+    _run_frames(state, 22)                       # milestone 0x0B
     assert state.mobs.hpos[_THIEF_ANIM] == 0x3001
     assert state.mobs.vpos[_THIEF_ANIM] == 0x4012
     assert not any(state.mobs.picture[0x0D + c] for c in range(4))
@@ -849,9 +862,9 @@ def test_thief_transition_cleanup_reprograms_the_route() -> None:
     state.mobs.picture[_THIEF_ANIM] = 0x1DCF
     state.mobs.insert(_THIEF_ANIM)
     state.mobs.insert(_THIEF_ANIM - 1)           # neighbour must survive
-    state.thief_tport_timer = -1
+    state.thief_tport_timer = 0
 
-    _run_frames(state, 48)
+    _run_frames(state, 46)
 
     assert state.mobs.picture[_THIEF_ANIM] == 0
     assert state.thief_tport_timer == -1
@@ -865,11 +878,11 @@ def test_the_thief_pass_runs_once_per_frame_not_four_times() -> None:
     """0x471B4 gates loop 1b on the loop index being zero."""
     state = _normal_state()
     state.mobs.picture[_THIEF_ANIM] = 0x1DCF
-    state.thief_tport_timer = -1
+    state.thief_tport_timer = 0
 
     main_score_update(state)
 
-    assert state.thief_tport_timer == 0
+    assert state.thief_tport_timer == 1
 
 
 def test_transition_loops_do_not_disturb_effect_aging() -> None:
@@ -1038,6 +1051,20 @@ def test_records_without_the_shared_line_ignore_the_value() -> None:
     state = _normal_state()
     dialog_first_encounter(state, 0, 1 << 0, 99)
     assert state.dialog_message == list(DIALOG_MESSAGES[0])
+
+
+def test_first_encounter_message_suppression_preserves_flags_and_speech() -> None:
+    state = _normal_state()
+    state.suppress_first_encounter_messages = True
+    state.dialog_timer = 10
+    state.dialog_message = ["EXISTING"]
+
+    assert dialog_first_encounter(state, 0, 1 << 1) == 1
+
+    assert state.dialog_first_encounter_flags & (1 << 1)
+    assert state.dialog_timer == 10
+    assert state.dialog_message == ["EXISTING"]
+    assert state.sound_log[-1] == DIALOG_SPEECH_IDS[1]
 
 
 def test_a_missing_value_renders_a_blank_field() -> None:

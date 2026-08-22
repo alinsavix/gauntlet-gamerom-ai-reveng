@@ -20,7 +20,7 @@ from __future__ import annotations
 import pytest
 
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus, SLOT_PLAYER_SHOTS
-from gauntpy.coords import encode_hpos, encode_vpos, pack_slot
+from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.mainloop import tick
 from gauntpy.state import GameState
 from gauntpy.subsystems import exits as ex
@@ -127,7 +127,7 @@ def _active_player_with_mob(state: GameState, index: int, slot: int,
     on zero health dies on the next ``main_move_players``.
     """
     px, py = slot % 32 * 16, slot // 32 * 16
-    state.mobs.create(slot, tile=0x1e0d, hpos=encode_hpos(px), vpos=encode_vpos(py),
+    state.mobs.create(slot, tile=0x1e0d, hpos=encode_hpos(px), vpos=encode_vpos_at_y(py),
                       obj_type=int(MazeObjIds.PLAYERSTART))
     p = state.players[index]
     p.status = int(PlayerStatus.ALIVE_HERE)
@@ -447,7 +447,7 @@ class TestPlayerStartInner:
 def _firing_player(state: GameState, index: int, direction: int) -> int:
     slot = pack_slot(9, 9)
     state.mobs.create(slot, tile=0x1e0d, hpos=encode_hpos(9 * 16),
-                      vpos=encode_vpos(9 * 16), obj_type=int(MazeObjIds.PLAYERSTART))
+                      vpos=encode_vpos_at_y(9 * 16), obj_type=int(MazeObjIds.PLAYERSTART))
     p = state.players[index]
     p.status = int(PlayerStatus.ALIVE_HERE)
     p.mob_slot = slot
@@ -514,7 +514,7 @@ class TestPlayerCreateShot:
 
         shot_slot = 0 + SLOT_PLAYER_SHOTS.start         # slot 1
         assert state.mobs.picture[shot_slot] != 0
-        assert state.shot_dx[shot_slot] == 6            # 0x180 >> 6, cardinal base
+        assert state.shot_dx[shot_slot] == 3            # ROM 0x180 is 3 px
         assert state.shot_dy[shot_slot] == 0
 
     def test_only_one_shot_per_channel_at_a_time(self):
@@ -531,22 +531,21 @@ class TestPlayerCreateShot:
         gp.player_create_shot(state, 0)
         state.mobs.picture[1] = 0                         # shot expired (WP-7)
         gp.player_create_shot(state, 0)
-        assert state.shot_dy[1] == -6                     # up, cardinal base
+        assert state.shot_dy[1] == 3                      # up: native V grows up
 
     def test_shot_speed_power_makes_shots_faster(self):
         state = GameState()
         _firing_player(state, 0, direction=0)
         state.players[0].powers |= gp._POWER_SHOTSPEED
         gp.player_create_shot(state, 0)
-        assert state.shot_dx[1] == 8                      # 0x200 >> 6, powered cardinal
+        assert state.shot_dx[1] == 4                      # ROM 0x200 is 4 px
 
     def test_diagonal_shot_is_slower_per_axis_than_cardinal(self):
-        """The ROM velocity table gives diagonals 0x100 (4 px/axis), not the
-        cardinal 6 px, so a diagonal shot's total speed matches a cardinal's."""
+        """The ROM's 0x100 diagonal component is 2 px in the native words."""
         state = GameState()
         _firing_player(state, 0, direction=1)            # down-right
         gp.player_create_shot(state, 0)
-        assert (state.shot_dx[1], state.shot_dy[1]) == (4, 4)
+        assert (state.shot_dx[1], state.shot_dy[1]) == (2, -2)
 
     def test_shot_plays_character_sound_and_consumes_supershot(self):
         state = GameState()
@@ -564,7 +563,7 @@ class TestPlayerCreateShot:
         _firing_player(state, 2, direction=2)            # facing down
         gp.player_create_shot(state, 2)
         assert state.mobs.picture[3] != 0                # slot player_index+1
-        assert state.shot_dy[3] == 6                     # down, cardinal base
+        assert state.shot_dy[3] == -4                    # down: native V falls
 
 
 # ---------------------------------------------------------------------------

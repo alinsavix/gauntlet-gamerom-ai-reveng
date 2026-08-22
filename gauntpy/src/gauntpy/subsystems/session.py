@@ -114,6 +114,13 @@ def start_attract_to_game(state: GameState) -> None:
 _FREE_PLAY_START_HEALTH = 0x7D0     # 2000
 
 
+def configured_start_health(state: GameState) -> int:
+    """The full health assigned when a player starts or continues."""
+    if not state.two_player_mode:
+        return _FREE_PLAY_START_HEALTH
+    return _COIN_HEALTH_TABLE[state.game_settings & 0x1F]
+
+
 def player_init_for_coin(state: GameState, player_index: int) -> None:
     """0x488CA + ``player_coindrop`` (0x4895C) -- credit a player into select.
 
@@ -135,10 +142,7 @@ def player_init_for_coin(state: GameState, player_index: int) -> None:
         player.health = _FREE_PLAY_START_HEALTH                 # 0x488EC
     else:
         sound_play(state, _COIN_SLOT_SOUND[player_index & 3])   # 0x488FE
-        if state.two_player_mode:                               # 0x4890E
-            player.health = _COIN_HEALTH_TABLE[state.game_settings & 0x1F]
-        else:
-            player.health = _FREE_PLAY_START_HEALTH             # 0x4891C
+        player.health = configured_start_health(state)          # 0x4890E-0x4891C
     player.score = 0                                            # 0x48954
     # A valid ROM lifecycle already ran player_resetcounters before a dead slot
     # can be credited again. Reassert its 1x baseline here so a host-driven

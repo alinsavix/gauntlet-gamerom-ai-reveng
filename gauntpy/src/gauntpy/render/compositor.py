@@ -31,11 +31,12 @@ from ..state import GameState
 from ..subsystems import score
 from ..subsystems.camera import viewport_scroll
 from .framebuffer import Framebuffer
-from .hud import draw_hud, draw_message_box
+from .hud import draw_debug_frame_counter, draw_hud, draw_message_box
 from .mobs import SpriteSource, draw_mob_layer
 from .playfield import (
-    PlayfieldCache, draw_exit_animation, draw_playfield, draw_wall_crumble,
-    playfield_cache_for, shadow_source_for,
+    PlayfieldCache, draw_animated_floor_tiles, draw_exit_animation, draw_playfield,
+    draw_transporter_tiles, draw_wall_crumble, playfield_cache_for,
+    shadow_source_for,
 )
 from .screens import draw_front_end_overlay
 
@@ -55,6 +56,9 @@ HUD_PANEL_X = score.PANEL_COLUMN * 8
 #: (dest_x, dest_y, width, height) in framebuffer pixels -- see the "screen
 #: split" derivation above.
 PLAYFIELD_VIEWPORT: tuple[int, int, int, int] = (0, 0, HUD_PANEL_X, LOGICAL_HEIGHT)
+_HARDWARE_VIEWPORT: tuple[int, int, int, int] = (
+    0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT,
+)
 HUD_PANEL: tuple[int, int, int, int] = (
     HUD_PANEL_X, 0, LOGICAL_WIDTH - HUD_PANEL_X, LOGICAL_HEIGHT,
 )
@@ -80,6 +84,7 @@ def render_frame(
     cache: RenderCache | None = None,
     width: int = LOGICAL_WIDTH,
     height: int = LOGICAL_HEIGHT,
+    paused: bool = False,
 ) -> tuple[Framebuffer, RenderCache]:
     """Composite one frame: playfield, then MOBs, then HUD.
 
@@ -98,30 +103,40 @@ def render_frame(
     # The camera stores the ROM's hardware scroll registers; the renderer wants
     # a plain viewport top-left. Convert once, here (I-23), so every layer sees
     # the same world-pixel corner.
-    scroll_x, scroll_y = viewport_scroll(state, PLAYFIELD_VIEWPORT[2], PLAYFIELD_VIEWPORT[3])
+    scroll_x, scroll_y = viewport_scroll(
+        state, _HARDWARE_VIEWPORT[2], _HARDWARE_VIEWPORT[3],
+    )
 
     shadow_src = None
     if state.maze is not None:
         cache.playfield = playfield_cache_for(state.maze, cache.playfield)
-        draw_playfield(fb, cache.playfield, scroll_x, scroll_y, PLAYFIELD_VIEWPORT)
+        draw_playfield(fb, cache.playfield, scroll_x, scroll_y, _HARDWARE_VIEWPORT)
+        draw_animated_floor_tiles(
+            fb, cache.playfield, state, scroll_x, scroll_y, _HARDWARE_VIEWPORT
+        )
         # The moving exit is a playfield stamp (main_exit_move -> pf_stamp_update),
         # not a MOB, and it changes every fourth frame -- so it goes on top of the
         # cached raster rather than into it. Crumbling walls are the same shape of
         # problem: wall_crumble restamps them as they take damage.
         draw_exit_animation(
-            fb, cache.playfield, state, scroll_x, scroll_y, PLAYFIELD_VIEWPORT
+            fb, cache.playfield, state, scroll_x, scroll_y, _HARDWARE_VIEWPORT
+        )
+        draw_transporter_tiles(
+            fb, cache.playfield, state, scroll_x, scroll_y, _HARDWARE_VIEWPORT
         )
         draw_wall_crumble(
-            fb, cache.playfield, state, scroll_x, scroll_y, PLAYFIELD_VIEWPORT
+            fb, cache.playfield, state, scroll_x, scroll_y, _HARDWARE_VIEWPORT
         )
         # Exact MOB shadows: the shadow-palette twin of the playfield the MOB
         # layer draws over (see playfield.build_playfield_images). Without a
         # maze there is nothing to shadow, so the MOB layer falls back to its
         # in-place darkening.
-        shadow_src = shadow_source_for(cache.playfield, scroll_x, scroll_y, PLAYFIELD_VIEWPORT)
+        shadow_src = shadow_source_for(
+            cache.playfield, scroll_x, scroll_y, _HARDWARE_VIEWPORT,
+        )
 
     draw_mob_layer(
-        fb, state, assets, scroll_x, scroll_y, PLAYFIELD_VIEWPORT,
+        fb, state, assets, scroll_x, scroll_y, _HARDWARE_VIEWPORT,
         shadow_src=shadow_src,
     )
 
@@ -136,5 +151,6 @@ def render_frame(
     # playfield (dialog_position_box, 0x4CB50) and over anything an attract
     # screen drew, so it goes last.
     draw_message_box(fb, state, PLAYFIELD_VIEWPORT)
+    draw_debug_frame_counter(fb, state, HUD_PANEL, paused=paused)
 
     return fb, cache

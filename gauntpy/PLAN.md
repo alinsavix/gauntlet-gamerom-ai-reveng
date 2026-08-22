@@ -133,6 +133,7 @@ gauntpy/
     state.py           GameState / Player              DONE
     mainloop.py        g2mainloop / game_frame / tick  DONE
     assets.py          gex bridge                      WP-1
+    maze.py            gex maze/ROM-data bridge        WP-3
     render/            compositor + host shell         WP-2
     subsystems/
       __init__.py      subsystem package               DONE

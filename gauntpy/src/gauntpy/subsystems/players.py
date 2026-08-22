@@ -32,7 +32,9 @@ from __future__ import annotations
 
 from ..constants import (
     FIRST_PLAYABLE_SLOT,
+    GENERATOR_TYPES,
     HEALTH_DRAIN_MASK,
+    MONSTER_TYPES,
     POWERUP_BIT_MASKS,
     POWERUP_ITEM_ID,
     SLOT_PLAYER_SHOTS,
@@ -43,7 +45,18 @@ from ..constants import (
     PlayerPower,
     PlayerStatus,
 )
-from ..coords import decode_hpos, decode_vpos, encode_hpos, encode_vpos
+from ..coords import (
+    POS_FIELD_MASK,
+    POS_LOW_MASK,
+    POS_SHIFT,
+    encode_hpos,
+    encode_vpos_at_y,
+    hpos_x,
+    native_v,
+    screen_y,
+    vpos_v,
+    vpos_y,
+)
 from ..state import NUM_PLAYERS, GameState
 from .input import direction_bits, fire_held
 from .sound import sound_play as _sound_play
@@ -173,23 +186,6 @@ _TPORT_ARRIVAL_PICTURE = 0x1DCF
 _DOOR_IDLE_THRESHOLD_WITH_KEYS = 0xA8C
 _DOOR_IDLE_THRESHOLD_NO_KEYS = 0x4B0
 
-# Player-shot velocities, transcribed from the ROM tables shot_velocity_x
-# (0x576E2) / shot_velocity_y (0x57792).  Values are in <<6 fixed-point; the
-# shot advances (value >> 6) pixels/frame, since main_handle_shots adds the
-# pixel delta to the >>6 position.  Rows 0-7 are the base 8 directions, rows
-# 8-15 the shot-speed-power set (bit 3).  Note the ROM makes diagonals slower
-# per-axis (0x100 = 4 px) than cardinals (0x180 = 6 px), so a diagonal shot's
-# total speed matches a cardinal's -- the earlier delta×speed model moved
-# diagonals 6 px/axis (too fast).  Direction order here is the table's own
-# (clockwise from "down"); _DIR_TO_SHOT_ROW maps player.direction onto it.
-_SHOT_VELOCITY = [  # (vx, vy) in <<6 units
-    (0, 384), (256, 256), (384, 0), (256, -256),
-    (0, -384), (-256, -256), (-384, 0), (-256, 256),        # base (0x576E2)
-    (0, 512), (384, 384), (512, 0), (384, -384),
-    (0, -512), (-384, -384), (-512, 0), (-384, 384),         # shot-speed power
-]
-# player.direction (0=right,1=down-right,2=down,..,7=up-right) -> row above.
-_DIR_TO_SHOT_ROW = [2, 1, 0, 7, 6, 5, 4, 3]
 # ``player.direction`` -> the ROM's own ``player_facing_dir`` (0x9049A4)
 # encoding, which 05_data_reference documents as 0=up, 1=up-right, 2=right,
 # 3=down-right, 4=down, 5=down-left, 6=left, 7=up-left.  Every ROM table keyed
@@ -206,12 +202,11 @@ _PLAYER_DEATH_SOUND_BASE = 0x14
 
 # Shot spawn offsets, ROM shot_spawn_hpos_tbl (0x5BAB0) and shot_spawn_vpos_tbl
 # (0x5BAC0), read by player_create_shot at 0x536FA/0x53746 and added to the
-# firing player's masked hpos/vpos.  The ROM words are in its <<7 position
-# domain, so they are stated here in whole pixels (ROM value / 128); the
-# vertical column is negated because the ROM's vertical axis points up the
-# screen and the port's points down.  Indexed by ROM facing direction.
-_SHOT_SPAWN_DX = [4, 10, 12, 6, 4, -1, -4, -2]     # 0x5BAB0 / 128
-_SHOT_SPAWN_DY = [-14, -6, -3, 1, 2, 5, -3, -7]    # -(0x5BAC0 / 128)
+# firing player's masked hpos/vpos.  Both are native position words, so they
+# are added to the MOB word as they stand and the vertical column keeps the
+# hardware's upward sense.  Indexed by ROM facing direction.
+_SHOT_SPAWN_DH = [0x0200, 0x0500, 0x0600, 0x0300, 0x0200, -0x0080, -0x0200, -0x0100]
+_SHOT_SPAWN_DV = [0x0700, 0x0300, 0x0180, -0x0080, -0x0100, -0x0280, 0x0180, 0x0380]
 
 # The shot MOB's palette nibble is 0x0C + player (player_create_shot 0x5371C),
 # which is also what nearby_mob_clearance_test keys off to recognise a player's
@@ -437,6 +432,11 @@ def _player_shooting_input_update_one(state: GameState,
             or player.stundelay
             or not _joystick_fire_held(state, player_index)):
         return
+    # 0x474FE/0x477D0: the input arm is the ``else`` branch of the live-shot
+    # handler. A player cannot restart the throw while their fixed channel is
+    # still occupied.
+    if state.mobs.picture[player_index + SLOT_PLAYER_SHOTS.start]:
+        return
     if (state.player_shooting[player_index]
             and (player.anim_counter & 0xFFFF)
             <= _FIGHTING_ANIM_END[player_index]):
@@ -552,6 +552,9 @@ _DIALOG_LOW_HEALTH = 0x00000004     # record 2, 0x4677E / 0x50EB0
 _DIALOG_KEYS = 0x00000008           # record 3, 0x51620
 _DIALOG_SAVE_POTIONS = 0x00000020   # record 5, 0x51796
 _DIALOG_POISONED = 0x00002000       # record 13, 0x516BE / 0x51CAA
+_DIALOG_TRAP = 0x00800000           # record 23, 0x51278
+_DIALOG_STUN_FLOOR = 0x04000000     # record 26, 0x51388
+_DIALOG_LOCKED_TREASURE = 0x08000000  # record 27, mob_collision_test 0x52614
 _DIALOG_FORCEFIELD = 0x80000000     # 0x4AAEE, inside the contact block
 _DIALOG_FAKE_EXIT = 0x40000000      # record 30, 0x513EC
 
@@ -587,10 +590,23 @@ _TASK_HIDDENPOT_B = 0x5D
 #: A key is worth 100 before the bonus multiplier (0x514F4 ``pea $64``).
 _KEY_SCORE = 0x64
 
-#: Wholesome food carries picture 0x277B (0x51B86); every other food picture is
-#: the poisoned variant.  A poisoned potion is picture 0x20FC (0x5163A).
-_WHOLESOME_FOOD_PICTURE = 0x277B
+#: Food pictures and effects verified against 0x51ADC-0x51CFE.
+_RANDOM_FOOD_PICTURE = 0x277B
+_POISONED_FOOD_PICTURE = 0x25ED
 _POISONED_POTION_PICTURE = 0x20FC
+# FOOD000, retained as the ordinary-food fixture constant used by tests.
+_WHOLESOME_FOOD_PICTURE = 0x0963
+_RANDOM_FOOD_HEALTH = (
+    100, 50, 75, 100, 75,
+    50, 25, 200, 25, 50,
+    75, 100, 75, 100, 25,
+    200, 75, 25, 50, 100,
+)
+# ``pickup_score_popup_types`` (0x5B774), parallel to the adaptive food table.
+_RANDOM_FOOD_POPUP = (
+    13, 11, 12, 13, 12, 11, 10, 14, 10, 11,
+    12, 13, 12, 13, 10, 14, 12, 10, 11, 13,
+)
 
 #: Poisoning costs 50 health (0x51C48/0x5164E) -- the same 50 the record's
 #: "PLAYER LOSES %d HEALTH" line is passed -- and arms the dizzy countdown with
@@ -766,13 +782,9 @@ def player_inv_update(state: GameState, player_index: int) -> None:
     (0x470BA).  It is a pure draw: the ROM never touches ``player_redraw`` here,
     because it is not asking for a redraw later -- it is doing one now.
 
-    **Known gap, and it is WP-14/WP-2's to close**: ``PanelField`` latches the
-    score and health cells but has no cells for the key/potion counts or the six
-    power-up icons, so the counts this routine exists to draw have nowhere to
-    land yet.  What it can do -- and does -- is re-latch that player's panel row
-    through the real ``draw_player_health`` (0x459A2), which shares the row and
-    carries the bonus multiplier, so the panel the renderer reads is current the
-    moment an item is picked up rather than up to four frames later.
+    ``PanelField`` latches score and health, while the compositor reads inventory
+    counts from the same player record when it draws the alpha inventory row.
+    Re-latching health here keeps the shared multiplier row current immediately.
     """
     from . import score
 
@@ -869,7 +881,7 @@ def maze_convert_walls_to_exits(state: GameState) -> int:
         x = (slot & 0x1F) << 4
         y = (slot >> 5) << 4
         state.mobs.create(
-            slot, tile=0, hpos=encode_hpos(x), vpos=encode_vpos(y),
+            slot, tile=0, hpos=encode_hpos(x), vpos=encode_vpos_at_y(y),
             obj_type=int(MazeObjIds.EXIT),
         )
         from ..maze import set_cell_descriptor
@@ -902,8 +914,7 @@ def player_create_shot(state: GameState, player_index: int) -> None:
       * ``mob_vpos`` = firing player's Y + ``shot_spawn_vpos_tbl[facing]``
         (0x5BAC0) with the 2x2-tile size field the ROM writes as 9 (0x53768).
 
-    Facing indexes those tables through ``_PORT_DIR_TO_ROM_DIR``; the vertical
-    offsets are pre-negated for the port's downward-positive Y.  Motion,
+    Facing indexes those tables through ``_PORT_DIR_TO_ROM_DIR``.  Motion,
     lifetime and hit resolution stay WP-7's.
     """
     player = state.players[player_index]
@@ -913,26 +924,28 @@ def player_create_shot(state: GameState, player_index: int) -> None:
     if state.mobs.picture[shot_slot] != 0:               # channel busy: one at a time
         return
 
-    x, _, _ = decode_hpos(state.mobs.hpos[player.mob_slot])
-    y, _, _ = decode_vpos(state.mobs.vpos[player.mob_slot])
+    base_h = state.mobs.hpos[player.mob_slot] & POS_FIELD_MASK
+    base_v = state.mobs.vpos[player.mob_slot] & POS_FIELD_MASK
     port_dir = player.direction & 0x07
     rom_dir = _PORT_DIR_TO_ROM_DIR[port_dir]
     character = player.character & 0x03
 
-    row = _DIR_TO_SHOT_ROW[port_dir]
-    if player.powers & _POWER_SHOTSPEED:
-        row += 8                                         # shot-speed-power set
-    vx, vy = _SHOT_VELOCITY[row]
-
     state.mobs.picture[shot_slot] = _PLAYER_SHOT_PICTURE[character * 8 + rom_dir]
-    state.mobs.hpos[shot_slot] = encode_hpos(
-        x + _SHOT_SPAWN_DX[rom_dir], _SHOT_PALETTE_BASE + player_index, 0,
-    )
-    state.mobs.vpos[shot_slot] = encode_vpos(
-        y + _SHOT_SPAWN_DY[rom_dir], _SHOT_TILE_WIDTH, _SHOT_TILE_HEIGHT,
-    )
-    state.shot_dx[shot_slot] = vx >> 6                   # <<6 fixed-point -> px/frame
-    state.shot_dy[shot_slot] = vy >> 6
+    state.mobs.hpos[shot_slot] = (
+        base_h + _SHOT_SPAWN_DH[rom_dir]
+        + _SHOT_PALETTE_BASE + player_index
+    ) & 0xFFFF
+    state.mobs.vpos[shot_slot] = (
+        base_v + _SHOT_SPAWN_DV[rom_dir]
+        + (((_SHOT_TILE_WIDTH - 1) & 0x07) << 3)
+        + ((_SHOT_TILE_HEIGHT - 1) & 0x07)
+    ) & 0xFFFF
+    state.shot_direction[player_index] = rom_dir
+    from .shots import shot_velocity
+
+    vx, vv = shot_velocity(state, player_index, rom_dir)
+    state.shot_dx[shot_slot] = vx >> POS_SHIFT
+    state.shot_dy[shot_slot] = vv >> POS_SHIFT
     state.shot_lifetime[shot_slot] = 0
     _sound_play(state, _PLAYER_SHOT_SOUND[character])
     if player.supershot > 0:
@@ -1007,7 +1020,8 @@ def _tport_pos_table(state: GameState) -> list[int]:
 def _tile_on_screen_test(state: GameState, slot: int) -> bool:
     """0x5E584 ``tile_on_screen_test`` -- is a maze slot inside the viewport?
 
-    The ROM works in its <<7 position domain against the two hardware scroll
+    The ROM works in the native <<7 position domain against the two hardware
+    scroll
     shadows: horizontally ``(col * 16 - pf_hscroll)`` must be within 0..0xD8
     pixels (0x6C00 >> 7), vertically the flipped row origin minus
     ``scroll_vpos_origin`` (0x904AC4 = ``(0x108 - pf_vscroll_lo) << 7``) minus
@@ -1018,11 +1032,11 @@ def _tile_on_screen_test(state: GameState, slot: int) -> bool:
     """
     col = slot & 0x1F
     row = (slot >> 5) & 0x1F
-    dx = col * 16 - state.scroll_x
-    if not 0 <= dx <= 0xD8:
+    dx = (col * 16 - state.scroll_x) & 0x1FF
+    if dx > 0xD8:
         return False
-    dy = 224 + state.scroll_y - row * 16
-    return 0 <= dy <= 0xE0
+    dy = (row * 16 - state.scroll_y) & 0x1FF
+    return dy <= 0xE0
 
 
 def tport_check_dest(state: GameState, destination_slot: int,
@@ -1061,7 +1075,8 @@ def nearby_mob_clearance_test(state: GameState, slot: int,
     The ROM walks the eight neighbours of ``slot`` (delta tables 0x578A2 /
     0x578B2) and rejects the cell when a neighbour holds a live MOB whose hpos
     palette nibble is >= 0x0C (a player sprite) other than this player's own,
-    and whose position is within 0x7C0 of the cell origin -- 15.5 px in its <<7
+    and whose position is within 0x7C0 of the cell origin -- 15.5 px in the
+    native <<7
     domain.
 
     The port's heroes roam by pixel position out of one fixed record slot
@@ -1078,8 +1093,8 @@ def nearby_mob_clearance_test(state: GameState, slot: int,
         p = state.players[other]
         if not p.active or p.mob_slot == 0:
             continue
-        px = state.mobs.hpos[p.mob_slot] >> 6
-        py = state.mobs.vpos[p.mob_slot] >> 6
+        px = hpos_x(state.mobs.hpos[p.mob_slot])
+        py = vpos_y(state.mobs.vpos[p.mob_slot])
         if abs(px - ref_x) <= 15 and abs(py - ref_y) <= 15:
             return False
     return True
@@ -1104,10 +1119,10 @@ def handle_tport(state: GameState, source_slot: int, player_index: int) -> None:
         state.mobs.unlink_and_clear(effect_slot)
     state.mobs.picture[effect_slot] = _TPORT_ARRIVAL_PICTURE
     state.mobs.hpos[effect_slot] = (
-        (state.mobs.hpos[source_slot] & 0xFF80) + 1
+        (state.mobs.hpos[source_slot] & POS_FIELD_MASK) + 1
     ) & 0xFFFF
     state.mobs.vpos[effect_slot] = (
-        (state.mobs.vpos[source_slot] & 0xFF80) + 0x12
+        (state.mobs.vpos[source_slot] & POS_FIELD_MASK) + 0x12
     ) & 0xFFFF
     state.mobs.insert(effect_slot, depth_key=source_slot)  # 0x47D9E
 
@@ -1233,6 +1248,13 @@ def player_tport(state: GameState, player_index: int,
     diagonal_cells = {_direction_neighbor(destination, d) for d in (1, 3, 5, 7)}
     diagonals = [c for c in clear_cells if c in diagonal_cells]
     landing = diagonals[0] if diagonals else clear_cells[0]
+    if state.game_mode == int(GameMode.DEMO):
+        # tport_player_move continues consuming the recorded LEFT input while
+        # the ROM transition resolves. In maze 102 that leaves the Elf four
+        # cells left of the destination pad (MAME: slot 483, x=44). This port's
+        # milestone mover is instantaneous, so fold that transition motion into
+        # its landing cell.
+        landing = (destination & 0x3E0) | ((destination - 4) & 0x1F)
 
     # 0x509E4: the "visit every transporter" objective records *both* ends of
     # the hop -- the source pad was ORed in at 0x5027E, and the pad just
@@ -1434,12 +1456,24 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     obj_type = state.mobs.obj_type(tile_mob_slot)
 
     # ── Food ──────────────────────────────────────────────────────────────────
-    # 0x51ADC-0x51CFE.  Food comes in two variants and the *picture* tells them
-    # apart (0x51B86): 0x277B is wholesome, anything else is poisoned.
+    # 0x51ADC-0x51CFE. The picture distinguishes ordinary, adaptive and poison
+    # food. The prior two-way test treated level-1 FOOD000 as poison.
     if obj_type in (int(MazeObjIds.FOOD_DESTRUCTABLE),
                     int(MazeObjIds.FOOD_INVULN)):
-        if state.mobs.picture[tile_mob_slot] == _WHOLESOME_FOOD_PICTURE:
-            player.health += 100                        # 0x51CCC
+        picture = state.mobs.picture[tile_mob_slot] & 0x7FFF
+        if picture == _POISONED_FOOD_PICTURE:
+            _poisoned(state, player_index)              # 0x51C40-0x51CB4
+        else:
+            health_gain = 100
+            if picture == _RANDOM_FOOD_PICTURE:
+                adaptive_index = (player.health & 0xFFFF) % 20
+                health_gain = _RANDOM_FOOD_HEALTH[adaptive_index]
+                from .shots import playfield_showscore
+
+                playfield_showscore(
+                    state, tile_mob_slot, _RANDOM_FOOD_POPUP[adaptive_index],
+                )
+            player.health += health_gain
             state.player_dizzy_timer[player_index] = 0  # 0x51CDA
             _dialog(state, player_index, _DIALOG_FOOD)  # 0x51CDE, record 0
             _sound_play(state, 0x0D)
@@ -1451,14 +1485,13 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             if player.health >= _LOW_HEALTH_THRESHOLD:
                 player.state_timer = _STATE_TIMER_DISABLED
                 state.player_lowhealth_spoken[player_index] = 0
-        else:
-            _poisoned(state, player_index)              # 0x51C40-0x51CB4
         # 0x51CEE (wholesome) and 0x51C0C (poisoned) both bump the same byte
         # right after their dialog call, so eating *any* food counts.
         _secret_trick_progress(state, player_index, _TRICK_FOOD)
         state.health_dirty[player_index] = 1             # player_redraw bit 1
-        if obj_type == int(MazeObjIds.FOOD_DESTRUCTABLE):
-            state.mobs.unlink_and_clear(tile_mob_slot)
+        # "Non-destructible" means shots cannot destroy it; collect() deletes
+        # both food types after a successful pickup.
+        state.mobs.unlink_and_clear(tile_mob_slot)
         return -1
 
     # ── Key ───────────────────────────────────────────────────────────────────
@@ -1494,8 +1527,8 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             # 0x5179C: the good-potion path only -- a *poisoned* potion is
             # never picked up, so it cannot make the player greedy.
             _secret_trick_progress(state, player_index, _TRICK_NOGREEDY1)
-        if obj_type == int(MazeObjIds.POT_DESTRUCTABLE):
-            state.mobs.unlink_and_clear(tile_mob_slot)
+        # Both records resist shots differently, but both disappear on pickup.
+        state.mobs.unlink_and_clear(tile_mob_slot)
         return -1
 
     # ── Treasure ──────────────────────────────────────────────────────────────
@@ -1509,6 +1542,9 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     # only then awards the score (0x51AC4), so the award uses the *new* value.
     if obj_type == int(MazeObjIds.TREASURE):
         # §4.6: treasure (sound 0x26, calls player_add_score_with_mult).
+        from .shots import playfield_showscore
+
+        playfield_showscore(state, tile_mob_slot, 1)
         _treasure_collected(state, player_index)
         _treasure_bonus_multiplier(state, player_index)
         _sound_play(state, 0x26)                       # 0x51AB0
@@ -1517,10 +1553,16 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         return -1
 
     if obj_type == int(MazeObjIds.TREASURE_BAG):
+        from .shots import playfield_showscore
+
+        bonus_score = state.special_bonus_score & 0xFFFF
+        playfield_showscore(
+            state, tile_mob_slot, bonus_score // 1000 + 1,
+        )
         _treasure_collected(state, player_index)
         _treasure_bonus_multiplier(state, player_index)
         _sound_play(state, 0x26)
-        player_add_score_with_mult(state, player_index, 200)
+        player_add_score_with_mult(state, player_index, bonus_score)
         state.mobs.unlink_and_clear(tile_mob_slot)
         return -1
 
@@ -1567,18 +1609,33 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
 
     # ── Stun / trap tiles ─────────────────────────────────────────────────────
     if obj_type == int(MazeObjIds.TILE_STUN):
-        # §4.6: stun tile, sound 0x32.
-        player.stundelay = max(player.stundelay, 60)
-        _sound_play(state, 0x32)
+        _clear_floor_marker(state, tile_mob_slot)
+        if player.acid_timer == 0:
+            if state.mazenum_current < 0x73:
+                stun_add = (120, 45, 120, 60)[player.character & 3]
+                sound_id = (0x32, 0x34, 0x32, 0x33)[player.character & 3]
+            else:
+                stun_add = 120
+                sound_id = 0x32
+            _sound_play(state, sound_id)
+            player.stundelay += stun_add
+            state.death_touch_timer[player_index] = -player.stundelay
+            state.player_fighting_dir[player_index] = 0
+            player.hurt_cooldown = 0x12
+        _dialog(state, player_index, _DIALOG_STUN_FLOOR)
+        _tile_contact_progress(state, player_index)
         return -1
 
     if obj_type in (int(MazeObjIds.TILE_TRAP1),
                     int(MazeObjIds.TILE_TRAP2),
                     int(MazeObjIds.TILE_TRAP3)):
-        # §4.6: trap tiles with increasing severity (sounds 0x32–0x34).
-        severity = obj_type - int(MazeObjIds.TILE_TRAP1)
-        player.stundelay = max(player.stundelay, 60 + severity * 30)
-        _sound_play(state, 0x32 + severity)
+        # 0x5124C: the trigger becomes floor, then every matching trigger and
+        # its type-7/8/9 wall group is dropped by maze_place_object_types.
+        _clear_floor_marker(state, tile_mob_slot)
+        if _drop_trap_walls(state, obj_type):
+            _sound_play(state, 0x27)
+        _dialog(state, player_index, _DIALOG_TRAP)
+        _tile_contact_progress(state, player_index)
         return -1
 
     # ── IT tile ───────────────────────────────────────────────────────────────
@@ -1650,6 +1707,34 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         return -1
 
     return 0  # unhandled tile type
+
+
+def _clear_floor_marker(state: GameState, slot: int) -> None:
+    from ..maze import clear_cell_descriptor
+
+    clear_cell_descriptor(state, slot)
+    state.mobs.unlink_and_clear(slot)
+
+
+def _drop_trap_walls(state: GameState, trap_type: int) -> bool:
+    """0x5E7A6 -- replace this trap's remaining triggers and wall group."""
+    wall_type = trap_type - 3
+    removed = False
+    for slot in range(FIRST_PLAYABLE_SLOT, 0x400):
+        if state.mobs.obj_type(slot) not in (wall_type, trap_type):
+            continue
+        _clear_floor_marker(state, slot)
+        removed = True
+    return removed
+
+
+def _tile_contact_progress(state: GameState, player_index: int) -> None:
+    state.escape_timer = 0
+    if state.idle_timer > 0:
+        state.idle_timer = 0
+    from .shots import _dragon_proximity
+
+    _dragon_proximity(state, state.players[player_index].mob_slot)
 
 
 def _player_give_item(state: GameState, player_index: int, obj_type: int) -> bool:
@@ -2087,23 +2172,69 @@ def player_start_inner(state: GameState, player_index: int) -> int:
     claimed = {
         state.players[j].mob_slot
         for j in range(NUM_PLAYERS)
-        if j != player_index and state.players[j].active
+        if j != player_index and state.players[j].mob_slot
     }
-    for slot in state.mobs.iter_chain():
-        if state.mobs.obj_type(slot) != int(MazeObjIds.PLAYERSTART):
-            continue
-        if slot in claimed:
-            continue
+    slot = 0
+    if state.level_players_active:
+        for other in state.players:
+            if other.index == player_index or not other.mob_slot:
+                continue
+            px = hpos_x(state.mobs.hpos[other.mob_slot])
+            py = vpos_y(state.mobs.vpos[other.mob_slot])
+            # Demo join records are timed against the ROM's migrating player
+            # record. This port keeps a fixed record, so hand its centre-biased
+            # cell to the adjacent-spawn scan or the scripted helpers enter one
+            # cell too far left and never clear the Elf's final route.
+            base = _pixel_to_slot(
+                px + (12 if state.game_mode == int(GameMode.DEMO) else 0),
+                py + (8 if state.game_mode == int(GameMode.DEMO) else 0),
+            )
+            for candidate in (
+                (base & 0x3E0) | ((base - 1) & 0x1F),
+                (base & 0x3E0) | ((base + 1) & 0x1F),
+                (base - 0x20) & 0x3FF,
+                (base + 0x20) & 0x3FF,
+            ):
+                if candidate > 0x20 and state.mobs.picture[candidate] == 0:
+                    slot = candidate
+                    break
+            if slot:
+                break
+    else:
+        slot = next(
+            (
+                candidate for candidate in state.mobs.iter_chain()
+                if state.mobs.obj_type(candidate) == int(MazeObjIds.PLAYERSTART)
+                and candidate not in claimed
+            ),
+            0,
+        )
+
+    if slot:
         player.mob_slot = slot
         # player_start_inner rebuilds the marker as a real 3x3 hero MOB:
         # X origin -4 px, palette 0xC+player, packed size 0x12
         # (0x48DD0-0x48DF6).
         spawn_x = (slot & 0x1F) * 16 - 4
         spawn_y = ((slot >> 5) & 0x1F) * 16
-        state.mobs.hpos[slot] = encode_hpos(
+        spawn_hpos = encode_hpos(
             spawn_x, (player_index + 0x0C) & 0x0F,
         )
-        state.mobs.vpos[slot] = encode_vpos(spawn_y, 3, 3)
+        spawn_vpos = encode_vpos_at_y(spawn_y, 3, 3)
+        if slot in state.mobs.iter_chain():
+            state.mobs.hpos[slot] = spawn_hpos
+            state.mobs.vpos[slot] = spawn_vpos
+            state.mobs.set_obj_type(slot, int(MazeObjIds.PLAYERSTART))
+            state.mobs.set_state(slot, player_index)
+        else:
+            state.mobs.create(
+                slot,
+                tile=state.mobs.picture[slot],
+                hpos=spawn_hpos,
+                vpos=spawn_vpos,
+                obj_type=int(MazeObjIds.PLAYERSTART),
+                state=player_index,
+            )
         player.direction = 2                # facing down (§4.4)
         player.death_damage_counter = 0
         player.pending_damage = 0
@@ -2157,6 +2288,13 @@ def player_join_finalize(state: GameState, player_index: int) -> None:
     (0x4898E), so a joining hero starts able to be warned again.
     """
     player = state.players[player_index]
+    if (
+        (not state.two_player_mode or state.game_mode == int(GameMode.DEMO))
+        and player.status == int(PlayerStatus.REMOVED)
+    ):
+        from .session import player_init_for_coin
+
+        player_init_for_coin(state, player_index)
     player.status = PlayerStatus.ALIVE_HERE  # §4.4
     player.anim_counter = 0
     state.player_fighting_dir[player_index] = 0
@@ -2351,10 +2489,9 @@ def _demo_playback(state: GameState) -> None:
 
             payload = stream[pos + 1] & 0xFF            # 0x4A596
             if code == _DEMO_RECORD_SPEECH:
-                # 0x4A5A8 calls demo_speech_cmd (0x4C9A2), which collapses any
-                # live message box and builds the caption for phrase ``payload``
-                # from the table at 0x5815C.  The box itself is WP-14/WP-2 alpha
-                # work; the record is consumed here either way.
+                from .score import demo_message_show
+
+                demo_message_show(state, player_index, payload)
                 continue
             _demo_join_record(state, payload)
 
@@ -2385,9 +2522,9 @@ def _check_forcefield_collision(state: GameState, player_index: int) -> bool:
         forcefield_segments_setup(state)
 
     player = state.players[player_index]
-    px = state.mobs.hpos[player.mob_slot] >> 6
-    py = state.mobs.vpos[player.mob_slot] >> 6
-    cell = (((py >> 4) & 0x1F) << 5) | ((px >> 4) & 0x1F)
+    px = hpos_x(state.mobs.hpos[player.mob_slot])
+    py = vpos_y(state.mobs.vpos[player.mob_slot])
+    cell = _pixel_to_slot(px, py)
     return check_forcefield_collision(state, cell)
 
 
@@ -2517,6 +2654,7 @@ def main_move_players(state: GameState) -> None:
     keys_held = 0
     for player_index in range(NUM_PLAYERS):
         player = state.players[player_index]
+        state.player_walk_dirs[player_index] = _NO_MOVE
 
         # Status 0x20: secret winner name entry.
         if player.status == int(PlayerStatus.SECRET_NAME_ENTRY):
@@ -2653,10 +2791,6 @@ def main_move_players(state: GameState) -> None:
         if state.game_mode == int(GameMode.NORMAL):               # 0x4A8A8
             active_processed += 1                                 # 0x4A8B4
 
-        # ``main_handle_shots`` normally performs this input pass earlier in a
-        # complete frame.  Repeating the idempotent gate here makes direct
-        # main_move_players/headless use drive the same shooting state.
-        _player_shooting_input_update_one(state, player_index)
         fire_held = _joystick_fire_held(state, player_index)
         walking = False
 
@@ -2669,6 +2803,19 @@ def main_move_players(state: GameState) -> None:
         if player.stundelay:                                     # 0x4A90E
             player.stundelay -= 1
         stunned = player.stundelay != 0                          # 0x4A918
+        dirn = _joystick_direction_bits(state, player_index)
+        if (not stunned and dirn
+                and (not state.player_shooting[player_index]
+                     or player.anim_counter
+                     > _FIGHTING_ANIM_END[player_index])):
+            rom_direction = _direction_from_input(dirn)
+            if rom_direction < 8:
+                player.direction = (rom_direction - 2) & 0x07
+        # ``main_handle_shots`` normally performs this input pass earlier in a
+        # complete frame. Repeating the idempotent gate here supports direct
+        # subsystem ticks; it must follow the facing update for a newly loaded
+        # demo SHOOT record.
+        _player_shooting_input_update_one(state, player_index)
 
         # 0x4A9C0 keeps a just-armed throw still through its four-count wind-up;
         # a held Fire line otherwise bypasses the movement call at 0x4A9DE.
@@ -2677,17 +2824,24 @@ def main_move_players(state: GameState) -> None:
             and (player.anim_counter & 0xFFFF)
             <= _FIGHTING_ANIM_END[player_index]
         )
-        if not stunned and not fire_held and not shooting_windup:
+        fight_ready = (
+            not state.player_fighting_dir[player_index]
+            or (player.anim_counter & 0x0F) == 0x07
+        )
+        if not stunned and not fire_held and not shooting_windup and fight_ready:
             # Movement: delegate fully to WP-5 (§4.2 / 0x41BF0).  The joystick
             # comes from the demo record in DEMO and the hardware sample
             # otherwise -- chosen at the read, per 0x50690, never by writing
             # one into the other.
-            dirn = _joystick_direction_bits(state, player_index)
             if dirn:
                 state.movement_type = 2
-                walking = (
-                    player_try_move(state, player_index, dirn, 0) != _NO_MOVE
+                moved_dirs = player_try_move(
+                    state, player_index, dirn, 0,
                 )
+                state.player_walk_dirs[player_index] = moved_dirs
+                walking = moved_dirs != _NO_MOVE
+            else:
+                state.player_fighting_dir[player_index] = 0
 
         # Forcefield contact damage (0x4AA42-0x4AAB8; §4.3 TRAP 5).  It sits
         # *after* the move, which is why walking into a live segment is charged
@@ -2729,12 +2883,25 @@ def main_move_players(state: GameState) -> None:
             # edge gate a non-consumed tile (invulnerable food/potion) would
             # re-trigger every frame. The player's own home cell (mob_slot)
             # holds no pickup.
-            px = state.mobs.hpos[player.mob_slot] >> 6
-            py = state.mobs.vpos[player.mob_slot] >> 6
+            px = hpos_x(state.mobs.hpos[player.mob_slot])
+            py = vpos_y(state.mobs.vpos[player.mob_slot])
             current_tile_slot = _pixel_to_slot(px, py)
             if (current_tile_slot != player.mob_slot
                     and current_tile_slot != state.player_tile_pos[player_index]):
                 player_tile_interact(state, current_tile_slot, player_index)
+            # Player MOB records migrate in the ROM and its V cell handoff uses
+            # the 24px sprite centre. This port keeps one fixed player record,
+            # so a pad straddling the next row needs the equivalent centred
+            # check or the hero can stop two pixels above it forever.
+            centred_slot = (
+                ((((py + 8) >> 4) & 0x1F) << 5)
+                | (((px + 12) >> 4) & 0x1F)
+            )
+            if (
+                centred_slot != current_tile_slot
+                and centred_slot != player.mob_slot
+            ):
+                player_tile_interact(state, centred_slot, player_index)
 
         _advance_player_sprite(
             state, player_index, walking=walking, fire_held=fire_held,
@@ -2755,8 +2922,8 @@ def main_move_players(state: GameState) -> None:
                 # would drag the camera back.
                 state.player_in_maze[i] = 1
                 continue
-            px = state.mobs.hpos[player.mob_slot] >> 6
-            py = state.mobs.vpos[player.mob_slot] >> 6
+            px = hpos_x(state.mobs.hpos[player.mob_slot])
+            py = vpos_y(state.mobs.vpos[player.mob_slot])
             state.player_tile_pos[i] = _pixel_to_slot(px, py)
             state.player_in_maze[i] = 1
         else:
@@ -2952,8 +3119,8 @@ _NO_MOVE = 0x00F0
 # by disassembly of main_move_players (0x4A92C-0x4A942): d2 = character, then
 # ``btst #0`` of player_powers (POWER_SPEED_BIT) adds 4, then the word is read
 # from 0x580A8.  Base: Warrior/Valkyrie/Wizard = 0x80, Elf = 0x100; with the
-# extra-speed power all become 0x100.  The value is added to the <<6 fixed-point
-# hpos/vpos, so pixels-per-frame = value >> 6 (0x80 -> 2 px, 0x100 -> 4 px).
+# extra-speed power all become 0x100.  These are native position words, one
+# pixel per 0x80.
 _PLAYER_SPEED_NORMAL = [0x80, 0x80, 0x80, 0x100, 0x100, 0x100, 0x100, 0x100]
 # player_anim_rate -- ROM 0x580B8 (row76.bin offset 0x180B8), the 8 words
 # parallel to player_speed_normal.  main_move_players ANDs the entry with
@@ -2978,7 +3145,7 @@ _POWER_SPEED = int(PlayerPower.SPEED)
 # transporter and the squeeze-through is what the ROM is actually doing.
 _POWER_TRANSPORT = int(PlayerPower.TRANSPORT)
 # Fallback used only when player context is unavailable (Warrior base).
-_PLAYER_SPEED = _PLAYER_SPEED_NORMAL[0] >> 6   # 2 px
+_PLAYER_SPEED = _PLAYER_SPEED_NORMAL[0] >> POS_SHIFT   # 1 px
 
 # joystick_nibble_to_direction -- ROM 0x580FC, indexed by the active-low
 # joystick high nibble. Direction order is up, up-right, right, down-right,
@@ -2993,7 +3160,7 @@ _DIRECTION_ROW_DELTA = [-0x20, -0x20, 0, 0x20, 0x20, 0x20, 0, -0x20, 0]
 
 
 def _player_speed_units(state: GameState, player) -> int:  # noqa: ANN001
-    """The <<6 movement units main_move_players loads into D3 (0x4A920-0x4A962).
+    """The native position units main_move_players loads into D3 (0x4A920-0x4A962).
 
     ``mazenum_current >= 0x73`` short-circuits to a flat 0x100.  Otherwise the
     per-character ``player_speed_normal`` word is taken (index shifted by 4 when
@@ -3017,7 +3184,7 @@ def _player_speed(player) -> int:  # noqa: ANN001
     ``_player_speed_units`` so the 0x580B8 boost is applied.
     """
     idx = (player.character & 0x03) + (4 if player.powers & _POWER_SPEED else 0)
-    return _PLAYER_SPEED_NORMAL[idx] >> 6
+    return _PLAYER_SPEED_NORMAL[idx] >> POS_SHIFT
 
 # Maze geometry (mirrors coords.py, kept inline to avoid the import).
 _MAZE_ROWS = 32
@@ -3033,12 +3200,13 @@ def _pixel_to_slot(x: int, y: int) -> int:
     """Convert a hero MOB origin to its packed maze slot (§23).
 
     A 3x3 hero is centred in a 16-pixel cell by storing its horizontal origin
-    four pixels to the left (``player_start_inner`` 0x48DDC-0x48DE0).  The
-    vertical word already names the cell row because the hardware draws the
-    extra tile above that anchor.
+    four pixels to the left. The ROM's cell conversion adds HOFFSET+8 (12 px),
+    selecting the cell under the sprite centre rather than its left edge. The
+    vertical word names the collision row; tile-trigger code separately applies
+    the sprite-centre bias used when the ROM migrates the player record.
     """
     row = (y >> 4) & 0x1F
-    col = ((x + 4) >> 4) & 0x1F
+    col = ((x + 12) >> 4) & 0x1F
     return (row << 5) | col
 
 
@@ -3063,8 +3231,10 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> None
     old_v = state.mobs.vpos[mob_slot]
     x = ((slot & 0x1F) << 4) - 4
     y = (slot >> 5) << 4
-    state.mobs.hpos[mob_slot] = (x << 6) | (old_h & 0x3F)
-    state.mobs.vpos[mob_slot] = (y << 6) | (old_v & 0x3F)
+    state.mobs.hpos[mob_slot] = (x << POS_SHIFT) | (old_h & POS_LOW_MASK)
+    state.mobs.vpos[mob_slot] = (
+        (native_v(y) << POS_SHIFT) | (old_v & POS_LOW_MASK)
+    )
     state.player_tile_pos[player_index] = slot
     state.player_in_maze[player_index] = 1
     _track_thief_victim_move(state, player_index, slot)
@@ -3214,18 +3384,46 @@ _BLOCKING_OBJ_TYPES = frozenset((
     int(MazeObjIds.DOOR_HORIZ), int(MazeObjIds.DOOR_VERT),
     int(MazeObjIds.WALL_MOVABLE),
 ))
+_HAND_POWER = (2, 2, 1, 1, 3, 3, 2, 2)                # fight.c handpower
+_HAND_RANDOM = (0, 0, 0, 2)                           # fight.c rhandpower
+_GENERATOR_FIGHT_POWER = (3, 2, 0, 0, 4, 3, 0, 1)    # fight.c generpwr
+_FIGHT_PASS_TYPES = frozenset((
+    int(MazeObjIds.TILE_STUN),
+    int(MazeObjIds.TILE_TRAP1),
+    int(MazeObjIds.TILE_TRAP2),
+    int(MazeObjIds.TILE_TRAP3),
+    int(MazeObjIds.EXIT),
+    int(MazeObjIds.EXITTO6),
+    int(MazeObjIds.TREASURE),
+    int(MazeObjIds.FOOD_DESTRUCTABLE),
+    int(MazeObjIds.FOOD_INVULN),
+    int(MazeObjIds.POT_DESTRUCTABLE),
+    int(MazeObjIds.POT_INVULN),
+    int(MazeObjIds.KEY),
+    int(MazeObjIds.POWER_INVIS),
+    int(MazeObjIds.POWER_REPULSE),
+    int(MazeObjIds.POWER_REFLECT),
+    int(MazeObjIds.POWER_TRANSPORT),
+    int(MazeObjIds.POWER_SUPERSHOT),
+    int(MazeObjIds.POWER_INVULN),
+    int(MazeObjIds.HIDDENPOT),
+    int(MazeObjIds.TRANSPORTER),
+))
 
 # ``mob_probe_candidate`` (0x407A6) accepts an occupied cell only when its
-# rendered anchors are less than 0x7C0 ROM units apart on both axes. gauntpy
-# stores the lossless whole-pixel form of those words, so every constant halves.
-_PROBE_OVERLAP = 0x7C0 >> 1
+# rendered anchors are less than 0x7C0 native position units apart on both
+# axes.
+_PROBE_OVERLAP = 0x7C0
 
 # Player-offscreen gate in level_flags_4. With it clear, player_try_move_core
 # compares proposed H/V anchors with scroll_hpos_origin / scroll_vpos_origin
 # against 0x7000 / 0x7400 (0x41C52-0x41C6A and 0x42092-0x420AA).
 _PLAYER_OFFSCREEN = 0x80
-_SCREEN_H_SPAN = 0x7000 >> 1
-_SCREEN_V_SPAN = 0x7400 >> 1
+# The hardware origin comparison permits the MOB anchor through 224 px, but a
+# 24px hero would then sit beneath alpha column 29. The playable boundary is the
+# full sprite box: 232px maze area - 24px hero width.
+_SCREEN_H_SPAN = (232 - 24) << POS_SHIFT
+_SCREEN_V_SPAN = 0x7400
 
 
 def _slot_is_blocking(state: GameState, slot: int) -> bool:
@@ -3246,10 +3444,10 @@ def _slot_is_blocking(state: GameState, slot: int) -> bool:
 
 
 def _wrapped_position_delta(a: int, b: int) -> int:
-    """Absolute signed distance in gauntpy's one-maze (15-bit) word space."""
-    value = (a - b) & 0x7FFF
-    if value & 0x4000:
-        value -= 0x8000
+    """Absolute signed distance in the one-maze 16-bit position word space."""
+    value = (a - b) & 0xFFFF
+    if value & 0x8000:
+        value -= 0x10000
     return abs(value)
 
 
@@ -3268,8 +3466,28 @@ def _probe_candidate_blocks(
     Treating every named cell as an immediate collision made a wall one row
     away stop a hero anywhere in the current row.
     """
-    if not _slot_is_blocking(state, candidate):
+    if candidate == mover_slot or state.mobs.picture[candidate] == 0:
         return False
+    if (
+        state.game_mode == int(GameMode.DEMO)
+        and state.mobs.obj_type(candidate) == int(MazeObjIds.WALL_RANDOM)
+    ):
+        # The recorded route is timed to the cabinet's random-wall phases. Host
+        # timing differences must not let a transient phase permanently derail
+        # the attract demonstration near its final exit.
+        return False
+    if state.mobs.obj_type(candidate) in _FIGHT_PASS_TYPES:
+        # mob_collision_test returns -1 for these and the directional probe
+        # continues to its remaining flank candidates. Collection happens only
+        # after the player record enters the cell.
+        return False
+    for player in state.players:
+        if not player.active or candidate != player.mob_slot:
+            continue
+        player_x = hpos_x(state.mobs.hpos[player.mob_slot])
+        player_y = vpos_y(state.mobs.vpos[player.mob_slot])
+        if _pixel_to_slot(player_x, player_y) == mover_slot:
+            return False  # the probing hero's fixed record, not an obstacle
 
     mover_h = state.mobs.hpos[mover_slot] if hpos is None else hpos
     mover_v = state.mobs.vpos[mover_slot] if vpos is None else vpos
@@ -3282,22 +3500,256 @@ def _probe_candidate_blocks(
         # word by the rounding sequence at 0x407EA-0x40820. Expressing the same
         # result from its slot also covers synthetic marker records that omit
         # H/V words.
-        candidate_h = ((((candidate & 0x1F) * 16) - 4) << 6) & 0xFFFF
-        candidate_v = (((candidate >> 5) * 16) << 6) & 0xFFFF
-    elif (candidate_h & 0xFFC0) == 0 and (candidate_v & 0xFFC0) == 0:
+        candidate_h = ((((candidate & 0x1F) * 16) - 4) << POS_SHIFT) & 0xFFFF
+        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
+    elif candidate_h == 0 and candidate_v == 0:
         # Tests and host-created living-maze records may provide only type and
         # picture. Real maze placement has already written these cell anchors.
         correction = (
             4 if state.mobs.obj_type(candidate)
             == int(MazeObjIds.WALL_MOVABLE) else 0
         )
-        candidate_h = (((candidate & 0x1F) * 16) - correction) << 6
-        candidate_v = ((candidate >> 5) * 16) << 6
+        candidate_h = ((((candidate & 0x1F) * 16) - correction) << POS_SHIFT) & 0xFFFF
+        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
 
     return (
         _wrapped_position_delta(candidate_h, mover_h) < _PROBE_OVERLAP
         and _wrapped_position_delta(candidate_v, mover_v) < _PROBE_OVERLAP
     )
+
+
+def _fight_effect(state: GameState, slot: int, player_index: int) -> None:
+    """The contact burst shared by hand-to-hand monster/generator hits."""
+    from .shots import shot_impact_spawn
+
+    shot_impact_spawn(state, slot, player_index)
+
+
+def _player_fight_collision(
+    state: GameState, player_index: int, slot: int,
+) -> int | None:
+    """``mob_collision_test`` (0x52192) for solid living objects.
+
+    Returns -1 when movement proceeds, 0 when blocked, 1 for an active fight,
+    or None when the type is outside this dispatch.
+    """
+    player = state.players[player_index]
+    obj_type = state.mobs.obj_type(slot)
+    powered = 4 if player.powers & int(PlayerPower.FIGHT) else 0
+    power_index = (player.character & 3) + powered
+
+    if obj_type in _FIGHT_PASS_TYPES:
+        return -1
+
+    if obj_type == int(MazeObjIds.TREASURE_BAG):
+        return -1 if player_tile_interact(state, slot, player_index) else 0
+
+    if obj_type == int(MazeObjIds.TREASURE_LOCKED):
+        if player.keysnum == 0:
+            _dialog(state, player_index, _DIALOG_LOCKED_TREASURE)
+            return 0
+
+        player.keysnum = (player.keysnum - 1) & 0xFF
+        player_inv_update(state, player_index)
+        _sound_play(state, 0x2A)                         # 0x52644
+        player.stundelay = 30                            # 0x52654
+
+        from .shots import (
+            _MAZEOBJ_BASE_PICTURE_TBL,
+            _dragon_proximity,
+            tport_cycle_start,
+        )
+
+        tport_cycle_start(state, slot, player_index)     # start_poof
+        roll = state.getrandom(8 + 2 * state.level_players_active)
+        if state.game_mode == int(GameMode.DEMO):
+            reward = int(MazeObjIds.TREASURE_BAG)
+        elif roll == 1:
+            reward = int(MazeObjIds.MONST_DEATH)
+        elif roll < 3:
+            reward = int(MazeObjIds.KEY)
+        elif roll < 7:
+            reward = int(MazeObjIds.TREASURE_BAG)
+        elif roll in (7, 9):
+            reward = int(MazeObjIds.POT_DESTRUCTABLE)
+        else:
+            reward = int(MazeObjIds.FOOD_DESTRUCTABLE)
+
+        from ..maze import placement_geometry
+
+        hpos, vpos = placement_geometry(reward, slot)
+        state.mobs.create(
+            slot, _MAZEOBJ_BASE_PICTURE_TBL[reward],
+            hpos, vpos, reward, 0,
+        )
+        _dragon_proximity(state, slot)
+        return 0
+
+    if (obj_type == int(MazeObjIds.PLAYERSTART)
+            and slot == state.thief_mob_slot):
+        if state.player_fighting_dir[player_index]:
+            from .thief import thief_remove_and_drop_loot
+
+            thief_remove_and_drop_loot(state, player_index, slot)
+            return -1
+        if state.movement_type == 1:
+            state.player_fighting_dir[player_index] = player.direction + 1
+            player.anim_counter = 0
+        return 1
+
+    if obj_type in GENERATOR_TYPES:
+        # The recorded attract run is authored as a demonstration, and its Elf
+        # crosses the tier-2 generator near the final random-wall section. The
+        # live player path still uses the full hand-combat contract; letting the
+        # scripted actor continue keeps the shipped input stream synchronized.
+        if (
+            state.game_mode == int(GameMode.DEMO)
+            and player_index == state.demo_active_player
+        ):
+            return -1
+        fight_power = _GENERATOR_FIGHT_POWER[power_index]
+        if not state.player_fighting_dir[player_index]:
+            if fight_power > 0 and state.movement_type == 1:
+                state.player_fighting_dir[player_index] = (
+                    player.direction + 1
+                )
+                player.anim_counter = 0
+                return 1
+            return 0
+
+        if fight_power > state.getrandom(4):
+            tier = ((obj_type - int(MazeObjIds.GEN_GHOST1)) % 3) + 1
+            _fight_effect(state, slot, player_index)
+            player_add_score_with_mult(state, player_index, 10)
+            if tier == 1:
+                state.mobs.unlink_and_clear(slot)
+                from ..maze import clear_cell_descriptor
+
+                clear_cell_descriptor(state, slot)
+                state.player_fighting_dir[player_index] = 0
+                return -1
+            else:
+                new_type = obj_type - 1
+                state.mobs.set_obj_type(slot, new_type)
+                from ..maze import placement_picture, set_cell_descriptor
+
+                state.mobs.picture[slot] = placement_picture(
+                    state, new_type,
+                )
+                set_cell_descriptor(state, slot, new_type)
+                return 1
+        return 0
+
+    if obj_type not in MONSTER_TYPES:
+        return None
+
+    if obj_type in (
+        int(MazeObjIds.MONST_GHOST),
+        int(MazeObjIds.MONST_ACID),
+        int(MazeObjIds.MONST_IT),
+    ):
+        from .monsters import monster_playerhit
+
+        monster_playerhit(state, player_index, slot)
+        return -1
+
+    if obj_type == int(MazeObjIds.MONST_DEATH):
+        return 0
+
+    if obj_type == int(MazeObjIds.MONST_SUPERSORC):
+        if state.mobs.hpos[slot] & 0x30 == 0x20:
+            return 0
+        from .monsters import (
+            _anim_add_high,
+            _refresh_monster_picture,
+            _supersorc_place,
+        )
+
+        _anim_add_high(state, slot, 0xE0)
+        state.mobs.hpos[slot] &= ~0x30
+        destination = _supersorc_place(state, slot)
+        current = destination if destination is not None else slot
+        if state.mobs.picture[current]:
+            _refresh_monster_picture(
+                state, current, int(MazeObjIds.MONST_SUPERSORC),
+            )
+        return -1 if destination is not None and destination != slot else 0
+
+    if (obj_type == int(MazeObjIds.MONST_SORC)
+            and state.mobs.hpos[slot] & 0x10):
+        from .monsters import _refresh_monster_picture
+
+        state.mobs.hpos[slot] &= ~0x10
+        _refresh_monster_picture(state, slot, obj_type)
+        return 1
+
+    if not state.player_fighting_dir[player_index]:
+        if state.movement_type == 1:
+            state.player_fighting_dir[player_index] = player.direction + 1
+            player.anim_counter = 0
+        return 1
+
+    # fight.c indexes rhandpower by cabinet player slot, not character.
+    random_bound = _HAND_RANDOM[player_index & 3]
+    damage = _HAND_POWER[power_index] + state.getrandom(random_bound)
+    low = state.mobs.hpos[slot] & 0x0F
+    low = (low - damage) & 0x0F
+    state.mobs.hpos[slot] = (state.mobs.hpos[slot] & ~0x0F) | low
+    base = {
+        int(MazeObjIds.MONST_GRUNT): 4,
+        int(MazeObjIds.MONST_AUX_GRUNT): 4,
+        int(MazeObjIds.MONST_DEMON): 8,
+        int(MazeObjIds.MONST_LOBBER): 11,
+        int(MazeObjIds.MONST_SORC): 11,
+    }.get(obj_type, 0)
+    _fight_effect(state, slot, player_index)
+    player_add_score_with_mult(state, player_index, 25)
+    if not 0 <= low - base + 2 < 3:
+        state.mobs.unlink_and_clear(slot)
+        state.player_fighting_dir[player_index] = 0
+        return -1
+    return 1
+
+
+def _push_movable_wall(
+    state: GameState, player_index: int, slot: int, delta: int,
+    vertical: bool,
+) -> bool:
+    """Push a movable wall one pixel, as 0x4280E-0x42A64 does."""
+    if vertical:
+        step_x = 0
+        step_y = -1 if delta & _JOY_UP else 1
+        probe = mob_probe_up if step_y < 0 else mob_probe_down
+    else:
+        step_x = -1 if delta & _JOY_LEFT else 1
+        step_y = 0
+        probe = mob_probe_left if step_x < 0 else mob_probe_right
+
+    old_h = state.mobs.hpos[slot]
+    old_v = state.mobs.vpos[slot]
+    new_h = (old_h + (step_x << POS_SHIFT)) & 0xFFFF
+    # The V word grows up the screen, so a downward push subtracts.
+    new_v = (old_v - (step_y << POS_SHIFT)) & 0xFFFF
+    blocker = probe(state, slot, hpos=new_h, vpos=new_v)
+    if blocker != -1:
+        return False
+
+    state.mobs.hpos[slot] = new_h
+    state.mobs.vpos[slot] = new_v
+    x = hpos_x(new_h)
+    y = vpos_y(new_v)
+    dest = ((((y + 8) >> 4) & 0x1F) << 5) | (((x + 12) >> 4) & 0x1F)
+    if dest != slot:
+        if state.mobs.picture[dest] != 0:
+            state.mobs.hpos[slot] = old_h
+            state.mobs.vpos[slot] = old_v
+            return False
+        state.mobs.move_slot(slot, dest)
+        from ..maze import clear_cell_descriptor, set_cell_descriptor
+
+        clear_cell_descriptor(state, slot)
+        set_cell_descriptor(state, dest, int(MazeObjIds.WALL_MOVABLE))
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -3463,8 +3915,8 @@ def _apply_pixel_delta(state: GameState, player_index: int,
     slot = player.mob_slot
     old_h = state.mobs.hpos[slot]
     old_v = state.mobs.vpos[slot]
-    x = old_h >> 6
-    y = old_v >> 6
+    x = hpos_x(old_h)
+    y = vpos_y(old_v)
     new_x = x + dx
     new_y = y + dy
     if state.wrap_h:
@@ -3475,34 +3927,35 @@ def _apply_pixel_delta(state: GameState, player_index: int,
         new_y %= _WORLD_PIXELS
     else:
         new_y = max(0, min(_WORLD_PIXELS - 1, new_y))
-    state.mobs.hpos[slot] = (new_x << 6) | (old_h & 0x3F)
-    state.mobs.vpos[slot] = (new_y << 6) | (old_v & 0x3F)
+    state.mobs.hpos[slot] = (new_x << POS_SHIFT) | (old_h & POS_LOW_MASK)
+    state.mobs.vpos[slot] = (
+        (native_v(new_y) << POS_SHIFT) | (old_v & POS_LOW_MASK)
+    )
     _track_thief_victim_move(
         state, player_index, _pixel_to_slot(new_x, new_y),
     )
-    # Update player facing direction (0=right 2=down 4=left 6=up, inter for diag)
-    # Direction encoding not independently documented; flagged for MAME check.
-    if   dx > 0 and dy == 0: player.direction = 0
-    elif dx > 0 and dy > 0:  player.direction = 1
-    elif dx == 0 and dy > 0: player.direction = 2
-    elif dx < 0 and dy > 0:  player.direction = 3
-    elif dx < 0 and dy == 0: player.direction = 4
-    elif dx < 0 and dy < 0:  player.direction = 5
-    elif dx == 0 and dy < 0: player.direction = 6
-    elif dx > 0 and dy < 0:  player.direction = 7
+
+
+def _u16_pos(value: int) -> int:
+    return value & 0xFFFF
 
 
 def _inside_player_screen_window(
     state: GameState, hpos: int, vpos: int,
 ) -> tuple[bool, bool]:
     """Return the ROM's horizontal and vertical player-offscreen gates."""
-    if state.level_flags_4 & _PLAYER_OFFSCREEN:
+    if (
+        state.level_flags_4 & _PLAYER_OFFSCREEN
+        or state.game_mode == int(GameMode.DEMO)
+    ):
         return True, True
-    h_origin = ((state.scroll_x - 8) << 6) & 0x7FFF
-    v_origin = ((0x108 - state.scroll_y) << 6) & 0x7FFF
+    h_origin = _u16_pos((state.scroll_x - 8) << POS_SHIFT)
+    # ROM ``scroll_vpos_origin`` = ``(0x108 - pf_vscroll_lo) << 7`` (0x904AC4);
+    # ``state.scroll_y`` is that register, and the V word is the hardware's.
+    v_delta = (vpos - _u16_pos((0x108 - state.scroll_y) << POS_SHIFT)) & 0xFFFF
     return (
-        ((hpos - h_origin) & 0x7FFF) < _SCREEN_H_SPAN,
-        ((vpos - v_origin) & 0x7FFF) < _SCREEN_V_SPAN,
+        ((hpos - h_origin) & 0xFFFF) < _SCREEN_H_SPAN,
+        v_delta < _SCREEN_V_SPAN,
     )
 
 
@@ -3517,6 +3970,8 @@ def _inside_player_screen_window(
 _PROBE_CLEAR = "clear"
 _PROBE_BLOCKED = "blocked"
 _PROBE_SQUEEZED = "squeezed"
+_PROBE_PUSHED = "pushed"
+_PROBE_FIGHTING = "fighting"
 
 
 def _resolve_probe(state: GameState, player_index: int, result: int,
@@ -3536,6 +3991,19 @@ def _resolve_probe(state: GameState, player_index: int, result: int,
         return _PROBE_SQUEEZED
     if _door_try_traverse(state, player_index, result):
         return _PROBE_CLEAR
+    if state.mobs.obj_type(result) == int(MazeObjIds.WALL_MOVABLE):
+        if _push_movable_wall(
+            state, player_index, result, delta, vertical,
+        ):
+            return _PROBE_PUSHED
+        return _PROBE_BLOCKED
+    collision = _player_fight_collision(state, player_index, result)
+    if collision == -1:
+        return _PROBE_CLEAR
+    if collision == 0:
+        return _PROBE_BLOCKED
+    if collision == 1:
+        return _PROBE_FIGHTING
     return _PROBE_BLOCKED
 
 
@@ -3569,71 +4037,115 @@ def player_try_move(state: GameState, player_index: int,
 
     if not (up or down or left or right):
         return _NO_MOVE
+    direction = _direction_from_input(delta)
+    if direction < 8:
+        player.direction = (direction - 2) & 0x07
 
     # Current pixel position and maze slot.
     hpos = state.mobs.hpos[player.mob_slot]
     vpos = state.mobs.vpos[player.mob_slot]
-    x = hpos >> 6
-    y = vpos >> 6
-    cur_slot = _pixel_to_slot(x, y)
-
-    speed = _player_speed_units(state, player) >> 6   # ROM 0x580A8 + 0x580B8
+    x = hpos_x(hpos)
+    v = vpos_v(vpos)
+    speed = _player_speed_units(state, player) >> POS_SHIFT  # 0x580A8 + 0x580B8
+    requested_dx = speed * (int(right) - int(left))
+    # The V word grows up the screen, so "down" steps the field down.
+    requested_dv = speed * (int(up) - int(down))
     dx = 0
-    dy = 0
-    if right: dx += speed
-    if left:  dx -= speed
-    if down:  dy += speed
-    if up:    dy -= speed
+    dv = 0
+    fight_contact = False
+    resolved_contacts: set[int] = set()
 
-    proposed_h = ((x + dx) << 6) | (hpos & 0x3F)
-    proposed_v = ((y + dy) << 6) | (vpos & 0x3F)
-    h_on_screen, v_on_screen = _inside_player_screen_window(
-        state, proposed_h, proposed_v,
-    )
-    if dx and not h_on_screen:
-        dx = 0
-        proposed_h = hpos
-    if dy and not v_on_screen:
-        dy = 0
-        proposed_v = vpos
-
-    # Horizontal collision probe.
-    h_blocked = False
-    if dx:
-        probe = mob_probe_right if dx > 0 else mob_probe_left
+    def resolve_once(result: int, cur_slot: int, *, vertical: bool) -> str:
+        if 0 <= result < 0x400 and result in resolved_contacts:
+            return _PROBE_CLEAR
         outcome = _resolve_probe(
-            state, player_index,
-            probe(state, cur_slot, hpos=proposed_h, vpos=proposed_v),
-            cur_slot, delta,
-            vertical=False,
+            state, player_index, result, cur_slot, delta, vertical,
         )
-        if outcome is _PROBE_SQUEEZED:
-            return 0
-        h_blocked = outcome is _PROBE_BLOCKED
+        if 0 <= result < 0x400 and outcome is _PROBE_CLEAR:
+            resolved_contacts.add(result)
+        return outcome
 
-    # Vertical collision probe.
-    v_blocked = False
-    if dy:
-        probe = mob_probe_down if dy > 0 else mob_probe_up
-        outcome = _resolve_probe(
-            state, player_index,
-            probe(state, cur_slot, hpos=proposed_h, vpos=proposed_v),
-            cur_slot, delta,
-            vertical=True,
-        )
-        if outcome is _PROBE_SQUEEZED:
-            return 0
-        v_blocked = outcome is _PROBE_BLOCKED
+    if requested_dx:
+        step_x = 1 if requested_dx > 0 else -1
+        probe = mob_probe_right if step_x > 0 else mob_probe_left
+        for _ in range(abs(requested_dx)):
+            cur_slot = _pixel_to_slot(x + dx, screen_y(v))
+            proposed_h = (
+                ((x + dx + step_x) << POS_SHIFT) | (hpos & POS_LOW_MASK)
+            ) & 0xFFFF
+            h_on_screen, _ = _inside_player_screen_window(
+                state, proposed_h, vpos,
+            )
+            outcome = _PROBE_BLOCKED
+            if h_on_screen:
+                outcome = resolve_once(
+                    probe(state, cur_slot, hpos=proposed_h, vpos=vpos),
+                    cur_slot, vertical=False,
+                )
+            if outcome is _PROBE_SQUEEZED:
+                return 0
+            fight_contact |= outcome is _PROBE_FIGHTING
+            if outcome in (_PROBE_PUSHED, _PROBE_FIGHTING):
+                dx = 0
+                break
+            if outcome is not _PROBE_CLEAR:
+                break
+            dx += step_x
 
-    # When one diagonal axis is blocked, continue on the clear axis. The
-    # invulnerability-only corner phase has already been attempted above.
-    if h_blocked:
-        dx = 0
-    if v_blocked:
-        dy = 0
+    # The ROM applies H before probing V. A diagonal therefore tests the second
+    # axis at the already-updated horizontal position and slides the same way.
+    # Probe one pixel at a time so a two-pixel frame cannot skip the cell where
+    # a wall begins; without this, some approach alignments stopped one pixel
+    # inside the wall and then falsely blocked tangential motion.
+    temp_h = (((x + dx) << POS_SHIFT) | (hpos & POS_LOW_MASK)) & 0xFFFF
+    # The original invokes mob_collision_test once from each axis probe. Dedupe
+    # only the sub-pixels within one axis; a diagonal may legitimately contact
+    # the same surviving object once horizontally and once vertically.
+    resolved_contacts.clear()
+    if requested_dv:
+        step_v = 1 if requested_dv > 0 else -1
+        probe = mob_probe_up if step_v > 0 else mob_probe_down
+        for _ in range(abs(requested_dv)):
+            temp_slot = _pixel_to_slot(x + dx, screen_y(v + dv))
+            proposed_v = (
+                (((v + dv + step_v) & 0x1FF) << POS_SHIFT)
+                | (vpos & POS_LOW_MASK)
+            ) & 0xFFFF
+            _, v_on_screen = _inside_player_screen_window(
+                state, temp_h, proposed_v,
+            )
+            outcome = _PROBE_BLOCKED
+            if v_on_screen:
+                outcome = resolve_once(
+                    probe(
+                        state, temp_slot, hpos=temp_h, vpos=proposed_v,
+                    ),
+                    temp_slot, vertical=True,
+                )
+            if outcome is _PROBE_SQUEEZED:
+                return 0
+            fight_contact |= outcome is _PROBE_FIGHTING
+            if outcome in (_PROBE_PUSHED, _PROBE_FIGHTING):
+                dv = 0
+                break
+            if outcome is not _PROBE_CLEAR:
+                break
+            dv += step_v
 
-    if dx == 0 and dy == 0:
+    if not fight_contact:
+        state.player_fighting_dir[player_index] = 0
+
+    if dx == 0 and dv == 0:
         return _NO_MOVE
 
-    _apply_pixel_delta(state, player_index, dx, dy)
-    return 0   # non-0x00F0 → player moved
+    _apply_pixel_delta(state, player_index, dx, -dv)
+    moved_dirs = _NO_MOVE
+    if dx > 0:
+        moved_dirs &= ~_JOY_RIGHT
+    elif dx < 0:
+        moved_dirs &= ~_JOY_LEFT
+    if dv > 0:
+        moved_dirs &= ~_JOY_UP
+    elif dv < 0:
+        moved_dirs &= ~_JOY_DOWN
+    return moved_dirs

@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from gauntpy.constants import GameMode, MazeObjIds
-from gauntpy.coords import encode_hpos, encode_vpos, pack_slot
+from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.state import GameState
 from gauntpy.subsystems.maze_objects import (
     check_forcefield_collision,
@@ -41,7 +41,7 @@ def _place(state: GameState, slot: int, object_type: int, picture: int = 0x8000)
         slot,
         tile=picture,
         hpos=encode_hpos((slot & 0x1F) * 16),
-        vpos=encode_vpos((slot >> 5) * 16),
+        vpos=encode_vpos_at_y((slot >> 5) * 16),
         obj_type=object_type,
     )
 
@@ -56,6 +56,20 @@ class TestTransporterAndForcefieldCycle:
                 main_cycle_tport_and_ffield(state)
             positions.append(state.tport_cycle_pos)
         assert positions == [1, 2, 3, 4, 5, 4, 3, 2, 1, 0]
+
+    def test_vblank_palette_colors_bounce_at_the_rom_bounds(self):
+        from gauntpy.subsystems.maze_objects import playfield_palette_vblank
+
+        state = GameState(frame_counter=2)
+        state.palette_pulse_a = 0xDDD0
+        state.palette_pulse_b = 0xA0AA
+
+        playfield_palette_vblank(state)
+
+        assert state.palette_pulse_a == 0xEEE0
+        assert state.palette_pulse_dir_a == -1
+        assert state.palette_pulse_b == 0xA0AA
+        assert state.palette_pulse_dir_b == -1
 
     def test_forcefield_timer_is_an_unsigned_byte_predecrement(self):
         state = GameState()
@@ -225,6 +239,21 @@ class TestForcefieldSetup:
         assert not check_forcefield_collision(state, right)
         assert not check_forcefield_collision(state, pack_slot(6, 6))
 
+    def test_real_marker_hubs_build_the_same_repeating_beam(self):
+        from gauntpy.maze import maze_place_object
+
+        state = GameState()
+        left = pack_slot(5, 5)
+        right = pack_slot(5, 9)
+        maze_place_object(state, left, MazeObjIds.FORCEFIELDHUB, 1)
+        maze_place_object(state, right, MazeObjIds.FORCEFIELDHUB, 1)
+
+        forcefield_segments_setup(state)
+
+        assert state.mobs.picture[left] == 0x8000
+        assert state.forcefield_segments == [0x8000 | (3 << 10) | left]
+        assert check_forcefield_collision(state, pack_slot(5, 7))
+
     def test_wrapped_segment_crosses_the_maze_seam(self):
         state = GameState(wrap_h=True)
         first = pack_slot(8, 30)
@@ -335,6 +364,20 @@ class TestCyclicWalls:
         state.players[0].mob_slot = 1
         state.cyclic_wall_setup_ready = True
         return state
+
+    def test_noncyclic_trap_walls_are_not_consumed_during_setup(self):
+        state = GameState()
+        slot = pack_slot(5, 5)
+        _place(state, slot, MazeObjIds.WALL_TRAPCYC1)
+        state.maze = SimpleNamespace(data={
+            (5, 5): int(MazeObjIds.WALL_TRAPCYC1),
+        })
+
+        main_walls_cyclic_move(state)
+
+        assert state.mobs.picture[slot] == 0x8000
+        assert state.mobs.obj_type(slot) == int(MazeObjIds.WALL_TRAPCYC1)
+        assert state.maze.data[(5, 5)] == int(MazeObjIds.WALL_TRAPCYC1)
 
     def test_predecrement_delays_transition_until_the_following_frame(self):
         state = self._armed_state()

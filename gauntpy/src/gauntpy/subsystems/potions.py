@@ -60,10 +60,14 @@ _IT_TYPE = int(MazeObjIds.MONST_IT)   # 0x1B / 27
 # Object-class split tested at 0x41670: generators are type >= 0x1C.
 _GENERATOR_SPLIT = 0x1C
 
+# 0x579D2 / 0x579E2, indexed by death_hits & 7.
+_DEATH_POTION_SCORE = (1000, 4000, 2000, 6000, 1000, 8000, 1000, 2000)
+_DEATH_POTION_POPUP = (2, 5, 3, 7, 2, 9, 2, 3)
+
 # The blast is not global.  0x41560-0x41584 subtracts the two camera-derived
 # monster culling origins from the target's H/V words and rejects it with an
 # *unsigned* compare against 0x7F80 / 0x8380 -- the same screen-sized box
-# ``monsters._in_cull_rect`` already implements in gauntpy's whole-pixel units.
+# ``monsters._in_cull_rect`` already implements in the same native words.
 # In the ROM the potion pass is a branch *inside* ``monsters_everything``
 # (0x40EA6 -> 0x41532), reached from ``main_move_monsters`` (0x49034) right
 # after it recomputes those origins at 0x49052-0x49072; gauntpy calls
@@ -220,14 +224,25 @@ def potion_blast(state: GameState, player_index: int, *,
             continue   # IT is immune -- filtered before the lookup
         if not _in_cull_rect(state, slot):
             continue   # off screen: 0x41570 / 0x41584 skip it entirely
-        _apply_potion_effect(state, slot, obj_type, trigger)
+        _apply_potion_effect(
+            state, slot, obj_type, trigger, player_index,
+        )
 
 
 def _apply_potion_effect(state: GameState, slot: int, obj_type: int,
-                         trigger: int) -> None:
+                         trigger: int, player_index: int) -> None:
     entry = _POTION_EFFECT_MATRIX_ROM[obj_type][trigger & 0x0F]
 
     if entry == 0:
+        if obj_type == int(MazeObjIds.MONST_DEATH):
+            from .shots import playfield_showscore
+
+            index = state.death_hits & 7
+            playfield_showscore(
+                state, slot, _DEATH_POTION_POPUP[index],
+            )
+            state.players[player_index].score += _DEATH_POTION_SCORE[index]
+            state.score_dirty[player_index] = 1
         state.mobs.unlink_and_clear(slot)        # zero destroys outright
         return
 

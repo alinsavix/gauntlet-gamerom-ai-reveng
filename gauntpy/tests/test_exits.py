@@ -33,7 +33,7 @@ doc/05_data_reference.md §5.5.
 from __future__ import annotations
 
 from gauntpy.constants import GameMode, MazeObjIds, PlayerStatus
-from gauntpy.coords import encode_hpos, encode_vpos
+from gauntpy.coords import encode_hpos, encode_vpos_at_y
 from gauntpy.rng import GameRandom
 from gauntpy.state import GameState
 from gauntpy.subsystems.exits import (
@@ -130,7 +130,7 @@ def _treasure_state(timer: int, *, player_alive: bool = True) -> GameState:
 
 def _exit_at(state: GameState, slot: int) -> None:
     px, py = (slot % 32) * 16, (slot // 32) * 16
-    state.mobs.create(slot, tile=0x8001, hpos=encode_hpos(px), vpos=encode_vpos(py),
+    state.mobs.create(slot, tile=0x8001, hpos=encode_hpos(px), vpos=encode_vpos_at_y(py),
                       obj_type=int(MazeObjIds.EXIT))
 
 

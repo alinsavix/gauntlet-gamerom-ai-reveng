@@ -13,14 +13,9 @@ Every table here is transcribed from ``row76.bin`` (game address ``A`` at file
 offset ``A - 0x40000``, big-endian) and every routine follows the
 corresponding disassembly rather than the prose.
 
-**Units.**  The ROM's MOB H/V words count *half* pixels: the position field is
-``pixel << 7``.  gauntpy's MOB words count whole pixels (``pixel << 6``), so
-every ROM constant that is masked out of, added to, or compared against a
-position word is halved here -- the same rule ``monsters.py`` documents for
-its culling box.  Velocity words are used *unscaled*, matching
-``players.py``/``monsters.py``/``dragon.py``: the port runs its whole world at
-that doubled word scale, so the ratios between shot, monster and player speeds
-stay exactly as the ROM has them.
+**Units.**  The MOB position field is the hardware's own ``pixel << 7``, so
+every ROM constant that is added to or compared against a position word --
+velocity vectors included -- is used here exactly as the ROM writes it.
 
 **Follow-ups owned elsewhere.**  The ROM's shot creators seed three words this
 module then owns; ``main_handle_shots`` still latches them on the frame a
@@ -46,7 +41,7 @@ next touch them:
 from __future__ import annotations
 
 from ..constants import MazeObjIds
-from ..coords import POS_FIELD_MASK, POS_LOW_MASK
+from ..coords import POS_FIELD_MASK, POS_LOW_MASK, POS_SHIFT, hpos_x, vpos_y
 from ..state import GameState
 
 CONSUMED = -1      # resolve_shot_hit: mob_unlink(shooter) + picture cleared
@@ -141,10 +136,9 @@ _SHOT_COUNTER_RELOAD = [
 # ordinary monster shot (+0x20), rows 5-8 the shot-power set (+0x28), row 9
 # the tier-2 monster shot (+0x48) and row 10 the max-tier shot (+0x50).
 #
-# The ROM's vertical axis is inverted (its V word grows upward, see §23), so
-# the port negates ``shot_velocity_y`` when it applies it: direction 0 is "up
-# the maze" in both, and ``thief.py``'s dodge scan already assumes exactly
-# this encoding.
+# The ROM stores positions and velocities in native ``<< 7`` words, and so do
+# we, so both tables are the literal ROM data.  The V axis grows up the screen
+# in both, so ``shot_velocity`` returns entry Y unchanged.
 _SHOT_VELOCITY_X = [
     0, 256, 384, 256, 0, -256, -384, -256,
     0, 384, 512, 384, 0, -384, -512, -384,
@@ -209,23 +203,23 @@ _MONSTER_PROJECTILE_PICTURE_TBL = [
 ]
 
 # shot_collision_width (0x40B98) and its companion span table (0x40BB0),
-# twelve words each, halved into gauntpy position-word units.  Player shots
-# index by character, other channels by channel.
-_SHOT_HITBOX_WIDTH = [w >> 1 for w in (
+# twelve words each, in native position units.  Player shots index by
+# character, other channels by channel.
+_SHOT_HITBOX_WIDTH = [
     0x0580, 0x0400, 0x0480, 0x0400, 0x0480, 0x0480,
     0x0480, 0x0480, 0x0480, 0x0480, 0x0480, 0x0480,
-)]
-_SHOT_HITBOX_SPAN = [w >> 1 for w in (
+]
+_SHOT_HITBOX_SPAN = [
     0x0800, 0x0600, 0x0700, 0x0600, 0x0600, 0x0600,
     0x0600, 0x0600, 0x0600, 0x0600, 0x0600, 0x0600,
-)]
+]
 # dragon_shot_collision_width (0x40BC8) plus its span half (0x40BD0).
-_DRAGON_HITBOX_WIDTH = [w >> 1 for w in (0x0300, 0x0200, 0x0280, 0x0200)]
-_DRAGON_HITBOX_SPAN = [w >> 1 for w in (0x0500, 0x0300, 0x0400, 0x0300)]
+_DRAGON_HITBOX_WIDTH = [0x0300, 0x0200, 0x0280, 0x0200]
+_DRAGON_HITBOX_SPAN = [0x0500, 0x0300, 0x0400, 0x0300]
 # A max-tier monster shot swaps in a fixed, much larger box (0x4094C).
-_MAXTIER_HITBOX_WIDTH = 0x0880 >> 1
-_MAXTIER_HITBOX_SPAN = 0x0E80 >> 1
-_MAXTIER_H_BIAS = 0x0200 >> 1     # 0x40990: nudge before masking
+_MAXTIER_HITBOX_WIDTH = 0x0880
+_MAXTIER_HITBOX_SPAN = 0x0E80
+_MAXTIER_H_BIAS = 0x0200          # 0x40990: nudge before masking
 
 # shot_collision_probe_offsets -- ROM 0x40BD8, eight direction records of five
 # (horizontal, vertical) signed word pairs.  The values are *word* indices
@@ -319,26 +313,25 @@ _TPORT_EFFECT_LAST = 0x095A
 _PLAYER_IMPACT_PICTURE = 0x0EFC
 _MONSTER_IMPACT_PICTURE = 0x1C5C
 
-# Off-screen disposal window (0x47716-0x477B8), halved into gauntpy units.
+# Off-screen disposal window (0x47716-0x477B8), in native position units.
 _SCREEN_H_BIAS = 0x08            # ROM scroll_hpos_origin = (pf_hscroll - 8)<<7
-_SCREEN_V_REF = 0x1F0            # see _screen_origins
-_SCREEN_W = 0x7400 >> 1
-_SCREEN_W_TOL = 0x8400 >> 1
-_SCREEN_H = 0x7800 >> 1
-_SCREEN_H_TOL = 0x8800 >> 1
-_SCREEN_MARGIN = 0x0800 >> 1
-_SCREEN_NEG = 0xC000 >> 1 | 0x8000   # 0xE000: the ROM's "delta is negative"
+_SCREEN_V_REF = 0x108            # ROM scroll_vpos_origin = (0x108 - pf_vscroll)<<7
+_SCREEN_W = 0x7400
+_SCREEN_W_TOL = 0x8400
+_SCREEN_H = 0x7800
+_SCREEN_H_TOL = 0x8800
+_SCREEN_MARGIN = 0x0800
+_SCREEN_NEG = 0xC000
 
 # Doors only react to a shot inside this box (0x4B416 passes 0x2C0 twice).
-_DOOR_LIMIT = 0x02C0 >> 1
+_DOOR_LIMIT = 0x02C0
 
 # Secret-wall prize roll (0x4B56A-0x4B5D2).
 _PRIZE_HIDDENPOT_BASE = 0xA728
 _GAME_MODE_SECRET = -3           # 0xFFFD, the secret-room game mode
 
 # The split of a MOB H/V word into "position" and "everything else".  The ROM
-# masks with 0xFF80 / 0x7F (0x479EA, 0x479FA); ``coords`` restates the pair at
-# gauntpy's one-bit-lower shift.
+# masks with 0xFF80 / 0x7F (0x479EA, 0x479FA) and so does ``coords``.
 _POS_FIELD_MASK = POS_FIELD_MASK
 _POS_LOW_MASK = POS_LOW_MASK
 
@@ -348,6 +341,11 @@ _POS_LOW_MASK = POS_LOW_MASK
 # =============================================================================
 
 def _u16(value: int) -> int:
+    return value & 0xFFFF
+
+
+def _maze_position(value: int) -> int:
+    """Unsigned position arithmetic: one 512 px maze is exactly one 16-bit word."""
     return value & 0xFFFF
 
 
@@ -384,8 +382,8 @@ def _cell_of(px: int, py: int) -> int:
     """Packed maze cell of a world pixel position (0x47A5A-0x47A7C).
 
     The ROM rounds each axis to the nearest cell centre (``+8``) before
-    truncating; its vertical half also un-inverts the V word, which the port
-    does not need because ``vpos`` already counts downward.
+    truncating; ``py`` arrives already un-inverted into downward screen pixels
+    by ``coords.vpos_y``, which is that routine's vertical half.
     """
     col = ((px + 8) >> 4) & 0x1F
     row = ((py + 8) >> 4) & 0x1F
@@ -400,25 +398,27 @@ def shot_cell(state: GameState, slot: int) -> int:
     exactly where the next frame would re-key it.
     """
     mobs = state.mobs
-    return _cell_of((mobs.hpos[slot] >> 6) & 0x3FF, (mobs.vpos[slot] >> 6) & 0x3FF)
+    return _cell_of(hpos_x(mobs.hpos[slot]), vpos_y(mobs.vpos[slot]))
 
 
 def _shot_cell(state: GameState, slot: int) -> int:
     return shot_cell(state, slot)
 
 
-def _direction_of(dx: int, dy: int) -> int:
+def _direction_of(dx: int, dv: int) -> int:
     """Shot direction code from a per-frame pixel delta.
 
-    Matches ``thief.py``'s identical derivation: 0 is up, then clockwise.
+    ``dv`` is a native V delta -- positive walks up the screen -- matching the
+    hardware axes ``state.shot_dy`` is stored in.  Matches ``thief.py``'s
+    identical derivation: 0 is up, then clockwise.
     """
     if dx == 0:
-        return 0 if dy < 0 else 4 if dy > 0 else 8
-    if dy == 0:
+        return 0 if dv > 0 else 4 if dv < 0 else 8
+    if dv == 0:
         return 2 if dx > 0 else 6
     if dx > 0:
-        return 1 if dy < 0 else 3
-    return 7 if dy < 0 else 5
+        return 1 if dv > 0 else 3
+    return 7 if dv > 0 else 5
 
 
 def _live_direction(state: GameState, shooter_id: int) -> int:
@@ -561,10 +561,10 @@ def _place_effect(state: GameState, effect_slot: int, source_slot: int,
     """Install a temporary effect MOB at a tile-aligned source position."""
     state.mobs.picture[effect_slot] = picture
     state.mobs.hpos[effect_slot] = (
-        (state.mobs.hpos[source_slot] & 0xFF80) + 1
+        (state.mobs.hpos[source_slot] & POS_FIELD_MASK) + 1
     ) & 0xFFFF
     state.mobs.vpos[effect_slot] = (
-        (state.mobs.vpos[source_slot] & 0xFF80) + vpos_add
+        (state.mobs.vpos[source_slot] & POS_FIELD_MASK) + vpos_add
     ) & 0xFFFF
     state.mobs.insert(effect_slot, depth_key=source_slot)
     state.mob_effect_anim_counter[effect_slot - 0x0D] = counter & 0xFF
@@ -688,10 +688,8 @@ def _channel_clear(state: GameState, shooter_id: int) -> None:
     The ROM leaves H/V alone here; only the off-screen path clears them.
     """
     slot = _shot_slot(shooter_id)
-    state.mobs.unlink(slot)
+    state.mobs.depth_remove(shooter_id)
     state.mobs.picture[slot] = 0
-    if slot < len(state.mobs.depth_key):
-        state.mobs.depth_key[slot] = 0
     state.shot_dx[slot] = 0
     state.shot_dy[slot] = 0
     state.shot_direction[shooter_id] = 8
@@ -865,7 +863,7 @@ def _handle_supersorc(state: GameState, slot: int, shooter_id: int,
         return _finish(state, slot, shooter_id)
 
     state.escape_timer = 0
-    _playfield_showscore(state, slot, 0)
+    playfield_showscore(state, slot, 0)
     shot_impact_spawn(state, slot, shooter_id)
     state.mobs.unlink_and_clear(slot)
     return _score_tail(
@@ -1333,7 +1331,7 @@ _SCORE_POPUP_SLOT = 0x11         # 0x494DC, the first popup MOB slot
 _SCORE_POPUP_FRAMES = 0x3C       # 0x494D2
 
 
-def _playfield_showscore(state: GameState, slot: int, popup: int) -> None:
+def playfield_showscore(state: GameState, slot: int, popup: int) -> None:
     """``playfield_showscore`` (0x49498) -- float a score sprite over ``slot``.
 
     Takes the first of the four popup channels whose ``score_display_timer``
@@ -1350,8 +1348,8 @@ def _playfield_showscore(state: GameState, slot: int, popup: int) -> None:
         mobs.picture[popup_slot] = _SCORE_POPUP_PICTURE[
             popup % len(_SCORE_POPUP_PICTURE)
         ]
-        hpos = mobs.hpos[slot] & 0xFFC0
-        vpos = _u16((mobs.vpos[slot] & 0xFFC0) + 0x200)
+        hpos = mobs.hpos[slot] & POS_FIELD_MASK
+        vpos = _u16((mobs.vpos[slot] & POS_FIELD_MASK) + 0x400)
         if popup < 0x0A:
             hpos += 5           # 0x4954A: palette 5, three tiles wide
             vpos = _u16(vpos + 0x10)
@@ -1363,6 +1361,9 @@ def _playfield_showscore(state: GameState, slot: int, popup: int) -> None:
         mobs.unlink(popup_slot)
         mobs.insert(popup_slot, depth_key=slot)
         return
+
+
+_playfield_showscore = playfield_showscore
 
 
 def _potion_blast(state: GameState, shooter_id: int) -> None:
@@ -1405,15 +1406,15 @@ def _spawn_maze_object(state: GameState, slot: int, obj_type: int,
     """``mob_create`` (0x5DC58) at the revealed cell (0x4B5FC-0x4B664).
 
     The ROM rebuilds the H/V words from the master parameter tables inline.
-    ``maze._placement_geometry`` is the port's single reviewed copy of exactly
+    ``maze.placement_geometry`` is the port's single reviewed copy of exactly
     that arithmetic -- including the fact that 0x5860C carries the packed
     sprite *size*, not a vertical offset -- so reuse it rather than duplicate
     the corrections.  The picture comes from the caller because the secret-wall
     prize randomizes it for a hidden potion, and because this path must not
-    gain the extra ``getrandom`` that ``maze._placement_picture`` draws.
+    gain the extra ``getrandom`` that ``maze.placement_picture`` draws.
     """
-    from ..maze import _placement_geometry
-    hpos, vpos = _placement_geometry(obj_type, slot)
+    from ..maze import placement_geometry
+    hpos, vpos = placement_geometry(obj_type, slot)
     state.mobs.create(slot, picture, hpos, vpos, obj_type, 0)
 
 
@@ -1557,54 +1558,78 @@ def _candidate_core(state: GameState, index: int, shooter_id: int,
         # follows the arrays.
         return None
 
-    if index == self_index:
-        return None
-    slot = index >> 1
-    picture = mobs.picture[slot]
-    if picture == 0:
-        return None
+    cell_slot = index >> 1
+    candidates: list[int] = []
+    if mobs.picture[cell_slot] and index != self_index:
+        candidates.append(cell_slot)
 
-    if picture & 0x8000:
-        # 0x40B02: a static playfield tile is snapped to its cell first.
-        sep_h = _u16(((mobs.hpos[slot] + 0x140) & 0xFC00) - shot_h)
-        sep_v = _u16(((mobs.vpos[slot] + 0x080) & 0xFC00) - shot_v)
-    else:
-        sep_h = _u16((mobs.hpos[slot] & 0xFFC0) - shot_h + 0x100)
-        sep_v = _u16((mobs.vpos[slot] & 0xFFC0) - shot_v)
+    # Player records remain in their PLAYERSTART slot in gauntpy while their
+    # live H/V words roam the maze. The ROM migrates the record itself, so an
+    # otherwise empty cell probe finds the player directly. Keep this overlay as
+    # an additional candidate; it must never replace a real monster in the cell.
+    for player in state.players:
+        if not player.active or not player.mob_slot:
+            continue
+        player_x = hpos_x(state.mobs.hpos[player.mob_slot])
+        player_y = vpos_y(state.mobs.vpos[player.mob_slot])
+        player_cell = (
+            (((player_y >> 4) & 0x1F) << 5)
+            | (((player_x + 12) >> 4) & 0x1F)
+        )
+        if (
+            player_cell == cell_slot
+            and player.mob_slot * 2 != self_index
+            and player.mob_slot not in candidates
+        ):
+            candidates.append(player.mob_slot)
 
-    state.shot_sep_h = sep_h
-    folded_h = sep_h ^ 0xFFC0 if sep_h & 0x8000 else sep_h
-    if folded_h >= width:
-        return None
-    state.shot_sep_h_abs = folded_h
+    for slot in candidates:
+        picture = mobs.picture[slot]
+        if picture & 0x8000:
+            # 0x40B02: a static playfield tile is snapped to its cell first.
+            sep_h = _u16(((mobs.hpos[slot] + 0x280) & 0xF800) - shot_h)
+            sep_v = _u16(((mobs.vpos[slot] + 0x100) & 0xF800) - shot_v)
+        else:
+            sep_h = _u16(
+                (mobs.hpos[slot] & POS_FIELD_MASK) - shot_h + 0x200
+            )
+            sep_v = _u16(
+                (mobs.vpos[slot] & POS_FIELD_MASK) - shot_v
+            )
 
-    state.shot_sep_v = sep_v
-    folded_v = sep_v ^ 0xFFC0 if sep_v & 0x8000 else sep_v
-    if folded_v >= width:
-        return None
-    state.shot_sep_v_abs = folded_v
+        state.shot_sep_h = sep_h
+        folded_h = sep_h ^ POS_FIELD_MASK if sep_h & 0x8000 else sep_h
+        if folded_h >= width:
+            continue
+        state.shot_sep_h_abs = folded_h
 
-    if span < _u16(folded_v + folded_h):
-        return None
+        state.shot_sep_v = sep_v
+        folded_v = sep_v ^ POS_FIELD_MASK if sep_v & 0x8000 else sep_v
+        if folded_v >= width:
+            continue
+        state.shot_sep_v_abs = folded_v
 
-    if maxtier and _MAXTIER_PASS_TBL[mobs.obj_type(slot)] != 0:
-        return None     # 0x40B3A: this type ignores a max-tier shot
-    return slot
+        if span < _u16(folded_v + folded_h):
+            continue
+
+        if maxtier and _MAXTIER_PASS_TBL[mobs.obj_type(slot)] != 0:
+            continue     # 0x40B3A: this type ignores a max-tier shot
+        return slot
+    return None
 
 
 def _wrap_allowed(state: GameState, shooter_id: int) -> bool:
     """The vertical window at 0x40A88/0x40A8A gates the probe's maze wrap.
 
-    The ROM's V word is inverted and counts half pixels, so a shot ``y`` pixels
-    down the maze holds ``(496 - y) << 7``.  "Negative and no greater than
-    0xF3FF" is therefore ``9 <= y <= 240``: the shot has to be level with the
-    bottom half of row 0 before a probe may wrap round to row 31.
+    Straight off the ROM now that the V word is the hardware's own: "negative
+    and no greater than 0xF3FF", i.e. the shot has to be level with the bottom
+    half of row 0 (9 <= screen y <= 240) before a probe may wrap to row 31.
 
-    The companion window at 0x40A9A, ``V > 0xF3FF`` or ``y <= 8``, guards the
-    row-0 case ``_candidate_core`` refuses outright.
+    The companion window at 0x40A9A, ``V > 0xF3FF``, guards the row-0 case
+    ``_candidate_core`` refuses outright.
     """
-    y = (state.mobs.vpos[_shot_slot(shooter_id)] >> 6) & 0x3FF
-    return 9 <= y <= 240
+    vpos = state.mobs.vpos[_shot_slot(shooter_id)] & 0xFFFF
+    return 0x8000 <= vpos <= 0xF3FF
 
 
 def shot_mob_collision(state: GameState, cell: int, shooter_id: int) -> int:
@@ -1633,8 +1658,8 @@ def shot_mob_collision(state: GameState, cell: int, shooter_id: int) -> int:
     shot_v = mobs.vpos[slot]
     if maxtier:
         shot_h = _u16(shot_h + _MAXTIER_H_BIAS)
-    shot_h &= 0xFFC0
-    shot_v &= 0xFFC0
+    shot_h &= POS_FIELD_MASK
+    shot_v &= POS_FIELD_MASK
 
     self_index = _u16(_shot_owner(state, shooter_id) * 2)
     if shooter_id < 4 and state.reflect_count[shooter_id] != 4:
@@ -1728,9 +1753,9 @@ def shot_reflect_calc(state: GameState, target: int, shooter_id: int) -> int:
 
     if target >= 0x400:
         # 0x53850: with no MOB to inspect, the shot's own vertical position
-        # decides.  The ROM's ``vpos > 0xF7FF`` is its inverted, half-pixel
-        # word for "within 8 pixels of the top of the maze".
-        near_top = ((mobs.vpos[_shot_slot(shooter_id)] >> 6) & 0x3FF) <= 8
+        # decides.  The ROM's ``vpos > 0xF7FF`` is "within 8 pixels of the top
+        # of the maze" in the hardware's upward V word.
+        near_top = (mobs.vpos[_shot_slot(shooter_id)] & 0xFFFF) > 0xF7FF
         if direction in (1, 7):
             outcome = _REFLECT_NONE if near_top else _REFLECT_XOR2
         else:
@@ -1854,13 +1879,11 @@ def _reflect_finish(state: GameState, target: int, shooter_id: int,
 def _screen_origins(state: GameState) -> tuple[int, int]:
     """The ROM's ``scroll_hpos_origin``/``scroll_vpos_origin`` (0x904AC2/4).
 
-    ROM: ``(pf_hscroll - 8) << 7`` and ``(0x108 - pf_vscroll_lo) << 7``.  The
-    port's camera keeps the same registers but un-inverts the vertical axis
-    for the rest of the engine, so the vertical origin becomes a downward
-    reference the shot's own vpos is subtracted *from*.
+    ``(pf_hscroll - 8) << 7`` and ``(0x108 - pf_vscroll_lo) << 7``, verbatim:
+    ``state.scroll_y`` *is* the ROM's vertical scroll register.
     """
-    origin_h = _u16((state.scroll_x - _SCREEN_H_BIAS) << 6)
-    origin_v = _u16((_SCREEN_V_REF - state.scroll_y) << 6)
+    origin_h = _u16((state.scroll_x - _SCREEN_H_BIAS) << POS_SHIFT)
+    origin_v = _u16((_SCREEN_V_REF - state.scroll_y) << POS_SHIFT)
     return origin_h, origin_v
 
 
@@ -1875,16 +1898,16 @@ def _offscreen(state: GameState, shooter_id: int, direction: int) -> bool:
     """0x47716-0x477B6 -- whether this shot has left the playfield window."""
     slot = _shot_slot(shooter_id)
     origin_h, origin_v = _screen_origins(state)
-    delta_h = _u16(state.mobs.hpos[slot] - origin_h)
-    delta_v = _u16(origin_v - state.mobs.vpos[slot])
+    delta_h = _maze_position(state.mobs.hpos[slot] - origin_h)
+    delta_v = _maze_position(state.mobs.vpos[slot] - origin_v)
 
     if delta_h > _SCREEN_W:
-        if _u16(delta_h + _SCREEN_MARGIN) > _SCREEN_W_TOL:
+        if _maze_position(delta_h + _SCREEN_MARGIN) > _SCREEN_W_TOL:
             return True
         if not _heads_back(direction, "h", delta_h >= _SCREEN_NEG):
             return True
     if delta_v > _SCREEN_H:
-        if _u16(delta_v + _SCREEN_MARGIN) > _SCREEN_H_TOL:
+        if _maze_position(delta_v + _SCREEN_MARGIN) > _SCREEN_H_TOL:
             return True
         if not _heads_back(direction, "v", delta_v >= _SCREEN_NEG):
             return True
@@ -1979,12 +2002,11 @@ def shot_velocity(state: GameState, shooter_id: int,
     """This frame's signed H/V word delta for a straight channel (0-7).
 
     Public so a shot creator can seed ``shot_dx/dy`` with the very step its
-    channel will take, instead of guessing one.  The ROM's vertical axis
-    points the other way, which is the negation here and in
-    ``_advance_position``.
+    channel will take, instead of guessing one.  Both components are in the
+    hardware's own axes, so the V delta is positive up the screen.
     """
     row = _velocity_row(state, shooter_id, direction)
-    return _SHOT_VELOCITY_X[row], -_SHOT_VELOCITY_Y[row]
+    return _SHOT_VELOCITY_X[row], _SHOT_VELOCITY_Y[row]
 
 
 def lobber_accumulator_seed(state: GameState, shooter_id: int) -> None:
@@ -2017,15 +2039,14 @@ def _advance_lobber(state: GameState, shooter_id: int) -> None:
     0x904A66/0x904A6E).  The accumulator *is* the shot's fine position: each
     frame the vector is added to it, the top bits are copied into the MOB word
     and the low bits stay as the sub-pixel remainder.  That remainder is the
-    whole point -- a lead of, say, 0x60 per frame is 1.5 px in gauntpy's word
-    scale, and only the accumulator can carry the half.
+    whole point -- a lead of, say, 0xC0 per frame is 1.5 px, and only the
+    accumulator can carry the half.
 
     The ROM writes ``hpos = (accum & 0xFF80) + (hpos & 0x7F)``, i.e. it keeps
     the channel's palette/flags (and, vertically, its sprite size) untouched
-    and replaces only the position field.  gauntpy's word puts that field one
-    bit lower, so the constants become ``_POS_FIELD_MASK``/``_POS_LOW_MASK``;
-    the vector itself is used unscaled, exactly like every other velocity in
-    the port (see this module's header).
+    and replaces only the position field.  Those are exactly
+    ``_POS_FIELD_MASK``/``_POS_LOW_MASK``, and the creators store the ROM's own
+    vector.
 
     ``shot_dx/dy`` are deliberately left alone: the vector never changes
     during a rock's flight, so ``monster_create_shot``'s rounded seed still
@@ -2053,8 +2074,7 @@ def _advance_position(state: GameState, shooter_id: int, direction: int) -> None
     Three class branches, exactly as the ROM dispatches them: player channels
     at 0x47846, monster channels at 0x478B8 (where a max-tier shot only moves
     on even frames, 0x478CE), and the lobbed-rock channels at 0x479C2.
-    The port keeps the ROM's velocity words unscaled, matching every other
-    mover in ``gauntpy``.
+    The velocity tables are the ROM's own native words.
     """
     if shooter_id >= 8:
         _advance_lobber(state, shooter_id)
@@ -2065,11 +2085,11 @@ def _advance_position(state: GameState, shooter_id: int, direction: int) -> None
             and (state.frame_counter & 1):
         return
 
-    dx, dy = shot_velocity(state, shooter_id, direction)
+    dx, dv = shot_velocity(state, shooter_id, direction)
     state.mobs.hpos[slot] = _u16(state.mobs.hpos[slot] + dx)
-    state.mobs.vpos[slot] = _u16(state.mobs.vpos[slot] + dy)
-    state.shot_dx[slot] = dx >> 6
-    state.shot_dy[slot] = dy >> 6
+    state.mobs.vpos[slot] = _u16(state.mobs.vpos[slot] + dv)
+    state.shot_dx[slot] = dx >> POS_SHIFT
+    state.shot_dy[slot] = dv >> POS_SHIFT
 
 
 def _reposition_in_chain(state: GameState, shooter_id: int, cell: int) -> None:

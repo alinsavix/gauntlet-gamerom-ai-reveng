@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from gauntpy.coords import hpos_x, vpos_y
 from gauntpy.constants import GameMode, MazeObjIds, PlayerStatus
 from gauntpy.state import GameState
 from gauntpy.subsystems.attract import (
@@ -330,6 +331,7 @@ class TestDemoInit:
         assert 254 in state.demo_streams[1], "the 0xFE join record must be present"
         assert state.demo_active_player == 1
         assert state.players[1].character == 3   # Elf
+        assert state.players[1].health == 2000
 
     def test_join_records_are_the_documented_pair(self):
         """§6.2: the only two 0xFE records are FE 20 and FE 03, adjacent."""
@@ -380,7 +382,60 @@ class TestDemoInit:
 
         assert moved, "the recorded stream still drives the demo hero"
         assert state.idle_timer == 5, "no timed-door countdown on the attract screen"
-        assert state.escape_timer == 7, "no escape-timeout countdown either"
+        assert state.escape_timer == 7
+
+    @requires_roms
+    def test_demo_elf_pushes_out_of_the_starting_box(self):
+        """The opening script is DOWN 8, then DOWN 144 while pushing a wall."""
+        from gauntpy.constants import MazeObjIds
+        from gauntpy.mainloop import tick
+
+        state = GameState()
+        start_attract_screen(state, int(GameMode.DEMO))
+        elf = state.players[1]
+        start_y = vpos_y(state.mobs.vpos[elf.mob_slot])
+        wall = next(
+            slot for slot in range(32, 1024)
+            if state.mobs.obj_type(slot) == int(MazeObjIds.WALL_MOVABLE)
+        )
+        wall_y = vpos_y(state.mobs.vpos[wall])
+
+        for _ in range(600):
+            tick(state)
+
+        assert state.demo_stream_pos[1] >= 10
+        assert vpos_y(state.mobs.vpos[elf.mob_slot]) == start_y + 112
+        moved_wall = next(
+            slot for slot in range(32, 1024)
+            if state.mobs.obj_type(slot) == int(MazeObjIds.WALL_MOVABLE)
+        )
+        assert vpos_y(state.mobs.vpos[moved_wall]) == wall_y + 96
+
+    @requires_roms
+    def test_demo_recording_reaches_the_transporter_and_exit(self, tmp_path):
+        from gauntpy.mainloop import tick
+
+        state = GameState()
+        state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
+        start_attract_screen(state, int(GameMode.DEMO))
+        elf = state.players[1]
+        transported = False
+        exited = False
+
+        for _ in range(7000):
+            tick(state)
+            if state.demo_stream_pos[1] >= 76 and elf.mob_slot:
+                x = hpos_x(state.mobs.hpos[elf.mob_slot])
+                y = vpos_y(state.mobs.vpos[elf.mob_slot])
+                transported |= x == 44 and 240 <= y <= 242
+            exited |= bool(elf.exit_pending)
+            if elf.mob_slot == 0:
+                break
+
+        assert transported
+        assert state.demo_stream_pos[1] >= 148
+        assert exited
+        assert elf.mob_slot == 0
 
 
 class TestLogoColors:

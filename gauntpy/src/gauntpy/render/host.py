@@ -50,7 +50,10 @@ from ..state import GameState
 from ..subsystems.input import JOY_DOWN, JOY_FIRE_BIT, JOY_IDLE, JOY_LEFT, JOY_MAGIC_BIT, JOY_RIGHT, JOY_UP
 from .compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH, RenderCache, render_frame
 
-__all__ = ["PygameUnavailable", "HostShell", "DEFAULT_KEYMAP"]
+__all__ = [
+    "PygameUnavailable", "HostShell", "DEFAULT_KEYMAP",
+    "DEFAULT_COIN_KEY", "DEFAULT_PAUSE_KEY",
+]
 
 
 class PygameUnavailable(RuntimeError):
@@ -78,6 +81,7 @@ DEFAULT_KEYMAP: dict[str, int] = {
 #: keymap. "5" is the classic arcade coin slot. Pressing it bumps the host
 #: player's 2-bit coin counter, exactly the signal ``coincheck`` polls.
 DEFAULT_COIN_KEY = "K_5"
+DEFAULT_PAUSE_KEY = "K_p"
 
 
 class HostShell:
@@ -113,6 +117,8 @@ class HostShell:
         self.player = player
         self._assets = assets
         self._cache = RenderCache()
+        self._title = title
+        self.paused = False
 
         pygame.init()
         self.window = pygame.display.set_mode((LOGICAL_WIDTH * scale, LOGICAL_HEIGHT * scale))
@@ -122,6 +128,7 @@ class HostShell:
         keymap = keymap if keymap is not None else DEFAULT_KEYMAP
         self._keymap = {getattr(pygame, name): bit for name, bit in keymap.items()}
         self._coin_key = getattr(pygame, DEFAULT_COIN_KEY)
+        self._pause_key = getattr(pygame, DEFAULT_PAUSE_KEY)
 
     # -- the g2mainloop interface --------------------------------------------
 
@@ -135,8 +142,14 @@ class HostShell:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 raise SystemExit(0)
-            if event.type == pygame.KEYDOWN and event.key == self._coin_key:
-                self._insert_coin(state)
+            if event.type == pygame.KEYDOWN:
+                if event.key == self._coin_key:
+                    self._insert_coin(state)
+                elif event.key == self._pause_key:
+                    self.paused = not self.paused
+                    pygame.display.set_caption(
+                        f"{self._title} [PAUSED]" if self.paused else self._title
+                    )
 
         self._sample_input(state)
         self.clock.tick(FRAMES_PER_SECOND)
@@ -160,7 +173,9 @@ class HostShell:
 
             self._assets = AssetStore()
 
-        fb, self._cache = render_frame(state, self._assets, cache=self._cache)
+        fb, self._cache = render_frame(
+            state, self._assets, cache=self._cache, paused=self.paused,
+        )
         image = fb.image
         surface = self._pygame.image.frombuffer(image.tobytes(), image.size, image.mode).convert_alpha()
         if self.scale != 1:

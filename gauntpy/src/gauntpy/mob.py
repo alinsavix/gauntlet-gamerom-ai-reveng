@@ -9,8 +9,8 @@ Reference: ``doc/04_game_subsystems.md`` §1.1, §2.1, §24;
 
     array           hw?  contents
     picture         yes  tile number (bits 14-0), software flag (bit 15)
-    hpos            yes  X (15-6), flags (5-4), palette (3-0)
-    vpos            yes  Y (15-6), width-1 (5-3), height-1 (2-0)
+    hpos            yes  X (15-7), flags (6-4), palette (3-0)
+    vpos            yes  Y (15-7), spare (6), width-1 (5-3), height-1 (2-0)
     link            yes  object type (15-10), next slot (9-0)
     state_link      no   object state (15-10), previous slot (9-0)
 
@@ -62,10 +62,10 @@ UPPER_MASK = 0x3F
 
 #: A maze row is 16 px and a SLIP band 8 px, so each row spans two bands
 #: (``moblist_insert`` 0x5DCD8-0x5DCDC derives the band from the slot's row,
-#: doubled). The ROM's index is ``2 * (row + 1)`` because its vertical
-#: coordinates measure the *bottom* edge of a cell counting up from the
-#: playfield floor; gauntpy's ``coords`` uses the top edge counting down, and
-#: ``2 * row`` is the same band in that convention.
+#: doubled). The ROM's index is ``2 * (row + 1)``, one band further on, because
+#: its vertical coordinates measure the *bottom* edge of a cell counting up
+#: from the playfield floor while its band table is read top-down; ``2 * row``
+#: is the same band sequence, in the same order, one band earlier.
 BANDS_PER_ROW = coords.CELL_PIXELS // SLIP_BAND_PIXELS
 
 #: Pictures a slot may already hold and still be linkable: empty, or the solid
@@ -128,8 +128,8 @@ class MobTable:
     # --- geometry ----------------------------------------------------------------
 
     def position(self, slot: int) -> tuple[int, int]:
-        """World pixel (x, y) of a slot."""
-        return coords.decode_hpos(self.hpos[slot])[0], coords.decode_vpos(self.vpos[slot])[0]
+        """World pixel (x, y) of a slot, converted to downward screen Y."""
+        return coords.hpos_x(self.hpos[slot]), coords.vpos_y(self.vpos[slot])
 
     def sort_key(self, slot: int) -> int:
         """The chain's ordering key for ``slot`` (0x5DCFE / 0x5DFE6).
@@ -299,6 +299,20 @@ class MobTable:
         self.picture[slot] = 0
         self.hpos[slot] = 0
         self.vpos[slot] = 0
+        self.link[slot] = 0
+        self.state_link[slot] = 0
+
+    def depth_remove(self, physical_slot_minus_one: int) -> None:
+        """``mob_depth_remove`` (0x5E064) for temporary depth-placed MOBs.
+
+        The ROM argument names ``physical slot - 1``. It unlinks that slot,
+        clears its depth key and both link/state words, and deliberately leaves
+        picture/H/V for the caller to clear or replace.
+        """
+        slot = (physical_slot_minus_one + 1) & LINK_MASK
+        self.unlink(slot)
+        if slot < len(self.depth_key):
+            self.depth_key[slot] = 0
         self.link[slot] = 0
         self.state_link[slot] = 0
 

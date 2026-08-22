@@ -253,6 +253,19 @@ def mirror_slot(state: GameState, slot: int) -> int:
     return slot
 
 
+def _placement_slot(state: GameState, slot: int, object_type: int) -> int:
+    """Mirror one placement and correct a dragon's 2x2 anchor."""
+    slot = mirror_slot(state, slot)
+    if object_type != int(MazeObjIds.MONST_DRAGON):
+        return slot
+    flags = level_flags_long(state)
+    if flags & MIRROR_H_FLAG:
+        slot = (slot & 0x3E0) | ((slot - 1) & 0x1F)
+    if flags & MIRROR_V_FLAG:
+        slot = (slot + 0x20) & 0x3FF
+    return slot
+
+
 def mirror_maze(state: GameState, maze: Maze) -> Maze:
     """A copy of ``maze`` with ``data`` moved through ``mirror_slot``.
 
@@ -267,7 +280,9 @@ def mirror_maze(state: GameState, maze: Maze) -> Maze:
     """
     mirrored = {}
     for (col, row), object_type in maze.data.items():
-        slot = mirror_slot(state, coords.pack_slot(row, col))
+        slot = _placement_slot(
+            state, coords.pack_slot(row, col), int(object_type),
+        )
         new_row, new_col = coords.unpack_slot(slot)
         mirrored[(new_col, new_row)] = object_type
     return replace(maze, data=mirrored)
@@ -324,14 +339,6 @@ _ROM_MARKER_TYPES = _SOLID_WALL_MARKERS | _TILE_MARKERS
 WALL_MARKER_PICTURE = 0x8000
 #: Floor/animated marker word (ROM 0x460B8-0x46100).
 TILE_MARKER_PICTURE = 0x8001
-
-#: ``mazeobj_hpos_correction_tbl`` entries are in the ROM's packed hpos units:
-#: bits 15-6 are the position and those units are half-pixels (a maze column
-#: steps the field by 32 for a 16 px cell), so a correction word converts to
-#: gauntpy's whole-pixel coordinates with ``>> 6`` then ``>> 1``. The one
-#: value that occurs, 512, becomes 4 px -- exactly half the overhang of a
-#: 24 px sprite in a 16 px cell, which is what "centering correction" means.
-_HPOS_CORRECTION_SHIFT = 7
 
 # ``getrandom(3)`` picks the invulnerable-food picture from a three-word ROM
 # table at 0x58F20 (doc/04 sec 5.4; ROM 0x46150-0x46168). Read through gex's
@@ -395,7 +402,7 @@ def maze_place_object(state: GameState, start_slot: int, object_type: int, count
         return start_slot + count
 
     for slot in range(start_slot, start_slot + count):
-        _place_one(state, mirror_slot(state, slot), object_type)
+        _place_one(state, _placement_slot(state, slot, object_type), object_type)
     return start_slot + count
 
 
@@ -423,12 +430,12 @@ def _write_marker(state: GameState, slot: int, object_type: int, picture: int) -
     x, y = coords.slot_to_pixels(slot)
     mobs.picture[slot] = picture
     mobs.hpos[slot] = coords.encode_hpos(x)
-    mobs.vpos[slot] = coords.encode_vpos(y)
+    mobs.vpos[slot] = coords.encode_vpos_at_y(y)
     mobs.set_obj_type(slot, object_type)
     mobs.set_state(slot, 0)
 
 
-def _placement_picture(state: GameState, object_type: int) -> int:
+def placement_picture(state: GameState, object_type: int) -> int:
     """The ``mob_picture`` a decoded object of ``object_type`` is created with.
 
     From the master ``mazeobj_base_picture_tbl`` (0x5868C, doc/05 §5.2) via
@@ -453,7 +460,12 @@ def _placement_picture(state: GameState, object_type: int) -> int:
     return 0 if pic == PICTURE_MARKER else pic
 
 
-def _placement_geometry(object_type: int, slot: int) -> tuple[int, int]:
+def placement_base_picture(object_type: int) -> int:
+    """The literal mazeobj_base_picture_tbl entry, without placement RNG."""
+    return base_picture(object_type)
+
+
+def placement_geometry(object_type: int, slot: int) -> tuple[int, int]:
     """``(hpos, vpos)`` words for a decoded object -- ROM 0x4617C-0x461CC.
 
     Three of the four master parameter tables meet here:
@@ -468,31 +480,32 @@ def _placement_geometry(object_type: int, slot: int) -> tuple[int, int]:
         width-1, bits 2-0 height-1. Monsters are 3x3 tiles, pickups 2x2, the
         dragon 4x4.
       * ``mazeobj_hpos_correction_tbl`` (0x5858C) centers a sprite wider than
-        its cell -- see ``_HPOS_CORRECTION_SHIFT``. Marker types skip it: the
+        its cell. Its entries are native hpos field units -- the same units
+        gauntpy stores -- so a correction is subtracted from the word
+        directly; the one value that occurs, 512, is 4 px, exactly half the
+        overhang of a 24 px sprite in a 16 px cell. Marker types skip it: the
         ROM's marker branch uses a fixed word instead, so their table entries
         are dead data.
 
-    Vertically the ROM stores ``(31 - row) * 32`` with no per-type addend at
-    all -- its Y field counts up from the playfield floor, which makes the
-    stored value the cell's *bottom* edge. Whether the sprite then hangs
-    upward from that edge (top = ``row*16 - 8`` for a 24 px creature) or is
-    centred on the cell like the horizontal axis is a display-hardware
-    convention the ROM alone does not settle, so the cell origin
-    ``doc/04 §23.2`` documents is kept and the question is left with WP-2,
-    which owns where a stamp lands. Only the packed size travels from this
-    table; ``vpos_offset``'s position bits are zero for every one of the 64
-    types, so nothing is being dropped.
+    Vertically the ROM stores ``(31 - row) * 16`` px with no per-type addend at
+    all -- its V field counts up from the playfield floor, which makes the
+    stored value the cell's *bottom* edge, and gauntpy stores exactly that
+    word. Whether a taller sprite then hangs upward from that edge is the
+    display hardware's business, and ``coords.sprite_top_y`` is where the
+    renderer settles it. Only the packed size travels from
+    ``mazeobj_vpos_offset_tbl``; its position bits are zero for every one of
+    the 64 types, so nothing is being dropped.
     """
     size = vpos_offset(object_type) & 0x3F
     width = ((size >> 3) & 0x07) + 1
     height = (size & 0x07) + 1
 
     x, y = coords.slot_to_pixels(slot)
+    hpos = coords.encode_hpos(x, hsize_tier(object_type) & 0x0F)
     if object_type not in _ROM_MARKER_TYPES:
-        x -= hpos_correction(object_type) >> _HPOS_CORRECTION_SHIFT
+        hpos = (hpos - hpos_correction(object_type)) & 0xFFFF
 
-    palette = hsize_tier(object_type) & 0x0F
-    return coords.encode_hpos(x, palette), coords.encode_vpos(y, width, height)
+    return hpos, coords.encode_vpos_at_y(y, width, height)
 
 
 def _create_generic(state: GameState, slot: int, object_type: int) -> None:
@@ -507,21 +520,48 @@ def _create_generic(state: GameState, slot: int, object_type: int) -> None:
     stamps as a marker anyway, so nothing reaches here with slot 0 in
     practice -- the guard is belt and braces.
 
-    Known gap: the dragon (type 0x3C) is created as a single MOB. The ROM
-    additionally reserves its three other 2x2 footprint cells through
-    ``dragon_reserve_footprint_cell`` (0x462AE) and calls the dragon setup at
-    0x5496E (ROM 0x46206-0x4625C). Both write WP-9 state this package does
-    not own.
+    Dragons also reserve the other three cells of their 2x2 footprint exactly
+    as 0x46206-0x4625C does before creating the primary record.
     """
-    hpos, vpos = _placement_geometry(object_type, slot)
+    hpos, vpos = placement_geometry(object_type, slot)
+    picture = placement_picture(state, object_type)
+    # objects.c seeds ordinary monsters with ROM direction 4 (down). The
+    # monster subsystem's internal compass is rotated by two, so that is 2.
+    mob_state = 2 if (
+        int(MazeObjIds.MONST_GHOST)
+        <= object_type
+        <= int(MazeObjIds.MONST_IT)
+    ) else 0
+    if (object_type == int(MazeObjIds.MONST_SUPERSORC)
+            and state.levelnum_current != LEVEL_SENTINEL
+            and state.game_mode != int(GameMode.LEGEND)):
+        hpos |= 0x10
+        picture = 0x1709
+    if object_type == int(MazeObjIds.MONST_DRAGON):
+        row = slot & 0x3E0
+        right = row | ((slot + 1) & 0x1F)
+        for reserved in ((slot - 0x20) & 0x3FF, right,
+                         (right - 0x20) & 0x3FF):
+            state.mobs.unlink_and_clear(reserved)
+            x, y = coords.slot_to_pixels(reserved)
+            state.mobs.picture[reserved] = 0x8002
+            state.mobs.hpos[reserved] = coords.encode_hpos(x)
+            state.mobs.vpos[reserved] = coords.encode_vpos_at_y(y, 2, 2)
+            state.mobs.set_obj_type(reserved, object_type)
+            state.mobs.set_state(reserved, 0)
     state.mobs.create(
         slot,
-        _placement_picture(state, object_type),
+        picture,
         hpos=hpos,
         vpos=vpos,
         obj_type=object_type,
+        state=mob_state,
         link_into_chain=slot != 0,
     )
+    if object_type == int(MazeObjIds.MONST_DRAGON):
+        from .subsystems.dragon import setup_dragon_segments
+
+        setup_dragon_segments(state, slot)
 
 
 def place_decoded_objects(state: GameState, maze: Maze) -> None:
@@ -736,6 +776,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     from .subsystems.maze_objects import select_forcefield_delay_profile
     select_forcefield_delay_profile(state)
     state.level_treasures = 0            # fresh level: reset the bonus tally count
+    state.special_bonus_score = 100      # 0x44166, ordinary score-bag value
 
     if maze_number is not None:
         # Caller pins a specific maze (attract demo/legend, treasure rooms) that

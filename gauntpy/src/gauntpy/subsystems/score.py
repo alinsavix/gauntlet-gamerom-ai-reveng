@@ -36,6 +36,7 @@ padding mode: nonzero pads with **spaces**); ``doc/07_function_index.md``
 from __future__ import annotations
 
 from ..constants import GameMode
+from ..coords import hpos_x, vpos_y
 from ..state import NUM_PLAYERS, GameState
 from .sound import sound_play, sound_speech_play
 
@@ -105,6 +106,10 @@ def _advance_effect(state: GameState, channel: int) -> None:
 #: palettes 4, 5, 6, 7 -- one per player, the RED/BLUE/YELLOW/GREEN identities
 #: the ROM's own ``player_color_name_strings`` (0x57222) name.
 PLAYER_TEXT_PALETTE_WORDS = (0xD000, 0xD400, 0xD800, 0xDC00)
+# player_inv_update 0x45AFA-0x45B6E: keys and potions use separate alpha
+# palette families, each advanced by player<<10.
+KEY_PALETTE_WORDS = (0xE000, 0xE400, 0xE800, 0xEC00)
+POTION_PALETTE_WORDS = (0xF000, 0xF400, 0xF800, 0xFC00)
 
 #: Alpha grid: 64 words per row, leftmost 42 columns displayed
 #: (doc/01_hardware.md §9). The info panel is the 13-column block
@@ -354,6 +359,23 @@ DIALOG_MESSAGES: tuple[tuple[str, ...], ...] = (
     ("  POISONED: YOU ARE DIZZY ", DIALOG_NUMERIC_LINE),
     ("   SHOOT DRAGON'S HEAD    ", DIALOG_NUMERIC_LINE),
     ("    AVOID ACID PUDDLES    ", DIALOG_NUMERIC_LINE),
+    ("   SHOOT SUPER SORCEROR   ", DIALOG_NUMERIC_LINE),
+    ("  USE MAGIC TO KILL DEATH ", DIALOG_NUMERIC_LINE),
+    ("  SHOTS DO NOT HURT  ", " OTHER PLAYERS (YET) "),
+    (" MAGIC POTIONS AFFECT ", " EVERYTHING ON SCREEN "),
+    (" KILL THIEF TO RECOVER ", "     STOLEN ITEM       "),
+    ("    FIND STOLEN     ", " ITEM ON NEXT LEVEL "),
+    (" SOME WALLS MAY ", "  BE DESTROYED  "),
+    ("   TRAPS MAKE    ", " WALLS DISAPPEAR "),
+    ("  TRANSPORTERS MOVE  ", " YOU TO THE CLOSEST  ",
+     " VISIBLE TRANSPORTER "),
+    ("  YOU ARE FULL OF  ", " BOMBS AND/OR KEYS "),
+    (" SOME TILES STUN ", "     PLAYERS     "),
+    (" USE KEY TO OPEN ", "  TREASURE CHEST "),
+    (" YOU ARE NOW IT ",),
+    (" KILL MUGGER TO ", "  RECOVER FOOD  "),
+    (" FAKE EXIT:       ", "   FIND REAL EXIT "),
+    ("    AVOID FORCE FIELDS    ", DIALOG_NUMERIC_LINE),
 )
 
 #: The parallel bank at ROM 0x5A300 -- the short forms used when the operator's
@@ -362,13 +384,15 @@ DIALOG_MESSAGES: tuple[tuple[str, ...], ...] = (
 #: pointer is NULL, so the ROM returns without a box).
 DIALOG_MESSAGES_SHORT: tuple[tuple[str, ...] | None, ...] = (
     (" FOOD/DRINK: ", "  100 HEALTH "),
-) + (None,) * 15
+) + (None,) * 31
 
 #: Speech ids at ROM 0x5A280, indexed the same way; 0 = no speech entry. The
 #: routine's return value is 1 exactly when it played one.
 DIALOG_SPEECH_IDS: tuple[int, ...] = (
     0x00, 0x9D, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x9E, 0x00, 0x00, 0xB6, 0x00, 0xB7, 0xB8,
+    0x00, 0x00, 0x00, 0xD2, 0x00, 0x00, 0x00, 0x00,
 )
 
 #: game_settings (0x904A24) bit 10 -- the operator "Reduce Text" option. It
@@ -379,6 +403,22 @@ GAME_SETTINGS_REDUCE_TEXT = 0x400
 #: Text set.
 DIALOG_TIMER_FRAMES = 0x96
 DIALOG_TIMER_FRAMES_SHORT = 0x78
+
+# ``dialog_tip_ptrs`` at ROM 0x5815C, selected by 0xFF demo records.
+DEMO_MESSAGES: tuple[tuple[str, ...], ...] = (
+    ("   BLUE   ", " SELECTED ", "   ELF    "),
+    ("  PUSH   ", " MOVABLE ", "  WALLS  "),
+    ("  SOME TREASURE ", "  REQUIRES KEYS "),
+    (" THERE CAN BE  ", " MORE THAN ONE ", "      TRAP     "),
+    (" ACID PUDDLES  ", " MOVE RANDOMLY "),
+    ("  SOME WALLS CAN  ", " BE SHOT AND TURN ", " INTO GOOD OR BAD "),
+    (" DEATH DIES AFTER ", " TAKING UP TO 200 ", "      HEALTH      "),
+    (" HAVE FRIENDS ", "   JOIN IN    ", "   ANY TIME   "),
+    (" MONSTERS FOLLOW ", "  PLAYER WHO IS  ", "       IT        "),
+    (" SOME WALLS MOVE ", "     RANDOMLY    "),
+    (" MONSTERS MAY MOVE ", "    DIFFERENTLY    "),
+    (" TAG, YOU'RE IT ",),
+)
 
 #: Sound 0x1C, "Message appears on screen" (§11.5), played at 0x4C6EE.
 SOUND_MESSAGE_APPEARS = 0x1C
@@ -398,6 +438,60 @@ def dialog_clear_message(state: GameState) -> None:
     state.dialog_box_width = 0
     state.dialog_box_rows = 0
     state.dialog_player = -1
+    state.dialog_box_column = -1
+    state.dialog_box_row = -1
+
+
+def _position_dialog_box(state: GameState, player_index: int) -> None:
+    """0x4CB50 -- choose an alpha-cell origin near the owning player."""
+    column, row = 14, 15
+    if 0 <= player_index < NUM_PLAYERS:
+        player = state.players[player_index]
+        if player.mob_slot:
+            x = hpos_x(state.mobs.hpos[player.mob_slot]) - state.scroll_x
+            y = vpos_y(state.mobs.vpos[player.mob_slot]) - state.scroll_y - 8
+            column = (x >> 3) & 0x3F
+            row = (y >> 3) & 0x3F
+            if column > 28 or row > 29:
+                column, row = 14, 15
+
+    if row < 15:
+        row += 4
+    else:
+        row -= state.dialog_box_rows + 1
+    width = state.dialog_box_width
+    if (column > (width >> 1)
+            and column < 29 - ((width + 1) >> 1)):
+        column -= width >> 1
+    elif column >= 29 - ((width + 1) >> 1):
+        column = 28 - width
+    else:
+        column = 1
+    state.dialog_box_column = column
+    state.dialog_box_row = row
+
+
+def demo_message_show(state: GameState, player_index: int,
+                      message_index: int) -> None:
+    """0x4C9A2 -- display one recorded attract-demo tip."""
+    if not 0 <= message_index < len(DEMO_MESSAGES):
+        return
+    if state.dialog_timer:
+        state.dialog_timer = 1
+        main_msgbox_countdown(state)
+
+    lines = DEMO_MESSAGES[message_index]
+    dialog_clear_message(state)
+    state.dialog_message = list(lines)
+    state.dialog_box_rows = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
+    state.dialog_box_width = len(lines[0])
+    state.dialog_player = player_index if 0 <= player_index < NUM_PLAYERS else -1
+    _position_dialog_box(state, state.dialog_player)
+    state.dialog_timer = (
+        DIALOG_TIMER_FRAMES_SHORT
+        if state.game_settings & GAME_SETTINGS_REDUCE_TEXT
+        else DIALOG_TIMER_FRAMES
+    )
 
 
 def _dialog_line(line: str, numeric_value: int) -> str:
@@ -448,10 +542,6 @@ def dialog_first_encounter(
     if state.dialog_first_encounter_flags & mask:
         return 0
 
-    if state.dialog_timer:
-        state.dialog_timer = 1              # force the previous box to expire
-        main_msgbox_countdown(state)
-
     state.dialog_first_encounter_flags |= mask
 
     index = 0
@@ -473,12 +563,19 @@ def dialog_first_encounter(
     if speech_id:
         sound_speech_play(state, speech_id)
         spoken = 1
+    if state.suppress_first_encounter_messages:
+        return spoken
+
+    if state.dialog_timer:
+        state.dialog_timer = 1              # force the previous box to expire
+        main_msgbox_countdown(state)
 
     dialog_clear_message(state)
     state.dialog_message = [_dialog_line(line, numeric_value) for line in lines]
     state.dialog_box_rows = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
     state.dialog_box_width = max(len(line) for line in lines)
     state.dialog_player = player_index if 0 <= player_index < NUM_PLAYERS else -1
+    _position_dialog_box(state, state.dialog_player)
     state.dialog_timer = (
         DIALOG_TIMER_FRAMES_SHORT if reduce_text else DIALOG_TIMER_FRAMES
     )
@@ -519,22 +616,6 @@ _TRANSITION_LAST = 0x16          # "> 0x16" is the cleanup branch
 _TRANSITION_IDLE = -1            # the ROM stores 0xFFFF
 
 
-def _mob_depth_remove(state: GameState, argument: int) -> None:
-    """0x5E064 -- unlink the physical slot ``argument + 1``.
-
-    The ROM routine resolves its parameter by adding one
-    (``doc/07_function_index.md``: "Remove physical slot ``argument+1`` from
-    the depth/priority lists", argument named ``physical_slot_minus_one``), so
-    a call site passing ``0x10 + i`` is acting on slot ``0x11 + i`` -- the same
-    popup slot whose picture it just cleared, not the slot below it. Reading
-    those arguments as literal slot numbers unlinks the wrong MOB and leaves
-    the real one on the depth chain with a cleared picture, so it is never
-    drawn and never removed. The bias is encoded here, once, so every ROM call
-    site below can stay literal.
-    """
-    state.mobs.unlink((argument + 1) & 0x3FF)
-
-
 def _transition_picture(step: int) -> int | None:
     """The sparkle frame for milestone ``step`` -- table 0x578F2 indexed by
     ``step`` below 0x0B and by ``step - 0x0B`` from 0x0B to 0x16 (0x47296 and
@@ -552,7 +633,10 @@ def _advance_thief_transition(state: GameState) -> None:
     Gated on the shared animation MOB (slot 0x1D) having a picture. The counter
     at 0x904BD6 advances every frame; milestones act on even counts only.
     """
-    if state.mobs.picture[_THIEF_ANIM_SLOT] == 0:
+    if (
+        state.thief_tport_timer < 0
+        or state.mobs.picture[_THIEF_ANIM_SLOT] == 0
+    ):
         return
 
     counter = (state.thief_tport_timer + 1) & 0xFFFF
@@ -577,7 +661,7 @@ def _advance_thief_transition(state: GameState) -> None:
         state.mobs.picture[state.thief_current_pos] = state.thief_tport_saved_picture
     elif step > _TRANSITION_LAST:
         # 0x4724A: retire the animation MOB and re-plan the thief's route.
-        _mob_depth_remove(state, _THIEF_ANIM_SLOT - 1)     # pea.l $1c.w
+        state.mobs.depth_remove(_THIEF_ANIM_SLOT - 1)      # pea.l $1c.w
         state.mobs.picture[_THIEF_ANIM_SLOT] = 0
         state.thief_tport_timer = _TRANSITION_IDLE
         state.thief_previous_pos = state.thief_current_pos
@@ -597,7 +681,10 @@ def _advance_player_transition(state: GameState, player_index: int) -> None:
     restore (``tport_restore_player_picture`` 0x50B88).
     """
     anim_slot = _TPORT_ANIM_SLOT + player_index
-    if state.mobs.picture[anim_slot] == 0:
+    if (
+        state.player_tport_phase[player_index] < 0
+        or state.mobs.picture[anim_slot] == 0
+    ):
         return
 
     counter = (state.player_tport_phase[player_index] + 1) & 0xFFFF
@@ -619,7 +706,9 @@ def _advance_player_transition(state: GameState, player_index: int) -> None:
         state.mobs.picture[player.mob_slot] = panel_saved[player_index]
         panel_saved[player_index] = 0
     elif step > _TRANSITION_LAST:
-        _mob_depth_remove(state, _TPORT_ANIM_SLOT + player_index - 1)  # 0x4734A: d4 + 0x18
+        state.mobs.depth_remove(
+            _TPORT_ANIM_SLOT + player_index - 1,
+        )  # 0x4734A: d4 + 0x18
         state.mobs.picture[anim_slot] = 0
         state.player_tport_phase[player_index] = _TRANSITION_IDLE
         return
@@ -641,14 +730,14 @@ def main_score_update(state: GameState) -> None:
     # MOB table).  Decrement the timer; when it reaches zero, clear the
     # picture at slot 0x11+i and drop that same slot from the depth chain --
     # the ROM's mob_depth_remove(0x10+i) resolves to 0x11+i, see
-    # _mob_depth_remove.
+    # MobTable.depth_remove.
     # ------------------------------------------------------------------
     for i in range(4):
         if state.score_display_timer[i] > 0:
             state.score_display_timer[i] -= 1
             if state.score_display_timer[i] == 0:
                 state.mobs.picture[0x11 + i] = 0
-                _mob_depth_remove(state, 0x10 + i)
+                state.mobs.depth_remove(0x10 + i)
 
     # Loop 1b: the shared thief/effect transition. The ROM runs it inside the
     # first pass of loop 1 only (0x471B4 tests the loop index), so it runs once

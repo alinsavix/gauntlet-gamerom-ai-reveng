@@ -78,10 +78,19 @@ class TestArguments:
 
         assert os.environ["GEX_ROM_DIR"] == "somewhere-the-user-chose"
 
+    def test_message_suppression_flag_is_forwarded_to_the_runner(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+
+        play.main(["--no-first-encounter-messages"])
+
+        assert called["suppress_first_encounter_messages"] is True
+
 
 def test_front_end_character_commit_uses_the_selected_hero_picture():
     """The no-ROM front-end path finalizes a real Wizard MOB with core artwork."""
-    from gauntpy.coords import encode_hpos, encode_vpos, slot_to_pixels
+    from gauntpy.coords import encode_hpos, encode_vpos_at_y, slot_to_pixels
     from gauntpy.subsystems.players import _PLAYER_IDLE_PICTURE, _PORT_DIR_TO_ROM_DIR
     from gauntpy.subsystems.session import main_start_game
 
@@ -89,7 +98,7 @@ def test_front_end_character_commit_uses_the_selected_hero_picture():
     start = 0x80
     x, y = slot_to_pixels(start)
     state.mobs.create(
-        start, tile=0x1E0D, hpos=encode_hpos(x), vpos=encode_vpos(y),
+        start, tile=0x1E0D, hpos=encode_hpos(x), vpos=encode_vpos_at_y(y),
         obj_type=MazeObjIds.PLAYERSTART,
     )
     state.players[1].status = PlayerStatus.SELECTING
@@ -121,7 +130,7 @@ class TestBuildState:
         player = state.players[0]
         assert player.active
         assert player.character == Character.VALKYRIE
-        assert player.health == 800
+        assert player.health == 750
         assert state.level_players_active == 1
 
     def test_the_hero_stands_on_a_real_cell_of_the_loaded_maze(self):
@@ -179,6 +188,22 @@ class TestBuildState:
         assert state.exit_slots
         for slot in state.exit_slots:
             assert state.mobs.obj_type(slot) == MazeObjIds.EXIT
+
+    def test_post_death_coin_restores_the_same_full_starting_health(self):
+        from gauntpy.subsystems.session import coincheck
+
+        state = play.build_state(2, Character.WARRIOR)
+        player = state.players[0]
+        full_health = player.health
+        player.health = 0
+        player.status = PlayerStatus.REMOVED
+        player.mob_slot = 0
+        state.coin_counters = 1
+
+        coincheck(state)
+
+        assert player.health == full_health == 750
+        assert player.status == PlayerStatus.SELECTING
 
     def test_moving_exits_actually_move_in_the_runner(self):
         """Level 4 is maze 3, which ships the ExitMoves flag and five exits.

@@ -29,6 +29,8 @@ from gauntpy.assets import (
     AssetStore,
     SpriteFrame,
     TileBlock,
+    _projectile_palette_bank,
+    _title_logo_palette_words,
 )
 
 # ---------------------------------------------------------------------------
@@ -55,6 +57,29 @@ requires_roms_and_refs = pytest.mark.skipif(
 requires_roms = pytest.mark.skipif(
     not _ROMS_EXIST, reason=f"ROM files not available at {_ROM_PATH}"
 )
+
+
+@pytest.mark.parametrize(("kind", "palette", "expected"), (
+    (None, 1, ("base", 1)),
+    ("warrior", 0x0C, ("warrior", 0)),
+    ("elf", 0x0D, ("elf", 1)),
+    ("wizard", 0x0E, ("wizard", 2)),
+))
+def test_projectile_palette_mapping_does_not_require_rom_pixels(
+    kind, palette, expected,
+):
+    assert _projectile_palette_bank(kind, palette) == expected
+
+
+def test_title_logo_palette_shift_moves_the_rom_color_chain():
+    from gex.palettes import GAUNTLET_PALETTES
+
+    initial = _title_logo_palette_words(0)
+    shifted = _title_logo_palette_words(1)
+    assert initial[0][2] == GAUNTLET_PALETTES["base"][0][2].irgb
+    assert shifted[0][2] == initial[0][3]
+    assert shifted[0][9] == initial[1][2]
+    assert _title_logo_palette_words(3)[9][9] == 0x1077
 
 
 @pytest.fixture(scope="module")
@@ -145,6 +170,13 @@ class TestTitleLogo:
         )
         first.putpixel((0, 0), (255, 0, 255, 255))
         assert second.getpixel((0, 0)) != (255, 0, 255, 255)
+
+    def test_live_title_palette_changes_the_rendered_wordmark(self):
+        store = AssetStore()
+        assert (
+            store.title_logo_for_frame(1).tobytes()
+            != store.title_logo_for_frame(24).tobytes()
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +308,29 @@ class TestSpriteDispatch:
         assert stamp.width == 2
         assert len(stamp.numbers) == 4
         assert stamp.ptype == "base"
+
+    def test_projectile_uses_its_live_base_palette_nibble(self):
+        from gex.projectiles import PROJECTILE_TILES
+
+        stamp = AssetStore().sprite(min(PROJECTILE_TILES), palette=1)
+
+        assert (stamp.ptype, stamp.pnum) == ("base", 1)
+
+    @pytest.mark.parametrize(("kind", "palette", "expected"), (
+        ("warrior", 0x0C, ("warrior", 0)),
+        ("elf", 0x0D, ("elf", 1)),
+        ("wizard", 0x0E, ("wizard", 2)),
+    ))
+    def test_projectile_player_banks_follow_palette_12_to_15(
+        self, kind, palette, expected,
+    ):
+        from gex.projectiles import PROJECTILE_TILES
+
+        stamp = AssetStore().sprite(
+            min(PROJECTILE_TILES), kind=kind, palette=palette,
+        )
+
+        assert (stamp.ptype, stamp.pnum) == expected
 
     def test_a_dragon_segment_picture_builds_a_4x4_base_stamp(self):
         from gex.dragon import DRAGON_SEGMENT_TILES
@@ -979,6 +1034,14 @@ class TestKindSelectsThePaletteBank:
         for index in range(len(GAUNTLET_PALETTES["wizard"])):
             stamp = store.sprite(tile, palette=index, kind="wizard")
             assert (stamp.ptype, stamp.pnum) == ("wizard", index)
+
+    def test_hardware_player_palette_nibble_selects_player_identity(self):
+        store = AssetStore()
+        elf_tile = HEROES["elf"].anims["walk"]["down"][0]
+
+        stamp = store.sprite(elf_tile, palette=0x0D, kind="elf")
+
+        assert (stamp.ptype, stamp.pnum) == ("elf", 1)
 
     def test_a_nibble_the_bank_has_no_entry_for_falls_back_to_the_default(self):
         """Banks are not all the same depth -- ``base`` has 12 entries, a

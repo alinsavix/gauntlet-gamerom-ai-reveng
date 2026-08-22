@@ -29,8 +29,11 @@ from __future__ import annotations
 from typing import Iterator, NamedTuple, Protocol
 
 from ..assets import HERO_NAMES, AssetError
-from ..constants import NUM_SLIP_BANDS, SLIP_BAND_PIXELS, MazeObjIds
-from ..coords import CELL_PIXELS, decode_hpos, decode_vpos
+from ..constants import (
+    NUM_SLIP_BANDS, SLIP_BAND_PIXELS, SLOT_DEMON_SHOTS,
+    SLOT_PLAYER_SHOTS, MazeObjIds,
+)
+from ..coords import CELL_PIXELS, decode_hpos, decode_vpos, sprite_top_y
 from ..state import GameState
 
 __all__ = [
@@ -163,7 +166,7 @@ class MobDrawInfo(NamedTuple):
 
     slot: int
     x: int          # world pixel, top-left corner (coords.decode_hpos)
-    y: int          # world pixel, top-left corner (coords.decode_vpos)
+    y: int          # world pixel, top-left corner (coords.sprite_top_y)
     width_px: int
     height_px: int
     picture: int     # raw mob_picture, bit 15 (software flag) not yet masked
@@ -226,6 +229,10 @@ def sprite_kind(state: GameState, slot: int) -> str | None:
     for player in state.players:
         if player.mob_slot == slot and player.status:
             return HERO_NAMES[int(player.character) & 0x03]
+    palette = state.mobs.hpos[slot] & 0x0F
+    if slot in (*SLOT_PLAYER_SHOTS, *SLOT_DEMON_SHOTS) and palette >= 0x0C:
+        player_index = palette - 0x0C
+        return HERO_NAMES[int(state.players[player_index].character) & 0x03]
     return _MONSTER_ENTITY.get(state.mobs.obj_type(slot))
 
 
@@ -303,9 +310,14 @@ def iter_visible_mobs(
     viewport_bottom = scroll_y + viewport_h
     viewport_right = scroll_x + viewport_w
 
-    for slot in mobs.iter_from_band(first_band):
+    wrapped_y = (
+        scroll_y + viewport_h > 512
+        or scroll_y < MAX_MOB_PIXELS + BAND_SLACK_PIXELS
+    )
+    iterator = mobs.iter_chain() if wrapped_y else mobs.iter_from_band(first_band)
+    for slot in iterator:
         band = mobs.band_of(slot)
-        if band > last_band:
+        if not wrapped_y and band > last_band:
             break
         if not mobs.is_occupied(slot):
             continue
@@ -314,21 +326,37 @@ def iter_visible_mobs(
             continue
 
         x, _, palette = decode_hpos(mobs.hpos[slot])
-        y_anchor, width_tiles, height_tiles = decode_vpos(mobs.vpos[slot])
+        v_anchor, width_tiles, height_tiles = decode_vpos(mobs.vpos[slot])
         width_px, height_px = width_tiles * 8, height_tiles * 8
-        # The vertical MOB word names the bottom of its 16-pixel maze cell.
-        # Hardware draws any extra rows upward: a 3x3 hero/monster begins eight
-        # pixels above the cell, and a 4x4 dragon sixteen. Treating the anchor as
-        # a top edge displaced all large artwork below its collision body.
-        y = y_anchor - max(0, height_px - CELL_PIXELS)
+        # The V word counts *up* from the playfield floor to the bottom of the
+        # MOB's 16-pixel maze cell, and hardware draws the sprite upward from
+        # there: a 3x3 hero/monster begins eight pixels above the cell, a 4x4
+        # dragon sixteen. ``coords.sprite_top_y`` is that one conversion, and
+        # this is the only place the renderer needs it.
+        y = sprite_top_y(v_anchor, height_px)
 
-        if x + width_px <= scroll_x or x >= viewport_right:
+        draw_x = next(
+            (
+                candidate for candidate in (x - 512, x, x + 512)
+                if candidate + width_px > scroll_x and candidate < viewport_right
+            ),
+            None,
+        )
+        if draw_x is None:
             continue
-        if y + height_px <= scroll_y or y >= viewport_bottom:
+        draw_y = next(
+            (
+                candidate for candidate in (y - 512, y, y + 512)
+                if candidate + height_px > scroll_y and candidate < viewport_bottom
+            ),
+            None,
+        )
+        if draw_y is None:
             continue
 
         yield MobDrawInfo(
-            slot, x, y, width_px, height_px, picture, palette, sprite_kind(state, slot)
+            slot, draw_x, draw_y, width_px, height_px, picture, palette,
+            sprite_kind(state, slot),
         )
 
 

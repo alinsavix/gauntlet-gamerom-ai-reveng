@@ -142,6 +142,9 @@ class GameState:
     frame_overflow: int = 0          # 0x904916, generator spawn throttle
     game_mode: int = GameMode.TITLE  # 0x904918
     dialog_timer: int = 0            # 0x904A9E, gates the 16-call world band
+    # Host testing option: keep first-encounter flags/speech semantics but do
+    # not create the alpha message box or stall the gameplay band.
+    suppress_first_encounter_messages: bool = False
 
     # =========================================================================
     # WP-3 · maze and level
@@ -178,6 +181,10 @@ class GameState:
     # WP-5 · player movement and collision
     # =========================================================================
     movement_type: int = 0            # 0x904BF2
+    # 0x9048F0: active-low directions actually moved this frame; 0xF0 = still.
+    player_walk_dirs: list[int] = field(
+        default_factory=lambda: [0x00F0] * NUM_PLAYERS
+    )
 
     # =========================================================================
     # WP-6 · player lifecycle, health, powers, tile interaction
@@ -284,7 +291,9 @@ class GameState:
     death_hits: int = 0             # 0x904A5C, global Death hit counter
 
     # Port-side whole-pixel projection of the ROM velocity tables/accumulators;
-    # indices 1-12 correspond to the fixed projectile MOB slots.
+    # indices 1-12 correspond to the fixed projectile MOB slots.  Both are in
+    # the hardware's own axes, so ``shot_dy`` is a *native* V delta: positive
+    # walks the projectile up the screen (``coords``).
     shot_dx: list[int] = field(default_factory=lambda: [0] * 13)
     shot_dy: list[int] = field(default_factory=lambda: [0] * 13)
     # Port-side elapsed frames, parallel to the exact ROM countdown below.
@@ -448,6 +457,8 @@ class GameState:
     thief_item_nextlevel: int = 0
     mugger_item_carried: int = 0
     thief_item_carried: int = 0x7D30
+    # 0x904B56, value carried by the special score-bag pickup.
+    special_bonus_score: int = 100
     # 0x904BB8-0x904BBE, collision and transporter state.
     thief_collision_direction_code: int = 0
     thief_stolen_item: int = 0
@@ -474,6 +485,11 @@ class GameState:
     tport_cycle_dir: int = 1
     # 0x904034, 2-bit sub-frame divider for transporter animation (ticks every 4th frame)
     tport_cycle_divider: int = 0
+    # 0x90402E / 0x90402C and the live playfield colors they steer in VBLANK.
+    palette_pulse_dir_a: int = 0
+    palette_pulse_dir_b: int = 0
+    palette_pulse_a: int = 0xAAA0
+    palette_pulse_b: int = 0xA0AA
     # Host-side latches for the two transporter secret-objective write sites.
     # The ROM writes source/destination pad bits synchronously at 0x5025C and
     # 0x509E4; gauntpy observes the armed transition on its next world frame.
@@ -581,6 +597,9 @@ class GameState:
     # Which player the box belongs to (-1 = centred/no owner), the argument
     # ``dialog_position_box`` (0x4CB50) takes; also selects its text palette.
     dialog_player: int = -1
+    # 0x904AA0/0x904AA2: alpha-cell origin chosen when the box is created.
+    dialog_box_column: int = -1
+    dialog_box_row: int = -1
     # 0x904BD6 ``thief_tport_timer``: the shared thief/effect transition
     # counter main_score_update's loop 1b advances. 0xFFFF/-1 = idle. Its two
     # companions are 0x904BCC (the thief picture saved across the dissolve) and
