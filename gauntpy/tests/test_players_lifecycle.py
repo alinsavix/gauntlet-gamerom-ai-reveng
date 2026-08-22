@@ -2146,6 +2146,46 @@ class TestDoorOpeningFronts:
         assert not state.mobs.is_occupied(slot - 1)
         assert not state.mobs.is_occupied(slot + 1)
 
+    def test_junction_scans_both_axes_in_object_type_order(self):
+        state = _active_state()
+        _make_player_active(state, 0)
+        slot = (8 << 5) | 8
+        state.mobs.create(
+            slot, tile=0x9D38, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.DOOR_HORIZ),
+        )
+        for neighbour in (slot - 1, slot - 0x20):
+            state.mobs.create(
+                neighbour, tile=0x9D3C, hpos=0, vpos=0,
+                obj_type=int(MazeObjIds.DOOR_HORIZ),
+            )
+
+        gp.door_open_start(state, slot, 0)
+
+        assert state.door_endpoint_dir[0:2] == [3, 3]
+        assert state.mobs.picture[slot - 1] == 0
+        assert state.mobs.picture[slot - 0x20] == 0
+        assert state.door_endpoint_pos[0:2] == [slot - 1, slot - 0x20]
+
+    def test_junction_endpoint_scan_rejects_reserved_row_zero(self):
+        state = _active_state()
+        _make_player_active(state, 0)
+        slot = (1 << 5) | 8
+        state.mobs.create(
+            slot, tile=0x9D38, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.DOOR_HORIZ),
+        )
+        reserved = slot - 0x20
+        state.mobs.create(
+            reserved, tile=0x9D3C, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.DOOR_HORIZ),
+        )
+
+        gp.door_open_start(state, slot, 0)
+
+        assert state.door_endpoint_pos[0:2] == [0, 0]
+        assert state.mobs.picture[reserved] == 0x9D3C
+
     def test_a_front_dies_at_the_end_of_the_door_line(self):
         state = _active_state()
         _make_player_active(state, 0)

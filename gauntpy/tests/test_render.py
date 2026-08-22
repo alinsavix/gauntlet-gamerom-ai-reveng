@@ -429,9 +429,10 @@ class TestVisibleMobsCoverEverythingOnScreen:
             x, _flags, _pal = coords.decode_hpos(state.mobs.hpos[slot])
             v, width, height = coords.decode_vpos(state.mobs.vpos[slot])
             y = coords.sprite_top_y(v, height * 8)
+            x_candidates = (x - 512, x, x + 512) if state.wrap_h else (x,)
             draw_x = next(
                 (
-                    candidate for candidate in (x - 512, x, x + 512)
+                    candidate for candidate in x_candidates
                     if candidate + width * 8 > scroll_x
                     and candidate < scroll_x + viewport_w
                 ),
@@ -557,6 +558,25 @@ class TestVisibleMobsCoverEverythingOnScreen:
         # point rather than merely filtered out afterwards.
         _place(state.mobs, row=1, col=1, picture=0x10)
         assert state.mobs.band_of(coords.pack_slot(1, 1)) < first
+
+    def test_nonwrapping_left_edge_does_not_draw_a_right_edge_mob(self):
+        state = GameState(wrap_h=False)
+        slot = _place(state.mobs, row=6, col=31, picture=0x300, size=3)
+        state.mobs.hpos[slot] = coords.encode_hpos(500)
+
+        visible = list(iter_visible_mobs(state, 0, 0, 336, 240))
+
+        assert all(info.slot != slot for info in visible)
+
+    def test_wrapping_left_edge_draws_a_right_edge_mob_across_the_seam(self):
+        state = GameState(wrap_h=True)
+        slot = _place(state.mobs, row=6, col=31, picture=0x300, size=3)
+        state.mobs.hpos[slot] = coords.encode_hpos(500)
+
+        visible = list(iter_visible_mobs(state, 0, 0, 336, 240))
+
+        info = next(info for info in visible if info.slot == slot)
+        assert info.x == -12
 
 
 class TestSpriteKind:
@@ -1979,6 +1999,25 @@ class TestRenderFrame:
         assert fb_a.image.tobytes() == fb_fresh.image.tobytes() == fb_b.image.tobytes()
 
 
+class TestDoorsUseTheMobLayer:
+    def test_door_types_are_not_baked_into_the_playfield_raster(self):
+        from types import SimpleNamespace
+
+        maze = SimpleNamespace(
+            data={(5, 5): int(MazeObjIds.DOOR_HORIZ)},
+            floorpattern=0,
+            floorcolor=0,
+            wallpattern=0,
+            wallcolor=0,
+        )
+
+        assert int(MazeObjIds.DOOR_HORIZ) not in playfield.TERRAIN_TYPES
+        assert int(MazeObjIds.DOOR_VERT) not in playfield.TERRAIN_TYPES
+        assert playfield._terrain_stamp(
+            maze, 5, 5, int(MazeObjIds.DOOR_HORIZ), None,
+        ) == (None, 0)
+
+
 # ---------------------------------------------------------------------------
 # Playfield golden-image comparison against gex's genpfimage -- needs ROMs.
 #
@@ -2054,8 +2093,12 @@ class TestPlayfieldMatchesGexReference:
         }
         contaminated = set(dynamic_cells)
         for dx, dy in dynamic_cells:
-            for oy in range(-2, 3):
-                for ox in range(-2, 3):
+            dynamic_type = whatis(maze_ours, dx, dy)
+            radius = 0 if dynamic_type in (
+                MazeObjIds.DOOR_HORIZ, MazeObjIds.DOOR_VERT,
+            ) else 2
+            for oy in range(-radius, radius + 1):
+                for ox in range(-radius, radius + 1):
                     contaminated.add((dx + ox, dy + oy))
 
         mismatches = []

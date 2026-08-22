@@ -30,6 +30,38 @@ _DOOR_HORIZONTAL_MAX = 0x9D6E
 _DOOR_VERTICAL_MIN = 0x9D7C
 _DOOR_VERTICAL_MAX = 0x9DAC
 
+# Door picture/position tables, ROM 0x5F9CE and 0x5FACA-0x5FC11.
+_DOOR_GFX_BY_NEIGHBORS = (
+    0x9D28, 0x9D24, 0x9D1C, 0x9D34,
+    0x9D20, 0x9D28, 0x9D2C, 0x9D1C,
+    0x9D18, 0x9D38, 0x9D28, 0x9D24,
+    0x9D30, 0x9D18, 0x9D20, 0x9D28,
+)
+_DOOR_GFX_TYPE2 = (
+    0x9D5A, 0x9D60, 0x9D3C, 0x9D68, 0x9D6E,
+    0x9D42, 0x9D4C, 0x9D52, 0x9D48,
+)
+_DOOR_HPOS_SUB2 = (
+    0x0200, 0x0200, 0x0200, 0x0280, 0x0280,
+    0x0280, 0x0200, 0x0200, 0x0000,
+)
+_DOOR_VPOS_ADD2 = (
+    0x0011, 0x0019, 0x0011, 0x0011, 0x0019,
+    0x0011, 0x0011, 0x0019, 0x0009,
+)
+_DOOR_GFX_TYPE3 = (
+    0x9D98, 0x9D9E, 0x9D7C, 0x9DA4, 0x9DAC,
+    0x9D8C, 0x9D82, 0x9D86, 0x9D94,
+)
+_DOOR_VPOS_SUB3 = (
+    0x0000, 0x0100, 0x0000, 0x0000, 0x0000,
+    0x0100, 0x0000, 0x0000, 0x0100,
+)
+_DOOR_VPOS_ADD3 = (
+    0x000A, 0x000A, 0x000A, 0x000B, 0x000B,
+    0x000B, 0x0009, 0x000A, 0x0009,
+)
+
 _FORCEFIELD_BLOCKERS = frozenset((
     int(MazeObjIds.WALL_REGULAR),
     int(MazeObjIds.WALL_SECRET),
@@ -51,15 +83,18 @@ def _clear_slot(state: GameState, slot: int) -> None:
     """Clear a dynamic MOB without corrupting synthetic, unlinked test tiles."""
     from ..maze import clear_cell_descriptor
 
+    was_door = _is_door(state, slot)
     clear_cell_descriptor(state, slot)
     if _slot_is_linked(state, slot):
         state.mobs.unlink_and_clear(slot)
-        return
-    state.mobs.picture[slot] = 0
-    state.mobs.hpos[slot] = 0
-    state.mobs.vpos[slot] = 0
-    state.mobs.link[slot] = 0
-    state.mobs.state_link[slot] = 0
+    else:
+        state.mobs.picture[slot] = 0
+        state.mobs.hpos[slot] = 0
+        state.mobs.vpos[slot] = 0
+        state.mobs.link[slot] = 0
+        state.mobs.state_link[slot] = 0
+    if was_door:
+        setup_door_graphics(state)
 
 
 def select_forcefield_delay_profile(state: GameState) -> None:
@@ -84,6 +119,118 @@ def _write_forcefield_color(state: GameState) -> None:
         return
     color_index = (state.frame_counter & 0x0C) >> 2
     state.forcefield_color = state.forcefield_colors_table[color_index]
+
+
+def _door_neighbor(slot: int, dx: int, dy: int) -> int:
+    row, col = slot >> 5, slot & 0x1F
+    return (((row + dy) & 0x1F) << 5) | ((col + dx) & 0x1F)
+
+
+def _is_door(state: GameState, slot: int) -> bool:
+    return state.mobs.obj_type(slot) in (
+        int(MazeObjIds.DOOR_HORIZ), int(MazeObjIds.DOOR_VERT),
+    )
+
+
+def _is_blank_floor(state: GameState, slot: int) -> bool:
+    """Logical equivalent of pf_isblankfloor for gauntpy's sparse MOB table.
+
+    The arcade stores blank floor as a 0x8000 cell record. Gauntpy omits that
+    record and keeps the same fact in ``maze.data``; an empty synthetic slot is
+    the test-fixture equivalent.
+    """
+    if (slot >> 5) == 0:
+        return True
+    if state.maze is None:
+        return state.mobs.picture[slot] == 0
+    row, col = slot >> 5, slot & 0x1F
+    return int(state.maze.data.get((col, row), MazeObjIds.TILE_FLOOR)) == int(
+        MazeObjIds.TILE_FLOOR
+    )
+
+
+def _door_orientation_index(
+    state: GameState, slot: int, *, vertical: bool,
+) -> int:
+    """The 3x3 negative/neither/positive blank-floor selector at 0x5F9EE."""
+    nx, ny = ((1, 0) if vertical else (0, 1))
+    px, py = (-nx, -ny)
+    sx, sy = ((0, 1) if vertical else (1, 0))
+
+    if _is_blank_floor(state, _door_neighbor(slot, px, py)):
+        negative = 6
+    elif (
+        _is_blank_floor(state, _door_neighbor(slot, 2 * px, 2 * py))
+        and _is_blank_floor(state, _door_neighbor(slot, px + sx, py + sy))
+        and _is_blank_floor(state, _door_neighbor(slot, px - sx, py - sy))
+    ):
+        negative = 3
+    else:
+        negative = 0
+
+    if _is_blank_floor(state, _door_neighbor(slot, nx, ny)):
+        positive = 2
+    elif (
+        _is_blank_floor(state, _door_neighbor(slot, 2 * nx, 2 * ny))
+        and _is_blank_floor(state, _door_neighbor(slot, nx + sx, ny + sy))
+        and _is_blank_floor(state, _door_neighbor(slot, nx - sx, ny - sy))
+    ):
+        positive = 1
+    else:
+        positive = 0
+    return negative + positive
+
+
+def setup_door_graphics(state: GameState) -> None:
+    """0x5F880 -- derive every door MOB picture, position, size, and state."""
+    door_slots = [
+        slot for slot in range(FIRST_PLAYABLE_SLOT, NUM_MOB_SLOTS)
+        if _is_door(state, slot)
+    ]
+    for slot in door_slots:
+        row, col = slot >> 5, slot & 0x1F
+        obj_type = state.mobs.obj_type(slot)
+        horizontal = obj_type == int(MazeObjIds.DOOR_HORIZ)
+        connected = (
+            _is_door(state, _door_neighbor(slot, 0, -1))
+            or _is_door(state, _door_neighbor(slot, 0, 1))
+        ) if horizontal else (
+            _is_door(state, _door_neighbor(slot, -1, 0))
+            or _is_door(state, _door_neighbor(slot, 1, 0))
+        )
+
+        if connected:
+            neighbors = (
+                int(_is_door(state, _door_neighbor(slot, -1, 0)))
+                | (int(_is_door(state, _door_neighbor(slot, 0, 1))) << 1)
+                | (int(_is_door(state, _door_neighbor(slot, 1, 0))) << 2)
+                | (int(_is_door(state, _door_neighbor(slot, 0, -1))) << 3)
+            )
+            state.mobs.picture[slot] = _DOOR_GFX_BY_NEIGHBORS[neighbors]
+            state.mobs.hpos[slot] = (col << 11) & 0xFFFF
+            state.mobs.vpos[slot] = (((row << 11) ^ 0xF800) + 0x09) & 0xFFFF
+            state.mobs.set_state(slot, neighbors)
+            continue
+
+        index = _door_orientation_index(state, slot, vertical=not horizontal)
+        if horizontal:
+            state.mobs.picture[slot] = _DOOR_GFX_TYPE2[index]
+            state.mobs.hpos[slot] = (
+                (col << 11) - _DOOR_HPOS_SUB2[index]
+            ) & 0xFFFF
+            state.mobs.vpos[slot] = (
+                ((row << 11) ^ 0xF800) + _DOOR_VPOS_ADD2[index]
+            ) & 0xFFFF
+            state.mobs.set_state(slot, 10)
+        else:
+            state.mobs.picture[slot] = _DOOR_GFX_TYPE3[index]
+            state.mobs.hpos[slot] = (col << 11) & 0xFFFF
+            state.mobs.vpos[slot] = (
+                ((row << 11) ^ 0xF800)
+                - _DOOR_VPOS_SUB3[index]
+                + _DOOR_VPOS_ADD3[index]
+            ) & 0xFFFF
+            state.mobs.set_state(slot, 5)
 
 
 def _transporter_id(state: GameState, slot: int) -> int:

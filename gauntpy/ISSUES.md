@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2252 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2262 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -40,6 +40,21 @@ start).
 ---
 
 ## Resolved issues
+
+### Tenth-pass rendering regressions (S-69 … S-70)
+
+- **S-69 · horizontal doors had a lower protrusion.** The playfield renderer
+  treated `door_gfx_by_neighbors` picture words as four sequential tiles and
+  baked a 2×2 stamp. The ROM writes a live MOB picture/H/V record per door
+  cell. Doors now remain dynamic MOBs, and level setup ports the connected and
+  isolated-door picture/position tables at 0x5F9CE–0x5FC11; removing a door
+  refreshes its surviving neighbours.
+- **S-70 · bounded left edges exposed wrapped world pixels.** The hardware
+  scroll conversion subtracts eight pixels; masking that origin unconditionally
+  turned the bounded left clamp into world X=509. The renderer now clamps the
+  visible 232-pixel maze window and disables opposite-edge MOB candidates on
+  non-wrapping horizontal axes while preserving the hardware seam on wrapping
+  levels.
 
 ### Ninth-pass live-play regressions (S-65 … S-68)
 

@@ -134,6 +134,11 @@ subsystems are allowed to revise it. All of them exploit the same fact: a wall
 is a logical type in a slot, and the graphic is derived. Change the type,
 redraw the cell and its neighbors, done.
 
+Doors are the exception to the apparent "terrain stamp" model: the door
+updater selects a live MOB picture and position for each door cell. Horizontal
+runs are therefore chains of correctly oriented MOB segments, not overlapping
+2×2 playfield stamps.
+
 **Cyclic walls.** Maze records can mark wall groups one, two, and three. When
 the level's cyclic flag is set, a two-second timer advances a phase counter
 through those groups: walls of the outgoing phase are removed, walls of the

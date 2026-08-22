@@ -104,7 +104,7 @@ def render_frame(
     # a plain viewport top-left. Convert once, here (I-23), so every layer sees
     # the same world-pixel corner.
     scroll_x, scroll_y = viewport_scroll(
-        state, _HARDWARE_VIEWPORT[2], _HARDWARE_VIEWPORT[3],
+        state, PLAYFIELD_VIEWPORT[2], PLAYFIELD_VIEWPORT[3],
     )
 
     shadow_src = None

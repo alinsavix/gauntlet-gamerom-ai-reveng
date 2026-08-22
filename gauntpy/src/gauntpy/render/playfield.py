@@ -67,15 +67,12 @@ import dataclasses
 from typing import Protocol
 
 from gex.adjacency import (
-    checkdooradj4,
     checkffadj4,
     checkwalladj3,
     checkwalladj8,
     ff_make_map,
-    isdoor,
     whatis,
 )
-from gex.door import DOOR_HORIZ, DOOR_VERT, door_get_stamp
 from gex.floor import floor_get_stamp
 from gex.items import item_get_stamp
 from gex.palettes import (
@@ -135,8 +132,7 @@ _WALL_TILE_DOTS: dict[int, int] = {
 #: see the module docstring's "terrain only" decision.
 TERRAIN_TYPES: frozenset[int] = frozenset(
     {MazeObjIds.TILE_FLOOR, MazeObjIds.WALL_SECRET,
-     MazeObjIds.WALL_DESTRUCTABLE, MazeObjIds.DOOR_HORIZ, MazeObjIds.DOOR_VERT,
-     MazeObjIds.FORCEFIELDHUB}
+     MazeObjIds.WALL_DESTRUCTABLE, MazeObjIds.FORCEFIELDHUB}
     | set(_FLOOR_TILE_INFO) | set(_WALL_TILE_DOTS)
 )
 
@@ -246,10 +242,6 @@ def _terrain_stamp(maze: MazeLike, x: int, y: int, obj: int, rand) -> tuple[Stam
         # A pushwall moves by sub-cell pixels and is therefore drawn from its
         # live MOB H/V record, not baked into the static terrain raster.
         return None, 0
-
-    if isdoor(obj):
-        adj = checkdooradj4(maze, x, y)
-        return door_get_stamp(DOOR_HORIZ if obj == MazeObjIds.DOOR_HORIZ else DOOR_VERT, adj), 0
 
     if obj == MazeObjIds.FORCEFIELDHUB:
         adj = checkffadj4(maze, x, y)

@@ -317,9 +317,10 @@ def iter_visible_mobs(
         # this is the only place the renderer needs it.
         y = sprite_top_y(v_anchor, height_px)
 
+        x_candidates = (x - 512, x, x + 512) if state.wrap_h else (x,)
         draw_x = next(
             (
-                candidate for candidate in (x - 512, x, x + 512)
+                candidate for candidate in x_candidates
                 if candidate + width_px > scroll_x and candidate < viewport_right
             ),
             None,

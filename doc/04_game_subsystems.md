@@ -1716,15 +1716,14 @@ playfield cells after adding the same palette/base value.
 
 `pf_isblankfloor` was previously documented with inverted polarity and object
 type. It returns -1 when the picture is 0x8000 and the object type is **not**
-0x3F, with column 0 accepted through an OR rather than excluded by the X test;
+0x3F, with packed row 0 accepted through an OR rather than reading the arrays;
 otherwise it returns zero. The stack wrapper at
 0x5EA26 is retained but has no discovered direct site. The related
 `pf_is_connectable_floor_xy` applies the same base test plus the level-flag and
 object-types 7–9 exclusions used to choose neighboring floor connectivity.
 This correction is **Verified**.
 
-**Confidence: Verified.** Wall and door rendering uses paired entries in the
-same style. `pf_wall_draw` (0x5EAB8) receives X/Y in D0/D1; the newly indexed
+**Confidence: Verified.** `pf_wall_draw` (0x5EAB8) receives X/Y in D0/D1; the newly indexed
 `pf_wall_draw_stack(uint16 x, uint16 y)` at 0x5EAC2 loads the same values from
 the normal stack and falls into the shared body. The stack entry is present in
 the shipped ROM but has no discovered direct control site. Both compute an
@@ -1744,8 +1743,12 @@ for pictures 0x9D18–0x9D3B, class 2 for 0x9D3C–0x9D7B, class 3 for
 and stack entries wrap coordinates to 0–31 and redraw each of the four
 neighbors only when this predicate is nonzero. `pf_door_draw_xy` takes X/Y in
 A0/A1 and the class in D0; `pf_door_draw(x,y,class)` is its normal-stack form.
-Both derive orientation/connectivity, update the four 2×2 playfield cells,
-and store the four-bit neighbor mask in `mob_state_link` bits 13–10.
+Both derive orientation/connectivity, write the selected **MOB picture** and
+its H/V words for that door cell, and store the four-bit neighbor mask in
+`mob_state_link` bits 13–10. Doors are therefore rendered by the MOB layer,
+not baked as 2×2 playfield stamps. Treating `door_gfx_by_neighbors` as a
+playfield descriptor creates extra artwork below horizontal runs because its
+words are picture numbers, not four sequential tile numbers.
 
 ---
 

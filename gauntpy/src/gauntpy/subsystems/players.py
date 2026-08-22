@@ -1387,14 +1387,50 @@ def door_open_start(state: GameState, door_slot: int, player_index: int) -> None
     if not 0 <= player_index < NUM_PLAYERS:
         return
     channel = player_index * 2
-    if state.mobs.obj_type(door_slot) == int(MazeObjIds.DOOR_VERT):
+    picture = state.mobs.picture[door_slot]
+    obj_type = state.mobs.obj_type(door_slot)
+    if picture >= 0x9D7C:
         directions = (0, 2)      # up / down along a vertical door
-    else:
+    elif picture >= 0x9D3C:
         directions = (3, 1)      # left / right along a horizontal door
-    state.door_endpoint_pos[channel] = door_slot
-    state.door_endpoint_pos[channel + 1] = door_slot
-    state.door_endpoint_dir[channel] = directions[0]
-    state.door_endpoint_dir[channel + 1] = directions[1]
+    else:
+        # Class-1 junction picture: the ROM scans both axes, in object-type
+        # order, and records at most two immediate branches.
+        horizontal = ((-1, 3), (1, 1))
+        vertical = ((-0x20, 0), (0x20, 2))
+        scans = (
+            (vertical, horizontal)
+            if obj_type == int(MazeObjIds.DOOR_VERT)
+            else (horizontal, vertical)
+        )
+        found = []
+        for scan in scans:
+            for offset, direction in scan:
+                candidate = door_slot + offset
+                if offset in (-1, 1):
+                    candidate = (
+                        (door_slot & 0x3E0)
+                        | ((door_slot + offset) & 0x1F)
+                    )
+                if (
+                    FIRST_PLAYABLE_SLOT <= candidate < len(state.mobs.picture)
+                    and state.mobs.obj_type(candidate) in (
+                        int(MazeObjIds.DOOR_HORIZ),
+                        int(MazeObjIds.DOOR_VERT),
+                    )
+                ):
+                    found.append(direction)
+                    if len(found) == 2:
+                        break
+            if len(found) == 2:
+                break
+        directions = tuple(found)
+
+    state.door_endpoint_pos[channel:channel + 2] = [0, 0]
+    state.door_endpoint_dir[channel:channel + 2] = [0, 0]
+    for offset, direction in enumerate(directions):
+        state.door_endpoint_pos[channel + offset] = door_slot
+        state.door_endpoint_dir[channel + offset] = direction
     main_open_doors(state)       # 0x51F9E
 
 
@@ -1418,6 +1454,8 @@ def _door_unlock(state: GameState, door_slot: int, player_index: int) -> None:
 
     clear_cell_descriptor(state, door_slot)
     state.mobs.unlink_and_clear(door_slot)
+    from .maze_objects import setup_door_graphics
+    setup_door_graphics(state)
     _sound_play(state, 0x12)                        # 0x51DDE: "Doors Open"
 
 
