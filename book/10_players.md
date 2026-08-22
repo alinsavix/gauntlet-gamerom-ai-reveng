@@ -385,7 +385,9 @@ victim.
 - **Repulsiveness** works as an anti-magnet, keeping monsters at a distance
   while it lasts.
 - **Reflective shots** bounce your projectiles off walls, with a fresh
-  direction calculated per bounce.
+  direction calculated per bounce. The top maze edge is represented as a
+  tagged playfield hit rather than a normal MOB cell, but it enters the same
+  reflection path.
 - **Super shots** come as a metered pack of screen-clearing ammunition, ten
   charges by the legend's account. While charges remain, every shot does top
   damage, pierces ordinary monsters, ignores a blinking sorcerer's immunity,
@@ -393,7 +395,11 @@ victim.
   Each fired shot burns one charge.
 - **Transportability** loosens the transporter rules, letting you arrive in
   places ordinarily off-limits. The game's secret challenges go so far as to
-  dare you to land on a demon, or on Death itself.
+  dare you to land on a demon, or on Death itself. A permitted occupied landing
+  is not rejected: the destination interaction runs, any surviving occupant is
+  removed, and the player's MOB record replaces it. Corner-squeeze transport
+  still obeys the shared-screen window, so it cannot carry a player through an
+  off-screen seam on a non-scrolling level.
 
 ## When friends become targets
 

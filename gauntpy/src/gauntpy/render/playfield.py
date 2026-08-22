@@ -1040,15 +1040,46 @@ def draw_transporter_tiles(
             )
 
 
+def _live_forcefield_cells(state) -> set[tuple[int, int]]:  # noqa: ANN001
+    """Expand the ROM's packed segment words to cells needing palette redraw."""
+    cells: set[tuple[int, int]] = set()
+    for segment in state.forcefield_segments:
+        hub = segment & 0x3FF
+        row, col = hub >> 5, hub & 0x1F
+        length = ((segment >> 10) & 0x0F) + 1
+        horizontal = bool(segment & 0x8000)
+        for distance in range(1, length):
+            cells.add((
+                (col + distance) & 0x1F if horizontal else col,
+                row if horizontal else (row + distance) & 0x1F,
+            ))
+    return cells
+
+
 def draw_animated_floor_tiles(
     fb, cache: PlayfieldCache, state, scroll_x: int, scroll_y: int,
     viewport: tuple[int, int, int, int],
 ) -> None:
-    """Re-stamp trap/stun cells through the two VBLANK-pulsed palettes."""
+    """Re-stamp forcefield/trap/stun cells through their live palette words."""
     if cache is None or cache.maze_object is None:
         return
 
     floorpattern = cache.floorpattern % len(S_COLORS_1)
+    ffmap = _live_forcefield_cells(state)
+    for x, y in ffmap:
+        slot = pack_slot(y, x)
+        stamp = _floor_stamp(
+            cache.maze_object, x, y, ffmap,
+            variation=cache.floor_variants[slot],
+        )
+        _blit_descriptor(
+            fb, tuple(stamp.numbers), slot,
+            _animated_floor_palette(
+                "forcefield", floorpattern, state.forcefield_color,
+            ),
+            scroll_x, scroll_y, viewport,
+        )
+
     animated = {
         int(MazeObjIds.TILE_TRAP1): ("trap", state.palette_pulse_b),
         int(MazeObjIds.TILE_TRAP2): ("trap", state.palette_pulse_b),

@@ -391,23 +391,82 @@ class TestTheTransporterStillRelocatesTheRecord:
         assert vpos_y(state.mobs.vpos[landing]) == 20 * 16
         assert landing in list(state.mobs.iter_chain())
 
-    def test_an_occupied_landing_cell_is_not_overwritten(self):
-        state = GameState(game_mode=GameMode.NORMAL)
+    def test_a_treasure_at_the_landing_is_collected_and_replaced(self):
+        state = GameState(game_mode=GameMode.NORMAL, level_players_active=1)
         start = pack_slot(10, 10)
         landing = pack_slot(20, 20)
         player = _spawn(state, 0, start)
+        player.bonusmult = 1
         state.mobs.create(landing, tile=0x3333, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
         state.player_tile_pos[0] = landing
 
         gp.tport_player_move(state, 0)
 
-        assert state.mobs.picture[landing] == 0x3333
+        assert player.mob_slot == landing
+        assert state.mobs.obj_type(landing) == int(MazeObjIds.PLAYERSTART)
+        assert state.mobs.picture[landing] == _HERO_PICTURE
+        assert state.player_treascount[0] == 1
+        assert player.score == 100
+
+    def test_a_monster_at_the_landing_is_replaced(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        start = pack_slot(10, 10)
+        landing = pack_slot(20, 20)
+        player = _spawn(state, 0, start)
+        state.mobs.create(
+            landing, tile=0x3333, hpos=encode_hpos(20 * 16),
+            vpos=encode_vpos_at_y(20 * 16, 3, 3),
+            obj_type=int(MazeObjIds.MONST_DEMON),
+        )
+        state.player_tile_pos[0] = landing
+
+        gp.tport_player_move(state, 0)
+
+        assert player.mob_slot == landing
+        assert state.mobs.obj_type(landing) == int(MazeObjIds.PLAYERSTART)
+        assert state.mobs.picture[landing] == _HERO_PICTURE
+        assert state.mobs.picture[start] == 0
+
+    def test_a_thief_at_the_landing_is_removed_and_drops_its_loot(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        start = pack_slot(10, 10)
+        landing = pack_slot(20, 20)
+        player = _spawn(state, 0, start)
+        state.thief_mob_slot = landing
+        state.thief_current_pos = landing
+        state.thief_victim = 0
+        state.thief_item_carried = int(MazeObjIds.KEY)
+        state.mobs.create(
+            landing, tile=0x0E63, hpos=encode_hpos(20 * 16),
+            vpos=encode_vpos_at_y(20 * 16, 3, 3),
+            obj_type=int(MazeObjIds.PLAYERSTART),
+        )
+        state.player_tile_pos[0] = landing
+
+        gp.tport_player_move(state, 0)
+
+        assert state.thief_mob_slot == 0
+        assert player.keysnum == 1
+        assert player.mob_slot == landing
+        assert state.mobs.obj_type(landing) == int(MazeObjIds.PLAYERSTART)
+
+    def test_a_newly_blocked_landing_keeps_the_player_at_the_source(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        start = pack_slot(10, 10)
+        landing = pack_slot(20, 20)
+        player = _spawn(state, 0, start)
+        state.mobs.create(
+            landing, tile=0x8000, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.WALL_REGULAR),
+        )
+        state.player_tile_pos[0] = landing
+
+        gp.tport_player_move(state, 0)
+
         assert player.mob_slot == start
+        assert state.mobs.picture[landing] == 0x8000
         assert state.player_tile_pos[0] == start
-        assert mob_cell_of(
-            state.mobs.hpos[start], state.mobs.vpos[start],
-        ) == start
 
     def test_aborted_transport_entry_restores_the_player_move(self):
         state = GameState(game_mode=GameMode.NORMAL, level_players_active=1)

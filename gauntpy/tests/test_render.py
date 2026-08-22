@@ -1528,15 +1528,69 @@ class TestExitAnimation:
         assert palettes[0][13] == IRGB(0xFFFF).to_rgba()
         assert palettes[1][13] == IRGB(0x8F00).to_rgba()
 
-    def test_trap_and_stun_palettes_use_the_vblank_pulse_words(self):
+    def test_animated_floor_palettes_use_their_live_color_words(self):
         from gex.palettes import IRGB, S_COLORS_1, S_COLORS_2
 
         trap = playfield._animated_floor_palette("trap", 0, 0x4044)
         stun = playfield._animated_floor_palette("stun", 0, 0xEEE0)
+        forcefield = playfield._animated_floor_palette(
+            "forcefield", 0, 0x9FFF,
+        )
 
         for index in (0, S_COLORS_1[0], S_COLORS_2[0]):
             assert trap[index] == IRGB(0x4044).to_rgba()
             assert stun[index] == IRGB(0xEEE0).to_rgba()
+            assert forcefield[index] == IRGB(0x9FFF).to_rgba()
+
+    def test_live_forcefield_cells_expand_the_runtime_segment_table(self):
+        state = GameState()
+        state.forcefield_segments = [
+            0x8000 | (3 << 10) | coords.pack_slot(5, 3),
+            0x4000 | (3 << 10) | coords.pack_slot(30, 8),
+        ]
+
+        assert playfield._live_forcefield_cells(state) == {
+            (4, 5), (5, 5), (6, 5),
+            (8, 31), (8, 0), (8, 1),
+        }
+
+    def test_forcefield_beam_is_redrawn_with_the_live_cycle_color(self, monkeypatch):
+        from gex.palettes import IRGB, S_COLORS_1
+
+        class Maze:
+            data = {
+                (3, 5): int(MazeObjIds.FORCEFIELDHUB),
+                (7, 5): int(MazeObjIds.FORCEFIELDHUB),
+            }
+            floorpattern = 0
+            floorcolor = 0
+            wallpattern = 0
+            wallcolor = 0
+
+        cache = self._cache()
+        cache.maze_object = Maze()
+        cache.floor_variants = (0,) * (32 * 32)
+        state = GameState(forcefield_color=0xF00F)
+        state.forcefield_segments = [
+            0x8000 | (3 << 10) | coords.pack_slot(5, 3),
+        ]
+        calls = []
+        monkeypatch.setattr(
+            playfield, "_blit_descriptor",
+            lambda fb, descriptor, cell, palette, sx, sy, viewport, **kwargs:
+                calls.append((cell, palette[S_COLORS_1[0]])),
+        )
+
+        playfield.draw_animated_floor_tiles(
+            Framebuffer(240, 240), cache, state, 0, 0, PLAYFIELD_VIEWPORT,
+        )
+
+        assert {cell for cell, _color in calls} == {
+            coords.pack_slot(5, 4),
+            coords.pack_slot(5, 5),
+            coords.pack_slot(5, 6),
+        }
+        assert all(color == IRGB(0xF00F).to_rgba() for _cell, color in calls)
 
     def test_exit_overlay_wraps_with_the_hardware_viewport(self, monkeypatch):
         import gex.render

@@ -2488,8 +2488,8 @@ class TestProbeWrapWindows:
         _place_monster(state, target, MazeObjIds.MONST_GHOST, health_nibble=4)
         assert shot_mob_collision(state, (0 << 5) | 10, 0) == -1
 
-    def test_row_zero_is_never_a_collision_candidate(self):
-        """0x40A9A: those slots are the shot/player/effect band."""
+    def test_row_zero_returns_a_tagged_playfield_boundary(self):
+        """0x40A9A: top-row shots return 0x400+cell, not a reserved MOB."""
         state = _make_state()
         state.players[0].mob_slot = 0x3FF
         _arm_player_shot(state, 0, x=160, y=4)
@@ -2500,7 +2500,22 @@ class TestProbeWrapWindows:
             state.mobs.picture[slot] = 1
             state.mobs.hpos[slot] = 160 << 7
             state.mobs.vpos[slot] = native_v(4) << 7
-        assert shot_mob_collision(state, (0 << 5) | 10, 0) == -1
+        assert shot_mob_collision(state, (0 << 5) | 10, 0) == 0x400 | 10
+
+    def test_reflective_shot_bounces_off_the_top_playfield_boundary(self):
+        state = _make_state()
+        state.players[0].mob_slot = 0x3FF
+        state.players[0].powers = 0x400
+        state.reflect_count[0] = 4
+        _arm_player_shot(state, 0, x=160, y=8)
+        state.shot_direction[0] = 1
+
+        target = shot_mob_collision(state, (0 << 5) | 10, 0)
+
+        assert target == 0x400 | 10
+        assert resolve_shot_hit(state, target, 0) == 0
+        assert state.shot_direction[0] == 3
+        assert state.reflect_count[0] == 3
 
     def test_the_wrap_returns_the_cell_without_a_hitbox_test(self):
         """0x40A94 returns the wrapped index straight to the caller."""

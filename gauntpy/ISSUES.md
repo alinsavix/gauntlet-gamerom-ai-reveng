@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2245 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2252 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -40,6 +40,26 @@ start).
 ---
 
 ## Resolved issues
+
+### Ninth-pass live-play regressions (S-65 … S-68)
+
+- **S-65 · forcefield visuals were frozen in the cached level raster.** The
+  cycle state and repeated damage phases were live, but the compositor never
+  applied `forcefield_color` after level setup. Runtime segment cells are now
+  re-stamped through that color each frame, including wrapped beams.
+- **S-66 · the top playfield boundary was discarded by shot collision.** The
+  row-zero branch at 0x40A9A returns a `0x400`-tagged playfield target when an
+  ordinary shot enters the top boundary. The port returned no hit, so reflective
+  shots escaped instead of reaching `shot_reflect_calc`.
+- **S-67 · transporter landings incorrectly rejected occupied cells.** The ROM
+  removes the old player record, resolves or clears a destination occupant, and
+  creates the player at that slot (0x508BA–0x509C8). The port now replaces
+  permitted monsters and handles collectible landings while preserving the
+  exact `tport_check_dest` blockers.
+- **S-68 · corner-squeeze transport omitted the destination screen gate.**
+  The 0x500A2 `level_flags_4`/`tile_on_screen_test` gate now rejects an
+  off-screen wrapped destination, preventing transport through the left edge of
+  non-scrolling levels such as level 8.
 
 ### S-64 · death reset orphaned the migrated player record
 

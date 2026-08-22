@@ -3326,33 +3326,61 @@ def migrate_player_record(state: GameState, player_index: int) -> bool:
 
 
 def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool:
-    """Put the hero at ``slot`` using the same origin as a normal spawn."""
+    """Commit the transporter move milestone, including landing replacement."""
     player = state.players[player_index]
-    mob_slot = player.mob_slot
-    if (
-        slot < FIRST_PLAYABLE_SLOT
-        or (slot != mob_slot and state.mobs.picture[slot] != 0)
-    ):
-        state.player_tile_pos[player_index] = mob_slot
+    source = player.mob_slot
+    if slot < FIRST_PLAYABLE_SLOT:
+        state.player_tile_pos[player_index] = source
         return False
 
-    old_h = state.mobs.hpos[mob_slot]
-    old_v = state.mobs.vpos[mob_slot]
+    if slot != source and tport_check_dest(state, slot, player_index):
+        state.player_tile_pos[player_index] = source
+        return False
+
+    picture = state.mobs.picture[source]
+    old_h = state.mobs.hpos[source]
+    old_v = state.mobs.vpos[source]
+    obj_type = state.mobs.obj_type(source)
+    obj_state = state.mobs.state(source)
     x = ((slot & 0x1F) << 4) - 4
     y = (slot >> 5) << 4
-    state.mobs.hpos[mob_slot] = replace_position(old_h, encode_hpos(x))
-    state.mobs.vpos[mob_slot] = replace_position(
-        old_v, encode_vpos_at_y(y),
-    )
-    # The record follows the hero, so a teleport is a slot move as well as a
-    # position write. ``tport_check_dest``/``nearby_mob_clearance_test`` have
-    # already refused an occupied landing cell, and ``migrate_player_record``
-    # refuses one again rather than overwriting whatever arrived meanwhile.
-    if slot != mob_slot and not migrate_player_record(state, player_index):
-        state.mobs.hpos[mob_slot] = old_h
-        state.mobs.vpos[mob_slot] = old_v
-        state.player_tile_pos[player_index] = mob_slot
-        return False
+
+    if slot != source:
+        # 0x508BA removes the old hero before resolving the destination. A
+        # usable occupant is interacted with, then any surviving record is
+        # cleared before mob_create installs the hero at the landing cell.
+        state.mobs.unlink_and_clear(source)
+        player.mob_slot = slot
+        if state.mobs.picture[slot] != 0:
+            handled = player_tile_interact(state, slot, player_index)
+            if (
+                not handled
+                and state.mobs.obj_type(slot) == int(MazeObjIds.PLAYERSTART)
+                and state.thief_mob_slot == slot
+            ):
+                from .thief import thief_remove_and_drop_loot
+
+                thief_remove_and_drop_loot(state, player_index, slot)
+                if state.mobs.picture[slot] != 0:
+                    player_tile_interact(state, slot, player_index)
+            if player.mob_slot != slot:
+                return True
+            if state.mobs.picture[slot] != 0:
+                state.mobs.unlink_and_clear(slot)
+        state.mobs.create(
+            slot,
+            tile=picture,
+            hpos=replace_position(old_h, encode_hpos(x)),
+            vpos=replace_position(old_v, encode_vpos_at_y(y)),
+            obj_type=obj_type,
+            state=obj_state,
+        )
+    else:
+        state.mobs.hpos[source] = replace_position(old_h, encode_hpos(x))
+        state.mobs.vpos[source] = replace_position(
+            old_v, encode_vpos_at_y(y),
+        )
+
     state.player_tile_pos[player_index] = slot
     state.player_in_maze[player_index] = 1
     _track_thief_victim_move(state, player_index, player.mob_slot)
@@ -3406,6 +3434,11 @@ def corner_squeeze_geometry(state: GameState, packed_slot: int,
         if target < FIRST_PLAYABLE_SLOT:
             return 0
 
+    if (
+        not state.level_flags_4 & _PLAYER_OFFSCREEN
+        and not _tile_on_screen_test(state, target)
+    ):
+        return 0
     if (state.mobs.hpos[target] & 0x0F) > 0x0C:
         return 0
     if state.mobs.obj_type(target) == int(MazeObjIds.TRANSPORTER):

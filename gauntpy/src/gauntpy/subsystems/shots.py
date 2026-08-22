@@ -1547,13 +1547,14 @@ def _candidate_core(state: GameState, index: int, shooter_id: int,
         return index >> 1
 
     if index < 0x40:
-        # 0x40A9A: the probe landed on maze row 0, which the MOB table shares
-        # with the shot/player/effect slots, so it is never a collision
-        # candidate.  The ROM's +0x800 there indexes past the end of every MOB
-        # array; it needs the shot itself above the playfield (V > 0xF3FF, the
-        # top half of row 0), so the port refuses rather than reading whatever
-        # follows the arrays.
-        return None
+        # 0x40A9A-0x40AA0: row 0 shares the reserved MOB band, so an upward
+        # shot in the top half of that row returns a 0x400-tagged playfield
+        # target instead of reading a MOB record. resolve_shot_hit routes that
+        # tag through the ordinary wall/reflect path.
+        shot_v = state.mobs.vpos[_shot_slot(shooter_id)] & 0xFFFF
+        if maxtier or shot_v <= 0xF3FF:
+            return None
+        return (index + 0x800) >> 1
 
     slot = index >> 1
     if mobs.picture[slot] == 0 or index == self_index:
@@ -1669,6 +1670,8 @@ def _dragon_hitbox_retry(state: GameState, slot: int, shooter_id: int,
                          shot_h: int, shot_v: int, self_index: int,
                          maxtier: bool) -> int:
     """0x40A3E -- the dragon gets a second, tighter pass over the same cell."""
+    if slot >= 0x400:
+        return slot
     if state.mobs.obj_type(slot) != int(MazeObjIds.MONST_DRAGON):
         return slot
     character = (

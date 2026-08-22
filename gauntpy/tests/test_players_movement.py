@@ -762,7 +762,7 @@ class TestCornerSqueezeGeometry:
         assert state.player_tile_pos[0] == 0
 
     def test_top_border_squeeze_advances_through_wrapped_row(self):
-        state = GameState()
+        state = GameState(wrap_v=True)
         player = _active_player_at(state, 0, (1 << 5) | 10)
         player.powers = self._POWER_INVULN
         wall = (0 << 5) | 10
@@ -773,6 +773,24 @@ class TestCornerSqueezeGeometry:
         player_try_move(state, 0, gin.JOY_UP, 0)
 
         assert state.player_tile_pos[0] == ((31 << 5) | 10)
+
+    def test_left_border_squeeze_cannot_cross_an_offscreen_seam(self):
+        state = GameState(wrap_h=False, scroll_x=0, scroll_y=10 * 16)
+        player = _active_player_at(state, 0, (10 << 5) | 0)
+        state.level_flags_4 &= ~0x80
+        player.powers = self._POWER_INVULN
+        wall = (10 << 5) | 31
+        state.mobs.picture[wall] = _WALL_PICTURE
+        state.mobs.set_obj_type(wall, int(MazeObjIds.WALL_REGULAR))
+        state.movement_type = 2
+
+        result = corner_squeeze_geometry(
+            state, player.mob_slot, 0, gin.JOY_LEFT,
+        )
+
+        assert result == 0
+        assert state.player_tport_phase[0] < 0
+        assert player.mob_slot == ((10 << 5) | 0)
 
 
 class TestThiefRouteTracking:

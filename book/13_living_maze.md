@@ -117,6 +117,11 @@ looping-sound timer that plays the buzz on first touch and a silencer sound
 when you break away. A forcefield never blocks movement the way a wall does.
 The whole design is a timing puzzle: watch the flicker, cross in the dark.
 
+The visible beam uses that same live color word. Each VBLANK writes it into the
+forcefield entries of all three selected playfield palettes, so the segment
+cells must be re-paletted every frame even though the maze's tile raster is
+otherwise cached.
+
 The hubs themselves use the 0x8000 marker picture, so setup must recognize a
 far hub before applying the ordinary marker-blocker test. Reversing that order
 records no segment: the colors still cycle, but every later lit phase is

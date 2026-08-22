@@ -898,7 +898,7 @@ Transporter position table: `tport_pos_table` at `0x910700` (word array[32]), po
 
 When a player touches a transporter:
 1. `player_tport` (0x50224) → `tport_player_flash` (0x50616): saves player MOB picture, sets picture to 0x1709 (flash frame)
-2. `tport_player_move` (0x50662): finds valid destination via `tport_check_dest` (0x50ADE), handles IT/thief handoff, plays transport sound (0x28), calls `handle_tport` at destination
+2. `tport_player_move` (0x50662): rechecks candidates with `tport_check_dest` (0x50ADE), removes the old player record, resolves or clears a permitted occupant at the landing cell, recreates the player there, handles IT/thief route state, and calls `handle_tport` at the destination
 3. `handle_tport` (0x47CFE): copies player position to an animation slot and creates the `tport_create_splodey` effect
 4. `tport_restore_player_picture` (0x50B88), the one-argument completion leaf used when the per-player movement state reaches 0x10, maps the player index through `active_mob_ids` and restores that MOB's picture from `tport_saved_picture[player]`
 
@@ -906,6 +906,13 @@ When a player touches a transporter:
 for a blocked destination and 0 for a usable one.  Blocking cases include an
 empty/reserved MOB picture, wall types 0x2F/0x3C/0x3E, and door types 0x0D/0x0E
 when the player has no key.
+
+A non-blocking occupied landing is intentional. At 0x508BA–0x509C8 the old
+player MOB is removed first, `resolve_move_tile_interaction` handles the
+destination, any surviving ordinary occupant is cleared, and `mob_create`
+installs the player in that slot. This is why Transportability can land on and
+replace monsters (including the secret-task demon/Death cases), as well as
+collect or clear other object types accepted by `tport_check_dest`.
 
 ### 7.3 Forcefield Segment Format
 
@@ -943,7 +950,7 @@ Playfield palette 1 (traps) moves by 0x1011 between 0x4044 and 0xA0AA;
 palette 2 (stun) moves by 0x1110 between 0x2220 and 0xEEE0. The selected
 floor-pattern color indices come from the byte tables at 0x405C8 and 0x405D8.
 
-Part 2 (forcefield): Step counter at `0x904049` cycles 0→7. Each step's duration = ROM table value + random(8). On even steps: reads one of 4 color words from ROM table at 0x405C0, writes to `forcefield_color` at `0x904046`. On odd steps: writes 0 (blink off).
+Part 2 (forcefield): Step counter at `0x904049` cycles 0→7. Each step's duration = ROM table value + random(8). On even steps: reads one of 4 color words from ROM table at 0x405C0, writes to `forcefield_color` at `0x904046`. On odd steps: writes 0 (blink off). Game VBLANK copies that live word into the three selected playfield palettes at offset 0x40 (0x403B2–0x403C0), so a host renderer must re-palette the segment cells each frame rather than leaving the level-load raster cached.
 
 Segment setup recognizes a partner hub before treating its 0x8000 marker
 picture as a blocker. Real FORCEFIELDHUB records use that marker; testing it
@@ -2035,7 +2042,7 @@ placement resets it on normal level entry or player join. This implements the
 
 **Generators:** tier 1 destroyed by any hit; tiers 2/3 need damage ≥ 2/3, else they degrade: `mob_link -= damage << 10` (becomes the next weaker generator) with a picture update.
 
-**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces.
+**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces. The row-zero branch at 0x40A9A returns `0x400 + cell` for a shot entering the top boundary (rather than indexing the reserved MOB slots 0–31); that tagged playfield hit is what sends the top wall through the same reflection path.
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 
