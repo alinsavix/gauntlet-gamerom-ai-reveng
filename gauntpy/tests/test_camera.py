@@ -381,6 +381,21 @@ class TestViewportConversion:
             assert 0 <= vx < 512, (px, py, vx)
             assert 0 <= vy < 512, (px, py, vy)
 
+    def test_nonwrapping_horizontal_view_never_exposes_the_opposite_edge(self):
+        state = _gameplay_state()
+        state.wrap_h = False
+        state.scroll_x = 5
+        assert viewport_scroll(state, 232, 240)[0] == 0
+
+        state.scroll_x = 0x124
+        assert viewport_scroll(state, 232, 240)[0] == 512 - 232
+
+    def test_wrapping_horizontal_view_keeps_the_hardware_seam(self):
+        state = _gameplay_state()
+        state.wrap_h = True
+        state.scroll_x = 5
+        assert viewport_scroll(state, 232, 240)[0] == 509
+
     def test_low_player_is_still_on_screen(self):
         """The upward V register used to push a low player off-screen (the
         bug behind the runner's old _center_camera workaround)."""

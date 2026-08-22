@@ -322,7 +322,10 @@ class MobTable:
         Order matters and is the ROM's: link the destination **first**, while
         its picture still says whether anything already lives there (the
         ``moblist_insert`` guard), then copy the five words, then unlink and
-        clear the source. This is how a monster "moves": identity is location,
+        clear the source. This is how anything in the maze "moves" -- a
+        monster (``monster_loop_core`` 0x410B0), a pushed movable wall
+        (``failed_door_post`` 0x42802) and a live hero
+        (``player_try_move_core`` 0x42520) all end here: identity is location,
         so moving means changing which slot holds the record.
         """
         self.moblist_insert(dst)

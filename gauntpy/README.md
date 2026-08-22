@@ -15,6 +15,8 @@ calls are implemented and tested. ROM data tables are transcribed from the ROMs
 and verified against radare2/Unicorn. The playable runner covers boot, attract,
 coin/character selection, gameplay, treasure/secret rooms, and level rotation.
 See [PLAN.md](PLAN.md) and [ISSUES.md](ISSUES.md).
+Contributors should also read the concise [fidelity rules](FIDELITY.md) before
+changing simulation state or coordinate arithmetic.
 
 ## Play it
 
@@ -77,6 +79,20 @@ cd gauntpy && uv run pytest -q      # the test suite
 The demo prints the loop's call trace for a normal frame, shows the dialog gate
 freezing exactly the sixteen gameplay calls, and shows `frame_overflow` setting
 and decaying.
+
+For deterministic gameplay investigations, use the scenario runner:
+
+```bash
+cd gauntpy
+GEX_ROM_DIR=../ROMs uv run gauntpy-scenario list
+GEX_ROM_DIR=../ROMs uv run gauntpy-scenario run level7-seam --every 4
+GEX_ROM_DIR=../ROMs uv run gauntpy-scenario run forcefields \
+  --output traces/scenarios/forcefields.json
+```
+
+The catalog includes level 1, the level-7 seam, forcefields, dragon range,
+attract-demo playback, and point-blank combat. Traces are compact JSON and
+deterministic from the same committed state.
 
 Without uv, everything still runs from the source tree directly (set
 `PYTHONPATH=src`, and `GEX_ROM_DIR` for the graphical runner):

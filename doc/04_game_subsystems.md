@@ -370,9 +370,9 @@ dragon helper adds 0x1000 to `D0.w` only when the shot overlaps the moving head
 hitbox. Complete register inputs and control-transfer sites are in
 [`generated/monster_combat_contracts.csv`](generated/monster_combat_contracts.csv).
 
-gauntpy's non-migrating player records are additional candidates after the
-probed cell's real occupant. They must not replace that occupant: doing so makes
-a co-located sorcerer invisible to the shooter's point-blank projectile.
+gauntpy resolves a probed cell to its own occupant. A live hero is one of those
+occupants, because its record migrates into the cell it stands in (§4.2), so
+the shooter's own hero can never displace a co-located sorcerer.
 
 ---
 
@@ -455,6 +455,43 @@ below 0x7000; the V anchor minus `scroll_vpos_origin` must be below 0x7400
 (0x41C52-0x41C6A, 0x42092-0x420AA, and their other-direction twins). These are
 the gates that keep a hero out of the alpha/HUD region and prevent walking past
 the bottom of the visible playfield.
+
+#### The record migrates by cell (0x424CA-0x42526)
+
+**Confidence: Verified** by disassembly of the `player_try_move_core` tail.
+
+A hero is not exempt from "identity is location". Once the axes have been
+resolved, the tail derives the cell the new H/V words name with the same
+arithmetic `monster_loop_core` uses (0x41358-0x41374): add 0x400 to V, keep
+the row bits with `andi.w #0xF800`, invert them (`eori.w #0xF800`, because V
+counts up from the playfield floor while rows count down), then add the H
+column taken as `(H + 0x600) >> 5`. The result is a packed slot, and because
+both axes are 16-bit it wraps at either maze seam for free. In whole pixels the
+column hands over half a cell along and the row at `y % 16 == 9`.
+
+Three outcomes, in the ROM's order:
+
+- **same cell** (0x424E8): only the two position words are written;
+- **different cell, destination empty** (0x424EC): the position words are
+  written into the source record, `active_mob_ids[player]` takes the new slot
+  and `move_mob_slot` (0x5DE0A) relocates the five words -- picture, H, V, the
+  object type, and the state word carrying the player index -- linking the
+  destination first and clearing the source afterwards. `thief_track_victim_move`
+  and `dragon_player_proximity` are then told about the new cell;
+- **different cell, destination occupied** (0x42542): `player_tile_interact` is
+  offered the cell first. A zero return abandons the move entirely and returns
+  `0x00F0` *without* writing the position words; `-2` (a transporter) returns
+  after the thief-route update; anything else falls back into the migration
+  path now that the tile has been consumed.
+
+The same tail exists for a pushed movable wall at `failed_door_post`
+(0x427B4-0x42808), instruction for instruction.
+
+gauntpy implements this in `players.migrate_player_record`, called from
+`_apply_pixel_delta` after the position write and again after the tile pass in
+`main_move_players`, so a consumed pickup lets the record follow the hero into
+the cell it just cleared on the same frame. It never migrates into a managed
+low slot (0-0x1F) and never overwrites an occupied cell.
 
 Door traversal is a register/shared-stack convention: `D2.w` is the current
 offset, `A2-A4` are MOB arrays, and the helper reads the caller's saved `D5`
@@ -861,7 +898,7 @@ Transporter position table: `tport_pos_table` at `0x910700` (word array[32]), po
 
 When a player touches a transporter:
 1. `player_tport` (0x50224) → `tport_player_flash` (0x50616): saves player MOB picture, sets picture to 0x1709 (flash frame)
-2. `tport_player_move` (0x50662): finds valid destination via `tport_check_dest` (0x50ADE), handles IT/thief handoff, plays transport sound (0x28), calls `handle_tport` at destination
+2. `tport_player_move` (0x50662): rechecks candidates with `tport_check_dest` (0x50ADE), removes the old player record, resolves or clears a permitted occupant at the landing cell, recreates the player there, handles IT/thief route state, and calls `handle_tport` at the destination
 3. `handle_tport` (0x47CFE): copies player position to an animation slot and creates the `tport_create_splodey` effect
 4. `tport_restore_player_picture` (0x50B88), the one-argument completion leaf used when the per-player movement state reaches 0x10, maps the player index through `active_mob_ids` and restores that MOB's picture from `tport_saved_picture[player]`
 
@@ -869,6 +906,13 @@ When a player touches a transporter:
 for a blocked destination and 0 for a usable one.  Blocking cases include an
 empty/reserved MOB picture, wall types 0x2F/0x3C/0x3E, and door types 0x0D/0x0E
 when the player has no key.
+
+A non-blocking occupied landing is intentional. At 0x508BA–0x509C8 the old
+player MOB is removed first, `resolve_move_tile_interaction` handles the
+destination, any surviving ordinary occupant is cleared, and `mob_create`
+installs the player in that slot. This is why Transportability can land on and
+replace monsters (including the secret-task demon/Death cases), as well as
+collect or clear other object types accepted by `tport_check_dest`.
 
 ### 7.3 Forcefield Segment Format
 
@@ -906,7 +950,7 @@ Playfield palette 1 (traps) moves by 0x1011 between 0x4044 and 0xA0AA;
 palette 2 (stun) moves by 0x1110 between 0x2220 and 0xEEE0. The selected
 floor-pattern color indices come from the byte tables at 0x405C8 and 0x405D8.
 
-Part 2 (forcefield): Step counter at `0x904049` cycles 0→7. Each step's duration = ROM table value + random(8). On even steps: reads one of 4 color words from ROM table at 0x405C0, writes to `forcefield_color` at `0x904046`. On odd steps: writes 0 (blink off).
+Part 2 (forcefield): Step counter at `0x904049` cycles 0→7. Each step's duration = ROM table value + random(8). On even steps: reads one of 4 color words from ROM table at 0x405C0, writes to `forcefield_color` at `0x904046`. On odd steps: writes 0 (blink off). Game VBLANK copies that live word into the three selected playfield palettes at offset 0x40 (0x403B2–0x403C0), so a host renderer must re-palette the segment cells each frame rather than leaving the level-load raster cached.
 
 Segment setup recognizes a partner hub before treating its 0x8000 marker
 picture as a blocker. Real FORCEFIELDHUB records use that marker; testing it
@@ -1672,15 +1716,14 @@ playfield cells after adding the same palette/base value.
 
 `pf_isblankfloor` was previously documented with inverted polarity and object
 type. It returns -1 when the picture is 0x8000 and the object type is **not**
-0x3F, with column 0 accepted through an OR rather than excluded by the X test;
+0x3F, with packed row 0 accepted through an OR rather than reading the arrays;
 otherwise it returns zero. The stack wrapper at
 0x5EA26 is retained but has no discovered direct site. The related
 `pf_is_connectable_floor_xy` applies the same base test plus the level-flag and
 object-types 7–9 exclusions used to choose neighboring floor connectivity.
 This correction is **Verified**.
 
-**Confidence: Verified.** Wall and door rendering uses paired entries in the
-same style. `pf_wall_draw` (0x5EAB8) receives X/Y in D0/D1; the newly indexed
+**Confidence: Verified.** `pf_wall_draw` (0x5EAB8) receives X/Y in D0/D1; the newly indexed
 `pf_wall_draw_stack(uint16 x, uint16 y)` at 0x5EAC2 loads the same values from
 the normal stack and falls into the shared body. The stack entry is present in
 the shipped ROM but has no discovered direct control site. Both compute an
@@ -1700,8 +1743,12 @@ for pictures 0x9D18–0x9D3B, class 2 for 0x9D3C–0x9D7B, class 3 for
 and stack entries wrap coordinates to 0–31 and redraw each of the four
 neighbors only when this predicate is nonzero. `pf_door_draw_xy` takes X/Y in
 A0/A1 and the class in D0; `pf_door_draw(x,y,class)` is its normal-stack form.
-Both derive orientation/connectivity, update the four 2×2 playfield cells,
-and store the four-bit neighbor mask in `mob_state_link` bits 13–10.
+Both derive orientation/connectivity, write the selected **MOB picture** and
+its H/V words for that door cell, and store the four-bit neighbor mask in
+`mob_state_link` bits 13–10. Doors are therefore rendered by the MOB layer,
+not baked as 2×2 playfield stamps. Treating `door_gfx_by_neighbors` as a
+playfield descriptor creates extra artwork below horizontal runs because its
+words are picture numbers, not four sequential tile numbers.
 
 ---
 
@@ -1998,7 +2045,7 @@ placement resets it on normal level entry or player join. This implements the
 
 **Generators:** tier 1 destroyed by any hit; tiers 2/3 need damage ≥ 2/3, else they degrade: `mob_link -= damage << 10` (becomes the next weaker generator) with a picture update.
 
-**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces.
+**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces. The row-zero branch at 0x40A9A returns `0x400 + cell` for a shot entering the top boundary (rather than indexing the reserved MOB slots 0–31); that tagged playfield hit is what sends the top wall through the same reflection path.
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 

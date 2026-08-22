@@ -141,7 +141,8 @@ class TestScheduling:
         state.game_mode = 0
         state.mazenum_current = 10
         state.levelnum_current = 16
-        _active(state, 0, pack_slot(6, 6))
+        # The victim's record names the cell it stands in.
+        _active(state, 0, pack_slot(8, 9))
         player_slot = state.players[0].mob_slot
         state.mobs.hpos[player_slot] = encode_hpos(9 * 16 + 7)
         state.mobs.vpos[player_slot] = encode_vpos_at_y(8 * 16 + 3)
@@ -921,18 +922,23 @@ class TestMoveEngineCollisionAndAnimation:
         assert state.thief_mob_slot == start
         assert hpos_x(state.mobs.hpos[start]) == 11 * 16
 
-    def test_engine_contacts_the_pixel_cell_not_the_players_fixed_mob_slot(self):
+    def test_engine_contacts_the_cell_the_player_record_occupies(self):
         state = GameState()
-        player_slot = pack_slot(5, 5)
-        thief_slot = pack_slot(10, 10)
+        thief_slot = pack_slot(10, 9)
+        player_slot = pack_slot(10, 10)
         _active(state, 0, player_slot)
         state.players[0].keysnum = 2
-        state.mobs.hpos[player_slot] = encode_hpos(10 * 16)
-        state.mobs.vpos[player_slot] = encode_vpos_at_y(10 * 16)
+        state.mobs.create(
+            player_slot, 1, encode_hpos(10 * 16),
+            encode_vpos_at_y(10 * 16), MazeObjIds.PLAYERSTART,
+        )
         _thief_at(state, thief_slot)
+        state.mobs.hpos[thief_slot] = encode_hpos(10 * 16 - 1)
         state.thief_mode = THIEF_PURSUE
 
-        thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[8], _SPEED_THIEF, _SPEED_THIEF)
+        thief_move_engine(
+            state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF,
+        )
 
         assert state.players[0].keysnum == 1
         assert state.thief_mode & THIEF_ESCAPE
@@ -953,17 +959,22 @@ class TestMoveEngineCollisionAndAnimation:
 
     def test_first_escape_contact_only_sets_the_latch_once(self):
         state = GameState()
-        player_slot = pack_slot(5, 5)
-        thief_slot = pack_slot(10, 10)
+        thief_slot = pack_slot(10, 9)
+        player_slot = pack_slot(10, 10)
         _active(state, 0, player_slot)
         state.players[0].health = 100
-        state.mobs.hpos[player_slot] = encode_hpos(10 * 16)
-        state.mobs.vpos[player_slot] = encode_vpos_at_y(10 * 16)
+        state.mobs.create(
+            player_slot, 1, encode_hpos(10 * 16),
+            encode_vpos_at_y(10 * 16), MazeObjIds.PLAYERSTART,
+        )
         _thief_at(state, thief_slot, direction=2)
+        state.mobs.hpos[thief_slot] = encode_hpos(10 * 16 - 1)
         state.thief_mode = THIEF_ESCAPE
         state.thief_stolen_item = 0x10
 
-        thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[8], _SPEED_THIEF, _SPEED_THIEF)
+        thief_move_engine(
+            state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF,
+        )
 
         assert state.players[0].health == 100
         assert state.thief_collision_direction_code == 3

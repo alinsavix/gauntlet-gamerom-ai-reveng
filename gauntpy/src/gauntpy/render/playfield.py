@@ -67,15 +67,12 @@ import dataclasses
 from typing import Protocol
 
 from gex.adjacency import (
-    checkdooradj4,
     checkffadj4,
     checkwalladj3,
     checkwalladj8,
     ff_make_map,
-    isdoor,
     whatis,
 )
-from gex.door import DOOR_HORIZ, DOOR_VERT, door_get_stamp
 from gex.floor import floor_get_stamp
 from gex.items import item_get_stamp
 from gex.palettes import (
@@ -135,8 +132,7 @@ _WALL_TILE_DOTS: dict[int, int] = {
 #: see the module docstring's "terrain only" decision.
 TERRAIN_TYPES: frozenset[int] = frozenset(
     {MazeObjIds.TILE_FLOOR, MazeObjIds.WALL_SECRET,
-     MazeObjIds.WALL_DESTRUCTABLE, MazeObjIds.DOOR_HORIZ, MazeObjIds.DOOR_VERT,
-     MazeObjIds.FORCEFIELDHUB}
+     MazeObjIds.WALL_DESTRUCTABLE, MazeObjIds.FORCEFIELDHUB}
     | set(_FLOOR_TILE_INFO) | set(_WALL_TILE_DOTS)
 )
 
@@ -246,10 +242,6 @@ def _terrain_stamp(maze: MazeLike, x: int, y: int, obj: int, rand) -> tuple[Stam
         # A pushwall moves by sub-cell pixels and is therefore drawn from its
         # live MOB H/V record, not baked into the static terrain raster.
         return None, 0
-
-    if isdoor(obj):
-        adj = checkdooradj4(maze, x, y)
-        return door_get_stamp(DOOR_HORIZ if obj == MazeObjIds.DOOR_HORIZ else DOOR_VERT, adj), 0
 
     if obj == MazeObjIds.FORCEFIELDHUB:
         adj = checkffadj4(maze, x, y)
@@ -1040,15 +1032,46 @@ def draw_transporter_tiles(
             )
 
 
+def _live_forcefield_cells(state) -> set[tuple[int, int]]:  # noqa: ANN001
+    """Expand the ROM's packed segment words to cells needing palette redraw."""
+    cells: set[tuple[int, int]] = set()
+    for segment in state.forcefield_segments:
+        hub = segment & 0x3FF
+        row, col = hub >> 5, hub & 0x1F
+        length = ((segment >> 10) & 0x0F) + 1
+        horizontal = bool(segment & 0x8000)
+        for distance in range(1, length):
+            cells.add((
+                (col + distance) & 0x1F if horizontal else col,
+                row if horizontal else (row + distance) & 0x1F,
+            ))
+    return cells
+
+
 def draw_animated_floor_tiles(
     fb, cache: PlayfieldCache, state, scroll_x: int, scroll_y: int,
     viewport: tuple[int, int, int, int],
 ) -> None:
-    """Re-stamp trap/stun cells through the two VBLANK-pulsed palettes."""
+    """Re-stamp forcefield/trap/stun cells through their live palette words."""
     if cache is None or cache.maze_object is None:
         return
 
     floorpattern = cache.floorpattern % len(S_COLORS_1)
+    ffmap = _live_forcefield_cells(state)
+    for x, y in ffmap:
+        slot = pack_slot(y, x)
+        stamp = _floor_stamp(
+            cache.maze_object, x, y, ffmap,
+            variation=cache.floor_variants[slot],
+        )
+        _blit_descriptor(
+            fb, tuple(stamp.numbers), slot,
+            _animated_floor_palette(
+                "forcefield", floorpattern, state.forcefield_color,
+            ),
+            scroll_x, scroll_y, viewport,
+        )
+
     animated = {
         int(MazeObjIds.TILE_TRAP1): ("trap", state.palette_pulse_b),
         int(MazeObjIds.TILE_TRAP2): ("trap", state.palette_pulse_b),

@@ -186,8 +186,14 @@ def viewport_scroll(state: GameState, viewport_w: int, viewport_h: int) -> tuple
 
     ``set_scroll_pos`` writes ``hmin = (hscroll - 8) << 7`` and the vertical
     scroll is already the downward world origin after coordinate conversion.
-    Do not clamp the window to 512: the hardware wraps the raster at either
-    edge, including the eight scanlines after row 31 at the bottom clamp.
+    A horizontally wrapping maze keeps the 9-bit origin. On a bounded maze,
+    clamp the *visible* playfield window so the few hardware-overdraw pixels
+    beneath the alpha panel cannot expose the opposite maze edge.
     """
-    del viewport_w, viewport_h
-    return (state.scroll_x - 8) & 0x1FF, state.scroll_y & 0x1FF
+    del viewport_h
+    origin_x = state.scroll_x - 8
+    if state.wrap_h:
+        origin_x &= 0x1FF
+    else:
+        origin_x = max(0, min(origin_x, WORLD_PIXELS - viewport_w))
+    return origin_x, state.scroll_y & 0x1FF

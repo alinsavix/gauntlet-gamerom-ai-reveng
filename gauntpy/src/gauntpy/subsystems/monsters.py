@@ -55,13 +55,15 @@ from ..constants import (
     PlayerPower,
 )
 from ..coords import (
-    POS_FIELD_MASK,
-    POS_LOW_MASK,
     POS_SHIFT,
     encode_hpos,
     encode_vpos_at_y,
     hpos_x,
+    low_field,
+    mob_cell_of,
     native_v,
+    position_field,
+    replace_position,
     vpos_y,
 )
 from ..state import GameState
@@ -854,26 +856,6 @@ def _cell_blocked(state: GameState, slot: int) -> bool:
     return state.mobs.is_occupied(slot)
 
 
-def _player_in_cell(state: GameState, slot: int) -> int | None:
-    """Index of an active player standing in ``slot``, else None.
-
-    A player's current cell comes from its pixel position (stored in its fixed
-    record slot's H/V words), not from ``player.mob_slot`` -- that field is the
-    spawn/record slot and does not move as the player walks.
-    """
-    row, col = slot >> 5, slot & 0x1F
-    for p in state.players:
-        if not p.active:
-            continue
-        # A 3x3 hero's stored H origin is four pixels left of its logical cell
-        # (player_start_inner 0x48DDC-0x48DE0).
-        px = hpos_x(state.mobs.hpos[p.mob_slot]) + 4
-        py = vpos_y(state.mobs.vpos[p.mob_slot])
-        if (px >> 4) == col and (py >> 4) == row:
-            return p.index
-    return None
-
-
 # =============================================================================
 # Top-level main-loop call
 # =============================================================================
@@ -1173,10 +1155,6 @@ def _monster_speed(state: GameState, obj_type: int, frame_word: int) -> int:
 _OVERLAP = 0x7C0
 #: 0x5E1BC etc -- software MOBs (picture bit 15) carry a shifted origin.
 _SOFTWARE_MOB_BIAS = 0x200
-#: 0x41358/0x41366 -- the sprite-origin biases the destination cell is read
-#: with: +0x400 vertically (8 px), +0x600 horizontally (12 px).
-_CELL_BIAS_V = 0x400
-_CELL_BIAS_H = 0x600
 #: 0x5E112 / 0x5E1DE -- the vertical edge guards, on the V word itself: a march
 #: towards row 0 stops unless the word is at or below 0xF080, and a march
 #: towards row 31 stops once the word has gone negative through the floor.
@@ -1206,27 +1184,18 @@ def _march_cell_blocks(state: GameState, cell: int, h: int, v: int) -> bool:
     exactly one maze in 16 bits, so the subtraction wraps at the seam on its
     own and a creature on column 31 sees column 0 as its neighbour.
 
-    One divergence the port has to bridge: the ROM relocates a walking hero's
-    record into the cell they occupy, so a probe finds them by cell.  gauntpy
-    keeps the record in the spawn slot and roams by pixel position, so an empty
-    cell an active player is standing in resolves to that player's record.
+    A hero needs no special case: its record migrates into the cell it stands
+    in, so a walking player is simply that cell's occupant.
     """
-    occupant = cell
     picture = state.mobs.picture[cell]
     if picture == 0:
-        victim = _player_in_cell(state, cell)
-        if victim is None:
-            return False
-        occupant = state.players[victim].mob_slot
-        picture = state.mobs.picture[occupant]
-        if picture == 0:
-            picture = 1                     # a hero with no art still blocks
-    cell_h = state.mobs.hpos[occupant]
+        return False
+    cell_h = state.mobs.hpos[cell]
     if picture & 0x8000:
         cell_h = (cell_h - _SOFTWARE_MOB_BIAS) & 0xFFFF
     if abs(_s16(cell_h - h)) >= _OVERLAP:
         return False
-    return abs(_s16(v - state.mobs.vpos[occupant])) < _OVERLAP
+    return abs(_s16(v - state.mobs.vpos[cell])) < _OVERLAP
 
 
 def _s16(value: int) -> int:
@@ -1384,16 +1353,17 @@ def _march_hit_player(state: GameState, slot: int, blocker: int) -> None:
 def _cell_player_index(state: GameState, cell: int) -> int | None:
     """Which player, if any, the given cell counts as.
 
-    The ROM tests the cell's palette nibble (>= 0xC, the four hero palettes);
-    this port also accepts a cell an active player is standing in, because
-    gauntpy players roam by pixel position and their record can lag a cell
-    behind.
+    The ROM tests the cell's palette nibble (>= 0xC, the four hero palettes)
+    and then charges the hit to that player.  This port asks the authoritative
+    question instead -- which live record *is* this cell -- because
+    ``active_mob_ids`` is the identity and a nibble is only its colour
+    (``FIDELITY.md`` rule 6).  Both answers are the same cell now that a hero's
+    record migrates with it.
     """
-    if (state.mobs.hpos[cell] & 0x0F) >= 0x0C:
-        for p in state.players:
-            if p.active and p.mob_slot == cell:
-                return p.index
-    return _player_in_cell(state, cell)
+    for p in state.players:
+        if p.active and p.mob_slot == cell:
+            return p.index
+    return None
 
 
 def _face_after_contact(state: GameState, slot: int, victim_cell: int) -> None:
@@ -1421,13 +1391,11 @@ def _destination_cell(h: int, v: int) -> int:
 
     The ROM adds 0x400 to V and 0x600 to H before slicing out the row and
     column, and its rows run the other way -- which is exactly what the stored
-    words do too, so this is the ROM's own arithmetic.
+    words do too, so this is the ROM's own arithmetic. ``coords.mob_cell_of``
+    owns it, because ``player_try_move_core`` (0x424CA) applies the identical
+    sequence to relocate a hero's record.
     """
-    x = ((h + _CELL_BIAS_H) >> POS_SHIFT) & 0x1FF
-    up = ((v + _CELL_BIAS_V) >> POS_SHIFT) & 0x1FF
-    col = (x >> 4) & 0x1F
-    row = (31 - (up >> 4)) & 0x1F
-    return (row << 5) | col
+    return mob_cell_of(h, v)
 
 
 def _commit_move(state: GameState, slot: int, index: int, d6: int, h: int,
@@ -1777,8 +1745,8 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
     # 0x49192/0x491A2: the projectile inherits only the shooter's *position*
     # field -- the shooter's palette (its health nibble) and its 3x3 sprite
     # size are masked off, and the class constants below replace them.
-    base_h = state.mobs.hpos[slot] & POS_FIELD_MASK
-    base_v = state.mobs.vpos[slot] & POS_FIELD_MASK
+    base_h = position_field(state.mobs.hpos[slot])
+    base_v = position_field(state.mobs.vpos[slot])
     if lead is None:
         off_h = _MONSTER_SHOT_SPAWN_H[rom_dir]
         off_v = _MONSTER_SHOT_SPAWN_V[rom_dir]
@@ -2186,21 +2154,8 @@ def generator_candidate_slot(gen_slot: int, index: int) -> int:
 
 
 def _rendered_occupant(state: GameState, cell: int) -> tuple[int, int]:
-    """``(record slot, picture)`` of whatever is drawn in ``cell``.
-
-    An empty cell resolves to an active player standing in it, the same
-    divergence ``_march_cell_blocks`` bridges: the ROM relocates a walking
-    hero's record into the cell they occupy, gauntpy leaves it in the spawn
-    slot and roams by pixel position.
-    """
-    picture = state.mobs.picture[cell]
-    if picture:
-        return cell, picture
-    victim = _player_in_cell(state, cell)
-    if victim is None:
-        return cell, 0
-    occupant = state.players[victim].mob_slot
-    return occupant, state.mobs.picture[occupant] or 1
+    """``(record slot, picture)`` of whatever is drawn in ``cell``."""
+    return cell, state.mobs.picture[cell]
 
 
 def tile_occupancy_test(state: GameState, slot: int) -> bool:
@@ -2463,8 +2418,8 @@ def _supersorc_too_crowded(state: GameState, dest: int, self_slot: int) -> bool:
     for s in state.mobs.iter_chain():
         if s == self_slot or state.mobs.picture[s] == 0:
             continue
-        if (abs((state.mobs.hpos[s] & POS_FIELD_MASK) - dest_h) <= _SUPERSORC_PROXIMITY
-                and abs((state.mobs.vpos[s] & POS_FIELD_MASK) - dest_v)
+        if (abs(position_field(state.mobs.hpos[s]) - dest_h) <= _SUPERSORC_PROXIMITY
+                and abs(position_field(state.mobs.vpos[s]) - dest_v)
                 <= _SUPERSORC_PROXIMITY):
             return True
     return False
@@ -2484,11 +2439,13 @@ def _supersorc_relocate(state: GameState, slot: int, dest: int,
         return
     if state.monster_iter_ptr == slot:      # 0x410A6: keep the walk marker live
         state.monster_iter_ptr = dest
-    low_h = state.mobs.hpos[slot] & POS_LOW_MASK
-    low_v = state.mobs.vpos[slot] & POS_LOW_MASK
+    low_h = low_field(state.mobs.hpos[slot])
+    low_v = low_field(state.mobs.vpos[slot])
     x = (dest & 0x1F) * 16
     y = (dest >> 5) * 16
     state.mobs.move_slot(slot, dest)
-    state.mobs.hpos[dest] = ((x & 0x1FF) << POS_SHIFT) | low_h
-    state.mobs.vpos[dest] = (native_v(y) << POS_SHIFT) | low_v
+    state.mobs.hpos[dest] = replace_position(low_h, encode_hpos(x))
+    state.mobs.vpos[dest] = replace_position(
+        low_v, encode_vpos_at_y(y),
+    )
     _set_direction(state, dest, direction)

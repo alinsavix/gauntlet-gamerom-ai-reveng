@@ -429,9 +429,10 @@ class TestVisibleMobsCoverEverythingOnScreen:
             x, _flags, _pal = coords.decode_hpos(state.mobs.hpos[slot])
             v, width, height = coords.decode_vpos(state.mobs.vpos[slot])
             y = coords.sprite_top_y(v, height * 8)
+            x_candidates = (x - 512, x, x + 512) if state.wrap_h else (x,)
             draw_x = next(
                 (
-                    candidate for candidate in (x - 512, x, x + 512)
+                    candidate for candidate in x_candidates
                     if candidate + width * 8 > scroll_x
                     and candidate < scroll_x + viewport_w
                 ),
@@ -514,28 +515,31 @@ class TestVisibleMobsCoverEverythingOnScreen:
         assert self._visible(state, 0, y + coords.CELL_PIXELS - 1) == [slot]
         assert self._visible(state, 0, y + coords.CELL_PIXELS) == []
 
-    def test_a_hero_stays_visible_after_walking_away_from_its_spawn_row(self):
-        """gauntpy's heroes break the rule bands rely on. A monster's record
-        *moves* as it walks (``MobTable.move_slot`` -- "identity is location"),
-        but a player keeps the PLAYERSTART slot they spawned into for the whole
-        level (``players.player_start_inner``; ``player_move`` only rewrites
-        H/V), so their band stays their spawn row's. Culling on it made the
-        hero disappear as soon as the camera scrolled past that row -- which is
-        the moment you walk half a screen from where you came in.
+    def test_a_hero_walks_its_band_along_with_it(self):
+        """A hero obeys the rule bands rely on, like every other creature.
+
+        ``players.migrate_player_record`` moves the record into the cell the
+        hero stands in (``MobTable.move_slot`` -- "identity is location"), so
+        the band the chain walk enters at follows the sprite down the maze and
+        the plain geometric window is all the renderer needs.
         """
         state = GameState()
-        slot = _place(state.mobs, row=2, col=8, picture=0x1E0D,
-                      obj_type=MazeObjIds.PLAYERSTART, size=3)
+        spawn = _place(state.mobs, row=2, col=8, picture=0x1E0D,
+                       obj_type=MazeObjIds.PLAYERSTART, size=3)
         player = state.players[0]
-        player.mob_slot = slot
+        player.mob_slot = spawn
         player.status = int(PlayerStatus.ALIVE_HERE)
 
-        state.mobs.vpos[slot] = coords.encode_vpos_at_y(320, 3, 3)   # walked 18 rows down
-        assert state.mobs.band_of(slot) == 4, "the record never left row 2"
+        walked = coords.pack_slot(20, 8)                    # 18 rows down
+        state.mobs.vpos[spawn] = coords.encode_vpos_at_y(320, 3, 3)
+        state.mobs.move_slot(spawn, walked)
+        player.mob_slot = walked
+        assert state.mobs.picture[spawn] == 0, "the spawn cell is vacated"
+        assert state.mobs.band_of(walked) == 40, "the band came with it"
 
         for scroll_y in (0, 100, 200, 272):
             assert self._visible(state, 0, scroll_y) == self._reference(state, 0, scroll_y), scroll_y
-        assert slot in self._visible(state, 0, 200)
+        assert walked in self._visible(state, 0, 200)
 
     def test_the_walk_still_enters_late_and_stops_early(self):
         """The band window is widened by a fixed, documented amount, not
@@ -554,6 +558,25 @@ class TestVisibleMobsCoverEverythingOnScreen:
         # point rather than merely filtered out afterwards.
         _place(state.mobs, row=1, col=1, picture=0x10)
         assert state.mobs.band_of(coords.pack_slot(1, 1)) < first
+
+    def test_nonwrapping_left_edge_does_not_draw_a_right_edge_mob(self):
+        state = GameState(wrap_h=False)
+        slot = _place(state.mobs, row=6, col=31, picture=0x300, size=3)
+        state.mobs.hpos[slot] = coords.encode_hpos(500)
+
+        visible = list(iter_visible_mobs(state, 0, 0, 336, 240))
+
+        assert all(info.slot != slot for info in visible)
+
+    def test_wrapping_left_edge_draws_a_right_edge_mob_across_the_seam(self):
+        state = GameState(wrap_h=True)
+        slot = _place(state.mobs, row=6, col=31, picture=0x300, size=3)
+        state.mobs.hpos[slot] = coords.encode_hpos(500)
+
+        visible = list(iter_visible_mobs(state, 0, 0, 336, 240))
+
+        info = next(info for info in visible if info.slot == slot)
+        assert info.x == -12
 
 
 class TestSpriteKind:
@@ -1525,15 +1548,69 @@ class TestExitAnimation:
         assert palettes[0][13] == IRGB(0xFFFF).to_rgba()
         assert palettes[1][13] == IRGB(0x8F00).to_rgba()
 
-    def test_trap_and_stun_palettes_use_the_vblank_pulse_words(self):
+    def test_animated_floor_palettes_use_their_live_color_words(self):
         from gex.palettes import IRGB, S_COLORS_1, S_COLORS_2
 
         trap = playfield._animated_floor_palette("trap", 0, 0x4044)
         stun = playfield._animated_floor_palette("stun", 0, 0xEEE0)
+        forcefield = playfield._animated_floor_palette(
+            "forcefield", 0, 0x9FFF,
+        )
 
         for index in (0, S_COLORS_1[0], S_COLORS_2[0]):
             assert trap[index] == IRGB(0x4044).to_rgba()
             assert stun[index] == IRGB(0xEEE0).to_rgba()
+            assert forcefield[index] == IRGB(0x9FFF).to_rgba()
+
+    def test_live_forcefield_cells_expand_the_runtime_segment_table(self):
+        state = GameState()
+        state.forcefield_segments = [
+            0x8000 | (3 << 10) | coords.pack_slot(5, 3),
+            0x4000 | (3 << 10) | coords.pack_slot(30, 8),
+        ]
+
+        assert playfield._live_forcefield_cells(state) == {
+            (4, 5), (5, 5), (6, 5),
+            (8, 31), (8, 0), (8, 1),
+        }
+
+    def test_forcefield_beam_is_redrawn_with_the_live_cycle_color(self, monkeypatch):
+        from gex.palettes import IRGB, S_COLORS_1
+
+        class Maze:
+            data = {
+                (3, 5): int(MazeObjIds.FORCEFIELDHUB),
+                (7, 5): int(MazeObjIds.FORCEFIELDHUB),
+            }
+            floorpattern = 0
+            floorcolor = 0
+            wallpattern = 0
+            wallcolor = 0
+
+        cache = self._cache()
+        cache.maze_object = Maze()
+        cache.floor_variants = (0,) * (32 * 32)
+        state = GameState(forcefield_color=0xF00F)
+        state.forcefield_segments = [
+            0x8000 | (3 << 10) | coords.pack_slot(5, 3),
+        ]
+        calls = []
+        monkeypatch.setattr(
+            playfield, "_blit_descriptor",
+            lambda fb, descriptor, cell, palette, sx, sy, viewport, **kwargs:
+                calls.append((cell, palette[S_COLORS_1[0]])),
+        )
+
+        playfield.draw_animated_floor_tiles(
+            Framebuffer(240, 240), cache, state, 0, 0, PLAYFIELD_VIEWPORT,
+        )
+
+        assert {cell for cell, _color in calls} == {
+            coords.pack_slot(5, 4),
+            coords.pack_slot(5, 5),
+            coords.pack_slot(5, 6),
+        }
+        assert all(color == IRGB(0xF00F).to_rgba() for _cell, color in calls)
 
     def test_exit_overlay_wraps_with_the_hardware_viewport(self, monkeypatch):
         import gex.render
@@ -1922,6 +1999,25 @@ class TestRenderFrame:
         assert fb_a.image.tobytes() == fb_fresh.image.tobytes() == fb_b.image.tobytes()
 
 
+class TestDoorsUseTheMobLayer:
+    def test_door_types_are_not_baked_into_the_playfield_raster(self):
+        from types import SimpleNamespace
+
+        maze = SimpleNamespace(
+            data={(5, 5): int(MazeObjIds.DOOR_HORIZ)},
+            floorpattern=0,
+            floorcolor=0,
+            wallpattern=0,
+            wallcolor=0,
+        )
+
+        assert int(MazeObjIds.DOOR_HORIZ) not in playfield.TERRAIN_TYPES
+        assert int(MazeObjIds.DOOR_VERT) not in playfield.TERRAIN_TYPES
+        assert playfield._terrain_stamp(
+            maze, 5, 5, int(MazeObjIds.DOOR_HORIZ), None,
+        ) == (None, 0)
+
+
 # ---------------------------------------------------------------------------
 # Playfield golden-image comparison against gex's genpfimage -- needs ROMs.
 #
@@ -1997,8 +2093,12 @@ class TestPlayfieldMatchesGexReference:
         }
         contaminated = set(dynamic_cells)
         for dx, dy in dynamic_cells:
-            for oy in range(-2, 3):
-                for ox in range(-2, 3):
+            dynamic_type = whatis(maze_ours, dx, dy)
+            radius = 0 if dynamic_type in (
+                MazeObjIds.DOOR_HORIZ, MazeObjIds.DOOR_VERT,
+            ) else 2
+            for oy in range(-radius, radius + 1):
+                for ox in range(-radius, radius + 1):
                     contaminated.add((dx + ox, dy + oy))
 
         mismatches = []

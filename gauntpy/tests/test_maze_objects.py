@@ -8,6 +8,7 @@ from gauntpy.constants import GameMode, MazeObjIds
 from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.state import GameState
 from gauntpy.subsystems.maze_objects import (
+    _is_blank_floor,
     check_forcefield_collision,
     forcefield_segments_setup,
     main_cycle_tport_and_ffield,
@@ -18,6 +19,7 @@ from gauntpy.subsystems.maze_objects import (
     open_timed_doors,
     record_transporter_secret_progress,
     select_forcefield_delay_profile,
+    setup_door_graphics,
     setup_random_walls,
 )
 from gauntpy.subsystems.exits import (
@@ -306,6 +308,47 @@ class TestForcefieldSetup:
 
 
 class TestDoorOpening:
+    def test_blank_floor_predicate_keeps_the_rom_row_zero_shortcut(self):
+        state = GameState()
+        slot = pack_slot(0, 5)
+        _place(state, slot, MazeObjIds.WALL_REGULAR, picture=0x8000)
+        state.maze = SimpleNamespace(data={(5, 0): int(MazeObjIds.WALL_REGULAR)})
+
+        assert _is_blank_floor(state, slot)
+
+    def test_connected_horizontal_door_uses_rom_neighbor_picture(self):
+        state = GameState()
+        center = pack_slot(5, 5)
+        left = pack_slot(5, 4)
+        above = pack_slot(4, 5)
+        for slot in (center, left, above):
+            _place(state, slot, MazeObjIds.DOOR_HORIZ, picture=0x9D3C)
+        state.maze = SimpleNamespace(data={
+            (5, 5): int(MazeObjIds.DOOR_HORIZ),
+            (4, 5): int(MazeObjIds.DOOR_HORIZ),
+            (5, 4): int(MazeObjIds.DOOR_HORIZ),
+        })
+
+        setup_door_graphics(state)
+
+        assert state.mobs.picture[center] == 0x9D38
+        assert state.mobs.hpos[center] == 5 << 11
+        assert state.mobs.vpos[center] == (((5 << 11) ^ 0xF800) + 9) & 0xFFFF
+        assert state.mobs.state(center) == 9
+
+    def test_isolated_horizontal_door_uses_orientation_tables(self):
+        state = GameState()
+        slot = pack_slot(5, 5)
+        _place(state, slot, MazeObjIds.DOOR_HORIZ, picture=0x9D3C)
+        state.maze = SimpleNamespace(data={(5, 5): int(MazeObjIds.DOOR_HORIZ)})
+
+        setup_door_graphics(state)
+
+        assert state.mobs.picture[slot] == 0x9D48
+        assert state.mobs.hpos[slot] == 5 << 11
+        assert state.mobs.vpos[slot] == (((5 << 11) ^ 0xF800) + 0x09) & 0xFFFF
+        assert state.mobs.state(slot) == 10
+
     def test_open_front_removes_cells_and_turns_at_a_junction(self):
         state = GameState()
         junction = pack_slot(5, 6)

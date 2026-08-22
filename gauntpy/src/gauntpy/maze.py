@@ -806,6 +806,8 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     # The renderer draws terrain from state.maze, not from the MobTable, so it
     # gets the mirrored view the objects were placed through.
     state.maze = mirror_maze(state, maze)
+    from .subsystems.maze_objects import setup_door_graphics
+    setup_door_graphics(state)
 
     # maze_new_level_setup step 10: rebuild the exit table from the MOBs just
     # placed (0x43B3A-0x43B9A). It has to live on the common load path, not in

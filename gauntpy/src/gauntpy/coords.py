@@ -81,6 +81,16 @@ def pixels_to_slot(x: int, y: int) -> int:
     return pack_slot(y // CELL_PIXELS, x // CELL_PIXELS)
 
 
+def biased_pixels_to_slot(
+    x: int, y: int, *, x_bias: int = 0, y_bias: int = 0,
+) -> int:
+    """Packed cell containing a biased screen-pixel point."""
+    return pack_slot(
+        ((y + y_bias) // CELL_PIXELS) & 0x1F,
+        ((x + x_bias) // CELL_PIXELS) & 0x1F,
+    )
+
+
 # --- MOB hardware word encoding ------------------------------------------------
 #
 # mob_hpos: bits 15-7 X position, bits 6-4 software flags, bits 3-0 palette
@@ -174,6 +184,31 @@ def hpos_x(word: int) -> int:
     return (word >> POS_SHIFT) & POS_VALUE_MASK
 
 
+def position_field(word: int) -> int:
+    """The native position field with all low software bits clear."""
+    return word & POS_FIELD_MASK
+
+
+def low_field(word: int) -> int:
+    """The seven non-position bits preserved by MOB position updates."""
+    return word & POS_LOW_MASK
+
+
+def replace_position(word: int, position_word: int) -> int:
+    """Replace only ``word``'s position field from another native word."""
+    return position_field(position_word) | low_field(word)
+
+
+def add_position(word: int, delta: int) -> int:
+    """Add a native position delta while preserving the low seven bits."""
+    return ((position_field(word) + delta) & POS_FIELD_MASK) | low_field(word)
+
+
+def position_delta(target_word: int, source_word: int) -> int:
+    """Unsigned native-word separation, matching the ROM's ``sub.w``."""
+    return (position_field(target_word) - position_field(source_word)) & 0xFFFF
+
+
 def vpos_v(word: int) -> int:
     """Native upward V pixel of a V word."""
     return (word >> POS_SHIFT) & POS_VALUE_MASK
@@ -181,7 +216,46 @@ def vpos_v(word: int) -> int:
 
 def vpos_y(word: int) -> int:
     """Downward screen Y of a V word -- the rendering/UI boundary conversion."""
-    return screen_y((word >> POS_SHIFT) & POS_VALUE_MASK)
+    return screen_y(vpos_v(word))
+
+
+def mob_words_to_slot(
+    hpos: int, vpos: int, *, x_bias: int = 0, y_bias: int = 0,
+) -> int:
+    """Logical packed cell for native H/V words and an explicit origin bias."""
+    return biased_pixels_to_slot(
+        hpos_x(hpos), vpos_y(vpos), x_bias=x_bias, y_bias=y_bias,
+    )
+
+
+#: The native position units the game adds to a live record's H/V words before
+#: slicing its row and column out of them -- 0x600 (12 px) horizontally and
+#: 0x400 (8 px) up the vertical axis. A creature is 24 px in a 16 px cell and is
+#: stored 4 px to the left of it, so the bias picks the column under the
+#: sprite's centre and hands the row over once the body is more than half way
+#: into the next one.
+CELL_BIAS_H = 0x600
+CELL_BIAS_V = 0x400
+
+
+def mob_cell_of(hpos: int, vpos: int) -> int:
+    """Packed cell a live MOB record belongs in, from its H/V words alone.
+
+    The one rule both movers use, instruction for instruction: a creature's
+    ``monster_loop_core`` (0x41358-0x41374) and a hero's
+    ``player_try_move_core`` (0x424CA-0x424E4) each add ``CELL_BIAS_V`` to V,
+    mask off the low four bits of the resulting row, invert it -- V counts *up*
+    from the playfield floor while rows count down -- and add the biased H
+    column. Because both axes are taken modulo one 512-pixel maze, the result
+    wraps at either seam on its own.
+
+    Not the same as ``mob_words_to_slot(..., y_bias=8)``: the vertical bias is
+    applied in the hardware's upward direction, so the row hands over at
+    ``y % 16 == 9`` rather than 8.
+    """
+    x = ((hpos + CELL_BIAS_H) >> POS_SHIFT) & POS_VALUE_MASK
+    up = ((vpos + CELL_BIAS_V) >> POS_SHIFT) & POS_VALUE_MASK
+    return pack_slot(MAZE_ROWS - 1 - (up // CELL_PIXELS), x // CELL_PIXELS)
 
 
 # --- packed slot -> playfield tile RAM ------------------------------------------

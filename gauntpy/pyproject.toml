@@ -45,6 +45,7 @@ gex = { path = "../python-gex", editable = true }
 [project.scripts]
 gauntpy = "gauntpy.__main__:main"
 gauntpy-play = "gauntpy.play:main"
+gauntpy-scenario = "gauntpy.scenarios:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

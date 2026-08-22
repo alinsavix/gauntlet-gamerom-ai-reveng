@@ -1513,21 +1513,23 @@ class TestIterationAndContact:
         _walk_frames(state, 4)   # must not raise
 
     def test_contact_uses_current_cell_not_spawn_slot(self):
-        """A moved player is hit at their pixel cell, not their spawn mob_slot.
+        """A moved player is hit at the cell its record migrated into.
 
-        Regression for the fixed-slot model: the player's record lives in the
-        spawn slot but their position roams via hpos/vpos, so contact must key
-        off the pixel-derived cell.
+        Identity is location for a hero exactly as it is for a monster
+        (``players.migrate_player_record``), so a creature stepping into the
+        cell the hero now owns finds it there -- no pixel overlay involved.
         """
         state = GameState()
-        spawn_slot = pack_slot(2, 2)          # where the record lives
+        spawn_slot = pack_slot(2, 2)          # where the hero came in
+        current_slot = pack_slot(5, 6)        # where the record now is
         p = state.players[0]
         p.status = PlayerStatus.ALIVE_HERE
-        p.mob_slot = spawn_slot
+        p.mob_slot = current_slot
         p.health = 1000
         state.level_players_active = 1
-        state.mobs.create(spawn_slot, tile=0x100,
-                          hpos=encode_hpos(6 * 16, palette=0),
+        assert state.mobs.picture[spawn_slot] == 0, "the spawn cell is vacated"
+        state.mobs.create(current_slot, tile=0x100,
+                          hpos=encode_hpos(6 * 16 - 4, palette=0x0C),
                           vpos=encode_vpos_at_y(5 * 16),
                           obj_type=int(MazeObjIds.PLAYERSTART), state=0)
 
@@ -1540,7 +1542,7 @@ class TestIterationAndContact:
                                                     flags=_HPOS_FLAG_MOVING)
         _monster_move_engine(state, monster_slot, int(MazeObjIds.MONST_GRUNT), 1, 0)
         assert state.players[0].health < 1000, \
-            "contact must key off the player's current cell, not the spawn slot"
+            "contact must key off the cell the player's record occupies"
 
     def test_surrounding_grunts_damage_a_spawn_aligned_player(self):
         state = GameState()
@@ -2441,12 +2443,17 @@ class TestTileOccupancyTest:
         assert not tile_occupancy_test(state, candidate)
 
     def test_a_hero_walking_through_the_cell_refuses_it(self):
-        """gauntpy leaves a hero's record in the spawn slot and roams by pixel
-        position; the ROM relocates it, so the cell has to resolve either way."""
+        """A hero half way out of the neighbouring cell is still in range.
+
+        The record migrates with the hero, so the eight-neighbour proximity
+        scan is all ``tile_occupancy_test`` needs: a hero whose record has just
+        handed over to (10,9) but whose body still overhangs (10,10) keeps the
+        cell reserved.
+        """
         state = GameState()
-        candidate, record = pack_slot(10, 10), pack_slot(20, 20)
+        candidate, record = pack_slot(10, 10), pack_slot(10, 9)
         _place_player(state, 0, record)
-        state.mobs.hpos[record] = encode_hpos(10 * 16, palette=0x0C)
+        state.mobs.hpos[record] = encode_hpos(10 * 16 - 12, palette=0x0C)
         state.mobs.vpos[record] = encode_vpos_at_y(10 * 16)
 
         assert not tile_occupancy_test(state, candidate)

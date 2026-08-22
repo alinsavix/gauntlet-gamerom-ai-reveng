@@ -560,7 +560,8 @@ class TestForcefieldDamageTable:
         from gauntpy.constants import MazeObjIds
         from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
         slot = pack_slot(5, 5)
-        p.mob_slot = 30
+        # The live record owns the cell it stands in.
+        p.mob_slot = slot
         state.mobs.hpos[p.mob_slot] = encode_hpos(5 * 16)
         state.mobs.vpos[p.mob_slot] = encode_vpos_at_y(5 * 16)
         for hub in (pack_slot(5, 3), pack_slot(5, 7)):
@@ -1416,7 +1417,7 @@ class TestRedrawBitsOnEveryValueChange:
 
         state = _active_state()
         state.forcefield_color = 1
-        p = _make_player_active(state, 0, health=1000)
+        p = _make_player_active(state, 0, health=1000, mob_slot=pack_slot(5, 5))
         state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         for hub in (pack_slot(5, 3), pack_slot(5, 7)):
@@ -1757,9 +1758,16 @@ class TestPlayerTport:
 
     def test_clearance_test_rejects_a_cell_another_player_stands_on(self):
         state, _ = self._world()
-        other = _make_player_active(state, 1, health=500, mob_slot=31)
-        state.mobs.hpos[31] = (10 * 16 + 8) << 7
-        state.mobs.vpos[31] = native_v(4 * 16 + 8) << 7
+        # 8 px past the origin of (4,10) puts the other hero's record in the
+        # neighbouring cell (4,11), which is what the ROM's neighbour scan sees.
+        other_slot = _pack(4, 11)
+        _make_player_active(state, 1, health=500, mob_slot=other_slot)
+        state.mobs.create(
+            other_slot, tile=0x1E0D,
+            hpos=((10 * 16 + 8) << 7) | 0x0D,
+            vpos=native_v(4 * 16 + 8) << 7,
+            obj_type=int(MazeObjIds.PLAYERSTART), state=1,
+        )
         assert not gp.nearby_mob_clearance_test(state, _pack(4, 10), 0)
         assert gp.nearby_mob_clearance_test(state, _pack(4, 10), 1)
 
@@ -1938,6 +1946,25 @@ class TestDeathAnimationSeed:
         gp.main_move_players(state)
         assert state.player_death_anim_frame[0] == 4
 
+    def test_death_clears_the_live_migrated_record_before_reset(self):
+        state = _active_state()
+        slot = (10 << 5) | 10
+        p = _make_player_active(state, 0, health=0, mob_slot=slot)
+        state.level_players_active = 1
+        state.mobs.create(
+            slot, tile=0x1E0D,
+            hpos=(160 << 7) | 0x0C,
+            vpos=native_v(160) << 7,
+            obj_type=int(MazeObjIds.PLAYERSTART),
+            state=0,
+        )
+
+        gp.main_move_players(state)
+
+        assert p.mob_slot == 0
+        assert not state.mobs.is_occupied(slot)
+        assert not state.mobs.is_linked(slot)
+
     def test_player_start_inner_clears_the_death_damage_counter(self):
         state = _active_state()
         state.maze = object()
@@ -2001,7 +2028,7 @@ class TestForcefieldUsesTheSegmentTable:
 
         state = _active_state()
         state.forcefield_color = 1
-        p = _make_player_active(state, 0, health=1000)
+        p = _make_player_active(state, 0, health=1000, mob_slot=pack_slot(5, 5))
         state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         for hub in (pack_slot(5, 3), pack_slot(5, 7)):
@@ -2021,7 +2048,7 @@ class TestForcefieldUsesTheSegmentTable:
 
         state = _active_state()
         state.forcefield_color = 1
-        p = _make_player_active(state, 0, health=1000)
+        p = _make_player_active(state, 0, health=1000, mob_slot=pack_slot(5, 5))
         state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         # horizontal, length 4, hub at (5,3) -- see doc/04 §7.3.
@@ -2038,7 +2065,7 @@ class TestForcefieldUsesTheSegmentTable:
 
         state = _active_state()
         state.forcefield_color = 1
-        p = _make_player_active(state, 0, health=1000)
+        p = _make_player_active(state, 0, health=1000, mob_slot=pack_slot(5, 1))
         state.mobs.hpos[p.mob_slot] = (1 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         # horizontal + wrap, length 4, hub at (5,30): covers 31, 0, 1.
@@ -2118,6 +2145,46 @@ class TestDoorOpeningFronts:
         assert state.door_endpoint_pos[0:2] == [slot - 1, slot + 1]
         assert not state.mobs.is_occupied(slot - 1)
         assert not state.mobs.is_occupied(slot + 1)
+
+    def test_junction_scans_both_axes_in_object_type_order(self):
+        state = _active_state()
+        _make_player_active(state, 0)
+        slot = (8 << 5) | 8
+        state.mobs.create(
+            slot, tile=0x9D38, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.DOOR_HORIZ),
+        )
+        for neighbour in (slot - 1, slot - 0x20):
+            state.mobs.create(
+                neighbour, tile=0x9D3C, hpos=0, vpos=0,
+                obj_type=int(MazeObjIds.DOOR_HORIZ),
+            )
+
+        gp.door_open_start(state, slot, 0)
+
+        assert state.door_endpoint_dir[0:2] == [3, 3]
+        assert state.mobs.picture[slot - 1] == 0
+        assert state.mobs.picture[slot - 0x20] == 0
+        assert state.door_endpoint_pos[0:2] == [slot - 1, slot - 0x20]
+
+    def test_junction_endpoint_scan_rejects_reserved_row_zero(self):
+        state = _active_state()
+        _make_player_active(state, 0)
+        slot = (1 << 5) | 8
+        state.mobs.create(
+            slot, tile=0x9D38, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.DOOR_HORIZ),
+        )
+        reserved = slot - 0x20
+        state.mobs.create(
+            reserved, tile=0x9D3C, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.DOOR_HORIZ),
+        )
+
+        gp.door_open_start(state, slot, 0)
+
+        assert state.door_endpoint_pos[0:2] == [0, 0]
+        assert state.mobs.picture[reserved] == 0x9D3C
 
     def test_a_front_dies_at_the_end_of_the_door_line(self):
         state = _active_state()
@@ -2283,25 +2350,28 @@ class TestDemoDrivesMovementAndFire:
         p = state.players[1]
         p.status = int(PlayerStatus.ALIVE_HERE)
         p.health = 500
+        # The record *is* the cell it stands in, so place it consistently:
+        # slot 40 is row 1 / column 8, and a 24px hero's origin is 4px left of
+        # its cell.
         p.mob_slot = 40
-        state.mobs.hpos[40] = (8 * 16 + 8) << 7
-        state.mobs.vpos[40] = native_v(8 * 16 + 8) << 7
+        state.mobs.hpos[40] = (8 * 16 - 4) << 7
+        state.mobs.vpos[40] = native_v(1 * 16) << 7
         return p
 
     def test_recorded_direction_moves_the_hero(self):
         # 0xE3: bit 4 (RIGHT) clear -> right held, buttons released.
         state = _demo_state([[], [40, 0xE3], [], []])
         p = self._elf(state)
-        x0 = hpos_x(state.mobs.hpos[40])
+        x0 = hpos_x(state.mobs.hpos[p.mob_slot])
         gp.main_move_players(state)
-        assert hpos_x(state.mobs.hpos[40]) > x0
+        assert hpos_x(state.mobs.hpos[p.mob_slot]) > x0
 
     def test_idle_record_moves_nothing(self):
         state = _demo_state([[], [40, 0xF3], [], []])
-        self._elf(state)
-        x0 = hpos_x(state.mobs.hpos[40])
+        p = self._elf(state)
+        x0 = hpos_x(state.mobs.hpos[p.mob_slot])
         gp.main_move_players(state)
-        assert hpos_x(state.mobs.hpos[40]) == x0
+        assert hpos_x(state.mobs.hpos[p.mob_slot]) == x0
 
     def test_recorded_fire_plays_the_throw_before_creating_a_shot(self):
         # 0xF1: bit 1 (FIRE) clear -> fire held.
@@ -2316,11 +2386,11 @@ class TestDemoDrivesMovementAndFire:
 
     def test_hardware_input_cannot_drive_a_demo_hero(self):
         state = _demo_state([[], [40, 0xF3], [], []])
-        self._elf(state)
+        p = self._elf(state)
         state.player_input_raw[1] = 0xFFFF & ~0x10   # RIGHT held on the cabinet
-        x0 = hpos_x(state.mobs.hpos[40])
+        x0 = hpos_x(state.mobs.hpos[p.mob_slot])
         gp.main_move_players(state)
-        assert hpos_x(state.mobs.hpos[40]) == x0
+        assert hpos_x(state.mobs.hpos[p.mob_slot]) == x0
 
 
 class TestDemoJoinRecords:
@@ -2641,7 +2711,7 @@ class TestPickupDialogs:
 
         state = _active_state()
         state.forcefield_color = 1
-        p = _make_player_active(state, 0, health=1000)
+        p = _make_player_active(state, 0, health=1000, mob_slot=pack_slot(5, 5))
         state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         for hub in (pack_slot(5, 3), pack_slot(5, 7)):
@@ -2932,10 +3002,16 @@ class TestTransportTransition:
 
     def _world(self):
         state = _active_state()
-        p = _make_player_active(state, 0, health=500, mob_slot=30)
-        state.mobs.hpos[30] = (5 * 16 + 8) << 7
-        state.mobs.vpos[30] = native_v(5 * 16 + 8) << 7
-        state.mobs.picture[30] = self._HERO_PICTURE
+        player_slot = _pack(5, 6)
+        p = _make_player_active(state, 0, health=500, mob_slot=player_slot)
+        state.mobs.create(
+            player_slot,
+            tile=self._HERO_PICTURE,
+            hpos=(5 * 16 + 8) << 7,
+            vpos=native_v(5 * 16 + 8) << 7,
+            obj_type=int(MazeObjIds.PLAYERSTART),
+            state=0,
+        )
         for row, col in ((5, 5), (5, 9)):
             state.mobs.create(_pack(row, col), tile=0, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.TRANSPORTER))
@@ -2954,11 +3030,12 @@ class TestTransportTransition:
         for frame in range(frames):
             state.frame_counter = frame
             self._frame(state)
+            player_slot = state.players[0].mob_slot
             trace.append((
                 state.player_tport_phase[0],
-                state.mobs.picture[30],
-                hpos_x(state.mobs.hpos[30]),
-                vpos_y(state.mobs.vpos[30]),
+                state.mobs.picture[player_slot],
+                hpos_x(state.mobs.hpos[player_slot]),
+                vpos_y(state.mobs.vpos[player_slot]),
                 state.mobs.picture[0x19],
             ))
             if state.player_tport_phase[0] < 0:
@@ -2996,9 +3073,11 @@ class TestTransportTransition:
         trace = self._run(state)
         assert trace[-1][0] < 0, "phase returns to its idle sentinel"
         assert state.mobs.picture[0x19] == 0, "the animation MOB is released"
-        assert hpos_x(state.mobs.hpos[30]), vpos_y(state.mobs.vpos[30]) == (
-            10 * 16 - 4, 4 * 16,
-        )
+        slot = state.players[0].mob_slot
+        assert (
+            hpos_x(state.mobs.hpos[slot]),
+            vpos_y(state.mobs.vpos[slot]),
+        ) == (10 * 16 - 4, 4 * 16)
 
     def test_gameplay_is_frozen_while_in_flight(self):
         """0x4A7E8: a non-negative phase skips the rest of the active path."""
@@ -3042,9 +3121,11 @@ class TestTransportTransition:
         assert gp.player_tport(state, 0, _pack(5, 9)) == -2
         trace = self._run(state)
         assert trace[-1][0] < 0
-        assert hpos_x(state.mobs.hpos[30]), vpos_y(state.mobs.vpos[30]) == (
-            6 * 16 - 4, 4 * 16,
-        )
+        slot = state.players[0].mob_slot
+        assert (
+            hpos_x(state.mobs.hpos[slot]),
+            vpos_y(state.mobs.vpos[slot]),
+        ) == (6 * 16 - 4, 4 * 16)
 
     def test_a_full_game_frame_drives_it(self):
         """Through ``tick`` -- every loop member in its real order."""
@@ -3057,10 +3138,12 @@ class TestTransportTransition:
             if state.player_tport_phase[0] < 0:
                 break
         assert state.player_tport_phase[0] < 0
-        assert state.mobs.picture[30] == self._HERO_PICTURE
-        assert hpos_x(state.mobs.hpos[30]), vpos_y(state.mobs.vpos[30]) == (
-            10 * 16 - 4, 4 * 16,
-        )
+        slot = state.players[0].mob_slot
+        assert state.mobs.picture[slot] == self._HERO_PICTURE
+        assert (
+            hpos_x(state.mobs.hpos[slot]),
+            vpos_y(state.mobs.vpos[slot]),
+        ) == (10 * 16 - 4, 4 * 16)
 
 
 class TestCornerSqueezeUsesTheSameTransition:
@@ -3069,31 +3152,41 @@ class TestCornerSqueezeUsesTheSameTransition:
         from gauntpy.constants import PlayerPower
 
         state = _active_state()
-        p = _make_player_active(state, 0, health=500, mob_slot=30)
+        player_slot = _pack(5, 6)
+        p = _make_player_active(state, 0, health=500, mob_slot=player_slot)
         p.powers = int(PlayerPower.TRANSPORT)
-        state.mobs.hpos[30] = (5 * 16 + 8) << 7
-        state.mobs.vpos[30] = native_v(5 * 16 + 8) << 7
-        state.mobs.picture[30] = 0x1E0D
+        state.mobs.create(
+            player_slot,
+            tile=0x1E0D,
+            hpos=(5 * 16 + 8) << 7,
+            vpos=native_v(5 * 16 + 8) << 7,
+            obj_type=int(MazeObjIds.PLAYERSTART),
+            state=0,
+        )
         state.movement_type = 1
         return state, p
 
     def test_it_arms_rather_than_commits(self):
-        state, _ = self._world()
-        before = (state.mobs.hpos[30], state.mobs.vpos[30])
+        state, player = self._world()
+        before = (
+            state.mobs.hpos[player.mob_slot], state.mobs.vpos[player.mob_slot],
+        )
 
         assert gp.corner_squeeze_geometry(
-            state, _pack(5, 5), 0, 0x10,        # JOY_RIGHT
+            state, player.mob_slot, 0, 0x10,        # JOY_RIGHT
         ) == -2
 
         assert state.player_tport_phase[0] == 0
         assert state.mobs.picture[0x19] == gp._TPORT_ARRIVAL_PICTURE
-        assert (state.mobs.hpos[30], state.mobs.vpos[30]) == before
+        assert (
+            state.mobs.hpos[player.mob_slot], state.mobs.vpos[player.mob_slot],
+        ) == before
 
     def test_it_completes_through_loop_2(self):
         from gauntpy.subsystems.score import main_score_update
 
-        state, _ = self._world()
-        gp.corner_squeeze_geometry(state, _pack(5, 5), 0, 0x10)
+        state, player = self._world()
+        gp.corner_squeeze_geometry(state, player.mob_slot, 0, 0x10)
         target = state.player_tile_pos[0]
         for frame in range(80):
             state.frame_counter = frame
@@ -3102,8 +3195,9 @@ class TestCornerSqueezeUsesTheSameTransition:
             if state.player_tport_phase[0] < 0:
                 break
         assert state.player_tport_phase[0] < 0
-        assert hpos_x(state.mobs.hpos[30]) == (target & 0x1F) * 16 - 4
-        assert vpos_y(state.mobs.vpos[30]) == (target >> 5) * 16
+        slot = state.players[0].mob_slot
+        assert hpos_x(state.mobs.hpos[slot]) == (target & 0x1F) * 16 - 4
+        assert vpos_y(state.mobs.vpos[slot]) == (target >> 5) * 16
 
 
 # =============================================================================
@@ -3646,6 +3740,7 @@ class TestStunDelayGate:
 
         state, p = self._moving_state(stundelay=5)
         state.forcefield_color = 1
+        p.mob_slot = pack_slot(5, 5)
         state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         state.forcefield_segments = [0x8000 | (3 << 10) | pack_slot(5, 3)]
@@ -3667,7 +3762,7 @@ class TestForcefieldIsChargedAfterTheMove:
         from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
 
         state = _active_state()
-        p = _make_player_active(state, 0, health=1000)
+        p = _make_player_active(state, 0, health=1000, mob_slot=pack_slot(5, 4))
         # The hero starts one cell to the left of the beam.
         state.mobs.hpos[p.mob_slot] = (4 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
@@ -3676,8 +3771,11 @@ class TestForcefieldIsChargedAfterTheMove:
         state.forcefield_segments_ready = True
         state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
 
-        def _step(st, index, delta, flags):
+        def _step(st, index, delta, flags, *, track_thief=True):
+            # The real mover writes H/V and migrates the record inside
+            # ``player_try_move``, before the forcefield check at 0x4AA42.
             st.mobs.hpos[st.players[index].mob_slot] = (5 * 16) << 7
+            gp.migrate_player_record(st, index)
 
         monkeypatch.setattr(gp, "player_try_move", _step)
 
@@ -4245,16 +4343,16 @@ class TestPostLoopIsNormalPlayOnly:
         p.status = int(PlayerStatus.ALIVE_HERE)
         p.health = 500
         p.mob_slot = 40
-        state.mobs.hpos[40] = (8 * 16 + 8) << 7
-        state.mobs.vpos[40] = native_v(8 * 16 + 8) << 7
+        state.mobs.hpos[40] = (8 * 16 - 4) << 7
+        state.mobs.vpos[40] = native_v(1 * 16) << 7
         return p
 
     def _normal_hero(self, state: GameState) -> Player:
         from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
 
         p = _make_player_active(state, 1, health=500, mob_slot=40)
-        state.mobs.hpos[40] = (8 * 16 + 8) << 7
-        state.mobs.vpos[40] = native_v(8 * 16 + 8) << 7
+        state.mobs.hpos[40] = (8 * 16 - 4) << 7
+        state.mobs.vpos[40] = native_v(1 * 16) << 7
         state.player_input_raw[1] = JOY_IDLE & ~JOY_RIGHT
         return p
 
@@ -4262,21 +4360,19 @@ class TestPostLoopIsNormalPlayOnly:
 
     def test_the_demo_hero_still_moves(self):
         state = _demo_state([[], [40, self._RIGHT_HELD], [], []])
-        self._demo_hero(state)
-        x0 = hpos_x(state.mobs.hpos[40])
+        p = self._demo_hero(state)
+        x0 = hpos_x(state.mobs.hpos[p.mob_slot])
         gp.main_move_players(state)
-        assert hpos_x(state.mobs.hpos[40]) > x0, (
+        assert hpos_x(state.mobs.hpos[p.mob_slot]) > x0, (
             "the demo arm at 0x4A8F2 rejoins the common path at 0x4A908"
         )
 
     def test_the_demo_hero_still_picks_things_up(self):
         state = _demo_state([[], [40, 0xF3], [], []])
         p = self._demo_hero(state)
-        # The cell the hero is standing in, which the tile pass will visit.
-        food_slot = gp._pixel_to_slot(
-            hpos_x(state.mobs.hpos[p.mob_slot]),
-            vpos_y(state.mobs.vpos[p.mob_slot]),
-        )
+        # The cell next door, which the hero walks into on the tile pass.
+        food_slot = p.mob_slot + 1
+        state.mobs.hpos[p.mob_slot] = (9 * 16 - 4) << 7
         state.mobs.create(food_slot, tile=gp._WHOLESOME_FOOD_PICTURE,
                           hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.FOOD_DESTRUCTABLE))

@@ -117,6 +117,11 @@ looping-sound timer that plays the buzz on first touch and a silencer sound
 when you break away. A forcefield never blocks movement the way a wall does.
 The whole design is a timing puzzle: watch the flicker, cross in the dark.
 
+The visible beam uses that same live color word. Each VBLANK writes it into the
+forcefield entries of all three selected playfield palettes, so the segment
+cells must be re-paletted every frame even though the maze's tile raster is
+otherwise cached.
+
 The hubs themselves use the 0x8000 marker picture, so setup must recognize a
 far hub before applying the ordinary marker-blocker test. Reversing that order
 records no segment: the colors still cycle, but every later lit phase is
@@ -128,6 +133,11 @@ Gauntlet II's signature trick is that a wall is a *claim*, and several
 subsystems are allowed to revise it. All of them exploit the same fact: a wall
 is a logical type in a slot, and the graphic is derived. Change the type,
 redraw the cell and its neighbors, done.
+
+Doors are the exception to the apparent "terrain stamp" model: the door
+updater selects a live MOB picture and position for each door cell. Horizontal
+runs are therefore chains of correctly oriented MOB segments, not overlapping
+2×2 playfield stamps.
 
 **Cyclic walls.** Maze records can mark wall groups one, two, and three. When
 the level's cyclic flag is set, a two-second timer advances a phase counter
