@@ -113,6 +113,13 @@ second row.) The consequences cascade:
 - When a monster moves to a new cell, the game *moves its record* to the
   new slot: a helper inserts the destination slot into the chain, copies
   the five words, and unlinks the source. Identity is location.
+- Heroes are no exception. A player's record starts life as the marker MOB
+  standing on the level's PLAYERSTART, and from then on it migrates cell by
+  cell exactly as a monster's does, carrying its picture, its live position
+  words, its object type and the state word that says whose hero it is. That
+  is why a shot probing a cell finds a player there, why a monster cannot walk
+  into the square you are standing on, and why the display's band table knows
+  where to start drawing you.
 
 A thousand-slot table of which perhaps a couple hundred are occupied might
 look wasteful, and the trade is deliberate: 10 bytes per slot buys the

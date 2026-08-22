@@ -34,7 +34,7 @@ class Player:
     keysnum: int = 0                            # 0x90405A, byte
     potionsnum: int = 0                         # 0x904055, byte
     bonusmult: int = 1                          # player_bonusmult
-    mob_slot: int = 0                           # active_mob_ids
+    mob_slot: int = 0                           # active_mob_ids: the live cell
     direction: int = 0                          # facing, 0-7
     anim_counter: int = 0
     state_timer: int = 0xFFFF                   # 0x904A26, low-health cadence
@@ -554,7 +554,9 @@ class GameState:
     scroll_x: int = 0
     scroll_y: int = 0
     # 0x904BD8: per-player tile position for camera extent calculation.
-    # Each entry is the packed slot (row<<5|col) of that player's tile.
+    # Each entry is the packed slot (row<<5|col) of that player's cell, which
+    # is ``Player.mob_slot`` itself except on the rare frame where an occupied
+    # destination held the migrating record back (players.migrate_player_record).
     player_tile_pos: list[int] = field(default_factory=lambda: [0] * 4)
     # 0x904BCE: per-player "in maze" flag (nonzero = camera should track this player)
     player_in_maze: list[int] = field(default_factory=lambda: [0] * 4)

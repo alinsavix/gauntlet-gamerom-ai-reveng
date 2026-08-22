@@ -41,7 +41,10 @@ next touch them:
 from __future__ import annotations
 
 from ..constants import MazeObjIds
-from ..coords import POS_FIELD_MASK, POS_LOW_MASK, POS_SHIFT, hpos_x, vpos_y
+from ..coords import (
+    POS_FIELD_MASK, POS_SHIFT,
+    hpos_x, position_field, replace_position, vpos_y,
+)
 from ..state import GameState
 
 CONSUMED = -1      # resolve_shot_hit: mob_unlink(shooter) + picture cleared
@@ -330,12 +333,6 @@ _DOOR_LIMIT = 0x02C0
 _PRIZE_HIDDENPOT_BASE = 0xA728
 _GAME_MODE_SECRET = -3           # 0xFFFD, the secret-room game mode
 
-# The split of a MOB H/V word into "position" and "everything else".  The ROM
-# masks with 0xFF80 / 0x7F (0x479EA, 0x479FA) and so does ``coords``.
-_POS_FIELD_MASK = POS_FIELD_MASK
-_POS_LOW_MASK = POS_LOW_MASK
-
-
 # =============================================================================
 # Small shared helpers
 # =============================================================================
@@ -561,10 +558,10 @@ def _place_effect(state: GameState, effect_slot: int, source_slot: int,
     """Install a temporary effect MOB at a tile-aligned source position."""
     state.mobs.picture[effect_slot] = picture
     state.mobs.hpos[effect_slot] = (
-        (state.mobs.hpos[source_slot] & POS_FIELD_MASK) + 1
+        position_field(state.mobs.hpos[source_slot]) + 1
     ) & 0xFFFF
     state.mobs.vpos[effect_slot] = (
-        (state.mobs.vpos[source_slot] & POS_FIELD_MASK) + vpos_add
+        position_field(state.mobs.vpos[source_slot]) + vpos_add
     ) & 0xFFFF
     state.mobs.insert(effect_slot, depth_key=source_slot)
     state.mob_effect_anim_counter[effect_slot - 0x0D] = counter & 0xFF
@@ -1348,8 +1345,8 @@ def playfield_showscore(state: GameState, slot: int, popup: int) -> None:
         mobs.picture[popup_slot] = _SCORE_POPUP_PICTURE[
             popup % len(_SCORE_POPUP_PICTURE)
         ]
-        hpos = mobs.hpos[slot] & POS_FIELD_MASK
-        vpos = _u16((mobs.vpos[slot] & POS_FIELD_MASK) + 0x400)
+        hpos = position_field(mobs.hpos[slot])
+        vpos = _u16(position_field(mobs.vpos[slot]) + 0x400)
         if popup < 0x0A:
             hpos += 5           # 0x4954A: palette 5, three tiles wide
             vpos = _u16(vpos + 0x10)
@@ -1558,64 +1555,44 @@ def _candidate_core(state: GameState, index: int, shooter_id: int,
         # follows the arrays.
         return None
 
-    cell_slot = index >> 1
-    candidates: list[int] = []
-    if mobs.picture[cell_slot] and index != self_index:
-        candidates.append(cell_slot)
+    slot = index >> 1
+    if mobs.picture[slot] == 0 or index == self_index:
+        # 0x40AA6/0x40AAE: an empty cell, or the shooter's own record, is not a
+        # candidate. A live hero *is* one -- its record migrates into the cell
+        # it stands in, so the probe finds it here like any other occupant.
+        return None
 
-    # Player records remain in their PLAYERSTART slot in gauntpy while their
-    # live H/V words roam the maze. The ROM migrates the record itself, so an
-    # otherwise empty cell probe finds the player directly. Keep this overlay as
-    # an additional candidate; it must never replace a real monster in the cell.
-    for player in state.players:
-        if not player.active or not player.mob_slot:
-            continue
-        player_x = hpos_x(state.mobs.hpos[player.mob_slot])
-        player_y = vpos_y(state.mobs.vpos[player.mob_slot])
-        player_cell = (
-            (((player_y >> 4) & 0x1F) << 5)
-            | (((player_x + 12) >> 4) & 0x1F)
+    picture = mobs.picture[slot]
+    if picture & 0x8000:
+        # 0x40B02: a static playfield tile is snapped to its cell first.
+        sep_h = _u16(((mobs.hpos[slot] + 0x280) & 0xF800) - shot_h)
+        sep_v = _u16(((mobs.vpos[slot] + 0x100) & 0xF800) - shot_v)
+    else:
+        sep_h = _u16(
+            position_field(mobs.hpos[slot]) - shot_h + 0x200
         )
-        if (
-            player_cell == cell_slot
-            and player.mob_slot * 2 != self_index
-            and player.mob_slot not in candidates
-        ):
-            candidates.append(player.mob_slot)
+        sep_v = _u16(
+            position_field(mobs.vpos[slot]) - shot_v
+        )
 
-    for slot in candidates:
-        picture = mobs.picture[slot]
-        if picture & 0x8000:
-            # 0x40B02: a static playfield tile is snapped to its cell first.
-            sep_h = _u16(((mobs.hpos[slot] + 0x280) & 0xF800) - shot_h)
-            sep_v = _u16(((mobs.vpos[slot] + 0x100) & 0xF800) - shot_v)
-        else:
-            sep_h = _u16(
-                (mobs.hpos[slot] & POS_FIELD_MASK) - shot_h + 0x200
-            )
-            sep_v = _u16(
-                (mobs.vpos[slot] & POS_FIELD_MASK) - shot_v
-            )
+    state.shot_sep_h = sep_h
+    folded_h = sep_h ^ POS_FIELD_MASK if sep_h & 0x8000 else sep_h
+    if folded_h >= width:
+        return None
+    state.shot_sep_h_abs = folded_h
 
-        state.shot_sep_h = sep_h
-        folded_h = sep_h ^ POS_FIELD_MASK if sep_h & 0x8000 else sep_h
-        if folded_h >= width:
-            continue
-        state.shot_sep_h_abs = folded_h
+    state.shot_sep_v = sep_v
+    folded_v = sep_v ^ POS_FIELD_MASK if sep_v & 0x8000 else sep_v
+    if folded_v >= width:
+        return None
+    state.shot_sep_v_abs = folded_v
 
-        state.shot_sep_v = sep_v
-        folded_v = sep_v ^ POS_FIELD_MASK if sep_v & 0x8000 else sep_v
-        if folded_v >= width:
-            continue
-        state.shot_sep_v_abs = folded_v
+    if span < _u16(folded_v + folded_h):
+        return None
 
-        if span < _u16(folded_v + folded_h):
-            continue
-
-        if maxtier and _MAXTIER_PASS_TBL[mobs.obj_type(slot)] != 0:
-            continue     # 0x40B3A: this type ignores a max-tier shot
-        return slot
-    return None
+    if maxtier and _MAXTIER_PASS_TBL[mobs.obj_type(slot)] != 0:
+        return None      # 0x40B3A: this type ignores a max-tier shot
+    return slot
 
 
 def _wrap_allowed(state: GameState, shooter_id: int) -> bool:
@@ -1658,8 +1635,8 @@ def shot_mob_collision(state: GameState, cell: int, shooter_id: int) -> int:
     shot_v = mobs.vpos[slot]
     if maxtier:
         shot_h = _u16(shot_h + _MAXTIER_H_BIAS)
-    shot_h &= POS_FIELD_MASK
-    shot_v &= POS_FIELD_MASK
+    shot_h = position_field(shot_h)
+    shot_v = position_field(shot_v)
 
     self_index = _u16(_shot_owner(state, shooter_id) * 2)
     if shooter_id < 4 and state.reflect_count[shooter_id] != 4:
@@ -2021,8 +1998,8 @@ def lobber_accumulator_seed(state: GameState, shooter_id: int) -> None:
     """
     lobber = shooter_id - 8
     slot = _shot_slot(shooter_id)
-    state.lobber_shot_h_accum[lobber] = state.mobs.hpos[slot] & POS_FIELD_MASK
-    state.lobber_shot_v_accum[lobber] = state.mobs.vpos[slot] & POS_FIELD_MASK
+    state.lobber_shot_h_accum[lobber] = position_field(state.mobs.hpos[slot])
+    state.lobber_shot_v_accum[lobber] = position_field(state.mobs.vpos[slot])
 
 
 def _advance_lobber(state: GameState, shooter_id: int) -> None:
@@ -2044,9 +2021,8 @@ def _advance_lobber(state: GameState, shooter_id: int) -> None:
 
     The ROM writes ``hpos = (accum & 0xFF80) + (hpos & 0x7F)``, i.e. it keeps
     the channel's palette/flags (and, vertically, its sprite size) untouched
-    and replaces only the position field.  Those are exactly
-    ``_POS_FIELD_MASK``/``_POS_LOW_MASK``, and the creators store the ROM's own
-    vector.
+    and replaces only the position field. ``coords.replace_position`` performs
+    that split, and the creators store the ROM's own vector.
 
     ``shot_dx/dy`` are deliberately left alone: the vector never changes
     during a rock's flight, so ``monster_create_shot``'s rounded seed still
@@ -2062,10 +2038,8 @@ def _advance_lobber(state: GameState, shooter_id: int) -> None:
     state.lobber_shot_h_accum[lobber] = accum_h
     state.lobber_shot_v_accum[lobber] = accum_v
 
-    state.mobs.hpos[slot] = _u16((accum_h & _POS_FIELD_MASK)
-                                 + (state.mobs.hpos[slot] & _POS_LOW_MASK))
-    state.mobs.vpos[slot] = _u16((accum_v & _POS_FIELD_MASK)
-                                 + (state.mobs.vpos[slot] & _POS_LOW_MASK))
+    state.mobs.hpos[slot] = replace_position(state.mobs.hpos[slot], accum_h)
+    state.mobs.vpos[slot] = replace_position(state.mobs.vpos[slot], accum_v)
 
 
 def _advance_position(state: GameState, shooter_id: int, direction: int) -> None:

@@ -597,6 +597,20 @@ class TestMobCollisionDispatch:
 
         assert state.rng.seed != seed_before
 
+    def test_demo_actor_uses_normal_monster_melee(self):
+        state = GameState(game_mode=GameMode.DEMO)
+        _active_player_at(state, 0, (10 << 5) | 10)
+        state.demo_active_player = 0
+        state.movement_type = 1
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x2000, hpos=(176 << 7) | 4,
+            vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_GRUNT),
+        )
+
+        assert gp._player_fight_collision(state, 0, slot) == 1
+        assert state.player_fighting_dir[0] != 0
+
     def test_two_pixel_frame_latches_acid_only_once(self):
         state = GameState(game_mode=GameMode.NORMAL)
         player = _active_player_at(state, 0, (5 << 5) | 5)
@@ -615,6 +629,8 @@ class TestMobCollisionDispatch:
         assert player.health == 1000
         assert player.stundelay == 0x20
         assert state.mobs.picture[acid] != 0
+        assert player.mob_slot == (5 << 5) | 5
+        assert gp._player_record_cell(state, 0) == player.mob_slot
 
     def test_diagonal_frame_keeps_one_contact_per_axis(self):
         state = GameState(game_mode=GameMode.NORMAL)

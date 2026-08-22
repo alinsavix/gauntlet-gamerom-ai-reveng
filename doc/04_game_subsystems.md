@@ -370,9 +370,9 @@ dragon helper adds 0x1000 to `D0.w` only when the shot overlaps the moving head
 hitbox. Complete register inputs and control-transfer sites are in
 [`generated/monster_combat_contracts.csv`](generated/monster_combat_contracts.csv).
 
-gauntpy's non-migrating player records are additional candidates after the
-probed cell's real occupant. They must not replace that occupant: doing so makes
-a co-located sorcerer invisible to the shooter's point-blank projectile.
+gauntpy resolves a probed cell to its own occupant. A live hero is one of those
+occupants, because its record migrates into the cell it stands in (§4.2), so
+the shooter's own hero can never displace a co-located sorcerer.
 
 ---
 
@@ -455,6 +455,43 @@ below 0x7000; the V anchor minus `scroll_vpos_origin` must be below 0x7400
 (0x41C52-0x41C6A, 0x42092-0x420AA, and their other-direction twins). These are
 the gates that keep a hero out of the alpha/HUD region and prevent walking past
 the bottom of the visible playfield.
+
+#### The record migrates by cell (0x424CA-0x42526)
+
+**Confidence: Verified** by disassembly of the `player_try_move_core` tail.
+
+A hero is not exempt from "identity is location". Once the axes have been
+resolved, the tail derives the cell the new H/V words name with the same
+arithmetic `monster_loop_core` uses (0x41358-0x41374): add 0x400 to V, keep
+the row bits with `andi.w #0xF800`, invert them (`eori.w #0xF800`, because V
+counts up from the playfield floor while rows count down), then add the H
+column taken as `(H + 0x600) >> 5`. The result is a packed slot, and because
+both axes are 16-bit it wraps at either maze seam for free. In whole pixels the
+column hands over half a cell along and the row at `y % 16 == 9`.
+
+Three outcomes, in the ROM's order:
+
+- **same cell** (0x424E8): only the two position words are written;
+- **different cell, destination empty** (0x424EC): the position words are
+  written into the source record, `active_mob_ids[player]` takes the new slot
+  and `move_mob_slot` (0x5DE0A) relocates the five words -- picture, H, V, the
+  object type, and the state word carrying the player index -- linking the
+  destination first and clearing the source afterwards. `thief_track_victim_move`
+  and `dragon_player_proximity` are then told about the new cell;
+- **different cell, destination occupied** (0x42542): `player_tile_interact` is
+  offered the cell first. A zero return abandons the move entirely and returns
+  `0x00F0` *without* writing the position words; `-2` (a transporter) returns
+  after the thief-route update; anything else falls back into the migration
+  path now that the tile has been consumed.
+
+The same tail exists for a pushed movable wall at `failed_door_post`
+(0x427B4-0x42808), instruction for instruction.
+
+gauntpy implements this in `players.migrate_player_record`, called from
+`_apply_pixel_delta` after the position write and again after the tile pass in
+`main_move_players`, so a consumed pickup lets the record follow the hero into
+the cell it just cleared on the same frame. It never migrates into a managed
+low slot (0-0x1F) and never overwrites an occupied cell.
 
 Door traversal is a register/shared-stack convention: `D2.w` is the current
 offset, `A2-A4` are MOB arrays, and the helper reads the caller's saved `D5`

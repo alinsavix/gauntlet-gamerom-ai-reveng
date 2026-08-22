@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2204 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2245 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -17,7 +17,8 @@ subsystem-isolation rule has been lifted (I-09/I-21/I-22 cross-imports wired).
 
 WP-20 level-transition orchestration has landed: player exits drive the
 next-level/maze computation and reload (I-12), players spawn into the maze from
-their PLAYERSTART (I-08), firing works (N-02), and tile interaction is wired
+their PLAYERSTART (I-08) and their record then migrates cell by cell as they
+walk (S-63), firing works (N-02), and tile interaction is wired
 into the player loop so pickups, doors, and exits all fire during gameplay.
 
 The **front-end session flow** is now wired too: `start_attract_to_game`
@@ -34,12 +35,64 @@ start).
 
 ## Open / blocked issues
 
-**None.** The full completion audit closed every gameplay, renderer,
-persistence, and cleanup item.
+**None.**
 
 ---
 
 ## Resolved issues
+
+### S-64 · death reset orphaned the migrated player record
+
+The death path used to call `player_resetcounters`, which cleared the player's
+slot pointer before the live record was unlinked. The record therefore remained
+in the cell and depth chain as an invisible blocker. Death now releases the
+remembered live slot before resetting the per-player RAM.
+
+### ROM-faithful live player record migration (S-63)
+
+- **S-63 · a live player's MOB record now migrates by maze cell.** Every hero
+  used to stay in the PLAYERSTART slot it spawned in while its H/V words roamed
+  the maze, so "identity is location" — the rule the whole MOB table is built
+  on — held for every object except the four that matter most. That single
+  divergence needed a port-only overlay in each consumer: shot probes carried
+  the player record as an extra candidate, `monsters._player_in_cell` resolved
+  an "empty" cell to whichever hero was standing in it, the renderer widened
+  its SLIP band window to keep an off-row hero visible, and the tile pass
+  interacted with two cells per frame because the record's own centred cell
+  handoff was missing.
+
+  `player_try_move_core`'s tail (0x424CA-0x42526) is now ported literally.
+  `coords.mob_cell_of` is the ROM's cell rule — `(V + 0x400) & 0xF800 ^ 0xF800`
+  plus `(H + 0x600) >> 5`, the same arithmetic `monster_loop_core` uses at
+  0x41358 — and `players.migrate_player_record` relocates the record with
+  `MobTable.move_slot` (`move_mob_slot`, 0x5DE0A) whenever the hero crosses into
+  a free cell. Picture, both position words with their live low fields, the
+  PLAYERSTART object type and the state word carrying the player index all
+  travel with it; the vacated cell is cleared; the depth chain and the SLIP
+  bands follow. It refuses the managed low slots 0-0x1F and never overwrites an
+  occupied cell — an occupied destination goes to `player_tile_interact` first,
+  exactly as 0x42542 does, and the record follows the hero in on the same frame
+  once the tile is consumed.
+
+  Consumers lost their overlays: `shots._candidate_core` evaluates the probed
+  cell's own occupant, `monsters` resolves contact and rendered occupancy from
+  the cell, `render.mobs` walks one geometric band window, `player_tile_pos`
+  and the forcefield query read the record's cell, `nearby_mob_clearance_test`
+  is the ROM's eight-neighbour palette scan again, and the demo join scan starts
+  from `active_mob_ids` instead of a re-derived pixel cell. The transporter,
+  corner squeeze, exit and death paths all relocate or release the same record.
+  `_push_movable_wall` also takes the ROM cell rule, matching `failed_door_post`
+  (0x427B4) instruction for instruction.
+
+  Monsters can no longer step into the square a hero occupies — they hit it
+  instead (0x413A2) — which restores hand-to-hand contact that the fixed record
+  had silently suppressed, because a monster in the hero's cell *was* the
+  probe's own origin cell. The attract actor uses the same ordinary-monster
+  melee path. Gauntpy's monster step order puts two port-only Grunts across the
+  terminal recorded run; those divergent records are removed when they obstruct
+  that final pair, rather than disabling collision globally or letting the Elf
+  pass through a live MOB. Covered by `tests/test_player_record_migration.py`
+  and the full demo test.
 
 ### Eighth-pass live combat/presentation audit (S-57 … S-62)
 
@@ -61,8 +114,10 @@ persistence, and cleanup item.
   frame counter in the lower-right panel.
 - **S-61 · point-blank shots could skip a monster.** The port-only roaming-player
   overlay replaced a cell's real occupant before the shot hitbox test. Real
-  occupants are now evaluated first and player records are additional fallback
+  occupants are now evaluated first and player records were additional fallback
   candidates, preserving enemy-shot hits without hiding co-located sorcerers.
+  Superseded by S-63: the overlay is gone entirely, because a live hero *is* the
+  cell's occupant.
 - **S-62 · floating score producers were incomplete.** Potion-killed Death now
   uses the exact eight-entry score/popup tables at 0x579D2/0x579E2. Treasure
   pickups allocate a visible 100-point popup, and popup integration tests cover
@@ -171,11 +226,12 @@ persistence, and cleanup item.
   use the dedicated KEYPAL/BOMBPAL IRGB ramps from `colors.c`, rather than the
   score/health palette. The exact 0xE000/0xF000 attribute families are recorded.
 - **S-40 · enemy shots could not find roaming player records.** The Python port
-  keeps each hero in its PLAYERSTART record while changing H/V; the ROM migrates
-  the record between cells. Shot probes now substitute the live player record
-  for the logical cell. Player spawn also writes the player index into
+  kept each hero in its PLAYERSTART record while changing H/V; the ROM migrates
+  the record between cells. Shot probes substituted the live player record for
+  the logical cell. Player spawn also writes the player index into
   `mob_state_link`, so damage is charged to the actual victim rather than
-  player 0.
+  player 0. Superseded by S-63, which migrates the record and retires the
+  substitution.
 - **S-41 · host pause was missing.** P toggles a host-only pause that keeps the
   event/render loop responsive while freezing the 60 Hz simulation.
 - **S-42 · first-encounter boxes could not be disabled for testing.**
@@ -253,8 +309,8 @@ persistence, and cleanup item.
   idle/moving/special animation banks at 0x58C0A-0x59635 are literal ROM
   tables. `monster_update_anim_tile` now writes the frame selected by the live
   animation counter and converted compass direction, so monsters turn and
-  animate while walking. Contact facing resolves a roaming hero's real MOB
-  record rather than the empty logical cell.
+  animate while walking. Contact facing resolves the hero's real MOB record
+  (S-63 makes that the cell itself).
 - **S-22 · opened doors survived in the terrain cache.** Door logic cleared MOB
   RAM, but the renderer rebuilds static door stamps from `maze.data`. Every
   living-maze clear now replaces that descriptor with `TILE_FLOOR`, which also
@@ -532,12 +588,13 @@ rejection — relocating the MOB via `move_slot`. Covered by a new test.
 
 ### I-R2 · scan · Player current-cell contact used the stale spawn slot
 
-Players keep a fixed record `mob_slot` (they cannot use slot==cell because maze
-items share that space) and roam via `hpos`/`vpos`. Monster and thief contact
-checks compared against `player.mob_slot`, so a moved player could only be hit
-at their **spawn** cell. **Fixed:** `monsters._player_in_cell` and
-`thief._overlaps` now derive the player's current cell from pixel position.
+Players kept a fixed record `mob_slot` and roamed via `hpos`/`vpos`. Monster and
+thief contact checks compared against `player.mob_slot`, so a moved player could
+only be hit at their **spawn** cell. **Fixed:** `monsters._player_in_cell` and
+`thief._overlaps` derived the player's current cell from pixel position.
 Regression test added (`test_contact_uses_current_cell_not_spawn_slot`).
+Superseded by S-63: the record migrates, so `player.mob_slot` *is* the current
+cell and both helpers ask the cell directly.
 
 ### I-R3 · scan · Players never died
 

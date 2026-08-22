@@ -11,10 +11,9 @@ pseudo-depth effect of things lower on screen drawing in front of things
 higher up.
 
 "Near", not "at": a band records where a MOB's *cell* is, and a sprite is up to
-eight tiles tall and can straddle the edge of the viewport (or, for a hero,
-sit rows away from the record slot it never leaves). ``_chain_band_window``
-widens the walk by exactly that much so the bounding-box test is the only thing
-that decides what is on screen.
+eight tiles tall and can straddle the edge of the viewport.
+``_chain_band_window`` widens the walk by exactly that much so the bounding-box
+test is the only thing that decides what is on screen.
 
 ``iter_visible_mobs`` is deliberately pure -- ``GameState`` in, an ordered
 list of what-to-draw-where out, no ``AssetStore`` involved. That is what lets
@@ -224,7 +223,9 @@ def sprite_kind(state: GameState, slot: int) -> str | None:
     Players are checked first because a hero's record keeps the PLAYERSTART
     object type it was spawned from, which the thief's MOB also uses
     (``thief._thief_spawn``) -- so the type alone cannot tell a hero from an
-    NPC, but the slot can.
+    NPC, but the slot can. ``Player.mob_slot`` is the *current* cell: the
+    record migrates with the hero (``players.migrate_player_record``), so the
+    lookup stays a single equality test.
     """
     for player in state.players:
         if player.mob_slot == slot and player.status:
@@ -234,27 +235,6 @@ def sprite_kind(state: GameState, slot: int) -> str | None:
         player_index = palette - 0x0C
         return HERO_NAMES[int(state.players[player_index].character) & 0x03]
     return _MONSTER_ENTITY.get(state.mobs.obj_type(slot))
-
-
-def _untracked_bands(state: GameState) -> Iterator[int]:
-    """SLIP bands the chain walk must cover regardless of where the camera is.
-
-    A MOB's band comes from its record slot's cell row, which is only a
-    statement about where it *is* because the simulation moves a creature's
-    record as it walks (``MobTable.move_slot`` -- "identity is location"). One
-    family breaks that rule: a hero's record stays in the PLAYERSTART slot it
-    was spawned into for the whole level (``players.player_start_inner``, and
-    ``player_move`` only rewrites H/V), so a player who walks away from their
-    spawn row keeps that row's band forever. Culling on it makes the hero
-    vanish the moment the camera scrolls past their spawn row -- which is
-    exactly what happens once you walk more than half a screen from it.
-
-    Yielding their bands here widens the window instead of adding a second,
-    out-of-order pass, so chain order (= draw priority) is untouched.
-    """
-    for player in state.players:
-        if player.mob_slot and player.status:
-            yield state.mobs.band_of(player.mob_slot)
 
 
 def _chain_band_window(state: GameState, scroll_y: int, viewport_h: int) -> tuple[int, int]:
@@ -273,14 +253,16 @@ def _chain_band_window(state: GameState, scroll_y: int, viewport_h: int) -> tupl
     and walked straight past it. Widening the window by that geometry at both
     ends is what makes the bounding-box test the only thing that decides
     visibility; the walk still stops early, it just stops at the right band.
+
+    No family is exempt any more: a hero's record migrates into the cell it
+    stands in (``players.migrate_player_record``), so its band tracks it the
+    same way a monster's does and one geometric window covers everything.
     """
+    del state
     first_y = scroll_y - (MAX_MOB_PIXELS + BAND_SLACK_PIXELS)
     last_y = scroll_y + viewport_h - 1 + BAND_SLACK_PIXELS
     first = max(0, first_y // SLIP_BAND_PIXELS)
     last = min(NUM_SLIP_BANDS - 1, last_y // SLIP_BAND_PIXELS)
-    for band in _untracked_bands(state):
-        first = min(first, band)
-        last = max(last, band)
     return first, max(first, last)
 
 

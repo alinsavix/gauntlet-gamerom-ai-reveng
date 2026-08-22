@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ..constants import MazeObjIds
 from ..coords import (
+    biased_pixels_to_slot,
     decode_hpos,
     decode_vpos,
     encode_hpos,
@@ -254,11 +255,8 @@ def thief_compute_path(state: GameState) -> None:
 
 
 def _player_packed_cell(state: GameState, player_index: int) -> int:
-    """Use the live player pixels; a player's MOB slot remains fixed."""
-    slot = state.players[player_index].mob_slot
-    x = hpos_x(state.mobs.hpos[slot])
-    y = vpos_y(state.mobs.vpos[slot])
-    return ((y >> 4) & 0x1F) << 5 | ((x >> 4) & 0x1F)
+    """The cell a hero occupies -- its migrating record names it directly."""
+    return state.players[player_index].mob_slot
 
 
 def _player_is_targetable(state: GameState, player_index: int) -> bool:
@@ -601,7 +599,7 @@ def _slot_for_thief(state: GameState) -> int:
 
 
 def _pixel_to_slot(x: int, y: int) -> int:
-    return ((y >> 4) & 0x1F) << 5 | ((x >> 4) & 0x1F)
+    return biased_pixels_to_slot(x, y)
 
 
 def _clamp_or_wrap(value: int, wraps: bool) -> int:

@@ -514,28 +514,31 @@ class TestVisibleMobsCoverEverythingOnScreen:
         assert self._visible(state, 0, y + coords.CELL_PIXELS - 1) == [slot]
         assert self._visible(state, 0, y + coords.CELL_PIXELS) == []
 
-    def test_a_hero_stays_visible_after_walking_away_from_its_spawn_row(self):
-        """gauntpy's heroes break the rule bands rely on. A monster's record
-        *moves* as it walks (``MobTable.move_slot`` -- "identity is location"),
-        but a player keeps the PLAYERSTART slot they spawned into for the whole
-        level (``players.player_start_inner``; ``player_move`` only rewrites
-        H/V), so their band stays their spawn row's. Culling on it made the
-        hero disappear as soon as the camera scrolled past that row -- which is
-        the moment you walk half a screen from where you came in.
+    def test_a_hero_walks_its_band_along_with_it(self):
+        """A hero obeys the rule bands rely on, like every other creature.
+
+        ``players.migrate_player_record`` moves the record into the cell the
+        hero stands in (``MobTable.move_slot`` -- "identity is location"), so
+        the band the chain walk enters at follows the sprite down the maze and
+        the plain geometric window is all the renderer needs.
         """
         state = GameState()
-        slot = _place(state.mobs, row=2, col=8, picture=0x1E0D,
-                      obj_type=MazeObjIds.PLAYERSTART, size=3)
+        spawn = _place(state.mobs, row=2, col=8, picture=0x1E0D,
+                       obj_type=MazeObjIds.PLAYERSTART, size=3)
         player = state.players[0]
-        player.mob_slot = slot
+        player.mob_slot = spawn
         player.status = int(PlayerStatus.ALIVE_HERE)
 
-        state.mobs.vpos[slot] = coords.encode_vpos_at_y(320, 3, 3)   # walked 18 rows down
-        assert state.mobs.band_of(slot) == 4, "the record never left row 2"
+        walked = coords.pack_slot(20, 8)                    # 18 rows down
+        state.mobs.vpos[spawn] = coords.encode_vpos_at_y(320, 3, 3)
+        state.mobs.move_slot(spawn, walked)
+        player.mob_slot = walked
+        assert state.mobs.picture[spawn] == 0, "the spawn cell is vacated"
+        assert state.mobs.band_of(walked) == 40, "the band came with it"
 
         for scroll_y in (0, 100, 200, 272):
             assert self._visible(state, 0, scroll_y) == self._reference(state, 0, scroll_y), scroll_y
-        assert slot in self._visible(state, 0, 200)
+        assert walked in self._visible(state, 0, 200)
 
     def test_the_walk_still_enters_late_and_stops_early(self):
         """The band window is widened by a fixed, documented amount, not

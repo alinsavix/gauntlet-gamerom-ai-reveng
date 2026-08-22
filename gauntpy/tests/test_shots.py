@@ -733,17 +733,20 @@ class TestMonsterShotDamageIndex:
         resolve_shot_hit(state, 302, 4)
         assert state.players[1].health == 0
 
-    def test_collision_finds_a_roaming_player_outside_their_fixed_record_cell(self):
+    def test_collision_finds_the_players_migrated_record(self):
         state = _make_state()
         victim = state.players[1]
         victim.status = int(PlayerStatus.ALIVE_HERE)
         victim.health = 100
-        _place_player_mob(state, 33, 1, x=160, y=160)
+        # The hero's record migrates into the cell it stands in, so the probe
+        # finds it as that cell's own occupant -- no port-side overlay.
+        cell = (10 << 5) | 10
+        _place_player_mob(state, cell, 1, x=160, y=160)
         _arm_monster_shot(state, 4)
 
-        hit = shot_mob_collision(state, (10 << 5) | 10, 4)
+        hit = shot_mob_collision(state, cell, 4)
 
-        assert hit == 33
+        assert hit == cell
         resolve_shot_hit(state, hit, 4)
         assert victim.health < 100
 
@@ -1216,7 +1219,12 @@ class TestShotCollision:
         state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, cell, 0) == cell
 
-    def test_close_sorcerer_wins_over_the_shooters_overlay_record(self):
+    def test_a_point_blank_sorcerer_is_the_cells_own_occupant(self):
+        """S-61: the shooter's own record must never displace a real occupant.
+
+        With the record migrating, a hero standing next door simply is not in
+        this cell, so the sorcerer sharing it is the only candidate.
+        """
         state = _make_state()
         hero_record = (4 << 5) | 4
         cell = (10 << 5) | 10
@@ -1235,22 +1243,22 @@ class TestShotCollision:
 
         assert shot_mob_collision(state, cell, 0) == cell
 
-    def test_empty_cell_still_finds_a_roaming_player_overlay(self):
+    def test_the_probed_cell_resolves_to_the_hero_standing_in_it(self):
         state = _make_state()
-        hero_record = (4 << 5) | 4
         cell = (10 << 5) | 10
         player = state.players[0]
-        player.mob_slot = hero_record
+        # Identity is location: the hero's record *is* the cell it occupies.
+        player.mob_slot = cell
         player.status = PlayerStatus.ALIVE_HERE
-        state.mobs.picture[hero_record] = 0x100
-        state.mobs.hpos[hero_record] = (160 << 7) | 0x0C
-        state.mobs.vpos[hero_record] = native_v(160) << 7
+        state.mobs.picture[cell] = 0x100
+        state.mobs.hpos[cell] = (160 << 7) | 0x0C
+        state.mobs.vpos[cell] = native_v(160) << 7
         state.mobs.picture[5] = 1
         state.mobs.hpos[5] = 160 << 7
         state.mobs.vpos[5] = native_v(160) << 7
         state.shot_direction[4] = 2
 
-        assert shot_mob_collision(state, cell, 4) == hero_record
+        assert shot_mob_collision(state, cell, 4) == cell
 
     def test_never_hits_its_own_shooter(self):
         """0x40AA6: active_mob_ids[shooter] is excluded from every probe."""
@@ -1415,12 +1423,12 @@ class TestMainHandleShots:
         main_handle_shots(state)
         assert hpos_x(state.mobs.hpos[slot]) == 163    # ROM 0x180 >> 7
 
-    def test_live_monster_channel_damages_a_roaming_fixed_record_player(self):
+    def test_live_monster_channel_damages_the_hero_in_the_cell(self):
         state, slot = self._monster_shot(0)
         victim = state.players[1]
         victim.status = int(PlayerStatus.ALIVE_HERE)
         victim.health = 100
-        _place_player_mob(state, 33, 1, x=160, y=160)
+        _place_player_mob(state, (10 << 5) | 10, 1, x=160, y=160)
 
         main_handle_shots(state)
 

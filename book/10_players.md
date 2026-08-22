@@ -206,6 +206,15 @@ All of the wall, door, and occupancy probes work on Chapter 8's packed maze
 slots and the traversability table introduced there. Movement is the biggest
 customer of that machinery.
 
+And when the move commits, the last thing it does is ask which cell your new
+position actually names, biasing by half a sprite so the answer is the cell
+your body is over rather than the one its top-left corner grazes. If that is a
+different cell from the one your record currently sits in, and nothing else is
+there, the record *moves* — the same slot-relocation a monster gets. If
+something is there, the tile is offered to the pickup handler first, and the
+move is abandoned outright when the handler wants nothing to do with it. Your
+hero obeys "identity is location" exactly like everything else in the maze.
+
 ## Swords and arrows
 
 Melee happens without a button. Walk into a monster and your hero *fights*:

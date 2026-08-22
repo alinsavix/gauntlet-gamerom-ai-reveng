@@ -15,10 +15,10 @@ from __future__ import annotations
 
 from ..constants import MazeObjIds
 from ..coords import (
-    POS_FIELD_MASK,
     POS_SHIFT,
     hpos_x,
     pack_slot,
+    position_field,
     vpos_v,
     vpos_y,
 )
@@ -231,10 +231,12 @@ def _update_dragon_pose(state: GameState, head_slot: int) -> None:
     state.mobs.picture[head_slot] = _DRAGON_HEAD_PICS[index]
     state.dragon_head_hpos = (
         state.mobs.hpos[head_slot] + (_HEAD_HDELTA[index] << POS_SHIFT)
-    ) & POS_FIELD_MASK
+    )
+    state.dragon_head_hpos = position_field(state.dragon_head_hpos)
     state.dragon_head_vpos = (
         state.mobs.vpos[head_slot] + (_HEAD_VDELTA[index] << POS_SHIFT)
-    ) & POS_FIELD_MASK
+    )
+    state.dragon_head_vpos = position_field(state.dragon_head_vpos)
 
 
 def _player_cell(state: GameState, player_index: int) -> tuple[int, int]:
@@ -494,13 +496,13 @@ def _dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     # The H word must carry its strength bits before anything reads the tier,
     # so write the MOB words first and pick the picture from them.
     state.mobs.hpos[shot_slot] = (
-        (state.mobs.hpos[head_slot] & POS_FIELD_MASK)
+        position_field(state.mobs.hpos[head_slot])
         + (off_h << POS_SHIFT) + hpos_low
     ) & 0xFFFF
     # Both the ROM's muzzle offsets and the stored V word grow upward, so the
     # offset simply adds.
     state.mobs.vpos[shot_slot] = (
-        (state.mobs.vpos[head_slot] & POS_FIELD_MASK)
+        position_field(state.mobs.vpos[head_slot])
         + (off_v << POS_SHIFT) + vpos_low
     ) & 0xFFFF
     state.mobs.picture[shot_slot] = shot_picture(state, channel, counter)
@@ -590,10 +592,10 @@ def _dragon_die(state: GameState, shooter_id: int) -> None:
     original_hpos = state.mobs.hpos[primary]
     original_vpos = state.mobs.vpos[primary]
     state.mobs.hpos[primary] = (
-        (original_hpos & POS_FIELD_MASK) + (8 << POS_SHIFT)
+        position_field(original_hpos) + (8 << POS_SHIFT)
     ) & 0xFFFF
     state.mobs.vpos[primary] = (
-        (original_vpos & POS_FIELD_MASK) + (8 << POS_SHIFT)
+        position_field(original_vpos) + (8 << POS_SHIFT)
     ) & 0xFFFF
     tport_cycle_start(state, primary, shooter_id)
     state.mobs.hpos[primary] = original_hpos
