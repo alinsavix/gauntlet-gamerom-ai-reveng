@@ -526,9 +526,19 @@ class TestStartAttractToGame:
         state.bonus_amount = 1234
         state.treasure_timer = 600
         state.welcome_elapsed_frames = 900
+        state.thief_item_carried = int(MazeObjIds.KEY)
+        state.thief_item_nextlevel = int(MazeObjIds.KEY)
+        state.mugger_item_carried = int(MazeObjIds.FOOD_INVULN)
+        state.mugger_item_nextlevel = int(MazeObjIds.FOOD_INVULN)
         start_attract_to_game(state)
         assert (state.bonus_timer, state.bonus_amount, state.treasure_timer) == (0, 0, 0)
         assert state.welcome_elapsed_frames == 0
+        assert (
+            state.thief_item_carried,
+            state.thief_item_nextlevel,
+            state.mugger_item_carried,
+            state.mugger_item_nextlevel,
+        ) == (0x7D30, 0x7D30, 0, 0)
 
     def test_session_sounds(self):
         state = GameState()

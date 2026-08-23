@@ -69,6 +69,21 @@ evidence remains in `../doc/`, generated contracts, and the book.
 18. **Dragon movement probes gate targeting.** In `dragon_choose_move_direction`,
     the two leading `0x8000` wall checks occur before the player/distance is
     published. Flame-lock targeting must not bypass blocked footprint probes.
+19. **MOB size outranks asset-family defaults.** A picture's table family does
+    not determine its dimensions. Decode the live V-word size; in particular,
+    ordinary projectiles are 2x2 but max-tier dragon breath is 3x3.
+20. **Collision tags survive representation shifts.** ROM helpers may tag a
+    doubled MOB index before the caller shifts it back to a packed cell. Preserve
+    the corresponding shifted tag (`0x1000` doubled becomes `0x0800`) through
+    dispatch instead of reducing every collision result to a bare slot.
+21. **Prompt setup and live fields are separate writes.** Literal OS strings can
+    deliberately leave holes for later per-frame writers. Port both owners; the
+    continue prompt's seconds come from `main_attract`, not
+    `show_continue_prompt`.
+22. **Escaped thief loot returns through random placement.** The thief/mugger
+    departure clears its live MOB at the recorded start cell and stores carried
+    loot for `maze_addrandompickups`; the next level recreates that pickup using
+    the ROM's empty-cell walk rather than retaining an actor or renderer overlay.
 
 ## Investigation workflow
 

@@ -662,7 +662,8 @@ class AssetStore:
         masked = picture & PICTURE_TILE_MASK
         if picture in MARKER_PICTURES:
             raise AssetError(self._no_sprite_message(picture, masked))
-        # Projectiles are 2x2 base-palette shots, not 8-direction creatures.
+        # Ordinary projectiles are 2x2 base-palette shots, but the max-tier
+        # dragon breath writes 0x12 into mob_vpos: a live 3x3 hardware block.
         # gex's own projectile_stamp/segment_stamp rebuild (and re-fill) a
         # Stamp on every call; going through self.stamp() with the identical
         # gex constants keeps every shot and dragon segment on the shared
@@ -673,8 +674,9 @@ class AssetStore:
             # red/blue/yellow/green. Base palettes 0-11 map directly.
             ptype, requested = _projectile_palette_bank(kind, palette)
             pnum = self._bank_index(ptype, SHOT_PNUM, requested)
+            xsize, ysize = size or (SHOT_XSIZE, SHOT_YSIZE)
             return self._block_stamp(
-                masked, SHOT_XSIZE, SHOT_YSIZE, ptype, pnum,
+                masked, xsize, ysize, ptype, pnum,
             )
         # Dragon head/body segments are 4x4 base-palette sprites.
         if masked in DRAGON_SEGMENT_TILES:

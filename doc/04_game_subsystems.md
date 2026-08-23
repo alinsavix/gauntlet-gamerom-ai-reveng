@@ -1057,6 +1057,10 @@ alignment.
 
 Because the breath's H word carries 0x30, `main_handle_shots` treats it exactly as a max-tier monster shot: the fixed large collision box (0x4094C), the 0x50 velocity block, motion only on even frames (0x478CE), the `special_projectile_picture_table` animation, removal when the counter reaches zero (0x477E8), and the tier-3 row of `monstshot_damage_tbl` — the row that raises the "shoot the dragon's head" dialog and spends the *Don't Get Hit* objective. The setup finishes by depth-placing the channel from the words it has just written (0x54952).
 
+The `0x12` V low byte is also authoritative display geometry: width and height
+are both three tiles. Although the picture comes from a projectile table, it is
+not an ordinary 2x2 projectile and must be decoded as the live 3x3 MOB.
+
 After target selection, the muzzle-alignment check runs. Within three cells,
 a vertical-facing dragon locks when horizontal error is between −17 and +18
 pixels; a horizontal-facing dragon locks when vertical error is within 17
@@ -1089,6 +1093,13 @@ Head rendering per phase boundary writes `mob_picture[dragon_seg_mob_ids[0]]` fr
 **Sustained fire:** while locked-in (state bit 3), a fire byte at a phase boundary holds the counter until the fire cooldown expires (continuous flame), otherwise the counter advances mod 128.
 
 **Damage rules** (`dragon_shot_hit`, 0x54112, called from `resolve_shot_hit`): hits only count when the fire bit is active (mouth open) and the dragon is not sleeping/turning; each hit plays sound 0x3A, increments `dragon_hits` (0x904880) — the 9th kills the dragon — and switches to a new random path (getrandom(5)), fast-forwarded to the first byte matching the current pose so the animation stays continuous.
+
+`dragon_shot_hitbox_adjust` (0x54B68) compares the shot against the separately
+tracked moving-head coordinates and adds `0x1000` to the doubled candidate index
+on overlap. `shot_mob_collision` then shifts right once, so
+`resolve_shot_hit`/`dragon_shot_hit` receive the packed slot tagged with
+`0x0800`. The damage handler's `target >= 0x400` gate depends on that tag;
+returning only the bare segment slot makes every player shot look like a miss.
 
 ### 8.4 Dragon ROM Data
 
@@ -1146,6 +1157,16 @@ mugger; if that roll fails, bit 4 (thief already used) forces a mugger anyway.
 0x200 for the ordinary thief**, so the mugger is the *slower* of the two. These
 are the same per-frame movement units as the player speed table (Elf 0x100,
 others 0x80).
+
+**Escape cleanup and returned loot. Confidence: Verified** at
+0x4EB9A-0x4EC50 and 0x44166-0x441A6. On the escape route's first return to the
+recorded start cell (with a different predecessor), the live thief/mugger MOB
+is removed and both current-slot words are cleared. Carried loot is copied to
+the next-level longwords. `maze_addrandompickups` later restores mugger food
+and thief loot with `maze_randomplace`'s `getrandom(0x3E0)+0x20`, then `+0x51`
+modulo 0x400 until it finds an empty non-reserved cell. An encoded multiplier
+bag restores `special_bonus_score` from the longword shifted right six. The
+routine's opening `mazenum_current < 0x73` gate excludes secret rooms.
 
 ### 9.2 Thief Targeting (`thief_target_calc`, 0x4DFF6)
 
@@ -1289,6 +1310,12 @@ AT THIS LEVEL
 Sound 0x3B ("Gauntlet II Theme Song") plays when shown, and
 `title_intro_state` is set to 1. The shared attract/display timer `0x904B7C`
 must not contain its disabled sentinel (`0xFFFF`).
+
+The four spaces in `WITHIN    SECONDS` are a live field, not final text.
+`main_attract` decrements `attract_timer` at 0x445D4-0x445DA and, on each full
+second in this NORMAL/no-player state, writes `attract_timer / 60` through OS
+small decimal 0x260 at alpha column 13, row 14, width 2 (0x44984-0x449B6).
+Leaving that separate writer out produces a permanently blank countdown.
 
 `show_level_end_bonus_screen` (0x4D476) is a separate no-argument routine.
 It clears the alpha display and renders the end-of-level treasure calculation
@@ -1676,7 +1703,10 @@ Handles the treasure room countdown. When the player enters a treasure room:
 - The entry page writes the initial small value at column 14,row 11 and the large
   status-panel value at column 34,row 2. On each full second,
   `main_treasure_timer` refreshes the latter through OS 0x272 and normally speaks
-  the matching ZERO–TEN sound from the 11-longword table at 0x5AB64
+  the matching ZERO–TEN sound from the 11-longword table at 0x5AB64. Both ROM
+  call sites use `(column=34,row=2,width=2,space-pad,attribute=0x8000)`; for a
+  one-digit count the leading large-space glyph consumes two cells, so the
+  visible digit begins at column 36 by design
 - At 10 seconds on levels above 30, a 1-in-16 gate may choose one of four fake spoken countdowns. The pointer table at 0x5ABE0 selects a five-number sequence at 0x5AB90–0x5ABDF for displayed seconds 10–6; at 6 it follows with JUST KIDDING or FOOLED YOU from 0x5ABF0
 - Without a fake countdown, displayed second 6 has a 1-in-4 chance to play one of four warning lines from 0x5AC08, with a parallel 1/2-second suppression count from 0x5AC18
 - At 0, selects a timeout line from 0x5ABF8 (settings bit 11 forces ZERO; otherwise random among ZERO, BETTER LUCK NEXT TIME, ZERO, and LOOKS LIKE YOU LOSE)

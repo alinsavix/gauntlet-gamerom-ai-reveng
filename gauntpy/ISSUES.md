@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2270 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2277 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,33 @@ start).
 ---
 
 ## Resolved issues
+
+### S-95 … S-99 · continue, dragon, thief-return, runner, and reported nonbugs
+
+- **S-95:** the continue prompt drew its literal `WITHIN    SECONDS` line but
+  omitted `main_attract`'s 0x44984-0x449B6 full-second writer. The live
+  `attract_timer / 60` value now updates alpha column 13, row 14 as a two-digit
+  field.
+- **S-96:** the dragon collision retry discarded
+  `dragon_shot_hitbox_adjust`'s tagged result after testing the moving head.
+  Successful head overlaps now retain the post-shift `0x0800` tag consumed by
+  `dragon_shot_hit`, so open-mouth hits increment `dragon_hits`. The close-range
+  breath also honors its live `mob_vpos = 0x12` 3x3 size instead of being forced
+  through the ordinary projectile 2x2 asset geometry.
+- **S-97:** deterministic mugger/thief escape reaches the recorded start cell,
+  clears the MOB, and resets both current-slot fields; the reported frozen
+  actor was not reproducible through that ROM path. The related real omission
+  was `maze_addrandompickups`' 0x44166-0x441A6 next-level return: escaped mugger
+  food and thief loot are now placed through the ROM's random empty-cell walk,
+  including encoded multiplier-bag value restoration.
+- **S-98:** direct `gauntpy-play` now defaults to the Elf. `--character` remains
+  available for selecting any of the four classes during testing.
+- **S-99:** two visual reports were verified against ROM rather than changed.
+  Treasure-room setup and the live timer both call OS large decimal at alpha
+  column 34, row 2; a space-padded one-digit value begins two cells later by
+  design. Holding Fire against a wall still selects and advances the shooting
+  table before each shot; a regression uses the hero's real `cell_x - 4`
+  geometry and protects those visible frames.
 
 ### S-93 · death/continue lost the player spawn record
 

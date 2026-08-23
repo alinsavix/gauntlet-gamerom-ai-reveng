@@ -111,6 +111,10 @@ def start_attract_to_game(state: GameState) -> None:
     state.game_mode = GameMode.NORMAL   # 0x44266
     state.levelnum_current = 1          # 0x4426C
     state.mazenum_current = 0           # 0x4420E
+    state.thief_item_carried = 0x7D30   # 0x44274-0x44280
+    state.thief_item_nextlevel = 0x7D30
+    state.mugger_item_carried = 0       # 0x44286-0x4428E
+    state.mugger_item_nextlevel = 0
     sound_play(state, 0x02)             # 0x4429A session-start sting
     state.bonus_timer = 0               # 0x44366 global_ui_delay_timer
     state.bonus_amount = 0

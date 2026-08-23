@@ -185,7 +185,9 @@ TO CONTINUE GAME
 AT THIS LEVEL
 ```
 
-The theme music plays under it, a countdown runs, and a coin plus the
+The theme music plays under it, a countdown runs, and the number is supplied by
+a different routine than the five prompt lines: once per second the attract
+state machine writes its timer divided by sixty into the four-space hole. A coin plus the
 start press resumes the session at the level where the
 party died. (There is no fifth button: START is the game's own vocabulary for
 the button whose input line the game calls Magic.) Letting the countdown expire ends the session. On level 1

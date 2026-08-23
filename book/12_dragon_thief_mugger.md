@@ -98,7 +98,9 @@ a successful shot the cooldown is reloaded with eight frames and the fireball
 launches from whichever body segment the current pose and facing say the mouth
 is nearest. There is also a locked-in mode where a fire byte holds the counter
 in place until the cooldown expires, so the flame becomes continuous instead of
-a burst.
+a burst. The close flame is also physically larger: its live hardware size word
+names a 3x3 block, while the long-range fireball is 2x2. The picture table alone
+does not determine that geometry.
 
 ## Nine hits, and only some of them count
 
@@ -112,6 +114,11 @@ is tracked separately from the segment MOBs because the head wanders. And the
 current path byte's fire bit must be set. That last condition is the one
 players discover by feel: you can only hurt the dragon while its mouth is open.
 Every other shot makes the ordinary impact sparkle and disappears.
+
+The collision routine carries that moving-head decision as a tag on the MOB
+index. It adds the tag before converting the doubled table index back to a maze
+slot; the damage routine tests the surviving tag before it considers the open
+mouth. Dropping it makes every visually accurate head strike harmless.
 
 A counted hit plays its own sound and increments a hit counter. It also
 switches the dragon to a fresh random program. The switch would normally snap
@@ -230,7 +237,10 @@ sets a first-encounter dialog flag, and marks the level's thief as spent.
 here the game gets its joke in. A coin flip picks one of two voices, and the
 cabinet plays a laugh and then "YOU CAN'T CATCH ME!" in the matching pitch. The
 carried item is remembered in a variable that survives the level transition,
-and it comes back as a pickup on the next level's floor.
+and it comes back as a pickup on the next level's floor. The departing actor is
+removed at its recorded starting cell; the next level creates a new pickup by
+walking a pseudorandom sequence of empty maze cells. A mugger returns food, and
+a stolen multiplier returns as a bag whose encoded value restores its score.
 
 Transporters are part of that retracing graph. If the target player has taught
 the route by teleporting, the thief dissolves into the same transition machinery,

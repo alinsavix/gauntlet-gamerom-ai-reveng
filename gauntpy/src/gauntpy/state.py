@@ -457,7 +457,7 @@ class GameState:
     thief_start_location: int = 0   # 0x904BBA, victim cell when scheduled
     # 0x904BA8-0x904BB6, carried and deferred thief/mugger loot.
     mugger_item_nextlevel: int = 0
-    thief_item_nextlevel: int = 0
+    thief_item_nextlevel: int = 0x7D30
     mugger_item_carried: int = 0
     thief_item_carried: int = 0x7D30
     # 0x904B56, value carried by the special score-bag pickup.

@@ -1690,12 +1690,28 @@ def _dragon_hitbox_retry(state: GameState, slot: int, shooter_id: int,
     character = (
         state.players[shooter_id].character & 0x03 if shooter_id < 4 else 0
     )
-    _candidate_core(
-        state, slot * 2, shooter_id,
-        _DRAGON_HITBOX_WIDTH[character], _DRAGON_HITBOX_SPAN[character],
-        shot_h, shot_v, self_index, maxtier,
-    )
-    return slot
+    facing = state.dragon_facing & 0x06
+    # dragon_head_hitbox_offsets, ROM 0x54BD6. Facing indexes these as byte
+    # offsets: V reads table[facing/2], H reads the following word.
+    offsets = (0x0400, 0, 0x0400, 0, 0x0400)
+    hsep = _u16(state.dragon_head_hpos - shot_h)
+    if hsep & 0x8000:
+        hsep ^= POS_FIELD_MASK
+    hsep = _s16(hsep - offsets[(facing >> 1) + 1])
+    width = _DRAGON_HITBOX_WIDTH[character]
+    if hsep >= width:
+        return slot
+
+    vsep = _u16(state.dragon_head_vpos - shot_v)
+    if vsep & 0x8000:
+        vsep ^= POS_FIELD_MASK
+    vsep = _s16(vsep - offsets[facing >> 1])
+    if vsep >= width or hsep + vsep >= _DRAGON_HITBOX_SPAN[character]:
+        return slot
+
+    # The ROM adds 0x1000 to the doubled MOB index and then shifts right once,
+    # so the public packed-cell result carries 0x0800 on a moving-head hit.
+    return slot | 0x0800
 
 
 def _shot_owner(state: GameState, shooter_id: int) -> int:

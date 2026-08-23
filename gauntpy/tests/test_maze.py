@@ -75,6 +75,39 @@ class TestMazeForLevel:
         assert gm.maze_for_level(0) is None
 
 
+class _FixedRNG:
+    def __init__(self, *values: int) -> None:
+        self.values = list(values)
+
+    def getrandom(self, bound: int) -> int:  # noqa: ARG002
+        return self.values.pop(0)
+
+
+class TestDeferredThiefPickups:
+    def test_mugger_food_and_encoded_thief_loot_return_on_the_next_level(self):
+        state = GameState()
+        state.rng = _FixedRNG(0, 1)
+        state.mugger_item_nextlevel = int(MazeObjIds.FOOD_INVULN)
+        state.thief_item_nextlevel = (
+            (4 * 500 << 6) | int(MazeObjIds.TREASURE_BAG)
+        )
+
+        slots = gm.place_deferred_thief_pickups(state)
+
+        assert slots == [FIRST_PLAYABLE_SLOT, FIRST_PLAYABLE_SLOT + 1]
+        assert state.mobs.obj_type(slots[0]) == int(MazeObjIds.FOOD_INVULN)
+        assert state.mobs.obj_type(slots[1]) == int(MazeObjIds.TREASURE_BAG)
+        assert state.special_bonus_score == 2000
+
+    def test_secret_rooms_do_not_receive_deferred_loot(self):
+        state = GameState(mazenum_current=0x73)
+        state.rng = _FixedRNG(0)
+        state.mugger_item_nextlevel = int(MazeObjIds.FOOD_INVULN)
+
+        assert gm.place_deferred_thief_pickups(state) == []
+        assert not any(state.mobs.picture)
+
+
 # ---------------------------------------------------------------------------
 # maze_place_object -- pure arithmetic, needs no ROMs
 # ---------------------------------------------------------------------------

@@ -87,6 +87,17 @@ class TestArguments:
 
         assert called["suppress_first_encounter_messages"] is True
 
+    def test_direct_play_defaults_to_elf_and_accepts_an_override(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+
+        play.main([])
+        assert called["character"] == Character.ELF
+
+        play.main(["--character", "wizard"])
+        assert called["character"] == Character.WIZARD
+
 
 def test_front_end_character_commit_uses_the_selected_hero_picture():
     """The no-ROM front-end path finalizes a real Wizard MOB with core artwork."""

@@ -4340,6 +4340,34 @@ class TestHeroPictures:
             int(Character.WIZARD) * 8 + right
         ]
 
+    def test_wall_contact_does_not_hide_the_held_fire_animation(self):
+        from gauntpy.mainloop import tick
+        from gauntpy.coords import pack_slot
+        from gauntpy.subsystems.input import JOY_FIRE_BIT, JOY_RIGHT
+
+        state = _active_state()
+        slot = pack_slot(10, 10)
+        wall = pack_slot(10, 11)
+        player = self._hero(state, 0, Character.ELF, slot, direction=0)
+        state.mobs.hpos[slot] = (10 * 16 - 4) << 7
+        state.mobs.create(
+            wall, 0x8000, 11 * 16 << 7, native_v(10 * 16) << 7,
+            MazeObjIds.WALL_REGULAR,
+        )
+        state.player_input_raw[0] = 0xFFFF & ~(JOY_RIGHT | JOY_FIRE_BIT)
+
+        pictures = []
+        for _ in range(10):
+            tick(state)
+            pictures.append(state.mobs.picture[player.mob_slot])
+
+        right = gp._PORT_DIR_TO_ROM_DIR[player.direction]
+        row = int(Character.ELF) * 32 + right * 4
+        assert set(pictures) >= {
+            gp._PLAYER_SHOOTING_PICTURE[row],
+            gp._PLAYER_SHOOTING_PICTURE[row + 1],
+        }
+
     def test_fighting_selects_its_eight_frame_table(self):
         state = _active_state()
         player = self._hero(state, 0, Character.ELF, 0x80, direction=7)

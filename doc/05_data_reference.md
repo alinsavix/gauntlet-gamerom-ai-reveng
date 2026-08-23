@@ -309,8 +309,8 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904BA2 | 2 B | `thief_previous_pos` | Previous thief maze/MOB slot. Movement copies `thief_next_pos` here before calculating the following cell; exit/steal and route-recovery code use it as the cell behind the thief. |
 | 0x904BA4 | 2 B | `thief_current_pos` | Thief's current maze cell, which is also the hardware MOB slot occupied by the thief. It indexes the MOB arrays and is replaced whenever movement transfers the thief into a new cell; zero means no active thief. |
 | 0x904BA6 | 2 B | `thief_next_pos` | Candidate/next maze cell for thief movement. It initially equals the spawn cell, is recomputed from direction deltas, and becomes `thief_previous_pos` on the next route step. |
-| 0x904BA8 | 4 B | `mugger_item_nextlevel` | Item that the mugger carried to the next level |
-| 0x904BAC | 4 B | `thief_item_nextlevel` | Item that the thief carried to the next level |
+| 0x904BA8 | 4 B | `mugger_item_nextlevel` | Item that the mugger carried to the next level; nonzero makes `maze_addrandompickups` place type 0x32 food |
+| 0x904BAC | 4 B | `thief_item_nextlevel` | Item that the thief carried to the next level; `0x7D30` means empty, otherwise bits 5–0 are the pickup type and the upper value shifted right 6 restores `special_bonus_score` for a multiplier bag |
 | 0x904BB0 | 4 B | `mugger_item_carried` | Item that the mugger is currently carrying |
 | 0x904BB4 | 4 B | `thief_item_carried` | Item that the thief is currently carrying |
 | 0x904BB8 | 2 B | `thief_collision_direction_code` | One-based direction/contact code set when the thief first collides with its target player (`thief_direction + 1`). It suppresses repeated damage during the same contact and is folded into `thief_move_engine`'s return adjustment; zero means no active contact code. |

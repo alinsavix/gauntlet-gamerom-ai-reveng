@@ -972,6 +972,36 @@ def _place_one(state: GameState, slot: int, object_type: int) -> None:
         _create_generic(state, slot, object_type)
 
 
+def maze_randomplace(state: GameState, object_type: int) -> int:
+    """0x42E9A -- place one pickup in the ROM's deterministic empty-cell walk."""
+    object_type = int(object_type)
+    slot = state.getrandom(0x3E0) + FIRST_PLAYABLE_SLOT
+    while slot < FIRST_PLAYABLE_SLOT or state.mobs.picture[slot]:
+        slot = (slot + 0x51) & 0x3FF
+    picture = placement_base_picture(object_type)
+    if object_type == int(MazeObjIds.HIDDENPOT):
+        picture = 0xA728 + (state.getrandom(6) << 2)
+    hpos, vpos = placement_geometry(object_type, slot)
+    state.mobs.create(slot, picture, hpos, vpos, object_type, 0)
+    return slot
+
+
+def place_deferred_thief_pickups(state: GameState) -> list[int]:
+    """0x44166-0x441A6 -- restore loot carried off on the previous level."""
+    placed: list[int] = []
+    if state.mazenum_current >= 0x73:
+        return placed
+    state.special_bonus_score = 100
+    if state.mugger_item_nextlevel:
+        placed.append(maze_randomplace(state, MazeObjIds.FOOD_INVULN))
+    if state.thief_item_nextlevel != 0x7D30:
+        state.special_bonus_score = state.thief_item_nextlevel >> 6
+        placed.append(maze_randomplace(
+            state, state.thief_item_nextlevel & 0x3F,
+        ))
+    return placed
+
+
 def _write_marker(state: GameState, slot: int, object_type: int, picture: int) -> None:
     """Stamp a marker straight into the five arrays (ROM 0x46012-0x460B4).
 
@@ -1376,6 +1406,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     # maze_setupnew calls maze_place_object(0, 2, 0x20)").
     place_decoded_objects(state, maze)
     maze_place_object(state, 0, MazeObjIds.WALL_REGULAR, FIRST_PLAYABLE_SLOT)
+    place_deferred_thief_pickups(state)
 
     # Logical maze data remains useful to gameplay/catalog code. The display
     # bridge commits its random texture decisions once into hardware-shaped

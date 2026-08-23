@@ -61,6 +61,17 @@ class TestScreenRotation:
         main_attract(state)
         assert state.attract_timer == before - 1
 
+    def test_continue_screen_writes_its_live_seconds_into_the_prompt(self):
+        state = GameState(game_mode=GameMode.NORMAL, levelnum_current=4)
+        state.attract_timer = 0x5DD
+
+        main_attract(state)
+
+        assert state.attract_timer == 1500
+        assert "".join(
+            chr(word & 0x3FF) for word in state.alpha_ram[14 * 64 + 13:14 * 64 + 15]
+        ) == "25"
+
     def test_zero_is_not_yet_expired(self):
         """0x44860 branches on ``bge``: zero is still a live frame."""
         state = GameState()

@@ -29,6 +29,7 @@ from ..state import GameState
 from .display import (
     alpha_word,
     fill_alpha_rect,
+    write_alpha_decimal,
     write_alpha_text,
 )
 from .sound import sound_play as _sound_play
@@ -425,6 +426,19 @@ def main_attract(state: GameState) -> None:
         return   # disabled sentinel, e.g. straight after start_attract_to_game
 
     state.attract_timer -= 1                       # 0x445DA
+
+    # 0x44984-0x449B6: NORMAL with no live players is the continue screen.
+    # The prompt itself contains a four-space hole; once per full second this
+    # tail writes the two-digit seconds value into that modeled alpha RAM.
+    if (
+        mode == int(GameMode.NORMAL)
+        and state.levelnum_current != 1
+        and state.attract_timer >= 0
+        and state.attract_timer % 60 == 0
+    ):
+        write_alpha_decimal(
+            state, 13, 14, state.attract_timer // 60, 2, 0x8000,
+        )
 
     if mode != int(GameMode.NORMAL):
         threshold = _INPUT_THRESHOLD[mode]

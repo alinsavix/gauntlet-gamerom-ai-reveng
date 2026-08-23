@@ -230,6 +230,11 @@ shot channel is free. The wind-up is why firing feels like a throw. The
 projectile takes your facing direction, a velocity from a table indexed by
 direction and class, and a picture from your class.
 
+Pressing into a wall does not cancel that table selection. The player remains
+stationary, but held Fire still advances the throw and creates the shot on the
+same four-count cadence; collision may remove a point-blank projectile almost
+immediately without replacing the hero's firing frames.
+
 One rule shapes everything about shooting: **each player owns exactly one shot
 MOB**, one of the fixed low slots from Chapter 8. One arrow in flight per elf.
 Your next shot cannot exist until the current one lands, so standing close to

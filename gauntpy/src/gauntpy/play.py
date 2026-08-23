@@ -1,6 +1,6 @@
 """A minimum playable runner: walk a hero around a real Gauntlet II maze.
 
-    uv run gauntpy-play            # level 1, Warrior
+    uv run gauntpy-play            # level 1, Elf
     uv run gauntpy-play --level 2 --character elf --scale 3
 
 By default it loads a maze and drops a player directly into gameplay; ``--attract``
@@ -128,7 +128,7 @@ def build_state(level: int, character: int) -> GameState:
     return state
 
 
-def run(level: int = 1, character: int = Character.WARRIOR, scale: int = 2,
+def run(level: int = 1, character: int = Character.ELF, scale: int = 2,
         from_attract: bool = False,
         suppress_first_encounter_messages: bool = False) -> None:
     """Open a window and run the game loop until the player closes it.
@@ -199,8 +199,8 @@ def main(argv: list[str] | None = None) -> None:
              "start at the matching rotation maze and advance from there",
     )
     parser.add_argument(
-        "--character", choices=sorted(_CHARACTERS), default="warrior",
-        help="hero class (default: warrior)",
+        "--character", choices=sorted(_CHARACTERS), default="elf",
+        help="hero class (default: elf)",
     )
     parser.add_argument("--scale", type=_positive_scale, default=2,
                         help="window pixel scale")
