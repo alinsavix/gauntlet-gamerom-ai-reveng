@@ -46,11 +46,23 @@ import struct
 from dataclasses import replace
 from typing import NamedTuple
 
+from gex.adjacency import (
+    checkffadj4,
+    ff_make_map,
+    whatis,
+)
 from gex.constants import (
     LFLAG4_TRAPS_LOCAL,
     LFLAG4_WRAP_H,
     LFLAG4_WRAP_V,
     MAX_MAZE_NUM,
+)
+from gex.floor import floor_get_stamp
+from gex.palettes import (
+    FLOOR_PALETTES,
+    SHRUB_FLOOR_COLOR_NUMS,
+    SHRUB_PALETTE_DEFAULT,
+    WALL_PALETTES,
 )
 from gex.mazedecode import Maze, maze_decompress
 from gex.objparams import (
@@ -67,10 +79,19 @@ from gex.roms import (
     slapstic_maze_get_real_addr,
     slapstic_read_maze,
 )
+from gex.wall import ff_get_stamp, wall_get_destructable_stamp, wall_get_stamp
 
 from . import coords
 from .constants import FIRST_PLAYABLE_SLOT, GameMode, MazeObjIds
 from .mob import MobTable
+from .playfield_vram import (
+    EXIT_SETTLED_DESC,
+    EXITTO6_SETTLED_DESC,
+    TRANSPORTER_DESC,
+    playfield_index,
+    read_tile_descriptor,
+    write_tile_descriptor,
+)
 from .state import GameState
 
 __all__ = [
@@ -90,7 +111,61 @@ __all__ = [
     "reset_and_load_level",
     "set_cell_descriptor",
     "clear_cell_descriptor",
+    "write_floor_descriptor",
+    "initialize_playfield_ram",
+    "initialize_maze_color_ram",
+    "load_attract_display_tilemap",
 ]
+
+_ATTRACT_TILE_STREAM_ADDR = 0x5CB28
+_ATTRACT_RUN_CONTROL_ADDR = 0x5850E
+_ATTRACT_TILE_COLUMNS = 40
+_ATTRACT_TILE_ROWS = 25
+_ATTRACT_TILE_LEFT = 1
+_ATTRACT_TILE_TOP = 5
+_ATTRACT_RUN_CONTROL_SIZE = 125
+_ATTRACT_FIXED_PALETTE_ADDR = 0x5AC5E
+
+
+def load_attract_display_tilemap(state: GameState) -> None:
+    """Port ``load_attract_display_tilemap`` 0x4438E into playfield VRAM."""
+    count = _ATTRACT_TILE_COLUMNS * _ATTRACT_TILE_ROWS
+    try:
+        raw_words = coderom_get_bytes(_ATTRACT_TILE_STREAM_ADDR, count * 2)
+        controls = coderom_get_bytes(
+            _ATTRACT_RUN_CONTROL_ADDR, _ATTRACT_RUN_CONTROL_SIZE,
+        )
+    except GexError:
+        return
+    words = struct.unpack(f">{count}H", raw_words)
+    word_index = 0
+    control_index = 0
+    remaining = 0
+    palette = 0
+    for row in range(_ATTRACT_TILE_TOP, _ATTRACT_TILE_TOP + _ATTRACT_TILE_ROWS):
+        for column in range(
+            _ATTRACT_TILE_LEFT, _ATTRACT_TILE_LEFT + _ATTRACT_TILE_COLUMNS,
+        ):
+            if remaining == 0:
+                control = controls[control_index]
+                control_index += 1
+                palette = (control & 0xE0) << 7
+                remaining = control & 0x1F
+            state.playfield_ram[playfield_index(column, row)] = (
+                words[word_index] & 0x0FFF
+            ) | palette
+            word_index += 1
+            remaining -= 1
+    state.playfield_generation += 1
+
+
+def load_attract_fixed_palette() -> tuple[int, ...] | None:
+    """Read init_display's fixed 128-word TITLE palette at ROM 0x5AC5E."""
+    try:
+        raw = coderom_get_bytes(_ATTRACT_FIXED_PALETTE_ADDR, 128 * 2)
+    except GexError:
+        return None
+    return struct.unpack(">128H", raw)
 
 
 
@@ -103,22 +178,501 @@ class MazeError(Exception):
 
 
 def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
-    """Write one living-maze descriptor.
-
-    The original updates playfield RAM together with the MOB record. The port's
-    renderer rebuilds terrain from ``state.maze.data``, so live terrain writers
-    must keep this descriptor view in step.
-    """
+    """Update a logical cell and perform the ROM-equivalent local restamps."""
+    slot &= 0x3FF
     data = getattr(state.maze, "data", None)
-    if data is None or slot < FIRST_PLAYABLE_SLOT:
+    if data is not None and slot >= FIRST_PLAYABLE_SLOT:
+        row, col = coords.unpack_slot(slot)
+        data[(col, row)] = int(object_type)
+
+    if state.playfield_floor_catalog and data is not None:
+        row, col = coords.unpack_slot(slot)
+        write_tile_descriptor(
+            state, slot, _descriptor_for_cell(state, slot, int(object_type)),
+        )
+
+        from .subsystems.maze_objects import refresh_surrounding_door_graphics
+
+        refresh_surrounding_door_graphics(state, slot)
+
+        # refresh_tile_visual 0x5F66E-0x5F76C visits these cells in this exact
+        # order. Only north, north-east, and east have a floor fallback because
+        # those are the three checkwalladj3 textures whose input includes the
+        # changed center cell.
+        refreshes = (
+            (-1, -1, False), (0, -1, True), (1, -1, True),
+            (-1, 0, False), (1, 0, True),
+            (-1, 1, False), (0, 1, False), (1, 1, False),
+        )
+        for dx, dy, refresh_floor in refreshes:
+            neighbour = coords.pack_slot(row + dy, col + dx)
+            neighbour_type = _logical_cell_type(
+                state, col + dx, row + dy,
+            )
+            wall_refreshed = _wall_needs_refresh(
+                state, neighbour, neighbour_type,
+            )
+            if wall_refreshed:
+                write_tile_descriptor(
+                    state, neighbour,
+                    _descriptor_for_cell(state, neighbour, neighbour_type),
+                )
+            elif refresh_floor and neighbour_type not in _WALL_TYPES:
+                write_tile_descriptor(
+                    state, neighbour,
+                    _descriptor_for_cell(state, neighbour, neighbour_type),
+                )
+
+            if (
+                (dx, dy) in ((0, -1), (1, 0))
+                or wall_refreshed and (dx, dy) in ((-1, 0), (0, 1))
+            ):
+                refresh_surrounding_door_graphics(state, neighbour)
         return
-    row, col = coords.unpack_slot(slot)
-    data[(col, row)] = int(object_type)
+
+    write_tile_descriptor(
+        state, slot, _descriptor_for_cell(state, slot, int(object_type)),
+    )
 
 
 def clear_cell_descriptor(state: GameState, slot: int) -> None:
     """Replace one living-maze descriptor with floor."""
     set_cell_descriptor(state, slot, int(MazeObjIds.TILE_FLOOR))
+
+
+def write_floor_descriptor(state: GameState, slot: int) -> None:
+    """Run one centre-only ``pf_floor_update`` ordinary-floor write."""
+    write_tile_descriptor(state, slot, _fresh_floor_descriptor(state, slot))
+
+
+_SPECIAL_FLOORS = frozenset((
+    int(MazeObjIds.TILE_STUN),
+    int(MazeObjIds.TILE_TRAP1),
+    int(MazeObjIds.TILE_TRAP2),
+    int(MazeObjIds.TILE_TRAP3),
+))
+_WALL_TYPES = frozenset((
+    int(MazeObjIds.WALL_REGULAR),
+    int(MazeObjIds.WALL_SECRET),
+    int(MazeObjIds.WALL_DESTRUCTABLE),
+    int(MazeObjIds.WALL_RANDOM),
+    int(MazeObjIds.WALL_TRAPCYC1),
+    int(MazeObjIds.WALL_TRAPCYC2),
+    int(MazeObjIds.WALL_TRAPCYC3),
+))
+_TRAP_WALL_TYPES = frozenset((
+    int(MazeObjIds.WALL_TRAPCYC1),
+    int(MazeObjIds.WALL_TRAPCYC2),
+    int(MazeObjIds.WALL_TRAPCYC3),
+))
+
+_WALL_ADJ8 = (
+    (-1, -1, 0x01), (0, -1, 0x02), (1, -1, 0x04),
+    (-1, 0, 0x08), (1, 0, 0x10),
+    (-1, 1, 0x20), (0, 1, 0x40), (1, 1, 0x80),
+)
+_FLOOR_ADJ3 = ((-1, 0, 4), (0, 1, 16), (-1, 1, 8))
+
+
+def _logical_cell_type(state: GameState, col: int, row: int) -> int:
+    data = getattr(state.maze, "data", None)
+    if data is None:
+        return int(MazeObjIds.TILE_FLOOR)
+    return int(data.get((col & 0x1F, row & 0x1F), MazeObjIds.TILE_FLOOR))
+
+
+def _wall_needs_refresh(
+    state: GameState, slot: int, object_type: int,
+) -> bool:
+    """Match refresh_tile_visual's connectable-wall probe for live records."""
+    if object_type not in _WALL_TYPES:
+        return False
+    if (
+        object_type == int(MazeObjIds.WALL_DESTRUCTABLE)
+        and slot in state.destructible_wall_stage
+    ):
+        return False
+    if (
+        object_type == int(MazeObjIds.WALL_RANDOM)
+        and state.mobs.picture[slot] == 0
+    ):
+        return False
+    return True
+
+
+def _wall_is_visible(state: GameState, object_type: int) -> bool:
+    """Apply maze_init_walls/pf_wall_draw's two invisibility gates."""
+    if state.levelnum_current == LEVEL_SENTINEL:
+        return True
+    if state.level_flags_2 & 0x80:
+        return False
+    return not (
+        object_type in _TRAP_WALL_TYPES and state.level_flags & 0x80
+    )
+
+
+def _wall_adjacency(state: GameState, slot: int) -> int:
+    row, col = coords.unpack_slot(slot)
+    return sum(
+        bit for dx, dy, bit in _WALL_ADJ8
+        if (
+            (neighbor := coords.pack_slot(
+                (row + dy) & 0x1F, (col + dx) & 0x1F,
+            )) >= FIRST_PLAYABLE_SLOT
+            and state.mobs.picture[neighbor] == 0x8000
+            and _logical_cell_type(state, col + dx, row + dy) in _WALL_TYPES
+        )
+    )
+
+
+def _floor_adjacency(state: GameState, slot: int) -> int:
+    if state.playfield_wallpattern >= 11:
+        return 0
+    row, col = coords.unpack_slot(slot)
+    return sum(
+        bit for dx, dy, bit in _FLOOR_ADJ3
+        if (
+            (object_type := _logical_cell_type(
+                state, col + dx, row + dy,
+            )) in _WALL_TYPES
+            and _wall_is_visible(state, object_type)
+            and not (
+                object_type in _TRAP_WALL_TYPES
+                and (
+                    state.level_flags & 0x80
+                    or state.level_flags_3 & 0x08
+                )
+            )
+            and state.mobs.picture[
+                coords.pack_slot((row + dy) & 0x1F, (col + dx) & 0x1F)
+            ] == 0x8000
+        )
+    )
+
+
+def write_cyclic_wall_descriptor(
+    state: GameState, slot: int, object_type: int,
+) -> None:
+    """Center-only wall_place_playfield_update for cyclic wall types 7-9."""
+    row, col = coords.unpack_slot(slot)
+    maze = state.maze
+    data = getattr(maze, "data", None)
+    if data is not None:
+        data[(col, row)] = int(object_type)
+    if not _wall_is_visible(state, object_type):
+        return
+    adjacency = sum(
+        bit for dx, dy, bit in _WALL_ADJ8
+        if (
+            (neighbor := coords.pack_slot(
+                (row + dy) & 0x1F, (col + dx) & 0x1F,
+            )) >= FIRST_PLAYABLE_SLOT
+            and state.mobs.picture[neighbor] == 0x8000
+            and state.mobs.obj_type(neighbor) in _TRAP_WALL_TYPES
+        )
+    )
+    if maze is None:
+        return
+    try:
+        stamp = wall_get_stamp(
+            int(getattr(maze, "wallpattern", 0)), adjacency,
+            int(getattr(maze, "wallcolor", 0)), _StateRandom(state),
+        )
+    except GexError:
+        return
+    write_tile_descriptor(state, slot, _descriptor_words(stamp, 7))
+
+
+def _forcefield_adjacency(state: GameState, slot: int) -> int:
+    result = 0
+    for segment in state.forcefield_segments:
+        hub = segment & 0x3FF
+        row, col = coords.unpack_slot(hub)
+        length = ((segment >> 10) & 0x0F) + 1
+        horizontal = bool(segment & 0x8000)
+        endpoint = (
+            (row << 5) | ((col + length) & 0x1F)
+            if horizontal
+            else (((row + length) & 0x1F) << 5) | col
+        )
+        if slot == hub:
+            result |= 2 if horizontal else 4
+        elif slot == endpoint:
+            result |= 8 if horizontal else 1
+    return result
+
+
+def _descriptor_for_cell(
+    state: GameState, slot: int, object_type: int,
+) -> tuple[int, int, int, int]:
+    slot &= 0x3FF
+    object_type = int(object_type)
+    if object_type == int(MazeObjIds.TILE_FLOOR):
+        return _fresh_floor_descriptor(state, slot)
+    if object_type in _SPECIAL_FLOORS:
+        palette = 2 if object_type == int(MazeObjIds.TILE_STUN) else 1
+        return _fresh_floor_descriptor(state, slot, palette=palette)
+    if object_type == int(MazeObjIds.EXIT):
+        return EXIT_SETTLED_DESC
+    if object_type == int(MazeObjIds.EXITTO6):
+        return EXITTO6_SETTLED_DESC
+    if object_type == int(MazeObjIds.TRANSPORTER):
+        return TRANSPORTER_DESC
+    if object_type == int(MazeObjIds.WALL_DESTRUCTABLE):
+        if not _wall_is_visible(state, object_type):
+            return read_tile_descriptor(state, slot)
+        descriptor = state.playfield_destruct_catalog.get(
+            _wall_adjacency(state, slot)
+        )
+        if descriptor is not None:
+            return descriptor
+        maze = state.maze
+        if maze is None or not hasattr(maze, "wallpattern"):
+            return read_tile_descriptor(state, slot)
+        if maze is not None:
+            try:
+                stamp = wall_get_destructable_stamp(
+                    int(getattr(maze, "wallpattern", 0)),
+                    _wall_adjacency(state, slot),
+                    int(getattr(maze, "wallcolor", 0)),
+                    _StateRandom(state),
+                )
+            except GexError:
+                return read_tile_descriptor(state, slot)
+            return _descriptor_words(stamp, 7)
+    if object_type in _WALL_TYPES:
+        if not _wall_is_visible(state, object_type):
+            return read_tile_descriptor(state, slot)
+        descriptor = state.playfield_wall_catalog.get(
+            _wall_adjacency(state, slot)
+        )
+        if descriptor is not None:
+            return descriptor
+        maze = state.maze
+        if maze is None or not hasattr(maze, "wallpattern"):
+            return read_tile_descriptor(state, slot)
+        if maze is not None:
+            try:
+                stamp = wall_get_stamp(
+                    int(getattr(maze, "wallpattern", 0)),
+                    _wall_adjacency(state, slot),
+                    int(getattr(maze, "wallcolor", 0)),
+                    _StateRandom(state),
+                )
+            except GexError:
+                return read_tile_descriptor(state, slot)
+            return _descriptor_words(stamp, 7)
+    if object_type == int(MazeObjIds.FORCEFIELDHUB):
+        adjacency = _forcefield_adjacency(state, slot)
+        descriptor = state.playfield_forcefield_catalog.get(
+            adjacency
+        )
+        if descriptor is not None:
+            return descriptor
+        return _descriptor_words(ff_get_stamp(adjacency), 4)
+    if object_type in _WALL_TYPES:
+        return read_tile_descriptor(state, slot)
+    return _fresh_floor_descriptor(state, slot)
+
+
+def _initial_floor_descriptor(
+    state: GameState, slot: int, object_type: int,
+) -> tuple[int, int, int, int]:
+    """Make the one descriptor decision made by ``maze_floor_decor``.
+
+    The ROM checks the four descriptor-owned object types before reaching its
+    random-floor branch.  Everything else receives one floor draw here; walls
+    are replaced by the separate wall pass afterwards.
+    """
+    object_type = int(object_type)
+    if object_type in (
+        int(MazeObjIds.EXIT),
+        int(MazeObjIds.EXITTO6),
+        int(MazeObjIds.TRANSPORTER),
+        int(MazeObjIds.FORCEFIELDHUB),
+    ):
+        return _descriptor_for_cell(state, slot, object_type)
+    if object_type in _SPECIAL_FLOORS:
+        palette = 2 if object_type == int(MazeObjIds.TILE_STUN) else 1
+        return _fresh_floor_descriptor(state, slot, palette=palette)
+    return _fresh_floor_descriptor(state, slot)
+
+
+def _initial_object_type(
+    state: GameState, maze: Maze, slot: int, col: int, row: int,
+) -> int:
+    """Read the post-setup MOB type, falling back to decoded floor-only data."""
+    if state.mobs.is_occupied(slot):
+        return state.mobs.obj_type(slot)
+    decoded = int(whatis(maze, col, row))
+    if state.cyclic_wall_setup_ready and decoded in _TRAP_WALL_TYPES:
+        return int(MazeObjIds.TILE_FLOOR)
+    return decoded
+
+
+class _StateRandom:
+    """gex stamp-provider adapter over the game's single live RNG stream."""
+
+    def __init__(self, state: GameState) -> None:
+        self.state = state
+
+    def intn(self, bound: int) -> int:
+        return self.state.getrandom(bound)
+
+
+def _fresh_floor_descriptor(
+    state: GameState, slot: int, *, palette: int | None = None,
+) -> tuple[int, int, int, int]:
+    """Draw the texture variant at the descriptor write point, as the ROM does."""
+    variation = state.getrandom(4)
+    adjacency = _floor_adjacency(state, slot)
+    descriptor = state.playfield_floor_catalog.get((adjacency, variation))
+    if descriptor is None:
+        if not state.playfield_floor_catalog:
+            descriptor = state.playfield_floor_descriptors[slot]
+        else:
+            maze = state.maze
+            if maze is None:
+                descriptor = state.playfield_floor_descriptors[slot]
+            else:
+                descriptor = _descriptor_words(
+                    floor_get_stamp(
+                        int(getattr(maze, "floorpattern", 0)),
+                        adjacency + variation,
+                        int(getattr(maze, "floorcolor", 0)),
+                    ),
+                    0,
+                )
+    if palette is None:
+        palette = 3 if slot in state.playfield_forcefield_cells else 0
+    descriptor = tuple(
+        (word & 0x8FFF) | ((palette & 7) << 12) for word in descriptor
+    )
+    state.playfield_floor_descriptors[slot] = descriptor
+    return descriptor
+
+
+def _descriptor_words(stamp, palette: int) -> tuple[int, int, int, int]:  # noqa: ANN001
+    return tuple(
+        (int(word) & 0x0FFF) | ((palette & 7) << 12)
+        for word in stamp.numbers[:4]
+    )
+
+
+def _palette_words(palette) -> list[int]:  # noqa: ANN001
+    return [int(color.irgb) & 0xFFFF for color in palette]
+
+
+def initialize_maze_color_ram(
+    state: GameState, maze: Maze, *, floorcolor: int | None = None,
+) -> None:
+    """Run the palette half of init_display for a decoded maze."""
+    from .subsystems.display import init_playfield_color_ram
+
+    selected_floorcolor = maze.floorcolor if floorcolor is None else floorcolor
+    palette7_substitutions: tuple[tuple[int, int], ...] = ()
+    if maze.wallpattern >= 6:
+        raw_special = (
+            WALL_PALETTES[maze.wallcolor - 1]
+            if maze.wallcolor else SHRUB_PALETTE_DEFAULT
+        )
+        first = 3 if maze.wallpattern >= 11 else 0
+        floor_indices = SHRUB_FLOOR_COLOR_NUMS[maze.floorpattern][first:first + 3]
+        palette7_substitutions = tuple(
+            (13 + offset, FLOOR_PALETTES[selected_floorcolor][source].irgb)
+            for offset, source in enumerate(floor_indices)
+        )
+    else:
+        raw_special = WALL_PALETTES[maze.wallcolor]
+    init_playfield_color_ram(
+        state,
+        _palette_words(FLOOR_PALETTES[selected_floorcolor]),
+        _palette_words(raw_special),
+        palette7_substitutions=palette7_substitutions,
+    )
+
+
+def initialize_playfield_ram(state: GameState, maze: Maze) -> None:
+    """Commit one level's randomly selected 64x64 descriptor table.
+
+    This is the gex-using level bridge corresponding to ``maze_floor_decor`` and
+    the initial ``refresh_tile_visual`` sweep. Every random descriptor choice is
+    drawn from ``state.getrandom`` at the point where its four words are written.
+    """
+    initialize_maze_color_ram(state, maze)
+
+    state.playfield_ram[:] = [0] * len(state.playfield_ram)
+    state.playfield_floor_descriptors[:] = [(0, 0, 0, 0)] * 1024
+    state.playfield_floor_catalog.clear()
+    state.playfield_wall_catalog.clear()
+    state.playfield_destruct_catalog.clear()
+    state.playfield_forcefield_catalog.clear()
+    state.playfield_wallpattern = int(maze.wallpattern)
+    state.playfield_forcefield_cells = set()
+    for segment in state.forcefield_segments:
+        hub = segment & 0x3FF
+        row, col = coords.unpack_slot(hub)
+        length = ((segment >> 10) & 0x0F) + 1
+        horizontal = bool(segment & 0x8000)
+        for distance in range(1, length):
+            state.playfield_forcefield_cells.add(
+                (row << 5) | ((col + distance) & 0x1F)
+                if horizontal
+                else (((row + distance) & 0x1F) << 5) | col
+            )
+    for adjacency in (0, 4, 8, 12, 16, 20, 24, 28):
+        for variation in range(4):
+            state.playfield_floor_catalog[(adjacency, variation)] = (
+                _descriptor_words(
+                    floor_get_stamp(
+                        maze.floorpattern, adjacency + variation,
+                        maze.floorcolor,
+                    ),
+                    0,
+                )
+            )
+
+    from gex.rand import SeededRandom
+    if maze.wallpattern in (0, 1, 2, 3, 4, 5, 6, 11):
+        for adjacency in range(256):
+            state.playfield_wall_catalog[adjacency] = _descriptor_words(
+                wall_get_stamp(
+                    maze.wallpattern, adjacency, maze.wallcolor,
+                    SeededRandom(5),
+                ),
+                7,
+            )
+    for adjacency in range(256):
+        state.playfield_destruct_catalog[adjacency] = _descriptor_words(
+            wall_get_destructable_stamp(
+                maze.wallpattern, adjacency, maze.wallcolor, SeededRandom(5),
+            ),
+            7,
+        )
+    for adjacency in range(16):
+        state.playfield_forcefield_catalog[adjacency] = _descriptor_words(
+            ff_get_stamp(adjacency), 4,
+        )
+
+    # maze_floor_decor calls pf_floor_update once per cell. Fixed descriptor
+    # types return before the RNG branch; ordinary floors and object underlays
+    # draw exactly one variation. Wall graphics are a later, separate pass.
+    for col in range(32):
+        for row in range(32):
+            slot = coords.pack_slot(row, col)
+            obj = _initial_object_type(state, maze, slot, col, row)
+            descriptor = _initial_floor_descriptor(state, slot, obj)
+            write_tile_descriptor(state, slot, descriptor)
+
+    # maze_init_walls owns wall descriptor selection and its pattern-specific
+    # random draws. No floor decision is repeated in this pass.
+    for row in range(32):
+        for col in range(32):
+            slot = coords.pack_slot(row, col)
+            obj = _initial_object_type(state, maze, slot, col, row)
+            if obj in _WALL_TYPES and _wall_is_visible(state, obj):
+                descriptor = _descriptor_for_cell(state, slot, obj)
+                write_tile_descriptor(state, slot, descriptor)
 
 
 # ---------------------------------------------------------------------------
@@ -803,9 +1357,17 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     place_decoded_objects(state, maze)
     maze_place_object(state, 0, MazeObjIds.WALL_REGULAR, FIRST_PLAYABLE_SLOT)
 
-    # The renderer draws terrain from state.maze, not from the MobTable, so it
-    # gets the mirrored view the objects were placed through.
+    # Logical maze data remains useful to gameplay/catalog code. The display
+    # bridge commits its random texture decisions once into hardware-shaped
+    # descriptor RAM; rendering never treats this dictionary as pixels.
     state.maze = mirror_maze(state, maze)
+    from .subsystems.maze_objects import (
+        forcefield_segments_setup, maze_forcefield_setup,
+    )
+    forcefield_segments_setup(state)
+    if state.level_flags_3 & 0x08:
+        maze_forcefield_setup(state)
+    initialize_playfield_ram(state, state.maze)
     from .subsystems.maze_objects import setup_door_graphics
     setup_door_graphics(state)
 

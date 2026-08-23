@@ -23,6 +23,8 @@ reads correctly over the black backgrounds the HUD and screens paint.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 GLYPH_W = 8
 GLYPH_H = 8
 
@@ -126,6 +128,91 @@ def draw_glyph_run(
         )
         cx += GLYPH_W * scale
     return cx - int(x)
+
+
+def draw_alpha_glyph(image, x: int, y: int, code: int, palette, *,
+                     opaque: bool) -> None:
+    """Draw one hardware alpha cell, with a PIL-only ROM-free fallback."""
+    if opaque:
+        from PIL import ImageDraw
+
+        ImageDraw.Draw(image).rectangle(
+            [x, y, x + GLYPH_W - 1, y + GLYPH_H - 1], fill=palette[0],
+        )
+    if code == 0:
+        return
+
+    if _rom_glyphs() is not None:
+        _blit_glyph(
+            image, _raw_glyph_fn(code & 0x3FF), x, y, palette[3], 1,
+            palette=palette, opaque=opaque,
+        )
+        return
+
+    large_tile = _large_fallback_tiles().get(code)
+    if large_tile is not None:
+        image.paste(
+            palette[3], (x, y, x + GLYPH_W, y + GLYPH_H),
+            large_tile.getchannel("A"),
+        )
+        return
+
+    # ROM-free host boundary. Printable glyph codes retain their ASCII meaning;
+    # known pre-baked HUD cells use compressed text fragments.
+    fallback = chr(code) if 0x21 <= code <= 0x7E else _hud_fallback_text().get(
+        code, "·",
+    )
+    _draw_text_pil(image, x, y, fallback, palette[3], 1)
+
+
+@lru_cache(maxsize=1)
+def _hud_fallback_text() -> dict[int, str]:
+    from .. import romtext
+
+    result = {romtext.GLYPH_KEY: "K", romtext.GLYPH_POTION: "P"}
+    for codes, text in zip(
+        romtext.CHARACTER_HUD_GLYPHS, romtext.CHARACTER_NAMES, strict=True,
+    ):
+        padded = text.ljust(len(codes) * 2)
+        result.update(
+            (code, padded[index * 2:index * 2 + 2])
+            for index, code in enumerate(codes)
+        )
+    for codes, text in (
+        (romtext.LABEL_SCORE_GLYPHS, "SCORE "),
+        (romtext.LABEL_HEALTH_GLYPHS, "HEALTH  "),
+    ):
+        result.update(
+            (code, text[index * 2:index * 2 + 2])
+            for index, code in enumerate(codes)
+        )
+    return result
+
+
+@lru_cache(maxsize=1)
+def _large_fallback_tiles() -> dict[int, object]:
+    """Build readable PIL substitutes for OS large-font quadrant glyphs."""
+    from PIL import Image
+    from ..subsystems.display import _LARGE_GLYPH_QUADS
+
+    result = {}
+    characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    for index, character in enumerate(characters):
+        small = Image.new("RGBA", (8, 8))
+        _draw_text_pil(small, 0, 0, character, (255, 255, 255, 255), 1)
+        large = small.resize((16, 16), Image.Resampling.NEAREST)
+        quads = (
+            large.crop((0, 0, 8, 8)),
+            large.crop((0, 8, 8, 16)),
+            large.crop((8, 0, 16, 8)),
+            large.crop((8, 8, 16, 16)),
+        )
+        for code, tile in zip(_LARGE_GLYPH_QUADS[index], quads, strict=True):
+            result.setdefault(code | 0x100, tile)
+    blank = Image.new("RGBA", (8, 8))
+    for code in _LARGE_GLYPH_QUADS[0x25]:
+        result[code | 0x100] = blank
+    return result
 
 
 def glyph_run_width(codes, *, scale: int = 1) -> int:

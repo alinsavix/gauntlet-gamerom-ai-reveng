@@ -80,13 +80,17 @@ def _spawn_player(state: GameState, character: int) -> int:
     player_join(state, 0)                   # positioned spawn + finalize
 
     if not p.active:                        # no PLAYERSTART: centre fallback
+        from .subsystems.display import init_player_mob_palette
+
         start = pack_slot(16, 16)
         px, py = slot_to_pixels(start)
         state.mobs.unlink_and_clear(start)
         state.mobs.create(
-            start, tile=0, hpos=encode_hpos(px), vpos=encode_vpos_at_y(py),
+            start, tile=0, hpos=encode_hpos(px, palette=0x0C),
+            vpos=encode_vpos_at_y(py),
             obj_type=MazeObjIds.PLAYERSTART, state=0,
         )
+        init_player_mob_palette(state, 0, character)
         p.status = PlayerStatus.ALIVE_HERE
         p.mob_slot = start
         p.direction = 2
@@ -133,8 +137,9 @@ def run(level: int = 1, character: int = Character.WARRIOR, scale: int = 2,
     ``from_attract`` -- boot through the real front end (``one_time_init`` ->
     TITLE attract), where you insert a coin (the ``5`` key), pick a class on the
     joystick, and press Magic (Enter) to start, exactly as the cabinet does. The
-    attract, high-score, legend, and character-select screens render
-    (``render/screens.py``) with the ROM alpha font and title artwork.
+    attract, high-score, legend, and character-select routines populate alpha
+    VRAM; the generic alpha renderer displays it with the ROM font. The title
+    screen uses the ROM's fixed playfield and procedurally built MOB records.
     """
     _ensure_rom_dir()
 

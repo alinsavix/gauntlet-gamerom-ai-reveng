@@ -34,6 +34,7 @@ from ..constants import (
 )
 from ..coords import CELL_PIXELS, decode_hpos, decode_vpos, sprite_top_y
 from ..state import GameState
+from ..subsystems.display import mob_palette_rgba
 
 __all__ = [
     "MobDrawInfo", "SpriteSource", "iter_visible_mobs", "draw_mob_layer",
@@ -100,37 +101,6 @@ MAX_MOB_PIXELS = MAX_MOB_TILES * 8
 #: (``monsters._destination_cell``'s +8px bias), and maze placement can nudge a
 #: sprite wider than its cell. One whole cell is the bound on that gap.
 BAND_SLACK_PIXELS = MAX_MOB_PIXELS - CELL_PIXELS
-
-# palette_hurt_{warrior,valkyrie,wizard,elf} (0x404AE/0x404D0/0x404F8/
-# 0x4051A) copy white from the 0x5B20E hurt-cycle tables into these class-local
-# palette entries while 0x905F30 is nonzero.
-_PLAYER_HURT_PALETTE_INDICES = (
-    (5, 12),
-    (6, 8, 9),
-    (6, 8, 10),
-    (11, 12),
-)
-_HURT_WHITE_RGBA = (225, 225, 225, 255)  # IRGB 0xFFFF
-
-
-def _player_hurt_palette(
-    state: GameState, slot: int, palette_rgba: list,
-) -> list:
-    """Apply the live hurt-palette RAM overlay for a hero MOB."""
-    player = next(
-        (
-            player for player in state.players
-            if player.mob_slot == slot and player.status
-        ),
-        None,
-    )
-    if player is None or player.hurt_cooldown == 0:
-        return palette_rgba
-    flashed = list(palette_rgba)
-    for index in _PLAYER_HURT_PALETTE_INDICES[player.character & 0x03]:
-        flashed[index] = _HURT_WHITE_RGBA
-    return flashed
-
 
 def strength_tier(state: GameState, slot: int) -> int:
     """The sprite/palette tier of the creature in ``slot`` -- the default
@@ -202,7 +172,6 @@ class SpriteSource(Protocol):
         kind: str | None = None,
         size: tuple[int, int] | None = None,
     ): ...
-    def palette(self, kind: str, index: int): ...           # -> gex.palettes.Palette
 
 
 def sprite_kind(state: GameState, slot: int) -> str | None:
@@ -356,24 +325,19 @@ def draw_mob_layer(
 ) -> None:
     """Draw every visible MOB, in chain order, onto ``fb``.
 
-    **The palette comes from the MOB itself.** ``mob_hpos`` bits 3-0 *are* the
-    hardware MOB palette number (``doc/01_hardware.md`` §8.2), and the game
-    keeps a creature's live health tier in those same bits
-    (``doc/04_game_subsystems.md`` §26) -- so the word ``iter_visible_mobs``
-    already decoded is passed straight to ``AssetStore.sprite(palette=...)``.
-    That is what makes a wounded monster change colour the way the original
-    does, without this layer having to infer anything.
+    **The palette comes from color RAM.** ``mob_hpos`` bits 3-0 select one of
+    the sixteen live banks at 0x910200. Asset metadata is used only to decode
+    indexed graphics; no static gex palette participates in this layer.
 
-    ``tier_for(state, slot) -> int`` remains as the ``tier`` fallback for an
-    asset provider that cannot honour a raw palette number; it defaults to
-    ``strength_tier``, which derives the same value from that nibble the long
-    way round. An asset store that supports ``palette`` ignores it.
+    ``tier_for(state, slot) -> int`` remains for compatibility with asset
+    providers that use tier metadata while locating a stamp. It cannot affect
+    final colors; those always come from the selected live RAM bank.
 
     **Which creature, not just which picture.** ``sprite_kind`` resolves each
     slot to a gex entity from the MOB table itself (the player slots by
     ``Player.character``, everything else by object type) and that goes to the
     asset store as ``kind``. Without it a playing Wizard renders as a Sorcerer
-    -- they share 40 tile numbers -- in the Sorcerer's palette bank.
+    -- they share 40 tile numbers -- with the wrong stamp geometry.
 
     **How big it is.** ``mob_vpos`` bits 5-0 are the sprite's tile size, and
     that word plus the picture is the whole of what the MOB hardware draws --
@@ -381,38 +345,31 @@ def draw_mob_layer(
     That is what renders the artwork no table names: a hero's exit/death
     dissolve is seven 3x3 blocks per class that no gex animation record
     covers, so before this the hero simply stopped being drawn part-way
-    through dying. ``kind`` still picks the bank, so a dissolving Warrior
-    dissolves in the Warrior's colours.
+    through dying. Its hpos nibble still selects the live player-color bank.
 
     Sprites the asset store still cannot resolve -- a picture in no table,
     from a caller that has no size either -- raise ``AssetError``; this layer
     catches that per MOB and skips it rather than failing the whole frame, so
     the renderer degrades gracefully as gex's data grows instead of being
-    all-or-nothing. The palette fetch is inside the same guard because a
-    resolved sprite still names a bank/index pair the provider may not have.
+    all-or-nothing.
     """
     dest_x, dest_y, vw, vh = viewport
     clip = (dest_x, dest_y, dest_x + vw, dest_y + vh)
     tier_for = tier_for or strength_tier
-    palette_cache: dict[tuple[str, int], list] = {}
+    palette_cache: dict[int, tuple] = {}
 
     for info in iter_visible_mobs(state, scroll_x, scroll_y, viewport[2], viewport[3]):
         try:
             stamp = assets.sprite(
                 info.picture,
                 tier=tier_for(state, info.slot),
-                palette=info.palette,
                 kind=info.kind,
                 size=info.size_tiles,
             )
-            pal_key = (stamp.ptype, stamp.pnum)
-            palette_rgba = palette_cache.get(pal_key)
+            palette_rgba = palette_cache.get(info.palette)
             if palette_rgba is None:
-                palette_rgba = [c.to_rgba() for c in assets.palette(stamp.ptype, stamp.pnum)]
-                palette_cache[pal_key] = palette_rgba
-            palette_rgba = _player_hurt_palette(
-                state, info.slot, palette_rgba,
-            )
+                palette_rgba = mob_palette_rgba(state, info.palette)
+                palette_cache[info.palette] = palette_rgba
         except AssetError:
             continue
 

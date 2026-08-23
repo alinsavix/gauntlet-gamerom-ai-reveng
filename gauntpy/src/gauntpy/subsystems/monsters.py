@@ -2023,8 +2023,7 @@ def _it_tag(state: GameState, player_index: int, monster_slot: int) -> None:
     """0x4967A -- touching IT transfers the curse instead of dealing damage.
 
     The ROM also swaps the on-screen IT name label here (0x4590E clears the old
-    holder's, 0x45866 sets the new one); gauntpy's renderer derives that from
-    ``player_it``, so the transfer is the assignment below.
+    holder's, 0x45866 sets the new one); synchronize those two alpha cells here.
     """
     p = state.players[player_index]
     _sound_play(state, _SOUND_IT_TAG)           # 0x35
@@ -2032,6 +2031,8 @@ def _it_tag(state: GameState, player_index: int, monster_slot: int) -> None:
     # before player_it is reassigned, so the *new* holder is credited.
     secret_trick_progress(state, player_index, _TRICK_TASK_WHILE_IT)
     state.player_it = player_index
+    from .score import write_it_labels
+    write_it_labels(state)
     state.mobs.unlink_and_clear(monster_slot)
     p.stundelay = _IT_TAG_STUN
     player_add_score_with_mult(state, player_index, _IT_TAG_SCORE)

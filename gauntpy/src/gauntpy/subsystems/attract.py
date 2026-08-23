@@ -23,8 +23,14 @@ interruption test blocks, and the three expiry outcomes at 0x44860-0x4491A
 
 from __future__ import annotations
 
+from .. import romtext
 from ..constants import GameMode, PlayerStatus
 from ..state import GameState
+from .display import (
+    alpha_word,
+    fill_alpha_rect,
+    write_alpha_text,
+)
 from .sound import sound_play as _sound_play
 
 # =============================================================================
@@ -79,6 +85,231 @@ _ATTRACT_MAZE = 0
 _DEMO_MAZE = 102
 _LEGEND_MAZE = 103
 
+# logo_motion_program_full/short, ROM 0x5AC2E/0x5AC4E. Each record is
+# (duration, ordinary-logo V delta, "II" V delta, playfield V-scroll delta).
+_TITLE_MOTION_FULL = (
+    (0x90, 2, 0, 0),
+    (0x03, -2, 0, 2),
+    (0x06, 1, 0, -1),
+    (0x01, 0, 0, 0),
+    (0xB3, 0, 2, 0),
+    (0x03, 0, -2, 2),
+    (0x06, 0, 1, -1),
+    (0x00, 0, 0, 0),
+)
+_TITLE_MOTION_SHORT = (
+    (0x90, 2, 0, 0),
+    (0x01, 0, 0, 0),
+    (0xB3, 0, 2, 0),
+    (0x00, 0, 0, 0),
+)
+_TITLE_MOB_FIRST = 0x20
+_TITLE_MOB_LAST = 0xBE
+
+
+def _title_mob_record(
+    state: GameState, slot: int, picture: int, hpos: int, vpos: int,
+) -> None:
+    state.mobs.create(slot, tile=picture, hpos=hpos, vpos=vpos, obj_type=0)
+
+
+def _init_title_logo_mobs(state: GameState) -> None:
+    """Port title_logo_init 0x4DA9A-0x4DCB8 into the four MOB arrays."""
+    slot = _TITLE_MOB_FIRST
+    picture = 0x2000
+    main_vpos = 0x6400
+    ii_picture = 0x2700
+    ii_vpos = 0x4000
+
+    for row in range(9):
+        if row == 6:
+            picture = 0x2560
+        hpos = 0x0200 + row
+        for _ in range(3):
+            _title_mob_record(state, slot, picture, hpos, main_vpos + 0x38)
+            slot += 1
+            picture += 8
+            hpos += 0x2000
+
+        if row < 5:
+            _title_mob_record(state, slot, picture, hpos, main_vpos + 0x20)
+            slot += 1
+            picture += 5
+            hpos += 0x1400
+            for _ in range(12):
+                _title_mob_record(state, slot, picture, hpos, main_vpos)
+                slot += 1
+                picture += 1
+                hpos += 0x0400
+        else:
+            _title_mob_record(state, slot, picture, hpos, main_vpos + 0x10)
+            slot += 1
+            picture += 3
+            hpos += 0x0C00
+            _title_mob_record(state, slot, picture, hpos, main_vpos)
+            slot += 1
+
+            ii_hpos = 0x6E00 + row
+            _title_mob_record(state, slot, ii_picture, ii_hpos, ii_vpos + 0x08)
+            slot += 1
+            ii_picture += 2
+            ii_hpos += 0x0800
+            for _ in range(6):
+                _title_mob_record(state, slot, ii_picture, ii_hpos, ii_vpos)
+                slot += 1
+                ii_picture += 1
+                ii_hpos += 0x0400
+
+            hpos += 0x2000
+            picture += 8
+            for _ in range(6):
+                _title_mob_record(state, slot, picture, hpos, main_vpos)
+                slot += 1
+                picture += 1
+                hpos += 0x0400
+
+        main_vpos -= 0x0400
+        ii_vpos -= 0x0400
+
+    ii_hpos = 0x6E09
+    _title_mob_record(state, slot, ii_picture, ii_hpos, ii_vpos + 0x08)
+    slot += 1
+    ii_picture += 2
+    ii_hpos += 0x0800
+    for _ in range(6):
+        _title_mob_record(state, slot, ii_picture, ii_hpos, ii_vpos)
+        slot += 1
+        ii_picture += 1
+        ii_hpos += 0x0400
+
+    assert slot - 1 == _TITLE_MOB_LAST
+    _scroll_title_mobs(state, -1, 0)
+    state.logo_motion_index = -1
+    state.logo_scroll_timer = 0
+
+
+def _scroll_title_mobs(
+    state: GameState, body_delta: int, ii_delta: int,
+) -> bool:
+    """Port scroll_apply 0x4D956 for the title's two MOB groups."""
+    if body_delta == 0 and ii_delta == 0:
+        return False
+    for slot in range(_TITLE_MOB_FIRST, _TITLE_MOB_LAST + 1):
+        picture = state.mobs.picture[slot] & 0x7FFF
+        delta = ii_delta if 0x2700 <= picture < 0x2728 else body_delta
+        state.mobs.vpos[slot] = (
+            state.mobs.vpos[slot] + (delta << 7)
+        ) & 0xFFFF
+    return True
+
+
+def _update_title_logo_motion(state: GameState) -> None:
+    program = _TITLE_MOTION_FULL if state.title_logo_full_program else _TITLE_MOTION_SHORT
+    while True:
+        if state.logo_scroll_timer == 0:
+            state.logo_motion_index += 1
+            duration, body_delta, ii_delta, scroll_delta = program[
+                state.logo_motion_index
+            ]
+            state.logo_scroll_timer = duration
+            if duration == 0:
+                state.logo_scroll_timer = -1
+            elif scroll_delta:
+                state.scroll_y = (state.scroll_y + scroll_delta) & 0x1FF
+
+        if state.logo_scroll_timer <= 0:
+            return
+        state.logo_scroll_timer -= 1
+        duration, body_delta, ii_delta, scroll_delta = program[
+            state.logo_motion_index
+        ]
+        if state.logo_scroll_timer > 0 and scroll_delta:
+            state.scroll_y = (state.scroll_y + scroll_delta) & 0x1FF
+        if _scroll_title_mobs(state, body_delta, ii_delta):
+            return
+
+
+def _write_legend_alpha(state: GameState) -> None:
+    """load_legend_page's opaque 29-column curtain and ROM text page."""
+    fill_alpha_rect(state, 0, 0, 29, 30, alpha_word(0x8000))
+    page = int(state.attract_legend)
+    if page == 1:
+        fill_alpha_rect(state, 16, 3, 10, 14, 0)
+    if page == 2:
+        # draw_legend_rules_page 0x4D088-0x4D0EC reveal windows precede text.
+        for column, width, row, height in (
+            (0, 5, 2, 5), (0, 9, 10, 5), (22, 7, 5, 2),
+            (22, 5, 7, 2), (24, 6, 5, 11), (24, 9, 5, 20),
+        ):
+            fill_alpha_rect(state, column, row, width, height, 0)
+    if page == 2:
+        records = romtext.LEGEND_RULES_TEXT
+    elif page == 1:
+        records = romtext.LEGEND_MONSTER_TEXT
+    else:
+        records = romtext.LEGEND_CREDITS_TEXT
+    for text, column, row in records:
+        attribute = 0x8800 if page == 0 and column == 4 else 0x8000
+        write_alpha_text(state, column, row, text, attribute)
+
+
+def _adjust_legend_rules_mobs(state: GameState) -> None:
+    """Port draw_legend_rules_page's decorative MOB writes at 0x4CFF8."""
+    for slot, picture in (
+        (0x24F, 0x09A2), (0x2CF, 0x2728), (0x2D0, 0x272C),
+        (0x2EF, 0x2730), (0x2F0, 0x2734), (0x30F, 0x2738),
+        (0x310, 0x273C),
+    ):
+        state.mobs.picture[slot] = picture
+    for slot, delta in (
+        (0x2C3, 0x0100), (0x2C4, -0x0100), (0x2E3, 0x0200),
+        (0x303, 0x0200), (0x323, -0x0100), (0x324, 0x0600),
+    ):
+        state.mobs.vpos[slot] = (state.mobs.vpos[slot] + delta) & 0xFFFF
+
+
+def _adjust_legend_monster_mobs(state: GameState) -> None:
+    """Port draw_legend_monsters_page's fourteen position adjustments."""
+    for array, slot, delta in (
+        (state.mobs.hpos, 0x257, -0x0400),
+        (state.mobs.vpos, 0x258, -0x0400),
+        (state.mobs.hpos, 0x279, 0x0400),
+        (state.mobs.hpos, 0x277, -0x0400),
+        (state.mobs.vpos, 0x277, -0x0200),
+        (state.mobs.vpos, 0x278, -0x0600),
+        (state.mobs.hpos, 0x299, 0x0400),
+        (state.mobs.vpos, 0x299, -0x0200),
+        (state.mobs.hpos, 0x2B7, -0x0400),
+        (state.mobs.vpos, 0x2B8, -0x0400),
+        (state.mobs.hpos, 0x2D9, 0x0400),
+        (state.mobs.vpos, 0x2D9, 0x0100),
+        (state.mobs.hpos, 0x2F7, -0x0600),
+        (state.mobs.vpos, 0x2F7, -0x0300),
+    ):
+        array[slot] = (array[slot] + delta) & 0xFFFF
+
+
+def _load_legend_page(state: GameState) -> None:
+    """Port load_legend_page 0x4CD1C, including its maze/palette reload."""
+    from .. import maze
+    from .players import setup_infopanel
+
+    maze.reset_and_load_level(
+        state, state.levelnum_current, maze_number=_LEGEND_MAZE,
+    )
+    if state.attract_legend == 1 and state.maze is not None:
+        maze.initialize_maze_color_ram(state, state.maze, floorcolor=7)
+    setup_infopanel(state, -1)
+    if state.attract_legend == 2:
+        state.scroll_x = 0x2C
+        state.scroll_y = 0x108
+        _adjust_legend_rules_mobs(state)
+    elif state.attract_legend == 1:
+        state.scroll_x = 0xE0
+        state.scroll_y = 0x100
+        _adjust_legend_monster_mobs(state)
+    _write_legend_alpha(state)
+
 # Recorded demo input streams, transcribed from ROM (row76.bin).  Each is a
 # flat list of bytes read as [timer, joystick] pairs, with 0xFF = speech marker
 # and 0xFE = join record (hi nibble = character class, lo nibble = slot).  The
@@ -126,14 +357,20 @@ _DIRECTION_BITS = 0xF0
 def main_logo_updcolors(state: GameState) -> None:
     """0x4DCBA -- palette-driven colour animation and title logo effects.
 
-    The palette RAM writes themselves are rendering (WP-2); here the cadence
-    counter advances so timing-dependent callers stay in step.  On the SCORES
-    screen the rainbow shifts every 16th frame; on TITLE the logo pulse runs on
-    its own inner/outer timers (§14.3).
+    TITLE delegates the exact nested timer and 0x910204/0x910332 writes to the
+    game-owned color-RAM model. ``logo_color_timer`` remains only a diagnostic
+    frame count for callers that observed the earlier migration.
     """
     state.logo_color_timer = (state.logo_color_timer + 1) & 0xFFFF
-    # Colour-cycle work (palette RAM) is deferred to WP-2; nothing the
-    # simulation reads changes here.
+    if int(state.game_mode) == int(GameMode.SCORES):
+        if (state.frame_counter & 0x0F) == 0:
+            block = state.alpha_color_ram[144:160]
+            state.alpha_color_ram[144:160] = block[-4:] + block[:-4]
+    elif int(state.game_mode) == int(GameMode.TITLE):
+        from .display import update_title_logo_colors
+
+        update_title_logo_colors(state)
+        _update_title_logo_motion(state)
 
 
 # =============================================================================
@@ -206,6 +443,7 @@ def main_attract(state: GameState) -> None:
 def _attract_timer_expired(state: GameState, mode: int) -> None:
     """0x44860-0x4491A -- what happens when the screen timer runs out."""
     state.logo_color_timer = 0                     # 0x44866 logo_cycle_timer
+    state.logo_cycle_timer = 0
 
     if mode == int(GameMode.LEGEND):               # 0x4486E
         if state.attract_legend == 0:
@@ -215,6 +453,10 @@ def _attract_timer_expired(state: GameState, mode: int) -> None:
             # (0x44882-0x4489C, and the attract_legend != 2 skip at 0x44904).
             state.attract_legend -= 1
             state.attract_timer = _LOADED_TIMER[int(GameMode.LEGEND)]
+            from .players import player_resetall
+
+            player_resetall(state)
+            _load_legend_page(state)                # 0x4488C-0x4489C
             return
     elif mode == int(GameMode.NORMAL):             # 0x448A4
         # The character-select screen timed out. A player still holding health
@@ -271,17 +513,39 @@ def start_attract_screen(state: GameState, mode: int) -> None:
     state.mazenum_current = _ATTRACT_MAZE          # 0x44462
 
     from .players import player_resetall
+    from .display import clear_attract_display_memory, restore_alpha_color_ram
 
+    clear_attract_display_memory(state)              # 0x44468 / 0x44474
+    restore_alpha_color_ram(state)                   # init_display common prefix
     player_resetall(state)                         # 0x4446E
     _sound_play(state, _SOUND_THEME_FADE)          # 0x4447A
     state.attract_timer = _LOADED_TIMER.get(mode, 0x258)
 
     if mode == int(GameMode.TITLE):
+        from .display import (
+            init_alpha_color_ram,
+            init_fixed_playfield_color_ram,
+            init_title_logo_colors,
+        )
+        from ..maze import (
+            load_attract_display_tilemap, load_attract_fixed_palette,
+        )
+
+        # attract_display (0x4438E) finishes with init_display(0x10, 0x10),
+        # which restores alpha colors but deliberately skips playfield/MOB
+        # palettes. The title routine then builds its own MOB display list.
+        load_attract_display_tilemap(state)
+        init_alpha_color_ram(state, initialize_mobs=False)
+        fixed_palette = load_attract_fixed_palette()
+        if fixed_palette is not None:
+            init_fixed_playfield_color_ram(state, fixed_palette)
         state.attract_count = (state.attract_count + 1) & 0xFFFF   # 0x4448E
         if state.attract_count >= _TITLE_SETTINGS_REFRESH_CYCLE:   # 0x44498
             state.attract_count = 0
             _refresh_operator_settings(state)          # 0x444A4-0x444C2
         state.title_logo_full_program = state.title_intro_state == 0
+        init_title_logo_colors(state)               # title_logo_init 0x444D2
+        _init_title_logo_mobs(state)
         if (
             state.game_settings & _SETTINGS_ATTRACT_SOUND
             and state.title_intro_state == 0
@@ -293,14 +557,18 @@ def start_attract_screen(state: GameState, mode: int) -> None:
     elif mode == int(GameMode.DEMO):
         attract_demo_init(state)
     elif mode == int(GameMode.LEGEND):
-        from .. import maze
-        from .players import setup_infopanel
-
         state.attract_legend = 2
+        _load_legend_page(state)                    # 0x44536-0x44552
+    elif mode == int(GameMode.SCORES):
+        from .. import maze
+        from .score import write_high_score_screen
+
         maze.reset_and_load_level(
             state, state.levelnum_current, maze_number=_LEGEND_MAZE,
         )
-        setup_infopanel(state, -1)                 # 0x4453C-0x44542
+        state.scroll_x = 9
+        state.scroll_y = 5
+        write_high_score_screen(state)              # attract_highscores 0x4450C
 
 
 def attract_demo_init(state: GameState) -> None:
@@ -398,6 +666,10 @@ def _check_attract_interrupt(state: GameState, mode: int) -> bool:
         if state.attract_legend > 0:
             state.attract_legend -= 1
             state.attract_timer = _LOADED_TIMER[int(GameMode.LEGEND)]
+            from .players import player_resetall
+
+            player_resetall(state)
+            _load_legend_page(state)
         else:
             start_attract_screen(state, int(GameMode.SCORES))
         return True

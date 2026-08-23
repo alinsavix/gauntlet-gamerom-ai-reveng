@@ -651,12 +651,10 @@ class TestLoadLevel:
     def test_mob_table_and_stored_maze_agree_cell_for_cell(self):
         """Placement and the stored (mirrored) maze describe the same level.
 
-        EXIT cells are the one documented exception: ``exit_scan_level`` runs
-        after placement and ``maze_pick_one_exit`` removes the losing exits on
-        an Exit1of/ExitMoves level (``mob_remove`` at 0x43EBC), so the MobTable
-        deliberately ends up with fewer exits than the maze data has.
+        ``exit_scan_level`` now routes losing exits through the shared floor
+        replacement, so logical maze data, MOB state, and playfield VRAM remain
+        synchronized after the Exit1of/ExitMoves pass.
         """
-        removed_any_exit = False
         for level in range(1, 6):
             state = GameState(game_mode=GameMode.NORMAL)
             gm.load_level(state, level)
@@ -664,17 +662,9 @@ class TestLoadLevel:
                 if row == 0:
                     continue
                 slot = pack_slot(row, col)
-                if object_type == MazeObjIds.EXIT:
-                    if state.mobs.obj_type(slot) != object_type:
-                        removed_any_exit = True
-                    continue
                 assert state.mobs.obj_type(slot) == object_type, (
                     f"level {level} cell (col={col}, row={row})"
                 )
-        assert removed_any_exit, (
-            "the opening act includes a multi-exit pick level; if this stops "
-            "being true the exception above is no longer needed"
-        )
 
     def test_a_normal_game_level_actually_gets_mirrored_sometimes(self):
         """The LFLAG1 bits-2-3 XOR is a getrandom(4) draw per level, so over a

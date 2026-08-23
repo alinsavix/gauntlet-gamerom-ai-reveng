@@ -6,8 +6,12 @@ Reference: ``doc/04_game_subsystems.md`` §10.1, §22, §6.4;
 
 from __future__ import annotations
 
+from .. import romtext
 from ..constants import Character, GameMode, PlayerStatus
 from ..state import NUM_PLAYERS, GameState
+from .display import (
+    clear_alpha_visible, write_alpha_glyphs, write_alpha_large_text,
+)
 from .players import player_join_finalize, player_start_inner, setup_infopanel
 
 # ---------------------------------------------------------------------------
@@ -28,6 +32,19 @@ _COIN_HEALTH_TABLE: list[int] = [
 # index it by *player slot*, not by character, which is what
 # doc/05_data_reference.md's "character announcement speech IDs" label misses.
 _COIN_SLOT_SOUND: list[int] = [0x22, 0x23, 0x24, 0x25]
+
+
+def _write_character_select_alpha(state: GameState) -> None:
+    """start_attract_to_game's portrait names and ROM instruction chain."""
+    clear_alpha_visible(state)
+    setup_infopanel(state, -1)
+    positions = ((12, 24), (5, 26), (12, 29), (18, 26))  # ROM 0x570B4/0x570B8
+    for klass, (column, row) in enumerate(positions):
+        write_alpha_glyphs(
+            state, column, row, romtext.CHARACTER_HUD_GLYPHS[klass], 0x8000,
+        )
+    for text, column, row in romtext.CHARACTER_SELECT_LINES:
+        write_alpha_large_text(state, column, row, text, 0x8C00)
 
 # ---------------------------------------------------------------------------
 # Module-private helpers
@@ -106,6 +123,7 @@ def start_attract_to_game(state: GameState) -> None:
     from .exits import exit_scan_level
     if maze.reset_and_load_level(state, 1):   # level 1 = maze 0 (I-08 spawn target)
         exit_scan_level(state)                # maze_new_level_setup exit table
+    _write_character_select_alpha(state)      # 0x442BC-0x44346
 
 
 # Free-play / demo starting health, ROM word at 0x578A0 (player_init_for_coin
@@ -327,6 +345,13 @@ def main_start_game(state: GameState) -> None:
         player = state.players[i]
 
         if player.status == PlayerStatus.SELECTING:
+            from .display import clear_alpha_visible
+
+            initial_selection = not any(
+                other.status == PlayerStatus.ALIVE_HERE
+                for index, other in enumerate(state.players)
+                if index != i
+            )
             # Commit character selection and starting health.
             player.character = state.pending_character[i]
 
@@ -341,6 +366,9 @@ def main_start_game(state: GameState) -> None:
             player_join_finalize(state, i)
             if placed != -1:
                 state.level_players_active += 1
+            if initial_selection:
+                clear_alpha_visible(state)
+                setup_infopanel(state, -1)
 
             # Tricks 0x0F-0x11 need somebody else to be pushy with, to be IT
             # against, or to avoid hurting, so a solo cabinet cancels them

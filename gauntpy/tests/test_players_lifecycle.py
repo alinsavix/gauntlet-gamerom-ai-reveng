@@ -1467,6 +1467,11 @@ class TestShowContinuePrompt:
         gp.show_continue_prompt(state)
         assert 0x3B in state.sound_log          # "Gauntlet II Theme Song"
         assert state.title_intro_state == 1
+        start = 13 * 64 + 5
+        assert "".join(
+            chr(word & 0x3FF) if word & 0x3FF else " "
+            for word in state.alpha_ram[start:start + 19]
+        ) == "   PRESS START     "
 
     def test_blocked_while_players_remain_on_the_level(self):
         state = self._ready()
@@ -1501,24 +1506,29 @@ class TestShowContinuePrompt:
 
 class TestSecretNameEntry:
 
-    def test_counts_down_then_hands_the_player_back(self):
+    def test_secret_code_matches_the_rom_crc_pipeline(self):
+        state = GameState()
+        state.secret_name_buffer = list(b"ALINSA" + b" " * 23)
+        state.secret_trick_last = 5
+        state.secret_trick_id = 0x5A
+        state.secret_prev_maze = 73
+
+        assert gp.secret_code_build(state) == "FB9-AD9"
+
+    def test_timeout_builds_code_then_hands_the_player_back(self):
         state = _active_state()
         state.secret_winner = 1
         p = state.players[1]
-        p.status = int(PlayerStatus.SECRET_NAME_ENTRY)
-        p.state_timer = 2
-
-        gp.main_move_players(state)
-        assert p.state_timer == 1
-        gp.main_move_players(state)
-        assert p.state_timer == 0
+        state.game_settings |= 0x2000
+        gp.secret_getname(state)
         assert p.status == int(PlayerStatus.SECRET_NAME_ENTRY)
-
+        assert state.alpha_ram[1 * 64 + 4] & 0x0100
+        state.bonus_timer = 4
         gp.main_move_players(state)
         assert p.status == int(PlayerStatus.ALIVE_NEXT)   # 0x54FD4
         assert state.secret_winner == -1                  # 0x54FDA
-        from gauntpy.subsystems.score import info_panel
-        assert info_panel(state).players[1].health_drawn
+        assert len(state.secret_code) == 7
+        assert state.secret_code[3] == "-"
 
     def test_ignores_a_winner_index_that_is_not_a_player(self):
         state = _active_state()
@@ -2154,15 +2164,18 @@ class TestDoorOpeningFronts:
             slot, tile=0x9D38, hpos=0, vpos=0,
             obj_type=int(MazeObjIds.DOOR_HORIZ),
         )
-        for neighbour in (slot - 1, slot - 0x20):
-            state.mobs.create(
-                neighbour, tile=0x9D3C, hpos=0, vpos=0,
-                obj_type=int(MazeObjIds.DOOR_HORIZ),
-            )
+        state.mobs.create(
+            slot - 1, tile=0x9D3C, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.DOOR_HORIZ),
+        )
+        state.mobs.create(
+            slot - 0x20, tile=0x9D7C, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.DOOR_VERT),
+        )
 
         gp.door_open_start(state, slot, 0)
 
-        assert state.door_endpoint_dir[0:2] == [3, 3]
+        assert state.door_endpoint_dir[0:2] == [3, 0]
         assert state.mobs.picture[slot - 1] == 0
         assert state.mobs.picture[slot - 0x20] == 0
         assert state.door_endpoint_pos[0:2] == [slot - 1, slot - 0x20]
@@ -3531,8 +3544,13 @@ class TestFakeExitObjective:
         state = _trick_state(gp._TRICK_NOFOOLED)
         _make_player_active(state, 0)
         slot = self._exit_slot(state, True)
+        from gauntpy.playfield_vram import (
+            read_tile_descriptor, write_tile_descriptor,
+        )
+        write_tile_descriptor(state, slot, (0x39E, 0x39F, 6, 6))
         gp.player_tile_interact(state, slot, 0)
         assert state.mobs.obj_type(slot) == 0     # 0x51404
+        assert read_tile_descriptor(state, slot) == (0, 0, 0, 0)
 
     def test_a_fake_exit_speaks_record_thirty(self):
         """0x513EC pushes mask 0x40000000 -- bit 30 selects the record.
@@ -4082,6 +4100,20 @@ class TestNameEntry:
         assert p.initials == [ord("A")] * 3
         assert p.initials_cursor == 0
         assert p.status == int(PlayerStatus.DYING)
+
+    def test_ranked_entry_writes_prompt_score_rank_and_large_initials(self):
+        state = self._entering()
+        p = state.players[0]
+        gp.setup_infopanel(state, 0)
+
+        row = 7
+        assert "".join(
+            chr(word & 0x3FF) if word & 0x3FF else " "
+            for word in state.alpha_ram[row * 64 + 29:row * 64 + 36]
+        ).startswith("  Enter")
+        assert state.alpha_ram[row * 64 + 36] & 0x0100
+        assert state.alpha_ram[(row + 1) * 64 + 36] & 0x0100
+        assert p.highscore_rank == 0
 
     def test_the_whole_death_to_removal_lifecycle_runs(self):
         """End to end: a ranked hero dies, enters initials, commits them, plays

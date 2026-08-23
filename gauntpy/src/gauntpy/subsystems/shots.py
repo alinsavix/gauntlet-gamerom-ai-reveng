@@ -1460,6 +1460,19 @@ def wall_crumble(state: GameState, slot: int, damage: int) -> int:
             return CONSUMED
 
     state.destructible_wall_stage[slot] = stage + damage
+    from ..playfield_vram import read_tile_descriptor, write_tile_descriptor
+
+    descriptor = wall_crumble_descriptor(state, slot)
+    if descriptor is not None:
+        write_tile_descriptor(state, slot, descriptor, 0x7000)
+    else:
+        palette = wall_crumble_palette(state, slot) & 7
+        write_tile_descriptor(
+            state,
+            slot,
+            tuple((word & 0x8FFF) | (palette << 12)
+                  for word in read_tile_descriptor(state, slot)),
+        )
     return 0
 
 

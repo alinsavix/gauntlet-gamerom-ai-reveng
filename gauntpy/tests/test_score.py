@@ -13,7 +13,7 @@ Reference: doc/04_game_subsystems.md §10.4-10.5, §14, §25; PLAN.md §6 WP-14.
 
 from __future__ import annotations
 
-from gauntpy.constants import GameMode
+from gauntpy.constants import GameMode, PlayerStatus
 from gauntpy.mainloop import tick
 from gauntpy.state import GameState, InfoPanel, PanelField
 from gauntpy.subsystems.score import (
@@ -48,7 +48,11 @@ from gauntpy.subsystems import score as score_mod
 
 def _normal_state() -> GameState:
     """Return a GameState in NORMAL gameplay mode."""
-    return GameState(game_mode=GameMode.NORMAL)
+    state = GameState(game_mode=GameMode.NORMAL)
+    for player in state.players:
+        player.status = PlayerStatus.ALIVE_HERE
+        player.health = 750
+    return state
 
 
 # ---------------------------------------------------------------------------

@@ -279,7 +279,7 @@ class TestStartAttractScreen:
         state.sound_log.clear()
         start_attract_screen(state, int(GameMode.SCORES))
         assert state.levelnum_current == 1
-        assert state.mazenum_current == 0
+        assert state.mazenum_current == 103
         assert state.sound_log[:2] == [_SOUND_SCREEN_CHANGE, _SOUND_THEME_FADE]
 
     def test_legend_rebuilds_the_whole_info_panel(self):
@@ -298,6 +298,27 @@ class TestStartAttractScreen:
 
         assert state.mazenum_current == 103
         assert state.maze is not None
+
+    @requires_roms
+    def test_title_builds_its_fixed_playfield_and_mob_display(self):
+        from gauntpy.playfield_vram import playfield_index
+
+        state = GameState()
+        start_attract_screen(state, int(GameMode.TITLE))
+
+        assert state.playfield_ram[playfield_index(21, 8)] == 0x44B2
+        assert any(state.playfield_color_ram)
+        assert any(state.playfield_shadow_color_ram)
+        assert state.mobs.picture[0x20] == 0x2000
+        assert state.mobs.picture[0xBE] == 0x2727
+        assert not any(state.alpha_ram)
+
+    @requires_roms
+    def test_every_attract_screen_restores_alpha_color_ram(self):
+        for mode in (GameMode.SCORES, GameMode.TITLE, GameMode.DEMO, GameMode.LEGEND):
+            state = GameState()
+            start_attract_screen(state, int(mode))
+            assert any(state.alpha_color_ram), mode
 
     def test_demo_rebuilds_the_whole_info_panel(self):
         """attract_demo_init 0x449DE-0x449E4, and it clears the first-encounter
@@ -477,6 +498,20 @@ class TestLogoColors:
         before = state.logo_color_timer
         main_logo_updcolors(state)
         assert state.logo_color_timer == (before + 1) & 0xFFFF
+
+    def test_scores_rotates_the_rom_alpha_palette_block_every_sixteen_frames(self):
+        state = GameState(game_mode=GameMode.SCORES)
+        state.alpha_color_ram[144:160] = list(range(16))
+        state.frame_counter = 0
+
+        main_logo_updcolors(state)
+
+        assert state.alpha_color_ram[144:160] == list(range(12, 16)) + list(range(12))
+
+        state.frame_counter = 1
+        before = list(state.alpha_color_ram)
+        main_logo_updcolors(state)
+        assert state.alpha_color_ram == before
 
 
 class TestTitleLogoMotionSelection:

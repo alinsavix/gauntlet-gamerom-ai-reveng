@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2279 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2256 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -33,13 +33,54 @@ start).
 
 ---
 
-## Open / blocked issues
-
-**None.**
-
----
-
 ## Resolved issues
+
+### S-82 · MOB/front-end rendering bypassed modeled video memory
+
+`GameState.mob_color_ram` now owns the complete 256-word MOB palette region.
+`init_display`, player setup, hurt/power VBLANK effects, title cycling, and
+SCORES cycling write the modeled color banks; the MOB compositor resolves every
+sprite solely from its hpos palette nibble and that RAM. TITLE now writes the
+ROM's fixed playfield tilemap/palette and procedurally builds all 159 MOB records
+used by `title_logo_init`, including its two-group motion program. SCORES and all
+three LEGEND pages reload maze 103 through normal display initialization.
+
+The audit also completed the display-memory side of OS large text, ordinary
+initials entry, the continue prompt, the secret-room 29-character editor and its
+ROM-matched CRC secret code, plus the rules-page reveal windows/decorative MOB
+writes. Temporary front-end/bonus alpha content is cleared at the same lifecycle
+boundaries as the ROM. Direct game-content compositing has been removed; the only
+host overlays left are the frame counter/PAUSED indicator and ROM-free glyph
+fallbacks.
+
+### S-81 · playfield color RAM remained a palette snapshot
+
+`GameState.playfield_color_ram` and `playfield_shadow_color_ram` now model all
+128 IRGB words at 0x910500 and 0x910400. Level setup follows `init_display`:
+palettes 0–3 clone the level floor palette, palette 4 receives the transporter
+palette, palettes 5–7 are the exact staged wall fades, and the shadow bank is
+derived by `palette_fade_copy`. Trap/stun VBLANK pulses, forcefield color steps,
+and transporter records write the live banks; descriptor-only wall/exit changes
+remain descriptor writes. The cached renderer resolves both normal and shadow
+colors solely from these arrays.
+
+### S-80 · playfield pixels bypassed modeled descriptor VRAM
+
+`GameState.playfield_ram` now owns all 4096 column-first descriptor words.
+Level setup commits random floor/wall texture choices once; shared ROM-shaped
+writers update doors, exits, transporters, forcefields, traps, and living walls.
+The compositor derives and generation-caches its normal/shadow rasters solely
+from VRAM; `maze.data` remains logical state and per-effect draw overlays are no
+longer on the live render path.
+
+### S-79 · game alpha content bypassed modeled alpha VRAM
+
+HUD fields, dialogs, high scores, legend/select text, and bonus tallies were
+reconstructed directly in `render/hud.py` and `render/screens.py`. Their ROM
+call sites now write complete attribute/glyph words into `GameState.alpha_ram`;
+one generic alpha pass resolves opacity, bank/palette, glyph, and live
+`alpha_color_ram` each frame. Only the host frame counter/PAUSED overlay and
+ROM-free glyph fallbacks bypass that layer.
 
 ### Twelfth-pass attract/HUD/wall presentation (S-76 … S-78)
 
@@ -54,8 +95,8 @@ start).
   through that live RAM. The resulting dark red/blue/yellow/green values match
   MAME 0.289 without sampled RGBA constants.
 - **S-78 · the SCORES overlay erased its maze scenery.** MAME shows score boxes
-  over maze 103, retained from LEGEND. LEGEND now loads maze 103 and SCORES no
-  longer clears the framebuffer. MAME also confirms LEGEND's 29-column opaque
+  over maze 103. Both SCORES and LEGEND now independently load maze 103 through
+  their ROM setup paths. MAME also confirms LEGEND's 29-column opaque
   alpha curtain is intentionally black; its maze remains loaded as scenery
   behind that curtain rather than visibly filling the text area.
 
@@ -245,8 +286,11 @@ remembered live slot before resetting the per-player RAM.
 - **S-47 · live color-RAM effects were frozen.** Trap and stun palettes now
   follow the alternating-field 0x4044↔0xA0AA and 0x2220↔0xEEE0 pulses.
   Transporter palette entries 8–13 consume all six records at 0x5AFAE.
-  The title logo is rendered through the shifting ten-palette bank instead of
-  pasting one cached RGBA frame.
+  MOB palettes now live in the 256-word 0x910200 bank: init_display's exact
+  0x5AE1E and Wizard-table copies, per-player spawn/hurt/power writes, and the
+  title's ten-row shift plus 0x910332 brightness injection all mutate that RAM.
+  MOB and title graphics remain indexed until the renderer resolves the live
+  entries; title MOB composition itself remains deferred.
 - **S-48 · the dragon never reached its flamethrower state.** Direction choice
   now uses the ROM compass, candidate-cell probes, target/distance packing,
   no-target sentinel and signed turn duration. Muzzle alignment updates the
@@ -407,8 +451,9 @@ remembered live slot before resetting the per-player RAM.
   of disappearing. A monster that crosses into a new MOB slot also writes its
   current facing/frame there immediately.
 - **S-26 · VBLANK hurt feedback and join defaults.** The 0x905F30 timers now
-  step 0x12→0x0C→0x06→0 and apply the class-specific white palette entries from
-  0x5B20E+, rather than being write-only state. Paid and free-play joins both
+  step 0x12→0x0C→0x06→0 and write the class-specific palette entries from
+  0x5B20E+ into live player MOB color RAM, rather than invoking a renderer
+  overlay. Paid and free-play joins both
   preserve `player_resetall`'s per-slot character default; `coincheck` had an
   invented Warrior assignment absent from 0x42B6A.
 - **S-27 · living-terrain redraws were too expensive and level state leaked.**
@@ -576,18 +621,17 @@ I-08) carry the player from a coin insert through class selection to a spawned
 hero. Verified end-to-end through the real `tick()` loop
 (`test_level_transition.py::TestFrontEndFlow`). The runner exposes it via
 `gauntpy-play --attract` (coin key `5`); `render/host.py` gained the coin-key
-edge handler. The title, high-score, legend, and character-select **screens now
-render** (`render/screens.py`, hooked into the compositor) — drawn only during a
-front-end phase, a no-op during gameplay. They and the HUD use the **real ROM
-alpha font** (`gex.alphafont` decodes `136043-1104.6p`'s 8x8 glyphs;
-`render/text.py` blits them, with a PIL fallback when the ROM is absent), so the
+edge handler. The title, high-score, legend, and character-select game routines
+now write the same alpha VRAM consumed by the compositor's generic alpha pass.
+They and the HUD use the **real ROM alpha font** (`gex.alphafont` decodes
+`136043-1104.6p`'s 8x8 glyphs; `render/text.py` retains a PIL fallback), so the
 text is the cabinet's own characters, not a placeholder. The **DEMO attract
 screen** now loads maze 102's MOBs and drops the scripted Elf in
 (`attract_demo_init`), so the demo rotation shows a real world; and the
-**level-end bonus screen** renders — walking into an exit holds a ~2.5 s "LEVEL
-COMPLETE / TREASURES n / BONUS" tally (`100 x players x coins x treasures`, §16;
-treasures counted by `player_tile_interact`, the world frozen on the TREAS_EXIT
-phase) before the next maze loads.
+**level-end bonus screen** renders the ROM's per-player
+`100 x COINS / TREASURES x / BONUS =` rows (`100 x players x coins x treasures`,
+§16; treasures counted by `player_tile_interact`, the world frozen on the
+TREAS_EXIT phase) before the next maze loads.
 
 **Resolved (title-logo tiles).** The extracted 96-MOB layout was correct, but
 the first reconstruction placed rows by raw packed Y. MAME renders motion
@@ -848,8 +892,8 @@ works too: by default the runner drops mid-level, but `--attract` boots through
 and press Magic to start, driving the genuine `coincheck` →
 `character_select_input_update` → `main_start_game` → spawn path (see the
 "Resolved · front-end session flow" entry). The attract, high-score, legend,
-and character-select **screens render** (`render/screens.py`) in the **real ROM
-alpha font**, so `--attract` shows arcade-faithful text throughout, not a dark
+and character-select routines write alpha VRAM rendered in the **real ROM alpha
+font**, so `--attract` shows arcade-faithful text throughout, not a dark
 window; the DEMO attract screen shows a real maze, each exit plays a "LEVEL
 COMPLETE" bonus tally, and the title uses the ROM-native pixel wordmark. It is
 the integration harness that surfaced I-R7, I-23, and I-24 — all now resolved.

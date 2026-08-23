@@ -6,6 +6,7 @@ Reference: ``doc/04_game_subsystems.md`` §12, §16, §10.6;
 
 from __future__ import annotations
 
+from .. import romtext
 from ..constants import (
     FIRST_PLAYABLE_SLOT,
     SLOT_EXIT_ANIMS,
@@ -13,8 +14,20 @@ from ..constants import (
     MazeObjIds,
     PlayerStatus,
 )
-from ..coords import position_field
+from ..coords import position_field, unpack_slot
+from ..playfield_vram import (
+    EXIT_ANIM_FRAMES,
+    EXIT_SETTLED_DESC,
+    exit_descriptor,
+    write_tile_descriptor,
+)
 from ..state import NUM_PLAYERS, GameState
+from .display import (
+    alpha_word,
+    fill_alpha_rect,
+    write_alpha_decimal,
+    write_alpha_text,
+)
 from .sound import sound_play, sound_speech_play
 
 # ---------------------------------------------------------------------------
@@ -457,9 +470,12 @@ def secret_room_spawn(state: GameState) -> None:
     player.potionsnum = 0
     player.supershot = 0
     state.secret_tricks_flags[winner] = 0    # player_start_inner 0x48ED6
+    from .players import setup_infopanel
+
+    setup_infopanel(state, winner)
 
 
-def _secret_room_payout(state: GameState, completed: bool) -> None:
+def _secret_room_payout(state: GameState, completed: bool) -> bool:
     """0x4D720-0x4D8A0 -- pay the winner, hand their inventory back, stand down.
 
     Only ``secret_winner`` is considered; a completed task pays
@@ -469,11 +485,13 @@ def _secret_room_payout(state: GameState, completed: bool) -> None:
     """
     winner = state.secret_winner
     state.bonus_amount = 0
+    open_name_entry = False
     if 0 <= winner < NUM_PLAYERS:
         player = state.players[winner]
         if (completed                                            # 0x4D748
                 and player.status in (int(PlayerStatus.ALIVE_NEXT),
                                       int(PlayerStatus.RESPAWN_WAIT))):
+            open_name_entry = True
             bonus = _SECRET_ROOM_BONUS * max(1, player.coin_count)   # 0x4D778
             player.score += bonus                                # 0x4D788
             state.score_dirty[winner] = 1
@@ -482,10 +500,15 @@ def _secret_room_payout(state: GameState, completed: bool) -> None:
         player.keysnum = (player.keysnum + state.secret_saved_keys) & 0xFF
         player.potionsnum = (player.potionsnum + state.secret_saved_potions) & 0xFF
         player.supershot = (player.supershot + state.secret_saved_supershot) & 0xFF
+        from .players import player_inv_update
+
+        player_inv_update(state, winner)
     state.secret_saved_keys = 0
     state.secret_saved_potions = 0
     state.secret_saved_supershot = 0
-    state.secret_winner = -1                                     # 0x4D866
+    if not open_name_entry:
+        state.secret_winner = -1                                 # 0x4D866
+    return open_name_entry
 
 
 # ---------------------------------------------------------------------------
@@ -678,6 +701,8 @@ def maze_pick_one_exit(state: GameState) -> None:
         if fake_exits:
             state.mobs.hpos[slot] |= _EXIT_FAKE_MARK      # 0x43EAC
         else:
+            from ..maze import clear_cell_descriptor
+            clear_cell_descriptor(state, slot)
             state.mobs.unlink_and_clear(slot)             # 0x43EBC mob_remove
 
 
@@ -757,10 +782,24 @@ def _exit_move_animate(state: GameState) -> None:
     if state.exit_move_timer <= _EXIT_ANIM_SETTLE:        # 0x52A6E
         state.exit_move_timer = _EXIT_MOVE_TIMER_RELOAD   # 0x52A74
         state.exit_anim_frame = 0                         # settled stamp 0x5C8A0
+        write_tile_descriptor(state, state.exit_open_id, EXIT_SETTLED_DESC)
+        if state.exit_close_id:
+            from ..maze import write_floor_descriptor
+            write_floor_descriptor(state, state.exit_close_id)
         state.exit_close_id = 0                           # vacated cell repainted
         return
 
     state.exit_anim_frame = (-state.exit_move_timer) >> 2  # 0x52AAC-0x52AB4
+    floorpattern = int(getattr(state.maze, "floorpattern", 0) or 0)
+    write_tile_descriptor(
+        state, state.exit_open_id,
+        exit_descriptor(floorpattern, EXIT_ANIM_FRAMES + state.exit_anim_frame),
+    )
+    if state.exit_close_id:
+        write_tile_descriptor(
+            state, state.exit_close_id,
+            exit_descriptor(floorpattern, state.exit_anim_frame),
+        )
 
 
 def _exit_relocate(state: GameState) -> None:
@@ -777,6 +816,19 @@ def _exit_relocate(state: GameState) -> None:
         index -= count
     new_slot = state.exit_slots[index]
     state.exit_open_id = new_slot               # 0x52908
+    data = getattr(state.maze, "data", None)
+    if data is not None and new_slot != old_slot:
+        old_row, old_col = unpack_slot(old_slot)
+        new_row, new_col = unpack_slot(new_slot)
+        data[(old_col, old_row)] = int(MazeObjIds.TILE_FLOOR)
+        data[(new_col, new_row)] = int(MazeObjIds.EXIT)
+    floorpattern = int(getattr(state.maze, "floorpattern", 0) or 0)
+    write_tile_descriptor(
+        state, old_slot, exit_descriptor(floorpattern, 0),
+    )
+    write_tile_descriptor(
+        state, new_slot, exit_descriptor(floorpattern, EXIT_ANIM_FRAMES),
+    )
 
     sound_play(state, 0x31)                     # "exit moves", 0x52A4C
     if new_slot == old_slot:
@@ -947,6 +999,9 @@ def player_exit_sequence(state: GameState, player_index: int,
     if hero_slot:                                  # 0x52D76: the hero leaves
         state.mobs.unlink_and_clear(hero_slot)
     player.powers &= 0xF3FF                        # 0x52D88
+    from .players import player_inv_update
+
+    player_inv_update(state, player_index)
     player.mob_slot = anim_slot                    # 0x52DA0
     player.anim_counter = 0                        # 0x52DAE
     # The dissolve starts by spinning the hero's facing down to 4 (0x4A672).
@@ -1048,6 +1103,43 @@ def show_level_start_screen(state: GameState) -> None:
 _BONUS_DISPLAY_FRAMES = 0x12C
 
 
+def _write_bonus_alpha(
+    state: GameState, *,
+    ordinary_rows: dict[int, tuple[int, int, int, int]],
+    secret_player: int,
+) -> None:
+    """Write show_level_end_bonus_screen's exact small-alpha tally."""
+    fill_alpha_rect(state, 0, 0, 29, 30, alpha_word(0x8000))
+    if secret_player >= 0:
+        attribute = 0x8400 + (secret_player << 10)
+        row = 9 + secret_player * 5
+        if state.bonus_amount:
+            write_alpha_text(state, 4, row, romtext.BONUS_SECRET_5000, attribute)
+            write_alpha_decimal(
+                state, 19, row, state.bonus_amount, 7, attribute,
+            )
+        else:
+            write_alpha_text(state, 4, row, romtext.BONUS_NONE, attribute)
+        return
+
+    for player_index, player in enumerate(state.players):
+        attribute = 0x8400 + (player_index << 10)
+        row = 8 + player_index * 5
+        values = ordinary_rows.get(player_index)
+        if values is None:
+            if player.status == int(PlayerStatus.ALIVE_HERE):
+                write_alpha_text(state, 4, row + 1, romtext.BONUS_NONE, attribute)
+            continue
+        player_factor, coin_factor, treasures, bonus = values
+        write_alpha_text(state, 7, row, romtext.BONUS_100_X_COINS, attribute)
+        write_alpha_decimal(state, 7, row, player_factor, 3, attribute)
+        write_alpha_decimal(state, 22, row, coin_factor, 5, attribute)
+        write_alpha_text(state, 9, row + 1, romtext.BONUS_TREASURES_X, attribute)
+        write_alpha_decimal(state, 23, row + 1, treasures, 4, attribute)
+        write_alpha_text(state, 13, row + 2, romtext.BONUS_EQUALS, attribute)
+        write_alpha_decimal(state, 21, row + 2, bonus, 6, attribute)
+
+
 def _exiting_or_here(state: GameState) -> list[int]:
     """Players who go on to the next level: still on it, or in the exit."""
     return [
@@ -1124,8 +1216,8 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     (the ROM's ``global_ui_delay_timer``, 0x904A4E) counting 300 frames down
     instead of cutting straight to the next level. ``main_treasure_timer`` runs
     the countdown and fires the deferred load (``_finish_level_end``) when it
-    expires; ``render/screens.py`` draws the tally meanwhile -- pixels only, the
-    numbers are settled here.
+    expires. This routine writes the settled tally into alpha VRAM before it
+    returns; the generic alpha pass displays those words during the hold.
 
     ``player_coincount`` floors at 1 because every player who joins through the
     real path is credited one coin (``player_coindrop`` 0x48962) whether the
@@ -1150,6 +1242,8 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     from .players import setup_infopanel
 
     was_secret_room = in_secret_room(state)          # 0x4D496, before the commit
+    secret_player = state.secret_winner if was_secret_room else -1
+    ordinary_rows: dict[int, tuple[int, int, int, int]] = {}
     challenge_completed = secret_check_winner(state) if was_secret_room else False  # 0x4D4B0
 
     sound_play(state, 0x39)                          # 0x4D48A slow-motion silencer
@@ -1167,8 +1261,9 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     state.bonus_timer = _BONUS_DISPLAY_FRAMES        # 0x4D50E
     state.game_mode = GameMode.TREAS_EXIT            # display phase (world frozen)
 
+    open_name_entry = False
     if was_secret_room:                              # 0x4D544 -> 0x4D720
-        _secret_room_payout(state, challenge_completed)
+        open_name_entry = _secret_room_payout(state, challenge_completed)
         state.secret_need_hint = 0                   # 0x4D8D4
     else:
         players = max(1, _count_active_players(state))   # 0x4D516 player_activecount
@@ -1180,6 +1275,7 @@ def show_level_end_bonus_screen(state: GameState) -> None:
             player = state.players[i]
             coins = max(1, player.coin_count)        # 0x4D574 player_coincount
             bonus = 100 * players * coins * shares[i]   # 0x4D522/0x4D578/0x4D58E
+            ordinary_rows[i] = (100 * players, 100 * players * coins, shares[i], bonus)
             if not bonus:
                 continue
             player.score += bonus                    # 0x4D59E
@@ -1187,6 +1283,14 @@ def show_level_end_bonus_screen(state: GameState) -> None:
             state.bonus_amount += bonus
 
         secret_check(state)                          # 0x4D8DC
+
+    _write_bonus_alpha(
+        state, ordinary_rows=ordinary_rows, secret_player=secret_player,
+    )
+    if open_name_entry:
+        from .players import secret_getname
+
+        secret_getname(state)                        # 0x4D7E0, after tally writes
 
     # Commit the next position last, exactly as 0x4D8E2/0x4D8EC do (default to
     # level+1 if compute_next_level was not run, e.g. a direct caller).
@@ -1202,7 +1306,10 @@ def _finish_level_end(state: GameState) -> None:
     position is already committed, so run ``show_level_start_screen`` -- which
     may replace the maze with a treasure room -- and then load it.
     """
+    from .display import clear_alpha_visible
+
     survivors = _exiting_or_here(state)
+    clear_alpha_visible(state)
     show_level_start_screen(state)                   # 0x4813A
     _load_next_level(state, state.levelnum_current, survivors)
     state.bonus_amount = 0

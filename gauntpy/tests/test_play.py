@@ -118,6 +118,21 @@ def test_front_end_character_commit_uses_the_selected_hero_picture():
 # The mid-level drop
 # ---------------------------------------------------------------------------
 
+def test_playerstart_fallback_installs_the_live_character_palette(monkeypatch):
+    from gauntpy.subsystems.display import (
+        init_mob_color_ram, mob_palette_words,
+    )
+
+    state = GameState()
+    init_mob_color_ram(state)
+    monkeypatch.setattr(play, "player_join", lambda *_args: None)
+
+    slot = play._spawn_player(state, Character.WARRIOR)
+
+    assert state.mobs.hpos[slot] & 0x0F == 0x0C
+    assert mob_palette_words(state, 0x0C) != mob_palette_words(GameState(), 0x0C)
+
+
 @requires_roms
 class TestBuildState:
     def test_level_one_loads_maze_zero_and_spawns_a_hero(self):

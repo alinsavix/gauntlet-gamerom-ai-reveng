@@ -168,6 +168,9 @@ def main_handle_potions(state: GameState) -> None:
         state.potion_player = p.index
         p.potionsnum -= 1
         _sound_play(state, _SOUND_POTION)
+        from .players import player_inv_update
+
+        player_inv_update(state, p.index)                 # 0x470BA
         _dialog_first_encounter(state, p.index, _DIALOG_POTION_USED)
         potion_blast(state, p.index)
 

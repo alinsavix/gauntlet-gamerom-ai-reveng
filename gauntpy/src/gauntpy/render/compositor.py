@@ -13,8 +13,8 @@ x 232-335, 104px wide. ``draw_player_score`` (0x45940) confirms it from the
 other end: its 7-digit field starts at column 0x1D = 29 and
 ``draw_player_health``'s 5-digit field at column 0x25 = 37 ends on column 41,
 the last displayed one. The playfield therefore gets x 0-231 and the panel
-x 232-335; ``subsystems/score.py`` holds the alpha-grid constants and
-``render/hud.py`` maps them into this rectangle.
+x 232-335. ``subsystems/score.py`` holds the alpha-grid constants; the generic
+``render/alpha.py`` pass maps all 42 visible columns.
 
 **Layer order implements the priority table by construction.** Draw
 playfield, then MOBs (transparent/shadow-aware), then HUD (opaque-aware) --
@@ -31,15 +31,13 @@ from ..constants import GameMode
 from ..state import GameState
 from ..subsystems import score
 from ..subsystems.camera import viewport_scroll
+from .alpha import draw_alpha_layer
 from .framebuffer import Framebuffer
-from .hud import draw_debug_frame_counter, draw_hud, draw_message_box
+from .hud import draw_debug_frame_counter
 from .mobs import SpriteSource, draw_mob_layer
 from .playfield import (
-    PlayfieldCache, draw_animated_floor_tiles, draw_exit_animation, draw_playfield,
-    draw_transporter_tiles, draw_wall_crumble, playfield_cache_for,
-    shadow_source_for,
+    PlayfieldCache, draw_playfield, playfield_cache_for_state, shadow_source_for,
 )
-from .screens import draw_front_end_overlay
 
 __all__ = [
     "LOGICAL_WIDTH", "LOGICAL_HEIGHT", "PLAYFIELD_VIEWPORT", "HUD_PANEL",
@@ -109,29 +107,11 @@ def render_frame(
     )
 
     shadow_src = None
-    if state.maze is not None:
-        cache.playfield = playfield_cache_for(state.maze, cache.playfield)
+    if state.maze is not None or state.playfield_generation:
+        cache.playfield = playfield_cache_for_state(state, cache.playfield)
         draw_playfield(fb, cache.playfield, scroll_x, scroll_y, _HARDWARE_VIEWPORT)
-        draw_animated_floor_tiles(
-            fb, cache.playfield, state, scroll_x, scroll_y, _HARDWARE_VIEWPORT
-        )
-        # The moving exit is a playfield stamp (main_exit_move -> pf_stamp_update),
-        # not a MOB, and it changes every fourth frame -- so it goes on top of the
-        # cached raster rather than into it. Crumbling walls are the same shape of
-        # problem: wall_crumble restamps them as they take damage.
-        draw_exit_animation(
-            fb, cache.playfield, state, scroll_x, scroll_y, _HARDWARE_VIEWPORT
-        )
-        draw_transporter_tiles(
-            fb, cache.playfield, state, scroll_x, scroll_y, _HARDWARE_VIEWPORT
-        )
-        draw_wall_crumble(
-            fb, cache.playfield, state, scroll_x, scroll_y, _HARDWARE_VIEWPORT
-        )
         # Exact MOB shadows: the shadow-palette twin of the playfield the MOB
-        # layer draws over (see playfield.build_playfield_images). Without a
-        # maze there is nothing to shadow, so the MOB layer falls back to its
-        # in-place darkening.
+        # layer draws over. Both rasters are derived from the same VRAM words.
         shadow_src = shadow_source_for(
             cache.playfield, scroll_x, scroll_y, _HARDWARE_VIEWPORT,
         )
@@ -141,18 +121,7 @@ def render_frame(
         shadow_src=shadow_src,
     )
 
-    if int(state.game_mode) != int(GameMode.SCORES):
-        draw_hud(fb, state, HUD_PANEL)
-
-    # Front-end screens use the cabinet's full 336x240 raster. This is required
-    # by the native 328px title wordmark and also covers the gameplay HUD during
-    # attract/select screens. The function remains a no-op during gameplay.
-    draw_front_end_overlay(fb, state, (0, 0, width, height), assets)
-
-    # The message box is the alpha layer's topmost element: it sits over the
-    # playfield (dialog_position_box, 0x4CB50) and over anything an attract
-    # screen drew, so it goes last.
-    draw_message_box(fb, state, PLAYFIELD_VIEWPORT)
+    draw_alpha_layer(fb, state)
     draw_debug_frame_counter(fb, state, HUD_PANEL, paused=paused)
 
     return fb, cache

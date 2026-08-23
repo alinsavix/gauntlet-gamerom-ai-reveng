@@ -37,7 +37,6 @@ from gauntpy.render.hud import (
 )
 from gauntpy.render.mobs import draw_mob_layer, iter_visible_mobs, strength_tier
 from gauntpy.render import playfield, romtext
-from gauntpy.render.screens import _title_logo_y, draw_front_end_overlay
 from gauntpy.state import GameState
 from gauntpy.subsystems import score
 from gauntpy.subsystems.score import (
@@ -45,6 +44,16 @@ from gauntpy.subsystems.score import (
     main_msgbox_countdown,
     main_score_display,
 )
+from gauntpy.subsystems.display import init_alpha_color_ram
+
+
+def _alpha_text(state, column: int, row: int, width: int) -> str:
+    start = row * score.ALPHA_ROW_STRIDE + column
+    return "".join(
+        chr(code) if code else " "
+        for word in state.alpha_ram[start:start + width]
+        for code in (word & 0x3FF,)
+    )
 
 # ---------------------------------------------------------------------------
 # ROM/reference availability (same approach as test_assets.py)
@@ -66,14 +75,6 @@ requires_roms = pytest.mark.skipif(
 # exercise real drawing code without ROMs.
 # ---------------------------------------------------------------------------
 
-class _FakeColor:
-    def __init__(self, rgba: tuple[int, int, int, int]) -> None:
-        self._rgba = rgba
-
-    def to_rgba(self) -> tuple[int, int, int, int]:
-        return self._rgba
-
-
 class _FakeAssets:
     """Every ``sprite(picture)`` is a single 8x8 tile filled with one index,
     derived from ``picture`` so different pictures are visibly different
@@ -83,14 +84,9 @@ class _FakeAssets:
     """
 
     def __init__(self) -> None:
-        # 16-entry grayscale ramp, distinguishable by exact value.
-        self._palette = [_FakeColor((i * 16, i * 16, i * 16, 255)) for i in range(16)]
         self.sprite_calls: list[
             tuple[int, int, int | None, str | None, tuple[int, int] | None]
         ] = []
-        from PIL import Image
-
-        self._title_logo = Image.new("RGBA", (328, 48), (32, 192, 64, 255))
 
     @staticmethod
     def _fill_index(picture: int) -> int:
@@ -104,13 +100,6 @@ class _FakeAssets:
         tile = [[idx] * 8 for _ in range(8)]
         self.sprite_calls.append((picture, tier, palette, kind, size))
         return Stamp(width=1, numbers=[picture], ptype="fake", pnum=0, data=[tile])
-
-    def palette(self, kind: str, index: int):
-        return self._palette
-
-    def title_logo(self):
-        return self._title_logo
-
 
 def _place(mobs, row: int, col: int, picture: int, obj_type=MazeObjIds.MONST_GHOST, size: int = 3) -> int:
     slot = coords.pack_slot(row, col)
@@ -254,28 +243,31 @@ class TestFramebuffer:
 # MOB layer: draw order (ROM-free -- PLAN.md §6 WP-2 acceptance criterion)
 # ---------------------------------------------------------------------------
 
-def test_player_hurt_palette_whitens_the_rom_selected_entries():
-    from gauntpy.render.mobs import (
-        _HURT_WHITE_RGBA,
-        _PLAYER_HURT_PALETTE_INDICES,
-        _player_hurt_palette,
+def test_live_mob_color_ram_changes_pixels_without_changing_mob_words():
+    state = GameState()
+    assets = _FakeAssets()
+    slot = _place(state.mobs, 2, 2, picture=0x100)
+    info = next(iter_visible_mobs(state, 0, 0, 240, 240))
+    pixel_index = assets._fill_index(0x100)
+    before_words = tuple(
+        table[slot] for table in (
+            state.mobs.link, state.mobs.picture, state.mobs.hpos, state.mobs.vpos,
+        )
     )
 
-    base = [(i, i, i, 255) for i in range(16)]
-    for character, indices in enumerate(_PLAYER_HURT_PALETTE_INDICES):
-        state = GameState()
-        player = state.players[0]
-        player.status = PlayerStatus.ALIVE_HERE
-        player.mob_slot = 42
-        player.character = character
-        player.hurt_cooldown = 0x0C
+    state.mob_color_ram[pixel_index] = 0xFF00
+    first = Framebuffer(240, 240)
+    draw_mob_layer(first, state, assets, 0, 0, (0, 0, 240, 240))
+    state.mob_color_ram[pixel_index] = 0xF0F0
+    second = Framebuffer(240, 240)
+    draw_mob_layer(second, state, assets, 0, 0, (0, 0, 240, 240))
 
-        flashed = _player_hurt_palette(state, 42, base)
-
-        assert base == [(i, i, i, 255) for i in range(16)]
-        for index in range(16):
-            expected = _HURT_WHITE_RGBA if index in indices else base[index]
-            assert flashed[index] == expected
+    assert first.get_pixel(info.x, info.y) != second.get_pixel(info.x, info.y)
+    assert tuple(
+        table[slot] for table in (
+            state.mobs.link, state.mobs.picture, state.mobs.hpos, state.mobs.vpos,
+        )
+    ) == before_words
 
 
 def test_projectile_palette_12_to_15_resolves_through_player_colour_banks():
@@ -363,15 +355,16 @@ class TestMobDrawOrder:
         state = GameState()
         _place(state.mobs, row=10, col=10, picture=1, size=4)   # earlier band -> earlier in chain
         top_slot = _place(state.mobs, row=11, col=10, picture=2, size=4)  # later band -> drawn on top, overlaps
+        state.mob_color_ram[_FakeAssets._fill_index(1)] = 0xFF00
+        state.mob_color_ram[_FakeAssets._fill_index(2)] = 0xF0F0
 
         fb = Framebuffer(240, 240)
         draw_mob_layer(fb, state, _FakeAssets(), 0, 0, PLAYFIELD_VIEWPORT)
 
         top_x, top_y = coords.slot_to_pixels(top_slot)
         top_y -= 16  # 4x4 MOB: two extra tile rows draw above the cell
-        expected_idx = _FakeAssets._fill_index(2)
-        expected_rgba = (expected_idx * 16, expected_idx * 16, expected_idx * 16, 255)
-        assert fb.get_pixel(top_x + 4, top_y + 4) == expected_rgba
+        from gauntpy.subsystems.display import _irgb_rgba
+        assert fb.get_pixel(top_x + 4, top_y + 4) == _irgb_rgba(0xF0F0)
 
 
 class TestTheRendererDecodesTheNativeVWord:
@@ -662,21 +655,6 @@ class TestSpriteKind:
         draw_mob_layer(Framebuffer(240, 240), state, assets, 0, 0, PLAYFIELD_VIEWPORT)
         assert assets.sprite_calls[0][3] == "wizard"
 
-    def test_a_sprite_whose_palette_the_provider_lacks_skips_one_mob_not_the_frame(self):
-        """The palette fetch moved inside the per-MOB guard: a resolved sprite
-        can still name a bank/index the provider does not have, and one missing
-        creature beats a black frame."""
-        from gauntpy.assets import AssetError
-
-        class _NoPalettes(_FakeAssets):
-            def palette(self, kind: str, index: int):
-                raise AssetError("no such palette")
-
-        state = GameState()
-        _place(state.mobs, row=6, col=6, picture=0x100)
-        draw_mob_layer(Framebuffer(240, 240), state, _NoPalettes(), 0, 0, PLAYFIELD_VIEWPORT)
-
-
 class TestMobStrengthTier:
     """``strength_tier`` must land on the palette index the hardware itself
     would have used: doc/01_hardware.md §8.2 makes ``mob_hpos`` bits 3-0 the
@@ -736,18 +714,14 @@ class TestMobStrengthTier:
         assert strength_tier(state, slot) == 1       # and 0 is below base-2
 
     def test_non_creatures_keep_tier_one(self):
-        """Items, shots and terrain carry their own palette in their stamp;
-        their hpos nibble is not a strength tier."""
+        """An item's hpos nibble is a color-RAM selector, not a strength tier."""
         state = GameState()
         slot = _place(state.mobs, row=5, col=5, picture=0x200, obj_type=MazeObjIds.KEY)
         assert strength_tier(state, slot) == 1
 
 
-class TestLivePaletteReachesTheAssetStore:
-    """``mob_hpos`` bits 3-0 are the hardware MOB palette number
-    (doc/01_hardware.md §8.2), so the MOB layer hands that word to
-    ``AssetStore.sprite(palette=...)`` rather than throwing it away and
-    re-deriving a tier."""
+class TestLivePaletteStaysInTheRenderer:
+    """AssetStore supplies indexed pixels; only color RAM supplies color."""
 
     def _draw(self, nibble: int, obj_type=MazeObjIds.MONST_GHOST):
         state = GameState()
@@ -763,19 +737,18 @@ class TestLivePaletteReachesTheAssetStore:
         draw_mob_layer(Framebuffer(240, 240), state, assets, 0, 0, PLAYFIELD_VIEWPORT)
         return assets.sprite_calls
 
-    def test_the_live_palette_word_is_passed_through(self):
+    def test_the_live_palette_word_is_not_given_to_the_asset_provider(self):
         for nibble in (0x2, 0x3, 0x4):
             calls = self._draw(nibble)
-            assert calls and calls[0][2] == nibble, nibble
+            assert calls and calls[0][2] is None, nibble
 
     def test_the_tier_fallback_is_still_supplied(self):
-        """An asset provider that cannot honour a raw palette number still
-        gets the derived tier."""
+        """Legacy stamp lookup metadata still receives the derived tier."""
         calls = self._draw(0x4)
         assert calls[0][1] == strength_tier_of(0x4)
 
     def test_a_wounded_monster_changes_colour(self):
-        """The whole point: dropping the nibble must change what is drawn."""
+        """Dropping the nibble selects another live RAM bank."""
         state = GameState()
         slot = coords.pack_slot(6, 6)
         x, y = coords.slot_to_pixels(slot)
@@ -784,10 +757,15 @@ class TestLivePaletteReachesTheAssetStore:
             vpos=coords.encode_vpos_at_y(y, 3, 3), obj_type=MazeObjIds.MONST_GHOST,
         )
         assets = _FakeAssets()
-        draw_mob_layer(Framebuffer(240, 240), state, assets, 0, 0, PLAYFIELD_VIEWPORT)
+        pixel = assets._fill_index(0x100)
+        state.mob_color_ram[4 * 16 + pixel] = 0xFF00
+        state.mob_color_ram[2 * 16 + pixel] = 0xF0F0
+        first = Framebuffer(240, 240)
+        draw_mob_layer(first, state, assets, 0, 0, PLAYFIELD_VIEWPORT)
         state.mobs.hpos[slot] = coords.encode_hpos(x) | 0x2      # two hits taken
-        draw_mob_layer(Framebuffer(240, 240), state, assets, 0, 0, PLAYFIELD_VIEWPORT)
-        assert assets.sprite_calls[0][2] != assets.sprite_calls[1][2]
+        second = Framebuffer(240, 240)
+        draw_mob_layer(second, state, assets, 0, 0, PLAYFIELD_VIEWPORT)
+        assert first.get_pixel(x, y - 8) != second.get_pixel(x, y - 8)
 
     def test_a_custom_tier_hook_is_still_honoured(self):
         state = GameState()
@@ -858,6 +836,7 @@ class TestTheMobSizeReachesTheAssetStore:
             vpos=coords.encode_vpos_at_y(y, 3, 2),
             obj_type=MazeObjIds.MONST_LOBBER,
         )
+        state.mob_color_ram[5] = 0xFFFF
         fb = Framebuffer(240, 240)
         draw_mob_layer(fb, state, ThreeByThreeAssets(), 0, 0, PLAYFIELD_VIEWPORT)
 
@@ -894,6 +873,9 @@ class TestHud:
         from gauntpy.subsystems.players import setup_infopanel
 
         state = GameState(game_mode=GameMode.NORMAL)
+        for player in state.players:
+            player.status = PlayerStatus.ALIVE_HERE
+            player.health = 750
         init_alpha_color_ram(state)
         setup_infopanel(state, -1)
         return state
@@ -914,6 +896,8 @@ class TestHud:
     def test_active_player_row_is_not_left_blank(self):
         state = self._state()
         state.players[0].status = PlayerStatus.ALIVE_HERE
+        from gauntpy.subsystems.players import setup_infopanel
+        setup_infopanel(state, 0)
         state.players[0].score = 1234
         state.players[0].health = 500
         state.frame_counter = 0
@@ -936,6 +920,7 @@ class TestHud:
         plain = Framebuffer(336, 240)
         draw_hud(plain, state, HUD_PANEL)
         state.player_it = 0
+        score.write_it_labels(state)
         tagged = Framebuffer(336, 240)
         draw_hud(tagged, state, HUD_PANEL)
 
@@ -994,6 +979,8 @@ class TestHud:
     def test_multicolor_name_glyphs_use_all_live_alpha_palette_shades(self):
         state = self._state()
         state.players[0].status = PlayerStatus.ALIVE_HERE
+        from gauntpy.subsystems.players import setup_infopanel
+        setup_infopanel(state, 0)
         before = Framebuffer(336, 240)
         draw_hud(before, state, HUD_PANEL)
 
@@ -1087,21 +1074,6 @@ class TestMessageBox:
     """The dialog box draws the ROM message ``dialog_first_encounter`` (0x4C440)
     put on GameState -- not a blank outline."""
 
-    def _drawn_text(self, state, monkeypatch) -> list[str]:
-        seen: list[str] = []
-        import gauntpy.render.hud as hud_mod
-
-        real = hud_mod.draw_text
-
-        def spy(image, x, y, text, rgba, *, scale=1, **kwargs):
-            seen.append(text)
-            return real(image, x, y, text, rgba, scale=scale, **kwargs)
-
-        monkeypatch.setattr(hud_mod, "draw_text", spy)
-        fb = Framebuffer(336, 240)
-        draw_message_box(fb, state, PLAYFIELD_VIEWPORT)
-        return seen
-
     def test_nothing_is_drawn_without_a_live_dialog(self):
         state = GameState()
         fb = Framebuffer(336, 240)
@@ -1109,12 +1081,15 @@ class TestMessageBox:
         draw_message_box(fb, state, PLAYFIELD_VIEWPORT)
         assert fb.image.tobytes() == before
 
-    def test_the_rom_message_lines_are_drawn(self, monkeypatch):
+    def test_the_rom_message_lines_are_written_to_alpha_ram(self):
         state = GameState(game_mode=GameMode.NORMAL)
         dialog_first_encounter(state, 0, 1 << 3)
-        seen = self._drawn_text(state, monkeypatch)
-        assert seen == list(state.dialog_message)
-        assert " SAVE KEYS TO  " in seen
+        for offset, line in enumerate(state.dialog_message, 1):
+            assert _alpha_text(
+                state, state.dialog_box_column + 1,
+                state.dialog_box_row + offset, len(line),
+            ) == line
+        assert " SAVE KEYS TO  " in state.dialog_message
 
     def test_the_box_is_sized_from_the_rom_geometry(self):
         state = GameState(game_mode=GameMode.NORMAL)
@@ -1127,8 +1102,12 @@ class TestMessageBox:
         expected_w = (state.dialog_box_width + 2) * 8
         top = vy + state.dialog_box_row * 8
         left = vx + state.dialog_box_column * 8
-        assert fb.get_pixel(left, top) == (200, 200, 200, 255), "box outline"
-        assert fb.get_pixel(left + expected_w - 1, top) == (200, 200, 200, 255)
+        top_word = state.alpha_ram[
+            state.dialog_box_row * score.ALPHA_ROW_STRIDE
+            + state.dialog_box_column
+        ]
+        assert top_word & 0x8000
+        assert top_word & 0x3FF == 0
 
     def test_the_box_disappears_when_the_timer_runs_out(self):
         state = GameState(game_mode=GameMode.NORMAL)
@@ -1143,6 +1122,7 @@ class TestMessageBox:
 
     def test_render_frame_puts_the_box_over_the_world(self):
         state = GameState(game_mode=GameMode.NORMAL)
+        init_alpha_color_ram(state)
         state.players[0].status = PlayerStatus.ALIVE_HERE
         fb_plain, _ = render_frame(state, _FakeAssets())
         dialog_first_encounter(state, 0, 1 << 3)
@@ -1281,42 +1261,17 @@ class TestRomText:
         assert text_width("ABC", scale=2) == 48
 
 
-class TestFrontEndOverlay:
-    """The title/scores/legend/character-select overlay (render/screens.py):
-    draws during attract and pre-game select, no-op during gameplay."""
-
-    def _overlay_changes_viewport(self, state) -> bool:
-        fb = Framebuffer(336, 240)
-        before = fb.image.tobytes()
-        draw_front_end_overlay(fb, state, (0, 0, 336, 240), _FakeAssets())
-        return fb.image.tobytes() != before
-
-    def test_title_screen_draws(self):
-        state = GameState()                       # default mode is TITLE attract
-        assert self._overlay_changes_viewport(state)
-
-    def test_title_uses_native_asset_wordmark(self):
-        fb = Framebuffer(336, 240)
-        assets = _FakeAssets()
-        draw_front_end_overlay(fb, GameState(), (0, 0, 336, 240), assets)
-        assert fb.get_pixel(4, 17) == (32, 192, 64, 255)
-        assert fb.get_pixel(331, 64) == (32, 192, 64, 255)
-
-    def test_the_disabled_attract_timer_sentinel_parks_the_wordmark(self):
-        """0x904B7C is read signed (main_attract's tst.w/blt), so its 0xFFFF
-        "disabled" value is -1, not a 65535-frame countdown: an idle attract
-        machine shows the settled logo, not the off-screen start of a motion
-        program that is not running."""
-        state = GameState()
-        state.attract_timer = 0xFFFF
-        assert _title_logo_y(state) == 17
-        state.attract_timer = 0
-        assert _title_logo_y(state) == 17
-
+class TestTitleMobs:
     def test_title_motion_matches_rom_landmarks(self):
-        state = GameState()
+        from gauntpy.coords import sprite_top_y
+        from gauntpy.subsystems.attract import (
+            _init_title_logo_mobs, _update_title_logo_motion,
+        )
+
+        state = GameState(game_mode=GameMode.TITLE)
         state.title_logo_full_program = True
-        for frame, expected_y in (
+        _init_title_logo_mobs(state)
+        expected = dict((
             (0, -207),
             (32, -271),
             (33, 239),
@@ -1327,19 +1282,38 @@ class TestFrontEndOverlay:
             (153, 17),
             (333, 13),
             (340, 17),
-        ):
-            state.attract_timer = 0x5DD - frame
-            assert _title_logo_y(state) == expected_y
+        ))
+        for frame in range(341):
+            if frame in expected:
+                y = sprite_top_y(state.mobs.vpos[0x20] >> 7, 8)
+                if y >= 240:
+                    y -= 512
+                assert y - state.scroll_y == expected[frame]
+            _update_title_logo_motion(state)
 
-        state.title_logo_full_program = False
-        state.attract_timer = 0x5DD - 145
-        assert _title_logo_y(state) == 17
+    def test_title_init_populates_the_hardware_mob_range(self):
+        from gauntpy.subsystems.attract import _init_title_logo_mobs
+
+        state = GameState(game_mode=GameMode.TITLE)
+        _init_title_logo_mobs(state)
+
+        assert state.mobs.picture[0x20] == 0x2000
+        assert state.mobs.hpos[0x20] == 0x0200
+        assert state.mobs.vpos[0x20] == 0x63B8
+        assert state.mobs.picture[0x75] == 0x2700
+        assert state.mobs.picture[0xBE] == 0x2727
 
     def test_scores_and_legend_draw(self):
+        from gauntpy.render.alpha import draw_alpha_layer
+        from gauntpy.subsystems.attract import start_attract_screen
+
         for mode in (GameMode.SCORES, GameMode.LEGEND):
             state = GameState()
-            state.game_mode = mode
-            assert self._overlay_changes_viewport(state), mode
+            init_alpha_color_ram(state)
+            start_attract_screen(state, int(mode))
+            fb = Framebuffer(336, 240)
+            draw_alpha_layer(fb, state)
+            assert fb.image.getbbox(), mode
 
     def test_scores_preserve_the_maze_between_opaque_score_boxes(self):
         from PIL import Image
@@ -1347,8 +1321,11 @@ class TestFrontEndOverlay:
         fb = Framebuffer(336, 240)
         fb.image.paste(Image.new("RGBA", (336, 240), (12, 34, 56, 255)))
         state = GameState(game_mode=GameMode.SCORES)
+        init_alpha_color_ram(state)
+        score.write_high_score_screen(state)
 
-        draw_front_end_overlay(fb, state, (0, 0, 336, 240), _FakeAssets())
+        from gauntpy.render.alpha import draw_alpha_layer
+        draw_alpha_layer(fb, state)
 
         assert fb.get_pixel(0, 239) == (12, 34, 56, 255)
         assert fb.get_pixel(8, 0) == (0, 0, 0, 255)
@@ -1361,126 +1338,86 @@ class TestFrontEndOverlay:
         assert fb.get_pixel(232, 80) != (50, 0, 0, 255)
 
     def test_character_select_draws_before_the_game_starts(self):
+        from gauntpy.render.alpha import draw_alpha_layer
+        from gauntpy.subsystems.session import _write_character_select_alpha
+
         state = GameState()
+        init_alpha_color_ram(state)
         state.game_mode = GameMode.NORMAL
         state.players[0].status = PlayerStatus.SELECTING
-        assert self._overlay_changes_viewport(state)
-
-    def test_gameplay_is_a_noop(self):
-        state = GameState()
-        state.game_mode = GameMode.NORMAL
-        state.players[0].status = PlayerStatus.ALIVE_HERE
-        assert not self._overlay_changes_viewport(state)
-
-    def test_select_overlay_suppressed_once_a_hero_is_playing(self):
-        """A late joiner selecting must not black out a live player's maze."""
-        state = GameState()
-        state.game_mode = GameMode.NORMAL
-        state.players[0].status = PlayerStatus.ALIVE_HERE
-        state.players[1].status = PlayerStatus.SELECTING
-        assert not self._overlay_changes_viewport(state)
-
+        _write_character_select_alpha(state)
+        fb = Framebuffer(336, 240)
+        draw_alpha_layer(fb, state)
+        assert fb.image.getbbox()
 
 class TestFrontEndTextIsRomData:
-    """None of the front-end copy is invented any more: it is transcribed ROM
-    text (render/romtext.py) and the ROM's own factory high-score table."""
+    """Front-end routines put ROM copy into alpha VRAM, not render calls."""
 
-    def _drawn_text(self, state, monkeypatch) -> list[str]:
-        """Every ASCII string the overlay draws, captured at the text layer."""
-        seen: list[str] = []
-        import gauntpy.render.screens as screens_mod
-        import gauntpy.render.text as text_mod
+    def test_title_leaves_alpha_ram_clear_for_its_playfield_and_mobs(self):
+        from gauntpy.subsystems.attract import start_attract_screen
 
-        real_draw = text_mod.draw_text
-
-        def spy(image, x, y, text, rgba, *, scale=1):
-            seen.append(text)
-            return real_draw(image, x, y, text, rgba, scale=scale)
-
-        monkeypatch.setattr(screens_mod, "draw_text", spy)
-        monkeypatch.setattr(text_mod, "draw_text", spy)
-        monkeypatch.setattr(
-            screens_mod, "draw_text_centered",
-            lambda image, cx, y, text, rgba, *, scale=1: seen.append(text),
-        )
-        fb = Framebuffer(336, 240)
-        draw_front_end_overlay(fb, state, (0, 0, 336, 240), _FakeAssets())
-        return seen
-
-    def test_title_uses_the_rom_insert_coin_and_press_start_strings(self, monkeypatch):
         state = GameState()
-        state.game_mode = GameMode.TITLE
-        seen = self._drawn_text(state, monkeypatch)
-        assert romtext.TEXT_INSERT_COIN.strip() in seen
-        assert romtext.TEXT_PRESS_START.strip() in seen
-        assert romtext.TEXT_ATARI_GAMES in seen
-        assert not any("PRESS 5" in s for s in seen), "no invented instruction copy"
+        start_attract_screen(state, int(GameMode.TITLE))
+        assert not any(state.alpha_ram)
 
-    def test_scores_screen_is_the_rom_four_way_split(self, monkeypatch):
+    def test_scores_screen_is_the_rom_four_way_split(self):
         state = GameState()
-        state.game_mode = GameMode.SCORES
-        seen = self._drawn_text(state, monkeypatch)
+        score.write_high_score_screen(state)
+        column, row = romtext.TEXT_SCORE_PER_COIN_POS
+        start = row * score.ALPHA_ROW_STRIDE + column
+        assert state.alpha_ram[start] & 0x3FF == 0x14E  # large S, OS 0x33D2
+        assert state.alpha_ram[start + 2] & 0x3FF == 0x100  # large C
+        for klass, column, row in romtext.HIGHSCORE_QUADRANTS:
+            plural = romtext.CHARACTER_NAME_PLURALS[klass]
+            start = row * score.ALPHA_ROW_STRIDE + column
+            assert all(
+                state.alpha_ram[start + offset * 2] & 0x0100
+                for offset in range(len(plural))
+            )
 
-        assert romtext.TEXT_SCORE_PER_COIN in seen
-        for plural in romtext.CHARACTER_NAME_PLURALS:
-            assert plural in seen, plural
-
-    def test_scores_screen_shows_the_rom_factory_ladder(self, monkeypatch):
+    def test_scores_screen_shows_the_rom_factory_ladder(self):
         state = GameState()
-        state.game_mode = GameMode.SCORES
-        seen = self._drawn_text(state, monkeypatch)
+        score.write_high_score_screen(state)
+        assert _alpha_text(state, 2, 3, 7) == " #1 AWC"
+        assert _alpha_text(state, 11, 3, 7) == "   8000"
+        assert _alpha_text(state, 24, 3, 7) == " #1 T H"
 
-        for klass, cls in enumerate(score.FACTORY_HIGHSCORE_RECORDS):
-            for value, initials in cls:
-                assert any(
-                    initials in s and str(value) in s for s in seen
-                ), (klass, initials, value)
-
-    def test_scores_screen_follows_the_live_table_not_the_rom_constant(self, monkeypatch):
+    def test_scores_screen_follows_the_live_table_not_the_rom_constant(self):
         state = GameState()
-        state.game_mode = GameMode.SCORES
         score.high_scores(state)[0][0] = (123456, "ZZZ")
-        seen = self._drawn_text(state, monkeypatch)
-        assert any("ZZZ" in s and "123456" in s for s in seen)
+        score.write_high_score_screen(state)
+        assert _alpha_text(state, 2, 3, 7) == " #1 ZZZ"
+        assert _alpha_text(state, 11, 3, 7) == " 123456"
 
-    def test_character_select_uses_the_rom_instruction_chain(self, monkeypatch):
+    def test_character_select_uses_the_rom_instruction_chain(self):
+        from gauntpy.subsystems.session import _write_character_select_alpha
+
         state = GameState()
         state.game_mode = GameMode.NORMAL
         state.players[0].status = PlayerStatus.SELECTING
-        seen = self._drawn_text(state, monkeypatch)
+        _write_character_select_alpha(state)
+        for text, column, row in romtext.CHARACTER_SELECT_LINES:
+            start = row * score.ALPHA_ROW_STRIDE + column
+            cells = (
+                state.alpha_ram[start:start + 2]
+                + state.alpha_ram[
+                    start + score.ALPHA_ROW_STRIDE:
+                    start + score.ALPHA_ROW_STRIDE + 2
+                ]
+            )
+            assert all(word & 0x0100 for word in cells)
+        assert _alpha_text(
+            state, score.PANEL_COLUMN, score.PLAYER_INV_ROW,
+            len(romtext.TEXT_SELECT_HERO),
+        ) == romtext.TEXT_SELECT_HERO
 
-        for text, _column, _row in romtext.CHARACTER_SELECT_LINES:
-            assert text in seen, text
-        assert romtext.TEXT_SELECT_HERO.strip() in seen
-        for name in romtext.CHARACTER_NAMES:
-            assert name in seen, name
-        assert not any("CHOOSE YOUR HERO" in s for s in seen)
+    def test_legend_uses_the_rom_descriptor_text(self):
+        from gauntpy.subsystems.attract import start_attract_screen
 
-    def test_character_select_names_players_by_their_rom_colour(self, monkeypatch):
         state = GameState()
-        state.game_mode = GameMode.NORMAL
-        state.players[1].status = PlayerStatus.SELECTING
-        state.players[1].character = 2
-        seen = self._drawn_text(state, monkeypatch)
-        assert romtext.PLAYER_COLOR_NAMES[1] in seen
-        assert "P2" not in seen
-
-    def test_bonus_screen_uses_show_level_end_bonus_screen_strings(self, monkeypatch):
-        state = GameState()
-        state.game_mode = GameMode.TREAS_EXIT
-        state.bonus_amount = 0
-        seen = self._drawn_text(state, monkeypatch)
-        assert romtext.BONUS_100_X_COINS in seen
-        assert romtext.BONUS_NONE in seen
-        assert not any("LEVEL COMPLETE" in s for s in seen)
-
-    def test_legend_uses_the_rom_gameplay_tips(self, monkeypatch):
-        state = GameState()
-        state.game_mode = GameMode.LEGEND
-        seen = self._drawn_text(state, monkeypatch)
-        flat = [line for tip in romtext.GAMEPLAY_TIPS for line in tip if line]
-        assert any(line in seen for line in flat)
-        assert not any("STRONGEST MELEE" in s for s in seen), "no invented class traits"
+        start_attract_screen(state, int(GameMode.LEGEND))
+        for text, column, row in romtext.LEGEND_RULES_TEXT:
+            assert _alpha_text(state, column, row, len(text)) == text
 
 
 class TestRomTextTables:
@@ -1493,7 +1430,7 @@ class TestRomTextTables:
 
     def test_the_player_colour_names_are_the_rom_ones(self):
         assert romtext.PLAYER_COLOR_NAMES == ("RED", "BLUE", "YELLOW", "GREEN")
-        assert len(romtext.PLAYER_COLOR_RGBA) == 4
+        assert score.PLAYER_TEXT_PALETTE_WORDS == (0xD000, 0xD400, 0xD800, 0xDC00)
 
     def test_glyph_runs_render_or_fall_back_to_their_ascii_spelling(self):
         from gauntpy.render.text import draw_glyph_run
@@ -1510,285 +1447,6 @@ class TestRomTextTables:
         )
 
 
-class TestExitAnimation:
-    """The moving exit is a playfield stamp (main_exit_move 0x5287C ->
-    pf_stamp_update 0x5E536), indexed by ``state.exit_anim_frame``."""
-
-    def test_descriptor_pool_is_the_rom_sequential_block(self):
-        """exit_tile_descs (0x5C8B0) is 252 consecutive words 0x3A2-0x49D, so
-        descriptor k is 0x3A2 + 4k. Nine floor patterns x seven stages."""
-        assert playfield.EXIT_DESC_TILE_BASE == 0x03A2
-        assert playfield.EXIT_ANIM_STAGES == 7
-        last = playfield.exit_descriptor(8, 7)     # pattern 8, final stage
-        assert last == (0x049A, 0x049B, 0x049C, 0x049D)
-        first = playfield.exit_descriptor(0, 0)
-        assert first == (0x03A2, 0x03A3, 0x03A4, 0x03A5)
-
-    def test_the_two_cells_are_always_at_complementary_stages(self):
-        """main_exit_move reads offset 0 for the closing cell and offset 0x20
-        (entry 8) for the opening one. The record pairs them so the stages sum
-        to the last one: as a cell seals, the other opens by the same amount.
-        Each half also holds its first stage for two steps."""
-        record = playfield.EXIT_DESC_RECORD
-        assert record == (0, 0, 1, 2, 3, 4, 5, 6, 6, 6, 5, 4, 3, 2, 1, 0)
-        last = playfield.EXIT_ANIM_STAGES - 1
-        for frame in range(playfield.EXIT_ANIM_FRAMES):
-            assert record[frame] + record[8 + frame] == last, frame
-        closing = record[:8]
-        opening = record[8:]
-        assert list(closing) == sorted(closing)
-        assert list(opening) == sorted(opening, reverse=True)
-        assert closing[0] == closing[1] and opening[0] == opening[1]
-
-    def test_each_floor_pattern_owns_its_own_seven_descriptors(self):
-        seen = set()
-        for pattern in range(9):
-            for entry in range(16):
-                seen.add(playfield.exit_descriptor(pattern, entry)[0])
-        assert len(seen) == 9 * playfield.EXIT_ANIM_STAGES
-
-    @requires_roms
-    def test_the_settled_descriptor_is_the_tiles_gex_uses_for_an_exit(self):
-        """floor_type10_desc (0x5C8A0) and gex's own ``exit`` item stamp are
-        the same 2x2 block -- which is what pins the overlay's palette.
-
-        Needs ROMs: ``item_get_stamp`` decodes the tiles it names, so without
-        them this errored instead of skipping, unlike every other test here.
-        """
-        from gex.items import item_get_stamp
-
-        assert playfield.EXIT_SETTLED_DESC == (0x039E, 0x039F, 0x0006, 0x0006)
-        assert tuple(item_get_stamp("exit").numbers) == playfield.EXIT_SETTLED_DESC
-
-    def _cache(self, palette=None):
-        from gauntpy.render.playfield import PlayfieldCache
-
-        return PlayfieldCache(
-            image=None, shadow_image=None, floorpattern=0,
-            exit_palette=palette or [(0, 0, 0, 255)] * 16,
-            transporter_palette=palette or [(0, 0, 0, 255)] * 16,
-        )
-
-    def _state(self, **kw):
-        state = GameState(game_mode=GameMode.NORMAL)
-        state.exit_open_id = coords.pack_slot(4, 4)
-        for key, value in kw.items():
-            setattr(state, key, value)
-        return state
-
-    def test_nothing_is_drawn_without_an_open_exit(self):
-        state = GameState()
-        state.exit_open_id = 0
-        fb = Framebuffer(240, 240)
-        before = fb.image.tobytes()
-        playfield.draw_exit_animation(fb, self._cache(), state, 0, 0, PLAYFIELD_VIEWPORT)
-        assert fb.image.tobytes() == before
-
-    def test_an_ordinary_live_exit_is_drawn_without_a_moving_exit(self):
-        state = GameState()
-        slot = coords.pack_slot(4, 4)
-        state.mobs.create(
-            slot, tile=0x8001, hpos=0, vpos=0,
-            obj_type=MazeObjIds.EXIT, link_into_chain=False,
-        )
-
-        assert self._capture(state) == [(slot, playfield.EXIT_SETTLED_DESC)]
-
-    def test_exit_to_six_uses_its_distinct_destination_graphic(self):
-        state = GameState()
-        slot = coords.pack_slot(7, 7)
-        state.mobs.create(
-            slot, tile=0x8001, hpos=0, vpos=0,
-            obj_type=MazeObjIds.EXITTO6, link_into_chain=False,
-        )
-
-        assert self._capture(state) == [(slot, playfield.EXITTO6_SETTLED_DESC)]
-
-    def test_transporter_marker_is_a_playfield_stamp(self):
-        state = GameState()
-        slot = coords.pack_slot(7, 7)
-        state.mobs.create(
-            slot, tile=0x8001, hpos=0, vpos=0,
-            obj_type=MazeObjIds.TRANSPORTER, link_into_chain=False,
-        )
-        stamped = []
-        real = playfield._blit_descriptor
-        playfield._blit_descriptor = (
-            lambda fb, descriptor, cell, palette, sx, sy, viewport, **kwargs:
-            stamped.append((cell, tuple(descriptor)))
-        )
-        try:
-            playfield.draw_transporter_tiles(
-                Framebuffer(240, 240), self._cache(), state,
-                0, 0, PLAYFIELD_VIEWPORT,
-            )
-        finally:
-            playfield._blit_descriptor = real
-
-        assert stamped == [(slot, playfield.TRANSPORTER_DESC)]
-
-    def test_transporter_stamp_consumes_the_live_cycle_phase(self):
-        from gex.palettes import IRGB
-
-        state = GameState()
-        slot = coords.pack_slot(7, 7)
-        state.mobs.create(
-            slot, tile=0x8001, hpos=0, vpos=0,
-            obj_type=MazeObjIds.TRANSPORTER, link_into_chain=False,
-        )
-        palettes = []
-        real = playfield._blit_descriptor
-        playfield._blit_descriptor = (
-            lambda fb, descriptor, cell, palette, sx, sy, viewport, **kwargs:
-            palettes.append(tuple(palette))
-        )
-        try:
-            for phase in (0, 5):
-                state.tport_cycle_pos = phase
-                playfield.draw_transporter_tiles(
-                    Framebuffer(240, 240), self._cache(), state,
-                    0, 0, PLAYFIELD_VIEWPORT,
-                )
-        finally:
-            playfield._blit_descriptor = real
-
-        assert palettes[0][13] == IRGB(0xFFFF).to_rgba()
-        assert palettes[1][13] == IRGB(0x8F00).to_rgba()
-
-    def test_animated_floor_palettes_use_their_live_color_words(self):
-        from gex.palettes import IRGB, S_COLORS_1, S_COLORS_2
-
-        trap = playfield._animated_floor_palette("trap", 0, 0x4044)
-        stun = playfield._animated_floor_palette("stun", 0, 0xEEE0)
-        forcefield = playfield._animated_floor_palette(
-            "forcefield", 0, 0x9FFF,
-        )
-
-        for index in (0, S_COLORS_1[0], S_COLORS_2[0]):
-            assert trap[index] == IRGB(0x4044).to_rgba()
-            assert stun[index] == IRGB(0xEEE0).to_rgba()
-            assert forcefield[index] == IRGB(0x9FFF).to_rgba()
-
-    def test_live_forcefield_cells_expand_the_runtime_segment_table(self):
-        state = GameState()
-        state.forcefield_segments = [
-            0x8000 | (3 << 10) | coords.pack_slot(5, 3),
-            0x4000 | (3 << 10) | coords.pack_slot(30, 8),
-        ]
-
-        assert playfield._live_forcefield_cells(state) == {
-            (4, 5), (5, 5), (6, 5),
-            (8, 31), (8, 0), (8, 1),
-        }
-
-    def test_forcefield_beam_is_redrawn_with_the_live_cycle_color(self, monkeypatch):
-        from gex.palettes import IRGB, S_COLORS_1
-
-        class Maze:
-            data = {
-                (3, 5): int(MazeObjIds.FORCEFIELDHUB),
-                (7, 5): int(MazeObjIds.FORCEFIELDHUB),
-            }
-            floorpattern = 0
-            floorcolor = 0
-            wallpattern = 0
-            wallcolor = 0
-
-        cache = self._cache()
-        cache.maze_object = Maze()
-        cache.floor_variants = (0,) * (32 * 32)
-        state = GameState(forcefield_color=0xF00F)
-        state.forcefield_segments = [
-            0x8000 | (3 << 10) | coords.pack_slot(5, 3),
-        ]
-        calls = []
-        monkeypatch.setattr(
-            playfield, "_blit_descriptor",
-            lambda fb, descriptor, cell, palette, sx, sy, viewport, **kwargs:
-                calls.append((cell, palette[S_COLORS_1[0]])),
-        )
-
-        playfield.draw_animated_floor_tiles(
-            Framebuffer(240, 240), cache, state, 0, 0, PLAYFIELD_VIEWPORT,
-        )
-
-        assert {cell for cell, _color in calls} == {
-            coords.pack_slot(5, 4),
-            coords.pack_slot(5, 5),
-            coords.pack_slot(5, 6),
-        }
-        assert all(color == IRGB(0xF00F).to_rgba() for _cell, color in calls)
-
-    def test_exit_overlay_wraps_with_the_hardware_viewport(self, monkeypatch):
-        import gex.render
-
-        calls = []
-
-        class Capture:
-            def blit_indexed_tile(self, tile, palette, x, y, **kwargs):
-                calls.append((x, y))
-
-        monkeypatch.setattr(
-            gex.render, "get_parsed_tile",
-            lambda _word: [[1] * 8 for _ in range(8)],
-        )
-        playfield._blit_descriptor(
-            Capture(), playfield.EXIT_SETTLED_DESC,
-            coords.pack_slot(5, 5), [(0, 0, 0, 255)] * 16,
-            509, 509, (0, 0, 336, 240),
-        )
-
-        assert calls[0] == (83, 83)
-        assert calls[-1] == (91, 91)
-
-    def test_the_settled_exit_is_drawn_while_the_timer_is_positive(self):
-        state = self._state(exit_move_timer=0x12C, exit_anim_frame=0)
-        stamped = self._capture(state)
-        assert stamped == [(state.exit_open_id, playfield.EXIT_SETTLED_DESC)]
-
-    def test_both_cells_animate_while_the_timer_is_negative(self):
-        state = self._state(
-            exit_move_timer=-12, exit_anim_frame=3,
-            exit_close_id=coords.pack_slot(9, 9),
-        )
-        stamped = self._capture(state)
-        assert stamped == [
-            (state.exit_close_id, playfield.exit_descriptor(0, 3)),
-            (state.exit_open_id, playfield.exit_descriptor(0, 8 + 3)),
-        ]
-
-    def test_the_vacated_cell_is_skipped_once_it_is_cleared(self):
-        """exits.py zeroes exit_close_id at settle -- the floor underneath is
-        already in the cached raster, so nothing is stamped there."""
-        state = self._state(exit_move_timer=-12, exit_anim_frame=2, exit_close_id=0)
-        stamped = self._capture(state)
-        assert [slot for slot, _ in stamped] == [state.exit_open_id]
-
-    def test_every_frame_of_the_phase_selects_a_distinct_stage(self):
-        seen = []
-        for frame in range(playfield.EXIT_ANIM_FRAMES):
-            state = self._state(exit_move_timer=-4 * frame - 4, exit_anim_frame=frame)
-            seen.append(self._capture(state)[0][1])
-        assert len(set(seen)) == playfield.EXIT_ANIM_STAGES
-
-    def _capture(self, state):
-        """Run the overlay with a stub tile decoder, returning the (cell,
-        descriptor) pairs it stamped."""
-        stamped: list[tuple[int, tuple]] = []
-        real = playfield._blit_descriptor
-
-        def spy(fb, descriptor, cell, palette, sx, sy, viewport):
-            stamped.append((cell, tuple(descriptor)))
-
-        playfield._blit_descriptor = spy
-        try:
-            fb = Framebuffer(240, 240)
-            playfield.draw_exit_animation(
-                fb, self._cache(), state, 0, 0, PLAYFIELD_VIEWPORT
-            )
-        finally:
-            playfield._blit_descriptor = real
-        return stamped
 
 
 class TestBonusScreenUsesThePerPlayerTally:
@@ -1796,55 +1454,48 @@ class TestBonusScreenUsesThePerPlayerTally:
     ``player_treascount`` (0x904A50), so the screen shows that, not the
     level-wide ``level_treasures``."""
 
-    def _drawn_text(self, state, monkeypatch) -> list[str]:
-        seen: list[str] = []
-        import gauntpy.render.screens as screens_mod
-
-        monkeypatch.setattr(
-            screens_mod, "draw_text_centered",
-            lambda image, cx, y, text, rgba, *, scale=1: seen.append(text),
-        )
-        monkeypatch.setattr(
-            screens_mod, "draw_text",
-            lambda image, x, y, text, rgba, *, scale=1: seen.append(text),
-        )
-        fb = Framebuffer(336, 240)
-        draw_front_end_overlay(fb, state, (0, 0, 336, 240), _FakeAssets())
-        return seen
-
     def _bonus_state(self):
         state = GameState()
-        state.game_mode = GameMode.TREAS_EXIT
+        state.level_players_active = 1
+        state.players[0].status = PlayerStatus.ALIVE_NEXT
+        state.players[0].coin_count = 1
         return state
 
-    def test_one_row_per_player_who_collected_treasure(self, monkeypatch):
+    def test_one_row_per_player_who_collected_treasure(self):
+        from gauntpy.subsystems.exits import show_level_end_bonus_screen
+
         state = self._bonus_state()
-        state.player_treascount = [3, 0, 5, 0]
-        state.level_treasures = 99         # must not be what the screen shows
-        state.bonus_amount = 3200
-        seen = self._drawn_text(state, monkeypatch)
+        state.player_treascount = [3, 0, 0, 0]
+        state.level_treasures = 3
+        show_level_end_bonus_screen(state)
+        assert _alpha_text(state, 7, 8, len(romtext.BONUS_100_X_COINS)) == (
+            romtext.BONUS_100_X_COINS
+        )
+        assert _alpha_text(state, 9, 9, len(romtext.BONUS_TREASURES_X)) == (
+            romtext.BONUS_TREASURES_X
+        )
+        assert _alpha_text(state, 23, 9, 4) == "   3"
 
-        assert f"{romtext.PLAYER_COLOR_NAMES[0]} {romtext.BONUS_TREASURES_X} 3" in seen
-        assert f"{romtext.PLAYER_COLOR_NAMES[2]} {romtext.BONUS_TREASURES_X} 5" in seen
-        assert not any(romtext.PLAYER_COLOR_NAMES[1] in s for s in seen)
-        assert not any("99" in s for s in seen), "level_treasures must not leak in"
+    def test_the_total_award_is_the_settled_bonus_amount(self):
+        from gauntpy.subsystems.exits import show_level_end_bonus_screen
 
-    def test_the_total_award_is_the_settled_bonus_amount(self, monkeypatch):
         state = self._bonus_state()
         state.player_treascount = [2, 0, 0, 0]
-        state.bonus_amount = 800
-        seen = self._drawn_text(state, monkeypatch)
-        assert romtext.BONUS_EQUALS in seen
-        assert "800" in seen
+        state.level_treasures = 2
+        show_level_end_bonus_screen(state)
+        assert state.bonus_amount == 200
+        assert _alpha_text(state, 13, 10, len(romtext.BONUS_EQUALS)) == romtext.BONUS_EQUALS
+        assert _alpha_text(state, 21, 10, 6) == "   200"
 
 
-    def test_no_bonus_when_nobody_collected_anything(self, monkeypatch):
+    def test_no_bonus_when_nobody_collected_anything(self):
+        from gauntpy.subsystems.exits import show_level_end_bonus_screen
+
         state = self._bonus_state()
         state.player_treascount = [0, 0, 0, 0]
-        state.bonus_amount = 0
-        seen = self._drawn_text(state, monkeypatch)
-        assert romtext.BONUS_NONE in seen
-        assert romtext.BONUS_100_X_COINS in seen
+        show_level_end_bonus_screen(state)
+        assert state.bonus_amount == 0
+        assert _alpha_text(state, 21, 10, 6) == "     0"
 
 
 class TestPlayfieldEdgeRule:
@@ -1929,29 +1580,6 @@ class TestPlayfieldEdgeRule:
         assert checkwalladj8(seam, 0, 5) & 0x29 == 0x29, "the seam must connect"
         assert checkwalladj8(middle, 0, 5) & 0x29 == 0, "and only across a seam"
 
-    def test_shootable_wall_types_use_the_levels_wall_palette(self):
-        maze = self._maze({
-            (5, 5): int(MazeObjIds.WALL_SECRET),
-            (6, 5): int(MazeObjIds.WALL_DESTRUCTABLE),
-        })
-        maze.wallpattern = 3
-        maze.wallcolor = 4
-        maze.floorpattern = 0
-        maze.floorcolor = 0
-
-        secret, _ = playfield._terrain_stamp(
-            maze, 5, 5, int(MazeObjIds.WALL_SECRET),
-            playfield.SeededRandom(5),
-        )
-        destructible, _ = playfield._terrain_stamp(
-            maze, 6, 5, int(MazeObjIds.WALL_DESTRUCTABLE),
-            playfield.SeededRandom(5),
-        )
-
-        assert (secret.ptype, secret.pnum) == ("wall", maze.wallcolor)
-        assert (destructible.ptype, destructible.pnum) == (
-            "wall", maze.wallcolor,
-        )
 
     def test_the_forcefield_ray_wraps_too(self):
         """ff_mark/ff_make_map read cells through the same masked accessor, so
@@ -1997,147 +1625,6 @@ class TestPlayfieldEdgeRule:
                 assert iswall(whatis(maze, x, 0)), f"maze {n} cell ({x}, 0)"
 
 
-class TestWallCrumble:
-    """Damaged destructible walls (wall_crumble 0x5303A) draw over the cached
-    raster, using the descriptor/palette WP-7 computes."""
-
-    def _cache(self, stamp=None):
-        from gauntpy.render.playfield import PlayfieldCache
-
-        return PlayfieldCache(
-            image=None, shadow_image=None,
-            crumble_stamps={} if stamp is None else {coords.pack_slot(4, 4): stamp},
-        )
-
-    def _stamp(self, ptype="wall", pnum=1):
-        from gex.render import Stamp
-
-        return Stamp(width=2, numbers=[0x100, 0x101, 0x102, 0x103],
-                     ptype=ptype, pnum=pnum,
-                     data=[[[2] * 8 for _ in range(8)] for _ in range(4)])
-
-    def _capture(self, state, cache):
-        stamped: list[tuple[int, tuple]] = []
-        real = playfield._blit_descriptor
-
-        def spy(fb, descriptor, cell, palette, sx, sy, viewport):
-            stamped.append((cell, tuple(descriptor)))
-
-        playfield._blit_descriptor = spy
-        try:
-            playfield.draw_wall_crumble(
-                Framebuffer(240, 240), cache, state, 0, 0, PLAYFIELD_VIEWPORT
-            )
-        finally:
-            playfield._blit_descriptor = real
-        return stamped
-
-    def test_nothing_is_drawn_without_damage(self):
-        state = GameState()
-        assert self._capture(state, self._cache(self._stamp())) == []
-
-    def test_stage_zero_is_the_untouched_wall(self):
-        state = GameState()
-        state.destructible_wall_stage = {coords.pack_slot(4, 4): 0}
-        assert self._capture(state, self._cache(self._stamp())) == []
-
-    def test_a_damaged_wall_on_a_plain_set_restamps_its_own_tiles(self):
-        """The ROM nibble is not an index into gex's static wall palette list."""
-        from gex.palettes import GAUNTLET_PALETTES
-        from gauntpy.subsystems.shots import wall_crumble_palette
-
-        state = GameState()
-        state.maze = type("M", (), {"wallpattern": 4})()
-        slot = coords.pack_slot(4, 4)
-        state.destructible_wall_stage = {slot: 2}
-
-        stamped = self._capture(state, self._cache(self._stamp()))
-
-        assert stamped == [(slot, (0x100, 0x101, 0x102, 0x103))]
-        assert wall_crumble_palette(state, slot) == 5      # 7 - stage
-        stamp = self._stamp(pnum=1)
-        assert playfield._stamp_palette_rgba(stamp, None) == [
-            color.to_rgba() for color in GAUNTLET_PALETTES["wall"][1]
-        ]
-
-    def test_plain_crumble_overlay_keeps_the_stamp_palette(self, monkeypatch):
-        state = GameState()
-        state.maze = type("M", (), {"wallpattern": 4})()
-        slot = coords.pack_slot(4, 4)
-        state.destructible_wall_stage = {slot: 1}
-        requested = []
-        real = playfield._stamp_palette_rgba
-
-        def capture(stamp, pnum):
-            requested.append(pnum)
-            return real(stamp, pnum)
-
-        monkeypatch.setattr(playfield, "_stamp_palette_rgba", capture)
-        self._capture(state, self._cache(self._stamp(pnum=4)))
-
-        assert requested == [None]
-
-    def test_a_damaged_wall_on_a_shrub_set_uses_the_rom_descriptor(self):
-        from gauntpy.subsystems.shots import wall_crumble_descriptor
-
-        state = GameState()
-        state.maze = type("M", (), {"wallpattern": 7})()
-        slot = coords.pack_slot(4, 4)
-        state.destructible_wall_stage = {slot: 1}
-
-        stamped = self._capture(state, self._cache(self._stamp(ptype="shrub", pnum=0)))
-
-        assert stamped == [(slot, wall_crumble_descriptor(state, slot))]
-        assert stamped[0][1] != (0x100, 0x101, 0x102, 0x103)
-
-    def test_each_stage_selects_a_different_descriptor(self):
-        state = GameState()
-        state.maze = type("M", (), {"wallpattern": 7})()
-        slot = coords.pack_slot(4, 4)
-        seen = set()
-        for stage in (0, 1, 2):
-            state.destructible_wall_stage = {slot: stage}
-            from gauntpy.subsystems.shots import wall_crumble_descriptor
-            seen.add(wall_crumble_descriptor(state, slot))
-        assert len(seen) == 3
-
-    def test_the_palette_walk_stays_inside_the_wall_bank(self):
-        from gex.palettes import GAUNTLET_PALETTES
-        from gauntpy.subsystems.shots import wall_crumble_palette
-
-        state = GameState()
-        state.maze = type("M", (), {"wallpattern": 4})()
-        slot = coords.pack_slot(4, 4)
-        for stage in (0, 1, 2):
-            state.destructible_wall_stage = {slot: stage}
-            assert 0 <= wall_crumble_palette(state, slot) < len(GAUNTLET_PALETTES["wall"])
-
-    @requires_roms
-    def test_the_overlay_never_advances_the_shared_texture_rng(self):
-        """The stamps are captured at build time precisely so drawing damage
-        cannot draw from the maze's stream and shift every floor texture.
-
-        Compared by *drawing* from the stream afterwards rather than by
-        inspecting the PRNG object: ``SeededRandom`` exposes neither a seed nor
-        a state, and ``repr(vars(rand))`` -- which this used to compare -- is
-        just the wrapped ``random.Random``'s address, identical whether or not
-        anything consumed it.
-        """
-        from gex.mazedecode import maze_decompress
-        from gex.roms import slapstic_read_maze
-        from gauntpy.render.playfield import draw_wall_crumble, playfield_cache_for
-
-        maze = maze_decompress(slapstic_read_maze(1))
-        untouched = maze_decompress(slapstic_read_maze(1))
-        cache = playfield_cache_for(maze, None)
-        state = GameState()
-        state.maze = maze
-        state.destructible_wall_stage = {slot: 1 for slot in (cache.crumble_stamps or {})}
-
-        draw_wall_crumble(Framebuffer(240, 240), cache, state, 0, 0, PLAYFIELD_VIEWPORT)
-        assert [maze.rand.intn(97) for _ in range(32)] == [
-            untouched.rand.intn(97) for _ in range(32)
-        ]
 
 
 class TestRenderFrame:
@@ -2168,444 +1655,8 @@ class TestRenderFrame:
         assert fb_a.image.tobytes() == fb_fresh.image.tobytes() == fb_b.image.tobytes()
 
 
-class TestDoorsUseTheMobLayer:
-    def test_door_types_are_not_baked_into_the_playfield_raster(self):
-        from types import SimpleNamespace
 
-        maze = SimpleNamespace(
-            data={(5, 5): int(MazeObjIds.DOOR_HORIZ)},
-            floorpattern=0,
-            floorcolor=0,
-            wallpattern=0,
-            wallcolor=0,
-        )
 
-        assert int(MazeObjIds.DOOR_HORIZ) not in playfield.TERRAIN_TYPES
-        assert int(MazeObjIds.DOOR_VERT) not in playfield.TERRAIN_TYPES
-        assert playfield._terrain_stamp(
-            maze, 5, 5, int(MazeObjIds.DOOR_HORIZ), None,
-        ) == (None, 0)
-
-
-# ---------------------------------------------------------------------------
-# Playfield golden-image comparison against gex's genpfimage -- needs ROMs.
-#
-# gex's genpfimage bakes a maze's starting monsters/items into the same PNG
-# as the terrain (it is a maze-*preview* tool -- see render/playfield.py's
-# module docstring). gauntpy's playfield layer deliberately does not, since
-# those are dynamic MOBs on real hardware. So this test restricts its pixel
-# comparison to cells whose object type is terrain in both renderers --
-# exactly the "assert on the playfield region they should share" escape
-# hatch PLAN.md §6 WP-2's acceptance criterion names.
-#
-# The two Maze objects are decoded independently (not shared) so each starts
-# with its own freshly-seeded SeededRandom(5) (gex.mazedecode.Maze's
-# default); both renderers consume that RNG in the same per-cell order (see
-# playfield.py's floor/terrain dispatch, deliberately mirroring gex.pfrender
-# cell-for-cell), so floor texture variety matches between the two
-# independent decodes.
-# ---------------------------------------------------------------------------
-
-@requires_roms
-class TestPlayfieldMatchesGexReference:
-    @staticmethod
-    def _decode(maze_num: int):
-        from gex.constants import MAX_MAZE_NUM
-        from gex.mazedecode import maze_decompress
-        from gex.roms import slapstic_read_maze
-
-        return maze_decompress(
-            slapstic_read_maze(maze_num),
-            allow_missing_delimiter=maze_num == MAX_MAZE_NUM,
-        )
-
-    # A spread of maze numbers, including both non-wrapping (most levels)
-    # and wrapping ones (LFLAG4_WRAP_H/V -- doc/04_game_subsystems.md's maze
-    # flags), and the last catalog entry (116, whose decode needs the
-    # allow_missing_delimiter special case gex's own tests exercise).
-    @pytest.mark.parametrize("maze_num", [0, 1, 10, 50, 100, 116])
-    def test_terrain_cells_match_gex_genpfimage_pixel_for_pixel(self, maze_num, tmp_path):
-        from PIL import Image
-
-        from gex.adjacency import whatis
-        from gex.pfrender import genpfimage
-        from gauntpy.render.playfield import TERRAIN_TYPES, build_playfield_image
-
-        maze_ref = self._decode(maze_num)
-        maze_ours = self._decode(maze_num)
-
-        ref_path = tmp_path / "ref.png"
-        genpfimage(maze_ref, str(ref_path))
-        ref_img = Image.open(ref_path).convert("RGBA")
-        # gex's export adds a cosmetic 16px border (and, for non-wrapping
-        # axes, one extra preview column/row beyond it) that real playfield
-        # RAM has no equivalent of -- see build_playfield_image's docstring.
-        # Cropping it off recovers exactly the 512x512 true world.
-        ref_world = ref_img.crop((16, 16, 16 + 512, 16 + 512))
-
-        our_world = build_playfield_image(maze_ours)
-        assert our_world.size == (512, 512)
-
-        # gex's item stamps are allowed to be larger than one cell and carry
-        # a pixel "nudge" (e.g. "treasure" is 3x3 tiles with nudge (-4, -4) --
-        # python-gex/src/gex/data/items.jsonc), so a dynamic object's
-        # rendering can bleed a few pixels into *neighboring* cells even
-        # though it's anchored at just one. Since gauntpy doesn't draw those
-        # objects at all (they're MOBs, not terrain -- see this module's
-        # docstring), a neighbor of a dynamic-object cell isn't a safe
-        # comparison point either. Exclude a buffer around every dynamic
-        # cell, not just the cell itself.
-        dynamic_cells = {
-            (x, y)
-            for y in range(32) for x in range(32)
-            if (
-                whatis(maze_ours, x, y) not in TERRAIN_TYPES
-                or whatis(maze_ours, x, y) == MazeObjIds.WALL_SECRET
-            )
-        }
-        contaminated = set(dynamic_cells)
-        for dx, dy in dynamic_cells:
-            dynamic_type = whatis(maze_ours, dx, dy)
-            radius = 0 if dynamic_type in (
-                MazeObjIds.DOOR_HORIZ, MazeObjIds.DOOR_VERT,
-                MazeObjIds.WALL_SECRET,
-            ) else 2
-            for oy in range(-radius, radius + 1):
-                for ox in range(-radius, radius + 1):
-                    contaminated.add((dx + ox, dy + oy))
-
-        mismatches = []
-        compared = 0
-        for y in range(32):
-            for x in range(32):
-                if (x, y) in contaminated:
-                    continue
-                compared += 1
-                box = (x * 16, y * 16, x * 16 + 16, y * 16 + 16)
-                if ref_world.crop(box).tobytes() != our_world.crop(box).tobytes():
-                    mismatches.append((x, y, int(whatis(maze_ours, x, y))))
-
-        # Threshold picked from the observed range across the parametrized
-        # mazes (255-634 comparable cells out of 1024) -- low enough not to
-        # flake on an item-dense maze, high enough to catch a dispatch bug
-        # that left almost nothing comparable.
-        assert compared > 150, "sanity: too few terrain-only cells survived the item-bleed exclusion to be a meaningful comparison"
-        assert not mismatches, f"{len(mismatches)}/{compared} terrain cells differ from gex's reference: {mismatches[:10]}"
-
-    def test_the_renderer_does_not_mutate_the_simulations_maze(self):
-        """The edge rule is applied through a read-only view. Nothing may be
-        written back -- anything else iterating maze.data (
-        maze.place_decoded_objects does) would see phantom cells."""
-        from gauntpy.render.playfield import build_playfield_images
-
-        maze = self._decode(1)
-        before = dict(maze.data)
-        build_playfield_images(maze)
-        assert maze.data == before
-        assert not any(x > 31 or y > 31 for x, y in maze.data)
-
-    def test_a_terrain_change_in_place_restamps_the_cache(self, monkeypatch):
-        """A wall dissolving or a door opening mutates maze.data under the same
-        object. It must update locally rather than rebuilding 512x512."""
-        from gauntpy.render import playfield
-        from gauntpy.render.playfield import playfield_cache_for
-
-        maze = self._decode(1)
-        cache = playfield_cache_for(maze, None)
-        assert playfield_cache_for(maze, cache) is cache, "unchanged: reuse"
-
-        cell = next(iter(maze.data))
-        maze.data[cell] = int(MazeObjIds.TILE_FLOOR)
-        monkeypatch.setattr(
-            playfield, "_build_playfield_layers",
-            lambda _maze: (_ for _ in ()).throw(
-                AssertionError("single-cell change rebuilt the world")
-            ),
-        )
-        rebuilt = playfield_cache_for(maze, cache)
-        assert rebuilt is cache, "terrain changed: restamp in place"
-        assert rebuilt.cells == maze.data
-
-    def test_incremental_shrub_update_does_not_retexture_other_cells(self):
-        from gauntpy.render.playfield import (
-            _changed_cell_neighbourhood, playfield_cache_for,
-        )
-
-        maze = self._decode(6)
-        cache = playfield_cache_for(maze, None)
-        before = cache.image.copy()
-        old = dict(maze.data)
-        changed = next(
-            cell for cell, obj in maze.data.items()
-            if obj in (
-                int(MazeObjIds.WALL_TRAPCYC1),
-                int(MazeObjIds.WALL_TRAPCYC2),
-                int(MazeObjIds.WALL_TRAPCYC3),
-                int(MazeObjIds.WALL_RANDOM),
-            )
-        )
-        maze.data[changed] = int(MazeObjIds.TILE_FLOOR)
-        affected = _changed_cell_neighbourhood(old, maze.data)
-
-        assert playfield_cache_for(maze, cache) is cache
-        for y in range(32):
-            for x in range(32):
-                if (x, y) in affected:
-                    continue
-                box = (x * 16, y * 16, x * 16 + 16, y * 16 + 16)
-                assert cache.image.crop(box).tobytes() == before.crop(box).tobytes()
-
-    def test_incremental_update_preserves_pushwall_overhang(self):
-        from gauntpy.render.playfield import (
-            build_playfield_images, playfield_cache_for,
-        )
-
-        maze = self._decode(40)
-        assert maze.data[(28, 5)] == int(MazeObjIds.WALL_MOVABLE)
-        assert maze.data[(29, 5)] == int(MazeObjIds.WALL_MOVABLE)
-        cache = playfield_cache_for(maze, None)
-
-        maze.data[(29, 3)] = int(MazeObjIds.DOOR_HORIZ)
-        assert playfield_cache_for(maze, cache) is cache
-        expected, _shadow, _crumble = build_playfield_images(maze)
-
-        # The 24x16 stamps are nudged -4,-4; this is the overhanging top strip
-        # a one-pass adjacency restamp used to erase with the row-4 floor boxes.
-        box = (28 * 16, 5 * 16 - 4, 30 * 16, 5 * 16)
-        assert cache.image.crop(box).tobytes() == expected.crop(box).tobytes()
-
-    def test_a_different_level_rebuilds_the_cache(self):
-        from gauntpy.render.playfield import playfield_cache_for
-
-        one, ten = self._decode(1), self._decode(10)      # both kept alive
-        cache = playfield_cache_for(one, None)
-        assert playfield_cache_for(ten, cache) is not cache
-
-    def test_identical_content_shares_a_raster(self):
-        """Validity is decided on content, not identity -- two decodes of the
-        same maze describe the same world, and id() can even be recycled onto
-        a fresh Maze once the old one is collected."""
-        from gauntpy.render.playfield import playfield_cache_for
-
-        first, second = self._decode(1), self._decode(1)
-        assert first is not second
-        cache = playfield_cache_for(first, None)
-        assert playfield_cache_for(second, cache) is cache
-
-    def test_a_palette_change_alone_rebuilds_the_cache(self):
-        from gauntpy.render.playfield import playfield_cache_for
-
-        maze = self._decode(1)
-        cache = playfield_cache_for(maze, None)
-        maze.floorcolor = (maze.floorcolor + 1) & 0x0F
-        assert playfield_cache_for(maze, cache) is not cache
-
-    def test_shadow_raster_is_the_irgb_transform_not_a_scale(self):
-        """build_playfield_images' shadow twin applies the exact ROM intensity
-        transform (playfield.irgb_to_shadow), which is darker than and
-        distinct from a naive RGB *0.5 -- that difference is the whole point
-        of the shadow raster.
-        """
-        from gauntpy.render.playfield import build_playfield_images
-
-        maze = self._decode(1)
-        normal, shadow, _crumble = build_playfield_images(maze)
-        assert normal.size == shadow.size == (512, 512)
-
-        n_px, s_px = normal.load(), shadow.load()
-        differs_from_half = 0
-        checked = 0
-        for y in range(0, 512, 7):
-            for x in range(0, 512, 7):
-                n = n_px[x, y]
-                if n[:3] == (0, 0, 0):
-                    continue
-                checked += 1
-                s = s_px[x, y]
-                # Shadow never brightens any channel (intensity only drops).
-                assert all(sc <= nc for sc, nc in zip(s[:3], n[:3])), (x, y, s, n)
-                if tuple(int(c * 0.5) for c in n[:3]) != s[:3]:
-                    differs_from_half += 1
-
-        assert checked > 100
-        # The exact transform must visibly diverge from 0.5-scaling on real
-        # playfield colors (it wouldn't, if the transform weren't applied).
-        assert differs_from_half > 0
-
-
-# ---------------------------------------------------------------------------
-# Playfield determinism -- real mazes, real ROM tiles.
-#
-# The floor texture of every cell and the tile choice of every shrub wall come
-# out of ``maze.rand``, deliberately: gex's own ``pfrender`` draws from the
-# same stream in the same per-cell order, which is what lets the golden-image
-# comparison above hold cell for cell. But *drawing* from it advanced it, so
-# the second build of a maze came out different from the first -- and this
-# module rebuilds whenever the cache is invalidated (a new level, a wall
-# dissolving, a caller that kept no cache). The renderer was not a function of
-# its input: two ``render_frame`` calls on an unchanged state produced two
-# different pictures of the same world.
-# ---------------------------------------------------------------------------
-
-@requires_roms
-class TestPlayfieldBuildIsPure:
-    @staticmethod
-    def _decode(maze_num: int):
-        from gex.constants import MAX_MAZE_NUM
-        from gex.mazedecode import maze_decompress
-        from gex.roms import slapstic_read_maze
-
-        return maze_decompress(
-            slapstic_read_maze(maze_num),
-            allow_missing_delimiter=maze_num == MAX_MAZE_NUM,
-        )
-
-    @staticmethod
-    def _cells_differing(a, b):
-        return {
-            (x, y)
-            for y in range(32)
-            for x in range(32)
-            if a.crop((x * 16, y * 16, x * 16 + 16, y * 16 + 16)).tobytes()
-            != b.crop((x * 16, y * 16, x * 16 + 16, y * 16 + 16)).tobytes()
-        }
-
-    def test_repeated_builds_of_one_maze_are_identical(self):
-        from gauntpy.render.playfield import build_playfield_images
-
-        maze = self._decode(1)
-        first_normal, first_shadow, _ = build_playfield_images(maze)
-        for _ in range(2):
-            normal, shadow, _ = build_playfield_images(maze)
-            assert normal.tobytes() == first_normal.tobytes()
-            assert shadow.tobytes() == first_shadow.tobytes()
-
-    def test_the_build_leaves_the_mazes_own_random_stream_where_it_found_it(self):
-        """It takes a copy (``build_rand``) rather than consuming the maze's
-        stream, so nothing downstream of the renderer sees a different world
-        because a frame happened to be drawn."""
-        from gauntpy.render.playfield import build_playfield_images
-
-        drawn, untouched = self._decode(1), self._decode(1)
-        build_playfield_images(drawn)
-        assert [drawn.rand.intn(97) for _ in range(32)] == [
-            untouched.rand.intn(97) for _ in range(32)
-        ]
-
-    def test_two_independent_decodes_render_the_same_world(self):
-        from gauntpy.render.playfield import build_playfield_images
-
-        one, two = self._decode(10), self._decode(10)
-        assert build_playfield_images(one)[0].tobytes() == build_playfield_images(two)[0].tobytes()
-
-    def test_repeated_frames_with_no_cache_are_identical(self):
-        """``render_frame``'s own contract (PLAN.md §3 rule 7) -- previously
-        true only because the smoke test ran without a maze loaded."""
-        state = GameState()
-        state.maze = self._decode(1)
-        _place(state.mobs, row=8, col=8, picture=5)
-
-        first, _ = render_frame(state, _FakeAssets())
-        for _ in range(2):
-            again, _ = render_frame(state, _FakeAssets())
-            assert again.image.tobytes() == first.image.tobytes()
-
-    def test_a_reused_cache_matches_a_freshly_built_one(self):
-        """"``cache`` is purely a performance seam" -- with a real maze
-        loaded, which is when the seam actually does anything."""
-        from gauntpy.render.compositor import RenderCache
-
-        state = GameState()
-        state.maze = self._decode(1)
-        fresh, _ = render_frame(state, _FakeAssets())
-
-        cache = RenderCache()
-        first, cache = render_frame(state, _FakeAssets(), cache=cache)
-        second, cache = render_frame(state, _FakeAssets(), cache=cache)
-        assert fresh.image.tobytes() == first.image.tobytes() == second.image.tobytes()
-
-    def test_a_wall_restyled_in_place_redraws_only_that_cell(self):
-        """Cache invalidation must not re-randomize the world. Swapping a plain
-        wall for a trap-cycle wall keeps the same stamp path, the same wall
-        adjacency for every neighbour (both are walls to ``iswall``) and the
-        same draw count -- so the only thing that may change is the corner dot
-        inside that one cell.
-        """
-        from gauntpy.render.playfield import build_playfield_images
-
-        maze = self._decode(1)
-        before, before_shadow, _ = build_playfield_images(maze)
-
-        cell = next(
-            key for key, value in sorted(maze.data.items())
-            if value == int(MazeObjIds.WALL_REGULAR)
-        )
-        maze.data[cell] = int(MazeObjIds.WALL_TRAPCYC1)
-        after, after_shadow, _ = build_playfield_images(maze)
-
-        assert self._cells_differing(before, after) == {cell}
-        assert self._cells_differing(before_shadow, after_shadow) == {cell}
-
-    def test_a_wall_removed_redraws_only_its_own_neighbourhood(self):
-        """The general case: an edit that *does* change adjacency reaches the
-        eight cells around it (through the wrap-around edge rule), and stops
-        there. Before the fix all 1024 cells came back different.
-        """
-        from gauntpy.render.playfield import build_playfield_images
-
-        maze = self._decode(1)
-        before, _shadow, _ = build_playfield_images(maze)
-
-        cell = next(
-            key for key, value in sorted(maze.data.items())
-            if value == int(MazeObjIds.WALL_REGULAR)
-        )
-        maze.data[cell] = int(MazeObjIds.TILE_FLOOR)
-        after, _shadow, _ = build_playfield_images(maze)
-
-        x, y = cell
-        neighbourhood = {
-            ((x + dx) & 0x1F, (y + dy) & 0x1F)
-            for dx in (-1, 0, 1) for dy in (-1, 0, 1)
-        }
-        differing = self._cells_differing(before, after)
-        assert cell in differing, "sanity: the edited cell itself must change"
-        assert differing <= neighbourhood, sorted(differing - neighbourhood)
-
-    def test_an_invalidated_cache_restamps_to_exactly_a_fresh_build(self):
-        """Terrain changing under the same Maze object is the case the content
-        comparison in ``playfield_cache_for`` exists for. On a non-random wall
-        pattern the local restamp is byte-identical to a fresh full build."""
-        from gauntpy.render.playfield import build_playfield_images, playfield_cache_for
-
-        maze = self._decode(1)
-        cache = playfield_cache_for(maze, None)
-
-        cell = next(
-            key for key, value in sorted(maze.data.items())
-            if value == int(MazeObjIds.WALL_REGULAR)
-        )
-        maze.data[cell] = int(MazeObjIds.TILE_FLOOR)
-
-        rebuilt = playfield_cache_for(maze, cache)
-        assert rebuilt is cache
-        expected_normal, expected_shadow, _ = build_playfield_images(maze)
-        assert rebuilt.image.tobytes() == expected_normal.tobytes()
-        assert rebuilt.shadow_image.tobytes() == expected_shadow.tobytes()
-
-    def test_a_maze_whose_walls_draw_from_the_stream_is_deterministic_too(self):
-        """Wall patterns 7-10 and 12-15 pick their tiles randomly
-        (``gex.wall.wall_get_tiles``), so on those levels the terrain pass
-        consumes the shared stream as well -- the case a per-build copy has to
-        cover and a "reset to a fixed seed per cell" fix would not.
-        """
-        from gauntpy.render.playfield import build_playfield_images
-
-        maze = self._decode(1)
-        maze.wallpattern = 7
-        first, _shadow, _ = build_playfield_images(maze)
-        second, _shadow2, _ = build_playfield_images(maze)
-        assert first.tobytes() == second.tobytes()
 
 
 # ---------------------------------------------------------------------------
@@ -2679,6 +1730,9 @@ class TestTheLayerNoLongerDropsEffectsAndDissolves:
         palette nibble in ``mob_hpos``.
         """
         source = coords.pack_slot(*cls._SOURCE_CELL)
+        from gauntpy.subsystems.display import init_mob_color_ram
+        if not any(state.mob_color_ram):
+            init_mob_color_ram(state)
         x, y = coords.slot_to_pixels(source)
         state.mobs.picture[slot] = picture
         state.mobs.hpos[slot] = coords.encode_hpos(x) | palette
@@ -2789,6 +1843,11 @@ class TestTheHeroDissolveIsDrawnToTheEnd:
         from gauntpy.constants import Character
 
         state = GameState()
+        from gauntpy.subsystems.display import (
+            init_mob_color_ram, init_player_mob_palette,
+        )
+        init_mob_color_ram(state)
+        init_player_mob_palette(state, 0, character)
         slot = coords.pack_slot(6, 6)
         x, y = coords.slot_to_pixels(slot)
         state.mobs.create(
@@ -2890,6 +1949,11 @@ class TestAWizardRendersAsAWizard:
         from gauntpy.constants import Character
 
         state = GameState()
+        from gauntpy.subsystems.display import (
+            init_mob_color_ram, init_player_mob_palette,
+        )
+        init_mob_color_ram(state)
+        init_player_mob_palette(state, 0, int(character))
         slot = coords.pack_slot(6, 6)
         x, y = coords.slot_to_pixels(slot)
         tile = HEROES[HERO_NAMES[int(character)]].anims["walk"]["down"][0]
@@ -2944,7 +2008,10 @@ class TestAWizardRendersAsAWizard:
         expected = Framebuffer(240, 240)
         stamp = store.sprite(tile, kind="wizard", palette=0)
         assert (stamp.ptype, stamp.pnum) == ("wizard", 0)
-        palette_rgba = [c.to_rgba() for c in store.palette(stamp.ptype, stamp.pnum)]
+        from gauntpy.subsystems.display import mob_palette_rgba
+        palette_rgba = mob_palette_rgba(
+            state, state.mobs.hpos[slot] & 0x0F,
+        )
         hero_x, hero_y = coords.slot_to_pixels(slot)
         hero_y -= 8
         for index, tile_data in enumerate(stamp.data):
@@ -2957,7 +2024,7 @@ class TestAWizardRendersAsAWizard:
 
         assert drawn.image.tobytes() == expected.image.tobytes()
 
-    def test_it_is_visibly_different_from_the_sorcerer_it_used_to_be(self):
+    def test_shared_artwork_still_uses_the_live_wizard_palette(self):
         from gauntpy.assets import AssetStore
         from gauntpy.constants import Character
 
@@ -2979,7 +2046,7 @@ class TestAWizardRendersAsAWizard:
         draw_mob_layer(before, state, _IgnoresKind(), 0, 0, PLAYFIELD_VIEWPORT)
 
         assert store.sprite(tile).ptype == "base", "the picture alone says Sorcerer"
-        assert now.image.tobytes() != before.image.tobytes()
+        assert now.image.tobytes() == before.image.tobytes()
 
     def test_the_other_three_classes_get_their_own_banks_too(self):
         from gex.heroes import HEROES

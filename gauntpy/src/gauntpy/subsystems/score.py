@@ -2,11 +2,9 @@
 
 The two numeric HUD renderers (``draw_player_score`` 0x45940 and
 ``draw_player_health`` 0x459A2) write the alpha (text) layer on real hardware.
-gauntpy splits that in the obvious way: **this module decides what the panel
-says and when it changes**, latching the result into an ``InfoPanel``, and
-``render/hud.py`` turns that latch into pixels. Nothing here imports the
-renderer (PLAN.md §3 rule 7 -- rendering reads state, state never reads
-rendering).
+The game-side routines here write those same attribute/glyph words into
+``GameState.alpha_ram`` at their ROM call sites. The renderer consumes only that
+display memory; it never re-derives content from live player state.
 
 The panel geometry below is not invented: it is read straight off the ROM's own
 drawing coordinates, disassembled from ``row76.bin`` (game address ``A`` maps to
@@ -35,9 +33,20 @@ padding mode: nonzero pads with **spaces**); ``doc/07_function_index.md``
 
 from __future__ import annotations
 
-from ..constants import GameMode
+from .. import romtext
+from ..constants import GameMode, PlayerStatus
 from ..coords import hpos_x, vpos_y
 from ..state import NUM_PLAYERS, GameState
+from .display import (
+    alpha_word,
+    clear_alpha_visible,
+    fill_alpha_rect,
+    write_alpha_large_char,
+    write_alpha_large_text,
+    write_alpha_decimal,
+    write_alpha_glyphs,
+    write_alpha_text,
+)
 from .sound import sound_play, sound_speech_play
 
 
@@ -146,7 +155,14 @@ IT_LABEL_COLUMN = 0x24       # 0x905048, two ASCII glyph cells between labels
 INVENTORY_COLUMN = 30
 INVENTORY_CELLS = 12
 ALPHA_ROW_STRIDE = 64
-ALPHA_SPACE_GLYPH = 0x20
+# OS draw_string maps ASCII space to alpha glyph zero (0x2F68-0x2F70).
+ALPHA_SPACE_GLYPH = 0
+# player_inv_update 0x45B88-0x45BDC. The six power bits stamp complete
+# attribute/glyph words around (not over) the character name on row p*5+7.
+POWER_ICON_COLUMNS = (41, 40, 33, 32, 31, 30)  # ROM 0x5732E + base column 30
+POWER_ICON_WORDS = (                           # ROM 0x57334
+    0x983B, 0x9D7A, 0xA0A2, 0xA49C, 0xA97B, 0xACA3,
+)
 
 #: Health redraw also fires below this value every time the player is selected,
 #: which is what makes the low-health warning pulse (§14.2).
@@ -185,14 +201,126 @@ def info_panel(state: GameState):
 
 def write_player_panel_background(state: GameState, player_index: int) -> None:
     """Write setup_infopanel's opaque player-colored space cells to alpha RAM."""
-    attribute = PLAYER_TEXT_PALETTE_WORDS[player_index] | ALPHA_SPACE_GLYPH
+    attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
     base = player_index * PLAYER_BLOCK_STRIDE
     name_row = base + PLAYER_NAME_ROW
     for column in range(PLAYER_NAME_COLUMN - 1, PLAYER_NAME_COLUMN + 5):
-        state.alpha_ram[name_row * ALPHA_ROW_STRIDE + column] = attribute
+        state.alpha_ram[name_row * ALPHA_ROW_STRIDE + column] = alpha_word(
+            attribute, ALPHA_SPACE_GLYPH,
+        )
     for row in range(base + PLAYER_LABEL_ROW, base + PLAYER_INV_ROW + 1):
         start = row * ALPHA_ROW_STRIDE + PANEL_COLUMN
-        state.alpha_ram[start:start + PANEL_WIDTH] = [attribute] * PANEL_WIDTH
+        state.alpha_ram[start:start + PANEL_WIDTH] = [
+            alpha_word(attribute, ALPHA_SPACE_GLYPH)
+        ] * PANEL_WIDTH
+
+
+def clear_player_panel_content(state: GameState, player_index: int) -> None:
+    """Blank every content cell in a removed player's four-row panel block."""
+    attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
+    start_row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_NAME_ROW
+    fill_alpha_rect(
+        state, PANEL_COLUMN, start_row, PANEL_WIDTH, PLAYER_BLOCK_ROWS,
+        alpha_word(attribute, ALPHA_SPACE_GLYPH),
+    )
+
+
+def write_info_panel_header(state: GameState) -> None:
+    """Write setup_infopanel's ROM dungeon banner and level field."""
+    fill_alpha_rect(
+        state, PANEL_COLUMN, 0, PANEL_WIDTH, LEVEL_ROW + 1,
+        alpha_word(0x8000),
+    )
+    for row, glyphs in enumerate(romtext.DUNGEON_HEADER_GLYPHS):
+        write_alpha_glyphs(state, 30, row, glyphs, 0x9400)
+    write_alpha_text(state, LEVEL_LABEL_COLUMN, LEVEL_ROW, romtext.TEXT_LEVEL, 0x8000)
+    write_alpha_decimal(
+        state, LEVEL_VALUE_COLUMN, LEVEL_ROW, state.levelnum_current,
+        LEVEL_DIGITS, 0x8000,
+    )
+
+
+def write_player_panel_static(state: GameState, player_index: int) -> None:
+    """Write one setup_infopanel identity/label block into alpha VRAM."""
+    write_player_panel_background(state, player_index)
+    base = player_index * PLAYER_BLOCK_STRIDE
+    attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
+    klass = int(state.players[player_index].character) & 3
+    write_alpha_glyphs(
+        state, PLAYER_NAME_COLUMN, base + PLAYER_NAME_ROW,
+        romtext.CHARACTER_HUD_GLYPHS[klass], attribute,
+    )
+    write_alpha_glyphs(
+        state, PLAYER_LABEL_COLUMN, base + PLAYER_LABEL_ROW,
+        (*romtext.LABEL_SCORE_GLYPHS, 0x20, 0x20,
+         *romtext.LABEL_HEALTH_GLYPHS),
+        attribute,
+    )
+
+
+def write_player_inventory(state: GameState, player_index: int) -> None:
+    """player_inv_update's key/potion row and six power-up icon cells."""
+    player = state.players[player_index]
+    row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_INV_ROW
+    keys = min(max(0, player.keysnum), INVENTORY_CELLS)
+    potions = min(max(0, player.potionsnum), INVENTORY_CELLS - keys)
+    blanks = INVENTORY_CELLS - keys - potions
+    words = (
+        [alpha_word(KEY_PALETTE_WORDS[player_index], romtext.GLYPH_KEY)] * keys
+        + [alpha_word(PLAYER_TEXT_PALETTE_WORDS[player_index])] * blanks
+        + [alpha_word(POTION_PALETTE_WORDS[player_index], romtext.GLYPH_POTION)]
+        * potions
+    )
+    start = row * ALPHA_ROW_STRIDE + INVENTORY_COLUMN
+    state.alpha_ram[start:start + INVENTORY_CELLS] = words
+    power_row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_NAME_ROW
+    state.alpha_ram[power_row * ALPHA_ROW_STRIDE + PANEL_COLUMN] = 0x8000
+    for bit, (column, word) in enumerate(zip(POWER_ICON_COLUMNS, POWER_ICON_WORDS)):
+        state.alpha_ram[power_row * ALPHA_ROW_STRIDE + column] = (
+            word if player.powers & (1 << bit) else 0x8000
+        )
+
+
+def write_player_panel_status(state: GameState, player_index: int) -> None:
+    """Write the status string selected by setup_infopanel's ROM branches."""
+    player = state.players[player_index]
+    row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_INV_ROW
+    attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
+    if player.status == int(PlayerStatus.SELECTING):
+        write_alpha_text(state, PANEL_COLUMN, row, romtext.TEXT_SELECT_HERO, attribute - 0x2000)
+    elif (
+        not player.mob_slot
+        and player.status in (
+            int(PlayerStatus.ALIVE_NEXT), int(PlayerStatus.SECRET_NAME_ENTRY),
+        )
+        and int(state.game_mode) >= 0
+    ):
+        write_alpha_text(state, 30, row, romtext.TEXT_ON_LEVEL, attribute - 0x1000)
+        write_alpha_decimal(state, 39, row, state.level_next, 3, attribute)
+    elif (
+        not player.mob_slot and not player.health
+        and player.state_timer != STATE_TIMER_IDLE and int(state.game_mode) >= 0
+    ):
+        write_alpha_text(state, PANEL_COLUMN, row, romtext.TEXT_GAME_OVER, attribute - 0x1000)
+    elif not player.mob_slot and int(state.game_mode) == int(GameMode.DEMO):
+        write_alpha_text(state, PANEL_COLUMN, row, romtext.TEXT_PRESS_START, attribute - 0x2000)
+    elif player.status == int(PlayerStatus.REMOVED):
+        write_alpha_text(
+            state, PANEL_COLUMN, row, romtext.TEXT_INSERT_COIN, attribute,
+        )
+
+
+def write_it_labels(state: GameState) -> None:
+    """Synchronize player_it_label_set's two literal glyph cells."""
+    for player_index in range(NUM_PLAYERS):
+        if state.players[player_index].status in (
+            int(PlayerStatus.DYING), int(PlayerStatus.SECRET_NAME_ENTRY),
+        ):
+            continue
+        row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_LABEL_ROW
+        attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
+        glyphs = romtext.LABEL_IT_GLYPHS if state.player_it == player_index else (0, 0)
+        write_alpha_glyphs(state, IT_LABEL_COLUMN, row, glyphs, attribute)
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +385,95 @@ def high_scores(state: GameState) -> list[list[tuple[int, str]]]:
     return state.high_scores
 
 
+def write_high_score_screen(state: GameState) -> None:
+    """attract_highscores (0x4A124): populate its complete alpha page."""
+    clear_alpha_visible(state)
+    opaque_blank = alpha_word(0x8000, ALPHA_SPACE_GLYPH)
+    for column, row, width, height in (
+        (1, 0, 17, 14), (20, 0, 21, 14),
+        (1, 17, 17, 12), (20, 17, 21, 12),
+    ):
+        fill_alpha_rect(state, column, row, width, height, opaque_blank)
+    column, row = romtext.TEXT_SCORE_PER_COIN_POS
+    write_alpha_large_text(state, column, row, romtext.TEXT_SCORE_PER_COIN, 0)
+    ladders = high_scores(state)
+    for klass, header_column, header_row in romtext.HIGHSCORE_QUADRANTS:
+        attribute = 0x5000 + (klass << 10)
+        write_alpha_large_text(
+            state, header_column, header_row,
+            romtext.CHARACTER_NAME_PLURALS[klass], attribute,
+        )
+        entry_column = 24 if klass >= 2 else 2
+        entry_row = 19 if klass in (1, 2) else 3
+        for rank, (value, initials) in enumerate(ladders[klass][:HIGHSCORE_RANKS]):
+            rank_text = f"#{rank + 1}" if rank == 9 else f" #{rank + 1}"
+            write_alpha_text(
+                state, entry_column, entry_row + rank,
+                f"{rank_text} {(initials + '   ')[:3]}", attribute,
+            )
+            write_alpha_decimal(
+                state, entry_column + 9, entry_row + rank,
+                value, 7, attribute,
+            )
+
+
+def write_player_initials_entry(state: GameState, player_index: int) -> None:
+    """Port draw_player_initials_entry 0x4A2CA into alpha RAM."""
+    player = state.players[player_index]
+    attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
+    row = player_index * 5 + 7
+    write_alpha_text(state, 29, row, "  Enter your ", attribute - 0x1000)
+    write_alpha_text(state, 29, row + 1, "   initials: ", attribute - 0x1000)
+    write_alpha_decimal(
+        state, 29, row + 2, player.score_per_coin, 7, attribute,
+    )
+    rank = player.highscore_rank
+    rank_text = "#10" if rank == 9 else f"#{rank + 1}"
+    write_alpha_text(state, 32, row + 3, rank_text, attribute - 0x1000)
+    for offset, code in enumerate(player.initials[:3]):
+        character = "\b" if code == 0x08 else chr(code or 0x20)
+        char_attribute = (
+            attribute - 0x1000
+            if offset == player.initials_cursor
+            else attribute
+        )
+        write_alpha_large_char(
+            state, 36 + offset * 2, row, character, char_attribute,
+        )
+
+
+def write_secret_name_entry(state: GameState, player_index: int) -> None:
+    """Write secret_getname's prompt and 29-character editable buffer."""
+    row = player_index * 5 + 7
+    cursor = state.players[player_index].initials_cursor
+    write_alpha_large_text(state, 4, 1, "ENTER YOUR", 0x8000)
+    write_alpha_text(state, 3, 4, "'LAST-NAME FIRST-NAME'", 0x8000)
+    for offset, code in enumerate(state.secret_name_buffer[:29]):
+        attribute = 0xB000 + player_index * 0x0400
+        if offset != cursor:
+            attribute += 0x1000
+        write_alpha_glyphs(state, offset, row, (code,), attribute)
+
+
+def write_secret_code_result(state: GameState, player_index: int) -> None:
+    """Write secret_name_entry_update's contest-code result page."""
+    row = player_index * 5 + 7
+    attribute = 0x8400 + player_index * 0x0400
+    write_alpha_large_text(state, 1, 1, "REMEMBER YOUR", 0x8000)
+    write_alpha_large_text(state, 3, 4, "SECRET CODE", 0x8000)
+    write_alpha_text(state, 10, row + 2, "TASK", attribute)
+    write_alpha_decimal(
+        state, 15, row + 2, state.secret_trick_id - 0x50, 2, attribute,
+    )
+    write_alpha_text(state, 2, row + 3, "SEND CONTEST ENTRY FORM", attribute)
+    write_alpha_text(state, 2, row + 4, " TO ATARI GAMES CORP.  ", attribute)
+    write_alpha_text(state, 2, row + 5, " CONTEST ENDS 12/19/86 ", attribute)
+    for offset, character in enumerate(state.secret_code):
+        write_alpha_large_char(
+            state, 7 + offset * 2, row, character, attribute,
+        )
+
+
 def rank_high_score(state: GameState, character: int, value: int) -> int:
     """OS ``rank_high_score`` (0x1C6) -- where ``value`` would place in that
     class's ladder: rank 0-9, or ``HIGHSCORE_RANKS`` when it does not rank.
@@ -284,8 +501,8 @@ def write_high_score_entry(
 
 
 # ---------------------------------------------------------------------------
-# The two numeric HUD renderers (§14.2). They latch into the panel shadow;
-# render/hud.py draws whatever they last latched.
+# The two numeric HUD writers (§14.2). They retain the diagnostic panel latch
+# and synchronously write the same words to alpha VRAM.
 # ---------------------------------------------------------------------------
 
 def _draw_player_score(state: GameState, player_index: int) -> None:
@@ -298,6 +515,11 @@ def _draw_player_score(state: GameState, player_index: int) -> None:
     field.score = state.players[player_index].score
     field.score_attr = PLAYER_TEXT_PALETTE_WORDS[player_index]
     field.score_drawn = True
+    write_alpha_decimal(
+        state, SCORE_COLUMN,
+        player_index * PLAYER_BLOCK_STRIDE + PLAYER_VALUE_ROW,
+        field.score, SCORE_DIGITS, field.score_attr,
+    )
 
 
 def _health_attribute(state: GameState, player_index: int) -> int:
@@ -337,6 +559,22 @@ def _draw_player_health(state: GameState, player_index: int) -> None:
     field.bonusmult = player.bonusmult
     field.health_attr = _health_attribute(state, player_index)
     field.health_drawn = True
+    row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_LABEL_ROW
+    if player.bonusmult > 1:
+        bonus_attr = 0xC000 + (player_index << 10)
+        write_alpha_glyphs(
+            state, BONUSMULT_COLUMN, row,
+            (ord(str(min(player.bonusmult, 9))), ord("x")), bonus_attr,
+        )
+    else:
+        write_alpha_glyphs(
+            state, BONUSMULT_COLUMN, row, (0, 0),
+            PLAYER_TEXT_PALETTE_WORDS[player_index],
+        )
+    write_alpha_decimal(
+        state, HEALTH_COLUMN, row + 1, field.health, HEALTH_DIGITS,
+        field.health_attr,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +680,35 @@ SOUND_MESSAGE_APPEARS = 0x1C
 DIALOG_BOX_BASE_ROWS = 3
 
 
+def _clear_dialog_alpha(state: GameState) -> None:
+    if state.dialog_box_column < 0 or state.dialog_box_row < 0:
+        return
+    fill_alpha_rect(
+        state, state.dialog_box_column, state.dialog_box_row,
+        state.dialog_box_width + 2, state.dialog_box_rows, 0,
+    )
+
+
+def _write_dialog_alpha(state: GameState) -> None:
+    """Write the positioned first-encounter/demo box synchronously."""
+    if state.dialog_box_column < 0 or state.dialog_box_row < 0:
+        return
+    attribute = (
+        PLAYER_TEXT_PALETTE_WORDS[state.dialog_player] - 0x1000
+        if 0 <= state.dialog_player < NUM_PLAYERS else 0x8000
+    )
+    fill_alpha_rect(
+        state, state.dialog_box_column, state.dialog_box_row,
+        state.dialog_box_width + 2, state.dialog_box_rows,
+        alpha_word(attribute),
+    )
+    for offset, line in enumerate(state.dialog_message, 1):
+        write_alpha_text(
+            state, state.dialog_box_column + 1,
+            state.dialog_box_row + offset, line, attribute,
+        )
+
+
 def dialog_clear_message(state: GameState) -> None:
     """0x4C70A -- blank the message buffer at 0x904AA4.
 
@@ -449,6 +716,7 @@ def dialog_clear_message(state: GameState) -> None:
     new one; here the buffer *is* the message, so clearing it is the whole
     effect and it is also what removes the box from the HUD.
     """
+    _clear_dialog_alpha(state)
     state.dialog_message = []
     state.dialog_box_width = 0
     state.dialog_box_rows = 0
@@ -502,6 +770,7 @@ def demo_message_show(state: GameState, player_index: int,
     state.dialog_box_width = len(lines[0])
     state.dialog_player = player_index if 0 <= player_index < NUM_PLAYERS else -1
     _position_dialog_box(state, state.dialog_player)
+    _write_dialog_alpha(state)
     state.dialog_timer = (
         DIALOG_TIMER_FRAMES_SHORT
         if state.game_settings & GAME_SETTINGS_REDUCE_TEXT
@@ -591,6 +860,7 @@ def dialog_first_encounter(
     state.dialog_box_width = max(len(line) for line in lines)
     state.dialog_player = player_index if 0 <= player_index < NUM_PLAYERS else -1
     _position_dialog_box(state, state.dialog_player)
+    _write_dialog_alpha(state)
     state.dialog_timer = (
         DIALOG_TIMER_FRAMES_SHORT if reduce_text else DIALOG_TIMER_FRAMES
     )
@@ -802,6 +1072,8 @@ def main_score_display(state: GameState) -> None:
     player_index = state.frame_counter & 3
     player = state.players[player_index]
     field = info_panel(state).players[player_index]
+    if player.status == PlayerStatus.DYING or player.health == 0:
+        return
 
     # Score redraw: update bit 0 (see the docstring on change detection).
     if (

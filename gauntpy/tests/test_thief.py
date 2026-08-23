@@ -44,6 +44,8 @@ from gauntpy.subsystems.thief import (
     _THIEF_COLLISION_REMOVE_FLAGS,
     _THIEF_DIRECTION_STEP_FLAGS,
 )
+from gauntpy.subsystems import score
+from gauntpy.subsystems.players import setup_infopanel
 
 # Same skip condition test_assets.py uses: the ROM byte-match below needs the
 # real code ROMs, everything else in this module does not.
@@ -562,6 +564,7 @@ class TestTimerAndTheftDetails:
         _active(state, 0, pack_slot(5, 5))
         _thief_at(state, pack_slot(6, 6))
         state.players[0].powers = 0x3F
+        setup_infopanel(state, 0)
 
         assert thief_steal_from_player(state, 0) == 1
 
@@ -570,6 +573,10 @@ class TestTimerAndTheftDetails:
         assert state.thief_mode & THIEF_ESCAPE
         assert state.thief_mode & THIEF_JUMPJUMP
         assert state.thief_mode & 0x10
+        assert state.alpha_ram[
+            score.PLAYER_NAME_ROW * score.ALPHA_ROW_STRIDE
+            + score.POWER_ICON_COLUMNS[4]
+        ] == 0x8000
 
     def test_multiplier_is_stolen_when_it_is_the_most_valuable_resource(self):
         state = GameState()

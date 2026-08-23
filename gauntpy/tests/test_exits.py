@@ -34,6 +34,12 @@ from __future__ import annotations
 
 from gauntpy.constants import GameMode, MazeObjIds, PlayerStatus
 from gauntpy.coords import encode_hpos, encode_vpos_at_y
+from gauntpy.playfield_vram import (
+    EXIT_SETTLED_DESC,
+    exit_descriptor,
+    read_tile_descriptor,
+    write_tile_descriptor,
+)
 from gauntpy.rng import GameRandom
 from gauntpy.state import GameState
 from gauntpy.subsystems.exits import (
@@ -797,6 +803,69 @@ class TestExitMoveAnimation:
         for _ in range(-_EXIT_ANIM_SETTLE):
             main_exit_move(state)
         assert state.exit_move_timer == _EXIT_MOVE_TIMER_RELOAD
+
+    def test_relocation_only_writes_centres_and_settlement_draws_one_floor(self):
+        class RecordingRng:
+            def __init__(self):
+                self.bounds = []
+
+            def getrandom(self, bound):
+                self.bounds.append(bound)
+                return 0
+
+        old_slot, new_slot = 100, 200
+        state = _exit_moves_state(timer=1, exits=(old_slot, new_slot))
+        state.maze = type("Maze", (), {
+            "data": {
+                (old_slot & 31, old_slot >> 5): int(MazeObjIds.EXIT),
+                (new_slot & 31, new_slot >> 5): int(MazeObjIds.EXIT),
+            },
+            "floorpattern": 0,
+            "wallpattern": 0,
+        })()
+        state.rng = RecordingRng()
+        for variation in range(4):
+            state.playfield_floor_catalog[(0, variation)] = (
+                0x120 + variation,
+            ) * 4
+        neighbours = {
+            slot: (0x500 + slot,) * 4
+            for center in (old_slot, new_slot)
+            for slot in (
+                center - 33, center - 32, center - 31,
+                center - 1, center + 1,
+                center + 31, center + 32, center + 33,
+            )
+        }
+        for slot, descriptor in neighbours.items():
+            write_tile_descriptor(state, slot, descriptor)
+
+        main_exit_move(state)
+
+        assert state.rng.bounds == []
+        assert read_tile_descriptor(state, old_slot) == exit_descriptor(0, 0)
+        assert read_tile_descriptor(state, new_slot) == exit_descriptor(0, 8)
+        assert all(
+            read_tile_descriptor(state, slot) == descriptor
+            for slot, descriptor in neighbours.items()
+        )
+        assert state.maze.data[(old_slot & 31, old_slot >> 5)] == int(
+            MazeObjIds.TILE_FLOOR
+        )
+        assert state.maze.data[(new_slot & 31, new_slot >> 5)] == int(
+            MazeObjIds.EXIT
+        )
+
+        for _ in range(-_EXIT_ANIM_SETTLE):
+            main_exit_move(state)
+
+        assert state.rng.bounds == [4]
+        assert read_tile_descriptor(state, old_slot) == (0x120,) * 4
+        assert read_tile_descriptor(state, new_slot) == EXIT_SETTLED_DESC
+        assert all(
+            read_tile_descriptor(state, slot) == descriptor
+            for slot, descriptor in neighbours.items()
+        )
 
 
 # ---------------------------------------------------------------------------
