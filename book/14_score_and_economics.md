@@ -142,7 +142,8 @@ up — while the heartbeat sound from Chapter 10 accelerates independently, and
 an acid-slowed player's column shifts to
 a different dimmed palette entirely. The score multiplier appears beside the
 health once it exceeds one, and when somebody is IT, the two-character IT
-label is stamped into their column in their color and announced out loud.
+label is stamped into their column with its dedicated bright attribute and
+announced out loud.
 
 The playfield has a second, brief score display. Four fixed MOB channels can
 float a value over its source object for 60 frames. Adaptive food chooses a +25
@@ -161,6 +162,9 @@ four-channel popup mechanism.
 corner as a host debugging aid. It deliberately uses host text, is not a game
 asset, and has no claimed arcade counterpart.
 When the host loop is paused, `PAUSED` appears immediately above it.
+For issue reporting it also writes the current maze number and first active
+player's pixel coordinates into modeled alpha RAM at the bottom of the panel;
+these diagnostics are not claimed as original cabinet content.
 
 ## Messages, advice, and the continue offer
 

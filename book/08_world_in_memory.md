@@ -207,6 +207,12 @@ in their fixed channels, 1 through 12, without any search at all. The
 chain orders the world; the slot arithmetic interrogates it. They share
 data, and conflating them would misdescribe both.
 
+The overlap check uses the candidate record's live H and V words. Even when bit
+15 of a picture sends the probe through its marker-rounding branch, the routine
+rounds those words; it does not reconstruct an anchor from the slot number.
+That distinction matters for corrected door and item placements near tight
+level edges.
+
 ## The invisible half
 
 Chapter 4 ended by promising that pixels are only the visible half of the

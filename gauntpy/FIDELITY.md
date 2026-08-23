@@ -88,6 +88,17 @@ evidence remains in `../doc/`, generated contracts, and the book.
     clears rows 0–6. Only maze numbers below 0x68 restore the dungeon logo and
     level field; treasure/secret rooms write `TIME:` over that blank region.
     Do not treat the ordinary header as permanent HUD decoration.
+24. **Corner transport has a zero pad identity.** `corner_squeeze_geometry`
+    stores zero in `player_tport_type`; at the move milestone that zero enables
+    `pf_replace(..., floor)` for an ordinary `0x8000` landing wall. Preserve the
+    logical maze, MOB marker, and playfield descriptor write together.
+25. **High-bit collision pictures still use live geometry.** The player probe's
+    `0x8000` branch rounds the candidate MOB's live H/V words; it does not rebuild
+    them from the packed slot. Door and item pictures can have bit 15 set while
+    carrying deliberate placement corrections.
+26. **Dragon damage is a live MOB palette change.** Counted hits 1–2, 3–5, and
+    6–8 rewrite the primary dragon segment's hpos palette nibble to 8, 7, and 6.
+    Do not represent this progression as a renderer tint.
 
 ## Investigation workflow
 

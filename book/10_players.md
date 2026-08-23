@@ -402,7 +402,12 @@ victim.
   places ordinarily off-limits. The game's secret challenges go so far as to
   dare you to land on a demon, or on Death itself. A permitted occupied landing
   is not rejected: the destination interaction runs, any surviving occupant is
-  removed, and the player's MOB record replaces it. Corner-squeeze transport
+  removed, and the player's MOB record replaces it. Corner transport can even
+  select a second ordinary wall as its landing: the game replaces that wall
+  with floor before installing the hero, though forcefield hubs and boundary
+  cases remain protected. An item in the crossed cell is skipped rather than
+  collected; an item in the actual landing cell is collected during relocation.
+  Corner-squeeze transport
   still obeys the shared-screen window, so it cannot carry a player through an
   off-screen seam on a non-scrolling level.
 
@@ -418,6 +423,10 @@ announcing the transfer by name. The gameplay half is that monster targeting
 *accounts for the IT player* when choosing whom to chase, so the crowd's
 attention finds you. Tag another hero and the label, the announcement, and the
 crowd all move on. Touching a friend is an act of aggression here.
+
+The two letters are intentionally not in the holder's normal red, blue, yellow,
+or green text attribute. The label writer uses its own `0xB000 | player<<10`
+family, which presents the bright white label seen on the cabinet.
 
 Friendly fire arrives by level flag. On levels flagged **shots stun**, a
 teammate's shot freezes you mid-stride for a beat and knocks your attack out

@@ -554,7 +554,8 @@ must not search the live MOB table for a marker that setup deliberately removed.
 **Confidence: Verified.** `player_it_label_set(uint16 player_index)` (0x45866)
 is the presentation half of an IT transfer. If the requested player is not
 already the tracked IT player, it draws the letters "IT" (chars 0x49/0x54,
-palette `0xB000 | p<<10`) into that player's HUD column at `0x905048 +
+attribute `0xB000 | p<<10`, distinct from the ordinary player-text family) into
+that player's HUD column at `0x905048 +
 (p*5+8)*128`, plays the character-specific "you're IT" speech from
 `speech_charname_tbl` (0x596F6), then sound 0xD4 for the first IT assignment
 or 0xD3 for a transfer.
@@ -923,6 +924,20 @@ installs the player in that slot. This is why Transportability can land on and
 replace monsters (including the secret-task demon/Death cases), as well as
 collect or clear other object types accepted by `tport_check_dest`.
 
+Corner-squeeze transport has a separate landing exception. The player arm at
+0x5015C clears `player_tport_type` instead of storing a destination pad. When
+`tport_player_move` sees that zero at 0x50788 and the selected landing contains
+picture 0x8000, it calls `pf_replace(landing, 0)` unless the object type is the
+0x3F forcefield hub. The later destination check therefore accepts the cell and
+the player replaces it. This is why Transportability can erase most wall tiles
+when it lands on them, while protected hubs and edge/boundary cases remain.
+
+The pre-landing path scan at 0x42744 also precedes ordinary tile interaction.
+With Transportability, keys, food, potions, treasure, and power-ups encountered
+as the blocking cell initiate the corner transition instead of being collected.
+If the selected landing cell itself contains an accepted item, the normal
+0x50934 interaction still collects it during relocation.
+
 The move milestone is iterative, not an instantaneous jump to a preselected
 cell. `tport_player_move` rotates the live joystick direction through the
 eight-entry table at 0x5B71C until a usable neighbour of the destination pad is
@@ -1092,7 +1107,7 @@ Head rendering per phase boundary writes `mob_picture[dragon_seg_mob_ids[0]]` fr
 
 **Sustained fire:** while locked-in (state bit 3), a fire byte at a phase boundary holds the counter until the fire cooldown expires (continuous flame), otherwise the counter advances mod 128.
 
-**Damage rules** (`dragon_shot_hit`, 0x54112, called from `resolve_shot_hit`): hits only count when the fire bit is active (mouth open) and the dragon is not sleeping/turning; each hit plays sound 0x3A, increments `dragon_hits` (0x904880) — the 9th kills the dragon — and switches to a new random path (getrandom(5)), fast-forwarded to the first byte matching the current pose so the animation stays continuous.
+**Damage rules** (`dragon_shot_hit`, 0x54112, called from `resolve_shot_hit`): hits only count when the fire bit is active (mouth open) and the dragon is not sleeping/turning; each hit plays sound 0x3A, increments `dragon_hits` (0x904880) — the 9th kills the dragon — and switches to a new random path (getrandom(5)), fast-forwarded to the first byte matching the current pose so the animation stays continuous. Before the impact tail, 0x541E8–0x5422A rewrites the primary segment's hpos palette nibble as `5 + (11-hits)/3`: hits 1–2 use palette 8, hits 3–5 palette 7, and hits 6–8 palette 6, visibly darkening the dragon in three bands.
 
 `dragon_shot_hitbox_adjust` (0x54B68) compares the shot against the separately
 tracked moving-head coordinates and adds `0x1000` to the doubled candidate index
@@ -1660,7 +1675,13 @@ update conditions require it:
   a low-health pulse it shifts the palette by −0x1000; acid-slowed players use
   −0x2000. It clears update bit 1 afterward.
 - `player_it_label_set` (0x45866) draws and announces the IT label, but its
-  caller owns the tracked IT state.
+  caller owns the tracked IT state. Its two cells use `0xB000 | player<<10`,
+  not the ordinary player-text attribute.
+
+gauntpy additionally writes `MAZE nnn` and the first active player's pixel
+`P# x,y` position into rows 27–28 of the modeled alpha panel. These are explicit
+host diagnostics with no claimed arcade call site; unlike a renderer overlay,
+they still pass through alpha RAM so panel ownership and clipping remain honest.
 
 ### 14.3 Logo Color Cycling (`main_logo_updcolors`, 0x4DCBA)
 

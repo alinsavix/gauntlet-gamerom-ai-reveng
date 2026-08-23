@@ -861,6 +861,7 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     if player_selector < 0:
         score.write_info_panel_backdrop(state)
         score.write_info_panel_header(state)
+        score.write_status_diagnostics(state)
     for i in targets:
         score.write_player_panel_background(state, i)
         initials_entry = (
@@ -3627,6 +3628,7 @@ def corner_squeeze_geometry(state: GameState, packed_slot: int,
     direction = _direction_from_input(delta)
     if direction == 8:
         return 0
+    state.player_tport_route_state[player_index] = packed_slot  # 0x4FEDA
 
     target = _direction_neighbor(packed_slot, direction)
     if target >= FIRST_PLAYABLE_SLOT:
@@ -3663,9 +3665,10 @@ def corner_squeeze_geometry(state: GameState, packed_slot: int,
         return 0
 
     _sound_play(state, 0x28)
-    # A corner squeeze has no destination *pad*, so the type word takes the
-    # landing cell itself -- loop 2 only uses it to place the arrival sparkle.
-    tport_transition_arm(state, player_index, target, target)
+    # 0x5015C clears the destination-pad word for a corner squeeze.  The zero is
+    # significant at 0x50788: it enables the pf_replace path that can erase a
+    # normal wall at the selected landing cell.
+    tport_transition_arm(state, player_index, 0, target)
     return -2
 
 
@@ -3678,8 +3681,8 @@ def tport_transition_arm(state: GameState, player_index: int,
     (0x500F0-0x5015C) after it has picked the cell on the far side of a corner.
     Each writes the same three words and arms the same animation MOB:
 
-      * ``player_tport_type[p]`` (0x904BE2) -- the destination *pad*, which
-        loop 2 spawns its arrival sparkle on;
+      * ``player_tport_type[p]`` (0x904BE2) -- the destination pad, or zero for
+        corner transport;
       * ``player_tile_or_tport_dest[p]`` (0x904BD8, this port's
         ``player_tile_pos``) -- the *cell the hero lands on*, which
         ``tport_player_move`` reads and which ``main_scroll_playfield`` pans the
@@ -3716,6 +3719,10 @@ def tport_player_move(state: GameState, player_index: int) -> None:
     """
     landing = state.player_tile_pos[player_index] & 0x3FF
     destination_pad = state.player_tport_type[player_index] & 0x3FF
+    corner_transport = (
+        destination_pad == 0
+        and state.player_tport_route_state[player_index] != 0
+    )
     direction = _direction_from_input(
         _joystick_direction_bits(state, player_index),
     )
@@ -3738,6 +3745,17 @@ def tport_player_move(state: GameState, player_index: int) -> None:
             landing = candidate
             state.player_tile_pos[player_index] = candidate
             break
+    if (
+        corner_transport
+        and state.mobs.picture[landing] == _WALL_PICTURE
+        and state.mobs.obj_type(landing) != int(MazeObjIds.FORCEFIELDHUB)
+    ):
+        # 0x5078E-0x507E8: corner transport may land on an ordinary software
+        # wall marker. pf_replace turns both the logical tile and descriptor
+        # VRAM into floor before the normal destination check and player move.
+        from .shots import _pf_replace
+
+        _pf_replace(state, landing, int(MazeObjIds.TILE_FLOOR))
     if _move_player_to_slot(state, player_index, landing):
         source_pad = state.player_tport_route_state[player_index] & 0x3FF
         if (
@@ -3896,10 +3914,17 @@ def _probe_candidate_blocks(
         # the attract demonstration near its final exit.
         return False
     if state.mobs.obj_type(candidate) in _FIGHT_PASS_TYPES:
-        # mob_collision_test returns -1 for these and the directional probe
-        # continues to its remaining flank candidates. Collection happens only
-        # after the player record enters the cell.
-        return False
+        transporting = any(
+            player.active
+            and player.mob_slot == self_slot
+            and player.powers & _POWER_TRANSPORT
+            for player in state.players
+        )
+        if not transporting:
+            # Ordinary movement resolves these after entering their cell. With
+            # transportability, squeeze_through_check runs first and teleports
+            # past them instead (0x42744 precedes mob_collision_test).
+            return False
     for player in state.players:
         if not player.active or candidate != player.mob_slot:
             continue
@@ -3915,22 +3940,18 @@ def _probe_candidate_blocks(
     candidate_h = state.mobs.hpos[candidate]
     candidate_v = state.mobs.vpos[candidate]
 
+    if candidate_h == 0 and candidate_v == 0:
+        # Synthetic records in isolated tests may omit placement geometry.
+        candidate_h = ((candidate & 0x1F) * 16 << POS_SHIFT) & 0xFFFF
+        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
+
     if picture & 0x8000:
         # A software marker's collision anchor is derived from its cell-aligned
-        # word by the rounding sequence at 0x407EA-0x40820. Expressing the same
-        # result from its slot also covers synthetic marker records that omit
-        # H/V words.
-        candidate_h = ((((candidate & 0x1F) * 16) - 4) << POS_SHIFT) & 0xFFFF
-        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
-    elif candidate_h == 0 and candidate_v == 0:
-        # Tests and host-created living-maze records may provide only type and
-        # picture. Real maze placement has already written these cell anchors.
-        correction = (
-            4 if state.mobs.obj_type(candidate)
-            == int(MazeObjIds.WALL_MOVABLE) else 0
-        )
-        candidate_h = ((((candidate & 0x1F) * 16) - correction) << POS_SHIFT) & 0xFFFF
-        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
+        # H/V words by the rounding sequence at 0x407EA-0x40820.  Use the live
+        # words: high-bit pictures include positioned door art, whose V anchor
+        # intentionally differs from the packed cell.
+        candidate_h = (((candidate_h + 0x280) & 0xF800) - 0x200) & 0xFFFF
+        candidate_v = (candidate_v + 0x100) & 0xF800
 
     return (
         _wrapped_position_delta(candidate_h, mover_h) < _PROBE_OVERLAP

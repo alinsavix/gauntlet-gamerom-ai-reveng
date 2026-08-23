@@ -1340,6 +1340,43 @@ class TestHudHooks:
         assert state.score_dirty == [0, 0, 0, 0]
         assert state.health_dirty == [0, 0, 0, 0]
 
+    def test_it_label_uses_the_rom_white_attribute_family(self):
+        from gauntpy.subsystems import score
+
+        state = _active_state()
+        _make_player_active(state, 2, health=100)
+        state.player_it = 2
+
+        gp.setup_infopanel(state, 2)
+
+        row = 2 * score.PLAYER_BLOCK_STRIDE + score.PLAYER_LABEL_ROW
+        words = state.alpha_ram[
+            row * score.ALPHA_ROW_STRIDE + score.IT_LABEL_COLUMN:
+            row * score.ALPHA_ROW_STRIDE + score.IT_LABEL_COLUMN + 2
+        ]
+        assert [word & 0xFC00 for word in words] == [0xB800, 0xB800]
+
+    def test_panel_bottom_shows_maze_and_live_pixel_coordinates(self):
+        from gauntpy.subsystems import score
+
+        state = _active_state()
+        player = _make_player_active(state, 0, health=100, mob_slot=(10 << 5) | 12)
+        state.mazenum_current = 19
+        state.mobs.hpos[player.mob_slot] = 188 << 7
+        state.mobs.vpos[player.mob_slot] = native_v(160) << 7
+
+        gp.setup_infopanel(state, -1)
+
+        def row_text(row):
+            start = row * score.ALPHA_ROW_STRIDE + score.PANEL_COLUMN
+            return "".join(
+                chr(word & 0x3FF) if word & 0x3FF else " "
+                for word in state.alpha_ram[start:start + score.PANEL_WIDTH]
+            ).rstrip()
+
+        assert row_text(score.DIAGNOSTIC_MAZE_ROW) == "MAZE 019"
+        assert row_text(score.DIAGNOSTIC_POSITION_ROW) == "P1 188,160"
+
     def test_setup_infopanel_ignores_an_out_of_range_selector(self):
         state = _active_state()
         gp.setup_infopanel(state, 9)

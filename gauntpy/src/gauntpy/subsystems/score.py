@@ -154,6 +154,8 @@ BONUSMULT_COLUMN = 31        # 0x90503E -> byte 0x3E of the row -> word 31
 IT_LABEL_COLUMN = 0x24       # 0x905048, two ASCII glyph cells between labels
 INVENTORY_COLUMN = 30
 INVENTORY_CELLS = 12
+DIAGNOSTIC_MAZE_ROW = 27
+DIAGNOSTIC_POSITION_ROW = 28
 ALPHA_ROW_STRIDE = 64
 # OS draw_string maps ASCII space to alpha glyph zero (0x2F68-0x2F70).
 ALPHA_SPACE_GLYPH = 0
@@ -332,9 +334,49 @@ def write_it_labels(state: GameState) -> None:
         ):
             continue
         row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_LABEL_ROW
-        attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
-        glyphs = romtext.LABEL_IT_GLYPHS if state.player_it == player_index else (0, 0)
+        is_it = state.player_it == player_index
+        # player_it_label_set 0x4589E writes 0xB000 | player_index<<10,
+        # independently of the ordinary red/blue/yellow/green text palettes.
+        # Clearing the label restores the normal panel attribute.
+        attribute = (
+            0xB000 | (player_index << 10)
+            if is_it else PLAYER_TEXT_PALETTE_WORDS[player_index]
+        )
+        glyphs = romtext.LABEL_IT_GLYPHS if is_it else (0, 0)
         write_alpha_glyphs(state, IT_LABEL_COLUMN, row, glyphs, attribute)
+
+
+def write_status_diagnostics(state: GameState) -> None:
+    """Write host-requested maze/position diagnostics through modeled alpha RAM."""
+    fill_alpha_rect(
+        state, PANEL_COLUMN, DIAGNOSTIC_MAZE_ROW, PANEL_WIDTH, 2,
+        alpha_word(0x8000),
+    )
+    write_alpha_text(
+        state, PANEL_COLUMN, DIAGNOSTIC_MAZE_ROW,
+        f"MAZE {state.mazenum_current:03d}"[-PANEL_WIDTH:], 0x8000,
+    )
+    active = next(
+        (
+            (index, player) for index, player in enumerate(state.players)
+            if player.active and player.mob_slot
+        ),
+        None,
+    )
+    if active is None:
+        return
+    from ..coords import hpos_x, vpos_y
+
+    player_index, player = active
+    text = (
+        f"P{player_index + 1} "
+        f"{hpos_x(state.mobs.hpos[player.mob_slot])},"
+        f"{vpos_y(state.mobs.vpos[player.mob_slot])}"
+    )
+    write_alpha_text(
+        state, PANEL_COLUMN, DIAGNOSTIC_POSITION_ROW,
+        text[:PANEL_WIDTH], 0x8000,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1096,6 +1138,8 @@ def main_score_display(state: GameState) -> None:
     # Master display gate (0x904007 bit 2).
     if not state.score_display_enabled:
         return
+
+    write_status_diagnostics(state)
 
     # One player per frame, round-robin over the four slots.
     player_index = state.frame_counter & 3

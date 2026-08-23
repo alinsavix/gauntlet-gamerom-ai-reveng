@@ -658,3 +658,10 @@ def dragon_shot_hit(state: GameState, target_slot: int, shooter_id: int) -> None
         _dragon_die(state, shooter_id)
         return
     _switch_path_matching_byte(state, old_byte)
+    primary = state.dragon_seg_mob_ids[0]
+    if primary:
+        # 0x541E8-0x5422A: hits 1-2/3-5/6-8 select palettes 8/7/6.
+        palette = 5 + (11 - state.dragon_hits) // 3
+        state.mobs.hpos[primary] = (
+            state.mobs.hpos[primary] & 0xFFF0
+        ) | palette

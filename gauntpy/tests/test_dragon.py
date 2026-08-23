@@ -445,6 +445,20 @@ class TestDamage:
         assert state.dragon_anim_ctr == 7 << 3  # program 1's first raw byte 1
         assert 0x3A in state.sound_log
 
+    def test_hits_darken_the_head_palette_in_rom_three_hit_bands(self):
+        state, primary = self._exposed_dragon()
+        state.rng = _FixedRNG(*([0] * 8))
+
+        seen = []
+        for _ in range(8):
+            state.dragon_state = 0
+            state.dragon_path_num = 0
+            state.dragon_anim_ctr = 8
+            dragon_shot_hit(state, 0x400 + primary, 0)
+            seen.append(state.mobs.hpos[primary] & 0x0F)
+
+        assert seen == [8, 8, 7, 7, 7, 6, 6, 6]
+
     def test_hit_is_rejected_while_turning_or_mouth_closed(self):
         state, primary = self._exposed_dragon()
         state.dragon_state = _ST_TURNING

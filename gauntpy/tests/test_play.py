@@ -227,6 +227,31 @@ class TestBuildState:
             int(Character.ELF) * 8 + _PORT_DIR_TO_ROM_DIR[player.direction]
         ]
 
+    def test_level_19_rom_maze_really_contains_four_it_creatures(self):
+        state = play.build_state(19, Character.ELF)
+
+        assert state.mazenum_current == 18
+        assert sum(
+            state.mobs.obj_type(slot) == int(MazeObjIds.MONST_IT)
+            for slot in range(32, 1024)
+        ) == 4
+
+    def test_level_20_upper_right_passage_accepts_continued_downward_motion(self):
+        from gauntpy.coords import hpos_x, vpos_y
+        from gauntpy.subsystems.input import JOY_DOWN
+        from gauntpy.subsystems.players import player_try_move
+
+        state = play.build_state(20, Character.ELF, keys=1)
+        player = state.players[0]
+        state.level_flags_4 |= 0x80
+        for frame in range(60):
+            state.frame_counter = frame
+            state.movement_type = 2
+            player_try_move(state, 0, JOY_DOWN, 0)
+
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 492
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) > 352
+
     def test_direct_start_inventory_and_powers_initialize_live_state(self):
         from gauntpy.constants import PlayerPower
         from gauntpy.subsystems.players import (

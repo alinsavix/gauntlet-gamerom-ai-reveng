@@ -128,6 +128,11 @@ the counter and rolling over into the next program if it has to. The animation
 stays continuous and the dragon's rhythm changes, which reads as the creature
 reacting.
 
+The reaction is visible in color as well as motion. After a counted hit, the
+game rewrites the primary dragon segment's live palette nibble. Hits one and two
+use palette 8, hits three through five use 7, and hits six through eight use 6,
+so the dragon darkens in three steps before the ninth hit removes it.
+
 The ninth hit ends it. All four segments are removed with a transporter-style
 dissolve, and two objects appear where the dragon was, at offsets chosen from
 its final facing: a bag of treasure and a hidden potion whose picture is one of

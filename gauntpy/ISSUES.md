@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2281 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2290 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,37 @@ start).
 ---
 
 ## Resolved issues
+
+### S-101 … S-106 · transportability, dragon/IT presentation, and maze diagnostics
+
+- **S-101:** corner transport had stored the landing cell as
+  `player_tport_type`, but the ROM clears that word at 0x5015C. The zero selects
+  0x5078E's `pf_replace(landing, floor)` branch for ordinary 0x8000 wall
+  markers. Transportability can now land on and erase those walls while leaving
+  forcefield hubs and boundary cases protected; logical maze state, the MOB
+  marker, and descriptor VRAM change together.
+- **S-102:** `_probe_candidate_blocks` had bypassed collectible cells before
+  `squeeze_through_check`. The ROM tests transport first, so a transportable
+  player skips most adjacent items instead of collecting them. An item in the
+  actual landing cell still goes through the relocation interaction and is
+  collected.
+- **S-103:** counted dragon hits changed paths but omitted 0x541E8-0x5422A's
+  primary-segment hpos rewrite. Hits 1-2, 3-5, and 6-8 now select live MOB
+  palettes 8, 7, and 6 before the ninth hit kills the dragon.
+- **S-104:** maze 18, used by the direct level-19 runner start, genuinely
+  decodes four IT creatures at slots 239, 327, 451, and 840. This is ROM maze
+  content, not duplicate spawning. The separate display bug was real:
+  `player_it_label_set` writes `0xB000 | player<<10`, not the ordinary
+  player-text attribute, restoring the bright label.
+- **S-105:** tight passages on the reported level-20 and level-22 areas exposed
+  a collision-model shortcut: pictures with bit 15 set were rounded from their
+  packed slot rather than their live H/V words. The 0x407EA-0x40820 and
+  0x42688-0x426CE branches round the live words, which retain deliberate door
+  and item placement corrections. The modeled probes now do the same.
+- **S-106:** the bottom of the status panel now receives `MAZE nnn` and the
+  first active player's `P# x,y` pixel coordinates. These requested diagnostics
+  are explicit non-arcade content, but are written through modeled alpha RAM
+  rather than composited as gameplay-looking renderer text.
 
 ### S-100 · treasure rooms retained the ordinary panel header
 
