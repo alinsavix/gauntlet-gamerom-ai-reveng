@@ -188,6 +188,27 @@ class TestInputLockout:
         main_attract(state)
         assert state.game_mode == int(GameMode.DEMO)
 
+    def test_position0_direction_advances_demo_to_legend(self):
+        state = GameState()
+        _attract(state, int(GameMode.DEMO))
+        state.attract_timer = _INPUT_THRESHOLD[int(GameMode.DEMO)]
+        state.player_input_raw[0] = _IDLE & ~0x80
+
+        main_attract(state)
+
+        assert state.game_mode == int(GameMode.LEGEND)
+
+    def test_position3_direction_still_restarts_demo(self):
+        state = GameState()
+        _attract(state, int(GameMode.DEMO))
+        state.attract_timer = _INPUT_THRESHOLD[int(GameMode.DEMO)]
+        state.player_input_raw[3] = _IDLE & ~0x80
+
+        main_attract(state)
+
+        assert state.game_mode == int(GameMode.DEMO)
+        assert state.attract_timer == _LOADED_TIMER[int(GameMode.DEMO)]
+
     def test_free_play_ignores_magic_only(self):
         """In free play (two_player_mode 0) only FIRE qualifies, not MAGIC."""
         state = GameState()
@@ -258,7 +279,7 @@ class TestStartAttractScreen:
         state.sound_log.clear()
         start_attract_screen(state, int(GameMode.SCORES))
         assert state.levelnum_current == 1
-        assert state.mazenum_current == 0
+        assert state.mazenum_current == 103
         assert state.sound_log[:2] == [_SOUND_SCREEN_CHANGE, _SOUND_THEME_FADE]
 
     def test_legend_rebuilds_the_whole_info_panel(self):
@@ -268,6 +289,36 @@ class TestStartAttractScreen:
             panel.score_drawn = False
         start_attract_screen(state, int(GameMode.LEGEND))
         assert all(p.score_drawn for p in state.info_panel.players)
+
+    @requires_roms
+    def test_legend_loads_maze_103_as_attract_scenery(self):
+        state = GameState()
+
+        start_attract_screen(state, int(GameMode.LEGEND))
+
+        assert state.mazenum_current == 103
+        assert state.maze is not None
+
+    @requires_roms
+    def test_title_builds_its_fixed_playfield_and_mob_display(self):
+        from gauntpy.playfield_vram import playfield_index
+
+        state = GameState()
+        start_attract_screen(state, int(GameMode.TITLE))
+
+        assert state.playfield_ram[playfield_index(21, 8)] == 0x44B2
+        assert any(state.playfield_color_ram)
+        assert any(state.playfield_shadow_color_ram)
+        assert state.mobs.picture[0x20] == 0x2000
+        assert state.mobs.picture[0xBE] == 0x2727
+        assert not any(state.alpha_ram)
+
+    @requires_roms
+    def test_every_attract_screen_restores_alpha_color_ram(self):
+        for mode in (GameMode.SCORES, GameMode.TITLE, GameMode.DEMO, GameMode.LEGEND):
+            state = GameState()
+            start_attract_screen(state, int(mode))
+            assert any(state.alpha_color_ram), mode
 
     def test_demo_rebuilds_the_whole_info_panel(self):
         """attract_demo_init 0x449DE-0x449E4, and it clears the first-encounter
@@ -412,7 +463,7 @@ class TestDemoInit:
         assert vpos_y(state.mobs.vpos[moved_wall]) == wall_y + 96
 
     @requires_roms
-    def test_demo_recording_reaches_the_transporter_and_exit(self, tmp_path):
+    def test_demo_recording_uses_the_mame_transporter_landing(self, tmp_path):
         from gauntpy.mainloop import tick
 
         state = GameState()
@@ -420,22 +471,25 @@ class TestDemoInit:
         start_attract_screen(state, int(GameMode.DEMO))
         elf = state.players[1]
         transported = False
-        exited = False
+        arrival_sparkle = False
 
         for _ in range(7000):
             tick(state)
             if state.demo_stream_pos[1] >= 76 and elf.mob_slot:
                 x = hpos_x(state.mobs.hpos[elf.mob_slot])
                 y = vpos_y(state.mobs.vpos[elf.mob_slot])
-                transported |= x == 44 and 240 <= y <= 242
-            exited |= bool(elf.exit_pending)
-            if elf.mob_slot == 0:
-                break
+                transported |= x == 92 and 240 <= y <= 242
+            if state.player_tport_phase[1] >= 0:
+                effect = 0x19 + 1
+                if state.mobs.picture[effect]:
+                    arrival_sparkle |= (
+                        hpos_x(state.mobs.hpos[effect]) == 92
+                        and vpos_y(state.mobs.vpos[effect]) == 240
+                    )
 
         assert transported
+        assert arrival_sparkle
         assert state.demo_stream_pos[1] >= 148
-        assert exited
-        assert elf.mob_slot == 0
 
 
 class TestLogoColors:
@@ -444,6 +498,20 @@ class TestLogoColors:
         before = state.logo_color_timer
         main_logo_updcolors(state)
         assert state.logo_color_timer == (before + 1) & 0xFFFF
+
+    def test_scores_rotates_the_rom_alpha_palette_block_every_sixteen_frames(self):
+        state = GameState(game_mode=GameMode.SCORES)
+        state.alpha_color_ram[144:160] = list(range(16))
+        state.frame_counter = 0
+
+        main_logo_updcolors(state)
+
+        assert state.alpha_color_ram[144:160] == list(range(12, 16)) + list(range(12))
+
+        state.frame_counter = 1
+        before = list(state.alpha_color_ram)
+        main_logo_updcolors(state)
+        assert state.alpha_color_ram == before
 
 
 class TestTitleLogoMotionSelection:

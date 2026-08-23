@@ -84,8 +84,8 @@ class Player:
 class PanelField:
     """One player's **latched** info-panel fields: what the last
     ``draw_player_score`` (0x45940) / ``draw_player_health`` (0x459A2) actually
-    put on the alpha layer at VRAM 0x905000. The renderer draws this rather
-    than the live ``Player``, so the HUD follows the ROM's own
+    put on the alpha layer at VRAM 0x905000. It is a diagnostic shadow of
+    ``alpha_ram`` (the renderer consumes VRAM directly), and confirms the ROM's
     one-player-per-four-frames redraw cadence.
     """
 
@@ -485,11 +485,9 @@ class GameState:
     tport_cycle_dir: int = 1
     # 0x904034, 2-bit sub-frame divider for transporter animation (ticks every 4th frame)
     tport_cycle_divider: int = 0
-    # 0x90402E / 0x90402C and the live playfield colors they steer in VBLANK.
+    # 0x90402E / 0x90402C: directions for colors held in live playfield RAM.
     palette_pulse_dir_a: int = 0
     palette_pulse_dir_b: int = 0
-    palette_pulse_a: int = 0xAAA0
-    palette_pulse_b: int = 0xA0AA
     # Host-side latches for the two transporter secret-objective write sites.
     # The ROM writes source/destination pad bits synchronously at 0x5025C and
     # 0x509E4; gauntpy observes the armed transition on its next world frame.
@@ -575,8 +573,8 @@ class GameState:
     mob_effect_anim_counter: list[int] = field(default_factory=lambda: [0] * 4)
     # 0x904007 bit 2: master score-display gate (1 = enabled).
     score_display_enabled: int = 1
-    # 0x905000 info-panel shadow: what draw_player_score / draw_player_health
-    # last wrote to the alpha layer for each player. render/hud.py draws this.
+    # Diagnostic shadow of what draw_player_score / draw_player_health last
+    # wrote. Rendering reads alpha_ram itself, not this convenience latch.
     info_panel: InfoPanel = field(default_factory=InfoPanel)
     # Per-character-class high-score ladders, ten entries of (score, initials)
     # best first -- the shape OS ``read_high_score_entry`` (0x1AE) exposes from
@@ -631,6 +629,11 @@ class GameState:
     secret_possible_start: int = 20
     # 0x904063: current secret room winner player index (-1 = none)
     secret_winner: int = -1
+    # 0x904AA4 dialog/name buffer reused by the secret-room contest flow.
+    secret_name_buffer: list[int] = field(
+        default_factory=lambda: [ord("A")] + [ord(" ")] * 28
+    )
+    secret_code: str = ""
     # 0x904870: maze number of previous secret room
     secret_prev_maze: int = 0
     # 0x904065: trick/challenge ID active in current level (0 = none)
@@ -738,6 +741,14 @@ class GameState:
     title_logo_full_program: bool = False
     # main_logo_updcolors cadence counter (palette cycling proper is WP-2).
     logo_color_timer: int = 0
+    logo_color_dir: int = 1          # 0x904A16
+    logo_cycle_timer: int = 0        # 0x904A18
+    logo_bright_timer: int = 0       # 0x904A1A
+    logo_bright_accum: int = 0       # 0x904A1C
+    logo_color_cur: int = 0          # 0x904A1E
+    logo_color_index: int = 0        # host index for ROM pointer 0x904A20
+    logo_motion_index: int = -1      # host index for ROM pointer 0x904A10
+    logo_scroll_timer: int = 0       # 0x904A14
 
     # =========================================================================
     # WP-18 · sound
@@ -784,6 +795,52 @@ class GameState:
     eeprom_write_timer: int = 0x8CA0  # 0x904012 target; §20 periodic-write countdown, 36,000 frames (~10 min @ 60Hz)
     eeprom_settings_cache: int = 0    # 0x904B94, "last written" shadow of game_settings; §20 change detection
     eeprom_save_path: str = "gauntpy_eeprom.json"  # no ROM address -- local persistence target, see eeprom.py
+
+    # =========================================================================
+    # Display memory · playfield/alpha VRAM and color RAM
+    # =========================================================================
+    # 0x900000-0x901FFF: 64 x 64 16-bit playfield descriptors, column-first.
+    playfield_ram: list[int] = field(default_factory=lambda: [0] * (64 * 64))
+    # Host-side invalidation key for the derived RGBA playfield raster.
+    playfield_generation: int = 0
+    # Descriptor-construction tables used only at ROM-equivalent stamp sites.
+    # The renderer never reads them; the committed words above remain canonical.
+    playfield_floor_descriptors: list[tuple[int, int, int, int]] = field(
+        default_factory=lambda: [(0, 0, 0, 0)] * (32 * 32)
+    )
+    playfield_floor_catalog: dict[
+        tuple[int, int], tuple[int, int, int, int]
+    ] = field(default_factory=dict)
+    playfield_wall_catalog: dict[int, tuple[int, int, int, int]] = field(
+        default_factory=dict
+    )
+    playfield_destruct_catalog: dict[int, tuple[int, int, int, int]] = field(
+        default_factory=dict
+    )
+    playfield_forcefield_catalog: dict[int, tuple[int, int, int, int]] = field(
+        default_factory=dict
+    )
+    playfield_forcefield_cells: set[int] = field(default_factory=set)
+    playfield_wallpattern: int = 0
+    # 0x910500-0x9105FF: 128 16-bit IRGB playfield color entries.
+    playfield_color_ram: list[int] = field(default_factory=lambda: [0] * 128)
+    # 0x910400-0x9104FF: the corresponding 128-entry shadow bank.
+    playfield_shadow_color_ram: list[int] = field(default_factory=lambda: [0] * 128)
+    # Host-side invalidation key for writes to either playfield color bank.
+    playfield_color_generation: int = 0
+    # 0x905000-0x905EFF: 64 columns x 30 visible alpha rows.
+    alpha_ram: list[int] = field(default_factory=lambda: [0] * (64 * 30))
+    # 0x910000-0x9101FF: 256 16-bit IRGB alpha color entries.
+    alpha_color_ram: list[int] = field(default_factory=lambda: [0] * 256)
+    # 0x910200-0x9103FF: 256 16-bit IRGB motion-object color entries.
+    mob_color_ram: list[int] = field(default_factory=lambda: [0] * 256)
+    # 0x9049F6 / 0x9049FE: byte offsets into each player's ROM color cycles.
+    player_hurt_palette_offset: list[int] = field(
+        default_factory=lambda: [0] * NUM_PLAYERS
+    )
+    player_power_palette_offset: list[int] = field(
+        default_factory=lambda: [0] * NUM_PLAYERS
+    )
 
     # =========================================================================
     # WP-20 · boot and orchestration

@@ -14,6 +14,8 @@ from gauntpy.subsystems.potions import (
     main_handle_potions,
     potion_blast,
 )
+from gauntpy.subsystems import score
+from gauntpy.subsystems.players import setup_infopanel
 
 
 def _active(state: GameState, index: int, slot: int,
@@ -79,6 +81,25 @@ class TestMagicGate:
         assert 0x1D in state.sound_log
         # Wizard column (0x12 col 2) is 0 -> Ghost destroyed.
         assert state.mobs.obj_type(pack_slot(8, 8)) == 0, "ghost destroyed"
+
+    def test_press_updates_alpha_inventory_at_the_rom_call_site(self):
+        state = GameState()
+        _active(state, 0, pack_slot(5, 5), character=Character.WIZARD)
+        state.players[0].potionsnum = 1
+        state.debounce_shift_magic[0] = 0x1C
+        setup_infopanel(state, 0)
+        start = score.PLAYER_INV_ROW * score.ALPHA_ROW_STRIDE + score.INVENTORY_COLUMN
+        assert any(
+            word & 0x3FF
+            for word in state.alpha_ram[start:start + score.INVENTORY_CELLS]
+        )
+
+        main_handle_potions(state)
+
+        assert all(
+            word & 0x3FF == 0
+            for word in state.alpha_ram[start:start + score.INVENTORY_CELLS]
+        )
 
     def test_no_potion_no_blast(self):
         state = GameState()

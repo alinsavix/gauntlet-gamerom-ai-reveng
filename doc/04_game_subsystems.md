@@ -739,6 +739,11 @@ loads maze 102 and installs the player-1 Elf input stream at 0x581C4;
 three explanatory pages. The former `load_demo_level` name at 0x4CD1C was
 therefore **Contradicted**.
 
+MAME 0.289 confirms the alpha-layer distinction: LEGEND's 29×30 opaque blank
+curtain intentionally hides maze 103 behind black text space, while the
+following SCORES screen retains maze 103 and uses opaque boxes only for its
+four ladders. The cyan maze remains visible between those boxes.
+
 ### 6.2 Demo Data Format
 
 Demo input streams are stored at ROM 0x5818C+. Format: 2-byte entries.
@@ -913,6 +918,20 @@ destination, any surviving ordinary occupant is cleared, and `mob_create`
 installs the player in that slot. This is why Transportability can land on and
 replace monsters (including the secret-task demon/Death cases), as well as
 collect or clear other object types accepted by `tport_check_dest`.
+
+The move milestone is iterative, not an instantaneous jump to a preselected
+cell. `tport_player_move` rotates the live joystick direction through the
+eight-entry table at 0x5B71C until a usable neighbour of the destination pad is
+found. It removes/recreates the player there and calls `handle_tport` again at
+0x509DE, moving the reappearance sparkle from the source to the destination.
+MAME 0.179 confirms the shipped demo moves player 1 from slot 492 `(180,240)`
+to slot 486 `(92,240)`; the effect changes to the destination on phase 22.
+
+**Display-origin clarification.** `scroll_hpos_origin` at 0x904AC2 remains
+`(pf_hscroll - 8) << 7` for player/shot boundary arithmetic. It is not the
+tilemap crop origin. Updated MAME 0.289 screenshots and RAM traces align visible
+playfield pixels directly at `pf_hscroll`: demo value 5 has zero pixel offset
+against gauntpy only when the renderer also starts at world X=5.
 
 ### 7.3 Forcefield Segment Format
 
@@ -1560,6 +1579,14 @@ player status and shares the numeric score/health renderers at 0x45940 and
 0x459A2 plus inventory and GAME OVER rendering. It caches fixed OS text
 services in A2/A3 for its many calls.
 
+The four player positions use opaque dark red, blue, yellow, and green alpha
+backgrounds even while inactive. `init_display` copies ROM 0x5AD1E into alpha
+color RAM 0x910000 and 0x910100; `setup_infopanel` fills alpha RAM with opaque
+spaces carrying attributes 0xD000/0xD400/0xD800/0xDC00. Resolving color zero
+through those live palettes yields `(50,0,0)`, `(0,0,50)`, `(33,33,0)`, and
+`(0,50,0)` under the hardware/MAME IRGB conversion. The name row uses the
+central six cells and the following three rows fill all thirteen panel cells.
+
 ### 14.2 Score Display (`main_score_display`, 0x457C0)
 
 Called every frame, but skips TITLE (0xFFFE) and SCORES (0xFFFF). It selects
@@ -2045,7 +2072,7 @@ placement resets it on normal level entry or player join. This implements the
 
 **Generators:** tier 1 destroyed by any hit; tiers 2/3 need damage ≥ 2/3, else they degrade: `mob_link -= damage << 10` (becomes the next weaker generator) with a picture update.
 
-**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls crumble via `wall_crumble` (0x5303A). Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces. The row-zero branch at 0x40A9A returns `0x400 + cell` for a shot entering the top boundary (rather than indexing the reserved MOB slots 0–31); that tagged playfield hit is what sends the top wall through the same reflection path.
+**Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls use the ordinary level wall palette until hit, then play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls use pattern 5 with the level's wall color and crumble via `wall_crumble` (0x5303A). The `7-stage` crumble value addresses live playfield color RAM; it is not a wall-theme index, so a static host palette must retain the wall's level color rather than selecting unrelated theme 6 after one hit. Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces. The row-zero branch at 0x40A9A returns `0x400 + cell` for a shot entering the top boundary (rather than indexing the reserved MOB slots 0–31); that tagged playfield hit is what sends the top wall through the same reflection path.
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 

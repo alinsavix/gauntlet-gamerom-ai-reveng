@@ -11,6 +11,17 @@ from gauntpy.subsystems.boot import one_time_init
 
 
 class TestOneTimeInit:
+    def test_alpha_color_ram_is_copied_from_rom_table(self):
+        state = GameState()
+
+        one_time_init(state)
+
+        assert state.alpha_color_ram[0:4] == [0x0000, 0xFFFF, 0xDFFF, 0xAFFF]
+        assert state.alpha_color_ram[144] == 0x3F00
+        assert state.alpha_color_ram[148] == 0x300F
+        assert state.alpha_color_ram[152] == 0x2FF0
+        assert state.alpha_color_ram[156] == 0x30F0
+
     def test_default_characters_are_0123(self):
         state = GameState()
         for p in state.players:

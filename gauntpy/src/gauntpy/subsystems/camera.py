@@ -182,18 +182,11 @@ def _scroll_set_position(state: GameState) -> None:
 
 
 def viewport_scroll(state: GameState, viewport_w: int, viewport_h: int) -> tuple[int, int]:
-    """Return the hardware playfield's toroidal world origin.
+    """Return the world origin represented by the hardware scroll registers.
 
-    ``set_scroll_pos`` writes ``hmin = (hscroll - 8) << 7`` and the vertical
-    scroll is already the downward world origin after coordinate conversion.
-    A horizontally wrapping maze keeps the 9-bit origin. On a bounded maze,
-    clamp the *visible* playfield window so the few hardware-overdraw pixels
-    beneath the alpha panel cannot expose the opposite maze edge.
+    MAME 0.289 pixel comparison pins the visible playfield directly to
+    ``pf_hscroll``. The older host-side ``-8`` conversion shifted the whole maze
+    five pixels too far right at the ROM's left clamp.
     """
-    del viewport_h
-    origin_x = state.scroll_x - 8
-    if state.wrap_h:
-        origin_x &= 0x1FF
-    else:
-        origin_x = max(0, min(origin_x, WORLD_PIXELS - viewport_w))
-    return origin_x, state.scroll_y & 0x1FF
+    del viewport_w, viewport_h
+    return state.scroll_x & 0x1FF, state.scroll_y & 0x1FF

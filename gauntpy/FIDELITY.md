@@ -22,12 +22,18 @@ evidence remains in `../doc/`, generated contracts, and the book.
    palette; V low bits contain sprite size. Position updates preserve them.
 6. **Player identity.** A live player record stores the player index in the
    state field. Never infer the victim solely from a picture or color.
-7. **Palette routing.** MOB palette nibbles 12–15 are player-color slots.
-   Player and demon/dragon projectiles use the appropriate character palette;
-   lobber rocks use base palette 1.
+7. **Palette routing.** Every MOB hpos nibble resolves directly through the
+   authoritative 256-word `GameState.mob_color_ram`; slots 12–15 are the live
+   player-color palettes. Hurt, power, effect, and title animation are game-side
+   color-RAM writes, never renderer overrides. Alpha/HUD code likewise writes
+   complete words to `GameState.alpha_ram` / `alpha_color_ram`; render modules
+   must not reconstruct content from gameplay state or sampled UI RGBA constants.
 8. **Simulation/render boundary.** Simulation writes native state. Rendering
    reads it and performs screen-coordinate conversion; rendering state never
-   feeds gameplay.
+   feeds gameplay. The playfield's authoritative pixels are the 4096
+   column-first words in `GameState.playfield_ram`, resolved through the live
+   128-word `playfield_color_ram` and `playfield_shadow_color_ram` banks;
+   `maze.data` is logical gameplay/catalog state, never a renderer input.
 9. **Randomness.** Route every game draw through `state.getrandom()`. Literal
    ROM tables carry their address in a nearby comment.
 10. **Evidence order.** Running ROM/MAME and direct ROM disassembly outrank

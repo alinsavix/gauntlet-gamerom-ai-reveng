@@ -30,6 +30,7 @@ ROM wins and the disagreement is written down at the point of use.
 
 from __future__ import annotations
 
+from .. import romtext
 from ..constants import (
     FIRST_PLAYABLE_SLOT,
     GENERATOR_TYPES,
@@ -652,23 +653,72 @@ def _poisoned(state: GameState, player_index: int) -> None:
 # RAM-visible half the ROM performs and routes the rest through the state the
 # owning package already reads.
 
+_SECRET_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTUWXYZ"  # ROM 0x54CA6
+_SECRET_NAME_LENGTH = 29
+
+
+def _secret_crc16(name: list[int]) -> int:
+    """Port secret_code_build's table-driven CRC-CCITT update."""
+    crc = 0
+    for code in name:
+        if code in (0, 0x20):
+            if code == 0:
+                break
+            continue
+        index = (code ^ (crc & 0xFF)) & 0xFF
+        table = index << 8
+        for _ in range(8):
+            table = ((table << 1) ^ 0x1021) & 0xFFFF if table & 0x8000 else (table << 1) & 0xFFFF
+        old_high = (crc >> 8) & 0xFF
+        crc = ((table & 0xFF) << 8) | (old_high ^ (table >> 8))
+    return crc
+
+
+def secret_code_build(state: GameState) -> str:
+    """Port secret_code_build 0x54BE0 and return its ``XXX-XXX`` result."""
+    crc = _secret_crc16(state.secret_name_buffer)
+    packed = (
+        ((((state.secret_trick_last & 0x0F) << 4)
+          | (state.secret_trick_id & 0x0F)) << 7)
+        | (state.secret_prev_maze & 0x7F)
+    )
+    code = (
+        _SECRET_CODE_ALPHABET[((crc >> 8) >> 2) & 0x1F]
+        + _SECRET_CODE_ALPHABET[(packed >> 10) & 0x1F]
+        + _SECRET_CODE_ALPHABET[(crc >> 5) & 0x1F]
+        + "-"
+        + _SECRET_CODE_ALPHABET[(packed >> 5) & 0x1F]
+        + _SECRET_CODE_ALPHABET[crc & 0x1F]
+        + _SECRET_CODE_ALPHABET[packed & 0x1F]
+    )
+    state.secret_code = code
+    return code
+
+
+def secret_getname(state: GameState) -> None:
+    """Port secret_getname 0x54EC6, including its alpha-RAM setup."""
+    winner = state.secret_winner
+    if not 0 <= winner < NUM_PLAYERS:
+        return
+    player = state.players[winner]
+    if not (state.game_settings & 0x2000):
+        state.bonus_timer = 0x0385
+        player.status = int(PlayerStatus.ALIVE_NEXT)
+        state.secret_winner = -1
+        return
+    player.name_entry_repeat_delay = _NAME_ENTRY_VELOCITY_LIMIT
+    player.name_entry_velocity = 0
+    player.initials_cursor = 0
+    player.status = int(PlayerStatus.SECRET_NAME_ENTRY)
+    state.bonus_timer = 0x0A8D
+    state.secret_name_buffer = [ord("A")] + [ord(" ")] * (_SECRET_NAME_LENGTH - 1)
+    from .score import write_secret_name_entry
+
+    write_secret_name_entry(state, winner)
+
+
 def secret_name_entry_update(state: GameState) -> None:
-    """0x54FE8 -- per-frame secret-winner name editor (§10.6).
-
-    The editor itself is text drawing: it steps the live character through
-    0x55440/0x554B6 and finishes by calling ``secret_code_build`` (0x54BE0).
-    Only the *state* half is reachable here, and it is small and exact: the
-    entry is selected by ``secret_winner`` (``ram.secret_player``, 0x904063),
-    it is driven by the reused ``player_state_timer`` countdown, and when it
-    completes the ROM writes ``player_status = 2`` and stores 0xFF back into
-    ``secret_winner`` (0x54FD4/0x54FDA).
-
-    **Visual-only boundary**: the letter grid, the "ENTER YOUR" prompt, and the
-    six-character ``XXX-XXX`` code the CRC at 0x54CC6-0x54EC5 produces are all
-    alpha-display work owned by WP-2/WP-15.  Nothing in this port stores an
-    entered name, so no code is built; the state machine still terminates so a
-    secret winner cannot wedge the player loop forever.
-    """
+    """Port the 29-character secret winner editor at 0x54FE8."""
     winner = state.secret_winner
     if not 0 <= winner < NUM_PLAYERS:
         return
@@ -676,14 +726,57 @@ def secret_name_entry_update(state: GameState) -> None:
     if player.status != int(PlayerStatus.SECRET_NAME_ENTRY):
         return
 
-    # The shared countdown at 0x904A26 (§10.3): decrement while non-negative.
-    if player.state_timer > 0:
-        player.state_timer -= 1
-        return
+    cursor = player.initials_cursor
+    dirs = (~(state.player_input_raw[winner] >> 4)) & 0x0F
+    velocity = player.name_entry_velocity
+    if dirs & 0x09:
+        velocity = min(velocity + 1, _NAME_ENTRY_VELOCITY_LIMIT) if velocity >= 0 else 0
+    elif dirs & 0x06:
+        velocity = max(velocity - 1, -_NAME_ENTRY_VELOCITY_LIMIT) if velocity <= 0 else 0
+    else:
+        velocity = 0
+    player.name_entry_velocity = velocity
 
-    player.status = int(PlayerStatus.ALIVE_NEXT)   # 0x54FD4
-    state.secret_winner = -1                       # 0x54FDA, ROM writes 0xFF
-    setup_infopanel(state, winner)
+    delay = player.name_entry_repeat_delay
+    if delay:
+        delay -= 1
+    if delay == 0:
+        if velocity and 0 <= cursor < _SECRET_NAME_LENGTH:
+            state.secret_name_buffer[cursor] = name_entry_step_char(
+                state.secret_name_buffer[cursor], velocity, bool(cursor),
+            )
+        delay = ((_NAME_ENTRY_VELOCITY_LIMIT - abs(velocity))
+                 >> _NAME_ENTRY_REPEAT_SHIFT) + _NAME_ENTRY_REPEAT_BASE
+    player.name_entry_repeat_delay = delay & 0xFF
+
+    from .score import write_secret_code_result, write_secret_name_entry
+
+    write_secret_name_entry(state, winner)
+    if (
+        _name_entry_commit_pressed(state, winner)
+        and state.bonus_timer < 0x0A15
+    ):
+        if state.secret_name_buffer[cursor] == _NAME_ENTRY_BACKSPACE:
+            state.secret_name_buffer[cursor] = _NAME_ENTRY_SPACE
+            cursor = max(0, cursor - 1)
+        else:
+            cursor += 1
+            state.bonus_timer = 0x0385
+        player.initials_cursor = cursor
+        if cursor < _SECRET_NAME_LENGTH:
+            write_secret_name_entry(state, winner)
+
+    if state.bonus_timer >= 5 and cursor < _SECRET_NAME_LENGTH:
+        return
+    for index in range(max(0, cursor), _SECRET_NAME_LENGTH):
+        state.secret_name_buffer[index] = _NAME_ENTRY_SPACE
+    secret_code_build(state)
+    write_secret_code_result(state, winner)
+    player.status = int(PlayerStatus.ALIVE_NEXT)
+    state.secret_winner = -1
+    state.debounce_shift_magic[winner] = 0
+    state.debounce_shift_fire[winner] = 0
+    state.bonus_timer = 0x02D1
 
 
 def show_continue_prompt(state: GameState) -> None:
@@ -708,6 +801,11 @@ def show_continue_prompt(state: GameState) -> None:
     if any(p.status not in allowed for p in state.players):
         return
 
+    from .display import write_alpha_text
+
+    _sound_play(state, 0x00)          # 0x44D06
+    for text, column, row in romtext.CONTINUE_PROMPT_LINES:
+        write_alpha_text(state, column, row, text, 0x8000)
     _sound_play(state, 0x3B)          # "Gauntlet II Theme Song" (§10.5)
     state.title_intro_state = 1
 
@@ -738,12 +836,40 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
         targets = range(player_selector, player_selector + 1)
     else:
         return
+    if player_selector < 0:
+        score.write_info_panel_header(state)
     for i in targets:
-        score._draw_player_score(state, i)     # 0x45940
-        score._draw_player_health(state, i)    # 0x459A2
-        player_inv_update(state, i)            # 0x45522
+        score.write_player_panel_background(state, i)
+        initials_entry = (
+            state.players[i].status == int(PlayerStatus.DYING)
+            and 0 <= state.players[i].highscore_rank < _HIGHSCORE_NO_RANK
+        )
+        if initials_entry:
+            score.clear_player_panel_content(state, i)
+            score.write_player_initials_entry(state, i)
+        elif state.players[i].status == int(PlayerStatus.SECRET_NAME_ENTRY):
+            score.clear_player_panel_content(state, i)
+            score.write_secret_name_entry(state, i)
+        elif state.players[i].status != int(PlayerStatus.REMOVED):
+            score.write_player_panel_static(state, i)
+            score._draw_player_score(state, i)     # 0x45940
+            score._draw_player_health(state, i)    # 0x459A2
+            player_inv_update(state, i)            # 0x45522
+        else:
+            score.clear_player_panel_content(state, i)
+            field = score.info_panel(state).players[i]
+            field.score = state.players[i].score
+            field.score_attr = score.PLAYER_TEXT_PALETTE_WORDS[i]
+            field.score_drawn = True
+            field.health = state.players[i].health
+            field.health_attr = score.PLAYER_TEXT_PALETTE_WORDS[i]
+            field.health_drawn = True
+            field.bonusmult = state.players[i].bonusmult
+        if not initials_entry and state.players[i].status != int(PlayerStatus.SECRET_NAME_ENTRY):
+            score.write_player_panel_status(state, i)
         state.score_dirty[i] = 0               # player_redraw bit 0, serviced
         state.health_dirty[i] = 0              # player_redraw bit 1, serviced
+    score.write_it_labels(state)
 
 
 def speech_welcome(state: GameState, player_index: int) -> None:
@@ -792,6 +918,7 @@ def player_inv_update(state: GameState, player_index: int) -> None:
 
     if 0 <= player_index < NUM_PLAYERS:
         score._draw_player_health(state, player_index)
+        score.write_player_inventory(state, player_index)
 
 
 def _secret_trick_progress(state: GameState, player_index: int,
@@ -1249,13 +1376,6 @@ def player_tport(state: GameState, player_index: int,
     diagonal_cells = {_direction_neighbor(destination, d) for d in (1, 3, 5, 7)}
     diagonals = [c for c in clear_cells if c in diagonal_cells]
     landing = diagonals[0] if diagonals else clear_cells[0]
-    if state.game_mode == int(GameMode.DEMO):
-        # tport_player_move continues consuming the recorded LEFT input while
-        # the ROM transition resolves. In maze 102 that leaves the Elf four
-        # cells left of the destination pad (MAME: slot 483, x=44). This port's
-        # milestone mover is instantaneous, so fold that transition motion into
-        # its landing cell.
-        landing = (destination & 0x3E0) | ((destination - 4) & 0x1F)
 
     # 0x509E4: the "visit every transporter" objective records *both* ends of
     # the hop -- the source pad was ORed in at 0x5027E, and the pad just
@@ -1450,12 +1570,9 @@ def _door_unlock(state: GameState, door_slot: int, player_index: int) -> None:
     player.keysnum = (player.keysnum - 1) & 0xFF    # 0x51DB8
     player_inv_update(state, player_index)          # 0x51DC2
     door_open_start(state, door_slot, player_index)  # 0x51DD8
-    from ..maze import clear_cell_descriptor
+    from .maze_objects import _remove_door_slot
 
-    clear_cell_descriptor(state, door_slot)
-    state.mobs.unlink_and_clear(door_slot)
-    from .maze_objects import setup_door_graphics
-    setup_door_graphics(state)
+    _remove_door_slot(state, door_slot)
     _sound_play(state, 0x12)                        # 0x51DDE: "Doors Open"
 
 
@@ -1639,6 +1756,9 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         # satisfies the "don't be fooled" objective -- but does not exit.
         if state.mobs.hpos[tile_mob_slot] & _FAKE_EXIT_FLAG:
             _dialog(state, player_index, _DIALOG_FAKE_EXIT)   # 0x513F8
+            from ..maze import clear_cell_descriptor
+
+            clear_cell_descriptor(state, tile_mob_slot)
             state.mobs.unlink_and_clear(tile_mob_slot)        # 0x51404
             _secret_trick_set(state, player_index, _TRICK_NOFOOLED, 1)
             return -1
@@ -1829,13 +1949,16 @@ def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
 
     player = state.players[player_index]
     active = state.level_players_active
+    changed = set()
 
     if active != 1:                                        # 0x51A16
         player.bonusmult = (player.bonusmult + 2) & 0xFFFF  # 0x51A2A
+        changed.add(player_index)
 
     cap = (active * 2) & 0xFFFF                            # 0x51A46
     if player.bonusmult > cap:                             # 0x51A48, unsigned
         player.bonusmult = cap                             # 0x51A60
+        changed.add(player_index)
 
     for other in range(NUM_PLAYERS):                       # 0x51A64
         if other == player_index:                          # 0x51A66
@@ -1847,6 +1970,9 @@ def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
             continue
         victim.bonusmult = (victim.bonusmult - 1) & 0xFFFF  # 0x51A96
         state.health_dirty[other] = 1                      # 0x51AA2
+        changed.add(other)
+    for changed_player in sorted(changed):
+        player_inv_update(state, changed_player)
 
 
 def player_damage_sample_update(state: GameState, player_index: int) -> None:
@@ -1918,15 +2044,10 @@ def player_resetcounters(state: GameState, player_index: int) -> None:
 
 
 def player_hurt_palette_vblank(state: GameState) -> None:
-    """0x401DE-0x40304 -- advance the four hurt-palette timers.
+    """0x401DE-0x40304 -- perform the live player MOB-palette writes."""
+    from .display import player_palette_vblank
 
-    VBLANK subtracts six from every nonzero 0x905F30 word. All hit writers load
-    0x12, yielding two white-flash fields (0x0C and 0x06) followed by the
-    zero-field restoration.
-    """
-    for player in state.players:
-        if player.hurt_cooldown:
-            player.hurt_cooldown = max(0, player.hurt_cooldown - 6)
+    player_palette_vblank(state)
 
 
 def player_resetall(state: GameState) -> None:
@@ -2170,6 +2291,9 @@ def _name_entry_edit(state: GameState, player_index: int) -> None:
         delay = ((_NAME_ENTRY_VELOCITY_LIMIT - abs(velocity))
                  >> _NAME_ENTRY_REPEAT_SHIFT) + _NAME_ENTRY_REPEAT_BASE
     player.name_entry_repeat_delay = delay & 0xFF    # 0x49F62
+    from .score import write_player_initials_entry
+
+    write_player_initials_entry(state, player_index)
 
     if not _name_entry_commit_pressed(state, player_index):
         return
@@ -2182,6 +2306,7 @@ def _name_entry_edit(state: GameState, player_index: int) -> None:
         cursor += 1                                  # 0x4A008
         player.state_timer = _NAME_ENTRY_STEP_TIMEOUT           # 0x4A00E
     player.initials_cursor = max(0, cursor)          # 0x4A066
+    write_player_initials_entry(state, player_index)
 
 
 def player_start_inner(state: GameState, player_index: int) -> int:
@@ -2245,6 +2370,9 @@ def player_start_inner(state: GameState, player_index: int) -> int:
         )
 
     if slot:
+        from .display import init_player_mob_palette
+
+        init_player_mob_palette(state, player_index, int(player.character))
         player.mob_slot = slot
         # player_start_inner rebuilds the marker as a real 3x3 hero MOB:
         # X origin -4 px, palette 0xC+player, packed size 0x12
@@ -2603,11 +2731,13 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
         state.player_invis_timer[player_index] -= 1
         if state.player_invis_timer[player_index] == 0:
             player.powers &= ~int(PlayerPower.INVIS) & 0xFFFF        # 0x4A80E
+            player_inv_update(state, player_index)
 
     if state.player_repulse_timer[player_index]:                     # 0x4A81A
         state.player_repulse_timer[player_index] -= 1
         if state.player_repulse_timer[player_index] == 0:
             player.powers &= ~int(PlayerPower.REPULSE) & 0xFFFF      # 0x4A826
+            player_inv_update(state, player_index)
 
     if player.acid_timer:                                            # 0x4A832
         if (state.frame_counter & 0x07) == 0:                        # 0x4A840
@@ -2618,6 +2748,7 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
         if player.acid_timer == 0:
             player.powers &= ~int(PlayerPower.ACID_AFFLICTION) & 0xFFFF       # 0x4A880
             state.health_dirty[player_index] = 1                     # 0x4A88C
+            player_inv_update(state, player_index)
 
     if state.player_dizzy_timer[player_index]:                       # 0x4A898
         state.player_dizzy_timer[player_index] -= 1                  # 0x4A89E
@@ -2650,7 +2781,10 @@ def _status8_complete(state: GameState, player_index: int) -> None:
         state.player_in_maze[player_index] = 0
         if state.player_it == player_index:                  # 0x4A6D6
             state.player_it = 0xFFFF
+            from .score import write_it_labels
+            write_it_labels(state)
         state.level_players_active = max(0, state.level_players_active - 1)
+        setup_infopanel(state, player_index)
         if state.level_players_active == 0:                  # 0x4A6E6
             from .exits import advance_level_countdowns, show_level_end_bonus_screen
 
@@ -2660,8 +2794,11 @@ def _status8_complete(state: GameState, player_index: int) -> None:
 
     # The port's death animation: the hero leaves the level for good.
     player.status = int(PlayerStatus.REMOVED)
+    setup_infopanel(state, player_index)
     if state.player_it == player_index:                      # 0x4A6D6
         state.player_it = 0xFFFF
+        from .score import write_it_labels
+        write_it_labels(state)
     if not any(p.active for p in state.players):
         show_continue_prompt(state)
 
@@ -2680,6 +2817,13 @@ def main_move_players(state: GameState) -> None:
        normal play writes): the door-idle threshold comparison and the escape
        timeout, so neither runs during the attract DEMO.
     """
+    # Secret-name entry runs during the TREAS_EXIT display hold (0x54FE8).
+    if 0 <= state.secret_winner < NUM_PLAYERS and state.players[
+        state.secret_winner
+    ].status == int(PlayerStatus.SECRET_NAME_ENTRY):
+        secret_name_entry_update(state)
+        return
+
     # ── Section 1: game-mode gate ─────────────────────────────────────────────
     if state.game_mode < 0:
         # Attract family: only DEMO runs the player loop.
@@ -2785,6 +2929,8 @@ def main_move_players(state: GameState) -> None:
             state.player_respawn_speech_timer[player_index] = -1
             if state.player_it == player_index:                   # 0x469C4
                 state.player_it = 0xFFFF
+                from .score import write_it_labels
+                write_it_labels(state)
             state.level_players_active = max(0, state.level_players_active - 1)
             calc_score_per_coin(state, player_index)              # 0x46A18
             # player_resetcounters clears the inventory, the powers, every
@@ -3535,7 +3681,33 @@ def tport_player_move(state: GameState, player_index: int) -> None:
     panning towards.
     """
     landing = state.player_tile_pos[player_index] & 0x3FF
-    _move_player_to_slot(state, player_index, landing)
+    destination_pad = state.player_tport_type[player_index] & 0x3FF
+    direction = _direction_from_input(
+        _joystick_direction_bits(state, player_index),
+    )
+    if destination_pad and destination_pad != landing and direction < 8:
+        # 0x50708 indexes tport_direction_rotation (0x5B71C): requested
+        # direction, then alternating left/right offsets until a usable
+        # neighbour of the destination pad is found.
+        for rotation in (0, 7, 1, 6, 2, 5, 3, 4):
+            candidate = _direction_neighbor(
+                destination_pad, (direction + rotation) & 7,
+            )
+            if candidate < FIRST_PLAYABLE_SLOT:
+                continue
+            if not _tile_on_screen_test(state, candidate):
+                continue
+            if tport_check_dest(state, candidate, player_index):
+                continue
+            if not nearby_mob_clearance_test(state, candidate, player_index):
+                continue
+            landing = candidate
+            state.player_tile_pos[player_index] = candidate
+            break
+    if _move_player_to_slot(state, player_index, landing):
+        # 0x509DE creates the arrival sparkle from the newly installed player
+        # record. The earlier 0x5050A effect remains at the source for dissolve.
+        handle_tport(state, landing, player_index)
 
 
 def squeeze_through_check(state: GameState, candidate_slot: int,
@@ -3958,10 +4130,6 @@ def _push_movable_wall(
             state.mobs.vpos[slot] = old_v
             return False
         state.mobs.move_slot(slot, dest)
-        from ..maze import clear_cell_descriptor, set_cell_descriptor
-
-        clear_cell_descriptor(state, slot)
-        set_cell_descriptor(state, dest, int(MazeObjIds.WALL_MOVABLE))
     return True
 
 

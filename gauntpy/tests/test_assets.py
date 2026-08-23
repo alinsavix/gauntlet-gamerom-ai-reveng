@@ -30,7 +30,6 @@ from gauntpy.assets import (
     SpriteFrame,
     TileBlock,
     _projectile_palette_bank,
-    _title_logo_palette_words,
 )
 
 # ---------------------------------------------------------------------------
@@ -69,17 +68,6 @@ def test_projectile_palette_mapping_does_not_require_rom_pixels(
     kind, palette, expected,
 ):
     assert _projectile_palette_bank(kind, palette) == expected
-
-
-def test_title_logo_palette_shift_moves_the_rom_color_chain():
-    from gex.palettes import GAUNTLET_PALETTES
-
-    initial = _title_logo_palette_words(0)
-    shifted = _title_logo_palette_words(1)
-    assert initial[0][2] == GAUNTLET_PALETTES["base"][0][2].irgb
-    assert shifted[0][2] == initial[0][3]
-    assert shifted[0][9] == initial[1][2]
-    assert _title_logo_palette_words(3)[9][9] == 0x1077
 
 
 @pytest.fixture(scope="module")
@@ -155,28 +143,6 @@ class TestTileRoundTrip:
         a = store.tile(0x100)
         b = store.tile(0x100)
         assert a is b, "decoding the same tile twice must reuse the cached pixels"
-
-
-@requires_roms
-class TestTitleLogo:
-    def test_native_logo_is_rom_decoded_and_mutation_isolated(self):
-        store = AssetStore()
-        first = store.title_logo()
-        second = store.title_logo()
-        assert first is not second
-        assert first.size == (328, 48)
-        assert hashlib.sha256(first.tobytes()).hexdigest() == (
-            "ffa64aab833688660ee15dcc8c8277cea5708c23355e688466ddf2c771e1e733"
-        )
-        first.putpixel((0, 0), (255, 0, 255, 255))
-        assert second.getpixel((0, 0)) != (255, 0, 255, 255)
-
-    def test_live_title_palette_changes_the_rendered_wordmark(self):
-        store = AssetStore()
-        assert (
-            store.title_logo_for_frame(1).tobytes()
-            != store.title_logo_for_frame(24).tobytes()
-        )
 
 
 # ---------------------------------------------------------------------------

@@ -1081,7 +1081,8 @@ class TestSecretWall:
     def _shoot_secret_wall(self, rolls, players=1):
         state = _make_state()
         state.level_players_active = players
-        state.rng = _FixedRandom(rolls)
+        # pf_replace stamps a freshly randomized floor before the prize draw.
+        state.rng = _FixedRandom([0, *rolls])
         SLOT = 360
         _place_typed(state, SLOT, MazeObjIds.WALL_SECRET)
         result = resolve_shot_hit(state, SLOT, 0)
@@ -1124,7 +1125,7 @@ class TestSecretWall:
         state = _make_state()
         state.level_players_active = 4
         state.secret_trick_id = 6
-        state.rng = _FixedRandom([0xF, 0])
+        state.rng = _FixedRandom([0, 0xF, 0])
         SLOT = 361
         _place_typed(state, SLOT, MazeObjIds.WALL_SECRET)
         resolve_shot_hit(state, SLOT, 0)

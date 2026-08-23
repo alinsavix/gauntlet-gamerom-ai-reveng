@@ -6,10 +6,10 @@ Reference: ``doc/03_game_rom_structure.md`` §5, §2.2; ``book/05_boot_and_os.md
 ``g2mainloop``. It is not part of the per-frame band, so it is not tracked in
 ``test_mainloop``'s implemented-calls roster.
 
-Scope note. The ROM's ``one_time_init`` also drives display setup, the palette
-init, the DIP/EEPROM reads through OS services, and the "restore factory
-defaults" request in settings bit 12 (0x432D8-0x432FA) -- hardware and OS-service
-concerns with no counterpart here. Everything the simulation can observe is
+Scope note. The ROM's ``one_time_init`` also drives display setup, the DIP/EEPROM
+reads through OS services, and the "restore factory defaults" request in settings
+bit 12 (0x432D8-0x432FA). Alpha VRAM/color RAM are now modeled; unrelated
+hardware and OS-service concerns remain host boundaries. Everything the simulation can observe is
 done: sound reset (0x42DC8), RAM/timer clearing, the persisted configuration
 (0x42F86), the high-score banks (0x49BD0), the default character assignment
 {0,1,2,3} (0x4332C-0x43342), and the hand-off into TITLE attract (0x43350).
@@ -21,6 +21,7 @@ from ..constants import Character, GameMode
 from ..state import NUM_PLAYERS, GameState
 from .attract import start_attract_screen
 from .eeprom import eeprom_load_settings
+from .display import init_alpha_color_ram
 from .score import highscore_table_init
 
 # Sound-board reset holdoff, loaded by sound_system_reset (0xB4 = 180 frames,
@@ -39,6 +40,7 @@ def one_time_init(state: GameState) -> None:
     """
     _sound_system_reset(state)
     _clear_game_state(state)
+    init_alpha_color_ram(state)             # init_display 0x434C2-0x434EC
     eeprom_load_settings(state)          # 0x43300 -- config load (WP-19)
     highscore_table_init(state)          # 0x43306 -- factory ladders (WP-14)
     _init_ram_variables(state)

@@ -59,19 +59,71 @@ class TestTransporterAndForcefieldCycle:
             positions.append(state.tport_cycle_pos)
         assert positions == [1, 2, 3, 4, 5, 4, 3, 2, 1, 0]
 
+    def test_transporter_and_forcefield_cycles_write_their_color_banks(self):
+        state = GameState(frame_counter=8, game_mode=GameMode.NORMAL)
+        state.forcefield_step_timer = 5
+        state.tport_cycle_divider = 3
+        before = list(state.playfield_color_ram)
+
+        main_cycle_tport_and_ffield(state)
+
+        assert state.playfield_color_ram == before
+        assert state.forcefield_color == 0x9FFF
+        assert state.tport_cycle_pos == 1
+        from gauntpy.subsystems.maze_objects import playfield_palette_vblank
+        playfield_palette_vblank(state)
+        assert state.playfield_color_ram[3 * 16] == 0x9FFF
+        assert state.playfield_color_ram[4 * 16 + 8:4 * 16 + 14] == [
+            0x8F00, 0x8F00, 0xCF21, 0xFF76, 0xFF98, 0xFFDD,
+        ]
+
     def test_vblank_palette_colors_bounce_at_the_rom_bounds(self):
         from gauntpy.subsystems.maze_objects import playfield_palette_vblank
 
-        state = GameState(frame_counter=2)
-        state.palette_pulse_a = 0xDDD0
-        state.palette_pulse_b = 0xA0AA
+        state = GameState(frame_counter=2, game_mode=GameMode.NORMAL)
+        state.maze = SimpleNamespace(floorpattern=5)
+        state.playfield_color_ram[2 * 16] = 0xDDD0
+        state.playfield_color_ram[1 * 16] = 0xA0AA
 
         playfield_palette_vblank(state)
 
-        assert state.palette_pulse_a == 0xEEE0
         assert state.palette_pulse_dir_a == -1
-        assert state.palette_pulse_b == 0xA0AA
         assert state.palette_pulse_dir_b == -1
+        for index in (0, 1, 2):
+            assert state.playfield_color_ram[1 * 16 + index] == 0xA0AA
+            assert state.playfield_color_ram[2 * 16 + index] == 0xEEE0
+
+    def test_title_vblank_skips_all_playfield_palette_writes(self):
+        from gauntpy.subsystems.maze_objects import playfield_palette_vblank
+
+        state = GameState(game_mode=GameMode.TITLE, frame_counter=2)
+        state.forcefield_color = 0xFFFF
+        state.tport_cycle_pos = 4
+        state.playfield_color_ram[:] = list(range(128))
+        before = list(state.playfield_color_ram)
+
+        playfield_palette_vblank(state)
+
+        assert state.playfield_color_ram == before
+
+    def test_odd_vblank_still_writes_forcefield_and_transporter_only(self):
+        from gauntpy.subsystems.maze_objects import playfield_palette_vblank
+
+        state = GameState(game_mode=GameMode.NORMAL, frame_counter=3)
+        state.maze = SimpleNamespace(floorpattern=0)
+        state.forcefield_color = 0xF00F
+        state.playfield_color_ram[16] = 0x5555
+        state.playfield_color_ram[32] = 0x6666
+
+        playfield_palette_vblank(state)
+
+        for index in (0, 10, 12):
+            assert state.playfield_color_ram[48 + index] == 0xF00F
+        assert state.playfield_color_ram[16] == 0x5555
+        assert state.playfield_color_ram[32] == 0x6666
+        assert state.playfield_color_ram[72:78] == list(
+            (0x8F00, 0xCF21, 0xFF76, 0xFF98, 0xFFDD, 0xFFFF)
+        )
 
     def test_forcefield_timer_is_an_unsigned_byte_predecrement(self):
         state = GameState()
@@ -344,9 +396,9 @@ class TestDoorOpening:
 
         setup_door_graphics(state)
 
-        assert state.mobs.picture[slot] == 0x9D48
-        assert state.mobs.hpos[slot] == 5 << 11
-        assert state.mobs.vpos[slot] == (((5 << 11) ^ 0xF800) + 0x09) & 0xFFFF
+        assert state.mobs.picture[slot] == 0x9D4C
+        assert state.mobs.hpos[slot] == ((5 << 11) - 0x0200) & 0xFFFF
+        assert state.mobs.vpos[slot] == (((5 << 11) ^ 0xF800) + 0x11) & 0xFFFF
         assert state.mobs.state(slot) == 10
 
     def test_open_front_removes_cells_and_turns_at_a_junction(self):
@@ -500,7 +552,8 @@ class TestRandomWalls:
             (4, 3): int(MazeObjIds.WALL_RANDOM),
             (8, 3): int(MazeObjIds.WALL_RANDOM),
         })
-        state.rng = _FixedRNG(16, 15)
+        # Each actual floor restamp draws getrandom(4) from the shared stream.
+        state.rng = _FixedRNG(16, 0, 15)
 
         main_walls_random_move(state)
         assert state.mobs.picture[slots[0]] == 0
@@ -517,7 +570,7 @@ class TestRandomWalls:
     def test_timer_counts_while_the_incremental_scan_runs(self):
         state, slots = self._state_with_walls()
         state.random_wall_timer = 2
-        state.rng = _FixedRNG(16, 16)
+        state.rng = _FixedRNG(16, 0, 16, 0)
 
         main_walls_random_move(state)
         assert state.random_wall_timer == 1

@@ -21,10 +21,9 @@ Quick tour:
 - ``hud`` -- layer 3, the cabinet's info panel (level, per-player name,
   score, health, bonus multiplier, inventory) on the ROM's own alpha-grid
   coordinates, drawing the values ``subsystems/score.py`` latched.
-- ``screens`` -- the front-end overlays (title, high scores, legend,
-  character select, level-end bonus).
-- ``text`` -- the alpha character-ROM blitter both of those draw through;
-  ``romtext`` -- the ROM strings and pre-baked HUD glyph runs they draw.
+- ``alpha`` -- layer 3, the generic alpha-RAM renderer used by both gameplay
+  HUD and front-end screens.
+- ``text`` -- alpha character-ROM decoding plus the host-only debug fallback.
 - ``compositor.render_frame(state, assets)`` -- assembles all three into one
   ``Framebuffer``; layer 4 (priority/shadowing) falls out of the draw order
   itself (see that module's docstring).
