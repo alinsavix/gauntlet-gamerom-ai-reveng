@@ -380,6 +380,13 @@ potion matrix's enhanced variant. Six bits become six icons on your info-panel
 column, and the thief in Chapter 12 appraises exactly these when choosing a
 victim.
 
+The hidden bottle dropped by a secret wall or dragon is how these permanent
+upgrades are delivered. Its picture chooses one of the six IDs. If you already
+own that upgrade, the bottle instead becomes an ordinary carried potion when
+there is inventory room; a solo player with a full inventory gets 100 points.
+The six HUD icons are written directly around the name row from the same low
+six bits.
+
 **The temporary shelf** holds timed or metered effects:
 
 - **Invisibility** makes monsters lose track of you. As the timer runs out

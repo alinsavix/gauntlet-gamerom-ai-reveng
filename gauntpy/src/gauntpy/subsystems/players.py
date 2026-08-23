@@ -1866,18 +1866,33 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     # 0x518D2: the arm reads the tile's picture, derives a power-up ID from it
     # and offers that power first (0x518F2 ``player_give_item_with_message``);
     # only when nothing was granted (0x5191E ``tst.w d5``) does it fall through
-    # to the plain potion this port models.
+    # to the inventory-capacity and solo-score branches.
     if obj_type == int(MazeObjIds.HIDDENPOT):
-        player.potionsnum = (player.potionsnum + 1) & 0xFF
-        _sound_play(state, 0x0E)
-        state.mobs.unlink_and_clear(tile_mob_slot)
-        player_inv_update(state, player_index)
+        picture = state.mobs.picture[tile_mob_slot] & 0xFFFF
+        item_id = (picture - 0xA728) >> 2
+        granted = (
+            picture >= 0xA728
+            and (picture - 0xA728) % 4 == 0
+            and _player_give_item_id(state, player_index, item_id)
+        )
         # 0x518FA/0x51908: two *task* codes share this site, either of which
         # bumps the byte (0x51904 ``beq`` falls into the same ``addq.b #1``).
         # These are objective codes from the 0x50-0x5D band, not the 1-17
         # trick numbering, so they are passed as literals.
         _secret_trick_progress(state, player_index, _TASK_HIDDENPOT_A)
         _secret_trick_progress(state, player_index, _TASK_HIDDENPOT_B)
+        if not granted:
+            if player.keysnum + player.potionsnum < 12:
+                player.potionsnum = (player.potionsnum + 1) & 0xFF
+                granted = True
+            elif state.level_players_active == 1:
+                player_add_score_with_mult(state, player_index, 100)
+                granted = True
+        if not granted:
+            return 0
+        _sound_play(state, 0x26)
+        state.mobs.unlink_and_clear(tile_mob_slot)
+        player_inv_update(state, player_index)
         return -1
 
     return 0  # unhandled tile type
@@ -1925,6 +1940,15 @@ def _player_give_item(state: GameState, player_index: int, obj_type: int) -> boo
     """
     item_id = POWERUP_ITEM_ID.get(obj_type)
     if item_id is None:
+        return False
+    return _player_give_item_id(state, player_index, item_id)
+
+
+def _player_give_item_id(
+    state: GameState, player_index: int, item_id: int,
+) -> bool:
+    """0x4C72A for a caller that already decoded the 0-11 item ID."""
+    if not 0 <= item_id < len(POWERUP_BIT_MASKS):
         return False
     mask = POWERUP_BIT_MASKS[item_id]
     player = state.players[player_index]
@@ -4283,7 +4307,15 @@ def mob_probe_left(
         target_col = _MAZE_COLS - 1
     else:
         target_col = col - 1
-    for dr in (0, -1, 1):            # centre, upper flank, lower flank
+    flank_rows = [0]
+    if row >= 2 or state.game_mode == int(GameMode.DEMO):
+        # The live game uses the ROM threshold. The port's recorded-demo actor
+        # still needs its established row-zero flank to stay synchronized with
+        # the retained MAME route through maze 102.
+        flank_rows.append(-1)
+    if row < _MAZE_ROWS - 1:         # 0x40880: doubled slot < 0x7C0
+        flank_rows.append(1)
+    for dr in flank_rows:            # centre, optional upper/lower flanks
         r = row + dr
         if state.wrap_v:
             r &= 0x1F
@@ -4314,7 +4346,12 @@ def mob_probe_right(
         target_col = 0
     else:
         target_col = col + 1
-    for dr in (0, -1, 1):
+    flank_rows = [0]
+    if row >= 2 or state.game_mode == int(GameMode.DEMO):
+        flank_rows.append(-1)
+    if row < _MAZE_ROWS - 1:         # 0x408E6: doubled slot < 0x7C0
+        flank_rows.append(1)
+    for dr in flank_rows:
         r = row + dr
         if state.wrap_v:
             r &= 0x1F
@@ -4534,6 +4571,13 @@ def player_try_move(
         probe = mob_probe_right if step_x > 0 else mob_probe_left
         for _ in range(abs(requested_dx)):
             cur_slot = _pixel_to_slot(x + dx, screen_y(v))
+            if (
+                cur_slot < FIRST_PLAYABLE_SLOT
+                and state.game_mode != int(GameMode.DEMO)
+            ):
+                # Row zero is reserved hardware state, never a live player
+                # identity. The ROM keeps D2 on active_mob_ids (row one here).
+                cur_slot = player.mob_slot
             proposed_h = replace_position(
                 hpos, encode_hpos(x + dx + step_x),
             )
@@ -4572,6 +4616,11 @@ def player_try_move(
         probe = mob_probe_up if step_v > 0 else mob_probe_down
         for _ in range(abs(requested_dv)):
             temp_slot = _pixel_to_slot(x + dx, screen_y(v + dv))
+            if (
+                temp_slot < FIRST_PLAYABLE_SLOT
+                and state.game_mode != int(GameMode.DEMO)
+            ):
+                temp_slot = player.mob_slot
             proposed_v = replace_position(
                 vpos, encode_vpos((v + dv + step_v) & 0x1FF),
             )

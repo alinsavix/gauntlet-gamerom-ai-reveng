@@ -3466,6 +3466,31 @@ class TestHiddenPotObjectiveCodes:
         self._pot(state)
         assert p.potionsnum == 1
 
+    def test_special_potions_grant_stat_powers_and_write_their_icons(self):
+        from gauntpy.subsystems import score
+
+        for item_id, mask in enumerate((
+            0x0002, 0x0001, 0x0020, 0x0010, 0x0008, 0x0004,
+        )):
+            state = _active_state()
+            player = _make_player_active(state, 0)
+            slot = 37
+            state.mobs.create(
+                slot, tile=0xA728 + item_id * 4, hpos=0, vpos=0,
+                obj_type=int(MazeObjIds.HIDDENPOT),
+            )
+
+            assert gp.player_tile_interact(state, slot, 0) == -1
+
+            assert player.powers & mask
+            assert player.potionsnum == 0
+            row = score.PLAYER_NAME_ROW
+            bit = mask.bit_length() - 1
+            column = score.POWER_ICON_COLUMNS[bit]
+            assert state.alpha_ram[
+                row * score.ALPHA_ROW_STRIDE + column
+            ] == score.POWER_ICON_WORDS[bit]
+
 
 class TestFoodAndTreasureObjectiveSites:
     """0x51C0C/0x51CEE (food) and 0x519C2 (treasure).

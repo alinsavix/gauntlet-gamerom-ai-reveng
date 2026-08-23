@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2290 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2296 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,36 @@ start).
 ---
 
 ## Resolved issues
+
+### S-107 … S-110 · top-edge movement, Super Sorcerers, and special potions
+
+- **S-107:** maze 17 at player pixel `(268,15)` reproduced a Python-only
+  lateral block against the reserved row-zero wall. The ROM's horizontal probe
+  suppresses its upper flank while the current doubled slot is below 0x80
+  (maze rows 0–1); the port used only a generic in-bounds test and included row
+  zero from row one. Left/right movement at that coordinate now matches direct
+  ROM execution.
+- **S-108:** the same investigation found the narrow-passage boundary mismatch:
+  `player_try_move_core` keeps `active_mob_ids[player]` in D2, while the port's
+  one-pixel integration re-quantized the corrected sprite origin into reserved
+  row zero. Intermediate probes now fall back to the live record for slots
+  0–31, preserving both ROM boundary behavior and the established one-pixel
+  integration that prevents high-speed wall skipping. The shipped demo retains
+  its prior port-side top-flank behavior because that is required to preserve
+  the independently captured MAME maze-102 route and transporter landing.
+- **S-109:** Super Sorcerer placement derived its start cell from the player's
+  `x>>4`, shifting a correctly placed hero one cell left, then materialized the
+  sorcerer without the ROM's four-pixel H correction. It now starts from
+  `active_mob_ids`, writes destination H as `column*16-4`, preserves only the
+  low six H/V bits at 0x5FF2C, and performs the literal eight-neighbour crowd
+  scan. Cardinal and diagonal placements now match ROM execution and face their
+  shots back along the chosen line.
+- **S-110:** hidden potion type 61 was always converted into an inventory
+  potion. The ROM decodes `(picture-0xA728)>>2` and first offers permanent power
+  ID 0–5; only an already-owned power falls through to a potion (when inventory
+  has room) or a solo 100-point award. The six stat powers and their sounds now
+  apply, and `player_inv_update` writes the matching icon at the exact ROM
+  columns 40, 39, 32, 31, 30, and 29.
 
 ### S-101 … S-106 · transportability, dragon/IT presentation, and maze diagnostics
 

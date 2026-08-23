@@ -161,7 +161,7 @@ ALPHA_ROW_STRIDE = 64
 ALPHA_SPACE_GLYPH = 0
 # player_inv_update 0x45B88-0x45BDC. The six power bits stamp complete
 # attribute/glyph words around (not over) the character name on row p*5+7.
-POWER_ICON_COLUMNS = (41, 40, 33, 32, 31, 30)  # ROM 0x5732E + base column 30
+POWER_ICON_COLUMNS = (40, 39, 32, 31, 30, 29)  # ROM 0x5732E + base column 29
 POWER_ICON_WORDS = (                           # ROM 0x57334
     0x983B, 0x9D7A, 0xA0A2, 0xA49C, 0xA97B, 0xACA3,
 )

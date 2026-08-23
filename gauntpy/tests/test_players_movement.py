@@ -185,6 +185,14 @@ class TestMobProbeLeft:
             state, (5 << 5) | 5, hpos=74 << 7, vpos=native_v(78) << 7,
         ) == upper_flank
 
+    def test_row_one_does_not_probe_the_reserved_top_row_as_a_flank(self):
+        state = _state_with_wall((0 << 5) | 16)
+
+        assert mob_probe_left(
+            state, (1 << 5) | 17,
+            hpos=266 << 7, vpos=native_v(15) << 7,
+        ) == -1
+
 
 # ---------------------------------------------------------------------------
 # mob_probe_right
@@ -213,6 +221,14 @@ class TestMobProbeRight:
         assert mob_probe_right(
             state, (5 << 5) | 5, hpos=78 << 7, vpos=native_v(82) << 7,
         ) == lower_flank
+
+    def test_row_one_does_not_probe_the_reserved_top_row_as_a_flank(self):
+        state = _state_with_wall((0 << 5) | 18)
+
+        assert mob_probe_right(
+            state, (1 << 5) | 17,
+            hpos=270 << 7, vpos=native_v(15) << 7,
+        ) == -1
 
 
 # ---------------------------------------------------------------------------

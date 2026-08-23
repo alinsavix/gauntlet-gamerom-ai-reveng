@@ -99,6 +99,20 @@ evidence remains in `../doc/`, generated contracts, and the book.
 26. **Dragon damage is a live MOB palette change.** Counted hits 1–2, 3–5, and
     6–8 rewrite the primary dragon segment's hpos palette nibble to 8, 7, and 6.
     Do not represent this progression as a renderer tint.
+27. **Reserved row zero is never a player probe origin.** The ROM keeps the
+    current `active_mob_ids[player]` slot in D2. Gauntpy's one-pixel integration
+    may derive an intermediate body cell, but it must fall back to the live
+    record when that cell is in reserved slots 0–31. Horizontal flank gates use
+    doubled-slot thresholds, so row zero is not an upper flank from row one.
+    Keep the explicit demo compatibility path until its retained MAME route can
+    survive removal; do not weaken normal gameplay geometry to preserve it.
+28. **Special actors may have actor-specific placement anchors.** Super
+    Sorcerer placement begins at the target player's live MOB slot and writes
+    its destination H position four pixels left of the cell. A generic
+    `pixel>>4` start or cell-origin placement changes its firing line.
+29. **Hidden-potion pictures encode permanent powers.** Type 61 picture
+    `(picture-0xA728)/4` is power ID 0–5. Only a duplicate grant falls through
+    to the inventory-potion/solo-score branches.
 
 ## Investigation workflow
 

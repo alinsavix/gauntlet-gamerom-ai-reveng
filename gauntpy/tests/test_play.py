@@ -252,6 +252,28 @@ class TestBuildState:
         assert hpos_x(state.mobs.hpos[player.mob_slot]) == 492
         assert vpos_y(state.mobs.vpos[player.mob_slot]) > 352
 
+    def test_level_18_top_wall_coordinate_allows_lateral_movement(self):
+        from gauntpy.coords import encode_hpos, encode_vpos_at_y, hpos_x, mob_cell_of
+        from gauntpy.subsystems.input import JOY_LEFT, JOY_RIGHT
+        from gauntpy.subsystems.players import player_try_move
+
+        for direction, expected_x in ((JOY_LEFT, 266), (JOY_RIGHT, 270)):
+            state = play.build_state(18, Character.ELF)
+            player = state.players[0]
+            state.mobs.unlink_and_clear(player.mob_slot)
+            slot = mob_cell_of(encode_hpos(268), encode_vpos_at_y(15))
+            state.mobs.create(
+                slot, 0x1E0D, encode_hpos(268, palette=12),
+                encode_vpos_at_y(15, 3, 3), MazeObjIds.PLAYERSTART, 0,
+            )
+            player.mob_slot = slot
+            state.level_flags_4 |= 0x80
+            state.movement_type = 2
+
+            player_try_move(state, 0, direction, 0)
+
+            assert hpos_x(state.mobs.hpos[player.mob_slot]) == expected_x
+
     def test_direct_start_inventory_and_powers_initialize_live_state(self):
         from gauntpy.constants import PlayerPower
         from gauntpy.subsystems.players import (

@@ -213,6 +213,13 @@ rounds those words; it does not reconstruct an anchor from the slot number.
 That distinction matters for corrected door and item placements near tight
 level edges.
 
+The player's side keeps one more subtle identity rule: the reserved row-zero
+slots can never become a hero's probe origin, even when a corrected sprite
+origin visually reaches that band. Near the top, horizontal probes also omit
+the row-zero flank while the hero record is still in row one. Missing those
+two boundary details makes the top wall catch lateral movement in otherwise
+open space.
+
 ## The invisible half
 
 Chapter 4 ended by promising that pixels are only the visible half of the

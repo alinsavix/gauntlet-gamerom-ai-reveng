@@ -256,10 +256,14 @@ active player it tests three directions behind that player's facing direction:
 straight back, then the two adjacent directions. The parallel tables at
 0x5FDAC/0x5FDB2 supply direction biases `{0,-1,+1}` and required clear runs
 `{4,3,3}`. Candidate cells must stay within rows 1–31, be visible, and be
-empty except that the target Super Sorcerer's own slot is allowed. A second
+empty except that the target Super Sorcerer's own slot is allowed. The walk
+starts from `active_mob_ids[player]` itself, not a cell re-derived from the
+player sprite's corrected H position. A second
 eight-cell proximity scan rejects a destination if any MOB is within 0x7C0
-in both rendered axes. On success the routine updates the target MOB's H/V
-position and direction bits and returns the packed destination tile in D0.w;
+in both rendered axes. On success the routine writes H as
+`column*16-4`, V at the row anchor, preserves only low bits 0–5 of both words,
+faces back along the chosen probe direction, and returns the packed destination
+tile in D0.w;
 after exhausting every player/direction it returns zero. The normal-stack
 `supersorc_place_helper(target_mob_slot, starting_player_index)` at 0x5FDB8
 loads the fixed MOB-array bases and converts the physical slot to the doubled
@@ -441,6 +445,20 @@ on **both** axes. Software wall markers first pass through the rounded
 that distance gate turns each three-cell probe into a coarse whole-row/column
 barrier.
 
+The movement core retains the live player record slot from
+`active_mob_ids[player]` in D2. In particular, row zero is reserved hardware
+state and cannot become a player's probe origin. The horizontal triplets have
+asymmetric edge gates: their upper flank runs only when the doubled slot is at
+least 0x80, so row zero is not tested from row one, while the lower flank runs
+only below 0x7C0. Direct ROM execution at maze 17 pixel `(268,15)` moves
+left/right by two pixels; treating the corrected sprite origin as row zero and
+including the reserved top wall incorrectly blocks both.
+
+gauntpy's shipped-demo compatibility path deliberately retains its earlier
+row-zero flank behavior. Removing it currently diverts the recorded maze-102
+actor before the transporter, contradicting the retained MAME trace that reaches
+slot 492 and lands at slot 486; this exception does not apply to normal play.
+
 `mob_collision_test` (0x52192) is deliberately tri-state. Collectible and floor
 types return -1 so movement proceeds and `player_tile_interact` handles them only
 after the player record enters the new cell; zero blocks; a live melee branch
@@ -596,6 +614,14 @@ at the two facing-dependent offsets around the removed dragon. The second
 offset is cumulative from the first, leaving both prizes inside the released
 2×2 footprint; the preceding dissolve is centered by an eight-pixel H/V
 adjustment.
+
+Hidden potion type 61 is a picture-indexed permanent upgrade before it is an
+inventory potion. At 0x518D2 the ROM computes
+`item_id = (mob_picture-0xA728)>>2`, yielding IDs 0–5 (armor, speed, magic,
+shot power, shot speed, fight), and calls `player_give_item_with_message`.
+Only when that bit is already owned does it fall through: it adds a potion when
+keys plus potions are below 12, otherwise awards 100 points in solo play, and
+otherwise leaves the object unhandled.
 
 The collision machinery identifies the player's logical cell from the
 sprite-center horizontal anchor (`x + 12`) and the ROM vertical handoff. A
@@ -1651,6 +1677,10 @@ spaces carrying attributes 0xD000/0xD400/0xD800/0xDC00. Resolving color zero
 through those live palettes yields `(50,0,0)`, `(0,0,50)`, `(33,33,0)`, and
 `(0,50,0)` under the hardware/MAME IRGB conversion. The name row uses the
 central six cells and the following three rows fill all thirteen panel cells.
+`player_inv_update` also writes the six low-byte permanent-power bits on the
+name row. Starting from alpha column 29, the byte offsets at 0x5732E
+`{11,10,3,2,1,0}` select columns `{40,39,32,31,30,29}`; the corresponding
+complete words at 0x57334 are written when bits 0–5 are set.
 
 The header is conditional. A whole-panel rebuild first fills alpha columns
 29–41, rows 0–6 with opaque spaces (0x452F2–0x45312). For

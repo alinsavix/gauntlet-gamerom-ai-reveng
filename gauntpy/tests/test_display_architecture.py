@@ -160,6 +160,7 @@ def test_inventory_writer_stamps_complete_rom_power_icon_words():
         word if state.players[2].powers & (1 << bit) else 0x8000
         for bit, word in enumerate(score.POWER_ICON_WORDS)
     ]
+    assert score.POWER_ICON_COLUMNS == (40, 39, 32, 31, 30, 29)
 
 
 def test_removed_player_rebuild_clears_every_stale_panel_content_cell():
