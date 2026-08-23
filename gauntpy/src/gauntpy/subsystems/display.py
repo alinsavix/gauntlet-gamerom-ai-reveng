@@ -500,17 +500,24 @@ def write_alpha_glyphs(
             )
 
 
+# OS large_character_glyph_index_map, OS ROM 0x34A6. display_large_text uses
+# the ASCII byte directly as an index; notably digits begin at quad 4 and space
+# maps to quad 0. Reconstructing this as ASCII ranges corrupts level numbers.
+_LARGE_GLYPH_INDEX_MAP = bytes.fromhex("""
+00 00 00 00 32 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 2E 00 00 00 00 2C 00 2B 00 00 01 02 03
+04 05 06 07 08 09 2A 27 00 00 00 24 00 0A 0B 0C
+0D 0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C
+1D 1E 1F 20 21 22 23 00 00 00 2D 00 0A 0B 0C 0D
+0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D
+1E 1F 20 21 22 23 00 00 00 00 70 00 4A 39 00 00
+""")
+
+
 def _large_glyph_index(character: str) -> int:
     code = ord(character)
-    if 0x30 <= code <= 0x39:
-        return code - 0x30
-    if 0x41 <= code <= 0x5A:
-        return code - 0x41 + 0x0A
-    return {
-        " ": 0x25, "!": 0x28, "#": 0x29, "'": 0x2E,
-        ",": 0x2C, "-": 0x2C, ".": 0x2B, ":": 0x2A,
-        "?": 0x24, "_": 0x2D,
-    }.get(character, 0x25)
+    return _LARGE_GLYPH_INDEX_MAP[code] if code < len(_LARGE_GLYPH_INDEX_MAP) else 0
 
 
 def write_alpha_large_text(

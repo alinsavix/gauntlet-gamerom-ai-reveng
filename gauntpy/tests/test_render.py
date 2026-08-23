@@ -1361,12 +1361,19 @@ class TestFrontEndTextIsRomData:
         assert not any(state.alpha_ram)
 
     def test_scores_screen_is_the_rom_four_way_split(self):
+        from gauntpy.subsystems.display import (
+            _LARGE_GLYPH_INDEX_MAP,
+            _LARGE_GLYPH_QUADS,
+        )
+
         state = GameState()
         score.write_high_score_screen(state)
         column, row = romtext.TEXT_SCORE_PER_COIN_POS
         start = row * score.ALPHA_ROW_STRIDE + column
-        assert state.alpha_ram[start] & 0x3FF == 0x14E  # large S, OS 0x33D2
-        assert state.alpha_ram[start + 2] & 0x3FF == 0x100  # large C
+        expected_s = _LARGE_GLYPH_QUADS[_LARGE_GLYPH_INDEX_MAP[ord("S")]][0] | 0x100
+        expected_c = _LARGE_GLYPH_QUADS[_LARGE_GLYPH_INDEX_MAP[ord("C")]][0] | 0x100
+        assert state.alpha_ram[start] & 0x3FF == expected_s
+        assert state.alpha_ram[start + 2] & 0x3FF == expected_c
         for klass, column, row in romtext.HIGHSCORE_QUADRANTS:
             plural = romtext.CHARACTER_NAME_PLURALS[klass]
             start = row * score.ALPHA_ROW_STRIDE + column

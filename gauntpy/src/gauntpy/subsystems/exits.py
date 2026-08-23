@@ -569,8 +569,8 @@ def main_treasure_timer(state: GameState) -> None:
     Four gates, in the ROM's order (0x4D2B2-0x4D2D8):
 
       * ``global_ui_delay_timer`` (0x904A4E) must be zero -- while a bonus tally
-        or level splash is up, this call runs down that shared timer and advances
-        the deferred transition instead of the treasure countdown;
+        or level splash is up, ``main_start_game`` runs down that shared timer
+        and this routine leaves the treasure countdown frozen;
       * ``treasure_timer`` (0x9049E8) must be nonzero;
       * ``game_mode`` must be NORMAL (0);
       * ``mazenum_current`` must be >= 104 -- a treasure or secret room.
@@ -582,16 +582,9 @@ def main_treasure_timer(state: GameState) -> None:
 
     Reference: doc/04_game_subsystems.md §16.
     """
-    # global_ui_delay_timer gate (0x4D2B2). Bonus display expiration prepares
-    # the next maze and its splash; splash expiration places the waiting heroes.
+    # main_treasure_timer only tests this shared timer. main_start_game owns its
+    # decrement and transition actions at 0x4817C-0x481E8.
     if state.bonus_timer > 0:
-        state.bonus_timer -= 1
-        if state.bonus_timer == 0:
-            if state.level_start_pending:
-                state.level_start_pending = False
-                _spawn_level_players(state, _exiting_or_here(state))
-            else:
-                _finish_level_end(state)
         return
 
     if state.treasure_timer <= 0:              # 0x4D2BC (also guards negatives)

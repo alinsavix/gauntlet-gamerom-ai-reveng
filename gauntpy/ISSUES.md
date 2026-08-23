@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2260 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2261 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,15 @@ start).
 ---
 
 ## Resolved issues
+
+### S-84 · level splash glyphs were corrupt and its hold never expired
+
+The large-character writer now indexes the literal OS ROM map at 0x34A6 instead
+of assuming digits begin at glyph quad zero; `LEVEL: 2` and other large text now
+use the same alpha words as OS `display_large_text`/`display_large_decimal_value`.
+The shared UI delay at 0x904A4E is now decremented by `main_start_game`, outside
+the dialog-gated gameplay band, matching 0x4817C. The splash therefore expires
+and places waiting players even when a message box is active.
 
 ### S-83 · boundary walls and gameplay presentation regressed after VRAM migration
 

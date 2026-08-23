@@ -243,6 +243,27 @@ class TestPlayerExitSequence:
 
 @requires_roms
 class TestShowLevelEndBonusScreenLoadsNextMaze:
+    def test_level_splash_timer_advances_while_a_dialog_gates_the_world(self, monkeypatch):
+        spawned = []
+        monkeypatch.setattr(
+            ex, "_spawn_level_players",
+            lambda state, survivors: spawned.append((state, survivors)),
+        )
+        state = GameState(
+            game_mode=GameMode.NORMAL,
+            bonus_timer=2,
+            dialog_timer=30,
+            level_start_pending=True,
+        )
+        state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
+
+        sess.main_start_game(state)
+        sess.main_start_game(state)
+
+        assert state.bonus_timer == 0
+        assert not state.level_start_pending
+        assert spawned and spawned[0][1] == [0]
+
     def test_solo_exit_loads_next_level_and_respawns_survivor(self):
         from gauntpy import maze
 
@@ -269,7 +290,7 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
 
         # Hold the level splash out; when the timer expires the hero is placed.
         while state.bonus_timer > 0:
-            ex.main_treasure_timer(state)
+            sess.main_start_game(state)
 
         assert state.game_mode == int(GameMode.NORMAL)
         assert not state.level_start_pending
@@ -347,7 +368,7 @@ class TestTreasureRoomRoundTrip:
         """Finish the exit dissolve, then sit out the bonus display."""
         _run_exit_animation(state)
         while state.bonus_timer > 0:
-            ex.main_treasure_timer(state)
+            sess.main_start_game(state)
 
     def test_exit_lands_in_a_treasure_room_then_returns_to_the_rotation(self):
         state = self._level_12_with_a_hero()
@@ -621,7 +642,7 @@ class TestSecretRoomRoundTrip:
         """Finish the exit dissolve, then sit out the bonus display."""
         _run_exit_animation(state)
         while state.bonus_timer > 0:
-            ex.main_treasure_timer(state)
+            sess.main_start_game(state)
 
     def test_no_treasure_trick_wins_and_opens_a_secret_room(self):
         state = self._level_12(self._GREEDY_MAZE)
