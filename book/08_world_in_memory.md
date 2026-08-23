@@ -220,6 +220,13 @@ the row-zero flank while the hero record is still in row one. Missing those
 two boundary details makes the top wall catch lateral movement in otherwise
 open space.
 
+It also explains a visual trap when judging collision by eye. The hero artwork
+is wider than one cell, but the game compares corrected MOB anchors inside a
+strict window and resolves horizontal motion before vertical. A frame can move
+the picture visibly closer to, or partly over, wall pixels even though the next
+anchor test correctly stops it. Replacing this with rectangular sprite
+collision would feel tighter than the cabinet, not more faithful.
+
 ## The invisible half
 
 Chapter 4 ended by promising that pixels are only the visible half of the

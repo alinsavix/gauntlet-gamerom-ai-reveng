@@ -467,6 +467,14 @@ before vertical motion, so a diagonal collision slides along the same axis as
 the original. Movable-wall collision advances only the wall on that frame; the
 hero stays put and retries on later frames.
 
+This anchor geometry can look like a one- or two-pixel nudge into wall artwork:
+the sprite is 24 pixels wide, while blocking is the strict `< 0x7C0` comparison
+between corrected MOB anchors, not a host sprite-box intersection. Horizontal
+motion is also committed before a blocked vertical axis. A direct probe of maze
+17 pixel `(16,10)` confirms left/right/down movement and an up-only top-wall
+block on both gauntpy and the ROM; the wrapped L/R seam is not a separate
+failure there.
+
 Unless `LFLAG4_PLAYER_OFFSCREEN` is set, each proposed axis also has to remain
 inside the hardware window. The H anchor minus `scroll_hpos_origin` must be
 below 0x7000; the V anchor minus `scroll_vpos_origin` must be below 0x7400

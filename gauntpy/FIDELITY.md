@@ -113,6 +113,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
 29. **Hidden-potion pictures encode permanent powers.** Type 61 picture
     `(picture-0xA728)/4` is power ID 0–5. Only a duplicate grant falls through
     to the inventory-potion/solo-score branches.
+30. **Visible sprite overlap is not collision penetration.** Player collision
+    compares corrected MOB anchors with a strict 0x7C0 window and resolves H
+    before V. A sprite can visibly approach or slide into wall artwork before
+    the next anchor comparison blocks; do not tighten this with sprite boxes
+    unless ROM/MAME diverges at the same state.
 
 ## Investigation workflow
 

@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2296 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2297 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,17 @@ start).
 ---
 
 ## Resolved issues
+
+### S-111 · maze-17 `(16,10)` seam report matches the ROM
+
+No behavior change was made. With the live wrapped camera, gauntpy and direct
+ROM execution agree at pixel `(16,10)`: left/right move to X=14/18, down moves
+to Y=12, and up remains at Y=10 because the top wall blocks it. Interpreting
+the reported Y as native/upward (screen Y=486) also matches for all cardinal
+and diagonal inputs. Moving toward a wall may leave the sprite visibly closer
+before the next frame blocks because collision compares corrected MOB anchors
+with a strict 0x7C0 overlap and applies horizontal motion before vertical; that
+is not evidence of a separate L/R seam defect at this coordinate.
 
 ### S-107 … S-110 · top-edge movement, Super Sorcerers, and special potions
 
