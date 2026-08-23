@@ -35,6 +35,15 @@ start).
 
 ## Resolved issues
 
+### S-100 · treasure rooms retained the ordinary panel header
+
+`setup_infopanel` now follows its maze-number branch at 0x45314. It always
+clears the first seven rows of the 13-column status panel, but only mazes below
+0x68 rebuild the GAUNTLET II dungeon glyphs and `LEVEL n` field. Treasure and
+secret rooms instead write the ROM 0x5758E descriptor: `TIME:` at alpha column
+34, row 1, above the existing large countdown. This removes the stale logo and
+level number shown by gauntpy while preserving the player blocks below.
+
 ### S-95 … S-99 · continue, dragon, thief-return, runner, and reported nonbugs
 
 - **S-95:** the continue prompt drew its literal `WITHIN    SECONDS` line but
@@ -55,12 +64,12 @@ start).
   including encoded multiplier-bag value restoration.
 - **S-98:** direct `gauntpy-play` now defaults to the Elf. `--character` remains
   available for selecting any of the four classes during testing.
-- **S-99:** two visual reports were verified against ROM rather than changed.
-  Treasure-room setup and the live timer both call OS large decimal at alpha
-  column 34, row 2; a space-padded one-digit value begins two cells later by
-  design. Holding Fire against a wall still selects and advances the shooting
-  table before each shot; a regression uses the hero's real `cell_x - 4`
-  geometry and protects those visible frames.
+- **S-99:** the treasure countdown position itself was verified: setup and the
+  live timer both call OS large decimal at alpha column 34, row 2; a
+  space-padded one-digit value begins two cells later by design. S-100 records
+  the separate surrounding-header omission. Holding Fire against a wall still
+  selects and advances the shooting table before each shot; a regression uses
+  the hero's real `cell_x - 4` geometry and protects those visible frames.
 
 ### S-93 · death/continue lost the player spawn record
 

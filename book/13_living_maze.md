@@ -244,7 +244,9 @@ On entry the session's real level and maze are saved, the mode word flips to
 the treasure-room state, and a timer is loaded by head count: 20 seconds for a
 lone player, up to 26 for four. There are no monsters; the opponent is the
 clock, and the cabinet narrates it. Each second, the display updates and a
-recorded voice speaks the number.
+recorded voice speaks the number. The status panel changes with the room: its
+ordinary GAUNTLET II dungeon banner and level number are erased, leaving a
+black header with **TIME:** directly above the large remaining-seconds value.
 
 The narration is where the game shows its personality. On levels above 30
 there is a 1-in-16 chance the voice counts down *wrong*, reading one of four

@@ -84,6 +84,10 @@ evidence remains in `../doc/`, generated contracts, and the book.
     departure clears its live MOB at the recorded start cell and stores carried
     loot for `maze_addrandompickups`; the next level recreates that pickup using
     the ROM's empty-cell walk rather than retaining an actor or renderer overlay.
+23. **Info-panel headers are maze-mode state.** A whole-panel rebuild first
+    clears rows 0–6. Only maze numbers below 0x68 restore the dungeon logo and
+    level field; treasure/secret rooms write `TIME:` over that blank region.
+    Do not treat the ordinary header as permanent HUD decoration.
 
 ## Investigation workflow
 

@@ -1637,6 +1637,13 @@ through those live palettes yields `(50,0,0)`, `(0,0,50)`, `(33,33,0)`, and
 `(0,50,0)` under the hardware/MAME IRGB conversion. The name row uses the
 central six cells and the following three rows fill all thirteen panel cells.
 
+The header is conditional. A whole-panel rebuild first fills alpha columns
+29–41, rows 0–6 with opaque spaces (0x452F2–0x45312). For
+`mazenum_current < 0x68`, it then writes the five-row dungeon-logo glyph block
+and `LEVEL n`. At 0x68 or above, it leaves that region blank except for the
+0x5758E descriptor, `TIME:` at column 34, row 1 (0x45314–0x4537C). The large
+bonus-room countdown occupies row 2 below it.
+
 ### 14.2 Score Display (`main_score_display`, 0x457C0)
 
 Called every frame, but skips TITLE (0xFFFE) and SCORES (0xFFFF). It selects
@@ -1707,6 +1714,8 @@ Handles the treasure room countdown. When the player enters a treasure room:
   call sites use `(column=34,row=2,width=2,space-pad,attribute=0x8000)`; for a
   one-digit count the leading large-space glyph consumes two cells, so the
   visible digit begins at column 36 by design
+- `setup_infopanel` clears the ordinary dungeon logo and level field from the
+  first seven status-panel rows and writes `TIME:` at column 34,row 1
 - At 10 seconds on levels above 30, a 1-in-16 gate may choose one of four fake spoken countdowns. The pointer table at 0x5ABE0 selects a five-number sequence at 0x5AB90–0x5ABDF for displayed seconds 10–6; at 6 it follows with JUST KIDDING or FOOLED YOU from 0x5ABF0
 - Without a fake countdown, displayed second 6 has a 1-in-4 chance to play one of four warning lines from 0x5AC08, with a parallel 1/2-second suppression count from 0x5AC18
 - At 0, selects a timeout line from 0x5ABF8 (settings bit 11 forces ZERO; otherwise random among ZERO, BETTER LUCK NEXT TIME, ZERO, and LOOKS LIKE YOU LOSE)

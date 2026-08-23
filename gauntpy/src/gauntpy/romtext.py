@@ -35,6 +35,7 @@ __all__ = [
     "TEXT_LEVEL", "TEXT_LEVEL_SPLASH", "TEXT_INSERT_COIN", "TEXT_PRESS_START",
     "TEXT_SELECT_HERO",
     "TEXT_GAME_OVER", "TEXT_ADD_COIN", "TEXT_ADD_COINS", "TEXT_ATARI_GAMES",
+    "TEXT_TIME",
     "TEXT_COPYRIGHT", "TEXT_ON_LEVEL", "CHARACTER_SELECT_LINES",
     "CONTINUE_PROMPT_LINES",
     "TEXT_SCORE_PER_COIN", "TEXT_SCORE_PER_COIN_POS", "HIGHSCORE_QUADRANTS",
@@ -107,6 +108,7 @@ TEXT_ADD_COINS = "  ADD   COINS"     # 0x57548
 TEXT_INSERT_COIN = " INSERT COIN "   # 0x57556
 TEXT_GAME_OVER = "  GAME OVER  "     # 0x57564
 TEXT_ATARI_GAMES = "ATARI GAMES"     # 0x575DE
+TEXT_TIME = "TIME:"                  # 0x57596, bonus-room panel header
 #: 0x575F6. The leading '@' is not an at-sign: alpha glyph 0x40 is the
 #: copyright mark, so this renders as "(c)1986" through the ROM font.
 TEXT_COPYRIGHT = "@1986"

@@ -970,6 +970,15 @@ class TestLevelEndHold:
             for word in state.alpha_ram[11 * 64 + 5:11 * 64 + 25]
         ).startswith("YOU HAVE")
         assert state.alpha_ram[2 * 64 + 34] & 0x3FF
+        assert "".join(
+            chr(word & 0x3FF) if word & 0x3FF else " "
+            for word in state.alpha_ram[1 * 64 + 29:1 * 64 + 42]
+        ) == "     TIME:   "
+        assert all(
+            state.alpha_ram[row * 64 + column] == 0x8000
+            for row in (0, 6)
+            for column in range(29, 42)
+        )
 
     def test_ordinary_level_start_draws_the_rom_level_splash(self):
         from gauntpy.subsystems.display import (

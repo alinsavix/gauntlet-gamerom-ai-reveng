@@ -226,18 +226,25 @@ def clear_player_panel_content(state: GameState, player_index: int) -> None:
 
 
 def write_info_panel_header(state: GameState) -> None:
-    """Write setup_infopanel's ROM dungeon banner and level field."""
+    """Write setup_infopanel's ordinary or bonus-room header."""
     fill_alpha_rect(
         state, PANEL_COLUMN, 0, PANEL_WIDTH, LEVEL_ROW + 1,
         alpha_word(0x8000),
     )
-    for row, glyphs in enumerate(romtext.DUNGEON_HEADER_GLYPHS):
-        write_alpha_glyphs(state, 30, row, glyphs, 0x9400)
-    write_alpha_text(state, LEVEL_LABEL_COLUMN, LEVEL_ROW, romtext.TEXT_LEVEL, 0x8000)
-    write_alpha_decimal(
-        state, LEVEL_VALUE_COLUMN, LEVEL_ROW, state.levelnum_current,
-        LEVEL_DIGITS, 0x8000,
-    )
+    if state.mazenum_current < 0x68:
+        for row, glyphs in enumerate(romtext.DUNGEON_HEADER_GLYPHS):
+            write_alpha_glyphs(state, 30, row, glyphs, 0x9400)
+        write_alpha_text(
+            state, LEVEL_LABEL_COLUMN, LEVEL_ROW, romtext.TEXT_LEVEL, 0x8000,
+        )
+        write_alpha_decimal(
+            state, LEVEL_VALUE_COLUMN, LEVEL_ROW, state.levelnum_current,
+            LEVEL_DIGITS, 0x8000,
+        )
+    else:
+        # setup_infopanel 0x45314-0x4537C: after the seven-row clear, the
+        # 0x5758E descriptor writes only TIME: at alpha column 34, row 1.
+        write_alpha_text(state, 34, 1, romtext.TEXT_TIME, 0x8000)
 
 
 def write_info_panel_backdrop(state: GameState) -> None:
