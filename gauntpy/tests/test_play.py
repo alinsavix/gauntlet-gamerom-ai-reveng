@@ -50,6 +50,15 @@ class TestArguments:
             play._positive_scale("0")
         assert play._positive_scale("3") == 3
 
+    def test_inventory_counts_are_byte_sized(self):
+        import argparse
+
+        assert play._inventory_count("0") == 0
+        assert play._inventory_count("255") == 255
+        for bad in ("-1", "256"):
+            with pytest.raises(argparse.ArgumentTypeError):
+                play._inventory_count(bad)
+
     def test_bad_level_exits_rather_than_loading_maze_zero(self):
         with pytest.raises(SystemExit):
             play.main(["--level", "0"])
@@ -97,6 +106,30 @@ class TestArguments:
 
         play.main(["--character", "wizard"])
         assert called["character"] == Character.WIZARD
+
+    def test_direct_inventory_and_repeatable_powers_are_forwarded(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+
+        play.main([
+            "--keys", "4", "--potions", "3",
+            "--power", "reflective-shots",
+            "--power", "transportability",
+        ])
+
+        assert called["keys"] == 4
+        assert called["potions"] == 3
+        assert called["powers"] == (
+            int(MazeObjIds.POWER_REFLECT),
+            int(MazeObjIds.POWER_TRANSPORT),
+        )
+
+    def test_direct_start_items_are_rejected_with_attract(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+
+        with pytest.raises(SystemExit):
+            play.main(["--attract", "--potions", "1"])
 
 
 def test_front_end_character_commit_uses_the_selected_hero_picture():
@@ -193,6 +226,38 @@ class TestBuildState:
         assert state.mobs.picture[player.mob_slot] == _PLAYER_IDLE_PICTURE[
             int(Character.ELF) * 8 + _PORT_DIR_TO_ROM_DIR[player.direction]
         ]
+
+    def test_direct_start_inventory_and_powers_initialize_live_state(self):
+        from gauntpy.constants import PlayerPower
+        from gauntpy.subsystems.players import (
+            _INVIS_TIMER_LOAD,
+            _REPULSE_TIMER_INIT,
+            _SUPERSHOT_CHARGES,
+        )
+
+        state = play.build_state(
+            1, Character.ELF, keys=4, potions=3,
+            powers=(
+                int(MazeObjIds.POWER_INVIS),
+                int(MazeObjIds.POWER_REPULSE),
+                int(MazeObjIds.POWER_REFLECT),
+                int(MazeObjIds.POWER_TRANSPORT),
+                int(MazeObjIds.POWER_SUPERSHOT),
+            ),
+        )
+        player = state.players[0]
+
+        assert (player.keysnum, player.potionsnum) == (4, 3)
+        assert player.powers & (
+            int(PlayerPower.INVIS)
+            | int(PlayerPower.REPULSE)
+            | int(PlayerPower.REFLECT)
+            | int(PlayerPower.TRANSPORT)
+            | int(PlayerPower.SUPERSHOT)
+        )
+        assert state.player_invis_timer[0] == _INVIS_TIMER_LOAD
+        assert state.player_repulse_timer[0] == _REPULSE_TIMER_INIT[Character.ELF]
+        assert player.supershot == _SUPERSHOT_CHARGES
 
     def test_a_built_level_survives_a_run_of_real_frames(self):
         """The whole point of the runner: ``game_frame`` drives the genuine

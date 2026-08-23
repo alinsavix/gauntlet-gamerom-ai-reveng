@@ -522,6 +522,28 @@ _SUPERSHOT_CHARGES = 0x0B
 #: POWER_INVULN arms the 0x905F40 countdown with 0x384 frames (0x5189E).
 _INVULN_TIMER_LOAD = 0x384
 
+
+def initialize_player_temporary_power(
+    state: GameState, player_index: int, obj_type: int,
+) -> None:
+    """Install one power-up tile's live state for a direct test-game start."""
+    item_id = POWERUP_ITEM_ID.get(int(obj_type))
+    if item_id is None or item_id < 6:
+        raise ValueError(f"not a temporary power-up object type: {obj_type}")
+    player = state.players[player_index]
+    player.powers |= POWERUP_BIT_MASKS[item_id]
+    if obj_type == int(MazeObjIds.POWER_INVIS):
+        state.player_invis_timer[player_index] = _INVIS_TIMER_LOAD
+    elif obj_type == int(MazeObjIds.POWER_REPULSE):
+        state.player_repulse_timer[player_index] = (
+            _REPULSE_TIMER_INIT[player.character & 0x03]
+        )
+    elif obj_type == int(MazeObjIds.POWER_SUPERSHOT):
+        player.supershot = (player.supershot + _SUPERSHOT_CHARGES) & 0xFF
+    elif obj_type == int(MazeObjIds.POWER_INVULN):
+        player.acid_timer = _INVULN_TIMER_LOAD
+
+
 #: The treasure-room maze band (0x519FE/0x51A08): mazes 0x68 through 0x72 skip
 #: the bonus-multiplier block and settle up on the bonus screen instead.
 _TREASURE_ROOM_MAZES = range(0x68, 0x73)
@@ -1822,21 +1844,12 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         # re-ORing or repeating the speech, but the arm's own side-effects
         # below still run -- a second invisibility potion re-arms the timer.
         _player_give_item(state, player_index, obj_type)
-        if obj_type == int(MazeObjIds.POWER_INVIS):
-            state.player_invis_timer[player_index] = _INVIS_TIMER_LOAD   # 0x517D4
-        elif obj_type == int(MazeObjIds.POWER_REPULSE):
-            state.player_repulse_timer[player_index] = (
-                _REPULSE_TIMER_INIT[player.character & 0x03]             # 0x5181A
-            )
-        elif obj_type == int(MazeObjIds.POWER_SUPERSHOT):
-            # 0x51874 ``addi.b #$b`` -- eleven charges, not one, and they add.
-            player.supershot = (player.supershot + _SUPERSHOT_CHARGES) & 0xFF
-        elif obj_type == int(MazeObjIds.POWER_INVULN):
+        initialize_player_temporary_power(state, player_index, obj_type)
+        if obj_type == int(MazeObjIds.POWER_INVULN):
             # 0x5189E arms the 0x905F40 countdown this port calls ``acid_timer``
             # -- the same word the acid puddle uses (0x512D0) and the same one
             # main_move_players drains health from every eighth frame
             # (0x4A838-0x4A85E).  Its expiry clears this power's bit (0x4A880).
-            player.acid_timer = _INVULN_TIMER_LOAD
             # 0x518B2: this is the "don't use invulnerability" objective's
             # tell.  Unlike every other trick site it *assigns* 1 rather than
             # bumping (0x518C8 ``move.b #$1``), so picking up a second one
