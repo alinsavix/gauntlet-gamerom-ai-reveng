@@ -295,6 +295,16 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
         assert state.game_mode == int(GameMode.NORMAL)
         assert not state.level_start_pending
         assert state.maze is not None
+        assert all(
+            state.alpha_ram[row * 64 + column] == 0
+            for row in range(30)
+            for column in range(29)
+        )
+        assert all(
+            state.alpha_ram[row * 64 + column] & 0x8000
+            for row in range(30)
+            for column in range(29, 42)
+        )
         p = state.players[0]
         assert p.status == int(PlayerStatus.ALIVE_HERE)                    # respawned
         assert state.mobs.obj_type(p.mob_slot) == int(MazeObjIds.PLAYERSTART)

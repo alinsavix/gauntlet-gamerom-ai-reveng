@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2262 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2263 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -35,16 +35,24 @@ start).
 
 ## Resolved issues
 
+### S-86 · corrected large-font base and level-splash teardown
+
+The OS `LEA 0x2C6(PC),A4` in `display_large_text` resolves to 0x34A2, not
+0x34A6 or 0x34A4. The exact 128-byte ASCII map is now transcribed from that
+effective address. On expiry, the level splash now also performs `maze_show`
+(0x4526A): alpha columns 0–28 and hidden 42–63 are cleared while the opaque
+13-column status panel is preserved, before waiting players are spawned.
+
 ### S-85 · remaining reconstructed large-font and HUD table shortcuts
 
 The ROM-free large-font renderer now assigns digit/letter quadrant images through
-the same OS 0x34A6 index map as the live alpha writer rather than enumerating
+the same OS 0x34A2 index map as the live alpha writer rather than enumerating
 `0-9A-Z` against the quadrant table. The five `M_DUNGEON` glyph rows are also
 literal transcriptions of ROM 0x574B8 rather than generated contiguous ranges.
 
 ### S-84 · level splash glyphs were corrupt and its hold never expired
 
-The large-character writer now indexes the literal OS ROM map at 0x34A6 instead
+The large-character writer now indexes the literal OS ROM map at 0x34A2 instead
 of assuming digits begin at glyph quad zero; `LEVEL: 2` and other large text now
 use the same alpha words as OS `display_large_text`/`display_large_decimal_value`.
 The shared UI delay at 0x904A4E is now decremented by `main_start_game`, outside

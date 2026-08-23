@@ -851,6 +851,10 @@ each character through the 128-byte ASCII-to-glyph-index table at PC-relative
 at `0x33D2 + 4 × index` (`large_character_tile_quads`) as two tile rows by one or
 two cells.
 
+The address is the resolved effective address of `LEA 0x2C6(PC),A4`, not the
+address after that instruction. Useful alignment checks are space → 0x25,
+`'0'` → 0x00, `':'` → 0x2A, and `A`/`a` → 0x0A.
+
 **Returns:** D0 = total alpha-cell advance. Each mapped glyph contributes one
 or two cells; this is not a pixel count.
 

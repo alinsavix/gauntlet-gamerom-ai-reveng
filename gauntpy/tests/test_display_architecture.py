@@ -26,6 +26,7 @@ from gauntpy.subsystems.display import (
     init_player_mob_palette,
     init_playfield_color_ram,
     init_title_logo_colors,
+    maze_show_alpha,
     palette_fade_word,
     player_palette_vblank,
     update_title_logo_colors,
@@ -61,6 +62,18 @@ def test_rom_free_large_font_uses_the_os_character_index_map():
     source = inspect.getsource(text_renderer._large_fallback_tiles)
     assert "_LARGE_GLYPH_INDEX_MAP[ord(character)]" in source
     assert "_LARGE_GLYPH_INDEX_MAP[ord(\" \")]" in source
+
+
+def test_maze_show_clears_everything_except_the_status_panel():
+    state = GameState()
+    state.alpha_ram[:] = [0xFFFF] * len(state.alpha_ram)
+
+    maze_show_alpha(state)
+
+    for row in range(30):
+        assert state.alpha_ram[row * 64:row * 64 + 29] == [0] * 29
+        assert state.alpha_ram[row * 64 + 29:row * 64 + 42] == [0xFFFF] * 13
+        assert state.alpha_ram[row * 64 + 42:(row + 1) * 64] == [0] * 22
 
 
 def test_mob_renderer_and_asset_bridge_have_no_palette_overrides():

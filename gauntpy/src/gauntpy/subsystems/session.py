@@ -351,7 +351,10 @@ def main_start_game(state: GameState) -> None:
             )
 
             if state.level_start_pending:
+                from .display import maze_show_alpha
+
                 state.level_start_pending = False
+                maze_show_alpha(state)                       # 0x4526A
                 _spawn_level_players(state, _exiting_or_here(state))
             elif state.game_mode == int(GameMode.TREAS_EXIT):
                 _finish_level_end(state)

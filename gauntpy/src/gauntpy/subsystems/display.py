@@ -500,18 +500,18 @@ def write_alpha_glyphs(
             )
 
 
-# OS large_character_glyph_index_map, OS ROM 0x34A6. display_large_text uses
+# OS large_character_glyph_index_map, OS ROM 0x34A2. display_large_text uses
 # the ASCII byte directly as an index; notably digits begin at quad 4 and space
 # maps to quad 0. Reconstructing this as ASCII ranges corrupts level numbers.
 _LARGE_GLYPH_INDEX_MAP = bytes.fromhex("""
-00 00 00 00 32 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 32 00 00 00 00 00 00 00
 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-00 00 00 2E 00 00 00 00 2C 00 2B 00 00 01 02 03
-04 05 06 07 08 09 2A 27 00 00 00 24 00 0A 0B 0C
-0D 0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C
-1D 1E 1F 20 21 22 23 00 00 00 2D 00 0A 0B 0C 0D
-0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D
-1E 1F 20 21 22 23 00 00 00 00 70 00 4A 39 00 00
+25 28 26 29 00 00 00 2E 00 00 00 00 2C 00 2B 00
+00 01 02 03 04 05 06 07 08 09 2A 27 00 00 00 24
+00 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18
+19 1A 1B 1C 1D 1E 1F 20 21 22 23 00 00 00 00 2D
+00 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18
+19 1A 1B 1C 1D 1E 1F 20 21 22 23 00 00 00 00 00
 """)
 
 
@@ -583,6 +583,12 @@ def fill_alpha_rect(
 
 def clear_alpha_visible(state: GameState) -> None:
     fill_alpha_rect(state, 0, 0, ALPHA_VISIBLE_COLUMNS, ALPHA_ROWS, 0)
+
+
+def maze_show_alpha(state: GameState) -> None:
+    """Port maze_show 0x4526A: reveal the maze while preserving its info panel."""
+    fill_alpha_rect(state, 0, 0, 29, ALPHA_ROWS, 0)
+    fill_alpha_rect(state, 42, 0, ALPHA_COLUMNS - 42, ALPHA_ROWS, 0)
 
 
 def _irgb_rgba(word: int) -> tuple[int, int, int, int]:

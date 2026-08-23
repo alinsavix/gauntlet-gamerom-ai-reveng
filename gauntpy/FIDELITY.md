@@ -40,6 +40,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
    ROM tables carry their address in a nearby comment.
 10. **Evidence order.** Running ROM/MAME and direct ROM disassembly outrank
     prose. Correct stale documentation when stronger evidence disagrees.
+11. **Effective table addresses.** For PC-relative ROM operands, transcribe from
+    the CPU's resolved effective address (and cross-check the loader/catalog),
+    not from the textual address of the following instruction.
+12. **Display lifecycle writes.** Screen transitions must port their alpha-RAM
+    teardown as well as setup. In particular, `maze_hide` makes columns 29–41
+    opaque and `maze_show` clears every other alpha column while preserving them.
 
 ## Investigation workflow
 
