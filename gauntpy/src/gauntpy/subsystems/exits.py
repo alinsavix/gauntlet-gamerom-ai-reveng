@@ -26,6 +26,7 @@ from .display import (
     alpha_word,
     fill_alpha_rect,
     write_alpha_decimal,
+    write_alpha_large_text,
     write_alpha_text,
 )
 from .sound import sound_play, sound_speech_play
@@ -567,10 +568,9 @@ def main_treasure_timer(state: GameState) -> None:
 
     Four gates, in the ROM's order (0x4D2B2-0x4D2D8):
 
-      * ``global_ui_delay_timer`` (0x904A4E) must be zero -- that timer is the
-        level-end bonus hold, modelled here as ``bonus_timer``, so while the
-        tally is up this call runs it down and fires the deferred next-level
-        load instead of the countdown;
+      * ``global_ui_delay_timer`` (0x904A4E) must be zero -- while a bonus tally
+        or level splash is up, this call runs down that shared timer and advances
+        the deferred transition instead of the treasure countdown;
       * ``treasure_timer`` (0x9049E8) must be nonzero;
       * ``game_mode`` must be NORMAL (0);
       * ``mazenum_current`` must be >= 104 -- a treasure or secret room.
@@ -582,13 +582,16 @@ def main_treasure_timer(state: GameState) -> None:
 
     Reference: doc/04_game_subsystems.md §16.
     """
-    # global_ui_delay_timer gate (0x4D2B2). The level-end bonus screen loads it
-    # with 0x12C at 0x4D50E, so the countdown is frozen while the tally shows;
-    # here the same timer also fires the deferred next-level load.
+    # global_ui_delay_timer gate (0x4D2B2). Bonus display expiration prepares
+    # the next maze and its splash; splash expiration places the waiting heroes.
     if state.bonus_timer > 0:
         state.bonus_timer -= 1
         if state.bonus_timer == 0:
-            _finish_level_end(state)
+            if state.level_start_pending:
+                state.level_start_pending = False
+                _spawn_level_players(state, _exiting_or_here(state))
+            else:
+                _finish_level_end(state)
         return
 
     if state.treasure_timer <= 0:              # 0x4D2BC (also guards negatives)
@@ -1018,10 +1021,11 @@ def player_exit_sequence(state: GameState, player_index: int,
     state.level_flags_3 &= ~_LFLAG3_EXIT_MOVES     # 0x52EB4 clears LFLAG bit 14
 
 
-def advance_level_countdowns(state: GameState) -> None:
+def advance_level_countdowns(state: GameState) -> bool:
     """The end-of-level bookkeeping at main_move_players 0x4A748-0x4A788.
 
-    Runs once, when the last player has left the level: the secret-room
+    Runs once, when the last player has left the level, and returns whether the
+    ROM branches to ``show_level_end_bonus_screen`` at 0x4A78C. The secret-room
     availability counter ticks down, and -- outside a bonus room, past level 6 --
     so do the hidden-potion and treasure-room countdowns.  ``level_next_treasure``
     reaching zero is what makes the *next* level a treasure room; see
@@ -1035,13 +1039,15 @@ def advance_level_countdowns(state: GameState) -> None:
         state.secret_possible_counter -= 1
 
     if in_bonus_room(state):                             # 0x4A756
-        return
+        return True
     if state.level_next <= 6:                            # 0x4A760
-        return
+        return False
     if state.level_next_potion:                          # 0x4A76C
         state.level_next_potion -= 1
-    if state.level_next_treasure:                        # 0x4A77A
-        state.level_next_treasure -= 1
+    if not state.level_next_treasure:                    # 0x4A77A
+        return True
+    state.level_next_treasure -= 1
+    return False
 
 
 def show_level_start_screen(state: GameState) -> None:
@@ -1096,6 +1102,20 @@ def show_level_start_screen(state: GameState) -> None:
     from .players import setup_infopanel
 
     setup_infopanel(state, -1)                               # 0x44F38-0x44F3E
+    fill_alpha_rect(state, 0, 0, 29, 30, alpha_word(0x8000)) # 0x44F44-0x44F66
+    if not in_bonus_room(state):
+        write_alpha_large_text(
+            state, 4, 9, romtext.TEXT_LEVEL_SPLASH, 0x8000,
+        )
+        write_alpha_large_text(
+            state, 16, 9, f"{state.levelnum_current:>3}", 0x8000,
+        )
+
+    # 0x45228-0x45260: normal/reduced-text/secret-room display holds.
+    state.bonus_timer = (
+        0x258 if in_secret_room(state)
+        else (0x96 if state.game_settings & 0x400 else 0xB4)
+    )
 
 
 # Bonus-screen hold before the next level loads: global_ui_delay_timer = 0x12C
@@ -1300,18 +1320,23 @@ def show_level_end_bonus_screen(state: GameState) -> None:
 
 
 def _finish_level_end(state: GameState) -> None:
-    """Fire the deferred next-level load when the bonus display expires.
+    """Prepare the next maze and level splash when the prior display ends.
 
     This is the ``main_start_game`` transition tail (0x480F2-0x48156): the
     position is already committed, so run ``show_level_start_screen`` -- which
-    may replace the maze with a treasure room -- and then load it.
+    may replace the maze with a treasure room -- and load it without placing
+    players until the splash's shared UI timer expires.
     """
     from .display import clear_alpha_visible
 
-    survivors = _exiting_or_here(state)
     clear_alpha_visible(state)
     show_level_start_screen(state)                   # 0x4813A
-    _load_next_level(state, state.levelnum_current, survivors)
+    state.level_start_pending = _load_next_level(
+        state, state.levelnum_current, _exiting_or_here(state),
+        spawn_players=False,
+    )
+    if not state.level_start_pending:
+        state.bonus_timer = 0
     state.bonus_amount = 0
     state.game_mode = GameMode.NORMAL
 
@@ -1348,7 +1373,10 @@ def update_monster_spawn_bonus_from_score_per_coin(state: GameState) -> None:
     ) & 0xFF                                                   # 0x48BA6
 
 
-def _load_next_level(state: GameState, level: int, survivors: list[int]) -> None:
+def _load_next_level(
+    state: GameState, level: int, survivors: list[int], *,
+    spawn_players: bool = True,
+) -> bool:
     """Swap in the committed maze and re-place ``survivors`` at its PLAYERSTARTs.
 
     A secret room takes the other spawn path (main_start_game 0x48232 ->
@@ -1360,17 +1388,25 @@ def _load_next_level(state: GameState, level: int, survivors: list[int]) -> None
     maze is left intact and only the level counters have moved.
     """
     from .. import maze                              # bridge module (imports gex)
-    from .players import player_join_finalize, player_start_inner
-
     # mazenum_current is already the maze to play -- the rotation's maze_next, or
     # the bonus room show_level_start_screen substituted for it.
     if not maze.reset_and_load_level(state, level, maze_number=state.mazenum_current):
-        return                                       # no ROMs: nothing to respawn into
+        return False                                  # no ROMs: nothing to respawn into
 
     exit_scan_level(state)                           # maze_new_level_setup exit table
     # player_start_inner clears player_treascount on every spawn (0x48E86); the
     # level total is cleared by load_level.
     state.player_treascount = [0] * len(state.players)
+    if not spawn_players:
+        return True
+
+    _spawn_level_players(state, survivors)
+    return True
+
+
+def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
+    """Run main_start_game's post-splash player placement on the loaded maze."""
+    from .players import player_join_finalize, player_start_inner
 
     if in_secret_room(state):                        # 0x48232
         secret_room_spawn(state)

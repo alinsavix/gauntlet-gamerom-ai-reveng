@@ -318,9 +318,11 @@ def _wall_adjacency(state: GameState, slot: int) -> int:
         if (
             (neighbor := coords.pack_slot(
                 (row + dy) & 0x1F, (col + dx) & 0x1F,
-            )) >= FIRST_PLAYABLE_SLOT
-            and state.mobs.picture[neighbor] == 0x8000
-            and _logical_cell_type(state, col + dx, row + dy) in _WALL_TYPES
+            )) < FIRST_PLAYABLE_SLOT
+            or (
+                state.mobs.picture[neighbor] == 0x8000
+                and _logical_cell_type(state, col + dx, row + dy) in _WALL_TYPES
+            )
         )
     )
 

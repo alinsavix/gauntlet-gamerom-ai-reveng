@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2256 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2260 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,20 @@ start).
 ---
 
 ## Resolved issues
+
+### S-83 · boundary walls and gameplay presentation regressed after VRAM migration
+
+- The reserved row-zero boundary now participates in the ROM's wall-adjacency
+  predicate, so its horizontal neighbours (and the opposite vertical seam) use
+  continuous wall stamps instead of isolated segments.
+- Whole-panel setup now performs `maze_hide`'s opaque 13-column alpha fill before
+  writing the header and player blocks, preventing playfield pixels from showing
+  through the status area.
+- `game_vblank`'s 32-word gradient at ROM 0x405E8 now drives alpha color RAM
+  0x91002E, restoring the color cycle in the GAUNTLET II panel logo.
+- The 0x4A748 transition gate now sends ordinary levels directly to the ROM's
+  `LEVEL:` splash and reserves `show_level_end_bonus_screen` for bonus-room
+  transitions. The 150/180/600-frame level-start hold now delays player placement.
 
 ### S-82 · MOB/front-end rendering bypassed modeled video memory
 

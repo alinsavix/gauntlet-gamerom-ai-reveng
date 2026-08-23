@@ -210,7 +210,10 @@ class TestPlayerExitSequence:
         _run_exit_animation(state)
         assert p.status == int(PlayerStatus.ALIVE_NEXT)
         assert state.level_players_active == 0
-        assert state.mobs.picture[anim_slot] == 0, "the animation MOB is released"
+        if state.level_start_pending:
+            assert state.mobs.picture[anim_slot] == 0x8000, "the next maze boundary is loaded"
+        else:
+            assert state.mobs.picture[anim_slot] == 0, "ROM-free fallback releases the animation"
 
     def test_last_player_to_exit_advances_the_level(self):
         """Solo player: stepping on the exit ends the level -- once the exit
@@ -250,23 +253,26 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
         state.players[0].health = 500
         old_slot = state.players[0].mob_slot
 
-        # Take the exit: the hero dissolves for ~32 frames (status 8) and only
-        # then does the bonus display phase begin -- never an instant load.
+        # Take the exit: the hero dissolves for ~32 frames, then the ordinary
+        # level splash appears. The treasure tally is reserved for bonus rooms
+        # and scheduled bonus-room entries.
         ex.player_exit_sequence(state, 0, old_slot, int(MazeObjIds.EXIT))
         assert state.players[0].status == int(PlayerStatus.EXITING)
         assert state.game_mode != int(GameMode.TREAS_EXIT)
         _run_exit_animation(state)
 
-        assert state.game_mode == int(GameMode.TREAS_EXIT)
+        assert state.game_mode == int(GameMode.NORMAL)
         assert state.bonus_timer > 0
+        assert state.level_start_pending
         assert state.levelnum_current == 2 and state.mazenum_current == 1  # committed
-        assert state.players[0].status == int(PlayerStatus.ALIVE_NEXT)     # still exiting
+        assert state.players[0].status == int(PlayerStatus.ALIVE_NEXT)
 
-        # Hold the bonus screen out; when the timer expires the next maze loads.
+        # Hold the level splash out; when the timer expires the hero is placed.
         while state.bonus_timer > 0:
             ex.main_treasure_timer(state)
 
         assert state.game_mode == int(GameMode.NORMAL)
+        assert not state.level_start_pending
         assert state.maze is not None
         p = state.players[0]
         assert p.status == int(PlayerStatus.ALIVE_HERE)                    # respawned

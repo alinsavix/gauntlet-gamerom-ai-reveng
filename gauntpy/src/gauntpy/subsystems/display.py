@@ -191,6 +191,16 @@ LOGO_INNER_TIMER_INIT = 0x0002  # ROM 0x5BA6A
 LOGO_BRIGHT_MIN = 0x0002        # ROM 0x5BA6C
 LOGO_BRIGHT_MAX = 0x000F        # ROM 0x5BA6E
 
+# vscroll_alpha_gradient, ROM 0x405E8. game_vblank 0x40304-0x40324 folds
+# frame_counter & 0xFC around 0x80 and writes the selected word to alpha color
+# RAM 0x91002E (palette 5, color 3), animating the dungeon logo in the HUD.
+VSCROLL_ALPHA_GRADIENT = _rom_words("""
+F00F F00E F00D F00C F00B F00A F009 F008
+F007 F006 F005 F004 F003 F002 F001 F000
+F000 F100 F200 F300 F400 F500 F600 F700
+F800 F900 FA00 FB00 FC00 FD00 FE00 FF00
+""")
+
 
 def restore_alpha_color_ram(state: GameState) -> None:
     """Copy init_display's two alpha palette banks without touching alpha RAM."""
@@ -301,6 +311,14 @@ def player_palette_vblank(state: GameState) -> None:
             state.mob_color_ram[destination + color_index] = source[
                 source_index + relative_bytes // 2
             ]
+
+
+def alpha_palette_vblank(state: GameState) -> None:
+    """Port game_vblank's scrolling HUD-logo color at 0x40304-0x40324."""
+    phase = state.frame_counter & 0xFC
+    if phase >= 0x80:
+        phase ^= 0xFC
+    state.alpha_color_ram[23] = VSCROLL_ALPHA_GRADIENT[phase >> 2]
 
 
 def init_title_logo_colors(state: GameState) -> None:

@@ -240,6 +240,13 @@ def write_info_panel_header(state: GameState) -> None:
     )
 
 
+def write_info_panel_backdrop(state: GameState) -> None:
+    """Port maze_hide's opaque 13-column panel fill at 0x4529A-0x452CA."""
+    fill_alpha_rect(
+        state, PANEL_COLUMN, 0, PANEL_WIDTH, 30, alpha_word(0x8000),
+    )
+
+
 def write_player_panel_static(state: GameState, player_index: int) -> None:
     """Write one setup_infopanel identity/label block into alpha VRAM."""
     write_player_panel_background(state, player_index)

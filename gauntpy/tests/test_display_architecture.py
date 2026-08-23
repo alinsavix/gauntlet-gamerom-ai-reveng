@@ -90,6 +90,31 @@ def test_setup_infopanel_writes_complete_rom_words_to_alpha_ram():
         ).strip() == ""
 
 
+def test_setup_infopanel_makes_the_entire_status_column_opaque():
+    state = GameState()
+    setup_infopanel(state, -1)
+
+    assert all(
+        state.alpha_ram[row * score.ALPHA_ROW_STRIDE + column] & 0x8000
+        for row in range(30)
+        for column in range(score.PANEL_COLUMN, score.PANEL_LAST_COLUMN + 1)
+    )
+
+
+def test_vblank_cycles_the_dungeon_header_color_from_the_rom_gradient():
+    from gauntpy.subsystems.display import (
+        VSCROLL_ALPHA_GRADIENT,
+        alpha_palette_vblank,
+    )
+
+    state = GameState()
+    for frame in (0, 4, 124, 128, 252):
+        state.frame_counter = frame
+        alpha_palette_vblank(state)
+        folded = (frame & 0xFC) ^ (0xFC if (frame & 0xFC) >= 0x80 else 0)
+        assert state.alpha_color_ram[23] == VSCROLL_ALPHA_GRADIENT[folded >> 2]
+
+
 def test_inventory_writer_stamps_complete_rom_power_icon_words():
     state = GameState()
     state.players[2].status = 1

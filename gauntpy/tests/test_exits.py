@@ -923,6 +923,18 @@ class TestLevelEndHold:
         show_level_start_screen(state)
         assert all(p.score_drawn for p in state.info_panel.players)
 
+    def test_ordinary_level_start_draws_the_rom_level_splash(self):
+        state = GameState()
+        state.levelnum_current = 2
+        state.mazenum_current = 1
+        state.level_next_treasure = 2
+
+        show_level_start_screen(state)
+
+        assert state.alpha_ram[9 * 64 + 4] & 0x3FF == 0x131  # large "L"
+        assert state.alpha_ram[9 * 64 + 20] & 0x3FF == 0x108  # large "2"
+        assert state.bonus_timer == 0xB4
+
 
 # ---------------------------------------------------------------------------
 # The per-player bonus tally (0x4D516-0x4D5AA)

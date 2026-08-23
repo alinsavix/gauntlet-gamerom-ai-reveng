@@ -34,6 +34,8 @@ evidence remains in `../doc/`, generated contracts, and the book.
    column-first words in `GameState.playfield_ram`, resolved through the live
    128-word `playfield_color_ram` and `playfield_shadow_color_ram` banks;
    `maze.data` is logical gameplay/catalog state, never a renderer input.
+   Gameplay VBLANK effects, including the HUD-logo gradient at alpha color RAM
+   `0x91002E`, must likewise mutate modeled color RAM before rendering.
 9. **Randomness.** Route every game draw through `state.getrandom()`. Literal
    ROM tables carry their address in a nearby comment.
 10. **Evidence order.** Running ROM/MAME and direct ROM disassembly outrank
