@@ -851,8 +851,17 @@ each character through the 128-byte ASCII-to-glyph-index table at PC-relative
 at `0x33D2 + 4 × index` (`large_character_tile_quads`) as two tile rows by one or
 two cells.
 
+The address is the resolved effective address of `LEA 0x2C6(PC),A4`, not the
+address after that instruction. Useful alignment checks are space → 0x25,
+`'0'` → 0x00, `':'` → 0x2A, and `A`/`a` → 0x0A.
+
 **Returns:** D0 = total alpha-cell advance. Each mapped glyph contributes one
 or two cells; this is not a pixel count.
+
+`render_large_glyph_register` always writes the left two tile bytes, then tests
+the record's right-hand word at 0x3280. A zero word suppresses the right column
+and returns a one-cell advance; otherwise it writes that column and returns two.
+For example, `':'` maps to quad `(0x6D, 0x6D, 0, 0)` and is half-width.
 
 The `movea.l 0x00800002,A0` instructions in this renderer family load a
 packed pair of strides, not a hardware pointer: 0x0080 is the 128-byte alpha

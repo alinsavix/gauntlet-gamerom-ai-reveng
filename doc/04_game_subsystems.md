@@ -1288,6 +1288,15 @@ path can award `5,000 × coins`. It removes departing player sprites, restores
 the saved secret-room counters, changes game mode, runs `secret_check`, and
 loads the saved next maze/level. 
 
+For an ordinary transition, `main_start_game` decrements
+`global_ui_delay_timer` at 0x4817C outside the dialog-gated gameplay band. At
+zero it resumes the level and calls `maze_show` (0x4526A), which clears alpha
+columns 0–28 and 42–63 on every row while preserving the opaque status-panel
+columns 29–41. Omitting that teardown leaves the level splash covering live play.
+The ordinary `LEVEL:` descriptor starts at alpha column 4; its colon uses the
+OS large font's one-cell quad `(0x6D, 0x6D, 0, 0)`, leaving column 15 blank
+before `display_large_decimal_value` begins its three-character field at 16.
+
 `secret_bonus_earned` (0x4D1A4) supplies the secret-room award predicate. It
 checks the active challenge code and the entrant's progress (and scans the
 playfield for challenge 0x53), returning -1 when the 5,000-per-coin bonus is

@@ -837,6 +837,7 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     else:
         return
     if player_selector < 0:
+        score.write_info_panel_backdrop(state)
         score.write_info_panel_header(state)
     for i in targets:
         score.write_player_panel_background(state, i)
@@ -2786,10 +2787,21 @@ def _status8_complete(state: GameState, player_index: int) -> None:
         state.level_players_active = max(0, state.level_players_active - 1)
         setup_infopanel(state, player_index)
         if state.level_players_active == 0:                  # 0x4A6E6
-            from .exits import advance_level_countdowns, show_level_end_bonus_screen
+            from .exits import (
+                _finish_level_end,
+                advance_level_countdowns,
+                show_level_end_bonus_screen,
+            )
 
-            advance_level_countdowns(state)                  # 0x4A748-0x4A788
-            show_level_end_bonus_screen(state)               # 0x4A78C
+            if advance_level_countdowns(state):              # 0x4A748-0x4A788
+                show_level_end_bonus_screen(state)           # 0x4A78C
+            else:
+                from .exits import secret_check
+
+                secret_check(state)                          # 0x480EC
+                state.levelnum_current = state.level_next
+                state.mazenum_current = state.maze_next
+                _finish_level_end(state)
         return
 
     # The port's death animation: the hero leaves the level for good.

@@ -174,7 +174,7 @@ class TestTreasureTimerGates:
         state.bonus_timer = 5
         main_treasure_timer(state)
         assert state.treasure_timer == 300
-        assert state.bonus_timer == 4
+        assert state.bonus_timer == 5, "main_start_game owns the shared timer"
 
     def test_attract_mode_does_not_count_down(self):
         state = _treasure_state(300)
@@ -922,6 +922,27 @@ class TestLevelEndHold:
             panel.score_drawn = False
         show_level_start_screen(state)
         assert all(p.score_drawn for p in state.info_panel.players)
+
+    def test_ordinary_level_start_draws_the_rom_level_splash(self):
+        from gauntpy.subsystems.display import (
+            _LARGE_GLYPH_INDEX_MAP,
+            _LARGE_GLYPH_QUADS,
+        )
+
+        state = GameState()
+        state.levelnum_current = 2
+        state.mazenum_current = 1
+        state.level_next_treasure = 2
+
+        show_level_start_screen(state)
+
+        expected_l = _LARGE_GLYPH_QUADS[_LARGE_GLYPH_INDEX_MAP[ord("L")]][0] | 0x100
+        expected_2 = _LARGE_GLYPH_QUADS[_LARGE_GLYPH_INDEX_MAP[ord("2")]][0] | 0x100
+        assert state.alpha_ram[9 * 64 + 4] & 0x3FF == expected_l
+        assert state.alpha_ram[9 * 64 + 14] & 0x3FF == 0x16D  # half-width colon
+        assert state.alpha_ram[9 * 64 + 15] == 0x8000         # untouched gap
+        assert state.alpha_ram[9 * 64 + 20] & 0x3FF == expected_2
+        assert state.bonus_timer == 0xB4
 
 
 # ---------------------------------------------------------------------------

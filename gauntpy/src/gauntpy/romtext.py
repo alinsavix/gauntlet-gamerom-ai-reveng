@@ -32,7 +32,8 @@ __all__ = [
     "CHARACTER_NAMES", "CHARACTER_NAME_PLURALS", "PLAYER_COLOR_NAMES",
     "CHARACTER_HUD_GLYPHS", "LABEL_SCORE_GLYPHS",
     "LABEL_HEALTH_GLYPHS", "LABEL_IT_GLYPHS", "GLYPH_KEY", "GLYPH_POTION",
-    "TEXT_LEVEL", "TEXT_INSERT_COIN", "TEXT_PRESS_START", "TEXT_SELECT_HERO",
+    "TEXT_LEVEL", "TEXT_LEVEL_SPLASH", "TEXT_INSERT_COIN", "TEXT_PRESS_START",
+    "TEXT_SELECT_HERO",
     "TEXT_GAME_OVER", "TEXT_ADD_COIN", "TEXT_ADD_COINS", "TEXT_ATARI_GAMES",
     "TEXT_COPYRIGHT", "TEXT_ON_LEVEL", "CHARACTER_SELECT_LINES",
     "CONTINUE_PROMPT_LINES",
@@ -85,14 +86,18 @@ GLYPH_POTION = 0xA3
 
 # ``M_DUNGEON`` / ``character_glyph_rows`` -- ROM 0x574B8, five rows of
 # twelve pre-baked cells written at alpha column 30, rows 0-4.
-DUNGEON_HEADER_GLYPHS = tuple(
-    tuple(range(start, start + 12))
-    for start in (0xBA, 0xC6, 0xD2, 0xDE, 0xEA)
+DUNGEON_HEADER_GLYPHS = (
+    (0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5),
+    (0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF, 0xD0, 0xD1),
+    (0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD),
+    (0xDE, 0xDF, 0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9),
+    (0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF, 0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5),
 )
 
 # --- panel and front-end strings -------------------------------------------
 
 TEXT_LEVEL = "LEVEL "            # 0x57326, panel header at row 6
+TEXT_LEVEL_SPLASH = "LEVEL:"     # descriptor 0x57634, string 0x5763C
 TEXT_ON_LEVEL = "ON LEVEL:"      # 0x57572
 TEXT_SELECT_HERO = " SELECT HERO "   # 0x5751E
 TEXT_PRESS_START = " PRESS START "   # 0x5752C

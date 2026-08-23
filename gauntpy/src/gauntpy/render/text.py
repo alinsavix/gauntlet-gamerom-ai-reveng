@@ -193,11 +193,14 @@ def _hud_fallback_text() -> dict[int, str]:
 def _large_fallback_tiles() -> dict[int, object]:
     """Build readable PIL substitutes for OS large-font quadrant glyphs."""
     from PIL import Image
-    from ..subsystems.display import _LARGE_GLYPH_QUADS
+    from ..subsystems.display import (
+        _LARGE_GLYPH_INDEX_MAP,
+        _LARGE_GLYPH_QUADS,
+    )
 
     result = {}
     characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    for index, character in enumerate(characters):
+    for character in characters:
         small = Image.new("RGBA", (8, 8))
         _draw_text_pil(small, 0, 0, character, (255, 255, 255, 255), 1)
         large = small.resize((16, 16), Image.Resampling.NEAREST)
@@ -207,10 +210,11 @@ def _large_fallback_tiles() -> dict[int, object]:
             large.crop((8, 0, 16, 8)),
             large.crop((8, 8, 16, 16)),
         )
+        index = _LARGE_GLYPH_INDEX_MAP[ord(character)]
         for code, tile in zip(_LARGE_GLYPH_QUADS[index], quads, strict=True):
             result.setdefault(code | 0x100, tile)
     blank = Image.new("RGBA", (8, 8))
-    for code in _LARGE_GLYPH_QUADS[0x25]:
+    for code in _LARGE_GLYPH_QUADS[_LARGE_GLYPH_INDEX_MAP[ord(" ")]]:
         result[code | 0x100] = blank
     return result
 

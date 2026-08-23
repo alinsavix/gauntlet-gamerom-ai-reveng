@@ -191,6 +191,16 @@ LOGO_INNER_TIMER_INIT = 0x0002  # ROM 0x5BA6A
 LOGO_BRIGHT_MIN = 0x0002        # ROM 0x5BA6C
 LOGO_BRIGHT_MAX = 0x000F        # ROM 0x5BA6E
 
+# vscroll_alpha_gradient, ROM 0x405E8. game_vblank 0x40304-0x40324 folds
+# frame_counter & 0xFC around 0x80 and writes the selected word to alpha color
+# RAM 0x91002E (palette 5, color 3), animating the dungeon logo in the HUD.
+VSCROLL_ALPHA_GRADIENT = _rom_words("""
+F00F F00E F00D F00C F00B F00A F009 F008
+F007 F006 F005 F004 F003 F002 F001 F000
+F000 F100 F200 F300 F400 F500 F600 F700
+F800 F900 FA00 FB00 FC00 FD00 FE00 FF00
+""")
+
 
 def restore_alpha_color_ram(state: GameState) -> None:
     """Copy init_display's two alpha palette banks without touching alpha RAM."""
@@ -301,6 +311,14 @@ def player_palette_vblank(state: GameState) -> None:
             state.mob_color_ram[destination + color_index] = source[
                 source_index + relative_bytes // 2
             ]
+
+
+def alpha_palette_vblank(state: GameState) -> None:
+    """Port game_vblank's scrolling HUD-logo color at 0x40304-0x40324."""
+    phase = state.frame_counter & 0xFC
+    if phase >= 0x80:
+        phase ^= 0xFC
+    state.alpha_color_ram[23] = VSCROLL_ALPHA_GRADIENT[phase >> 2]
 
 
 def init_title_logo_colors(state: GameState) -> None:
@@ -482,47 +500,59 @@ def write_alpha_glyphs(
             )
 
 
+# OS large_character_glyph_index_map, OS ROM 0x34A2. display_large_text uses
+# the ASCII byte directly as an index; notably digits begin at quad 4 and space
+# maps to quad 0. Reconstructing this as ASCII ranges corrupts level numbers.
+_LARGE_GLYPH_INDEX_MAP = bytes.fromhex("""
+00 00 00 00 00 00 00 00 32 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+25 28 26 29 00 00 00 2E 00 00 00 00 2C 00 2B 00
+00 01 02 03 04 05 06 07 08 09 2A 27 00 00 00 24
+00 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18
+19 1A 1B 1C 1D 1E 1F 20 21 22 23 00 00 00 00 2D
+00 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18
+19 1A 1B 1C 1D 1E 1F 20 21 22 23 00 00 00 00 00
+""")
+
+
 def _large_glyph_index(character: str) -> int:
     code = ord(character)
-    if 0x30 <= code <= 0x39:
-        return code - 0x30
-    if 0x41 <= code <= 0x5A:
-        return code - 0x41 + 0x0A
-    return {
-        " ": 0x25, "!": 0x28, "#": 0x29, "'": 0x2E,
-        ",": 0x2C, "-": 0x2C, ".": 0x2B, ":": 0x2A,
-        "?": 0x24, "_": 0x2D,
-    }.get(character, 0x25)
+    return _LARGE_GLYPH_INDEX_MAP[code] if code < len(_LARGE_GLYPH_INDEX_MAP) else 0
 
 
 def write_alpha_large_text(
     state: GameState, column: int, row: int, text: str, attribute: int,
-) -> None:
+) -> int:
     """Port OS display_large_text 0x31D2 for one descriptor."""
-    for offset, character in enumerate(text.upper()):
-        write_alpha_large_char(
-            state, column + offset * 2, row, character, attribute,
+    cursor = column
+    for character in text.upper():
+        cursor += write_alpha_large_char(
+            state, cursor, row, character, attribute,
         )
+    return cursor - column
 
 
 def write_alpha_large_char(
     state: GameState, column: int, row: int, character: str, attribute: int,
-) -> None:
-    """Write one OS-format 2x2 large character into alpha RAM."""
+) -> int:
+    """Write one OS large character and return its one- or two-cell advance."""
     cell_attribute = (attribute & ALPHA_ATTRIBUTE_MASK) | 0x0100
     glyphs = (
         (0x1C, 0x1E, 0xFC, 0x7E)
         if character == "\b"
         else _LARGE_GLYPH_QUADS[_large_glyph_index(character.upper())]
     )
-    for dx, dy, glyph in (
-        (0, 0, glyphs[0]), (0, 1, glyphs[1]),
-        (1, 0, glyphs[2]), (1, 1, glyphs[3]),
-    ):
+    cells = [(0, 0, glyphs[0]), (0, 1, glyphs[1])]
+    width = 1
+    if glyphs[2] or glyphs[3]:              # 0x3280 tst.w (a2)
+        cells.extend(((1, 0, glyphs[2]), (1, 1, glyphs[3])))
+        width = 2
+    for dx, dy, glyph in cells:
         if 0 <= column + dx < ALPHA_COLUMNS and 0 <= row + dy < ALPHA_ROWS:
             state.alpha_ram[alpha_index(column + dx, row + dy)] = alpha_word(
                 cell_attribute, glyph | 0x0100,
             )
+    return width
 
 
 def write_alpha_text(
@@ -558,6 +588,12 @@ def fill_alpha_rect(
 
 def clear_alpha_visible(state: GameState) -> None:
     fill_alpha_rect(state, 0, 0, ALPHA_VISIBLE_COLUMNS, ALPHA_ROWS, 0)
+
+
+def maze_show_alpha(state: GameState) -> None:
+    """Port maze_show 0x4526A: reveal the maze while preserving its info panel."""
+    fill_alpha_rect(state, 0, 0, 29, ALPHA_ROWS, 0)
+    fill_alpha_rect(state, 42, 0, ALPHA_COLUMNS - 42, ALPHA_ROWS, 0)
 
 
 def _irgb_rgba(word: int) -> tuple[int, int, int, int]:

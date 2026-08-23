@@ -8,6 +8,7 @@ import inspect
 from gauntpy.constants import PlayerStatus
 from gauntpy.render import hud
 from gauntpy.render import mobs as mob_renderer
+from gauntpy.render import text as text_renderer
 from gauntpy import assets
 from gauntpy.render.alpha import draw_alpha_layer
 from gauntpy.render.framebuffer import Framebuffer
@@ -25,6 +26,7 @@ from gauntpy.subsystems.display import (
     init_player_mob_palette,
     init_playfield_color_ram,
     init_title_logo_colors,
+    maze_show_alpha,
     palette_fade_word,
     player_palette_vblank,
     update_title_logo_colors,
@@ -54,6 +56,35 @@ def test_subsystem_display_has_no_gex_dependency():
     import gauntpy.subsystems.display as display
 
     assert "gex" not in inspect.getsource(display)
+
+
+def test_rom_free_large_font_uses_the_os_character_index_map():
+    source = inspect.getsource(text_renderer._large_fallback_tiles)
+    assert "_LARGE_GLYPH_INDEX_MAP[ord(character)]" in source
+    assert "_LARGE_GLYPH_INDEX_MAP[ord(\" \")]" in source
+
+
+def test_maze_show_clears_everything_except_the_status_panel():
+    state = GameState()
+    state.alpha_ram[:] = [0xFFFF] * len(state.alpha_ram)
+
+    maze_show_alpha(state)
+
+    for row in range(30):
+        assert state.alpha_ram[row * 64:row * 64 + 29] == [0] * 29
+        assert state.alpha_ram[row * 64 + 29:row * 64 + 42] == [0xFFFF] * 13
+        assert state.alpha_ram[row * 64 + 42:(row + 1) * 64] == [0] * 22
+
+
+def test_large_text_uses_rom_variable_width_glyphs():
+    from gauntpy.subsystems.display import write_alpha_large_text
+
+    state = GameState()
+    width = write_alpha_large_text(state, 4, 9, "L:", 0x8000)
+
+    assert width == 3
+    assert state.alpha_ram[9 * 64 + 6] & 0x3FF == 0x16D
+    assert state.alpha_ram[9 * 64 + 7] == 0
 
 
 def test_mob_renderer_and_asset_bridge_have_no_palette_overrides():
@@ -88,6 +119,31 @@ def test_setup_infopanel_writes_complete_rom_words_to_alpha_ram():
                 score_start:score_start + score.SCORE_DIGITS
             ]
         ).strip() == ""
+
+
+def test_setup_infopanel_makes_the_entire_status_column_opaque():
+    state = GameState()
+    setup_infopanel(state, -1)
+
+    assert all(
+        state.alpha_ram[row * score.ALPHA_ROW_STRIDE + column] & 0x8000
+        for row in range(30)
+        for column in range(score.PANEL_COLUMN, score.PANEL_LAST_COLUMN + 1)
+    )
+
+
+def test_vblank_cycles_the_dungeon_header_color_from_the_rom_gradient():
+    from gauntpy.subsystems.display import (
+        VSCROLL_ALPHA_GRADIENT,
+        alpha_palette_vblank,
+    )
+
+    state = GameState()
+    for frame in (0, 4, 124, 128, 252):
+        state.frame_counter = frame
+        alpha_palette_vblank(state)
+        folded = (frame & 0xFC) ^ (0xFC if (frame & 0xFC) >= 0x80 else 0)
+        assert state.alpha_color_ram[23] == VSCROLL_ALPHA_GRADIENT[folded >> 2]
 
 
 def test_inventory_writer_stamps_complete_rom_power_icon_words():

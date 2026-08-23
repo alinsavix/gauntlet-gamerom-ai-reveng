@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2256 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2264 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,52 @@ start).
 ---
 
 ## Resolved issues
+
+### S-87 · half-width large glyphs were forced to two cells
+
+`render_large_glyph_register` tests the right-hand quad word at 0x3280 and
+returns an advance of one cell when it is zero. The alpha writer now does the
+same instead of always writing and advancing two cells. In the level splash,
+the colon's ROM quad `(0x6D, 0x6D, 0, 0)` therefore occupies only column 14;
+column 15 remains the intended blank before the large decimal at column 16.
+
+### S-86 · corrected large-font base and level-splash teardown
+
+The OS `LEA 0x2C6(PC),A4` in `display_large_text` resolves to 0x34A2, not
+0x34A6 or 0x34A4. The exact 128-byte ASCII map is now transcribed from that
+effective address. On expiry, the level splash now also performs `maze_show`
+(0x4526A): alpha columns 0–28 and hidden 42–63 are cleared while the opaque
+13-column status panel is preserved, before waiting players are spawned.
+
+### S-85 · remaining reconstructed large-font and HUD table shortcuts
+
+The ROM-free large-font renderer now assigns digit/letter quadrant images through
+the same OS 0x34A2 index map as the live alpha writer rather than enumerating
+`0-9A-Z` against the quadrant table. The five `M_DUNGEON` glyph rows are also
+literal transcriptions of ROM 0x574B8 rather than generated contiguous ranges.
+
+### S-84 · level splash glyphs were corrupt and its hold never expired
+
+The large-character writer now indexes the literal OS ROM map at 0x34A2 instead
+of assuming digits begin at glyph quad zero; `LEVEL: 2` and other large text now
+use the same alpha words as OS `display_large_text`/`display_large_decimal_value`.
+The shared UI delay at 0x904A4E is now decremented by `main_start_game`, outside
+the dialog-gated gameplay band, matching 0x4817C. The splash therefore expires
+and places waiting players even when a message box is active.
+
+### S-83 · boundary walls and gameplay presentation regressed after VRAM migration
+
+- The reserved row-zero boundary now participates in the ROM's wall-adjacency
+  predicate, so its horizontal neighbours (and the opposite vertical seam) use
+  continuous wall stamps instead of isolated segments.
+- Whole-panel setup now performs `maze_hide`'s opaque 13-column alpha fill before
+  writing the header and player blocks, preventing playfield pixels from showing
+  through the status area.
+- `game_vblank`'s 32-word gradient at ROM 0x405E8 now drives alpha color RAM
+  0x91002E, restoring the color cycle in the GAUNTLET II panel logo.
+- The 0x4A748 transition gate now sends ordinary levels directly to the ROM's
+  `LEVEL:` splash and reserves `show_level_end_bonus_screen` for bonus-room
+  transitions. The 150/180/600-frame level-start hold now delays player placement.
 
 ### S-82 · MOB/front-end rendering bypassed modeled video memory
 

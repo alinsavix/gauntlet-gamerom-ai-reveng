@@ -34,10 +34,21 @@ evidence remains in `../doc/`, generated contracts, and the book.
    column-first words in `GameState.playfield_ram`, resolved through the live
    128-word `playfield_color_ram` and `playfield_shadow_color_ram` banks;
    `maze.data` is logical gameplay/catalog state, never a renderer input.
+   Gameplay VBLANK effects, including the HUD-logo gradient at alpha color RAM
+   `0x91002E`, must likewise mutate modeled color RAM before rendering.
 9. **Randomness.** Route every game draw through `state.getrandom()`. Literal
    ROM tables carry their address in a nearby comment.
 10. **Evidence order.** Running ROM/MAME and direct ROM disassembly outrank
     prose. Correct stale documentation when stronger evidence disagrees.
+11. **Effective table addresses.** For PC-relative ROM operands, transcribe from
+    the CPU's resolved effective address (and cross-check the loader/catalog),
+    not from the textual address of the following instruction.
+12. **Display lifecycle writes.** Screen transitions must port their alpha-RAM
+    teardown as well as setup. In particular, `maze_hide` makes columns 29–41
+    opaque and `maze_show` clears every other alpha column while preserving them.
+13. **Large text is variable-width.** The OS quad record's right-hand word is
+    also a width flag: zero means a one-cell glyph. Writers must return and use
+    the ROM's one/two-cell advance rather than positioning by character count.
 
 ## Investigation workflow
 

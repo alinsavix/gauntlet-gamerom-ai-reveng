@@ -386,6 +386,20 @@ def test_live_wall_refresh_updates_the_wrapped_adjacency_ring():
     assert read_tile_descriptor(state, wrapped_floor) == (2, 2, 2, 2)
 
 
+def test_reserved_boundary_row_connects_as_one_continuous_wall():
+    import gauntpy.maze as maze_module
+
+    state = GameState()
+    state.maze = SimpleNamespace(data={})
+    for slot in range(32):
+        state.mobs.picture[slot] = 0x8000
+        state.mobs.set_obj_type(slot, int(MazeObjIds.WALL_REGULAR))
+
+    assert maze_module._wall_adjacency(state, 0) & (0x08 | 0x10) == 0x18
+    assert maze_module._wall_adjacency(state, 15) & (0x08 | 0x10) == 0x18
+    assert maze_module._wall_adjacency(state, 31) & (0x08 | 0x10) == 0x18
+
+
 def test_all_floor_live_refresh_draws_center_then_exact_three_neighbors():
     class SequencedRng:
         def __init__(self):

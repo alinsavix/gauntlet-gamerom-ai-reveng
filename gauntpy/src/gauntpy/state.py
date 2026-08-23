@@ -663,12 +663,14 @@ class GameState:
     # clears it in player_start_inner (0x48E86); WP-15 owns the counter and
     # exposes ``exits.treasure_collected()`` as that write site.
     player_treascount: list[int] = field(default_factory=lambda: [0] * NUM_PLAYERS)
-    # Level-end bonus screen (show_level_end_bonus_screen, 0x4D476): while
-    # bonus_timer > 0 the game_mode is TREAS_EXIT and the tally is displayed;
-    # when it expires the deferred next-level load fires. bonus_amount is the
-    # computed award shown on the screen.
+    # 0x904A4E global_ui_delay_timer: holds the bonus tally and then the level
+    # splash before player placement. bonus_amount is the computed award shown
+    # on the treasure/secret-room exit screen.
     bonus_timer: int = 0
     bonus_amount: int = 0
+    # Host-side phase marker for the shared 0x904A4E timer. True after the next
+    # maze and its level splash are prepared, while hero placement is deferred.
+    level_start_pending: bool = False
     # 0x904B80: levels left before the next treasure room. Seeded with
     # getrandom(3)+3 the first time levelnum_current reaches 6
     # (maze_new_level_setup 0x438E4-0x438FC), decremented once per level on the

@@ -272,7 +272,12 @@ and how hundreds of them are kept alive at once.
 >   centering, and transporter/exit table rebuilds:
 >   `doc/04_game_subsystems.md` §5.2; the paced state machine is
 >   `main_start_game` (0x4800C) and the presentation is
->   `show_level_start_screen` (0x44DB4).
+>   `show_level_start_screen` (0x44DB4). Its shared delay is decremented outside
+>   the gameplay freeze gate; `maze_show` (0x4526A) then removes the splash by
+>   clearing every alpha column except the preserved 29–41 status panel.
+>   The OS large font is variable-width: the level label's colon is a one-cell
+>   glyph, and its returned advance—not Python character count—positions what
+>   follows.
 > - Exits: `player_exit_sequence` (0x52B40) and the all-exited advance via
 >   `maze_checknum` (0x52ECA): `doc/04_game_subsystems.md` §12.
 > - Treasure rooms (mazes 104–114), countdown, and the bonus tally screen
