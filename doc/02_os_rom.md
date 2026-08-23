@@ -858,6 +858,11 @@ address after that instruction. Useful alignment checks are space → 0x25,
 **Returns:** D0 = total alpha-cell advance. Each mapped glyph contributes one
 or two cells; this is not a pixel count.
 
+`render_large_glyph_register` always writes the left two tile bytes, then tests
+the record's right-hand word at 0x3280. A zero word suppresses the right column
+and returns a one-cell advance; otherwise it writes that column and returns two.
+For example, `':'` maps to quad `(0x6D, 0x6D, 0, 0)` and is half-width.
+
 The `movea.l 0x00800002,A0` instructions in this renderer family load a
 packed pair of strides, not a hardware pointer: 0x0080 is the 128-byte alpha
 row stride and 0x0002 is the word-cell stride. This immediate is tracked

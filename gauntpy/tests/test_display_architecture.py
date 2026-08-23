@@ -76,6 +76,17 @@ def test_maze_show_clears_everything_except_the_status_panel():
         assert state.alpha_ram[row * 64 + 42:(row + 1) * 64] == [0] * 22
 
 
+def test_large_text_uses_rom_variable_width_glyphs():
+    from gauntpy.subsystems.display import write_alpha_large_text
+
+    state = GameState()
+    width = write_alpha_large_text(state, 4, 9, "L:", 0x8000)
+
+    assert width == 3
+    assert state.alpha_ram[9 * 64 + 6] & 0x3FF == 0x16D
+    assert state.alpha_ram[9 * 64 + 7] == 0
+
+
 def test_mob_renderer_and_asset_bridge_have_no_palette_overrides():
     mob_source = inspect.getsource(mob_renderer)
     asset_source = inspect.getsource(assets)

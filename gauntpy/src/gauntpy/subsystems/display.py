@@ -522,32 +522,37 @@ def _large_glyph_index(character: str) -> int:
 
 def write_alpha_large_text(
     state: GameState, column: int, row: int, text: str, attribute: int,
-) -> None:
+) -> int:
     """Port OS display_large_text 0x31D2 for one descriptor."""
-    for offset, character in enumerate(text.upper()):
-        write_alpha_large_char(
-            state, column + offset * 2, row, character, attribute,
+    cursor = column
+    for character in text.upper():
+        cursor += write_alpha_large_char(
+            state, cursor, row, character, attribute,
         )
+    return cursor - column
 
 
 def write_alpha_large_char(
     state: GameState, column: int, row: int, character: str, attribute: int,
-) -> None:
-    """Write one OS-format 2x2 large character into alpha RAM."""
+) -> int:
+    """Write one OS large character and return its one- or two-cell advance."""
     cell_attribute = (attribute & ALPHA_ATTRIBUTE_MASK) | 0x0100
     glyphs = (
         (0x1C, 0x1E, 0xFC, 0x7E)
         if character == "\b"
         else _LARGE_GLYPH_QUADS[_large_glyph_index(character.upper())]
     )
-    for dx, dy, glyph in (
-        (0, 0, glyphs[0]), (0, 1, glyphs[1]),
-        (1, 0, glyphs[2]), (1, 1, glyphs[3]),
-    ):
+    cells = [(0, 0, glyphs[0]), (0, 1, glyphs[1])]
+    width = 1
+    if glyphs[2] or glyphs[3]:              # 0x3280 tst.w (a2)
+        cells.extend(((1, 0, glyphs[2]), (1, 1, glyphs[3])))
+        width = 2
+    for dx, dy, glyph in cells:
         if 0 <= column + dx < ALPHA_COLUMNS and 0 <= row + dy < ALPHA_ROWS:
             state.alpha_ram[alpha_index(column + dx, row + dy)] = alpha_word(
                 cell_attribute, glyph | 0x0100,
             )
+    return width
 
 
 def write_alpha_text(

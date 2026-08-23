@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2263 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2264 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,14 @@ start).
 ---
 
 ## Resolved issues
+
+### S-87 · half-width large glyphs were forced to two cells
+
+`render_large_glyph_register` tests the right-hand quad word at 0x3280 and
+returns an advance of one cell when it is zero. The alpha writer now does the
+same instead of always writing and advancing two cells. In the level splash,
+the colon's ROM quad `(0x6D, 0x6D, 0, 0)` therefore occupies only column 14;
+column 15 remains the intended blank before the large decimal at column 16.
 
 ### S-86 · corrected large-font base and level-splash teardown
 

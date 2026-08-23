@@ -46,6 +46,9 @@ evidence remains in `../doc/`, generated contracts, and the book.
 12. **Display lifecycle writes.** Screen transitions must port their alpha-RAM
     teardown as well as setup. In particular, `maze_hide` makes columns 29–41
     opaque and `maze_show` clears every other alpha column while preserving them.
+13. **Large text is variable-width.** The OS quad record's right-hand word is
+    also a width flag: zero means a one-cell glyph. Writers must return and use
+    the ROM's one/two-cell advance rather than positioning by character count.
 
 ## Investigation workflow
 
