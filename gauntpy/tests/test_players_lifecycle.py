@@ -1340,6 +1340,43 @@ class TestHudHooks:
         assert state.score_dirty == [0, 0, 0, 0]
         assert state.health_dirty == [0, 0, 0, 0]
 
+    def test_it_label_uses_the_rom_white_attribute_family(self):
+        from gauntpy.subsystems import score
+
+        state = _active_state()
+        _make_player_active(state, 2, health=100)
+        state.player_it = 2
+
+        gp.setup_infopanel(state, 2)
+
+        row = 2 * score.PLAYER_BLOCK_STRIDE + score.PLAYER_LABEL_ROW
+        words = state.alpha_ram[
+            row * score.ALPHA_ROW_STRIDE + score.IT_LABEL_COLUMN:
+            row * score.ALPHA_ROW_STRIDE + score.IT_LABEL_COLUMN + 2
+        ]
+        assert [word & 0xFC00 for word in words] == [0xB800, 0xB800]
+
+    def test_panel_bottom_shows_maze_and_live_pixel_coordinates(self):
+        from gauntpy.subsystems import score
+
+        state = _active_state()
+        player = _make_player_active(state, 0, health=100, mob_slot=(10 << 5) | 12)
+        state.mazenum_current = 19
+        state.mobs.hpos[player.mob_slot] = 188 << 7
+        state.mobs.vpos[player.mob_slot] = native_v(160) << 7
+
+        gp.setup_infopanel(state, -1)
+
+        def row_text(row):
+            start = row * score.ALPHA_ROW_STRIDE + score.PANEL_COLUMN
+            return "".join(
+                chr(word & 0x3FF) if word & 0x3FF else " "
+                for word in state.alpha_ram[start:start + score.PANEL_WIDTH]
+            ).rstrip()
+
+        assert row_text(score.DIAGNOSTIC_MAZE_ROW) == "MAZE 019"
+        assert row_text(score.DIAGNOSTIC_POSITION_ROW) == "P1 188,160"
+
     def test_setup_infopanel_ignores_an_out_of_range_selector(self):
         state = _active_state()
         gp.setup_infopanel(state, 9)
@@ -3429,6 +3466,31 @@ class TestHiddenPotObjectiveCodes:
         self._pot(state)
         assert p.potionsnum == 1
 
+    def test_special_potions_grant_stat_powers_and_write_their_icons(self):
+        from gauntpy.subsystems import score
+
+        for item_id, mask in enumerate((
+            0x0002, 0x0001, 0x0020, 0x0010, 0x0008, 0x0004,
+        )):
+            state = _active_state()
+            player = _make_player_active(state, 0)
+            slot = 37
+            state.mobs.create(
+                slot, tile=0xA728 + item_id * 4, hpos=0, vpos=0,
+                obj_type=int(MazeObjIds.HIDDENPOT),
+            )
+
+            assert gp.player_tile_interact(state, slot, 0) == -1
+
+            assert player.powers & mask
+            assert player.potionsnum == 0
+            row = score.PLAYER_NAME_ROW
+            bit = mask.bit_length() - 1
+            column = score.POWER_ICON_COLUMNS[bit]
+            assert state.alpha_ram[
+                row * score.ALPHA_ROW_STRIDE + column
+            ] == score.POWER_ICON_WORDS[bit]
+
 
 class TestFoodAndTreasureObjectiveSites:
     """0x51C0C/0x51CEE (food) and 0x519C2 (treasure).
@@ -4339,6 +4401,34 @@ class TestHeroPictures:
         assert state.mobs.picture[1] == gp._PLAYER_SHOT_PICTURE[
             int(Character.WIZARD) * 8 + right
         ]
+
+    def test_wall_contact_does_not_hide_the_held_fire_animation(self):
+        from gauntpy.mainloop import tick
+        from gauntpy.coords import pack_slot
+        from gauntpy.subsystems.input import JOY_FIRE_BIT, JOY_RIGHT
+
+        state = _active_state()
+        slot = pack_slot(10, 10)
+        wall = pack_slot(10, 11)
+        player = self._hero(state, 0, Character.ELF, slot, direction=0)
+        state.mobs.hpos[slot] = (10 * 16 - 4) << 7
+        state.mobs.create(
+            wall, 0x8000, 11 * 16 << 7, native_v(10 * 16) << 7,
+            MazeObjIds.WALL_REGULAR,
+        )
+        state.player_input_raw[0] = 0xFFFF & ~(JOY_RIGHT | JOY_FIRE_BIT)
+
+        pictures = []
+        for _ in range(10):
+            tick(state)
+            pictures.append(state.mobs.picture[player.mob_slot])
+
+        right = gp._PORT_DIR_TO_ROM_DIR[player.direction]
+        row = int(Character.ELF) * 32 + right * 4
+        assert set(pictures) >= {
+            gp._PLAYER_SHOOTING_PICTURE[row],
+            gp._PLAYER_SHOOTING_PICTURE[row + 1],
+        }
 
     def test_fighting_selects_its_eight_frame_table(self):
         state = _active_state()

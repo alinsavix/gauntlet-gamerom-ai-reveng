@@ -252,6 +252,12 @@ the neighborhood. When it fails on every candidate it stays where it is. The
 effect from the player's side is a sorcerer that keeps materializing at your
 back.
 
+"Behind" begins at the player's live maze slot, not at a cell recalculated from
+the hero sprite's four-pixel-left origin. The arriving sorcerer uses that same
+four-pixel correction, then faces exactly back along the selected cardinal or
+diagonal probe line. Losing either correction shifts the materialization and
+makes its supposedly aimed bolt pass beside the player.
+
 **Death** is the one monster with a private economy. Touching Death costs four
 health per contact, or three if you are carrying extra armor, and the same
 number is added to a running per-player damage counter. An ordinary shot leaves

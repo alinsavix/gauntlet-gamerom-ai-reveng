@@ -6,7 +6,7 @@ and the checked ``row76.bin`` routines at 0x4DEB8-0x4FEB0.
 
 from __future__ import annotations
 
-from ..constants import MazeObjIds
+from ..constants import FIRST_PLAYABLE_SLOT, MazeObjIds
 from ..coords import (
     biased_pixels_to_slot,
     decode_hpos,
@@ -189,6 +189,62 @@ def calc_direction(state: GameState, from_slot: int, to_slot: int) -> int:
     return 8 if col_delta == 0 and row_delta == 0 else direction
 
 
+def _tport_positions(state: GameState) -> list[int]:
+    return [
+        slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+        if state.mobs.obj_type(slot) == int(MazeObjIds.TRANSPORTER)
+    ]
+
+
+def tport_find_id(state: GameState, packed_pos: int) -> int:
+    """0x4E7C0 -- return a transporter's one-based ID, or count+1."""
+    pads = _tport_positions(state)
+    try:
+        return pads.index(packed_pos) + 1
+    except ValueError:
+        return len(pads) + 1
+
+
+def tport_route_connect(
+    state: GameState, source_pos: int, destination_pos: int, landing_pos: int,
+) -> None:
+    """0x4E684 -- connect both directional route-table records."""
+    source_id = tport_find_id(state, source_pos)
+    destination_id = tport_find_id(state, destination_pos)
+    if not 1 <= source_id < len(state.tport_route_forward):
+        return
+    if not 1 <= destination_id < len(state.tport_route_reverse):
+        return
+
+    forward = (
+        (destination_id << 8)
+        | (state.tport_route_forward[source_id] & 0x0F)
+    )
+    reverse = state.tport_route_reverse[destination_id] & 0xFF00
+    if reverse == 0:
+        reverse = source_id << 8
+    reverse |= (calc_direction(state, destination_pos, landing_pos) + 1) & 0x0F
+    state.tport_route_forward[source_id] = forward
+    state.tport_route_reverse[destination_id] = reverse
+
+
+def tport_route_connect_if_empty(
+    state: GameState, source_pos: int, destination_pos: int, approach_pos: int,
+) -> None:
+    """0x4E73A -- fill the source's approach direction once."""
+    source_id = tport_find_id(state, source_pos)
+    destination_id = tport_find_id(state, destination_pos)
+    if not 1 <= source_id < len(state.tport_route_forward):
+        return
+    if not 1 <= destination_id < len(state.tport_route_reverse):
+        return
+    if state.tport_route_forward[source_id] & 0x0F:
+        return
+    state.tport_route_forward[source_id] |= (
+        calc_direction(state, source_pos, approach_pos) + 1
+    ) & 0x0F
+
+
 def _advance_route_cell(packed_pos: int, direction: int) -> int:
     return (
         ((packed_pos & 0x3E0) + _ROUTE_ROW_DELTAS[direction])
@@ -294,6 +350,7 @@ def thief_target_calc(state: GameState) -> None:
 
 def thief_setup(state: GameState) -> None:
     """0x4E432 -- reset this level's thief state and roll its appearance."""
+    state.thief_level_setup_done = True
     state.thief_current_pos = 0
     state.thief_mob_slot = 0
     state.thief_enter_time = -1
@@ -303,6 +360,8 @@ def thief_setup(state: GameState) -> None:
     state.thief_mode = THIEF_DEAD
     state.thief_collision_direction_code = 0
     state.thief_pursuit_direction = -1
+    state.thief_tport_timer = -1
+    state.thief_tport_dest = 0
 
     if state.game_mode < 0 or state.mazenum_current >= _THIEF_MAZE_LIMIT:
         return
@@ -405,9 +464,9 @@ def _thief_deploy(state: GameState) -> None:
 def main_start_thief(state: GameState) -> None:
     """0x4DEB8 -- schedule/deploy bookkeeping and the arrival pause."""
     if state.thief_enter_time < 0:
-        # gauntpy has no separate level-setup dispatcher for this routine.  Do
-        # not overwrite the spent latches after a thief/mugger has already fled.
-        if state.thief_current_pos == 0 and state.thief_mode == THIEF_DEAD:
+        # Direct dev/test level loads do not run main_start_game's 0x4835E tail.
+        # Let them perform that setup once without repeating its RNG draw.
+        if not state.thief_level_setup_done:
             thief_setup(state)
         return
     if state.thief_enter_time > 0:
@@ -658,12 +717,86 @@ def thief_handle_tile_collision(state: GameState, candidate_mob_slot: int) -> in
         return 0
 
     obj_type = state.mobs.obj_type(candidate_mob_slot)
+    if (
+        candidate_mob_slot == state.thief_next_pos
+        and obj_type == int(MazeObjIds.TRANSPORTER)
+    ):
+        return thief_enter_tport(state, candidate_mob_slot)
     if _THIEF_COLLISION_REMOVE_FLAGS[obj_type]:
         state.mobs.unlink_and_clear(candidate_mob_slot)
         return -1
     if state.mobs.picture[candidate_mob_slot] == 0x8000 or obj_type in _THIEF_SOLID_OBJECTS:
         return -1
     return 0
+
+
+def thief_start_tport_anim(state: GameState, destination_pos: int) -> None:
+    """0x4FBFC -- arm the shared transition and destination placeholder."""
+    from .players import handle_tport
+
+    state.thief_tport_active = 1
+    handle_tport(state, state.thief_current_pos, 4)
+    state.thief_tport_timer = 0
+    state.thief_tport_dest = destination_pos
+    state.thief_next_pos = destination_pos
+    if state.mobs.is_occupied(destination_pos):
+        state.mobs.unlink_and_clear(destination_pos)
+    row, col = destination_pos >> 5, destination_pos & 0x1F
+    palette = 1 if state.thief_mode & THIEF_IS_MUGGER else 0
+    state.mobs.create(
+        destination_pos,
+        0x1709,
+        encode_hpos(col * 16 - 4, palette=palette),
+        encode_vpos_at_y(row * 16, width=3, height=3),
+        MazeObjIds.PLAYERSTART,
+    )
+    if state.thief_previous_pos != state.thief_current_pos:
+        path_grid_set_high_direction_if_empty(
+            state,
+            destination_pos,
+            calc_direction(
+                state, destination_pos, state.thief_previous_pos,
+            ),
+        )
+    _sound_play(state, 0x28)
+
+
+def thief_enter_tport(state: GameState, transporter_pos: int) -> int:
+    """0x4FAD4 -- follow a learned transporter route, or return clear."""
+    route_id = tport_find_id(state, transporter_pos)
+    if not 1 <= route_id < len(state.tport_route_forward):
+        return 0
+    route = (
+        state.tport_route_forward[route_id]
+        if state.thief_mode & THIEF_PURSUE
+        else state.tport_route_reverse[route_id]
+    )
+    destination_id = (route >> 8) & 0xFF
+    pads = _tport_positions(state)
+    if not 1 <= destination_id <= len(pads):
+        return 0
+    direction_route = (
+        state.tport_route_reverse[destination_id]
+        if state.thief_mode & THIEF_PURSUE
+        else state.tport_route_forward[destination_id]
+    )
+    direction = (direction_route & 0x0F) - 1
+    if not 0 <= direction <= 7:
+        return 0
+    destination_pad = pads[destination_id - 1]
+    landing = _advance_route_cell(destination_pad, direction) & 0x3FF
+    if (state.mobs.hpos[landing] & 0x0F) >= 0x0C:
+        return 0
+    from .players import nearby_mob_clearance_test
+
+    if not nearby_mob_clearance_test(state, landing, 4):
+        return 0
+    tport_route_connect_if_empty(
+        state, transporter_pos, destination_pad, state.thief_previous_pos,
+    )
+    thief_start_tport_anim(state, landing)
+    state.thief_previous_pos = destination_pad
+    return -1
 
 
 def _direction_from_move_flags(move_flags: int) -> int:
@@ -913,6 +1046,8 @@ def _set_thief_animation(state: GameState, movement_result: int) -> None:
 def main_thief_anim(state: GameState) -> None:
     """0x4E8DC -- thief state graph, dodge latches, movement and animation."""
     if not state.thief_current_pos or state.thief_enter_time >= 0:
+        return
+    if state.thief_tport_timer >= 0:                 # 0x4E900-0x4E908
         return
     if _escape_animation(state):
         return

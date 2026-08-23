@@ -190,6 +190,9 @@ class GameState:
     # WP-6 · player lifecycle, health, powers, tile interaction
     # =========================================================================
     player_it: int = 0xFFFF         # 0x9049DC, 0xFFFF = nobody is IT
+    # 0x9049E0: randomly selected PLAYERSTART cell retained after its marker is
+    # replaced with floor; first starts and post-death continues spawn here.
+    maze_player_start_slot: int = 0         # 0x9049DC, 0xFFFF = nobody is IT
     # Per-player looping-sound timer arrays (§21).
     # Negative = new contact (main_handle_death plays start sound and negates).
     # Positive = countdown; when reaches 0, stop sound plays.
@@ -454,7 +457,7 @@ class GameState:
     thief_start_location: int = 0   # 0x904BBA, victim cell when scheduled
     # 0x904BA8-0x904BB6, carried and deferred thief/mugger loot.
     mugger_item_nextlevel: int = 0
-    thief_item_nextlevel: int = 0
+    thief_item_nextlevel: int = 0x7D30
     mugger_item_carried: int = 0
     thief_item_carried: int = 0x7D30
     # 0x904B56, value carried by the special score-bag pickup.
@@ -608,6 +611,11 @@ class GameState:
     thief_tport_timer: int = -1
     thief_tport_saved_picture: int = 0
     thief_tport_dest: int = 0
+    thief_level_setup_done: bool = False
+    # 0x905C54/0x905D54: one-based transporter route records. Bits 15-8 name
+    # the linked transporter ID; low nibble is direction+1.
+    tport_route_forward: list[int] = field(default_factory=lambda: [0] * 33)
+    tport_route_reverse: list[int] = field(default_factory=lambda: [0] * 33)
     # 0x904BC4 ``tport_saved_picture``: one word per player, the hero's MOB
     # picture parked across a transporter transition by loop 2's save milestone
     # and put back by ``tport_restore_player_picture`` (0x50B88).

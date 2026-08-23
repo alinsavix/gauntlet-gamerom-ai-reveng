@@ -256,10 +256,14 @@ active player it tests three directions behind that player's facing direction:
 straight back, then the two adjacent directions. The parallel tables at
 0x5FDAC/0x5FDB2 supply direction biases `{0,-1,+1}` and required clear runs
 `{4,3,3}`. Candidate cells must stay within rows 1–31, be visible, and be
-empty except that the target Super Sorcerer's own slot is allowed. A second
+empty except that the target Super Sorcerer's own slot is allowed. The walk
+starts from `active_mob_ids[player]` itself, not a cell re-derived from the
+player sprite's corrected H position. A second
 eight-cell proximity scan rejects a destination if any MOB is within 0x7C0
-in both rendered axes. On success the routine updates the target MOB's H/V
-position and direction bits and returns the packed destination tile in D0.w;
+in both rendered axes. On success the routine writes H as
+`column*16-4`, V at the row anchor, preserves only low bits 0–5 of both words,
+faces back along the chosen probe direction, and returns the packed destination
+tile in D0.w;
 after exhausting every player/direction it returns zero. The normal-stack
 `supersorc_place_helper(target_mob_slot, starting_player_index)` at 0x5FDB8
 loads the fixed MOB-array bases and converts the physical slot to the doubled
@@ -441,6 +445,20 @@ on **both** axes. Software wall markers first pass through the rounded
 that distance gate turns each three-cell probe into a coarse whole-row/column
 barrier.
 
+The movement core retains the live player record slot from
+`active_mob_ids[player]` in D2. In particular, row zero is reserved hardware
+state and cannot become a player's probe origin. The horizontal triplets have
+asymmetric edge gates: their upper flank runs only when the doubled slot is at
+least 0x80, so row zero is not tested from row one, while the lower flank runs
+only below 0x7C0. Direct ROM execution at maze 17 pixel `(268,15)` moves
+left/right by two pixels; treating the corrected sprite origin as row zero and
+including the reserved top wall incorrectly blocks both.
+
+gauntpy's shipped-demo compatibility path deliberately retains its earlier
+row-zero flank behavior. Removing it currently diverts the recorded maze-102
+actor before the transporter, contradicting the retained MAME trace that reaches
+slot 492 and lands at slot 486; this exception does not apply to normal play.
+
 `mob_collision_test` (0x52192) is deliberately tri-state. Collectible and floor
 types return -1 so movement proceeds and `player_tile_interact` handles them only
 after the player record enters the new cell; zero blocks; a live melee branch
@@ -544,13 +562,18 @@ coin to a player who is already active.
 The first player uses `maze_player_start_slot`. Later players do not need another
 PLAYERSTART marker: 0x48C1A–0x48C92 tries left, right, up, and down around each
 existing player's current cell, accepting the first empty on-screen candidate.
+`maze_scan_objects(-1)` chooses that first-player slot randomly from the decoded
+PLAYERSTART records, stores it at 0x9049E0, and replaces the selected marker with
+floor. The saved word therefore remains authoritative after death; a continue
+must not search the live MOB table for a marker that setup deliberately removed.
 
 ### 4.5 IT Mechanic
 
 **Confidence: Verified.** `player_it_label_set(uint16 player_index)` (0x45866)
 is the presentation half of an IT transfer. If the requested player is not
 already the tracked IT player, it draws the letters "IT" (chars 0x49/0x54,
-palette `0xB000 | p<<10`) into that player's HUD column at `0x905048 +
+attribute `0xB000 | p<<10`, distinct from the ordinary player-text family) into
+that player's HUD column at `0x905048 +
 (p*5+8)*128`, plays the character-specific "you're IT" speech from
 `speech_charname_tbl` (0x596F6), then sound 0xD4 for the first IT assignment
 or 0xD3 for a transfer.
@@ -591,6 +614,14 @@ at the two facing-dependent offsets around the removed dragon. The second
 offset is cumulative from the first, leaving both prizes inside the released
 2×2 footprint; the preceding dissolve is centered by an eight-pixel H/V
 adjustment.
+
+Hidden potion type 61 is a picture-indexed permanent upgrade before it is an
+inventory potion. At 0x518D2 the ROM computes
+`item_id = (mob_picture-0xA728)>>2`, yielding IDs 0–5 (armor, speed, magic,
+shot power, shot speed, fight), and calls `player_give_item_with_message`.
+Only when that bit is already owned does it fall through: it adds a potion when
+keys plus potions are below 12, otherwise awards 100 points in solo play, and
+otherwise leaves the object unhandled.
 
 The collision machinery identifies the player's logical cell from the
 sprite-center horizontal anchor (`x + 12`) and the ROM vertical handoff. A
@@ -919,6 +950,20 @@ installs the player in that slot. This is why Transportability can land on and
 replace monsters (including the secret-task demon/Death cases), as well as
 collect or clear other object types accepted by `tport_check_dest`.
 
+Corner-squeeze transport has a separate landing exception. The player arm at
+0x5015C clears `player_tport_type` instead of storing a destination pad. When
+`tport_player_move` sees that zero at 0x50788 and the selected landing contains
+picture 0x8000, it calls `pf_replace(landing, 0)` unless the object type is the
+0x3F forcefield hub. The later destination check therefore accepts the cell and
+the player replaces it. This is why Transportability can erase most wall tiles
+when it lands on them, while protected hubs and edge/boundary cases remain.
+
+The pre-landing path scan at 0x42744 also precedes ordinary tile interaction.
+With Transportability, keys, food, potions, treasure, and power-ups encountered
+as the blocking cell initiate the corner transition instead of being collected.
+If the selected landing cell itself contains an accepted item, the normal
+0x50934 interaction still collects it during relocation.
+
 The move milestone is iterative, not an instantaneous jump to a preselected
 cell. `tport_player_move` rotates the live joystick direction through the
 eight-entry table at 0x5B71C until a usable neighbour of the destination pad is
@@ -1025,6 +1070,12 @@ and updates the packed movement state, facing, and signed animation phase.
 The low nibble selects the player (4 means none), bits 4–7 hold the cardinal
 facing, and the high byte is the selected player's forward-axis distance in
 16-pixel cells. Directly above/right/below/left maps to compass 0/2/4/6.
+
+The obstruction test is also a target-publication gate, not merely a later
+movement veto. At 0x53FE0-0x5400C either leading footprint cell containing
+picture 0x8000 skips that player before its index, direction, or distance can be
+selected. Consequently a close aligned player behind that leading wall does not
+activate sustained flame lock. Directly above/right/below/left maps to compass 0/2/4/6.
 No-target state is `4 | facing<<4 | 0x1000`.
 
 `dragon_update_segments` (0x53D10) reads the current path pose and facing,
@@ -1046,6 +1097,10 @@ alignment.
 | V muzzle offset | `tbl_0x5D430[facing>>1] + tbl_0x5D4E8[pose]` | `tbl_0x5D4E8[pose]` |
 
 Because the breath's H word carries 0x30, `main_handle_shots` treats it exactly as a max-tier monster shot: the fixed large collision box (0x4094C), the 0x50 velocity block, motion only on even frames (0x478CE), the `special_projectile_picture_table` animation, removal when the counter reaches zero (0x477E8), and the tier-3 row of `monstshot_damage_tbl` — the row that raises the "shoot the dragon's head" dialog and spends the *Don't Get Hit* objective. The setup finishes by depth-placing the channel from the words it has just written (0x54952).
+
+The `0x12` V low byte is also authoritative display geometry: width and height
+are both three tiles. Although the picture comes from a projectile table, it is
+not an ordinary 2x2 projectile and must be decoded as the live 3x3 MOB.
 
 After target selection, the muzzle-alignment check runs. Within three cells,
 a vertical-facing dragon locks when horizontal error is between −17 and +18
@@ -1078,7 +1133,14 @@ Head rendering per phase boundary writes `mob_picture[dragon_seg_mob_ids[0]]` fr
 
 **Sustained fire:** while locked-in (state bit 3), a fire byte at a phase boundary holds the counter until the fire cooldown expires (continuous flame), otherwise the counter advances mod 128.
 
-**Damage rules** (`dragon_shot_hit`, 0x54112, called from `resolve_shot_hit`): hits only count when the fire bit is active (mouth open) and the dragon is not sleeping/turning; each hit plays sound 0x3A, increments `dragon_hits` (0x904880) — the 9th kills the dragon — and switches to a new random path (getrandom(5)), fast-forwarded to the first byte matching the current pose so the animation stays continuous.
+**Damage rules** (`dragon_shot_hit`, 0x54112, called from `resolve_shot_hit`): hits only count when the fire bit is active (mouth open) and the dragon is not sleeping/turning; each hit plays sound 0x3A, increments `dragon_hits` (0x904880) — the 9th kills the dragon — and switches to a new random path (getrandom(5)), fast-forwarded to the first byte matching the current pose so the animation stays continuous. Before the impact tail, 0x541E8–0x5422A rewrites the primary segment's hpos palette nibble as `5 + (11-hits)/3`: hits 1–2 use palette 8, hits 3–5 palette 7, and hits 6–8 palette 6, visibly darkening the dragon in three bands.
+
+`dragon_shot_hitbox_adjust` (0x54B68) compares the shot against the separately
+tracked moving-head coordinates and adds `0x1000` to the doubled candidate index
+on overlap. `shot_mob_collision` then shifts right once, so
+`resolve_shot_hit`/`dragon_shot_hit` receive the packed slot tagged with
+`0x0800`. The damage handler's `target >= 0x400` gate depends on that tag;
+returning only the bare segment slot makes every player shot look like a miss.
 
 ### 8.4 Dragon ROM Data
 
@@ -1136,6 +1198,16 @@ mugger; if that roll fails, bit 4 (thief already used) forces a mugger anyway.
 0x200 for the ordinary thief**, so the mugger is the *slower* of the two. These
 are the same per-frame movement units as the player speed table (Elf 0x100,
 others 0x80).
+
+**Escape cleanup and returned loot. Confidence: Verified** at
+0x4EB9A-0x4EC50 and 0x44166-0x441A6. On the escape route's first return to the
+recorded start cell (with a different predecessor), the live thief/mugger MOB
+is removed and both current-slot words are cleared. Carried loot is copied to
+the next-level longwords. `maze_addrandompickups` later restores mugger food
+and thief loot with `maze_randomplace`'s `getrandom(0x3E0)+0x20`, then `+0x51`
+modulo 0x400 until it finds an empty non-reserved cell. An encoded multiplier
+bag restores `special_bonus_score` from the longword shifted right six. The
+routine's opening `mazenum_current < 0x73` gate excludes secret rooms.
 
 ### 9.2 Thief Targeting (`thief_target_calc`, 0x4DFF6)
 
@@ -1279,6 +1351,12 @@ AT THIS LEVEL
 Sound 0x3B ("Gauntlet II Theme Song") plays when shown, and
 `title_intro_state` is set to 1. The shared attract/display timer `0x904B7C`
 must not contain its disabled sentinel (`0xFFFF`).
+
+The four spaces in `WITHIN    SECONDS` are a live field, not final text.
+`main_attract` decrements `attract_timer` at 0x445D4-0x445DA and, on each full
+second in this NORMAL/no-player state, writes `attract_timer / 60` through OS
+small decimal 0x260 at alpha column 13, row 14, width 2 (0x44984-0x449B6).
+Leaving that separate writer out produces a permanently blank countdown.
 
 `show_level_end_bonus_screen` (0x4D476) is a separate no-argument routine.
 It clears the alpha display and renders the end-of-level treasure calculation
@@ -1474,6 +1552,10 @@ When the maze has the ExitMoves flag, the routine walks the exit slots collected
 during setup, using the stride table at 0x5B7FC; it does **not** call the random
 pickup placer. The old and new cells run complementary eight-step descriptor
 animations, then the selected exit rests for 0x12C frames. Plays sound 0x31.
+At relocation, 0x52984-0x529D0 writes a new 0x8001 marker and derives its H/V
+words from the destination slot before clearing the old marker. This is not a
+record move: preserving the old H/V words would anchor a later player-exit
+animation at the vacated cell.
 
 Ordinary EXIT rests as descriptor `(0x039E, 0x039F, 0x0006, 0x0006)` at
 0x5C8A0. EXITTO6 is visibly distinct:
@@ -1595,6 +1677,17 @@ spaces carrying attributes 0xD000/0xD400/0xD800/0xDC00. Resolving color zero
 through those live palettes yields `(50,0,0)`, `(0,0,50)`, `(33,33,0)`, and
 `(0,50,0)` under the hardware/MAME IRGB conversion. The name row uses the
 central six cells and the following three rows fill all thirteen panel cells.
+`player_inv_update` also writes the six low-byte permanent-power bits on the
+name row. Starting from alpha column 29, the byte offsets at 0x5732E
+`{11,10,3,2,1,0}` select columns `{40,39,32,31,30,29}`; the corresponding
+complete words at 0x57334 are written when bits 0–5 are set.
+
+The header is conditional. A whole-panel rebuild first fills alpha columns
+29–41, rows 0–6 with opaque spaces (0x452F2–0x45312). For
+`mazenum_current < 0x68`, it then writes the five-row dungeon-logo glyph block
+and `LEVEL n`. At 0x68 or above, it leaves that region blank except for the
+0x5758E descriptor, `TIME:` at column 34, row 1 (0x45314–0x4537C). The large
+bonus-room countdown occupies row 2 below it.
 
 ### 14.2 Score Display (`main_score_display`, 0x457C0)
 
@@ -1612,7 +1705,13 @@ update conditions require it:
   a low-health pulse it shifts the palette by −0x1000; acid-slowed players use
   −0x2000. It clears update bit 1 afterward.
 - `player_it_label_set` (0x45866) draws and announces the IT label, but its
-  caller owns the tracked IT state.
+  caller owns the tracked IT state. Its two cells use `0xB000 | player<<10`,
+  not the ordinary player-text attribute.
+
+gauntpy additionally writes `MAZE nnn` and the first active player's pixel
+`P# x,y` position into rows 27–28 of the modeled alpha panel. These are explicit
+host diagnostics with no claimed arcade call site; unlike a renderer overlay,
+they still pass through alpha RAM so panel ownership and clipping remain honest.
 
 ### 14.3 Logo Color Cycling (`main_logo_updcolors`, 0x4DCBA)
 
@@ -1655,9 +1754,19 @@ The shift registers accumulate 16 consecutive frames of each input bit. ANDing m
 bonus-screen transition.
 
 Handles the treasure room countdown. When the player enters a treasure room:
-- Displays "YOU HAVE X SECONDS TO COLLECT TREASURES"
+- `show_level_start_screen` selects its d3=1 branch and displays the large
+  `TREASURE ROOM` title plus `YOU HAVE X SECONDS TO COLLECT TREASURES` and
+  `YOU MUST EXIT TO RECEIVE BONUS POINTS` from ROM 0x572C6–0x57325
 - Counts down the timer (stored at `ram.treasure_timer`, `0x9049E8`)
-- On each full second, displays the numeric countdown through OS 0x272 and normally speaks the matching ZERO–TEN sound from the 11-longword table at 0x5AB64
+- The entry page writes the initial small value at column 14,row 11 and the large
+  status-panel value at column 34,row 2. On each full second,
+  `main_treasure_timer` refreshes the latter through OS 0x272 and normally speaks
+  the matching ZERO–TEN sound from the 11-longword table at 0x5AB64. Both ROM
+  call sites use `(column=34,row=2,width=2,space-pad,attribute=0x8000)`; for a
+  one-digit count the leading large-space glyph consumes two cells, so the
+  visible digit begins at column 36 by design
+- `setup_infopanel` clears the ordinary dungeon logo and level field from the
+  first seven status-panel rows and writes `TIME:` at column 34,row 1
 - At 10 seconds on levels above 30, a 1-in-16 gate may choose one of four fake spoken countdowns. The pointer table at 0x5ABE0 selects a five-number sequence at 0x5AB90–0x5ABDF for displayed seconds 10–6; at 6 it follows with JUST KIDDING or FOOLED YOU from 0x5ABF0
 - Without a fake countdown, displayed second 6 has a 1-in-4 chance to play one of four warning lines from 0x5AC08, with a parallel 1/2-second suppression count from 0x5AC18
 - At 0, selects a timeout line from 0x5ABF8 (settings bit 11 forces ZERO; otherwise random among ZERO, BETTER LUCK NEXT TIME, ZERO, and LOOKS LIKE YOU LOSE)

@@ -1220,6 +1220,26 @@ class TestShotCollision:
         state.mobs.vpos[cell] = native_v(160) << 7
         assert shot_mob_collision(state, cell, 0) == cell
 
+    def test_dragon_head_overlap_retains_the_rom_tag_and_takes_damage(self):
+        state = _make_state()
+        state.players[0].mob_slot = 0x3FF
+        _arm_player_shot(state)
+        cell = (10 << 5) | 10
+        _place_monster(state, cell, MazeObjIds.MONST_DRAGON, health_nibble=8)
+        state.mobs.hpos[cell] = (160 << 7) | 8
+        state.mobs.vpos[cell] = native_v(160) << 7
+        state.dragon_facing = 2
+        state.dragon_head_hpos = 160 << 7
+        state.dragon_head_vpos = native_v(160) << 7
+        state.dragon_path_num = 0
+        state.dragon_anim_ctr = 8
+        state.dragon_state = 0
+
+        target = shot_mob_collision(state, cell, 0)
+        assert target == cell | 0x0800
+        assert resolve_shot_hit(state, target, 0) == -1
+        assert state.dragon_hits == 1
+
     def test_a_point_blank_sorcerer_is_the_cells_own_occupant(self):
         """S-61: the shooter's own record must never displace a real occupant.
 

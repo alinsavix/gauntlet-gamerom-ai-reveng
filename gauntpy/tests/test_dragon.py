@@ -375,6 +375,23 @@ class TestPoseAndAttack:
         assert state.shot_direction[7] == 4
         assert state.dragon_state & _ST_LOCKED
 
+    def test_leading_wall_blocks_target_publication_and_flame_lock(self):
+        from gauntpy.subsystems.dragon import _choose_move_direction
+
+        state = GameState()
+        primary = _place_dragon(state)
+        _place_player(state, 164, 112)
+        wall = pack_slot(8, 10)
+        state.mobs.picture[wall] = 0x8000
+        state.mobs.set_obj_type(wall, int(MazeObjIds.WALL_REGULAR))
+        state.dragon_state = 0
+        state.dragon_facing = 0
+
+        _choose_move_direction(state, primary)
+
+        assert state.dragon_move_state & 0x0F == 4
+        assert not state.dragon_state & _ST_LOCKED
+
     def test_no_live_player_publishes_the_no_target_sentinel(self):
         state = GameState()
         _place_dragon(state)
@@ -427,6 +444,20 @@ class TestDamage:
         assert state.dragon_path_num == 1
         assert state.dragon_anim_ctr == 7 << 3  # program 1's first raw byte 1
         assert 0x3A in state.sound_log
+
+    def test_hits_darken_the_head_palette_in_rom_three_hit_bands(self):
+        state, primary = self._exposed_dragon()
+        state.rng = _FixedRNG(*([0] * 8))
+
+        seen = []
+        for _ in range(8):
+            state.dragon_state = 0
+            state.dragon_path_num = 0
+            state.dragon_anim_ctr = 8
+            dragon_shot_hit(state, 0x400 + primary, 0)
+            seen.append(state.mobs.hpos[primary] & 0x0F)
+
+        assert seen == [8, 8, 7, 7, 7, 6, 6, 6]
 
     def test_hit_is_rejected_while_turning_or_mouth_closed(self):
         state, primary = self._exposed_dragon()

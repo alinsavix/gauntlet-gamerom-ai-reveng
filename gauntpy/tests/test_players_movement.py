@@ -141,6 +141,19 @@ class TestMobProbeDown:
             state, (5 << 5) | 5, hpos=74 << 7, vpos=native_v(82) << 7,
         ) == left_flank
 
+    def test_high_bit_sprite_uses_its_live_marker_rounding_anchor(self):
+        state = GameState()
+        mover = (22 << 5) | 31
+        door = (23 << 5) | 31
+        state.mobs.create(
+            door, tile=0x9D4C, hpos=0xF600, vpos=0x3011,
+            obj_type=int(MazeObjIds.DOOR_HORIZ),
+        )
+
+        assert mob_probe_down(
+            state, mover, hpos=0xF600, vpos=0x4700,
+        ) == -1
+
 
 # ---------------------------------------------------------------------------
 # mob_probe_left
@@ -172,6 +185,14 @@ class TestMobProbeLeft:
             state, (5 << 5) | 5, hpos=74 << 7, vpos=native_v(78) << 7,
         ) == upper_flank
 
+    def test_row_one_does_not_probe_the_reserved_top_row_as_a_flank(self):
+        state = _state_with_wall((0 << 5) | 16)
+
+        assert mob_probe_left(
+            state, (1 << 5) | 17,
+            hpos=266 << 7, vpos=native_v(15) << 7,
+        ) == -1
+
 
 # ---------------------------------------------------------------------------
 # mob_probe_right
@@ -200,6 +221,14 @@ class TestMobProbeRight:
         assert mob_probe_right(
             state, (5 << 5) | 5, hpos=78 << 7, vpos=native_v(82) << 7,
         ) == lower_flank
+
+    def test_row_one_does_not_probe_the_reserved_top_row_as_a_flank(self):
+        state = _state_with_wall((0 << 5) | 18)
+
+        assert mob_probe_right(
+            state, (1 << 5) | 17,
+            hpos=270 << 7, vpos=native_v(15) << 7,
+        ) == -1
 
 
 # ---------------------------------------------------------------------------
@@ -729,6 +758,76 @@ class TestCornerSqueezeGeometry:
         player_try_move(state, 0, gin.JOY_RIGHT, 0)
 
         assert state.player_tile_pos[0] == ((10 << 5) | 12)
+
+    def test_transport_can_land_on_and_remove_the_second_wall(self):
+        from types import SimpleNamespace
+
+        state = GameState()
+        player = _active_player_at(state, 0, (10 << 5) | 10)
+        player.powers = self._POWER_INVULN
+        first = (10 << 5) | 11
+        landing = (10 << 5) | 12
+        state.maze = SimpleNamespace(data={
+            (11, 10): int(MazeObjIds.WALL_REGULAR),
+            (12, 10): int(MazeObjIds.WALL_REGULAR),
+        })
+        for slot in (first, landing):
+            state.mobs.create(
+                slot, tile=_WALL_PICTURE, hpos=(slot & 31) * 16 << 7,
+                vpos=native_v((slot >> 5) * 16) << 7,
+                obj_type=int(MazeObjIds.WALL_REGULAR), link_into_chain=False,
+            )
+        state.movement_type = 2
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+        assert state.player_tport_type[0] == 0
+        assert state.player_tile_pos[0] == landing
+
+        gp.tport_player_move(state, 0)
+
+        assert player.mob_slot == landing
+        assert state.mobs.picture[first] == _WALL_PICTURE
+        assert state.maze.data[(12, 10)] == int(MazeObjIds.TILE_FLOOR)
+
+    def test_transport_skips_an_item_instead_of_collecting_it(self):
+        state = GameState()
+        player = _active_player_at(state, 0, (10 << 5) | 10)
+        player.powers = self._POWER_INVULN
+        key = (10 << 5) | 11
+        state.mobs.create(
+            key, tile=0x8AFC, hpos=11 * 16 << 7,
+            vpos=native_v(10 * 16) << 7, obj_type=int(MazeObjIds.KEY),
+        )
+        state.movement_type = 2
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+
+        assert state.player_tile_pos[0] == ((10 << 5) | 12)
+        assert state.mobs.obj_type(key) == int(MazeObjIds.KEY)
+        assert player.keysnum == 0
+
+    def test_transport_landing_on_an_item_collects_it(self):
+        state = GameState()
+        player = _active_player_at(state, 0, (10 << 5) | 10)
+        player.powers = self._POWER_INVULN
+        wall = (10 << 5) | 11
+        key = (10 << 5) | 12
+        state.mobs.create(
+            wall, tile=_WALL_PICTURE, hpos=11 * 16 << 7,
+            vpos=native_v(10 * 16) << 7,
+            obj_type=int(MazeObjIds.WALL_REGULAR), link_into_chain=False,
+        )
+        state.mobs.create(
+            key, tile=0x8AFC, hpos=12 * 16 << 7,
+            vpos=native_v(10 * 16) << 7, obj_type=int(MazeObjIds.KEY),
+        )
+        state.movement_type = 2
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+        gp.tport_player_move(state, 0)
+
+        assert player.mob_slot == key
+        assert player.keysnum == 1
 
     def test_squeeze_is_disabled_on_recursive_movement_pass(self):
         state = GameState()

@@ -207,6 +207,19 @@ in their fixed channels, 1 through 12, without any search at all. The
 chain orders the world; the slot arithmetic interrogates it. They share
 data, and conflating them would misdescribe both.
 
+The overlap check uses the candidate record's live H and V words. Even when bit
+15 of a picture sends the probe through its marker-rounding branch, the routine
+rounds those words; it does not reconstruct an anchor from the slot number.
+That distinction matters for corrected door and item placements near tight
+level edges.
+
+The player's side keeps one more subtle identity rule: the reserved row-zero
+slots can never become a hero's probe origin, even when a corrected sprite
+origin visually reaches that band. Near the top, horizontal probes also omit
+the row-zero flank while the hero record is still in row one. Missing those
+two boundary details makes the top wall catch lateral movement in otherwise
+open space.
+
 ## The invisible half
 
 Chapter 4 ended by promising that pixels are only the visible half of the

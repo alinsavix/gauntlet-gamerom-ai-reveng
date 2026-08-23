@@ -96,6 +96,7 @@ from gauntpy.subsystems.monsters import (
     _shooter_in_view,
     _spawn_probability,
     _supersorc_dispatch,
+    _supersorc_place,
     _tile_on_screen,
     _update_cull_rect,
     GENERATOR_RETRY_RELOAD,
@@ -1608,6 +1609,42 @@ class TestSuperSorcerer:
         assert not state.mobs.hpos[found[0]] & (_HPOS_FLAG_MOVING | _HPOS_FLAG_ATTACK), \
             "0x410BE: it arrives solid again"
         assert state.mobs.picture[found[0]] != 0x1709
+
+    def test_relocation_uses_player_slot_and_rom_corrected_hpos(self):
+        state = GameState()
+        state.rng = _FixedRNG(0)
+        player_slot = pack_slot(10, 10)
+        _place_player(state, 0, player_slot)
+        state.players[0].direction = 0
+        state.mobs.hpos[player_slot] = encode_hpos(10 * 16 - 4, palette=0x0C)
+        origin = pack_slot(9, 9)
+        _arena(state, pack_slot(10, 8))
+        _place_monster(state, origin, MazeObjIds.MONST_SUPERSORC)
+        self._blinked_out(state, origin)
+
+        destination = _supersorc_place(state, origin)
+
+        assert destination == pack_slot(10, 6)
+        assert decode_hpos(state.mobs.hpos[destination])[0] == 6 * 16 - 4
+        assert decode_vpos_at_y(state.mobs.vpos[destination])[0] == 10 * 16
+        assert state.mobs.state(destination) & 7 == 0
+
+    def test_diagonal_relocation_faces_exactly_back_toward_player_slot(self):
+        state = GameState()
+        state.rng = _FixedRNG(0)
+        player_slot = pack_slot(10, 10)
+        _place_player(state, 0, player_slot)
+        state.players[0].direction = 1
+        state.mobs.hpos[player_slot] = encode_hpos(10 * 16 - 4, palette=0x0C)
+        origin = pack_slot(9, 9)
+        _arena(state, pack_slot(8, 8))
+        _place_monster(state, origin, MazeObjIds.MONST_SUPERSORC)
+        self._blinked_out(state, origin)
+
+        destination = _supersorc_place(state, origin)
+
+        assert destination == pack_slot(6, 6)
+        assert state.mobs.state(destination) & 7 == 1
 
     def test_teleport_is_turn_staggered(self):
         """0x41078: the teleport only runs on the creature's stagger frame."""

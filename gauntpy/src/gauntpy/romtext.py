@@ -35,11 +35,13 @@ __all__ = [
     "TEXT_LEVEL", "TEXT_LEVEL_SPLASH", "TEXT_INSERT_COIN", "TEXT_PRESS_START",
     "TEXT_SELECT_HERO",
     "TEXT_GAME_OVER", "TEXT_ADD_COIN", "TEXT_ADD_COINS", "TEXT_ATARI_GAMES",
+    "TEXT_TIME",
     "TEXT_COPYRIGHT", "TEXT_ON_LEVEL", "CHARACTER_SELECT_LINES",
     "CONTINUE_PROMPT_LINES",
     "TEXT_SCORE_PER_COIN", "TEXT_SCORE_PER_COIN_POS", "HIGHSCORE_QUADRANTS",
     "BONUS_100_X_COINS", "BONUS_TREASURES_X", "BONUS_EQUALS", "BONUS_NONE",
     "BONUS_SECRET_5000", "GAMEPLAY_TIPS",
+    "TREASURE_ROOM_TITLE", "TREASURE_ROOM_LINES",
     "DUNGEON_HEADER_GLYPHS", "LEGEND_RULES_TEXT", "LEGEND_CREDITS_TEXT",
     "LEGEND_MONSTER_TEXT",
 ]
@@ -106,6 +108,7 @@ TEXT_ADD_COINS = "  ADD   COINS"     # 0x57548
 TEXT_INSERT_COIN = " INSERT COIN "   # 0x57556
 TEXT_GAME_OVER = "  GAME OVER  "     # 0x57564
 TEXT_ATARI_GAMES = "ATARI GAMES"     # 0x575DE
+TEXT_TIME = "TIME:"                  # 0x57596, bonus-room panel header
 #: 0x575F6. The leading '@' is not an at-sign: alpha glyph 0x40 is the
 #: copyright mark, so this renders as "(c)1986" through the ROM font.
 TEXT_COPYRIGHT = "@1986"
@@ -151,6 +154,15 @@ BONUS_TREASURES_X = "TREASURES x"
 BONUS_EQUALS = "BONUS ="
 BONUS_NONE = "NO BONUS !!"
 BONUS_SECRET_5000 = "5,000 x COINS = "
+
+# show_level_start_screen treasure-room branch, ROM 0x572C6-0x57325.
+TREASURE_ROOM_TITLE = "TREASURE ROOM"
+TREASURE_ROOM_LINES = (
+    ("YOU HAVE    SECONDS", 5, 11, 0x8400),
+    ("TO COLLECT TREASURES", 5, 12, 0x8400),
+    ("YOU MUST EXIT TO", 7, 14, 0x8C00),
+    ("RECEIVE BONUS POINTS", 5, 15, 0x8C00),
+)
 
 #: Gameplay tip strings, ROM 0x5999C-0x59B53, paired into the two-line units
 #: the game shows them as. The final entry is a single line.

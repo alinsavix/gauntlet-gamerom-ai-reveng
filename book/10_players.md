@@ -230,6 +230,11 @@ shot channel is free. The wind-up is why firing feels like a throw. The
 projectile takes your facing direction, a velocity from a table indexed by
 direction and class, and a picture from your class.
 
+Pressing into a wall does not cancel that table selection. The player remains
+stationary, but held Fire still advances the throw and creates the shot on the
+same four-count cadence; collision may remove a point-blank projectile almost
+immediately without replacing the hero's firing frames.
+
 One rule shapes everything about shooting: **each player owns exactly one shot
 MOB**, one of the fixed low slots from Chapter 8. One arrow in flight per elf.
 Your next shot cannot exist until the current one lands, so standing close to
@@ -375,6 +380,13 @@ potion matrix's enhanced variant. Six bits become six icons on your info-panel
 column, and the thief in Chapter 12 appraises exactly these when choosing a
 victim.
 
+The hidden bottle dropped by a secret wall or dragon is how these permanent
+upgrades are delivered. Its picture chooses one of the six IDs. If you already
+own that upgrade, the bottle instead becomes an ordinary carried potion when
+there is inventory room; a solo player with a full inventory gets 100 points.
+The six HUD icons are written directly around the name row from the same low
+six bits.
+
 **The temporary shelf** holds timed or metered effects:
 
 - **Invisibility** makes monsters lose track of you. As the timer runs out
@@ -397,7 +409,12 @@ victim.
   places ordinarily off-limits. The game's secret challenges go so far as to
   dare you to land on a demon, or on Death itself. A permitted occupied landing
   is not rejected: the destination interaction runs, any surviving occupant is
-  removed, and the player's MOB record replaces it. Corner-squeeze transport
+  removed, and the player's MOB record replaces it. Corner transport can even
+  select a second ordinary wall as its landing: the game replaces that wall
+  with floor before installing the hero, though forcefield hubs and boundary
+  cases remain protected. An item in the crossed cell is skipped rather than
+  collected; an item in the actual landing cell is collected during relocation.
+  Corner-squeeze transport
   still obeys the shared-screen window, so it cannot carry a player through an
   off-screen seam on a non-scrolling level.
 
@@ -413,6 +430,10 @@ announcing the transfer by name. The gameplay half is that monster targeting
 *accounts for the IT player* when choosing whom to chase, so the crowd's
 attention finds you. Tag another hero and the label, the announcement, and the
 crowd all move on. Touching a friend is an act of aggression here.
+
+The two letters are intentionally not in the holder's normal red, blue, yellow,
+or green text attribute. The label writer uses its own `0xB000 | player<<10`
+family, which presents the bright white label seen on the cabinet.
 
 Friendly fire arrives by level flag. On levels flagged **shots stun**, a
 teammate's shot freezes you mid-stride for a beat and knocks your attack out

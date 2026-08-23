@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2264 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2296 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,139 @@ start).
 ---
 
 ## Resolved issues
+
+### S-107 … S-110 · top-edge movement, Super Sorcerers, and special potions
+
+- **S-107:** maze 17 at player pixel `(268,15)` reproduced a Python-only
+  lateral block against the reserved row-zero wall. The ROM's horizontal probe
+  suppresses its upper flank while the current doubled slot is below 0x80
+  (maze rows 0–1); the port used only a generic in-bounds test and included row
+  zero from row one. Left/right movement at that coordinate now matches direct
+  ROM execution.
+- **S-108:** the same investigation found the narrow-passage boundary mismatch:
+  `player_try_move_core` keeps `active_mob_ids[player]` in D2, while the port's
+  one-pixel integration re-quantized the corrected sprite origin into reserved
+  row zero. Intermediate probes now fall back to the live record for slots
+  0–31, preserving both ROM boundary behavior and the established one-pixel
+  integration that prevents high-speed wall skipping. The shipped demo retains
+  its prior port-side top-flank behavior because that is required to preserve
+  the independently captured MAME maze-102 route and transporter landing.
+- **S-109:** Super Sorcerer placement derived its start cell from the player's
+  `x>>4`, shifting a correctly placed hero one cell left, then materialized the
+  sorcerer without the ROM's four-pixel H correction. It now starts from
+  `active_mob_ids`, writes destination H as `column*16-4`, preserves only the
+  low six H/V bits at 0x5FF2C, and performs the literal eight-neighbour crowd
+  scan. Cardinal and diagonal placements now match ROM execution and face their
+  shots back along the chosen line.
+- **S-110:** hidden potion type 61 was always converted into an inventory
+  potion. The ROM decodes `(picture-0xA728)>>2` and first offers permanent power
+  ID 0–5; only an already-owned power falls through to a potion (when inventory
+  has room) or a solo 100-point award. The six stat powers and their sounds now
+  apply, and `player_inv_update` writes the matching icon at the exact ROM
+  columns 40, 39, 32, 31, 30, and 29.
+
+### S-101 … S-106 · transportability, dragon/IT presentation, and maze diagnostics
+
+- **S-101:** corner transport had stored the landing cell as
+  `player_tport_type`, but the ROM clears that word at 0x5015C. The zero selects
+  0x5078E's `pf_replace(landing, floor)` branch for ordinary 0x8000 wall
+  markers. Transportability can now land on and erase those walls while leaving
+  forcefield hubs and boundary cases protected; logical maze state, the MOB
+  marker, and descriptor VRAM change together.
+- **S-102:** `_probe_candidate_blocks` had bypassed collectible cells before
+  `squeeze_through_check`. The ROM tests transport first, so a transportable
+  player skips most adjacent items instead of collecting them. An item in the
+  actual landing cell still goes through the relocation interaction and is
+  collected.
+- **S-103:** counted dragon hits changed paths but omitted 0x541E8-0x5422A's
+  primary-segment hpos rewrite. Hits 1-2, 3-5, and 6-8 now select live MOB
+  palettes 8, 7, and 6 before the ninth hit kills the dragon.
+- **S-104:** maze 18, used by the direct level-19 runner start, genuinely
+  decodes four IT creatures at slots 239, 327, 451, and 840. This is ROM maze
+  content, not duplicate spawning. The separate display bug was real:
+  `player_it_label_set` writes `0xB000 | player<<10`, not the ordinary
+  player-text attribute, restoring the bright label.
+- **S-105:** tight passages on the reported level-20 and level-22 areas exposed
+  a collision-model shortcut: pictures with bit 15 set were rounded from their
+  packed slot rather than their live H/V words. The 0x407EA-0x40820 and
+  0x42688-0x426CE branches round the live words, which retain deliberate door
+  and item placement corrections. The modeled probes now do the same.
+- **S-106:** the bottom of the status panel now receives `MAZE nnn` and the
+  first active player's `P# x,y` pixel coordinates. These requested diagnostics
+  are explicit non-arcade content, but are written through modeled alpha RAM
+  rather than composited as gameplay-looking renderer text.
+
+### S-100 · treasure rooms retained the ordinary panel header
+
+`setup_infopanel` now follows its maze-number branch at 0x45314. It always
+clears the first seven rows of the 13-column status panel, but only mazes below
+0x68 rebuild the GAUNTLET II dungeon glyphs and `LEVEL n` field. Treasure and
+secret rooms instead write the ROM 0x5758E descriptor: `TIME:` at alpha column
+34, row 1, above the existing large countdown. This removes the stale logo and
+level number shown by gauntpy while preserving the player blocks below.
+
+### S-95 … S-99 · continue, dragon, thief-return, runner, and reported nonbugs
+
+- **S-95:** the continue prompt drew its literal `WITHIN    SECONDS` line but
+  omitted `main_attract`'s 0x44984-0x449B6 full-second writer. The live
+  `attract_timer / 60` value now updates alpha column 13, row 14 as a two-digit
+  field.
+- **S-96:** the dragon collision retry discarded
+  `dragon_shot_hitbox_adjust`'s tagged result after testing the moving head.
+  Successful head overlaps now retain the post-shift `0x0800` tag consumed by
+  `dragon_shot_hit`, so open-mouth hits increment `dragon_hits`. The close-range
+  breath also honors its live `mob_vpos = 0x12` 3x3 size instead of being forced
+  through the ordinary projectile 2x2 asset geometry.
+- **S-97:** deterministic mugger/thief escape reaches the recorded start cell,
+  clears the MOB, and resets both current-slot fields; the reported frozen
+  actor was not reproducible through that ROM path. The related real omission
+  was `maze_addrandompickups`' 0x44166-0x441A6 next-level return: escaped mugger
+  food and thief loot are now placed through the ROM's random empty-cell walk,
+  including encoded multiplier-bag value restoration.
+- **S-98:** direct `gauntpy-play` now defaults to the Elf. `--character` remains
+  available for selecting any of the four classes during testing.
+- **S-99:** the treasure countdown position itself was verified: setup and the
+  live timer both call OS large decimal at alpha column 34, row 2; a
+  space-padded one-digit value begins two cells later by design. S-100 records
+  the separate surrounding-header omission. Holding Fire against a wall still
+  selects and advances the shooting table before each shot; a regression uses
+  the hero's real `cell_x - 4` geometry and protects those visible frames.
+
+### S-93 · death/continue lost the player spawn record
+
+`maze_scan_objects(-1)` now selects and stores `maze_player_start_slot`
+(0x9049E0), removes that marker just as `pf_replace` does, and
+`player_start_inner` reuses the saved cell for first starts and post-death
+continues. A failed loaded-maze placement is no longer finalized into an active
+player with MOB slot zero. Successful continues rebuild the hero picture,
+tracking words, and snap the camera so the player is immediately visible.
+
+### S-94 · dragon wall/flame report confirmed as ROM behavior
+
+No behavior change was made. `dragon_choose_move_direction` 0x53E4A tests both
+leading footprint cells and skips the candidate at 0x53FE0-0x54044 when either
+picture is the `0x8000` wall marker. Because target/distance publication happens
+after those probes, a player approached through that wall does not establish the
+close-range flame lock. A regression now protects this ROM ordering.
+
+### S-88 … S-92 · exit, treasure, idle-door, and thief-route regressions
+
+- **S-88:** moving exits now rebuild their 0x8001 marker H/V/link words from the
+  destination slot (0x52984-0x52A32), so a later exit dissolve uses the new
+  location rather than copied coordinates from the old slot.
+- **S-89:** treasure-room entry now writes the ROM 0x572C6-0x57325 title and
+  instruction page, including both initial countdown fields.
+- **S-90:** `main_treasure_timer` writes the live large countdown at alpha
+  column 34, row 2 on every full second (0x4D2FC-0x4D32A).
+- **S-91:** the common post-spawn level tail now calls `thief_setup` and clears
+  `idle_timer` at the ROM's 0x4835E/0x4836A sites, so timed doors are re-armed
+  on every level.
+- **S-92:** player transport now records the victim's forward/reverse transporter
+  route; `thief_enter_tport` follows the two-stage route lookup at 0x4FAD4,
+  creates the destination placeholder, and the transition completion repairs
+  the reverse path before recomputing the next cell. `main_thief_anim` also
+  honors the 0x4E900 transition-timer gate, so the thief cannot move while its
+  dissolve is in flight.
 
 ### S-87 · half-width large glyphs were forced to two cells
 

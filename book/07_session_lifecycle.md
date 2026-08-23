@@ -83,6 +83,13 @@ welcome. Join-in-progress, one of the game's signature freedoms, costs no
 special machinery at all; it is the ordinary join path running while a
 level happens to be in progress.
 
+The first-player case does not search for a surviving start marker. During maze
+setup the cabinet randomly chooses a PLAYERSTART, remembers its packed cell, and
+replaces the marker with floor. Fresh starts and post-death continues reuse that
+saved cell; later joiners search beside a hero who is already active. A placement
+failure never advances to the finalizer, because "alive with no MOB" would leave
+the camera tracking an absent player.
+
 ## Starting a level
 
 Whether a session is beginning at level 1 or the party just cleared level
@@ -178,7 +185,9 @@ TO CONTINUE GAME
 AT THIS LEVEL
 ```
 
-The theme music plays under it, a countdown runs, and a coin plus the
+The theme music plays under it, a countdown runs, and the number is supplied by
+a different routine than the five prompt lines: once per second the attract
+state machine writes its timer divided by sixty into the four-space hole. A coin plus the
 start press resumes the session at the level where the
 party died. (There is no fifth button: START is the game's own vocabulary for
 the button whose input line the game calls Magic.) Letting the countdown expire ends the session. On level 1

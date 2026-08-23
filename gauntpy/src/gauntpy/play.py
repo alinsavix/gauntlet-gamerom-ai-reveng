@@ -1,6 +1,6 @@
 """A minimum playable runner: walk a hero around a real Gauntlet II maze.
 
-    uv run gauntpy-play            # level 1, Warrior
+    uv run gauntpy-play            # level 1, Elf
     uv run gauntpy-play --level 2 --character elf --scale 3
 
 By default it loads a maze and drops a player directly into gameplay; ``--attract``
@@ -40,6 +40,15 @@ _CHARACTERS = {
     "elf": Character.ELF,
 }
 
+_TEMPORARY_POWERS = {
+    "invisibility": MazeObjIds.POWER_INVIS,
+    "repulsiveness": MazeObjIds.POWER_REPULSE,
+    "reflective-shots": MazeObjIds.POWER_REFLECT,
+    "transportability": MazeObjIds.POWER_TRANSPORT,
+    "super-shots": MazeObjIds.POWER_SUPERSHOT,
+    "invulnerability": MazeObjIds.POWER_INVULN,
+}
+
 
 def _positive_level(value: str) -> int:
     level = int(value)
@@ -53,6 +62,13 @@ def _positive_scale(value: str) -> int:
     if scale < 1:
         raise argparse.ArgumentTypeError("scale must be 1 or greater")
     return scale
+
+
+def _inventory_count(value: str) -> int:
+    count = int(value)
+    if not 0 <= count <= 255:
+        raise argparse.ArgumentTypeError("inventory count must be between 0 and 255")
+    return count
 
 
 def _ensure_rom_dir() -> None:
@@ -103,7 +119,14 @@ def _spawn_player(state: GameState, character: int) -> int:
     return p.mob_slot
 
 
-def build_state(level: int, character: int) -> GameState:
+def build_state(
+    level: int,
+    character: int,
+    *,
+    keys: int = 0,
+    potions: int = 0,
+    powers: tuple[int, ...] = (),
+) -> GameState:
     """Load ``level`` and spawn a hero directly (the mid-level drop)."""
     from . import maze
 
@@ -123,14 +146,24 @@ def build_state(level: int, character: int) -> GameState:
         state.mazenum_current = min(level - 1, MAX_MAZE_NUM)
     maze.load_level(state, level)           # places objects with their pictures
     _spawn_player(state, character)
-    from .subsystems.players import setup_infopanel
+    from .subsystems.players import (
+        initialize_player_temporary_power,
+        setup_infopanel,
+    )
+    player = state.players[0]
+    player.keysnum = keys
+    player.potionsnum = potions
+    for power in powers:
+        initialize_player_temporary_power(state, 0, power)
     setup_infopanel(state, -1)
     return state
 
 
-def run(level: int = 1, character: int = Character.WARRIOR, scale: int = 2,
+def run(level: int = 1, character: int = Character.ELF, scale: int = 2,
         from_attract: bool = False,
-        suppress_first_encounter_messages: bool = False) -> None:
+        suppress_first_encounter_messages: bool = False,
+        keys: int = 0, potions: int = 0,
+        powers: tuple[int, ...] = ()) -> None:
     """Open a window and run the game loop until the player closes it.
 
     Two entries: the default mid-level drop (``build_state``), or -- with
@@ -163,7 +196,9 @@ def run(level: int = 1, character: int = Character.WARRIOR, scale: int = 2,
     else:
         from .maze import MazeError
         try:
-            state = build_state(level, character)
+            state = build_state(
+                level, character, keys=keys, potions=potions, powers=powers,
+            )
         except MazeError as exc:
             host.close()
             raise SystemExit(
@@ -199,8 +234,8 @@ def main(argv: list[str] | None = None) -> None:
              "start at the matching rotation maze and advance from there",
     )
     parser.add_argument(
-        "--character", choices=sorted(_CHARACTERS), default="warrior",
-        help="hero class (default: warrior)",
+        "--character", choices=sorted(_CHARACTERS), default="elf",
+        help="hero class (default: elf)",
     )
     parser.add_argument("--scale", type=_positive_scale, default=2,
                         help="window pixel scale")
@@ -213,7 +248,21 @@ def main(argv: list[str] | None = None) -> None:
         "--no-first-encounter-messages", action="store_true",
         help="suppress first-encounter pop-up boxes without changing gameplay",
     )
+    parser.add_argument(
+        "--keys", type=_inventory_count, default=0,
+        help="start direct play with this many keys (0-255)",
+    )
+    parser.add_argument(
+        "--potions", type=_inventory_count, default=0,
+        help="start direct play with this many potions (0-255)",
+    )
+    parser.add_argument(
+        "--power", action="append", choices=sorted(_TEMPORARY_POWERS), default=[],
+        help="start direct play with a temporary power; may be repeated",
+    )
     args = parser.parse_args(argv)
+    if args.attract and (args.keys or args.potions or args.power):
+        parser.error("--keys, --potions, and --power require direct play (no --attract)")
 
     _ensure_rom_dir()
     if not os.environ.get("GEX_ROM_DIR"):
@@ -226,7 +275,9 @@ def main(argv: list[str] | None = None) -> None:
 
     run(level=args.level, character=_CHARACTERS[args.character], scale=args.scale,
         from_attract=args.attract,
-        suppress_first_encounter_messages=args.no_first_encounter_messages)
+        suppress_first_encounter_messages=args.no_first_encounter_messages,
+        keys=args.keys, potions=args.potions,
+        powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power))
 
 
 

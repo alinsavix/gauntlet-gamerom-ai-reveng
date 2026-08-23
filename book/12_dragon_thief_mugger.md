@@ -98,7 +98,9 @@ a successful shot the cooldown is reloaded with eight frames and the fireball
 launches from whichever body segment the current pose and facing say the mouth
 is nearest. There is also a locked-in mode where a fire byte holds the counter
 in place until the cooldown expires, so the flame becomes continuous instead of
-a burst.
+a burst. The close flame is also physically larger: its live hardware size word
+names a 3x3 block, while the long-range fireball is 2x2. The picture table alone
+does not determine that geometry.
 
 ## Nine hits, and only some of them count
 
@@ -113,6 +115,11 @@ current path byte's fire bit must be set. That last condition is the one
 players discover by feel: you can only hurt the dragon while its mouth is open.
 Every other shot makes the ordinary impact sparkle and disappears.
 
+The collision routine carries that moving-head decision as a tag on the MOB
+index. It adds the tag before converting the doubled table index back to a maze
+slot; the damage routine tests the surviving tag before it considers the open
+mouth. Dropping it makes every visually accurate head strike harmless.
+
 A counted hit plays its own sound and increments a hit counter. It also
 switches the dragon to a fresh random program. The switch would normally snap
 the head to a new pose, so the routine walks forward through the new program
@@ -120,6 +127,11 @@ until it finds a byte with the pose the dragon is already holding, advancing
 the counter and rolling over into the next program if it has to. The animation
 stays continuous and the dragon's rhythm changes, which reads as the creature
 reacting.
+
+The reaction is visible in color as well as motion. After a counted hit, the
+game rewrites the primary dragon segment's live palette nibble. Hits one and two
+use palette 8, hits three through five use 7, and hits six through eight use 6,
+so the dragon darkens in three steps before the ninth hit removes it.
 
 The ninth hit ends it. All four segments are removed with a transporter-style
 dissolve, and two objects appear where the dragon was, at offsets chosen from
@@ -134,6 +146,12 @@ player, its next nibble holds compass direction 0/2/4/6, and its high byte
 measures forward distance in 16-pixel cells. No target has its own sentinel.
 Within three cells the dragon uses the large, max-strength 3×3 flame; farther
 away it throws the ordinary 2×2 fireball.
+
+Targeting is constrained by the dragon's own footprint. Before publishing a
+player and distance, the movement chooser checks the two leading cells; a solid
+wall marker in either one rejects that candidate. A player aligned above the
+dragon but separated by that leading wall therefore does not establish the
+sustained flame lock.
 
 Close range alone does not sustain the flame. The muzzle must also line up with
 the target by roughly one sprite width. That sets the lock bit and holds the
@@ -224,7 +242,18 @@ sets a first-encounter dialog flag, and marks the level's thief as spent.
 here the game gets its joke in. A coin flip picks one of two voices, and the
 cabinet plays a laugh and then "YOU CAN'T CATCH ME!" in the matching pitch. The
 carried item is remembered in a variable that survives the level transition,
-and it comes back as a pickup on the next level's floor.
+and it comes back as a pickup on the next level's floor. The departing actor is
+removed at its recorded starting cell; the next level creates a new pickup by
+walking a pseudorandom sequence of empty maze cells. A mugger returns food, and
+a stolen multiplier returns as a bag whose encoded value restores its score.
+
+Transporters are part of that retracing graph. If the target player has taught
+the route by teleporting, the thief dissolves into the same transition machinery,
+reappears beside the linked pad, restores its MOB record there, writes the
+reverse breadcrumb, and recomputes its next path cell. The level-start setup
+resets the thief scheduler before a new route is considered. While the dissolve
+timer is active, the ordinary thief movement loop is gated off; the transition
+machine alone owns the source and destination records.
 
 Killing the thief before it leaves is worth five hundred points times your
 treasure multiplier, and the loot is respawned on the tile it was standing on.

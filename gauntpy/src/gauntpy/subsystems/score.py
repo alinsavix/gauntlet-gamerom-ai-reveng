@@ -154,12 +154,14 @@ BONUSMULT_COLUMN = 31        # 0x90503E -> byte 0x3E of the row -> word 31
 IT_LABEL_COLUMN = 0x24       # 0x905048, two ASCII glyph cells between labels
 INVENTORY_COLUMN = 30
 INVENTORY_CELLS = 12
+DIAGNOSTIC_MAZE_ROW = 27
+DIAGNOSTIC_POSITION_ROW = 28
 ALPHA_ROW_STRIDE = 64
 # OS draw_string maps ASCII space to alpha glyph zero (0x2F68-0x2F70).
 ALPHA_SPACE_GLYPH = 0
 # player_inv_update 0x45B88-0x45BDC. The six power bits stamp complete
 # attribute/glyph words around (not over) the character name on row p*5+7.
-POWER_ICON_COLUMNS = (41, 40, 33, 32, 31, 30)  # ROM 0x5732E + base column 30
+POWER_ICON_COLUMNS = (40, 39, 32, 31, 30, 29)  # ROM 0x5732E + base column 29
 POWER_ICON_WORDS = (                           # ROM 0x57334
     0x983B, 0x9D7A, 0xA0A2, 0xA49C, 0xA97B, 0xACA3,
 )
@@ -226,18 +228,25 @@ def clear_player_panel_content(state: GameState, player_index: int) -> None:
 
 
 def write_info_panel_header(state: GameState) -> None:
-    """Write setup_infopanel's ROM dungeon banner and level field."""
+    """Write setup_infopanel's ordinary or bonus-room header."""
     fill_alpha_rect(
         state, PANEL_COLUMN, 0, PANEL_WIDTH, LEVEL_ROW + 1,
         alpha_word(0x8000),
     )
-    for row, glyphs in enumerate(romtext.DUNGEON_HEADER_GLYPHS):
-        write_alpha_glyphs(state, 30, row, glyphs, 0x9400)
-    write_alpha_text(state, LEVEL_LABEL_COLUMN, LEVEL_ROW, romtext.TEXT_LEVEL, 0x8000)
-    write_alpha_decimal(
-        state, LEVEL_VALUE_COLUMN, LEVEL_ROW, state.levelnum_current,
-        LEVEL_DIGITS, 0x8000,
-    )
+    if state.mazenum_current < 0x68:
+        for row, glyphs in enumerate(romtext.DUNGEON_HEADER_GLYPHS):
+            write_alpha_glyphs(state, 30, row, glyphs, 0x9400)
+        write_alpha_text(
+            state, LEVEL_LABEL_COLUMN, LEVEL_ROW, romtext.TEXT_LEVEL, 0x8000,
+        )
+        write_alpha_decimal(
+            state, LEVEL_VALUE_COLUMN, LEVEL_ROW, state.levelnum_current,
+            LEVEL_DIGITS, 0x8000,
+        )
+    else:
+        # setup_infopanel 0x45314-0x4537C: after the seven-row clear, the
+        # 0x5758E descriptor writes only TIME: at alpha column 34, row 1.
+        write_alpha_text(state, 34, 1, romtext.TEXT_TIME, 0x8000)
 
 
 def write_info_panel_backdrop(state: GameState) -> None:
@@ -325,9 +334,49 @@ def write_it_labels(state: GameState) -> None:
         ):
             continue
         row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_LABEL_ROW
-        attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
-        glyphs = romtext.LABEL_IT_GLYPHS if state.player_it == player_index else (0, 0)
+        is_it = state.player_it == player_index
+        # player_it_label_set 0x4589E writes 0xB000 | player_index<<10,
+        # independently of the ordinary red/blue/yellow/green text palettes.
+        # Clearing the label restores the normal panel attribute.
+        attribute = (
+            0xB000 | (player_index << 10)
+            if is_it else PLAYER_TEXT_PALETTE_WORDS[player_index]
+        )
+        glyphs = romtext.LABEL_IT_GLYPHS if is_it else (0, 0)
         write_alpha_glyphs(state, IT_LABEL_COLUMN, row, glyphs, attribute)
+
+
+def write_status_diagnostics(state: GameState) -> None:
+    """Write host-requested maze/position diagnostics through modeled alpha RAM."""
+    fill_alpha_rect(
+        state, PANEL_COLUMN, DIAGNOSTIC_MAZE_ROW, PANEL_WIDTH, 2,
+        alpha_word(0x8000),
+    )
+    write_alpha_text(
+        state, PANEL_COLUMN, DIAGNOSTIC_MAZE_ROW,
+        f"MAZE {state.mazenum_current:03d}"[-PANEL_WIDTH:], 0x8000,
+    )
+    active = next(
+        (
+            (index, player) for index, player in enumerate(state.players)
+            if player.active and player.mob_slot
+        ),
+        None,
+    )
+    if active is None:
+        return
+    from ..coords import hpos_x, vpos_y
+
+    player_index, player = active
+    text = (
+        f"P{player_index + 1} "
+        f"{hpos_x(state.mobs.hpos[player.mob_slot])},"
+        f"{vpos_y(state.mobs.vpos[player.mob_slot])}"
+    )
+    write_alpha_text(
+        state, PANEL_COLUMN, DIAGNOSTIC_POSITION_ROW,
+        text[:PANEL_WIDTH], 0x8000,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -943,6 +992,7 @@ def _advance_thief_transition(state: GameState) -> None:
         state.thief_tport_saved_picture = state.mobs.picture[state.thief_current_pos]
         state.mobs.unlink_and_clear(state.thief_current_pos)
         state.thief_current_pos = state.thief_tport_dest
+        state.thief_mob_slot = 0
     elif step == _TRANSITION_MOVE:
         # 0x47218: re-stamp the fixed thief animation channel (25 + 4) at the
         # destination through the one implementation of handle_tport.
@@ -956,7 +1006,21 @@ def _advance_thief_transition(state: GameState) -> None:
         state.mobs.depth_remove(_THIEF_ANIM_SLOT - 1)      # pea.l $1c.w
         state.mobs.picture[_THIEF_ANIM_SLOT] = 0
         state.thief_tport_timer = _TRANSITION_IDLE
-        state.thief_previous_pos = state.thief_current_pos
+        state.thief_mob_slot = state.thief_current_pos
+        from .thief import (
+            calc_direction,
+            path_grid_set_high_direction_if_empty,
+            thief_compute_path,
+        )
+
+        path_grid_set_high_direction_if_empty(
+            state,
+            state.thief_current_pos,
+            calc_direction(
+                state, state.thief_current_pos, state.thief_previous_pos,
+            ),
+        )
+        thief_compute_path(state)
         return
 
     picture = _transition_picture(step)
@@ -1074,6 +1138,8 @@ def main_score_display(state: GameState) -> None:
     # Master display gate (0x904007 bit 2).
     if not state.score_display_enabled:
         return
+
+    write_status_diagnostics(state)
 
     # One player per frame, round-robin over the four slots.
     player_index = state.frame_counter & 3

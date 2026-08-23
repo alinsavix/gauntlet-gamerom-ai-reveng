@@ -2354,9 +2354,9 @@ def _supersorc_place(state: GameState, slot: int) -> int | None:
         if not p.active:
             continue
 
-        px = hpos_x(state.mobs.hpos[p.mob_slot])
-        py = vpos_y(state.mobs.vpos[p.mob_slot])
-        prow, pcol = py >> 4, px >> 4
+        # 0x5FE1A reads active_mob_ids directly. A hero's corrected sprite
+        # origin is four pixels left of that slot and must not be quantized back.
+        prow, pcol = p.mob_slot >> 5, p.mob_slot & 0x1F
         behind = (p.direction + 4) & 0x07
 
         for bias, run in zip(_SUPERSORC_BIAS, _SUPERSORC_RUN):
@@ -2414,14 +2414,23 @@ def _supersorc_too_crowded(state: GameState, dest: int, self_slot: int) -> bool:
     close enough to matter is in one of those cells, so the depth-chain scan
     here reaches the same set.
     """
-    dest_h = ((dest & 0x1F) * 16) << POS_SHIFT
+    dest_h = (((dest & 0x1F) * 16 - 4) << POS_SHIFT) & 0xFFFF
     dest_v = native_v((dest >> 5) * 16) << POS_SHIFT
-    for s in state.mobs.iter_chain():
-        if s == self_slot or state.mobs.picture[s] == 0:
+    row_base = dest & 0x3E0
+    for dc, dr in zip(_OCCUPANCY_NEIGHBOUR_COL, _OCCUPANCY_NEIGHBOUR_ROW):
+        s = row_base + dr + ((dest + dc) & 0x1F)
+        if not 0x20 <= s < 0x400 or s == self_slot:
             continue
-        if (abs(position_field(state.mobs.hpos[s]) - dest_h) <= _SUPERSORC_PROXIMITY
-                and abs(position_field(state.mobs.vpos[s]) - dest_v)
-                <= _SUPERSORC_PROXIMITY):
+        picture = state.mobs.picture[s]
+        if picture == 0:
+            continue
+        delta_h = state.mobs.hpos[s] - dest_h
+        if picture & 0x8000:
+            delta_h -= 0x200
+        if (
+            abs(delta_h) <= _SUPERSORC_PROXIMITY
+            and abs(state.mobs.vpos[s] - dest_v) <= _SUPERSORC_PROXIMITY
+        ):
             return True
     return False
 
@@ -2430,8 +2439,8 @@ def _supersorc_relocate(state: GameState, slot: int, dest: int,
                         direction: int) -> None:
     """Move the Super Sorcerer's record to ``dest`` and face ``direction``.
 
-    0x5FF2C keeps the low seven bits of both position words -- the flags and
-    the palette/tier nibble -- and only rewrites the cell part.
+    0x5FF2C keeps the low six bits of both position words -- the flags and
+    palette/tier or size fields -- and only rewrites the cell part.
     """
     if dest == slot:
         _set_direction(state, slot, direction)
@@ -2440,9 +2449,10 @@ def _supersorc_relocate(state: GameState, slot: int, dest: int,
         return
     if state.monster_iter_ptr == slot:      # 0x410A6: keep the walk marker live
         state.monster_iter_ptr = dest
-    low_h = low_field(state.mobs.hpos[slot])
-    low_v = low_field(state.mobs.vpos[slot])
-    x = (dest & 0x1F) * 16
+    # 0x5FF2C masks with 0x3F, deliberately clearing low-field bit 6.
+    low_h = state.mobs.hpos[slot] & 0x3F
+    low_v = state.mobs.vpos[slot] & 0x3F
+    x = (dest & 0x1F) * 16 - 4
     y = (dest >> 5) * 16
     state.mobs.move_slot(slot, dest)
     state.mobs.hpos[dest] = replace_position(low_h, encode_hpos(x))

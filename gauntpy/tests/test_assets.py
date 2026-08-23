@@ -275,6 +275,13 @@ class TestSpriteDispatch:
         assert len(stamp.numbers) == 4
         assert stamp.ptype == "base"
 
+    def test_max_tier_dragon_breath_uses_its_live_3x3_mob_size(self):
+        store = AssetStore()
+        stamp = store.sprite(0x27EF, size=(3, 3))
+
+        assert stamp.width == 3
+        assert list(stamp.numbers) == list(range(0x27EF, 0x27F8))
+
     def test_projectile_uses_its_live_base_palette_nibble(self):
         from gex.projectiles import PROJECTILE_TILES
 

@@ -132,7 +132,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x9048F8 | 2 B × 4 | `lobber_shot_vec_h` | Horizontal component for lobber shots |
 | 0x904900 | 2 B × 4 | `lobber_shot_vec_v` | Vertical component for lobber shots |
 | 0x904908 | 1 B × 4 | `player_redraw` | Per-player redraw flags (bit 0 = score needs redraw, cleared by `draw_player_score`; bit 1 = health, set on damage, cleared by `draw_player_health`). |
-| 0x90490C | 2 B | `idle_timer` | Counts up while the post-player-loop activity gate is set. Above 0x04B0 or 0x0A8C (selected by caller state), `open_timed_doors` removes type-0x0D/0x0E door objects and this word becomes 0xFFFF to disable further increments. |
+| 0x90490C | 2 B | `idle_timer` | Counts up while the post-player-loop activity gate is set. Above 0x04B0 or 0x0A8C (selected by caller state), `open_timed_doors` removes type-0x0D/0x0E door objects and this word becomes 0xFFFF to disable further increments. The common level-start tail clears it at 0x4836A after `thief_setup`, re-arming timed doors every level. |
 | 0x90490E | 2 B × 4 | `player_bonusmult` | Per-player current bonus multiplier |
 | 0x904876 | 2 B | `current_player` | Index (0–3) of the player currently being processed by `main_move_players`; written each iteration of the per-player loop |
 | 0x904916 | 2 B | `frame_overflow` | Non-zero if frame took too long to render |
@@ -156,7 +156,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x9049C4 | 2 B × 12 | `shot_direction` | Direction/state word for each of 12 projectile channels. Values 0–7 are compass directions; reflection and special-shot paths also retain flag bits in the same word. |
 | 0x9049DC | 2 B | `player_it` | Player who is IT (0–3) or 0xFFFF (-1) if nobody |
 | 0x9049DE | 2 B | `mob_depth_list_head` | Head MOB ID of the global depth-sorted display list; the placement routines update it when inserting before the current first MOB |
-| 0x9049E0 | 2 B | `maze_player_start_slot` | Packed maze slot selected by `maze_scan_objects` for the player-start marker; used to center the initial view and as the fallback spawn position for joining players |
+| 0x9049E0 | 2 B | `maze_player_start_slot` | Packed maze slot randomly selected by `maze_scan_objects(-1)` from the PLAYERSTART records before that marker is replaced with floor. It remains the first-player and post-death continue spawn even after no PLAYERSTART marker remains live. |
 | 0x9049E2 | 2 B | `two_player_mode` | Game pricing/two-player mode config |
 | 0x9049E4 | 4 B | `dialog_first_encounter_flags` | Bitmask of which first-encounter dialogs have been shown |
 | 0x9049E8 | 2 B | `treasure_timer` | Time spent in treasure room |
@@ -309,8 +309,8 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904BA2 | 2 B | `thief_previous_pos` | Previous thief maze/MOB slot. Movement copies `thief_next_pos` here before calculating the following cell; exit/steal and route-recovery code use it as the cell behind the thief. |
 | 0x904BA4 | 2 B | `thief_current_pos` | Thief's current maze cell, which is also the hardware MOB slot occupied by the thief. It indexes the MOB arrays and is replaced whenever movement transfers the thief into a new cell; zero means no active thief. |
 | 0x904BA6 | 2 B | `thief_next_pos` | Candidate/next maze cell for thief movement. It initially equals the spawn cell, is recomputed from direction deltas, and becomes `thief_previous_pos` on the next route step. |
-| 0x904BA8 | 4 B | `mugger_item_nextlevel` | Item that the mugger carried to the next level |
-| 0x904BAC | 4 B | `thief_item_nextlevel` | Item that the thief carried to the next level |
+| 0x904BA8 | 4 B | `mugger_item_nextlevel` | Item that the mugger carried to the next level; nonzero makes `maze_addrandompickups` place type 0x32 food |
+| 0x904BAC | 4 B | `thief_item_nextlevel` | Item that the thief carried to the next level; `0x7D30` means empty, otherwise bits 5–0 are the pickup type and the upper value shifted right 6 restores `special_bonus_score` for a multiplier bag |
 | 0x904BB0 | 4 B | `mugger_item_carried` | Item that the mugger is currently carrying |
 | 0x904BB4 | 4 B | `thief_item_carried` | Item that the thief is currently carrying |
 | 0x904BB8 | 2 B | `thief_collision_direction_code` | One-based direction/contact code set when the thief first collides with its target player (`thief_direction + 1`). It suppresses repeated damage during the same contact and is folded into `thief_move_engine`'s return adjustment; zero means no active contact code. |
@@ -1311,8 +1311,9 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x57242 | 16 B | `character_name_ptrs` — four pointers to the padded character labels WARRIOR, VALKYRIE, WIZARD, and ELF at 0x57252–0x57279. |
 | 0x57252 | 40 B | `character_name_strings` — four fixed-width ten-byte character labels targeted by `character_name_ptrs`. |
 | 0x5727A | 180 B | `level_start_message_strings` — NUL-terminated strings used by `show_level_start_screen`, from “SECRET ROOM” through “LEVEL ”; exact range 0x5727A–0x5732D. Call sites pass explicit row/column/attribute arguments rather than using a descriptor table. |
-| 0x5732E | 6 B | `level_start_row_bytes` — six bytes `{0x0B,0x0A,0x03,0x02,0x01,0x00}` read as a byte table by `show_level_start_screen` at 0x45BBA–0x45BC0 (`movea.l #0x5732E,a0; move.b (a0,d0.w),d0`, index d5 unscaled). |
-| 0x57334 | 12 B | `level_start_attr_words` — six words `{0x983B,0x9D7A,0xA0A2,0xA49C,0xA97B,0xACA3}` read by the same routine at 0x45BA8–0x45BAE (`movea.l #0x57334,a0; move.w (a0,d0.w),d1`, index d5 doubled); alpha glyph/attribute codes. The former `dead_header_byte_block` classification was **Contradicted** — both tables have direct immediate bases in the same basic block. |
+| 0x5732E | 6 B | `player_power_icon_column_offsets` — bytes `{0x0B,0x0A,0x03,0x02,0x01,0x00}` read by `player_inv_update` at 0x45BBA–0x45BC0. Added to the name-row base at alpha column 29, they place power bits 0–5 at columns 40, 39, 32, 31, 30, and 29. |
+| 0x57334 | 12 B | `player_power_icon_words` — six complete alpha words `{0x983B,0x9D7A,0xA0A2,0xA49C,0xA97B,0xACA3}` parallel to the column offsets and selected by low-byte `player_powers` bits 0–5 at 0x45B9E–0x45BDC. The former `dead_header_byte_block` and `level_start_*` classifications were **Contradicted** by the direct `player_inv_update` consumer. |
+| 0x5758E | 14 B | `bonus_time_header_desc` — text descriptor `{column 34,row 1,string_ptr 0x57596,flags 0}` followed by `"TIME:"`; `setup_infopanel` uses it for maze numbers 0x68 and above after blanking the ordinary logo/level region |
 | 0x57BD8 | 738 B | `dead_tile_word_block` — runtime-dead ROM residue containing 369 uninterrupted big-endian words, exact range 0x57BD8–0x57EB9. Nearly every value is a 0x1Exx tile/picture code (many 0x1E13 blanks); there are no terminators or pointer boundaries. Whole-ROM pointer/xref and immediate/computed-base searches found no game or OS consumer. Although 369 factors as 9×41, the shipped code supplies no dimensions or orientation, so this must not be promoted to a live rectangular-map interpretation. |
 | 0x57EBA | 320 B | `factory_highscore_records` — exactly 40 eight-byte records through 0x57FF9. Each record is `{uint32_be score, char initials[3], uint8 zero}`; records are arranged as four character-class lists of ten because initialization adds `class × 0x50 + rank × 8`. Starts with score 0x1F40 and initials `AWC`. |
 | 0x57FFA | 118 B | Score-per-coin display records plus the “Enter your initials:” prompt, exact range 0x57FFA–0x5806F. The block opens with an 8-byte `text_desc` `{column 6, row 14, string_ptr 0x58002, flags 0}` whose string is “SCORE PER COIN”; `attract_highscores` pushes `pea.l 0x57FFA` at 0x4A1AA and nothing references 0x58000 |

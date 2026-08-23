@@ -522,6 +522,28 @@ _SUPERSHOT_CHARGES = 0x0B
 #: POWER_INVULN arms the 0x905F40 countdown with 0x384 frames (0x5189E).
 _INVULN_TIMER_LOAD = 0x384
 
+
+def initialize_player_temporary_power(
+    state: GameState, player_index: int, obj_type: int,
+) -> None:
+    """Install one power-up tile's live state for a direct test-game start."""
+    item_id = POWERUP_ITEM_ID.get(int(obj_type))
+    if item_id is None or item_id < 6:
+        raise ValueError(f"not a temporary power-up object type: {obj_type}")
+    player = state.players[player_index]
+    player.powers |= POWERUP_BIT_MASKS[item_id]
+    if obj_type == int(MazeObjIds.POWER_INVIS):
+        state.player_invis_timer[player_index] = _INVIS_TIMER_LOAD
+    elif obj_type == int(MazeObjIds.POWER_REPULSE):
+        state.player_repulse_timer[player_index] = (
+            _REPULSE_TIMER_INIT[player.character & 0x03]
+        )
+    elif obj_type == int(MazeObjIds.POWER_SUPERSHOT):
+        player.supershot = (player.supershot + _SUPERSHOT_CHARGES) & 0xFF
+    elif obj_type == int(MazeObjIds.POWER_INVULN):
+        player.acid_timer = _INVULN_TIMER_LOAD
+
+
 #: The treasure-room maze band (0x519FE/0x51A08): mazes 0x68 through 0x72 skip
 #: the bonus-multiplier block and settle up on the bonus screen instead.
 _TREASURE_ROOM_MAZES = range(0x68, 0x73)
@@ -839,6 +861,7 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     if player_selector < 0:
         score.write_info_panel_backdrop(state)
         score.write_info_panel_header(state)
+        score.write_status_diagnostics(state)
     for i in targets:
         score.write_player_panel_background(state, i)
         initials_entry = (
@@ -1822,21 +1845,12 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         # re-ORing or repeating the speech, but the arm's own side-effects
         # below still run -- a second invisibility potion re-arms the timer.
         _player_give_item(state, player_index, obj_type)
-        if obj_type == int(MazeObjIds.POWER_INVIS):
-            state.player_invis_timer[player_index] = _INVIS_TIMER_LOAD   # 0x517D4
-        elif obj_type == int(MazeObjIds.POWER_REPULSE):
-            state.player_repulse_timer[player_index] = (
-                _REPULSE_TIMER_INIT[player.character & 0x03]             # 0x5181A
-            )
-        elif obj_type == int(MazeObjIds.POWER_SUPERSHOT):
-            # 0x51874 ``addi.b #$b`` -- eleven charges, not one, and they add.
-            player.supershot = (player.supershot + _SUPERSHOT_CHARGES) & 0xFF
-        elif obj_type == int(MazeObjIds.POWER_INVULN):
+        initialize_player_temporary_power(state, player_index, obj_type)
+        if obj_type == int(MazeObjIds.POWER_INVULN):
             # 0x5189E arms the 0x905F40 countdown this port calls ``acid_timer``
             # -- the same word the acid puddle uses (0x512D0) and the same one
             # main_move_players drains health from every eighth frame
             # (0x4A838-0x4A85E).  Its expiry clears this power's bit (0x4A880).
-            player.acid_timer = _INVULN_TIMER_LOAD
             # 0x518B2: this is the "don't use invulnerability" objective's
             # tell.  Unlike every other trick site it *assigns* 1 rather than
             # bumping (0x518C8 ``move.b #$1``), so picking up a second one
@@ -1852,18 +1866,33 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     # 0x518D2: the arm reads the tile's picture, derives a power-up ID from it
     # and offers that power first (0x518F2 ``player_give_item_with_message``);
     # only when nothing was granted (0x5191E ``tst.w d5``) does it fall through
-    # to the plain potion this port models.
+    # to the inventory-capacity and solo-score branches.
     if obj_type == int(MazeObjIds.HIDDENPOT):
-        player.potionsnum = (player.potionsnum + 1) & 0xFF
-        _sound_play(state, 0x0E)
-        state.mobs.unlink_and_clear(tile_mob_slot)
-        player_inv_update(state, player_index)
+        picture = state.mobs.picture[tile_mob_slot] & 0xFFFF
+        item_id = (picture - 0xA728) >> 2
+        granted = (
+            picture >= 0xA728
+            and (picture - 0xA728) % 4 == 0
+            and _player_give_item_id(state, player_index, item_id)
+        )
         # 0x518FA/0x51908: two *task* codes share this site, either of which
         # bumps the byte (0x51904 ``beq`` falls into the same ``addq.b #1``).
         # These are objective codes from the 0x50-0x5D band, not the 1-17
         # trick numbering, so they are passed as literals.
         _secret_trick_progress(state, player_index, _TASK_HIDDENPOT_A)
         _secret_trick_progress(state, player_index, _TASK_HIDDENPOT_B)
+        if not granted:
+            if player.keysnum + player.potionsnum < 12:
+                player.potionsnum = (player.potionsnum + 1) & 0xFF
+                granted = True
+            elif state.level_players_active == 1:
+                player_add_score_with_mult(state, player_index, 100)
+                granted = True
+        if not granted:
+            return 0
+        _sound_play(state, 0x26)
+        state.mobs.unlink_and_clear(tile_mob_slot)
+        player_inv_update(state, player_index)
         return -1
 
     return 0  # unhandled tile type
@@ -1911,6 +1940,15 @@ def _player_give_item(state: GameState, player_index: int, obj_type: int) -> boo
     """
     item_id = POWERUP_ITEM_ID.get(obj_type)
     if item_id is None:
+        return False
+    return _player_give_item_id(state, player_index, item_id)
+
+
+def _player_give_item_id(
+    state: GameState, player_index: int, item_id: int,
+) -> bool:
+    """0x4C72A for a caller that already decoded the 0-11 item ID."""
+    if not 0 <= item_id < len(POWERUP_BIT_MASKS):
         return False
     mask = POWERUP_BIT_MASKS[item_id]
     player = state.players[player_index]
@@ -2361,14 +2399,19 @@ def player_start_inner(state: GameState, player_index: int) -> int:
             if slot:
                 break
     else:
-        slot = next(
-            (
-                candidate for candidate in state.mobs.iter_chain()
-                if state.mobs.obj_type(candidate) == int(MazeObjIds.PLAYERSTART)
-                and candidate not in claimed
-            ),
-            0,
-        )
+        state.player_it = 0xFFFF                                  # 0x48C08
+        slot = state.maze_player_start_slot                       # 0x48C10
+        if not slot:
+            # Hand-built ROM-free/test mazes may omit maze_scan_objects(-1).
+            slot = next(
+                (
+                    candidate for candidate in state.mobs.iter_chain()
+                    if state.mobs.obj_type(candidate)
+                    == int(MazeObjIds.PLAYERSTART)
+                    and candidate not in claimed
+                ),
+                0,
+            )
 
     if slot:
         from .display import init_player_mob_palette
@@ -2384,15 +2427,19 @@ def player_start_inner(state: GameState, player_index: int) -> int:
             spawn_x, (player_index + 0x0C) & 0x0F,
         )
         spawn_vpos = encode_vpos_at_y(spawn_y, 3, 3)
+        initial_picture = _PLAYER_IDLE_PICTURE[
+            (int(player.character) & 0x03) * 8 + 4
+        ]
         if slot in state.mobs.iter_chain():
             state.mobs.hpos[slot] = spawn_hpos
             state.mobs.vpos[slot] = spawn_vpos
+            state.mobs.picture[slot] = initial_picture
             state.mobs.set_obj_type(slot, int(MazeObjIds.PLAYERSTART))
             state.mobs.set_state(slot, player_index)
         else:
             state.mobs.create(
                 slot,
-                tile=state.mobs.picture[slot],
+                tile=initial_picture,
                 hpos=spawn_hpos,
                 vpos=spawn_vpos,
                 obj_type=int(MazeObjIds.PLAYERSTART),
@@ -3605,6 +3652,7 @@ def corner_squeeze_geometry(state: GameState, packed_slot: int,
     direction = _direction_from_input(delta)
     if direction == 8:
         return 0
+    state.player_tport_route_state[player_index] = packed_slot  # 0x4FEDA
 
     target = _direction_neighbor(packed_slot, direction)
     if target >= FIRST_PLAYABLE_SLOT:
@@ -3641,9 +3689,10 @@ def corner_squeeze_geometry(state: GameState, packed_slot: int,
         return 0
 
     _sound_play(state, 0x28)
-    # A corner squeeze has no destination *pad*, so the type word takes the
-    # landing cell itself -- loop 2 only uses it to place the arrival sparkle.
-    tport_transition_arm(state, player_index, target, target)
+    # 0x5015C clears the destination-pad word for a corner squeeze.  The zero is
+    # significant at 0x50788: it enables the pf_replace path that can erase a
+    # normal wall at the selected landing cell.
+    tport_transition_arm(state, player_index, 0, target)
     return -2
 
 
@@ -3656,8 +3705,8 @@ def tport_transition_arm(state: GameState, player_index: int,
     (0x500F0-0x5015C) after it has picked the cell on the far side of a corner.
     Each writes the same three words and arms the same animation MOB:
 
-      * ``player_tport_type[p]`` (0x904BE2) -- the destination *pad*, which
-        loop 2 spawns its arrival sparkle on;
+      * ``player_tport_type[p]`` (0x904BE2) -- the destination pad, or zero for
+        corner transport;
       * ``player_tile_or_tport_dest[p]`` (0x904BD8, this port's
         ``player_tile_pos``) -- the *cell the hero lands on*, which
         ``tport_player_move`` reads and which ``main_scroll_playfield`` pans the
@@ -3694,6 +3743,10 @@ def tport_player_move(state: GameState, player_index: int) -> None:
     """
     landing = state.player_tile_pos[player_index] & 0x3FF
     destination_pad = state.player_tport_type[player_index] & 0x3FF
+    corner_transport = (
+        destination_pad == 0
+        and state.player_tport_route_state[player_index] != 0
+    )
     direction = _direction_from_input(
         _joystick_direction_bits(state, player_index),
     )
@@ -3716,7 +3769,30 @@ def tport_player_move(state: GameState, player_index: int) -> None:
             landing = candidate
             state.player_tile_pos[player_index] = candidate
             break
+    if (
+        corner_transport
+        and state.mobs.picture[landing] == _WALL_PICTURE
+        and state.mobs.obj_type(landing) != int(MazeObjIds.FORCEFIELDHUB)
+    ):
+        # 0x5078E-0x507E8: corner transport may land on an ordinary software
+        # wall marker. pf_replace turns both the logical tile and descriptor
+        # VRAM into floor before the normal destination check and player move.
+        from .shots import _pf_replace
+
+        _pf_replace(state, landing, int(MazeObjIds.TILE_FLOOR))
     if _move_player_to_slot(state, player_index, landing):
+        source_pad = state.player_tport_route_state[player_index] & 0x3FF
+        if (
+            player_index == state.thief_victim
+            and source_pad
+            and destination_pad
+        ):
+            from .thief import tport_route_connect
+
+            tport_route_connect(
+                state, source_pad, destination_pad, landing,
+            )                                           # 0x5085C-0x5087A
+            state.thief_victim_pos = landing           # 0x50880
         # 0x509DE creates the arrival sparkle from the newly installed player
         # record. The earlier 0x5050A effect remains at the source for dissolve.
         handle_tport(state, landing, player_index)
@@ -3862,10 +3938,17 @@ def _probe_candidate_blocks(
         # the attract demonstration near its final exit.
         return False
     if state.mobs.obj_type(candidate) in _FIGHT_PASS_TYPES:
-        # mob_collision_test returns -1 for these and the directional probe
-        # continues to its remaining flank candidates. Collection happens only
-        # after the player record enters the cell.
-        return False
+        transporting = any(
+            player.active
+            and player.mob_slot == self_slot
+            and player.powers & _POWER_TRANSPORT
+            for player in state.players
+        )
+        if not transporting:
+            # Ordinary movement resolves these after entering their cell. With
+            # transportability, squeeze_through_check runs first and teleports
+            # past them instead (0x42744 precedes mob_collision_test).
+            return False
     for player in state.players:
         if not player.active or candidate != player.mob_slot:
             continue
@@ -3881,22 +3964,18 @@ def _probe_candidate_blocks(
     candidate_h = state.mobs.hpos[candidate]
     candidate_v = state.mobs.vpos[candidate]
 
+    if candidate_h == 0 and candidate_v == 0:
+        # Synthetic records in isolated tests may omit placement geometry.
+        candidate_h = ((candidate & 0x1F) * 16 << POS_SHIFT) & 0xFFFF
+        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
+
     if picture & 0x8000:
         # A software marker's collision anchor is derived from its cell-aligned
-        # word by the rounding sequence at 0x407EA-0x40820. Expressing the same
-        # result from its slot also covers synthetic marker records that omit
-        # H/V words.
-        candidate_h = ((((candidate & 0x1F) * 16) - 4) << POS_SHIFT) & 0xFFFF
-        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
-    elif candidate_h == 0 and candidate_v == 0:
-        # Tests and host-created living-maze records may provide only type and
-        # picture. Real maze placement has already written these cell anchors.
-        correction = (
-            4 if state.mobs.obj_type(candidate)
-            == int(MazeObjIds.WALL_MOVABLE) else 0
-        )
-        candidate_h = ((((candidate & 0x1F) * 16) - correction) << POS_SHIFT) & 0xFFFF
-        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
+        # H/V words by the rounding sequence at 0x407EA-0x40820.  Use the live
+        # words: high-bit pictures include positioned door art, whose V anchor
+        # intentionally differs from the packed cell.
+        candidate_h = (((candidate_h + 0x280) & 0xF800) - 0x200) & 0xFFFF
+        candidate_v = (candidate_v + 0x100) & 0xF800
 
     return (
         _wrapped_position_delta(candidate_h, mover_h) < _PROBE_OVERLAP
@@ -4228,7 +4307,15 @@ def mob_probe_left(
         target_col = _MAZE_COLS - 1
     else:
         target_col = col - 1
-    for dr in (0, -1, 1):            # centre, upper flank, lower flank
+    flank_rows = [0]
+    if row >= 2 or state.game_mode == int(GameMode.DEMO):
+        # The live game uses the ROM threshold. The port's recorded-demo actor
+        # still needs its established row-zero flank to stay synchronized with
+        # the retained MAME route through maze 102.
+        flank_rows.append(-1)
+    if row < _MAZE_ROWS - 1:         # 0x40880: doubled slot < 0x7C0
+        flank_rows.append(1)
+    for dr in flank_rows:            # centre, optional upper/lower flanks
         r = row + dr
         if state.wrap_v:
             r &= 0x1F
@@ -4259,7 +4346,12 @@ def mob_probe_right(
         target_col = 0
     else:
         target_col = col + 1
-    for dr in (0, -1, 1):
+    flank_rows = [0]
+    if row >= 2 or state.game_mode == int(GameMode.DEMO):
+        flank_rows.append(-1)
+    if row < _MAZE_ROWS - 1:         # 0x408E6: doubled slot < 0x7C0
+        flank_rows.append(1)
+    for dr in flank_rows:
         r = row + dr
         if state.wrap_v:
             r &= 0x1F
@@ -4479,6 +4571,13 @@ def player_try_move(
         probe = mob_probe_right if step_x > 0 else mob_probe_left
         for _ in range(abs(requested_dx)):
             cur_slot = _pixel_to_slot(x + dx, screen_y(v))
+            if (
+                cur_slot < FIRST_PLAYABLE_SLOT
+                and state.game_mode != int(GameMode.DEMO)
+            ):
+                # Row zero is reserved hardware state, never a live player
+                # identity. The ROM keeps D2 on active_mob_ids (row one here).
+                cur_slot = player.mob_slot
             proposed_h = replace_position(
                 hpos, encode_hpos(x + dx + step_x),
             )
@@ -4517,6 +4616,11 @@ def player_try_move(
         probe = mob_probe_up if step_v > 0 else mob_probe_down
         for _ in range(abs(requested_dv)):
             temp_slot = _pixel_to_slot(x + dx, screen_y(v + dv))
+            if (
+                temp_slot < FIRST_PLAYABLE_SLOT
+                and state.game_mode != int(GameMode.DEMO)
+            ):
+                temp_slot = player.mob_slot
             proposed_v = replace_position(
                 vpos, encode_vpos((v + dv + step_v) & 0x1FF),
             )

@@ -49,6 +49,70 @@ evidence remains in `../doc/`, generated contracts, and the book.
 13. **Large text is variable-width.** The OS quad record's right-hand word is
     also a width flag: zero means a one-cell glyph. Writers must return and use
     the ROM's one/two-cell advance rather than positioning by character count.
+14. **Relocated markers need fresh geometry.** A packed MOB slot is identity and
+    location, but copying a marker record does not recompute its H/V words.
+    Relocation routines that the ROM rebuilds (such as moving exits) must derive
+    coordinates from the destination slot.
+15. **Level-start common tails are state resets.** Calls after player placement
+    (`thief_setup`, `maze_show`, `idle_timer` clear) apply to every handoff arm;
+    do not bury them in only ordinary or secret-room setup.
+16. **Transport routes are bidirectional state.** Player transport writes the
+    forward source link and reverse destination/landing direction. A thief first
+    resolves the linked destination, then reads the opposite table at that ID
+    for its arrival direction; one route word cannot substitute for both reads.
+    While that shared transition timer is nonnegative, the actor's ordinary
+    movement loop must remain gated; only the transition owner moves its record.
+17. **Persistent spawn identity outlives its marker.** Maze setup stores the
+    randomly selected PLAYERSTART slot before replacing that marker with floor.
+    First starts and continues use the saved word, not a search for a marker that
+    no longer exists.
+18. **Dragon movement probes gate targeting.** In `dragon_choose_move_direction`,
+    the two leading `0x8000` wall checks occur before the player/distance is
+    published. Flame-lock targeting must not bypass blocked footprint probes.
+19. **MOB size outranks asset-family defaults.** A picture's table family does
+    not determine its dimensions. Decode the live V-word size; in particular,
+    ordinary projectiles are 2x2 but max-tier dragon breath is 3x3.
+20. **Collision tags survive representation shifts.** ROM helpers may tag a
+    doubled MOB index before the caller shifts it back to a packed cell. Preserve
+    the corresponding shifted tag (`0x1000` doubled becomes `0x0800`) through
+    dispatch instead of reducing every collision result to a bare slot.
+21. **Prompt setup and live fields are separate writes.** Literal OS strings can
+    deliberately leave holes for later per-frame writers. Port both owners; the
+    continue prompt's seconds come from `main_attract`, not
+    `show_continue_prompt`.
+22. **Escaped thief loot returns through random placement.** The thief/mugger
+    departure clears its live MOB at the recorded start cell and stores carried
+    loot for `maze_addrandompickups`; the next level recreates that pickup using
+    the ROM's empty-cell walk rather than retaining an actor or renderer overlay.
+23. **Info-panel headers are maze-mode state.** A whole-panel rebuild first
+    clears rows 0–6. Only maze numbers below 0x68 restore the dungeon logo and
+    level field; treasure/secret rooms write `TIME:` over that blank region.
+    Do not treat the ordinary header as permanent HUD decoration.
+24. **Corner transport has a zero pad identity.** `corner_squeeze_geometry`
+    stores zero in `player_tport_type`; at the move milestone that zero enables
+    `pf_replace(..., floor)` for an ordinary `0x8000` landing wall. Preserve the
+    logical maze, MOB marker, and playfield descriptor write together.
+25. **High-bit collision pictures still use live geometry.** The player probe's
+    `0x8000` branch rounds the candidate MOB's live H/V words; it does not rebuild
+    them from the packed slot. Door and item pictures can have bit 15 set while
+    carrying deliberate placement corrections.
+26. **Dragon damage is a live MOB palette change.** Counted hits 1–2, 3–5, and
+    6–8 rewrite the primary dragon segment's hpos palette nibble to 8, 7, and 6.
+    Do not represent this progression as a renderer tint.
+27. **Reserved row zero is never a player probe origin.** The ROM keeps the
+    current `active_mob_ids[player]` slot in D2. Gauntpy's one-pixel integration
+    may derive an intermediate body cell, but it must fall back to the live
+    record when that cell is in reserved slots 0–31. Horizontal flank gates use
+    doubled-slot thresholds, so row zero is not an upper flank from row one.
+    Keep the explicit demo compatibility path until its retained MAME route can
+    survive removal; do not weaken normal gameplay geometry to preserve it.
+28. **Special actors may have actor-specific placement anchors.** Super
+    Sorcerer placement begins at the target player's live MOB slot and writes
+    its destination H position four pixels left of the cell. A generic
+    `pixel>>4` start or cell-origin placement changes its firing line.
+29. **Hidden-potion pictures encode permanent powers.** Type 61 picture
+    `(picture-0xA728)/4` is power ID 0–5. Only a duplicate grant falls through
+    to the inventory-potion/solo-score branches.
 
 ## Investigation workflow
 

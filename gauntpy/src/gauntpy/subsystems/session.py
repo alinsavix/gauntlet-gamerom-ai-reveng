@@ -111,6 +111,10 @@ def start_attract_to_game(state: GameState) -> None:
     state.game_mode = GameMode.NORMAL   # 0x44266
     state.levelnum_current = 1          # 0x4426C
     state.mazenum_current = 0           # 0x4420E
+    state.thief_item_carried = 0x7D30   # 0x44274-0x44280
+    state.thief_item_nextlevel = 0x7D30
+    state.mugger_item_carried = 0       # 0x44286-0x4428E
+    state.mugger_item_nextlevel = 0
     sound_play(state, 0x02)             # 0x4429A session-start sting
     state.bonus_timer = 0               # 0x44366 global_ui_delay_timer
     state.bonus_amount = 0
@@ -379,14 +383,19 @@ def main_start_game(state: GameState) -> None:
             # Full join (I-08): place the hero MOB into the maze when one is
             # loaded, then finalize (ALIVE_HERE + join speech / HUD redraw).
             # player_start_inner returns -1 and counts the player itself when it
-            # finds a spawn tile; when there is no maze (attract/character
-            # select) it returns 0 without counting, so the join is still
-            # finalized here and counted once. Either way the count advances by
-            # exactly one -- unifying the two former increment sites (I-R5).
+            # finds a spawn tile. A loaded-maze failure must remain SELECTING;
+            # finalizing it would create an active player with MOB slot zero.
+            # ROM-free/front-end-only harnesses have no world and keep the old
+            # status-only behavior.
             placed = player_start_inner(state, i)
-            player_join_finalize(state, i)
-            if placed != -1:
+            joined = placed == -1
+            if not joined and state.maze is None:
+                # ROM-free/front-end-only harness: there is no world to place.
+                joined = True
                 state.level_players_active += 1
+            if not joined:
+                continue
+            player_join_finalize(state, i)
             if initial_selection:
                 clear_alpha_visible(state)
                 setup_infopanel(state, -1)

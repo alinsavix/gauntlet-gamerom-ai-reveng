@@ -49,6 +49,17 @@ By default the runner drops you straight into a level. Options:
 uv run --all-extras gauntpy-play --level 2 --character elf --scale 3
 ```
 
+Direct play can seed inventory and temporary powers for testing:
+
+```bash
+uv run --all-extras gauntpy-play --keys 3 --potions 2 \
+  --power reflective-shots --power transportability
+```
+
+`--power` may be repeated and accepts `invisibility`, `repulsiveness`,
+`reflective-shots`, `transportability`, `super-shots`, and `invulnerability`.
+These test-start options cannot be combined with `--attract`.
+
 For uninterrupted testing, suppress first-encounter pop-up boxes (speech and
 gameplay effects still occur):
 
