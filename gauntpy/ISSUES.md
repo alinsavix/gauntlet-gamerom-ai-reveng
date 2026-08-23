@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2261 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2262 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,13 @@ start).
 ---
 
 ## Resolved issues
+
+### S-85 · remaining reconstructed large-font and HUD table shortcuts
+
+The ROM-free large-font renderer now assigns digit/letter quadrant images through
+the same OS 0x34A6 index map as the live alpha writer rather than enumerating
+`0-9A-Z` against the quadrant table. The five `M_DUNGEON` glyph rows are also
+literal transcriptions of ROM 0x574B8 rather than generated contiguous ranges.
 
 ### S-84 · level splash glyphs were corrupt and its hold never expired
 

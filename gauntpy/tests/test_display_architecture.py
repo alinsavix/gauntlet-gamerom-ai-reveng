@@ -8,6 +8,7 @@ import inspect
 from gauntpy.constants import PlayerStatus
 from gauntpy.render import hud
 from gauntpy.render import mobs as mob_renderer
+from gauntpy.render import text as text_renderer
 from gauntpy import assets
 from gauntpy.render.alpha import draw_alpha_layer
 from gauntpy.render.framebuffer import Framebuffer
@@ -54,6 +55,12 @@ def test_subsystem_display_has_no_gex_dependency():
     import gauntpy.subsystems.display as display
 
     assert "gex" not in inspect.getsource(display)
+
+
+def test_rom_free_large_font_uses_the_os_character_index_map():
+    source = inspect.getsource(text_renderer._large_fallback_tiles)
+    assert "_LARGE_GLYPH_INDEX_MAP[ord(character)]" in source
+    assert "_LARGE_GLYPH_INDEX_MAP[ord(\" \")]" in source
 
 
 def test_mob_renderer_and_asset_bridge_have_no_palette_overrides():
