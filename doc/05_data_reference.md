@@ -156,7 +156,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x9049C4 | 2 B × 12 | `shot_direction` | Direction/state word for each of 12 projectile channels. Values 0–7 are compass directions; reflection and special-shot paths also retain flag bits in the same word. |
 | 0x9049DC | 2 B | `player_it` | Player who is IT (0–3) or 0xFFFF (-1) if nobody |
 | 0x9049DE | 2 B | `mob_depth_list_head` | Head MOB ID of the global depth-sorted display list; the placement routines update it when inserting before the current first MOB |
-| 0x9049E0 | 2 B | `maze_player_start_slot` | Packed maze slot selected by `maze_scan_objects` for the player-start marker; used to center the initial view and as the fallback spawn position for joining players |
+| 0x9049E0 | 2 B | `maze_player_start_slot` | Packed maze slot randomly selected by `maze_scan_objects(-1)` from the PLAYERSTART records before that marker is replaced with floor. It remains the first-player and post-death continue spawn even after no PLAYERSTART marker remains live. |
 | 0x9049E2 | 2 B | `two_player_mode` | Game pricing/two-player mode config |
 | 0x9049E4 | 4 B | `dialog_first_encounter_flags` | Bitmask of which first-encounter dialogs have been shown |
 | 0x9049E8 | 2 B | `treasure_timer` | Time spent in treasure room |

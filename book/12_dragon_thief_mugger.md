@@ -135,6 +135,12 @@ measures forward distance in 16-pixel cells. No target has its own sentinel.
 Within three cells the dragon uses the large, max-strength 3×3 flame; farther
 away it throws the ordinary 2×2 fireball.
 
+Targeting is constrained by the dragon's own footprint. Before publishing a
+player and distance, the movement chooser checks the two leading cells; a solid
+wall marker in either one rejects that candidate. A player aligned above the
+dragon but separated by that leading wall therefore does not establish the
+sustained flame lock.
+
 Close range alone does not sustain the flame. The muzzle must also line up with
 the target by roughly one sprite width. That sets the lock bit and holds the
 current fire phase instead of advancing the path program. Leaving either the

@@ -62,6 +62,13 @@ evidence remains in `../doc/`, generated contracts, and the book.
     for its arrival direction; one route word cannot substitute for both reads.
     While that shared transition timer is nonnegative, the actor's ordinary
     movement loop must remain gated; only the transition owner moves its record.
+17. **Persistent spawn identity outlives its marker.** Maze setup stores the
+    randomly selected PLAYERSTART slot before replacing that marker with floor.
+    First starts and continues use the saved word, not a search for a marker that
+    no longer exists.
+18. **Dragon movement probes gate targeting.** In `dragon_choose_move_direction`,
+    the two leading `0x8000` wall checks occur before the player/distance is
+    published. Flame-lock targeting must not bypass blocked footprint probes.
 
 ## Investigation workflow
 

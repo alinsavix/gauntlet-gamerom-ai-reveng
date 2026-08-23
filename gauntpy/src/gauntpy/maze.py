@@ -1154,6 +1154,23 @@ def place_decoded_objects(state: GameState, maze: Maze) -> None:
         maze_place_object(state, slot, object_type, 1)
 
 
+def select_player_start_slot(state: GameState) -> None:
+    """Port maze_scan_objects(-1): select and consume one PLAYERSTART marker."""
+    starts = [
+        slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+        if state.mobs.obj_type(slot) == int(MazeObjIds.PLAYERSTART)
+    ]
+    state.maze_player_start_slot = 0
+    if not starts:
+        return
+    slot = starts[state.getrandom(len(starts))]
+    state.maze_player_start_slot = slot
+    state.mobs.unlink_and_clear(slot)
+    data = getattr(state.maze, "data", None)
+    if data is not None:
+        row, col = coords.unpack_slot(slot)
+        data.pop((col, row), None)
+
 
 # ---------------------------------------------------------------------------
 # maze_load_pickup_config (0x436FE) -- level flags load & randomization
@@ -1364,6 +1381,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     # bridge commits its random texture decisions once into hardware-shaped
     # descriptor RAM; rendering never treats this dictionary as pixels.
     state.maze = mirror_maze(state, maze)
+    select_player_start_slot(state)              # maze_scan_objects(-1), 0x4395E
     from .subsystems.maze_objects import (
         forcefield_segments_setup, maze_forcefield_setup,
     )

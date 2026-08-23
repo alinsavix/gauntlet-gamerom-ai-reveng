@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2268 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2270 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,23 @@ start).
 ---
 
 ## Resolved issues
+
+### S-93 · death/continue lost the player spawn record
+
+`maze_scan_objects(-1)` now selects and stores `maze_player_start_slot`
+(0x9049E0), removes that marker just as `pf_replace` does, and
+`player_start_inner` reuses the saved cell for first starts and post-death
+continues. A failed loaded-maze placement is no longer finalized into an active
+player with MOB slot zero. Successful continues rebuild the hero picture,
+tracking words, and snap the camera so the player is immediately visible.
+
+### S-94 · dragon wall/flame report confirmed as ROM behavior
+
+No behavior change was made. `dragon_choose_move_direction` 0x53E4A tests both
+leading footprint cells and skips the candidate at 0x53FE0-0x54044 when either
+picture is the `0x8000` wall marker. Because target/distance publication happens
+after those probes, a player approached through that wall does not establish the
+close-range flame lock. A regression now protects this ROM ordering.
 
 ### S-88 … S-92 · exit, treasure, idle-door, and thief-route regressions
 

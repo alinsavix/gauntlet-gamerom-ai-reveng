@@ -452,8 +452,7 @@ class TestPlayerStartInner:
         state = GameState()
         state.maze = object()                           # dummy: just not None
         slot = pack_slot(8, 8)
-        state.mobs.create(slot, tile=0x1e0d, hpos=0, vpos=0,
-                          obj_type=int(MazeObjIds.PLAYERSTART))
+        state.maze_player_start_slot = slot
 
         assert gp.player_start_inner(state, 0) == -1
         p = state.players[0]
@@ -466,16 +465,46 @@ class TestPlayerStartInner:
     def test_second_player_takes_a_distinct_start(self):
         state = GameState()
         state.maze = object()
-        slot_a, slot_b = pack_slot(5, 5), pack_slot(6, 6)
-        for s in (slot_a, slot_b):
-            state.mobs.create(s, tile=0x1e0d, hpos=0, vpos=0,
-                              obj_type=int(MazeObjIds.PLAYERSTART))
+        slot_a = pack_slot(5, 5)
+        expected = pack_slot(5, 4)
         # Player 0 already spawned and active at slot_a.
         state.players[0].status = int(PlayerStatus.ALIVE_HERE)
         state.players[0].mob_slot = slot_a
+        state.level_players_active = 1
 
         assert gp.player_start_inner(state, 1) == -1
-        assert state.players[1].mob_slot == slot_b      # skipped slot_a
+        assert state.players[1].mob_slot == expected
+
+    @requires_roms
+    def test_post_death_continue_reuses_saved_start_and_snaps_camera(self):
+        from gauntpy import maze
+        from gauntpy.coords import slot_to_pixels
+        from gauntpy.subsystems.camera import viewport_scroll
+
+        state = GameState(game_mode=GameMode.NORMAL)
+        maze.load_level(state, 2)
+        start = state.maze_player_start_slot
+        assert start
+        assert gp.player_start_inner(state, 0) == -1
+        state.mobs.unlink_and_clear(state.players[0].mob_slot)
+        gp.player_resetcounters(state, 0)
+        state.level_players_active = 0
+        state.scroll_x = 300
+        state.scroll_y = 300
+
+        sess.player_init_for_coin(state, 0)
+        state.debounce_shift_magic[0] = 0x1C
+        sess.main_start_game(state)
+
+        player = state.players[0]
+        assert player.status == int(PlayerStatus.ALIVE_HERE)
+        assert player.mob_slot == start
+        assert state.mobs.picture[start] != 0
+        assert state.player_in_maze[0] == 1
+        scroll_x, scroll_y = viewport_scroll(state, 232, 240)
+        player_x, player_y = slot_to_pixels(start)
+        assert (player_x - scroll_x) % 512 < 232
+        assert (player_y - scroll_y) % 512 < 240
 
 
 # ---------------------------------------------------------------------------

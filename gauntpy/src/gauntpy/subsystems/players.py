@@ -2361,14 +2361,19 @@ def player_start_inner(state: GameState, player_index: int) -> int:
             if slot:
                 break
     else:
-        slot = next(
-            (
-                candidate for candidate in state.mobs.iter_chain()
-                if state.mobs.obj_type(candidate) == int(MazeObjIds.PLAYERSTART)
-                and candidate not in claimed
-            ),
-            0,
-        )
+        state.player_it = 0xFFFF                                  # 0x48C08
+        slot = state.maze_player_start_slot                       # 0x48C10
+        if not slot:
+            # Hand-built ROM-free/test mazes may omit maze_scan_objects(-1).
+            slot = next(
+                (
+                    candidate for candidate in state.mobs.iter_chain()
+                    if state.mobs.obj_type(candidate)
+                    == int(MazeObjIds.PLAYERSTART)
+                    and candidate not in claimed
+                ),
+                0,
+            )
 
     if slot:
         from .display import init_player_mob_palette
@@ -2384,15 +2389,19 @@ def player_start_inner(state: GameState, player_index: int) -> int:
             spawn_x, (player_index + 0x0C) & 0x0F,
         )
         spawn_vpos = encode_vpos_at_y(spawn_y, 3, 3)
+        initial_picture = _PLAYER_IDLE_PICTURE[
+            (int(player.character) & 0x03) * 8 + 4
+        ]
         if slot in state.mobs.iter_chain():
             state.mobs.hpos[slot] = spawn_hpos
             state.mobs.vpos[slot] = spawn_vpos
+            state.mobs.picture[slot] = initial_picture
             state.mobs.set_obj_type(slot, int(MazeObjIds.PLAYERSTART))
             state.mobs.set_state(slot, player_index)
         else:
             state.mobs.create(
                 slot,
-                tile=state.mobs.picture[slot],
+                tile=initial_picture,
                 hpos=spawn_hpos,
                 vpos=spawn_vpos,
                 obj_type=int(MazeObjIds.PLAYERSTART),

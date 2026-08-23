@@ -375,6 +375,23 @@ class TestPoseAndAttack:
         assert state.shot_direction[7] == 4
         assert state.dragon_state & _ST_LOCKED
 
+    def test_leading_wall_blocks_target_publication_and_flame_lock(self):
+        from gauntpy.subsystems.dragon import _choose_move_direction
+
+        state = GameState()
+        primary = _place_dragon(state)
+        _place_player(state, 164, 112)
+        wall = pack_slot(8, 10)
+        state.mobs.picture[wall] = 0x8000
+        state.mobs.set_obj_type(wall, int(MazeObjIds.WALL_REGULAR))
+        state.dragon_state = 0
+        state.dragon_facing = 0
+
+        _choose_move_direction(state, primary)
+
+        assert state.dragon_move_state & 0x0F == 4
+        assert not state.dragon_state & _ST_LOCKED
+
     def test_no_live_player_publishes_the_no_target_sentinel(self):
         state = GameState()
         _place_dragon(state)

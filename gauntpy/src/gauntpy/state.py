@@ -190,6 +190,9 @@ class GameState:
     # WP-6 · player lifecycle, health, powers, tile interaction
     # =========================================================================
     player_it: int = 0xFFFF         # 0x9049DC, 0xFFFF = nobody is IT
+    # 0x9049E0: randomly selected PLAYERSTART cell retained after its marker is
+    # replaced with floor; first starts and post-death continues spawn here.
+    maze_player_start_slot: int = 0         # 0x9049DC, 0xFFFF = nobody is IT
     # Per-player looping-sound timer arrays (§21).
     # Negative = new contact (main_handle_death plays start sound and negates).
     # Positive = countdown; when reaches 0, stop sound plays.

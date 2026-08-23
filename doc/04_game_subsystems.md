@@ -544,6 +544,10 @@ coin to a player who is already active.
 The first player uses `maze_player_start_slot`. Later players do not need another
 PLAYERSTART marker: 0x48C1A–0x48C92 tries left, right, up, and down around each
 existing player's current cell, accepting the first empty on-screen candidate.
+`maze_scan_objects(-1)` chooses that first-player slot randomly from the decoded
+PLAYERSTART records, stores it at 0x9049E0, and replaces the selected marker with
+floor. The saved word therefore remains authoritative after death; a continue
+must not search the live MOB table for a marker that setup deliberately removed.
 
 ### 4.5 IT Mechanic
 
@@ -1025,6 +1029,12 @@ and updates the packed movement state, facing, and signed animation phase.
 The low nibble selects the player (4 means none), bits 4–7 hold the cardinal
 facing, and the high byte is the selected player's forward-axis distance in
 16-pixel cells. Directly above/right/below/left maps to compass 0/2/4/6.
+
+The obstruction test is also a target-publication gate, not merely a later
+movement veto. At 0x53FE0-0x5400C either leading footprint cell containing
+picture 0x8000 skips that player before its index, direction, or distance can be
+selected. Consequently a close aligned player behind that leading wall does not
+activate sustained flame lock. Directly above/right/below/left maps to compass 0/2/4/6.
 No-target state is `4 | facing<<4 | 0x1000`.
 
 `dragon_update_segments` (0x53D10) reads the current path pose and facing,

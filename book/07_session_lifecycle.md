@@ -83,6 +83,13 @@ welcome. Join-in-progress, one of the game's signature freedoms, costs no
 special machinery at all; it is the ordinary join path running while a
 level happens to be in progress.
 
+The first-player case does not search for a surviving start marker. During maze
+setup the cabinet randomly chooses a PLAYERSTART, remembers its packed cell, and
+replaces the marker with floor. Fresh starts and post-death continues reuse that
+saved cell; later joiners search beside a hero who is already active. A placement
+failure never advances to the finalizer, because "alive with no MOB" would leave
+the camera tracking an absent player.
+
 ## Starting a level
 
 Whether a session is beginning at level 1 or the party just cleared level

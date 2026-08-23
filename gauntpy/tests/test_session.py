@@ -400,10 +400,7 @@ def test_main_start_game_first_warrior_sets_spawn_bonus_not_multiplier():
     state = GameState()
     state.game_mode = GameMode.NORMAL
     state.maze = object()
-    state.mobs.create(
-        0x120, tile=1, hpos=0, vpos=0,
-        obj_type=int(MazeObjIds.PLAYERSTART),
-    )
+    state.maze_player_start_slot = 0x120
     state.players[0].status = PlayerStatus.SELECTING
     state.pending_character[0] = Character.WARRIOR
 
@@ -418,10 +415,7 @@ def test_main_start_game_first_wizard_sets_spawn_bonus_not_multiplier():
     state = GameState()
     state.game_mode = GameMode.NORMAL
     state.maze = object()
-    state.mobs.create(
-        0x120, tile=1, hpos=0, vpos=0,
-        obj_type=int(MazeObjIds.PLAYERSTART),
-    )
+    state.maze_player_start_slot = 0x120
     state.players[0].status = PlayerStatus.SELECTING
     state.pending_character[0] = Character.WIZARD
 
