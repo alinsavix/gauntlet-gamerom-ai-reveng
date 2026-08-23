@@ -1328,7 +1328,8 @@ class TestTitleMobs:
         draw_alpha_layer(fb, state)
 
         assert fb.get_pixel(0, 239) == (12, 34, 56, 255)
-        assert fb.get_pixel(8, 0) == (0, 0, 0, 255)
+        assert fb.get_pixel(8, 0) == (12, 34, 56, 255)
+        assert fb.get_pixel(8, 8) == (0, 0, 0, 255)
 
     def test_scores_compositor_does_not_leak_gameplay_hud_backgrounds(self):
         state = GameState(game_mode=GameMode.SCORES)
@@ -1382,6 +1383,15 @@ class TestFrontEndTextIsRomData:
                 for offset in range(len(plural))
             )
 
+    def test_scores_screen_preserves_the_maze_border_above_the_top_ladders(self):
+        state = GameState()
+        score.write_high_score_screen(state)
+
+        assert state.alpha_ram[1] == 0
+        assert state.alpha_ram[20] == 0
+        assert state.alpha_ram[score.ALPHA_ROW_STRIDE + 1] & 0x8000
+        assert state.alpha_ram[score.ALPHA_ROW_STRIDE + 20] & 0x8000
+
     def test_scores_screen_shows_the_rom_factory_ladder(self):
         state = GameState()
         score.write_high_score_screen(state)
@@ -1423,8 +1433,40 @@ class TestFrontEndTextIsRomData:
 
         state = GameState()
         start_attract_screen(state, int(GameMode.LEGEND))
-        for text, column, row in romtext.LEGEND_RULES_TEXT:
+        for text, column, row, _attribute in romtext.LEGEND_RULES_TEXT:
             assert _alpha_text(state, column, row, len(text)) == text
+        assert _alpha_text(state, 8, 0, 6) == "LEGEND"
+
+    def test_legend_rules_reveals_the_rom_rectangles_without_erasing_the_panel(self):
+        from gauntpy.subsystems.attract import start_attract_screen
+
+        state = GameState()
+        start_attract_screen(state, int(GameMode.LEGEND))
+
+        for column, row in (
+            (0, 2), (0, 10), (0, 22), (22, 2), (24, 11), (24, 20),
+        ):
+            assert state.alpha_ram[row * score.ALPHA_ROW_STRIDE + column] == 0
+        assert state.alpha_ram[7 * score.ALPHA_ROW_STRIDE + 22] & 0x8000
+        assert state.alpha_ram[
+            5 * score.ALPHA_ROW_STRIDE + score.PANEL_COLUMN
+        ] & 0x8000
+
+    def test_monster_legend_writes_the_rom_capability_table(self):
+        from gauntpy.subsystems.attract import start_attract_screen
+
+        state = GameState()
+        start_attract_screen(state, int(GameMode.LEGEND))
+        state.attract_legend = 1
+        from gauntpy.subsystems.attract import _load_legend_page
+        _load_legend_page(state)
+
+        assert _alpha_text(state, 6, 0, 8) == "MONSTERS"
+        assert _alpha_text(state, 0, 19, 5) == "GHOST"
+        assert _alpha_text(state, 15, 19, 2) == "NO"
+        assert _alpha_text(state, 20, 19, 3) == "YES"
+        assert _alpha_text(state, 25, 25, 4) == "STUN"
+        assert _alpha_text(state, 0, 14, 6) == "DRAGON"
 
 
 class TestRomTextTables:

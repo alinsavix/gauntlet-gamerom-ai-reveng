@@ -446,7 +446,7 @@ def write_high_score_screen(state: GameState) -> None:
     clear_alpha_visible(state)
     opaque_blank = alpha_word(0x8000, ALPHA_SPACE_GLYPH)
     for column, row, width, height in (
-        (1, 0, 17, 14), (20, 0, 21, 14),
+        (1, 1, 17, 13), (20, 1, 21, 13),
         (1, 17, 17, 12), (20, 17, 21, 12),
     ):
         fill_alpha_rect(state, column, row, width, height, opaque_blank)

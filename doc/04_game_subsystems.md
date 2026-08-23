@@ -781,7 +781,16 @@ therefore **Contradicted**.
 MAME 0.289 confirms the alpha-layer distinction: LEGEND's 29×30 opaque blank
 curtain intentionally hides maze 103 behind black text space, while the
 following SCORES screen retains maze 103 and uses opaque boxes only for its
-four ladders. The cyan maze remains visible between those boxes.
+four ladders. The cyan maze remains visible between those boxes, including the
+complete one-cell row above the two upper ladders; their opaque spans begin on
+alpha row 1, not row 0.
+
+`draw_legend_rules_page` uses `alpha_clear_rect(column, width, row, height)`;
+the six calls at 0x4D088-0x4D0EC reveal `(0,5,2,5)`, `(0,5,10,9)`,
+`(0,5,22,7)`, `(22,7,2,5)`, `(24,5,11,6)`, and `(24,5,20,9)`. The last two
+remain left of the status panel. `draw_legend_monsters_page` separately clears
+`(16,10,3,14)` and expands the 42 records at 0x5A56E into ten creature names
+and the lower Fight/Shoot/Magic matrix.
 
 ### 6.2 Demo Data Format
 
@@ -846,6 +855,15 @@ search. The recorded Elf collects the row-straddling potion, uses it near the
 end, and reaches the exit; treating the hero's fixed host record as its logical
 cell, or clipping the scripted hero to a camera held by lagging joined actors,
 breaks that sequence.
+
+The ordinary transporter landing also calls `dialog_first_encounter` with mask
+0x01000000 at 0x50840-0x5084C. Its 150-frame message freezes
+`main_move_players`, including `demo_ptr` and `demo_timer`, while the
+transporter phase animation continues in the score/effect loop outside the
+dialog-gated world band. A fresh MAME 0.289 trace therefore lands at slot 486
+`(92,240)` during the still-live `32 D3` record, then resumes enough LEFT input
+to reach slot 483 `(44,242)` before the next record. Omitting the dialog consumes
+that input during the dissolve and strands the Elf against the wall below.
 
 ### 6.4 Attract-Mode Interruption
 
@@ -979,6 +997,9 @@ found. It removes/recreates the player there and calls `handle_tport` again at
 0x509DE, moving the reappearance sparkle from the source to the destination.
 MAME 0.179 confirms the shipped demo moves player 1 from slot 492 `(180,240)`
 to slot 486 `(92,240)`; the effect changes to the destination on phase 22.
+For an ordinary pad (`player_tport_type != 0`), the successful candidate path
+first calls `dialog_first_encounter(player, 0x01000000)` at 0x50840-0x5084C.
+Corner transport skips this call.
 
 **Display-origin clarification.** `scroll_hpos_origin` at 0x904AC2 remains
 `(pf_hscroll - 8) << 7` for player/shot boundary arithmetic. It is not the

@@ -578,6 +578,7 @@ _DIALOG_KEYS = 0x00000008           # record 3, 0x51620
 _DIALOG_SAVE_POTIONS = 0x00000020   # record 5, 0x51796
 _DIALOG_POISONED = 0x00002000       # record 13, 0x516BE / 0x51CAA
 _DIALOG_TRAP = 0x00800000           # record 23, 0x51278
+_DIALOG_TRANSPORTER = 0x01000000    # record 24, 0x50840
 _DIALOG_STUN_FLOOR = 0x04000000     # record 26, 0x51388
 _DIALOG_LOCKED_TREASURE = 0x08000000  # record 27, mob_collision_test 0x52614
 _DIALOG_FORCEFIELD = 0x80000000     # 0x4AAEE, inside the contact block
@@ -3780,6 +3781,8 @@ def tport_player_move(state: GameState, player_index: int) -> None:
         from .shots import _pf_replace
 
         _pf_replace(state, landing, int(MazeObjIds.TILE_FLOOR))
+    if destination_pad:
+        _dialog(state, player_index, _DIALOG_TRANSPORTER)  # 0x50840-0x5084C
     if _move_player_to_slot(state, player_index, landing):
         source_pad = state.player_tport_route_state[player_index] & 0x3FF
         if (

@@ -482,14 +482,20 @@ class TestDemoInit:
         start_attract_screen(state, int(GameMode.DEMO))
         elf = state.players[1]
         transported = False
+        resumed_after_transport = False
         arrival_sparkle = False
 
         for _ in range(7000):
             tick(state)
-            if state.demo_stream_pos[1] >= 76 and elf.mob_slot:
+            if elf.mob_slot:
                 x = hpos_x(state.mobs.hpos[elf.mob_slot])
                 y = vpos_y(state.mobs.vpos[elf.mob_slot])
                 transported |= x == 92 and 240 <= y <= 242
+                resumed_after_transport |= (
+                    state.demo_stream_pos[1] >= 76
+                    and x == 44
+                    and 280 <= y <= 282
+                )
             if state.player_tport_phase[1] >= 0:
                 effect = 0x19 + 1
                 if state.mobs.picture[effect]:
@@ -499,8 +505,11 @@ class TestDemoInit:
                     )
 
         assert transported
+        assert resumed_after_transport
         assert arrival_sparkle
         assert state.demo_stream_pos[1] >= 148
+        assert elf.status == int(PlayerStatus.ALIVE_NEXT), "the Elf reached the exit"
+        assert state.dialog_first_encounter_flags & 0x01000000
 
 
 class TestLogoColors:

@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2297 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2300 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,28 @@ start).
 ---
 
 ## Resolved issues
+
+### S-112 … S-113 · demo transporter timing and incomplete attract pages
+
+- **S-112:** `tport_player_move` omitted the first-encounter dialog call at
+  0x50840-0x5084C after selecting an ordinary transporter landing. In the
+  attract demo that 150-frame dialog freezes `main_move_players` and the ROM
+  script while the transporter animation continues outside the dialog-gated
+  world band. Without it, the remaining LEFT record expired during the
+  dissolve, leaving the Elf at `(92,256)` and preventing the recorded route
+  from reaching the exit. The game-side dialog write is restored; command
+  boundaries now match a fresh MAME 0.289 trace from the `(92,240)` landing
+  through the exit.
+- **S-113:** the rules legend transposed five of six `alpha_clear_rect`
+  arguments, erasing labels and the first status-panel column instead of
+  revealing maze-103 item art. It also omitted the centered LEGEND heading,
+  used normalized spellings instead of ROM `DESTRUCTABLE`/`MOVEABLE`, and
+  flattened the three text palettes. The monster page omitted the complete
+  42-cell table at 0x5A56E: duplicated creature labels plus the Fight/Shoot/
+  Magic `NO`/`YES`/`STUN` matrix. Those modeled alpha-RAM writes now follow
+  0x4CDB8/0x4CFDA exactly. The SCORES page's top opaque boxes also began one
+  row too high; rows 1-13 are opaque while row 0 remains maze-103 scenery,
+  matching MAME 0.289.
 
 ### S-111 · maze-17 `(16,10)` seam report matches the ROM
 

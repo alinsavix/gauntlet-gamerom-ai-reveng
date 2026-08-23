@@ -188,6 +188,14 @@ countdowns therefore freeze along with the monsters. Wall-clock time on the
 demo screen is the script's fifty seconds plus roughly two seconds for each
 of the twelve boxes.
 
+One more box is produced by the world rather than an `FF` record. When the Elf
+reappears from the transporter, `tport_player_move` raises the ordinary
+first-encounter transporter advice. The transition animation lives outside the
+dialog-gated block and finishes, but the `32 D3` input record stops counting
+down. When the box closes, its remaining LEFT frames carry the Elf away from
+the landing wall. This is not presentation-only timing: omit that game-side
+dialog and the same immutable ROM recording gets stuck after the teleporter.
+
 The twelve messages are worth reading as a set:
 
 > BLUE SELECTED ELF · PUSH MOVABLE WALLS · SOME TREASURE REQUIRES KEYS ·
@@ -300,13 +308,17 @@ The legend is three ten-second pages drawn over stored maze 103, which is
 loaded purely as scenery. The routine that builds a page always fills a
 29-by-30 block of the text layer with opaque blanks first, the black curtain
 Chapter 4 described, so the maze behind it never shows through where the
-text goes.
+text goes. The item page then cuts six exact rectangular windows back through
+that curtain so the corresponding maze objects show beside their labels. Those
+rectangles stop before the status panel; their 68000 arguments are pushed in
+the reverse of the callee's `(column, width, row, height)` order.
 
 That maze persists into the following high-score screen. The four score boxes
 are opaque alpha rectangles, but the cells between them are transparent, so
 maze 103's cyan floor pattern is visible around the ladder. Updated MAME 0.289
 captures distinguish these cases: SCORES visibly retains the maze; LEGEND is
-intentionally black across its 29-column curtain.
+intentionally black across its 29-column curtain. The upper score boxes begin
+on alpha row one, leaving the maze's complete cyan top border visible.
 
 The pages come in reverse order of their numbering. The first is headed
 LEGEND and shows the item and terrain vocabulary: wall and floor types,
@@ -314,7 +326,10 @@ movable and destructible walls, potions, food, exits, traps, stun tiles,
 forcefields, keys, treasure, and the temporary and permanent power-ups, each
 beside its actual sprite. The second is headed MONSTERS and runs the roster
 from ghosts through Super Sorcerers, with Death, the acid puddle, IT, and the
-dragon named next to their graphics. The third is the credits:
+dragon named next to their graphics. It repeats those ten names in a lower
+table and answers three cabinet-manual questions for each one: can it be fought,
+shot, or affected by magic? The ROM's cells answer `NO`, `YES`, or `STUN` in
+separate palettes. The third page is the credits:
 
 | Role | Names |
 |------|-------|

@@ -118,6 +118,14 @@ evidence remains in `../doc/`, generated contracts, and the book.
     before V. A sprite can visibly approach or slide into wall artwork before
     the next anchor comparison blocks; do not tighten this with sprite boxes
     unless ROM/MAME diverges at the same state.
+31. **Dialogs are part of recorded-demo timing.** A first-encounter call can
+    freeze `main_move_players` and its demo pointer while animation work outside
+    the dialog-gated world band continues. Port the producer's dialog write;
+    never compensate by retiming or editing the ROM input stream.
+32. **Resolve stack arguments before porting alpha rectangles.**
+    `alpha_clear_rect` consumes `(column, width, row, height)` even though 68000
+    callers push those values in reverse order. Transpose the call, not the
+    visual result, and regression-test the exact transparent cells.
 
 ## Investigation workflow
 

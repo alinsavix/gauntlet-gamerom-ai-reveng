@@ -239,14 +239,33 @@ def _write_legend_alpha(state: GameState) -> None:
     if page == 2:
         # draw_legend_rules_page 0x4D088-0x4D0EC reveal windows precede text.
         for column, width, row, height in (
-            (0, 5, 2, 5), (0, 9, 10, 5), (22, 7, 5, 2),
-            (22, 5, 7, 2), (24, 6, 5, 11), (24, 9, 5, 20),
+            (0, 5, 2, 5), (0, 5, 10, 9), (0, 5, 22, 7),
+            (22, 7, 2, 5), (24, 5, 11, 6), (24, 5, 20, 9),
         ):
             fill_alpha_rect(state, column, row, width, height, 0)
     if page == 2:
-        records = romtext.LEGEND_RULES_TEXT
+        write_alpha_text(state, 8, 0, "LEGEND", 0x8000)
+        for text, column, row, attribute in romtext.LEGEND_RULES_TEXT:
+            write_alpha_text(state, column, row, text, attribute)
+        return
     elif page == 1:
-        records = romtext.LEGEND_MONSTER_TEXT
+        write_alpha_text(state, 6, 0, "MONSTERS", 0x8000)
+        for text, column in (
+            ("Type", 1), ("Fight", 12), ("Shoot", 18), ("Magic", 24),
+        ):
+            write_alpha_text(state, column, 18, text, 0x8000)
+        write_alpha_text(state, 1, 3, "Type", 0x8000)
+        for index, (name, fight, shoot, magic) in enumerate(
+            romtext.LEGEND_MONSTER_ROWS
+        ):
+            art_row = 4 + index + (1 if index == 9 else 0)
+            table_row = 19 + index
+            write_alpha_text(state, 0, art_row, name, 0x9000)
+            write_alpha_text(state, 0, table_row, name, 0x9000)
+            for text, column in ((fight, 15), (shoot, 20), (magic, 25)):
+                attribute = romtext.LEGEND_MONSTER_VALUE_ATTRIBUTES[text]
+                write_alpha_text(state, column, table_row, text, attribute)
+        return
     else:
         records = romtext.LEGEND_CREDITS_TEXT
     for text, column, row in records:
