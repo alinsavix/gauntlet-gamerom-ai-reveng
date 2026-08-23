@@ -3717,6 +3717,18 @@ def tport_player_move(state: GameState, player_index: int) -> None:
             state.player_tile_pos[player_index] = candidate
             break
     if _move_player_to_slot(state, player_index, landing):
+        source_pad = state.player_tport_route_state[player_index] & 0x3FF
+        if (
+            player_index == state.thief_victim
+            and source_pad
+            and destination_pad
+        ):
+            from .thief import tport_route_connect
+
+            tport_route_connect(
+                state, source_pad, destination_pad, landing,
+            )                                           # 0x5085C-0x5087A
+            state.thief_victim_pos = landing           # 0x50880
         # 0x509DE creates the arrival sparkle from the newly installed player
         # record. The earlier 0x5050A effect remains at the source for dissolve.
         handle_tport(state, landing, player_index)

@@ -69,7 +69,9 @@ neighbors are always reconsidered, not just the cell that changed.
 Doors also open without keys. A per-level idle timer counts up while play
 drags; past its threshold the game removes every door object on the level in
 one sweep and plays the "Doors open" fanfare. The timer is the cabinet's
-opinion that you have been dawdling, and it is reset by forward progress.
+opinion that you have been dawdling, and it is reset by forward progress. The
+common level-start tail also clears it after placing the party, so the one-shot
+disable from an earlier maze cannot carry into the next.
 
 ## Transporters
 
@@ -82,6 +84,13 @@ whose adjacent door, if any, is one you hold a key for. Blocked candidates are
 skipped. Arrival plays the transport sound, restores your saved sprite, and
 runs a sparkle: a dedicated effect MOB from a small reserved pool, stepped
 through its picture cycle by the per-frame animation loop until it expires.
+
+When the thief's selected victim uses a transporter, the game also learns a
+two-way route: one table links the source pad forward, while a companion table
+links the destination backward and records which neighboring cell the player
+used. The thief resolves the pad link first and then consults the opposite table
+for the step-off direction. This lets an escaping thief retrace a route it saw
+the player take rather than walking through the pad as ordinary floor.
 
 The shimmer of the transporter pads themselves is a third, independent piece:
 a palette animation. A bouncing counter selects one of six sixteen-byte color

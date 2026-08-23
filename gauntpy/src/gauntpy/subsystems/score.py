@@ -943,6 +943,7 @@ def _advance_thief_transition(state: GameState) -> None:
         state.thief_tport_saved_picture = state.mobs.picture[state.thief_current_pos]
         state.mobs.unlink_and_clear(state.thief_current_pos)
         state.thief_current_pos = state.thief_tport_dest
+        state.thief_mob_slot = 0
     elif step == _TRANSITION_MOVE:
         # 0x47218: re-stamp the fixed thief animation channel (25 + 4) at the
         # destination through the one implementation of handle_tport.
@@ -956,7 +957,21 @@ def _advance_thief_transition(state: GameState) -> None:
         state.mobs.depth_remove(_THIEF_ANIM_SLOT - 1)      # pea.l $1c.w
         state.mobs.picture[_THIEF_ANIM_SLOT] = 0
         state.thief_tport_timer = _TRANSITION_IDLE
-        state.thief_previous_pos = state.thief_current_pos
+        state.thief_mob_slot = state.thief_current_pos
+        from .thief import (
+            calc_direction,
+            path_grid_set_high_direction_if_empty,
+            thief_compute_path,
+        )
+
+        path_grid_set_high_direction_if_empty(
+            state,
+            state.thief_current_pos,
+            calc_direction(
+                state, state.thief_current_pos, state.thief_previous_pos,
+            ),
+        )
+        thief_compute_path(state)
         return
 
     picture = _transition_picture(step)

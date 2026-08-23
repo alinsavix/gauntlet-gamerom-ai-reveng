@@ -35,6 +35,9 @@ from gauntpy.subsystems.thief import (
     thief_track_victim_move,
     thief_target_calc,
     thief_timer_set,
+    thief_enter_tport,
+    tport_route_connect,
+    tport_route_connect_if_empty,
     calc_direction,
     path_grid_get_direction,
     path_grid_set_high_direction_if_empty,
@@ -733,6 +736,51 @@ class TestDeployAndEscapeGraph:
         assert state.thief_mode & THIEF_ESCAPE
         assert not state.thief_mode & THIEF_PURSUE
         assert state.thief_next_pos == previous
+
+    def test_escape_retraces_a_players_learned_transporter_route(self):
+        from gauntpy.subsystems.score import main_score_update
+
+        state = GameState()
+        source_pad = pack_slot(10, 8)
+        destination_pad = pack_slot(10, 15)
+        player_landing = pack_slot(10, 16)
+        thief_start = pack_slot(10, 14)
+        thief_landing = pack_slot(10, 9)
+        for pad in (source_pad, destination_pad):
+            state.mobs.create(
+                pad, 0x8001,
+                encode_hpos((pad & 31) * 16),
+                encode_vpos_at_y((pad >> 5) * 16),
+                MazeObjIds.TRANSPORTER,
+            )
+        tport_route_connect(
+            state, source_pad, destination_pad, player_landing,
+        )
+        tport_route_connect_if_empty(
+            state, source_pad, destination_pad, thief_landing,
+        )
+        _thief_at(state, thief_start)
+        original_picture = state.mobs.picture[thief_start]
+        state.thief_mode = THIEF_ESCAPE
+        state.thief_previous_pos = pack_slot(10, 13)
+        state.thief_next_pos = destination_pad
+
+        assert thief_enter_tport(state, destination_pad) == -1
+        assert state.thief_tport_dest == thief_landing
+        assert state.thief_tport_timer == 0
+        source_hpos = state.mobs.hpos[thief_start]
+        main_thief_anim(state)
+        assert state.thief_current_pos == thief_start
+        assert state.mobs.hpos[thief_start] == source_hpos
+
+        for _ in range(48):
+            main_score_update(state)
+
+        assert state.thief_tport_timer == -1
+        assert state.thief_current_pos == thief_landing
+        assert state.thief_mob_slot == thief_landing
+        assert state.mobs.picture[thief_landing] == original_picture
+        assert state.thief_next_pos != thief_landing
 
     def test_escape_finishes_when_the_route_returns_to_start(self):
         state = GameState()

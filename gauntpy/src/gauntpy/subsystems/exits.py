@@ -598,7 +598,11 @@ def main_treasure_timer(state: GameState) -> None:
 
     # Every full second (60 frames), including the final zero.
     if state.treasure_timer % 60 == 0:         # 0x4D2EA divu #0x3C, remainder
-        _countdown_speech(state, state.treasure_timer // 60)
+        seconds_remaining = state.treasure_timer // 60
+        write_alpha_large_text(
+            state, 34, 2, f"{seconds_remaining:>2}", 0x8000,
+        )                                       # 0x4D2FC-0x4D32A
+        _countdown_speech(state, seconds_remaining)
 
     # Timer just expired: end the level if anyone is still present.
     if state.treasure_timer == 0:              # 0x4D456
@@ -845,7 +849,19 @@ def _exit_relocate(state: GameState) -> None:
             state.mobs.unlink_and_clear(new_slot)
 
     if state.mobs.is_occupied(old_slot):
-        state.mobs.move_slot(old_slot, new_slot)   # 0x52984 create / 0x52A00 clear
+        state.mobs.unlink_and_clear(old_slot)
+
+    # 0x52984-0x52A32 rebuilds the tile marker from the destination slot. Moving
+    # the old record would preserve its old H/V words, making a later exit
+    # dissolve appear where the exit used to be.
+    from ..maze import placement_geometry
+
+    hpos, vpos = placement_geometry(int(MazeObjIds.EXIT), new_slot)
+    state.mobs.picture[new_slot] = 0x8001
+    state.mobs.hpos[new_slot] = hpos
+    state.mobs.vpos[new_slot] = vpos
+    state.mobs.set_obj_type(new_slot, int(MazeObjIds.EXIT))
+    state.mobs.set_state(new_slot, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -1096,7 +1112,16 @@ def show_level_start_screen(state: GameState) -> None:
 
     setup_infopanel(state, -1)                               # 0x44F38-0x44F3E
     fill_alpha_rect(state, 0, 0, 29, 30, alpha_word(0x8000)) # 0x44F44-0x44F66
-    if not in_bonus_room(state):
+    if _TREASURE_MAZE_FIRST <= state.mazenum_current <= _TREASURE_MAZE_LAST:
+        write_alpha_large_text(
+            state, 1, 5, romtext.TREASURE_ROOM_TITLE, 0x8000,
+        )
+        for text, column, row, attribute in romtext.TREASURE_ROOM_LINES:
+            write_alpha_text(state, column, row, text, attribute)
+        seconds = state.treasure_timer // 60
+        write_alpha_decimal(state, 14, 11, seconds, 2, 0x8000)
+        write_alpha_large_text(state, 34, 2, f"{seconds:>2}", 0x8000)
+    elif not in_bonus_room(state):
         write_alpha_large_text(
             state, 4, 9, romtext.TEXT_LEVEL_SPLASH, 0x8000,
         )
@@ -1404,6 +1429,10 @@ def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     if in_secret_room(state):                        # 0x48232
         secret_room_spawn(state)
         update_monster_spawn_bonus_from_score_per_coin(state)   # 0x4834E
+        from .thief import thief_setup
+
+        thief_setup(state)                           # 0x4835E
+        state.idle_timer = 0                         # 0x4836A
         return
 
     secret_new_level_setup(state)                    # 0x43916-0x4395C
@@ -1417,3 +1446,7 @@ def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     # 0x4834E: both handoff arms converge here, with the heroes already back to
     # status 1, so the bonus is computed from the party that is about to play.
     update_monster_spawn_bonus_from_score_per_coin(state)
+    from .thief import thief_setup
+
+    thief_setup(state)                               # 0x4835E
+    state.idle_timer = 0                             # 0x4836A

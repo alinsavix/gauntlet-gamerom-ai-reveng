@@ -1329,6 +1329,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     packages to wire in when they land, rather than guessed at here.
     """
     state.levelnum_current = level_number
+    state.thief_level_setup_done = False
     from .subsystems.maze_objects import select_forcefield_delay_profile
     select_forcefield_delay_profile(state)
     state.level_treasures = 0            # fresh level: reset the bonus tally count

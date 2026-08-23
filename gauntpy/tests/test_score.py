@@ -860,8 +860,12 @@ def test_thief_transition_restamps_fixed_animation_slot_at_destination() -> None
 
 
 def test_thief_transition_cleanup_reprograms_the_route() -> None:
+    from gauntpy.subsystems.thief import THIEF_ESCAPE
+
     state = _normal_state()
     state.thief_current_pos = 0x140
+    state.thief_previous_pos = 0x160
+    state.thief_mode = THIEF_ESCAPE
     state.thief_tport_dest = 0x180
     state.mobs.picture[_THIEF_ANIM] = 0x1DCF
     state.mobs.insert(_THIEF_ANIM)
@@ -875,7 +879,8 @@ def test_thief_transition_cleanup_reprograms_the_route() -> None:
     chain = list(state.mobs.iter_chain())
     assert _THIEF_ANIM not in chain, "mob_depth_remove(0x1C) resolves to 0x1D"
     assert _THIEF_ANIM - 1 in chain
-    assert state.thief_previous_pos == state.thief_current_pos
+    assert state.thief_mob_slot == state.thief_current_pos
+    assert state.thief_next_pos == 0x160
 
 
 def test_the_thief_pass_runs_once_per_frame_not_four_times() -> None:

@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2264 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2268 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,25 @@ start).
 ---
 
 ## Resolved issues
+
+### S-88 … S-92 · exit, treasure, idle-door, and thief-route regressions
+
+- **S-88:** moving exits now rebuild their 0x8001 marker H/V/link words from the
+  destination slot (0x52984-0x52A32), so a later exit dissolve uses the new
+  location rather than copied coordinates from the old slot.
+- **S-89:** treasure-room entry now writes the ROM 0x572C6-0x57325 title and
+  instruction page, including both initial countdown fields.
+- **S-90:** `main_treasure_timer` writes the live large countdown at alpha
+  column 34, row 2 on every full second (0x4D2FC-0x4D32A).
+- **S-91:** the common post-spawn level tail now calls `thief_setup` and clears
+  `idle_timer` at the ROM's 0x4835E/0x4836A sites, so timed doors are re-armed
+  on every level.
+- **S-92:** player transport now records the victim's forward/reverse transporter
+  route; `thief_enter_tport` follows the two-stage route lookup at 0x4FAD4,
+  creates the destination placeholder, and the transition completion repairs
+  the reverse path before recomputing the next cell. `main_thief_anim` also
+  honors the 0x4E900 transition-timer gate, so the thief cannot move while its
+  dissolve is in flight.
 
 ### S-87 · half-width large glyphs were forced to two cells
 

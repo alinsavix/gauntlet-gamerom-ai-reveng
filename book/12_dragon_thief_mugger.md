@@ -226,6 +226,14 @@ cabinet plays a laugh and then "YOU CAN'T CATCH ME!" in the matching pitch. The
 carried item is remembered in a variable that survives the level transition,
 and it comes back as a pickup on the next level's floor.
 
+Transporters are part of that retracing graph. If the target player has taught
+the route by teleporting, the thief dissolves into the same transition machinery,
+reappears beside the linked pad, restores its MOB record there, writes the
+reverse breadcrumb, and recomputes its next path cell. The level-start setup
+resets the thief scheduler before a new route is considered. While the dissolve
+timer is active, the ordinary thief movement loop is gated off; the transition
+machine alone owns the source and destination records.
+
 Killing the thief before it leaves is worth five hundred points times your
 treasure multiplier, and the loot is respawned on the tile it was standing on.
 If it was carrying your multiplier, recovering the bag is worth what the

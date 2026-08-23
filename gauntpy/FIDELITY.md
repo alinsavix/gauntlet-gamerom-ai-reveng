@@ -49,6 +49,19 @@ evidence remains in `../doc/`, generated contracts, and the book.
 13. **Large text is variable-width.** The OS quad record's right-hand word is
     also a width flag: zero means a one-cell glyph. Writers must return and use
     the ROM's one/two-cell advance rather than positioning by character count.
+14. **Relocated markers need fresh geometry.** A packed MOB slot is identity and
+    location, but copying a marker record does not recompute its H/V words.
+    Relocation routines that the ROM rebuilds (such as moving exits) must derive
+    coordinates from the destination slot.
+15. **Level-start common tails are state resets.** Calls after player placement
+    (`thief_setup`, `maze_show`, `idle_timer` clear) apply to every handoff arm;
+    do not bury them in only ordinary or secret-room setup.
+16. **Transport routes are bidirectional state.** Player transport writes the
+    forward source link and reverse destination/landing direction. A thief first
+    resolves the linked destination, then reads the opposite table at that ID
+    for its arrival direction; one route word cannot substitute for both reads.
+    While that shared transition timer is nonnegative, the actor's ordinary
+    movement loop must remain gated; only the transition owner moves its record.
 
 ## Investigation workflow
 

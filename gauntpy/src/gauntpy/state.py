@@ -608,6 +608,11 @@ class GameState:
     thief_tport_timer: int = -1
     thief_tport_saved_picture: int = 0
     thief_tport_dest: int = 0
+    thief_level_setup_done: bool = False
+    # 0x905C54/0x905D54: one-based transporter route records. Bits 15-8 name
+    # the linked transporter ID; low nibble is direction+1.
+    tport_route_forward: list[int] = field(default_factory=lambda: [0] * 33)
+    tport_route_reverse: list[int] = field(default_factory=lambda: [0] * 33)
     # 0x904BC4 ``tport_saved_picture``: one word per player, the hero's MOB
     # picture parked across a transporter transition by loop 2's save milestone
     # and put back by ``tport_restore_player_picture`` (0x50B88).

@@ -211,6 +211,14 @@ class TestTreasureTimer:
         main_treasure_timer(state)
         assert state.treasure_timer == 298
 
+    def test_updates_the_large_status_countdown_each_second(self):
+        state = _treasure_state(61)
+
+        main_treasure_timer(state)
+
+        assert state.treasure_timer == 60
+        assert state.alpha_ram[2 * 64 + 36] & 0x3FF
+
     def test_timeout_triggers_bonus_transition(self):
         """Criterion 2: timer reaching 0 sets game_mode to TREAS_EXIT when
         at least one player is active."""
@@ -724,6 +732,11 @@ class TestExitMove:
         assert state.exit_close_id == 100
         assert state.mobs.obj_type(200) == int(MazeObjIds.EXIT)
         assert not state.mobs.is_occupied(100)
+        from gauntpy.maze import placement_geometry
+
+        expected_h, expected_v = placement_geometry(int(MazeObjIds.EXIT), 200)
+        assert state.mobs.hpos[200] == expected_h
+        assert state.mobs.vpos[200] == expected_v
 
     def test_single_exit_maze_does_not_lose_its_exit(self):
         state = _exit_moves_state(timer=1, exits=(100,))
@@ -749,6 +762,26 @@ class TestExitMove:
         assert state.movement_type == 1
         _run_exit_animation(state)
         assert p.status == int(PlayerStatus.ALIVE_NEXT)
+
+    def test_entering_an_opening_exit_animates_at_its_new_location(self):
+        from gauntpy.maze import placement_geometry
+
+        state = _exit_moves_state(timer=1, exits=(100, 200))
+        main_exit_move(state)
+        player = state.players[0]
+        player.status = int(PlayerStatus.ALIVE_HERE)
+        player.mob_slot = 201
+        state.level_players_active = 1
+        hpos, vpos = placement_geometry(int(MazeObjIds.PLAYERSTART), 201)
+        state.mobs.create(
+            201, 0x1234, hpos, vpos, int(MazeObjIds.PLAYERSTART),
+        )
+
+        player_exit_sequence(state, 0, 200, int(MazeObjIds.EXIT))
+
+        expected_h, expected_v = placement_geometry(int(MazeObjIds.EXIT), 200)
+        assert state.mobs.hpos[21] & 0xFF80 == (expected_h - 0x200) & 0xFF80
+        assert state.mobs.vpos[21] & 0xFF80 == expected_v & 0xFF80
 
 
 class TestExitMoveAnimation:
@@ -922,6 +955,21 @@ class TestLevelEndHold:
             panel.score_drawn = False
         show_level_start_screen(state)
         assert all(p.score_drawn for p in state.info_panel.players)
+
+    def test_treasure_room_start_draws_title_instructions_and_timer(self):
+        state = GameState()
+        state.levelnum_current = 17
+        state.mazenum_current = _TREASURE_MAZE
+        state.treasure_timer = 1201
+
+        show_level_start_screen(state)
+
+        assert state.alpha_ram[5 * 64 + 1] & 0x3FF
+        assert "".join(
+            chr(word & 0x3FF) if word & 0x3FF else " "
+            for word in state.alpha_ram[11 * 64 + 5:11 * 64 + 25]
+        ).startswith("YOU HAVE")
+        assert state.alpha_ram[2 * 64 + 34] & 0x3FF
 
     def test_ordinary_level_start_draws_the_rom_level_splash(self):
         from gauntpy.subsystems.display import (

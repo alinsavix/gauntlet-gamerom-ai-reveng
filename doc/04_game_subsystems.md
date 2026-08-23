@@ -1474,6 +1474,10 @@ When the maze has the ExitMoves flag, the routine walks the exit slots collected
 during setup, using the stride table at 0x5B7FC; it does **not** call the random
 pickup placer. The old and new cells run complementary eight-step descriptor
 animations, then the selected exit rests for 0x12C frames. Plays sound 0x31.
+At relocation, 0x52984-0x529D0 writes a new 0x8001 marker and derives its H/V
+words from the destination slot before clearing the old marker. This is not a
+record move: preserving the old H/V words would anchor a later player-exit
+animation at the vacated cell.
 
 Ordinary EXIT rests as descriptor `(0x039E, 0x039F, 0x0006, 0x0006)` at
 0x5C8A0. EXITTO6 is visibly distinct:
@@ -1655,9 +1659,14 @@ The shift registers accumulate 16 consecutive frames of each input bit. ANDing m
 bonus-screen transition.
 
 Handles the treasure room countdown. When the player enters a treasure room:
-- Displays "YOU HAVE X SECONDS TO COLLECT TREASURES"
+- `show_level_start_screen` selects its d3=1 branch and displays the large
+  `TREASURE ROOM` title plus `YOU HAVE X SECONDS TO COLLECT TREASURES` and
+  `YOU MUST EXIT TO RECEIVE BONUS POINTS` from ROM 0x572C6–0x57325
 - Counts down the timer (stored at `ram.treasure_timer`, `0x9049E8`)
-- On each full second, displays the numeric countdown through OS 0x272 and normally speaks the matching ZERO–TEN sound from the 11-longword table at 0x5AB64
+- The entry page writes the initial small value at column 14,row 11 and the large
+  status-panel value at column 34,row 2. On each full second,
+  `main_treasure_timer` refreshes the latter through OS 0x272 and normally speaks
+  the matching ZERO–TEN sound from the 11-longword table at 0x5AB64
 - At 10 seconds on levels above 30, a 1-in-16 gate may choose one of four fake spoken countdowns. The pointer table at 0x5ABE0 selects a five-number sequence at 0x5AB90–0x5ABDF for displayed seconds 10–6; at 6 it follows with JUST KIDDING or FOOLED YOU from 0x5ABF0
 - Without a fake countdown, displayed second 6 has a 1-in-4 chance to play one of four warning lines from 0x5AC08, with a parallel 1/2-second suppression count from 0x5AC18
 - At 0, selects a timeout line from 0x5ABF8 (settings bit 11 forces ZERO; otherwise random among ZERO, BETTER LUCK NEXT TIME, ZERO, and LOOKS LIKE YOU LOSE)

@@ -397,6 +397,7 @@ class TestTreasureRoomRoundTrip:
         assert state.treasure_timer == 1200 + 1     # solo duration + 1
         assert state.treas_mazerand_num == 105      # rotation advanced by adder+1
         assert 3 <= state.level_next_treasure <= 5
+        assert state.idle_timer == 0
         assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
         assert state.game_mode == int(GameMode.NORMAL)
 
