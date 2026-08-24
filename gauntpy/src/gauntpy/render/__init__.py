@@ -27,6 +27,8 @@ Quick tour:
 - ``compositor.render_frame(state, assets)`` -- assembles all three into one
   ``Framebuffer``; layer 4 (priority/shadowing) falls out of the draw order
   itself (see that module's docstring).
+- ``diagnostics`` -- immutable state snapshots and a separate host-only panel;
+  never writes modeled game or video memory.
 - ``host.HostShell`` -- the pygame window + input + 60Hz pump; supplies
   ``wait_for_vblank``/``present`` so ``mainloop.g2mainloop(state, host)`` can
   drive it directly.
@@ -35,6 +37,7 @@ Quick tour:
 from __future__ import annotations
 
 from .compositor import HUD_PANEL, HUD_PANEL_X, LOGICAL_HEIGHT, LOGICAL_WIDTH, PLAYFIELD_VIEWPORT, RenderCache, render_frame
+from .diagnostics import DebugSnapshot, capture_debug_snapshot, render_debug_panel
 from .framebuffer import Framebuffer
 
 __all__ = [
@@ -46,4 +49,7 @@ __all__ = [
     "PLAYFIELD_VIEWPORT",
     "HUD_PANEL",
     "HUD_PANEL_X",
+    "DebugSnapshot",
+    "capture_debug_snapshot",
+    "render_debug_panel",
 ]

@@ -140,6 +140,10 @@ evidence remains in `../doc/`, generated contracts, and the book.
     old/new alpha labels, and stuns the recipient, but only while
     `movement_type` is nonzero. IT-creature contact is the separate
     first-assignment path.
+36. **Host diagnostics never write arcade memory.** Capture immutable,
+    read-only snapshots after simulation and render them on a separate host
+    surface. Debug values must not occupy alpha/playfield/MOB/color RAM or feed
+    back into gameplay.
 
 ## Investigation workflow
 

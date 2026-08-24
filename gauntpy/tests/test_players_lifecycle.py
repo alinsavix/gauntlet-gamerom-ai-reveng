@@ -1356,7 +1356,7 @@ class TestHudHooks:
         ]
         assert [word & 0xFC00 for word in words] == [0xB800, 0xB800]
 
-    def test_panel_bottom_shows_maze_and_live_pixel_coordinates(self):
+    def test_panel_bottom_contains_no_host_diagnostics(self):
         from gauntpy.subsystems import score
 
         state = _active_state()
@@ -1367,15 +1367,10 @@ class TestHudHooks:
 
         gp.setup_infopanel(state, -1)
 
-        def row_text(row):
+        for row in (27, 28):
             start = row * score.ALPHA_ROW_STRIDE + score.PANEL_COLUMN
-            return "".join(
-                chr(word & 0x3FF) if word & 0x3FF else " "
-                for word in state.alpha_ram[start:start + score.PANEL_WIDTH]
-            ).rstrip()
-
-        assert row_text(score.DIAGNOSTIC_MAZE_ROW) == "MAZE 019"
-        assert row_text(score.DIAGNOSTIC_POSITION_ROW) == "P1 188,160"
+            words = state.alpha_ram[start:start + score.PANEL_WIDTH]
+            assert all(word & 0x03FF == 0 for word in words)
 
     def test_setup_infopanel_ignores_an_out_of_range_selector(self):
         state = _active_state()

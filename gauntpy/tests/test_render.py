@@ -2199,6 +2199,37 @@ class TestHostShellInput:
         finally:
             shell.close()
 
+    def test_f1_toggles_the_separate_host_diagnostics_panel(self):
+        from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
+        from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
+        from gauntpy.render.host import HostShell
+
+        shell = HostShell(assets=_FakeAssets(), scale=1)
+        try:
+            pygame = shell._pygame
+            state = GameState()
+            assert shell.window.get_size() == (LOGICAL_WIDTH, LOGICAL_HEIGHT)
+
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F1)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_visible
+            assert shell.window.get_size() == (
+                LOGICAL_WIDTH + DEBUG_PANEL_WIDTH,
+                LOGICAL_HEIGHT,
+            )
+            shell.present(state)
+
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F1)
+            )
+            shell.wait_for_vblank(state)
+            assert not shell.diagnostics_visible
+            assert shell.window.get_size() == (LOGICAL_WIDTH, LOGICAL_HEIGHT)
+        finally:
+            shell.close()
+
 
 # ---------------------------------------------------------------------------
 # Throughput -- not a hard CI gate (generous bound), but documents measured

@@ -1770,10 +1770,11 @@ update conditions require it:
   caller owns the tracked IT state. Its two cells use `0xB000 | player<<10`,
   not the ordinary player-text attribute.
 
-gauntpy additionally writes `MAZE nnn` and the first active player's pixel
-`P# x,y` position into rows 27–28 of the modeled alpha panel. These are explicit
-host diagnostics with no claimed arcade call site; unlike a renderer overlay,
-they still pass through alpha RAM so panel ownership and clipping remain honest.
+gauntpy's host diagnostics do not enter this path. The optional F1 side panel
+captures a read-only snapshot after the game frame and renders it with a
+host-owned PIL surface. Mode, maze, camera, RNG, demo pointers, MOB counts, and
+player coordinates therefore remain inspectable without changing alpha RAM or
+claiming an arcade call site.
 
 ### 14.3 Logo Color Cycling (`main_logo_updcolors`, 0x4DCBA)
 

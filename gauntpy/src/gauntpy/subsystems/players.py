@@ -862,7 +862,6 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     if player_selector < 0:
         score.write_info_panel_backdrop(state)
         score.write_info_panel_header(state)
-        score.write_status_diagnostics(state)
     for i in targets:
         score.write_player_panel_background(state, i)
         initials_entry = (

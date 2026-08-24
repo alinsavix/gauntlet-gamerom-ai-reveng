@@ -37,11 +37,17 @@ A window opens on a real Gauntlet II maze with your hero's genuine class sprite.
 | **Alt / Enter** | Magic (also start / commit a character) |
 | **5** | insert a coin |
 | **P** | pause / resume |
+| **F1** | show / hide the host diagnostics panel |
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
 you pick up items and open doors, you fire, and walking into an **exit loads the
 next level** — the opening act plays mazes 0–4 as levels 1–5, then the cabinet
 rotation takes over.
+
+The **F1** panel is host-only: it reads an immutable post-frame snapshot and
+shows mode, level/maze, camera, RNG, IT owner, demo pointers, MOB counts, and
+per-player state. It does not use the arcade alpha renderer or write modeled
+video/game memory.
 
 By default the runner drops you straight into a level. Options:
 

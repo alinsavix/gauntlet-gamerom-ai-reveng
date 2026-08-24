@@ -49,10 +49,15 @@ from ..constants import FRAMES_PER_SECOND
 from ..state import GameState
 from ..subsystems.input import JOY_DOWN, JOY_FIRE_BIT, JOY_IDLE, JOY_LEFT, JOY_MAGIC_BIT, JOY_RIGHT, JOY_UP
 from .compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH, RenderCache, render_frame
+from .diagnostics import (
+    DEBUG_PANEL_WIDTH,
+    capture_debug_snapshot,
+    render_debug_panel,
+)
 
 __all__ = [
     "PygameUnavailable", "HostShell", "DEFAULT_KEYMAP",
-    "DEFAULT_COIN_KEY", "DEFAULT_PAUSE_KEY",
+    "DEFAULT_COIN_KEY", "DEFAULT_PAUSE_KEY", "DEFAULT_DIAGNOSTICS_KEY",
 ]
 
 
@@ -82,6 +87,7 @@ DEFAULT_KEYMAP: dict[str, int] = {
 #: player's 2-bit coin counter, exactly the signal ``coincheck`` polls.
 DEFAULT_COIN_KEY = "K_5"
 DEFAULT_PAUSE_KEY = "K_p"
+DEFAULT_DIAGNOSTICS_KEY = "K_F1"
 
 
 class HostShell:
@@ -103,6 +109,7 @@ class HostShell:
         player: int = 0,
         title: str = "gauntpy",
         keymap: dict[str, int] | None = None,
+        diagnostics: bool = False,
     ) -> None:
         try:
             import pygame
@@ -119,9 +126,10 @@ class HostShell:
         self._cache = RenderCache()
         self._title = title
         self.paused = False
+        self.diagnostics_visible = diagnostics
 
         pygame.init()
-        self.window = pygame.display.set_mode((LOGICAL_WIDTH * scale, LOGICAL_HEIGHT * scale))
+        self.window = self._set_window_mode()
         pygame.display.set_caption(title)
         self.clock = pygame.time.Clock()
 
@@ -129,6 +137,18 @@ class HostShell:
         self._keymap = {getattr(pygame, name): bit for name, bit in keymap.items()}
         self._coin_key = getattr(pygame, DEFAULT_COIN_KEY)
         self._pause_key = getattr(pygame, DEFAULT_PAUSE_KEY)
+        self._diagnostics_key = getattr(pygame, DEFAULT_DIAGNOSTICS_KEY)
+
+    def _window_logical_width(self) -> int:
+        return LOGICAL_WIDTH + (
+            DEBUG_PANEL_WIDTH if self.diagnostics_visible else 0
+        )
+
+    def _set_window_mode(self):
+        return self._pygame.display.set_mode((
+            self._window_logical_width() * self.scale,
+            LOGICAL_HEIGHT * self.scale,
+        ))
 
     # -- the g2mainloop interface --------------------------------------------
 
@@ -150,6 +170,9 @@ class HostShell:
                     pygame.display.set_caption(
                         f"{self._title} [PAUSED]" if self.paused else self._title
                     )
+                elif event.key == self._diagnostics_key:
+                    self.diagnostics_visible = not self.diagnostics_visible
+                    self.window = self._set_window_mode()
 
         self._sample_input(state)
         self.clock.tick(FRAMES_PER_SECOND)
@@ -183,6 +206,19 @@ class HostShell:
                 surface, (LOGICAL_WIDTH * self.scale, LOGICAL_HEIGHT * self.scale)
             )
         self.window.blit(surface, (0, 0))
+        if self.diagnostics_visible:
+            panel = render_debug_panel(
+                capture_debug_snapshot(state, paused=self.paused),
+            )
+            panel_surface = self._pygame.image.frombuffer(
+                panel.tobytes(), panel.size, panel.mode,
+            ).convert_alpha()
+            if self.scale != 1:
+                panel_surface = self._pygame.transform.scale(
+                    panel_surface,
+                    (DEBUG_PANEL_WIDTH * self.scale, LOGICAL_HEIGHT * self.scale),
+                )
+            self.window.blit(panel_surface, (LOGICAL_WIDTH * self.scale, 0))
         self._pygame.display.flip()
 
     # -- input ---------------------------------------------------------------

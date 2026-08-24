@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2307 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2310 passed, 5 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,16 @@ start).
 ---
 
 ## Resolved issues
+
+### S-117 · host diagnostics shared the arcade alpha panel
+
+The requested `MAZE nnn` and `P# x,y` diagnostics had been written into rows
+27-28 of modeled alpha RAM, making host inspection modify arcade-visible state.
+A toggleable F1 side panel now captures an immutable post-frame snapshot and
+renders it with a host-owned PIL surface. It exposes mode, level/maze, camera,
+RNG, IT owner, timers, demo pointers, MOB counts, and all four player records
+without touching simulation or video RAM. The old alpha diagnostics were
+removed; the game compositor remains the original 336x240 raster.
 
 ### S-114 … S-116 · demo potion, IT state, and movable-wall cadence
 
@@ -152,7 +162,9 @@ is not evidence of a separate L/R seam defect at this coordinate.
 - **S-106:** the bottom of the status panel now receives `MAZE nnn` and the
   first active player's `P# x,y` pixel coordinates. These requested diagnostics
   are explicit non-arcade content, but are written through modeled alpha RAM
-  rather than composited as gameplay-looking renderer text.
+  rather than composited as gameplay-looking renderer text. **Superseded by
+  S-117:** they now live in the separate read-only host panel and no longer
+  modify alpha RAM.
 
 ### S-100 · treasure rooms retained the ordinary panel header
 
