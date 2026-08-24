@@ -5,12 +5,15 @@ from __future__ import annotations
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.render.diagnostics import (
+    DEBUG_PAGES,
     DEBUG_FONT_SIZE,
     DEBUG_PANEL_HEIGHT,
     DEBUG_PANEL_WIDTH,
     _host_font,
     capture_debug_snapshot,
+    debug_page_lines,
     debug_snapshot_lines,
+    derive_debug_events,
     render_debug_panel,
 )
 from gauntpy.state import GameState
@@ -99,3 +102,50 @@ def test_panel_uses_a_scalable_antialiased_font():
 
     font = _host_font(DEBUG_FONT_SIZE)
     assert isinstance(font, ImageFont.FreeTypeFont)
+
+
+def test_every_diagnostics_page_has_read_only_rows():
+    state = _diagnostic_state()
+    selected = pack_slot(9, 12)
+    snapshot = capture_debug_snapshot(state, selected_mob=selected)
+
+    assert snapshot.selected_mob == selected
+    for page, name in enumerate(DEBUG_PAGES):
+        rows = debug_page_lines(
+            snapshot, page, events=("00123 test event",),
+        )
+        assert rows, name
+        image = render_debug_panel(
+            snapshot, page=page, events=("00123 test event",), height=960,
+        )
+        assert image.size == (DEBUG_PANEL_WIDTH, 960)
+
+
+def test_event_log_is_derived_from_snapshots_without_game_instrumentation():
+    state = _diagnostic_state()
+    before = capture_debug_snapshot(state)
+    state.player_it = 2
+    state.players[1].health -= 25
+    state.players[1].score += 100
+    state.players[1].potionsnum = 0
+    after = capture_debug_snapshot(state)
+
+    events = derive_debug_events(before, after)
+
+    assert "IT P2 -> P3" in events
+    assert "P2 damage -25 = 1575" in events
+    assert "P2 score +100 = 350" in events
+    assert "P2 potions 1 -> 0" in events
+
+
+def test_corrupt_depth_chain_is_reported_without_crashing_the_host():
+    state = _diagnostic_state()
+    state.mobs.depth_list_head = 1
+    state.mobs.set_next(1, 1)
+
+    snapshot = capture_debug_snapshot(state)
+    display_rows = dict(debug_page_lines(
+        snapshot, DEBUG_PAGES.index("DISPLAY"),
+    ))
+
+    assert display_rows["MOB CHAIN"] == "CYCLE"

@@ -143,7 +143,8 @@ evidence remains in `../doc/`, generated contracts, and the book.
 36. **Host diagnostics never write arcade memory.** Capture immutable,
     read-only snapshots after simulation and render them on a separate host
     surface. Debug values must not occupy alpha/playfield/MOB/color RAM or feed
-    back into gameplay.
+    back into gameplay. Rolling diagnostic events are differences between host
+    snapshots, not new producers in game routines.
 37. **Demo completion belongs to the attract state machine.** The last recorded
     exit must not commit `level_next`. `main_start_game` resets the demo actors,
     closes any dialog, and expires the DEMO timer so `main_attract` advances to

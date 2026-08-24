@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2314 passed, 6 skipped** (gauntpy) and
+present the suites are clean: **2317 passed, 7 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,15 @@ start).
 ---
 
 ## Resolved issues
+
+### S-122 · diagnostics exposed only one fixed overview
+
+The F1 panel now has nine host-owned pages: overview, player input/runtime,
+decoded demo records, level flags and timers, actor counts plus a raw selected
+MOB inspector, thief/dragon AI, display-memory state, audio queues, and events.
+F2/F3 page through them and brackets select occupied MOBs. The rolling event
+history is derived from consecutive immutable snapshots while the panel is
+open; no game-loop call or simulation producer was added.
 
 ### S-121 · diagnostics used Pillow's tiny bitmap font
 

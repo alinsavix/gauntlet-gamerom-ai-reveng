@@ -39,6 +39,8 @@ genuine class sprite. Use `--scale` to override it.
 | **5** | insert a coin |
 | **P** | pause / resume |
 | **F1** | show / hide the host diagnostics panel |
+| **F2 / F3** | next / previous diagnostics page |
+| **[ / ]** | select the previous / next occupied MOB |
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
 you pick up items and open doors, you fire, and walking into an **exit loads the
@@ -50,6 +52,10 @@ shows mode, level/maze, camera, RNG, IT owner, demo pointers, MOB counts, and
 per-player state. It does not use the arcade alpha renderer or write modeled
 video/game memory. Its text remains at native host resolution when the game
 raster is enlarged with `--scale`, using an anti-aliased system monospace font.
+Its pages cover overview, players and raw input, decoded demo records, level
+flags/timers, actor counts and raw MOB words, thief/dragon AI, display memory,
+audio queues, and a rolling event log inferred from snapshots while the panel
+is open.
 
 By default the runner drops you straight into a level. Options:
 

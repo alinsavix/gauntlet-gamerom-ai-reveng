@@ -45,19 +45,25 @@ anywhere to put the interrupt. Tests that need overflow behaviour set
 
 from __future__ import annotations
 
+from collections import deque
+
 from ..constants import FRAMES_PER_SECOND
 from ..state import GameState
 from ..subsystems.input import JOY_DOWN, JOY_FIRE_BIT, JOY_IDLE, JOY_LEFT, JOY_MAGIC_BIT, JOY_RIGHT, JOY_UP
 from .compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH, RenderCache, render_frame
 from .diagnostics import (
+    DEBUG_PAGES,
     DEBUG_PANEL_WIDTH,
     capture_debug_snapshot,
+    derive_debug_events,
     render_debug_panel,
 )
 
 __all__ = [
     "PygameUnavailable", "HostShell", "DEFAULT_KEYMAP",
     "DEFAULT_COIN_KEY", "DEFAULT_PAUSE_KEY", "DEFAULT_DIAGNOSTICS_KEY",
+    "DEFAULT_DIAGNOSTICS_NEXT_KEY", "DEFAULT_DIAGNOSTICS_PREV_KEY",
+    "DEFAULT_DIAGNOSTICS_MOB_PREV_KEY", "DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY",
 ]
 
 
@@ -88,6 +94,10 @@ DEFAULT_KEYMAP: dict[str, int] = {
 DEFAULT_COIN_KEY = "K_5"
 DEFAULT_PAUSE_KEY = "K_p"
 DEFAULT_DIAGNOSTICS_KEY = "K_F1"
+DEFAULT_DIAGNOSTICS_NEXT_KEY = "K_F2"
+DEFAULT_DIAGNOSTICS_PREV_KEY = "K_F3"
+DEFAULT_DIAGNOSTICS_MOB_PREV_KEY = "K_LEFTBRACKET"
+DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY = "K_RIGHTBRACKET"
 
 
 class HostShell:
@@ -127,6 +137,10 @@ class HostShell:
         self._title = title
         self.paused = False
         self.diagnostics_visible = diagnostics
+        self.diagnostics_page = 0
+        self.diagnostics_selected_mob = 0
+        self._diagnostics_previous = None
+        self._diagnostics_events: deque[str] = deque(maxlen=64)
 
         pygame.init()
         self.window = self._set_window_mode()
@@ -138,6 +152,18 @@ class HostShell:
         self._coin_key = getattr(pygame, DEFAULT_COIN_KEY)
         self._pause_key = getattr(pygame, DEFAULT_PAUSE_KEY)
         self._diagnostics_key = getattr(pygame, DEFAULT_DIAGNOSTICS_KEY)
+        self._diagnostics_next_key = getattr(
+            pygame, DEFAULT_DIAGNOSTICS_NEXT_KEY,
+        )
+        self._diagnostics_prev_key = getattr(
+            pygame, DEFAULT_DIAGNOSTICS_PREV_KEY,
+        )
+        self._diagnostics_mob_prev_key = getattr(
+            pygame, DEFAULT_DIAGNOSTICS_MOB_PREV_KEY,
+        )
+        self._diagnostics_mob_next_key = getattr(
+            pygame, DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY,
+        )
 
     def _set_window_mode(self):
         game_width = LOGICAL_WIDTH * self.scale
@@ -168,7 +194,32 @@ class HostShell:
                     )
                 elif event.key == self._diagnostics_key:
                     self.diagnostics_visible = not self.diagnostics_visible
+                    self._diagnostics_previous = None
                     self.window = self._set_window_mode()
+                elif (
+                    self.diagnostics_visible
+                    and event.key == self._diagnostics_next_key
+                ):
+                    self.diagnostics_page = (
+                        self.diagnostics_page + 1
+                    ) % len(DEBUG_PAGES)
+                elif (
+                    self.diagnostics_visible
+                    and event.key == self._diagnostics_prev_key
+                ):
+                    self.diagnostics_page = (
+                        self.diagnostics_page - 1
+                    ) % len(DEBUG_PAGES)
+                elif (
+                    self.diagnostics_visible
+                    and event.key == self._diagnostics_mob_prev_key
+                ):
+                    self._step_diagnostics_mob(state, -1)
+                elif (
+                    self.diagnostics_visible
+                    and event.key == self._diagnostics_mob_next_key
+                ):
+                    self._step_diagnostics_mob(state, 1)
 
         self._sample_input(state)
         self.clock.tick(FRAMES_PER_SECOND)
@@ -184,6 +235,20 @@ class HostShell:
         state.coin_counters = (
             (state.coin_counters & ~(3 << shift)) | (((current + 1) & 3) << shift)
         )
+
+    def _step_diagnostics_mob(self, state: GameState, delta: int) -> None:
+        occupied = [
+            slot for slot in range(1, len(state.mobs.picture))
+            if state.mobs.picture[slot]
+        ]
+        if not occupied:
+            self.diagnostics_selected_mob = 0
+            return
+        if self.diagnostics_selected_mob not in occupied:
+            self.diagnostics_selected_mob = occupied[0 if delta >= 0 else -1]
+            return
+        index = occupied.index(self.diagnostics_selected_mob)
+        self.diagnostics_selected_mob = occupied[(index + delta) % len(occupied)]
 
     def present(self, state: GameState) -> None:
         """Render the current state and flip it to the window."""
@@ -203,9 +268,22 @@ class HostShell:
             )
         self.window.blit(surface, (0, 0))
         if self.diagnostics_visible:
+            snapshot = capture_debug_snapshot(
+                state,
+                paused=self.paused,
+                selected_mob=self.diagnostics_selected_mob,
+            )
+            self.diagnostics_selected_mob = snapshot.selected_mob
+            for event in derive_debug_events(self._diagnostics_previous, snapshot):
+                self._diagnostics_events.append(
+                    f"{snapshot.frame:05d} {event}"
+                )
+            self._diagnostics_previous = snapshot
             panel = render_debug_panel(
-                capture_debug_snapshot(state, paused=self.paused),
+                snapshot,
                 height=LOGICAL_HEIGHT * self.scale,
+                page=self.diagnostics_page,
+                events=tuple(self._diagnostics_events),
             )
             panel_surface = self._pygame.image.frombuffer(
                 panel.tobytes(), panel.size, panel.mode,

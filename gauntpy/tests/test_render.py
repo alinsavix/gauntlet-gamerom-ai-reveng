@@ -2245,6 +2245,46 @@ class TestHostShellInput:
         finally:
             shell.close()
 
+    def test_diagnostics_page_and_mob_navigation_is_host_only(self):
+        from gauntpy.render.host import HostShell
+
+        state = GameState()
+        state.mobs.picture[32] = 0x1000
+        state.mobs.picture[40] = 0x2000
+        shell = HostShell(assets=_FakeAssets(), scale=1, diagnostics=True)
+        try:
+            pygame = shell._pygame
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F2)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_page == 1
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F3)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_page == 0
+
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHTBRACKET)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_selected_mob == 32
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHTBRACKET)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_selected_mob == 40
+
+            before = tuple(state.mobs.picture)
+            shell.present(state)
+            state.players[0].health = 100
+            shell.present(state)
+            assert shell._diagnostics_events
+            assert tuple(state.mobs.picture) == before
+        finally:
+            shell.close()
+
 
 # ---------------------------------------------------------------------------
 # Throughput -- not a hard CI gate (generous bound), but documents measured
