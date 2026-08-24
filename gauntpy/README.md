@@ -47,7 +47,8 @@ rotation takes over.
 The **F1** panel is host-only: it reads an immutable post-frame snapshot and
 shows mode, level/maze, camera, RNG, IT owner, demo pointers, MOB counts, and
 per-player state. It does not use the arcade alpha renderer or write modeled
-video/game memory.
+video/game memory. Its text remains at native host resolution when the game
+raster is enlarged with `--scale`.
 
 By default the runner drops you straight into a level. Options:
 

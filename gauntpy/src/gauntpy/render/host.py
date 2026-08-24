@@ -139,16 +139,12 @@ class HostShell:
         self._pause_key = getattr(pygame, DEFAULT_PAUSE_KEY)
         self._diagnostics_key = getattr(pygame, DEFAULT_DIAGNOSTICS_KEY)
 
-    def _window_logical_width(self) -> int:
-        return LOGICAL_WIDTH + (
-            DEBUG_PANEL_WIDTH if self.diagnostics_visible else 0
-        )
-
     def _set_window_mode(self):
-        return self._pygame.display.set_mode((
-            self._window_logical_width() * self.scale,
-            LOGICAL_HEIGHT * self.scale,
-        ))
+        game_width = LOGICAL_WIDTH * self.scale
+        panel_width = DEBUG_PANEL_WIDTH if self.diagnostics_visible else 0
+        return self._pygame.display.set_mode(
+            (game_width + panel_width, LOGICAL_HEIGHT * self.scale)
+        )
 
     # -- the g2mainloop interface --------------------------------------------
 
@@ -209,15 +205,11 @@ class HostShell:
         if self.diagnostics_visible:
             panel = render_debug_panel(
                 capture_debug_snapshot(state, paused=self.paused),
+                height=LOGICAL_HEIGHT * self.scale,
             )
             panel_surface = self._pygame.image.frombuffer(
                 panel.tobytes(), panel.size, panel.mode,
             ).convert_alpha()
-            if self.scale != 1:
-                panel_surface = self._pygame.transform.scale(
-                    panel_surface,
-                    (DEBUG_PANEL_WIDTH * self.scale, LOGICAL_HEIGHT * self.scale),
-                )
             self.window.blit(panel_surface, (LOGICAL_WIDTH * self.scale, 0))
         self._pygame.display.flip()
 

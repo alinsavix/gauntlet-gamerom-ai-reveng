@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2310 passed, 5 skipped** (gauntpy) and
+present the suites are clean: **2310 passed, 6 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,14 @@ start).
 ---
 
 ## Resolved issues
+
+### S-118 · diagnostics text inherited the game scale
+
+The host initially scaled the complete 240x240 diagnostics raster by
+`--scale`, making its small text blocky and consuming unnecessary width. The
+game remains scaled normally, but the panel now keeps a fixed 240-pixel host
+width and renders its font at native resolution; only its background height
+extends to match the scaled game window.
 
 ### S-117 · host diagnostics shared the arcade alpha panel
 

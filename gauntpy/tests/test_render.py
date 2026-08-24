@@ -2230,6 +2230,21 @@ class TestHostShellInput:
         finally:
             shell.close()
 
+    def test_diagnostics_panel_stays_native_width_when_game_is_scaled(self):
+        from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
+        from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
+        from gauntpy.render.host import HostShell
+
+        shell = HostShell(assets=_FakeAssets(), scale=3, diagnostics=True)
+        try:
+            assert shell.window.get_size() == (
+                LOGICAL_WIDTH * 3 + DEBUG_PANEL_WIDTH,
+                LOGICAL_HEIGHT * 3,
+            )
+            shell.present(GameState())
+        finally:
+            shell.close()
+
 
 # ---------------------------------------------------------------------------
 # Throughput -- not a hard CI gate (generous bound), but documents measured
