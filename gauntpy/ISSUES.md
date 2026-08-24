@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2296 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2317 passed, 7 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,123 @@ start).
 ---
 
 ## Resolved issues
+
+### S-123 · diagnostics navigation order and game-panel frame overlay
+
+Diagnostics page navigation now follows F2 = previous and F3 = next, matching
+the panel legend. The decimal host frame counter has moved entirely to the F1
+overview and is no longer composited over the arcade player-status area.
+`PAUSED` remains the sole host marker on the game raster.
+
+### S-122 · diagnostics exposed only one fixed overview
+
+The F1 panel now has nine host-owned pages: overview, player input/runtime,
+decoded demo records, level flags and timers, actor counts plus a raw selected
+MOB inspector, thief/dragon AI, display-memory state, audio queues, and events.
+F2/F3 page through them and brackets select occupied MOBs. The rolling event
+history is derived from consecutive immutable snapshots while the panel is
+open; no game-loop call or simulation producer was added.
+
+### S-121 · diagnostics used Pillow's tiny bitmap font
+
+The host panel now uses an anti-aliased system monospace face (Consolas on
+Windows, DejaVu Sans Mono or Menlo elsewhere, with Pillow's scalable default as
+a final fallback). The native panel is 320 pixels wide and player state is
+compacted to two rows each, preserving the complete display at scale 1 without
+scaling the glyph raster.
+
+### S-120 · completed demo actors started playable level 2
+
+When the third recorded actor finished its exit animation,
+`players._status8_complete` ran gauntpy's normal immediate level-handoff helper.
+That committed the demo's computed `level_next = 2`, loaded the next maze, and
+respawned the three attract actors under keyboard control. The ROM instead
+leaves the non-bonus transition to `main_start_game`: its 0x480B6 DEMO arm
+waits for shared effect slots 13-16 to clear, calls `player_resetall`, closes
+the dialog, and clears `attract_timer`. `main_attract` then advances from DEMO
+to LEGEND later in the same frame. The port now preserves that ownership and
+the completed puppet party cannot enter normal play.
+
+### S-119 · playable host defaulted to 2x scale
+
+The `gauntpy-play` CLI and `HostShell` now default to 4x game scaling.
+`--scale` continues to override it, and the diagnostics panel remains unscaled.
+
+### S-118 · diagnostics text inherited the game scale
+
+The host initially scaled the complete 240x240 diagnostics raster by
+`--scale`, making its small text blocky and consuming unnecessary width. The
+game remains scaled normally, but the panel now keeps a fixed 240-pixel host
+width and renders its font at native resolution; only its background height
+extends to match the scaled game window.
+
+### S-117 · host diagnostics shared the arcade alpha panel
+
+The requested `MAZE nnn` and `P# x,y` diagnostics had been written into rows
+27-28 of modeled alpha RAM, making host inspection modify arcade-visible state.
+A toggleable F1 side panel now captures an immutable post-frame snapshot and
+renders it with a host-owned PIL surface. It exposes mode, level/maze, camera,
+RNG, IT owner, timers, demo pointers, MOB counts, and all four player records
+without touching simulation or video RAM. The old alpha diagnostics were
+removed; the game compositor remains the original 336x240 raster.
+
+### S-114 … S-116 · demo potion, IT state, and movable-wall cadence
+
+- **S-114:** `main_handle_potions` always read `debounce_shift_magic`, so the
+  demo's active-low Magic bit at the current `demo_ptr` was never seen. The ROM
+  branches at 0x47012: normal play matches the debounced `0x1C` edge, while any
+  nonzero game mode tests bit 0 of the current demo record directly. The Elf now
+  spends the potion, clears the on-screen monsters through the ordinary potion
+  matrix, observes the resulting dialog pause, and reaches the exit.
+- **S-115:** two independent IT paths were missing. `game_vblank`
+  0x40328-0x4037A alternates alpha-color palettes 12-15 every 16 frames, flattening
+  their three visible colors to color 0 and then restoring the ROM ramps; those
+  modeled color-RAM writes now make the `0xB000 | player<<10` label flash. Player
+  collision at 0x41DAC-0x41DEC also transfers `player_it` when the current holder
+  runs into another hero and stuns the recipient for 0x40 frames. The recorded
+  tag therefore moves the label from the red Wizard to the blue Elf.
+- **S-116:** no movement change was made. Direct ROM execution and a fresh MAME
+  0.289 RAM trace agree that the opening movable wall advances one pixel on a
+  blocked push frame while the base Elf advances two pixels only when the
+  collision gap permits it. The resulting 0/2-pixel hero cadence is original
+  game state, not a Python interpolation defect; a regression protects the
+  paired player/wall sequence.
+
+### S-112 … S-113 · demo transporter timing and incomplete attract pages
+
+- **S-112:** `tport_player_move` omitted the first-encounter dialog call at
+  0x50840-0x5084C after selecting an ordinary transporter landing. In the
+  attract demo that 150-frame dialog freezes `main_move_players` and the ROM
+  script while the transporter animation continues outside the dialog-gated
+  world band. Without it, the remaining LEFT record expired during the
+  dissolve, leaving the Elf at `(92,256)` and preventing the recorded route
+  from reaching the exit. The game-side dialog write is restored. A follow-up
+  found that the runner's `--no-first-encounter-messages` option still
+  suppressed this timing-critical DEMO dialog; suppression is now limited to
+  non-DEMO play. The actual `play.bat --attract` configuration now follows the
+  fresh MAME 0.289 command boundaries from the `(92,240)` landing through the
+  exit.
+- **S-113:** the rules legend transposed five of six `alpha_clear_rect`
+  arguments, erasing labels and the first status-panel column instead of
+  revealing maze-103 item art. It also omitted the centered LEGEND heading,
+  used normalized spellings instead of ROM `DESTRUCTABLE`/`MOVEABLE`, and
+  flattened the three text palettes. The monster page omitted the complete
+  42-cell table at 0x5A56E: duplicated creature labels plus the Fight/Shoot/
+  Magic `NO`/`YES`/`STUN` matrix. Those modeled alpha-RAM writes now follow
+  0x4CDB8/0x4CFDA exactly. The SCORES page's top opaque boxes also began one
+  row too high; rows 1-13 are opaque while row 0 remains maze-103 scenery,
+  matching MAME 0.289.
+
+### S-111 · maze-17 `(16,10)` seam report matches the ROM
+
+No behavior change was made. With the live wrapped camera, gauntpy and direct
+ROM execution agree at pixel `(16,10)`: left/right move to X=14/18, down moves
+to Y=12, and up remains at Y=10 because the top wall blocks it. Interpreting
+the reported Y as native/upward (screen Y=486) also matches for all cardinal
+and diagonal inputs. Moving toward a wall may leave the sprite visibly closer
+before the next frame blocks because collision compares corrected MOB anchors
+with a strict 0x7C0 overlap and applies horizontal motion before vertical; that
+is not evidence of a separate L/R seam defect at this coordinate.
 
 ### S-107 … S-110 · top-edge movement, Super Sorcerers, and special potions
 
@@ -94,7 +211,9 @@ start).
 - **S-106:** the bottom of the status panel now receives `MAZE nnn` and the
   first active player's `P# x,y` pixel coordinates. These requested diagnostics
   are explicit non-arcade content, but are written through modeled alpha RAM
-  rather than composited as gameplay-looking renderer text.
+  rather than composited as gameplay-looking renderer text. **Superseded by
+  S-117:** they now live in the separate read-only host panel and no longer
+  modify alpha RAM.
 
 ### S-100 · treasure rooms retained the ordinary panel header
 
@@ -229,7 +348,7 @@ initials entry, the continue prompt, the secret-room 29-character editor and its
 ROM-matched CRC secret code, plus the rules-page reveal windows/decorative MOB
 writes. Temporary front-end/bonus alpha content is cleared at the same lifecycle
 boundaries as the ROM. Direct game-content compositing has been removed; the only
-host overlays left are the frame counter/PAUSED indicator and ROM-free glyph
+host overlay left is the PAUSED indicator, plus ROM-free glyph
 fallbacks.
 
 ### S-81 · playfield color RAM remained a palette snapshot
@@ -258,7 +377,7 @@ HUD fields, dialogs, high scores, legend/select text, and bonus tallies were
 reconstructed directly in `render/hud.py` and `render/screens.py`. Their ROM
 call sites now write complete attribute/glyph words into `GameState.alpha_ram`;
 one generic alpha pass resolves opacity, bank/palette, glyph, and live
-`alpha_color_ram` each frame. Only the host frame counter/PAUSED overlay and
+`alpha_color_ram` each frame. Only the host PAUSED overlay and
 ROM-free glyph fallbacks bypass that layer.
 
 ### Twelfth-pass attract/HUD/wall presentation (S-76 … S-78)
@@ -405,8 +524,8 @@ remembered live slot before resetting the per-player RAM.
   selected by the original projectile word; lobber channels remain base
   palette 1.
 - **S-60 · pause was only visible in the window caption.** The host passes its
-  pause state into the compositor, which draws `PAUSED` above the host-only
-  frame counter in the lower-right panel.
+  pause state into the compositor, which draws `PAUSED` in the lower-right
+  panel.
 - **S-61 · point-blank shots could skip a monster.** The port-only roaming-player
   overlay replaced a cell's real occupant before the shot hitbox test. Real
   occupants are now evaluated first and player records were additional fallback
@@ -492,6 +611,8 @@ remembered live slot before resetting the per-player RAM.
 - **S-52 · frame inspection lacked a stable reference.** A host-only decimal
   frame counter is drawn in the lower-right status-panel corner after all game
   layers. It deliberately uses host text and is not presented as original art.
+  **Superseded by S-123:** the frame now appears only on the separate F1
+  diagnostics overview.
 - **S-53 · completing the score-bag read path exposed missing writers.** A fresh
   level now seeds the ordinary 100-point bag value. Dragon death creates the
   score bag and randomized hidden potion at its two facing-dependent offsets,

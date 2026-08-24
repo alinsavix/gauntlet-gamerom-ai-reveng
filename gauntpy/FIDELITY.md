@@ -113,6 +113,42 @@ evidence remains in `../doc/`, generated contracts, and the book.
 29. **Hidden-potion pictures encode permanent powers.** Type 61 picture
     `(picture-0xA728)/4` is power ID 0–5. Only a duplicate grant falls through
     to the inventory-potion/solo-score branches.
+30. **Visible sprite overlap is not collision penetration.** Player collision
+    compares corrected MOB anchors with a strict 0x7C0 window and resolves H
+    before V. A sprite can visibly approach or slide into wall artwork before
+    the next anchor comparison blocks; do not tighten this with sprite boxes
+    unless ROM/MAME diverges at the same state.
+31. **Dialogs are part of recorded-demo timing.** A first-encounter call can
+    freeze `main_move_players` and its demo pointer while animation work outside
+    the dialog-gated world band continues. Port the producer's dialog write;
+    never compensate by retiming or editing the ROM input stream. Host options
+    that suppress gameplay hints must not suppress DEMO dialogs.
+32. **Resolve stack arguments before porting alpha rectangles.**
+    `alpha_clear_rect` consumes `(column, width, row, height)` even though 68000
+    callers push those values in reverse order. Transpose the call, not the
+    visual result, and regression-test the exact transparent cells.
+33. **Demo input is selected at each consumer.** The playback head only advances
+    pointers and timers. Movement, shots, potions, and transporter direction read
+    the current ROM record themselves; in particular, potion use tests its
+    active-low Magic bit directly instead of consulting the hardware debounce
+    register.
+34. **Alpha labels can animate through color RAM alone.** The IT glyph words stay
+    in alpha RAM while VBLANK alternates their player-specific palettes 12-15.
+    Port the palette writes; do not blink the glyphs in the renderer.
+35. **Only the current IT player tags another hero.** Player-player collision
+    transfers `player_it` when the holder moves into a live player, updates the
+    old/new alpha labels, and stuns the recipient, but only while
+    `movement_type` is nonzero. IT-creature contact is the separate
+    first-assignment path.
+36. **Host diagnostics never write arcade memory.** Capture immutable,
+    read-only snapshots after simulation and render them on a separate host
+    surface. Debug values must not occupy alpha/playfield/MOB/color RAM or feed
+    back into gameplay. Rolling diagnostic events are differences between host
+    snapshots, not new producers in game routines.
+37. **Demo completion belongs to the attract state machine.** The last recorded
+    exit must not commit `level_next`. `main_start_game` resets the demo actors,
+    closes any dialog, and expires the DEMO timer so `main_attract` advances to
+    LEGEND.
 
 ## Investigation workflow
 

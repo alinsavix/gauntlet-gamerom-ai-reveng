@@ -482,14 +482,28 @@ class TestDemoInit:
         start_attract_screen(state, int(GameMode.DEMO))
         elf = state.players[1]
         transported = False
+        resumed_after_transport = False
         arrival_sparkle = False
+        reached_exit = False
+        furthest_stream_pos = 0
 
-        for _ in range(7000):
+        for _ in range(7200):
             tick(state)
-            if state.demo_stream_pos[1] >= 76 and elf.mob_slot:
+            furthest_stream_pos = max(
+                furthest_stream_pos, state.demo_stream_pos[1],
+            )
+            reached_exit |= bool(elf.exit_pending) or elf.status == int(
+                PlayerStatus.ALIVE_NEXT
+            )
+            if elf.mob_slot:
                 x = hpos_x(state.mobs.hpos[elf.mob_slot])
                 y = vpos_y(state.mobs.vpos[elf.mob_slot])
                 transported |= x == 92 and 240 <= y <= 242
+                resumed_after_transport |= (
+                    state.demo_stream_pos[1] >= 76
+                    and x == 44
+                    and 280 <= y <= 282
+                )
             if state.player_tport_phase[1] >= 0:
                 effect = 0x19 + 1
                 if state.mobs.picture[effect]:
@@ -499,8 +513,119 @@ class TestDemoInit:
                     )
 
         assert transported
+        assert resumed_after_transport
         assert arrival_sparkle
+        assert furthest_stream_pos >= 148
+        assert reached_exit, "the Elf reached the exit"
+        assert state.dialog_first_encounter_flags & 0x01000000
+
+    @requires_roms
+    def test_demo_transfers_it_and_spends_the_elf_potion(self, tmp_path):
+        from gauntpy.mainloop import tick
+
+        state = GameState()
+        state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
+        start_attract_screen(state, int(GameMode.DEMO))
+        elf = state.players[1]
+        elf_became_it = False
+        potion_cleared_monsters = False
+        previous_monsters = None
+        previous_potions = elf.potionsnum
+        reached_exit = False
+
+        for _ in range(7200):
+            tick(state)
+            elf_became_it |= state.player_it == 1
+            reached_exit |= bool(elf.exit_pending) or elf.status == int(
+                PlayerStatus.ALIVE_NEXT
+            )
+            monsters = sum(
+                1 for slot in range(32, 1024)
+                if int(MazeObjIds.MONST_GHOST)
+                <= state.mobs.obj_type(slot)
+                <= int(MazeObjIds.MONST_IT)
+            )
+            if (
+                previous_potions > elf.potionsnum
+                and previous_monsters is not None
+            ):
+                potion_cleared_monsters |= monsters < previous_monsters
+            previous_monsters = monsters
+            previous_potions = elf.potionsnum
+
+        assert elf_became_it
+        assert elf.potionsnum == 0
+        assert potion_cleared_monsters
+        assert reached_exit
+
+    @requires_roms
+    def test_completed_demo_advances_to_legend_not_playable_level_two(
+        self, tmp_path, monkeypatch,
+    ):
+        from gauntpy.mainloop import tick
+        from gauntpy.subsystems import players
+
+        state = GameState()
+        state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
+        completed_demo_resets = 0
+        original_resetall = players.player_resetall
+
+        def tracked_resetall(reset_state):
+            nonlocal completed_demo_resets
+            if (
+                int(reset_state.game_mode) == int(GameMode.DEMO)
+                and reset_state.level_players_active == 0
+                and any(
+                    player.status == int(PlayerStatus.ALIVE_NEXT)
+                    for player in reset_state.players
+                )
+            ):
+                completed_demo_resets += 1
+            original_resetall(reset_state)
+
+        monkeypatch.setattr(players, "player_resetall", tracked_resetall)
+        start_attract_screen(state, int(GameMode.DEMO))
+        started_level_two = False
+
+        for _ in range(7600):
+            tick(state)
+            started_level_two |= (
+                int(state.game_mode) == int(GameMode.NORMAL)
+                and state.levelnum_current == 2
+                and state.level_players_active > 0
+            )
+
+        assert not started_level_two
+        assert completed_demo_resets == 1
+        assert int(state.game_mode) == int(GameMode.LEGEND)
+        assert state.level_players_active == 0
+        assert all(
+            player.status == int(PlayerStatus.REMOVED)
+            for player in state.players
+        )
+
+    @requires_roms
+    def test_runner_message_suppression_does_not_break_the_demo(self, tmp_path):
+        """play.bat disables gameplay hints, but DEMO dialogs are script timing."""
+        from gauntpy.mainloop import tick
+
+        state = GameState()
+        state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
+        state.suppress_first_encounter_messages = True
+        start_attract_screen(state, int(GameMode.DEMO))
+        elf = state.players[1]
+        reached_exit = False
+
+        for _ in range(7200):
+            tick(state)
+            reached_exit |= (
+                bool(elf.exit_pending)
+                or elf.status == int(PlayerStatus.ALIVE_NEXT)
+            )
+
+        assert reached_exit
         assert state.demo_stream_pos[1] >= 148
+        assert state.dialog_first_encounter_flags & 0x01000000
 
 
 class TestLogoColors:

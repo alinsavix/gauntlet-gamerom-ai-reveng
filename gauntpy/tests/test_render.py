@@ -31,9 +31,9 @@ from gauntpy.render.compositor import HUD_PANEL, PLAYFIELD_VIEWPORT, render_fram
 from gauntpy.render.framebuffer import Framebuffer
 from gauntpy.render.hud import (
     cell_xy,
-    draw_debug_frame_counter,
     draw_hud,
     draw_message_box,
+    draw_pause_indicator,
 )
 from gauntpy.render.mobs import draw_mob_layer, iter_visible_mobs, strength_tier
 from gauntpy.render import playfield, romtext
@@ -1179,28 +1179,25 @@ class TestPanelGeometryMatchesTheRom:
             state, score.PLAYER_TEXT_PALETTE_WORDS[0],
         )
 
-    def test_debug_frame_counter_uses_the_lower_right_panel_corner(self):
-        state = GameState()
-        state.frame_counter = 123
+    def test_unpaused_host_draws_no_debug_text_over_the_game_panel(self):
         fb = Framebuffer(336, 240)
 
-        draw_debug_frame_counter(fb, state, HUD_PANEL)
+        draw_pause_indicator(fb, HUD_PANEL)
 
-        assert any(
-            fb.get_pixel(x, y) != (0, 0, 0, 255)
+        assert all(
+            fb.get_pixel(x, y) == (0, 0, 0, 255)
             for y in range(220, 240)
             for x in range(300, 336)
         )
 
-    def test_pause_indicator_appears_above_the_frame_counter(self):
-        state = GameState(frame_counter=123)
+    def test_pause_indicator_uses_the_lower_right_panel_corner(self):
         fb = Framebuffer(336, 240)
 
-        draw_debug_frame_counter(fb, state, HUD_PANEL, paused=True)
+        draw_pause_indicator(fb, HUD_PANEL, paused=True)
 
         assert any(
             fb.get_pixel(x, y) != (0, 0, 0, 255)
-            for y in range(205, 229)
+            for y in range(220, 240)
             for x in range(285, 336)
         )
 
@@ -1328,7 +1325,8 @@ class TestTitleMobs:
         draw_alpha_layer(fb, state)
 
         assert fb.get_pixel(0, 239) == (12, 34, 56, 255)
-        assert fb.get_pixel(8, 0) == (0, 0, 0, 255)
+        assert fb.get_pixel(8, 0) == (12, 34, 56, 255)
+        assert fb.get_pixel(8, 8) == (0, 0, 0, 255)
 
     def test_scores_compositor_does_not_leak_gameplay_hud_backgrounds(self):
         state = GameState(game_mode=GameMode.SCORES)
@@ -1382,6 +1380,15 @@ class TestFrontEndTextIsRomData:
                 for offset in range(len(plural))
             )
 
+    def test_scores_screen_preserves_the_maze_border_above_the_top_ladders(self):
+        state = GameState()
+        score.write_high_score_screen(state)
+
+        assert state.alpha_ram[1] == 0
+        assert state.alpha_ram[20] == 0
+        assert state.alpha_ram[score.ALPHA_ROW_STRIDE + 1] & 0x8000
+        assert state.alpha_ram[score.ALPHA_ROW_STRIDE + 20] & 0x8000
+
     def test_scores_screen_shows_the_rom_factory_ladder(self):
         state = GameState()
         score.write_high_score_screen(state)
@@ -1423,8 +1430,40 @@ class TestFrontEndTextIsRomData:
 
         state = GameState()
         start_attract_screen(state, int(GameMode.LEGEND))
-        for text, column, row in romtext.LEGEND_RULES_TEXT:
+        for text, column, row, _attribute in romtext.LEGEND_RULES_TEXT:
             assert _alpha_text(state, column, row, len(text)) == text
+        assert _alpha_text(state, 8, 0, 6) == "LEGEND"
+
+    def test_legend_rules_reveals_the_rom_rectangles_without_erasing_the_panel(self):
+        from gauntpy.subsystems.attract import start_attract_screen
+
+        state = GameState()
+        start_attract_screen(state, int(GameMode.LEGEND))
+
+        for column, row in (
+            (0, 2), (0, 10), (0, 22), (22, 2), (24, 11), (24, 20),
+        ):
+            assert state.alpha_ram[row * score.ALPHA_ROW_STRIDE + column] == 0
+        assert state.alpha_ram[7 * score.ALPHA_ROW_STRIDE + 22] & 0x8000
+        assert state.alpha_ram[
+            5 * score.ALPHA_ROW_STRIDE + score.PANEL_COLUMN
+        ] & 0x8000
+
+    def test_monster_legend_writes_the_rom_capability_table(self):
+        from gauntpy.subsystems.attract import start_attract_screen
+
+        state = GameState()
+        start_attract_screen(state, int(GameMode.LEGEND))
+        state.attract_legend = 1
+        from gauntpy.subsystems.attract import _load_legend_page
+        _load_legend_page(state)
+
+        assert _alpha_text(state, 6, 0, 8) == "MONSTERS"
+        assert _alpha_text(state, 0, 19, 5) == "GHOST"
+        assert _alpha_text(state, 15, 19, 2) == "NO"
+        assert _alpha_text(state, 20, 19, 3) == "YES"
+        assert _alpha_text(state, 25, 25, 4) == "STUN"
+        assert _alpha_text(state, 0, 14, 6) == "DRAGON"
 
 
 class TestRomTextTables:
@@ -2154,6 +2193,92 @@ class TestHostShellInput:
             )
             shell.wait_for_vblank(state)
             assert not shell.paused
+        finally:
+            shell.close()
+
+    def test_f1_toggles_the_separate_host_diagnostics_panel(self):
+        from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
+        from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
+        from gauntpy.render.host import HostShell
+
+        shell = HostShell(assets=_FakeAssets(), scale=1)
+        try:
+            pygame = shell._pygame
+            state = GameState()
+            assert shell.window.get_size() == (LOGICAL_WIDTH, LOGICAL_HEIGHT)
+
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F1)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_visible
+            assert shell.window.get_size() == (
+                LOGICAL_WIDTH + DEBUG_PANEL_WIDTH,
+                LOGICAL_HEIGHT,
+            )
+            shell.present(state)
+
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F1)
+            )
+            shell.wait_for_vblank(state)
+            assert not shell.diagnostics_visible
+            assert shell.window.get_size() == (LOGICAL_WIDTH, LOGICAL_HEIGHT)
+        finally:
+            shell.close()
+
+    def test_diagnostics_panel_stays_native_width_when_game_is_scaled(self):
+        from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
+        from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
+        from gauntpy.render.host import HostShell
+
+        shell = HostShell(assets=_FakeAssets(), scale=3, diagnostics=True)
+        try:
+            assert shell.window.get_size() == (
+                LOGICAL_WIDTH * 3 + DEBUG_PANEL_WIDTH,
+                LOGICAL_HEIGHT * 3,
+            )
+            shell.present(GameState())
+        finally:
+            shell.close()
+
+    def test_diagnostics_page_and_mob_navigation_is_host_only(self):
+        from gauntpy.render.host import HostShell
+
+        state = GameState()
+        state.mobs.picture[32] = 0x1000
+        state.mobs.picture[40] = 0x2000
+        shell = HostShell(assets=_FakeAssets(), scale=1, diagnostics=True)
+        try:
+            pygame = shell._pygame
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F3)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_page == 1
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F2)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_page == 0
+
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHTBRACKET)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_selected_mob == 32
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHTBRACKET)
+            )
+            shell.wait_for_vblank(state)
+            assert shell.diagnostics_selected_mob == 40
+
+            before = tuple(state.mobs.picture)
+            shell.present(state)
+            state.players[0].health = 100
+            shell.present(state)
+            assert shell._diagnostics_events
+            assert tuple(state.mobs.picture) == before
         finally:
             shell.close()
 

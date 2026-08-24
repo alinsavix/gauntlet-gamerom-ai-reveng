@@ -154,8 +154,6 @@ BONUSMULT_COLUMN = 31        # 0x90503E -> byte 0x3E of the row -> word 31
 IT_LABEL_COLUMN = 0x24       # 0x905048, two ASCII glyph cells between labels
 INVENTORY_COLUMN = 30
 INVENTORY_CELLS = 12
-DIAGNOSTIC_MAZE_ROW = 27
-DIAGNOSTIC_POSITION_ROW = 28
 ALPHA_ROW_STRIDE = 64
 # OS draw_string maps ASCII space to alpha glyph zero (0x2F68-0x2F70).
 ALPHA_SPACE_GLYPH = 0
@@ -346,39 +344,6 @@ def write_it_labels(state: GameState) -> None:
         write_alpha_glyphs(state, IT_LABEL_COLUMN, row, glyphs, attribute)
 
 
-def write_status_diagnostics(state: GameState) -> None:
-    """Write host-requested maze/position diagnostics through modeled alpha RAM."""
-    fill_alpha_rect(
-        state, PANEL_COLUMN, DIAGNOSTIC_MAZE_ROW, PANEL_WIDTH, 2,
-        alpha_word(0x8000),
-    )
-    write_alpha_text(
-        state, PANEL_COLUMN, DIAGNOSTIC_MAZE_ROW,
-        f"MAZE {state.mazenum_current:03d}"[-PANEL_WIDTH:], 0x8000,
-    )
-    active = next(
-        (
-            (index, player) for index, player in enumerate(state.players)
-            if player.active and player.mob_slot
-        ),
-        None,
-    )
-    if active is None:
-        return
-    from ..coords import hpos_x, vpos_y
-
-    player_index, player = active
-    text = (
-        f"P{player_index + 1} "
-        f"{hpos_x(state.mobs.hpos[player.mob_slot])},"
-        f"{vpos_y(state.mobs.vpos[player.mob_slot])}"
-    )
-    write_alpha_text(
-        state, PANEL_COLUMN, DIAGNOSTIC_POSITION_ROW,
-        text[:PANEL_WIDTH], 0x8000,
-    )
-
-
 # ---------------------------------------------------------------------------
 # High-score table (§10.3, highscore_table_init 0x49BD0)
 # ---------------------------------------------------------------------------
@@ -446,7 +411,7 @@ def write_high_score_screen(state: GameState) -> None:
     clear_alpha_visible(state)
     opaque_blank = alpha_word(0x8000, ALPHA_SPACE_GLYPH)
     for column, row, width, height in (
-        (1, 0, 17, 14), (20, 0, 21, 14),
+        (1, 1, 17, 13), (20, 1, 21, 13),
         (1, 17, 17, 12), (20, 17, 21, 12),
     ):
         fill_alpha_rect(state, column, row, width, height, opaque_blank)
@@ -903,7 +868,10 @@ def dialog_first_encounter(
     if speech_id:
         sound_speech_play(state, speech_id)
         spoken = 1
-    if state.suppress_first_encounter_messages:
+    if (
+        state.suppress_first_encounter_messages
+        and state.game_mode != int(GameMode.DEMO)
+    ):
         return spoken
 
     if state.dialog_timer:
@@ -1138,8 +1106,6 @@ def main_score_display(state: GameState) -> None:
     # Master display gate (0x904007 bit 2).
     if not state.score_display_enabled:
         return
-
-    write_status_diagnostics(state)
 
     # One player per frame, round-robin over the four slots.
     player_index = state.frame_counter & 3

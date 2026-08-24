@@ -467,6 +467,14 @@ before vertical motion, so a diagonal collision slides along the same axis as
 the original. Movable-wall collision advances only the wall on that frame; the
 hero stays put and retries on later frames.
 
+This anchor geometry can look like a one- or two-pixel nudge into wall artwork:
+the sprite is 24 pixels wide, while blocking is the strict `< 0x7C0` comparison
+between corrected MOB anchors, not a host sprite-box intersection. Horizontal
+motion is also committed before a blocked vertical axis. A direct probe of maze
+17 pixel `(16,10)` confirms left/right/down movement and an up-only top-wall
+block on both gauntpy and the ROM; the wrapped L/R seam is not a separate
+failure there.
+
 Unless `LFLAG4_PLAYER_OFFSCREEN` is set, each proposed axis also has to remain
 inside the hardware window. The H anchor minus `scroll_hpos_origin` must be
 below 0x7000; the V anchor minus `scroll_vpos_origin` must be below 0x7400
@@ -504,6 +512,14 @@ Three outcomes, in the ROM's order:
 
 The same tail exists for a pushed movable wall at `failed_door_post`
 (0x427B4-0x42808), instruction for instruction.
+
+The four movable-wall arms at 0x4280E-0x42A64 advance the wall by exactly
+`0x80`, one native pixel, and return zero to the current movement axis. A base
+Elf's requested step is `0x100`, so while pushing it alternates blocked frames
+that move only the wall with clear frames that move the hero two pixels. Direct
+ROM execution and MAME 0.289 show the same 0/2-pixel hero cadence; smoothing it
+in the renderer or forcing the hero forward on every push frame would change
+the game-side MOB words.
 
 gauntpy implements this in `players.migrate_player_record`, called from
 `_apply_pixel_delta` after the position write and again after the tile pass in
@@ -584,6 +600,21 @@ clears the old label, draws/announces the new one, and then stores the new
 player in 0x9049DC.
 
 The IT player variable is at `0x9049DC` (0xFFFF = nobody is IT).
+
+The label flashes without rewriting either glyph. Every 16 frames,
+`game_vblank` 0x40328-0x4037A selects phase bit 0x10 and rewrites colors 1-3 of
+alpha palettes 12-15 at 0x910062-0x91007E. One phase copies each palette's dark
+color 0 over all three entries; the other restores the corresponding
+`alpha_palette_init` ramp from ROM 0x5AD80. Alpha RAM remains authoritative for
+the label, and live alpha color RAM supplies the animation.
+
+There is also a player-to-player transfer inside `player_try_move_core`
+0x41DAC-0x41DEC. Only a mover who is already `player_it` can tag the collided
+hero: the old label is cleared, the new one is drawn and announced, the global
+word changes to the recipient, sound 0x35 plays, and the recipient receives a
+0x40-frame stun. The whole arm is gated on nonzero `movement_type`, so recursive
+collision retries cannot transfer it. Touching the IT creature is the separate
+first-assignment path.
 
 ### 4.6 Tile Interaction (`player_tile_interact` / `tile_occupant_interact`, 0x511AC)
 
@@ -773,7 +804,16 @@ therefore **Contradicted**.
 MAME 0.289 confirms the alpha-layer distinction: LEGEND's 29×30 opaque blank
 curtain intentionally hides maze 103 behind black text space, while the
 following SCORES screen retains maze 103 and uses opaque boxes only for its
-four ladders. The cyan maze remains visible between those boxes.
+four ladders. The cyan maze remains visible between those boxes, including the
+complete one-cell row above the two upper ladders; their opaque spans begin on
+alpha row 1, not row 0.
+
+`draw_legend_rules_page` uses `alpha_clear_rect(column, width, row, height)`;
+the six calls at 0x4D088-0x4D0EC reveal `(0,5,2,5)`, `(0,5,10,9)`,
+`(0,5,22,7)`, `(22,7,2,5)`, `(24,5,11,6)`, and `(24,5,20,9)`. The last two
+remain left of the status panel. `draw_legend_monsters_page` separately clears
+`(16,10,3,14)` and expands the 42 records at 0x5A56E into ten creature names
+and the lower Fight/Shoot/Magic matrix.
 
 ### 6.2 Demo Data Format
 
@@ -815,6 +855,12 @@ The second byte is an active-low joystick value for normal input records:
 
 For example, `0xB3` presses DOWN; `0xF3` supplies no input.
 
+The four input consumers select the source independently. In
+`main_handle_potions`, 0x47012-0x4704A reads the debounced `0x1C` Magic edge only
+when `game_mode == 0`; otherwise it tests active-low bit 0 directly in the
+current record at `demo_ptr[player]`. Feeding only the hardware debounce
+register cannot reproduce the recorded potion use.
+
 | Player | ROM Address | Exact size | Notes |
 |--------|-------------|------------|-------|
 | Player 0 | 0x5818C | 56 B | 28 command pairs; not active in the standard demo |
@@ -837,7 +883,29 @@ The join call takes the DEMO branch of player credit initialization and assigns
 search. The recorded Elf collects the row-straddling potion, uses it near the
 end, and reaches the exit; treating the hero's fixed host record as its logical
 cell, or clipping the scripted hero to a camera held by lagging joined actors,
-breaks that sequence.
+breaks that sequence. The late Magic record must also reach the potion
+consumer directly: it spends the inventory byte, clears the on-screen monsters,
+and raises the ordinary potion-use dialog before the final run to the exit.
+
+The ordinary transporter landing also calls `dialog_first_encounter` with mask
+0x01000000 at 0x50840-0x5084C. Its 150-frame message freezes
+`main_move_players`, including `demo_ptr` and `demo_timer`, while the
+transporter phase animation continues in the score/effect loop outside the
+dialog-gated world band. A fresh MAME 0.289 trace therefore lands at slot 486
+`(92,240)` during the still-live `32 D3` record, then resumes enough LEFT input
+to reach slot 483 `(44,242)` before the next record. Omitting the dialog consumes
+that input during the dissolve and strands the Elf against the wall below.
+Host-side gameplay-hint suppression must therefore remain inactive in DEMO;
+it is not permitted to bypass this game-side timing event.
+
+When every recorded actor has finished the status-8 exit animation,
+`level_players_active` reaches zero but the normal level transition is not
+committed. `main_start_game` 0x48026-0x480E2 sees the status-2 players, waits
+for shared effect pictures 13-16 to clear, and takes its explicit DEMO arm at
+0x480B6: `player_resetall`, `attract_timer = 0`, and immediate dialog teardown.
+The later `main_attract` call decrements that timer below zero and rotates DEMO
+to LEGEND. The actors and their computed `level_next` never become a playable
+level.
 
 ### 6.4 Attract-Mode Interruption
 
@@ -971,6 +1039,9 @@ found. It removes/recreates the player there and calls `handle_tport` again at
 0x509DE, moving the reappearance sparkle from the source to the destination.
 MAME 0.179 confirms the shipped demo moves player 1 from slot 492 `(180,240)`
 to slot 486 `(92,240)`; the effect changes to the destination on phase 22.
+For an ordinary pad (`player_tport_type != 0`), the successful candidate path
+first calls `dialog_first_encounter(player, 0x01000000)` at 0x50840-0x5084C.
+Corner transport skips this call.
 
 **Display-origin clarification.** `scroll_hpos_origin` at 0x904AC2 remains
 `(pf_hscroll - 8) << 7` for player/shot boundary arithmetic. It is not the
@@ -1708,10 +1779,11 @@ update conditions require it:
   caller owns the tracked IT state. Its two cells use `0xB000 | player<<10`,
   not the ordinary player-text attribute.
 
-gauntpy additionally writes `MAZE nnn` and the first active player's pixel
-`P# x,y` position into rows 27–28 of the modeled alpha panel. These are explicit
-host diagnostics with no claimed arcade call site; unlike a renderer overlay,
-they still pass through alpha RAM so panel ownership and clipping remain honest.
+gauntpy's host diagnostics do not enter this path. The optional F1 side panel
+captures a read-only snapshot after the game frame and renders it with a
+host-owned PIL surface. Mode, maze, camera, RNG, demo pointers, MOB counts, and
+player coordinates therefore remain inspectable without changing alpha RAM or
+claiming an arcade call site.
 
 ### 14.3 Logo Color Cycling (`main_logo_updcolors`, 0x4DCBA)
 

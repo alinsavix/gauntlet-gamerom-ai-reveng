@@ -103,6 +103,7 @@ class TestArguments:
 
         play.main([])
         assert called["character"] == Character.ELF
+        assert called["scale"] == 4
 
         play.main(["--character", "wizard"])
         assert called["character"] == Character.WIZARD
@@ -273,6 +274,42 @@ class TestBuildState:
             player_try_move(state, 0, direction, 0)
 
             assert hpos_x(state.mobs.hpos[player.mob_slot]) == expected_x
+
+    def test_level_18_left_seam_coordinate_matches_rom_movement(self):
+        from gauntpy.coords import (
+            encode_hpos, encode_vpos_at_y, hpos_x, mob_cell_of, vpos_y,
+        )
+        from gauntpy.subsystems.camera import snap_camera
+        from gauntpy.subsystems.input import JOY_DOWN, JOY_LEFT, JOY_RIGHT, JOY_UP
+        from gauntpy.subsystems.players import player_try_move
+
+        expected = (
+            (JOY_LEFT, (14, 10)),
+            (JOY_RIGHT, (18, 10)),
+            (JOY_UP, (16, 10)),
+            (JOY_DOWN, (16, 12)),
+        )
+        for direction, position in expected:
+            state = play.build_state(18, Character.ELF)
+            player = state.players[0]
+            state.mobs.unlink_and_clear(player.mob_slot)
+            slot = mob_cell_of(encode_hpos(16), encode_vpos_at_y(10))
+            state.mobs.create(
+                slot, 0x1E0D, encode_hpos(16, palette=12),
+                encode_vpos_at_y(10, 3, 3), MazeObjIds.PLAYERSTART, 0,
+            )
+            player.mob_slot = slot
+            state.player_tile_pos[0] = slot
+            snap_camera(state)
+            state.movement_type = 2
+
+            player_try_move(state, 0, direction, 0)
+
+            live = player.mob_slot
+            assert (
+                hpos_x(state.mobs.hpos[live]),
+                vpos_y(state.mobs.vpos[live]),
+            ) == position
 
     def test_direct_start_inventory_and_powers_initialize_live_state(self):
         from gauntpy.constants import PlayerPower

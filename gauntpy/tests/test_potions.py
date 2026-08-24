@@ -70,7 +70,7 @@ class TestMagicGate:
 
     def test_press_consumes_potion_and_blasts(self):
         """A Wizard's magic press consumes a potion and clears a Ghost."""
-        state = GameState()
+        state = GameState(game_mode=GameMode.NORMAL)
         _active(state, 0, pack_slot(5, 5), character=Character.WIZARD)
         state.players[0].potionsnum = 1
         _place(state, pack_slot(8, 8), MazeObjIds.MONST_GHOST)
@@ -82,8 +82,23 @@ class TestMagicGate:
         # Wizard column (0x12 col 2) is 0 -> Ghost destroyed.
         assert state.mobs.obj_type(pack_slot(8, 8)) == 0, "ghost destroyed"
 
+    def test_demo_reads_magic_directly_from_the_current_record(self):
+        state = GameState(game_mode=GameMode.DEMO)
+        _active(state, 1, pack_slot(5, 5), character=Character.ELF)
+        state.players[1].potionsnum = 1
+        _place(state, pack_slot(8, 8), MazeObjIds.MONST_GHOST)
+        _camera_on(state, _FOCUS)
+        state.debounce_shift_magic[1] = 0xFFFF
+        state.demo_streams[1] = [8, 0xF2]  # active-low Magic, no directions
+        state.demo_timers[1] = 8
+
+        main_handle_potions(state)
+
+        assert state.players[1].potionsnum == 0
+        assert state.mobs.obj_type(pack_slot(8, 8)) == 0
+
     def test_press_updates_alpha_inventory_at_the_rom_call_site(self):
-        state = GameState()
+        state = GameState(game_mode=GameMode.NORMAL)
         _active(state, 0, pack_slot(5, 5), character=Character.WIZARD)
         state.players[0].potionsnum = 1
         state.debounce_shift_magic[0] = 0x1C
@@ -278,7 +293,7 @@ class TestBlastOutcomes:
         assert state.potion_player == 0x05  # character 1 | shot 4
 
     def test_potion_is_rejected_on_maze_0x73_and_later(self):
-        state = GameState()
+        state = GameState(game_mode=GameMode.NORMAL)
         _active(state, 0, pack_slot(5, 5), character=Character.WARRIOR)
         state.players[0].potionsnum = 1
         state.debounce_shift_magic[0] = 0x1C

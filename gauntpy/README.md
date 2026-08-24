@@ -28,7 +28,8 @@ With [uv](https://docs.astral.sh/uv/) (recommended — it resolves the local
 cd gauntpy && uv run --all-extras gauntpy-play
 ```
 
-A window opens on a real Gauntlet II maze with your hero's genuine class sprite.
+A window opens at **4x scale** on a real Gauntlet II maze with your hero's
+genuine class sprite. Use `--scale` to override it.
 
 | Key | Action |
 |-----|--------|
@@ -37,11 +38,24 @@ A window opens on a real Gauntlet II maze with your hero's genuine class sprite.
 | **Alt / Enter** | Magic (also start / commit a character) |
 | **5** | insert a coin |
 | **P** | pause / resume |
+| **F1** | show / hide the host diagnostics panel |
+| **F2 / F3** | previous / next diagnostics page |
+| **[ / ]** | select the previous / next occupied MOB |
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
 you pick up items and open doors, you fire, and walking into an **exit loads the
 next level** — the opening act plays mazes 0–4 as levels 1–5, then the cabinet
 rotation takes over.
+
+The **F1** panel is host-only: it reads an immutable post-frame snapshot and
+shows mode, level/maze, camera, RNG, IT owner, demo pointers, MOB counts, and
+per-player state. It does not use the arcade alpha renderer or write modeled
+video/game memory. Its text remains at native host resolution when the game
+raster is enlarged with `--scale`, using an anti-aliased system monospace font.
+Its pages cover overview, players and raw input, decoded demo records, level
+flags/timers, actor counts and raw MOB words, thief/dragon AI, display memory,
+audio queues, and a rolling event log inferred from snapshots while the panel
+is open.
 
 By default the runner drops you straight into a level. Options:
 

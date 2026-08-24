@@ -13,4 +13,4 @@ cd /d "%~dp0"
 rem copy link mode avoids uv's cross-drive hardlink warning on this checkout.
 set "UV_LINK_MODE=copy"
 
-uv run --all-extras gauntpy-play %*
+uv run --all-extras gauntpy-play %* --scale 4 --no-first-encounter-messages

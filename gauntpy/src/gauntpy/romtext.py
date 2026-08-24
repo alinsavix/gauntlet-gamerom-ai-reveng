@@ -43,7 +43,7 @@ __all__ = [
     "BONUS_SECRET_5000", "GAMEPLAY_TIPS",
     "TREASURE_ROOM_TITLE", "TREASURE_ROOM_LINES",
     "DUNGEON_HEADER_GLYPHS", "LEGEND_RULES_TEXT", "LEGEND_CREDITS_TEXT",
-    "LEGEND_MONSTER_TEXT",
+    "LEGEND_MONSTER_ROWS",
 ]
 
 # --- character and player identity ----------------------------------------
@@ -183,18 +183,43 @@ GAMEPLAY_TIPS = (
 # ``load_legend_page`` rules page, ROM 0x5A6CE-0x5A8AB. Coordinates are the
 # linked descriptor records consumed by draw_legend_rules_page (0x4CFDA).
 LEGEND_RULES_TEXT = (
-    ("FOOD", 6, 3), ("MAGIC", 6, 5), ("POTIONS", 6, 6),
-    ("INVISIBILITY", 6, 11), ("INVULNERABILITY", 6, 12),
-    ("REPULSIVENESS", 6, 13), ("REFLECTIVE SHOTS", 6, 15),
-    ("10 SUPER SHOTS", 6, 16), ("TRANSPORTABILITY", 6, 18),
-    ("WALL/FLOOR TYPES", 6, 20), ("FORCE FIELD", 12, 22),
-    ("WALL", 6, 23), ("STUN TILE", 14, 24),
-    ("DESTRUCTIBLE", 6, 25), ("TRAP", 19, 26),
-    ("MOVABLE", 6, 27), ("EXIT", 19, 28),
-    ("TREASURE", 13, 3), ("KEY", 18, 6),
-    ("TEMPORARY", 0, 8), ("POTIONS", 0, 9),
-    ("PERMANENT", 20, 9), ("POTIONS", 22, 10),
+    ("FOOD", 6, 3, 0x9000), ("MAGIC", 6, 5, 0x9000),
+    ("POTIONS", 6, 6, 0x9000), ("INVISIBILITY", 6, 11, 0x9000),
+    ("INVULNERABILITY", 6, 12, 0x9000),
+    ("REPULSIVENESS", 6, 13, 0x9000),
+    ("REFLECTIVE SHOTS", 6, 15, 0x9000),
+    ("10 SUPER SHOTS", 6, 16, 0x9000),
+    ("TRANSPORTABILITY", 6, 18, 0x9000),
+    ("WALL/FLOOR TYPES", 6, 20, 0x8000),
+    ("FORCE FIELD", 12, 22, 0x8800), ("WALL", 6, 23, 0x9000),
+    ("STUN TILE", 14, 24, 0x8800),
+    ("DESTRUCTABLE", 6, 25, 0x9000), ("TRAP", 19, 26, 0x8800),
+    ("MOVEABLE", 6, 27, 0x9000), ("EXIT", 19, 28, 0x8800),
+    ("TREASURE", 13, 3, 0x8800), ("KEY", 18, 6, 0x8800),
+    ("TEMPORARY", 0, 8, 0x8000), ("POTIONS", 0, 9, 0x8000),
+    ("PERMANENT", 20, 9, 0x8000), ("POTIONS", 22, 10, 0x8000),
 )
+
+# ``draw_legend_monsters_page`` table, ROM 0x5A56E-0x5A669. Each row is
+# (monster, Fight, Shoot, Magic); the routine writes the name beside the maze
+# art and repeats it in the lower capability table.
+LEGEND_MONSTER_ROWS = (
+    ("GHOST", "NO", "YES", "YES"),
+    ("GRUNT", "YES", "YES", "YES"),
+    ("DEMON", "YES", "YES", "YES"),
+    ("LOBBER", "YES", "YES", "YES"),
+    ("SORCERER", "YES", "YES", "YES"),
+    ("DEATH", "NO", "NO", "YES"),
+    ("ACID PUDDLE", "NO", "NO", "STUN"),
+    ("SUPER SORCERER", "NO", "YES", "STUN"),
+    ("    IT", "NO", "STUN", "NO"),
+    ("DRAGON", "NO", "YES", "STUN"),
+)
+LEGEND_MONSTER_VALUE_ATTRIBUTES = {
+    "NO": 0x8800,
+    "YES": 0x8400,
+    "STUN": 0x8C00,
+}
 
 # Credits descriptor chains at ROM 0x5A99C/0x5AB0E.
 LEGEND_CREDITS_TEXT = (
@@ -210,13 +235,4 @@ LEGEND_CREDITS_TEXT = (
     ("KEN HATA", 4, 24), ("SPECIAL THANKS TO:", 2, 26),
     ("MIKE ALBAUGH", 4, 27), ("DAVE THEURER", 4, 28),
     ("AND MANY OTHERS", 4, 29),
-)
-
-LEGEND_MONSTER_TEXT = (
-    ("MONSTERS", 10, 0), ("Type", 1, 3), ("Type", 1, 18),
-    ("Fight", 12, 18), ("Shoot", 18, 18), ("Magic", 24, 18),
-    ("GHOST", 0, 4), ("GRUNT", 0, 5), ("DEMON", 0, 6),
-    ("LOBBER", 0, 7), ("SORCERER", 0, 8), ("DEATH", 0, 9),
-    ("ACID PUDDLE", 0, 10), ("SUPER SORCERER", 0, 11),
-    ("IT", 0, 12), ("DRAGON", 0, 15),
 )

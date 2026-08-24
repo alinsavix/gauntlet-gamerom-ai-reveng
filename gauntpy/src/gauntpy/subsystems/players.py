@@ -578,6 +578,7 @@ _DIALOG_KEYS = 0x00000008           # record 3, 0x51620
 _DIALOG_SAVE_POTIONS = 0x00000020   # record 5, 0x51796
 _DIALOG_POISONED = 0x00002000       # record 13, 0x516BE / 0x51CAA
 _DIALOG_TRAP = 0x00800000           # record 23, 0x51278
+_DIALOG_TRANSPORTER = 0x01000000    # record 24, 0x50840
 _DIALOG_STUN_FLOOR = 0x04000000     # record 26, 0x51388
 _DIALOG_LOCKED_TREASURE = 0x08000000  # record 27, mob_collision_test 0x52614
 _DIALOG_FORCEFIELD = 0x80000000     # 0x4AAEE, inside the contact block
@@ -861,7 +862,6 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     if player_selector < 0:
         score.write_info_panel_backdrop(state)
         score.write_info_panel_header(state)
-        score.write_status_diagnostics(state)
     for i in targets:
         score.write_player_panel_background(state, i)
         initials_entry = (
@@ -2843,6 +2843,11 @@ def _status8_complete(state: GameState, player_index: int) -> None:
             if advance_level_countdowns(state):              # 0x4A748-0x4A788
                 show_level_end_bonus_screen(state)           # 0x4A78C
             else:
+                # DEMO completion is owned by main_start_game at
+                # 0x480B6-0x480E2. The countdown bookkeeping above still runs,
+                # but level 2 is never committed for the recorded actors.
+                if state.game_mode == int(GameMode.DEMO):
+                    return
                 from .exits import secret_check
 
                 secret_check(state)                          # 0x480EC
@@ -3780,6 +3785,8 @@ def tport_player_move(state: GameState, player_index: int) -> None:
         from .shots import _pf_replace
 
         _pf_replace(state, landing, int(MazeObjIds.TILE_FLOOR))
+    if destination_pad:
+        _dialog(state, player_index, _DIALOG_TRANSPORTER)  # 0x50840-0x5084C
     if _move_player_to_slot(state, player_index, landing):
         source_pad = state.player_tport_route_state[player_index] & 0x3FF
         if (
@@ -4061,6 +4068,28 @@ def _player_fight_collision(
             state.player_fighting_dir[player_index] = player.direction + 1
             player.anim_counter = 0
         return 1
+
+    if obj_type == int(MazeObjIds.PLAYERSTART):
+        target_index = next(
+            (
+                index for index, target in enumerate(state.players)
+                if index != player_index and target.active and target.mob_slot == slot
+            ),
+            None,
+        )
+        if target_index is None:
+            return None
+        # 0x41DAC-0x41DEC: only the current IT player can transfer the curse by
+        # running into another live player on a non-recursive movement pass. The
+        # target is stunned for 0x40 frames.
+        if state.movement_type != 0 and state.player_it == player_index:
+            state.player_it = target_index
+            from .score import write_it_labels
+
+            write_it_labels(state)
+            _sound_play(state, 0x35)
+            state.players[target_index].stundelay = 0x40
+        return 0
 
     if obj_type in GENERATOR_TYPES:
         # The recorded attract run is authored as a demonstration, and its Elf

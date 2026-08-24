@@ -7,7 +7,7 @@ Reference: ``doc/04_game_subsystems.md`` §10.1, §22, §6.4;
 from __future__ import annotations
 
 from .. import romtext
-from ..constants import Character, GameMode, PlayerStatus
+from ..constants import SLOT_SHOT_EXPLOSIONS, Character, GameMode, PlayerStatus
 from ..state import NUM_PLAYERS, GameState
 from .display import (
     clear_alpha_visible, write_alpha_glyphs, write_alpha_large_text,
@@ -341,6 +341,31 @@ def main_start_game(state: GameState) -> None:
     state.welcome_elapsed_frames = (
         state.welcome_elapsed_frames + 1
     ) & 0xFFFF_FFFF                                               # 0x48020
+
+    # 0x48026-0x480E2: after the final recorded actor finishes its exit
+    # animation, DEMO has no active players, at least one status-2 survivor, and
+    # no shared effect in slots 13-16. Reset the puppet party and expire this
+    # attract screen; main_attract later in the same frame advances to LEGEND.
+    if (
+        state.level_players_active == 0
+        and state.game_mode == int(GameMode.DEMO)
+        and any(
+            player.status == int(PlayerStatus.ALIVE_NEXT)
+            for player in state.players
+        )
+        and not any(
+            state.mobs.picture[slot] for slot in SLOT_SHOT_EXPLOSIONS
+        )
+    ):
+        from .players import player_resetall
+        from .score import main_msgbox_countdown
+
+        player_resetall(state)                                    # 0x480C0
+        state.attract_timer = 0                                   # 0x480C6
+        if state.dialog_timer:
+            state.dialog_timer = 1                                # 0x480D4
+            main_msgbox_countdown(state)                           # 0x480DC
+        return
 
     # global_ui_delay_timer is decremented here, outside the dialog-gated world
     # band (0x4817C). This keeps level splashes advancing even while a message

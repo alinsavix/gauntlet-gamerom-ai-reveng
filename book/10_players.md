@@ -433,7 +433,14 @@ crowd all move on. Touching a friend is an act of aggression here.
 
 The two letters are intentionally not in the holder's normal red, blue, yellow,
 or green text attribute. The label writer uses its own `0xB000 | player<<10`
-family, which presents the bright white label seen on the cabinet.
+family. Every sixteen frames VBLANK alternates the four matching alpha palettes
+between their dark first color and their full white ramp, so the letters flash
+while their two alpha-RAM words remain untouched.
+
+Tagging is directional. The current IT holder must run into another live hero;
+the collision clears the old label, draws the recipient's, moves the global IT
+word, and stuns the recipient for sixty-four frames. A non-IT player merely
+running into the holder does not reverse that ownership rule.
 
 Friendly fire arrives by level flag. On levels flagged **shots stun**, a
 teammate's shot freezes you mid-stride for a beat and knocks your attack out
