@@ -864,6 +864,8 @@ dialog-gated world band. A fresh MAME 0.289 trace therefore lands at slot 486
 `(92,240)` during the still-live `32 D3` record, then resumes enough LEFT input
 to reach slot 483 `(44,242)` before the next record. Omitting the dialog consumes
 that input during the dissolve and strands the Elf against the wall below.
+Host-side gameplay-hint suppression must therefore remain inactive in DEMO;
+it is not permitted to bypass this game-side timing event.
 
 ### 6.4 Attract-Mode Interruption
 

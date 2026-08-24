@@ -903,7 +903,10 @@ def dialog_first_encounter(
     if speech_id:
         sound_speech_play(state, speech_id)
         spoken = 1
-    if state.suppress_first_encounter_messages:
+    if (
+        state.suppress_first_encounter_messages
+        and state.game_mode != int(GameMode.DEMO)
+    ):
         return spoken
 
     if state.dialog_timer:

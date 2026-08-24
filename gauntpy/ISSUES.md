@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2300 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2301 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -43,9 +43,12 @@ start).
   script while the transporter animation continues outside the dialog-gated
   world band. Without it, the remaining LEFT record expired during the
   dissolve, leaving the Elf at `(92,256)` and preventing the recorded route
-  from reaching the exit. The game-side dialog write is restored; command
-  boundaries now match a fresh MAME 0.289 trace from the `(92,240)` landing
-  through the exit.
+  from reaching the exit. The game-side dialog write is restored. A follow-up
+  found that the runner's `--no-first-encounter-messages` option still
+  suppressed this timing-critical DEMO dialog; suppression is now limited to
+  non-DEMO play. The actual `play.bat --attract` configuration now follows the
+  fresh MAME 0.289 command boundaries from the `(92,240)` landing through the
+  exit.
 - **S-113:** the rules legend transposed five of six `alpha_clear_rect`
   arguments, erasing labels and the first status-panel column instead of
   revealing maze-103 item art. It also omitted the centered LEGEND heading,

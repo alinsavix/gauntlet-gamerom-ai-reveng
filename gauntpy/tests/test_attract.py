@@ -511,6 +511,29 @@ class TestDemoInit:
         assert elf.status == int(PlayerStatus.ALIVE_NEXT), "the Elf reached the exit"
         assert state.dialog_first_encounter_flags & 0x01000000
 
+    @requires_roms
+    def test_runner_message_suppression_does_not_break_the_demo(self, tmp_path):
+        """play.bat disables gameplay hints, but DEMO dialogs are script timing."""
+        from gauntpy.mainloop import tick
+
+        state = GameState()
+        state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
+        state.suppress_first_encounter_messages = True
+        start_attract_screen(state, int(GameMode.DEMO))
+        elf = state.players[1]
+        reached_exit = False
+
+        for _ in range(7000):
+            tick(state)
+            reached_exit |= (
+                bool(elf.exit_pending)
+                or elf.status == int(PlayerStatus.ALIVE_NEXT)
+            )
+
+        assert reached_exit
+        assert state.demo_stream_pos[1] >= 148
+        assert state.dialog_first_encounter_flags & 0x01000000
+
 
 class TestLogoColors:
     def test_cadence_counter_advances(self):
