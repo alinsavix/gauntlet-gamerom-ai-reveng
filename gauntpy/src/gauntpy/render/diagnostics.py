@@ -533,7 +533,7 @@ def render_debug_panel(
     page %= len(DEBUG_PAGES)
     title = f"{page + 1}/{len(DEBUG_PAGES)} {DEBUG_PAGES[page]}"
     draw.text((8, 4), title, font=heading_font, fill=_HEADING)
-    controls = "F1 HIDE  F2> F3<  [ ] MOB"
+    controls = "F1 HIDE  F2< F3>  [ ] MOB"
     controls_box = draw.textbbox((0, 0), controls, font=font)
     draw.text(
         (width - (controls_box[2] - controls_box[0]) - 8, 6),

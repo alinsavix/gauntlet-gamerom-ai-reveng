@@ -33,7 +33,7 @@ from ..subsystems import score
 from ..subsystems.camera import viewport_scroll
 from .alpha import draw_alpha_layer
 from .framebuffer import Framebuffer
-from .hud import draw_debug_frame_counter
+from .hud import draw_pause_indicator
 from .mobs import SpriteSource, draw_mob_layer
 from .playfield import (
     PlayfieldCache, draw_playfield, playfield_cache_for_state, shadow_source_for,
@@ -122,6 +122,6 @@ def render_frame(
     )
 
     draw_alpha_layer(fb, state)
-    draw_debug_frame_counter(fb, state, HUD_PANEL, paused=paused)
+    draw_pause_indicator(fb, HUD_PANEL, paused=paused)
 
     return fb, cache

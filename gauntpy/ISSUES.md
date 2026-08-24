@@ -35,6 +35,13 @@ start).
 
 ## Resolved issues
 
+### S-123 · diagnostics navigation order and game-panel frame overlay
+
+Diagnostics page navigation now follows F2 = previous and F3 = next, matching
+the panel legend. The decimal host frame counter has moved entirely to the F1
+overview and is no longer composited over the arcade player-status area.
+`PAUSED` remains the sole host marker on the game raster.
+
 ### S-122 · diagnostics exposed only one fixed overview
 
 The F1 panel now has nine host-owned pages: overview, player input/runtime,
@@ -341,7 +348,7 @@ initials entry, the continue prompt, the secret-room 29-character editor and its
 ROM-matched CRC secret code, plus the rules-page reveal windows/decorative MOB
 writes. Temporary front-end/bonus alpha content is cleared at the same lifecycle
 boundaries as the ROM. Direct game-content compositing has been removed; the only
-host overlays left are the frame counter/PAUSED indicator and ROM-free glyph
+host overlay left is the PAUSED indicator, plus ROM-free glyph
 fallbacks.
 
 ### S-81 · playfield color RAM remained a palette snapshot
@@ -370,7 +377,7 @@ HUD fields, dialogs, high scores, legend/select text, and bonus tallies were
 reconstructed directly in `render/hud.py` and `render/screens.py`. Their ROM
 call sites now write complete attribute/glyph words into `GameState.alpha_ram`;
 one generic alpha pass resolves opacity, bank/palette, glyph, and live
-`alpha_color_ram` each frame. Only the host frame counter/PAUSED overlay and
+`alpha_color_ram` each frame. Only the host PAUSED overlay and
 ROM-free glyph fallbacks bypass that layer.
 
 ### Twelfth-pass attract/HUD/wall presentation (S-76 … S-78)
@@ -517,8 +524,8 @@ remembered live slot before resetting the per-player RAM.
   selected by the original projectile word; lobber channels remain base
   palette 1.
 - **S-60 · pause was only visible in the window caption.** The host passes its
-  pause state into the compositor, which draws `PAUSED` above the host-only
-  frame counter in the lower-right panel.
+  pause state into the compositor, which draws `PAUSED` in the lower-right
+  panel.
 - **S-61 · point-blank shots could skip a monster.** The port-only roaming-player
   overlay replaced a cell's real occupant before the shot hitbox test. Real
   occupants are now evaluated first and player records were additional fallback
@@ -604,6 +611,8 @@ remembered live slot before resetting the per-player RAM.
 - **S-52 · frame inspection lacked a stable reference.** A host-only decimal
   frame counter is drawn in the lower-right status-panel corner after all game
   layers. It deliberately uses host text and is not presented as original art.
+  **Superseded by S-123:** the frame now appears only on the separate F1
+  diagnostics overview.
 - **S-53 · completing the score-bag read path exposed missing writers.** A fresh
   level now seeds the ordinary 100-point bag value. Dragon death creates the
   score bag and randomized hidden potion at its two facing-dependent offsets,

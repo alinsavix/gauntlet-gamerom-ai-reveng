@@ -8,7 +8,7 @@ from .alpha import draw_alpha_layer
 from .text import GLYPH_W
 
 __all__ = [
-    "draw_hud", "draw_message_box", "draw_debug_frame_counter",
+    "draw_hud", "draw_message_box", "draw_pause_indicator",
     "CELL", "cell_xy",
 ]
 
@@ -31,30 +31,24 @@ def draw_message_box(fb, state: GameState, viewport: tuple[int, int, int, int]) 
     draw_alpha_layer(fb, state, clip=viewport)
 
 
-def draw_debug_frame_counter(
-    fb, state: GameState, panel: tuple[int, int, int, int], *,
+def draw_pause_indicator(
+    fb, panel: tuple[int, int, int, int], *,
     paused: bool = False,
 ) -> None:
-    """Draw host-only diagnostics; these deliberately do not enter alpha VRAM."""
+    """Draw the host pause marker without entering modeled alpha RAM."""
+    if not paused:
+        return
     from PIL import ImageDraw, ImageFont
 
     px, py, pw, ph = panel
-    text = str(state.frame_counter & 0xFFFF)
     draw = ImageDraw.Draw(fb.image)
     font = ImageFont.load_default()
-    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
-    width, height = right - left, bottom - top
-    draw.text(
-        (px + pw - width - 2, py + ph - height - 2),
-        text, fill=(255, 255, 0, 255), font=font,
+    pause_text = "PAUSED"
+    left, top, right, bottom = draw.textbbox(
+        (0, 0), pause_text, font=font,
     )
-    if paused:
-        pause_text = "PAUSED"
-        left, top, right, bottom = draw.textbbox(
-            (0, 0), pause_text, font=font,
-        )
-        pause_width = right - left
-        draw.text(
-            (px + pw - pause_width - 2, py + ph - 2 * height - 4),
-            pause_text, fill=(255, 80, 80, 255), font=font,
-        )
+    pause_width, height = right - left, bottom - top
+    draw.text(
+        (px + pw - pause_width - 2, py + ph - height - 2),
+        pause_text, fill=(255, 80, 80, 255), font=font,
+    )

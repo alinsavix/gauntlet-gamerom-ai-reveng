@@ -158,13 +158,12 @@ counter selects both the awarded score and its matching floating picture.
 gauntpy also shows the ordinary 100-point treasure pickup through the same
 four-channel popup mechanism.
 
-`gauntpy` also writes the current decimal frame in the lower-right status-panel
-corner as a host debugging aid. It deliberately uses host text, is not a game
-asset, and has no claimed arcade counterpart.
-When the host loop is paused, `PAUSED` appears immediately above it.
-For issue reporting it also writes the current maze number and first active
-player's pixel coordinates into modeled alpha RAM at the bottom of the panel;
-these diagnostics are not claimed as original cabinet content.
+`gauntpy` keeps the current frame on its separate F1 diagnostics overview
+rather than writing it over the arcade status panel. The only host text that
+can appear over the game raster is `PAUSED`, in the lower-right corner while
+the host loop is stopped.
+Maze numbers and player coordinates likewise live on that host panel, never in
+modeled alpha RAM.
 
 ## Messages, advice, and the continue offer
 

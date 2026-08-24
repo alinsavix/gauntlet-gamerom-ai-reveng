@@ -39,7 +39,7 @@ genuine class sprite. Use `--scale` to override it.
 | **5** | insert a coin |
 | **P** | pause / resume |
 | **F1** | show / hide the host diagnostics panel |
-| **F2 / F3** | next / previous diagnostics page |
+| **F2 / F3** | previous / next diagnostics page |
 | **[ / ]** | select the previous / next occupied MOB |
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,

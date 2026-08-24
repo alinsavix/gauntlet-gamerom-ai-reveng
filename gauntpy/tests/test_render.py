@@ -31,9 +31,9 @@ from gauntpy.render.compositor import HUD_PANEL, PLAYFIELD_VIEWPORT, render_fram
 from gauntpy.render.framebuffer import Framebuffer
 from gauntpy.render.hud import (
     cell_xy,
-    draw_debug_frame_counter,
     draw_hud,
     draw_message_box,
+    draw_pause_indicator,
 )
 from gauntpy.render.mobs import draw_mob_layer, iter_visible_mobs, strength_tier
 from gauntpy.render import playfield, romtext
@@ -1179,28 +1179,25 @@ class TestPanelGeometryMatchesTheRom:
             state, score.PLAYER_TEXT_PALETTE_WORDS[0],
         )
 
-    def test_debug_frame_counter_uses_the_lower_right_panel_corner(self):
-        state = GameState()
-        state.frame_counter = 123
+    def test_unpaused_host_draws_no_debug_text_over_the_game_panel(self):
         fb = Framebuffer(336, 240)
 
-        draw_debug_frame_counter(fb, state, HUD_PANEL)
+        draw_pause_indicator(fb, HUD_PANEL)
 
-        assert any(
-            fb.get_pixel(x, y) != (0, 0, 0, 255)
+        assert all(
+            fb.get_pixel(x, y) == (0, 0, 0, 255)
             for y in range(220, 240)
             for x in range(300, 336)
         )
 
-    def test_pause_indicator_appears_above_the_frame_counter(self):
-        state = GameState(frame_counter=123)
+    def test_pause_indicator_uses_the_lower_right_panel_corner(self):
         fb = Framebuffer(336, 240)
 
-        draw_debug_frame_counter(fb, state, HUD_PANEL, paused=True)
+        draw_pause_indicator(fb, HUD_PANEL, paused=True)
 
         assert any(
             fb.get_pixel(x, y) != (0, 0, 0, 255)
-            for y in range(205, 229)
+            for y in range(220, 240)
             for x in range(285, 336)
         )
 
@@ -2255,12 +2252,12 @@ class TestHostShellInput:
         try:
             pygame = shell._pygame
             pygame.event.post(
-                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F2)
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F3)
             )
             shell.wait_for_vblank(state)
             assert shell.diagnostics_page == 1
             pygame.event.post(
-                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F3)
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F2)
             )
             shell.wait_for_vblank(state)
             assert shell.diagnostics_page == 0
