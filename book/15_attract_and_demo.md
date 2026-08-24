@@ -237,6 +237,13 @@ only when the new gap is clear. Direct ROM execution and MAME show the same
 0/2-pixel hero sequence, so smoothing those MOB words would make the
 reimplementation less faithful, not more.
 
+If the recorded party reaches the exit before the screen timer does, the
+cabinet does not reward its puppets with another level. After the last dissolve
+and any shared sparkle finish, the start-game state machine resets all four
+demo positions and forces the demo timer to expire. The attract state machine
+then advances to the legend page in the same frame; level 2 is never loaded and
+the three recorded heroes can never fall under control-panel input.
+
 The Elf is player position 1, so its status panel and sprite are both blue.
 Hardware MOB palette slots 12–15 select color variants 0–3 within the chosen
 hero class. Treating slot 13 as an out-of-range Elf palette and falling back to

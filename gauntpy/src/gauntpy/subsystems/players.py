@@ -2843,6 +2843,11 @@ def _status8_complete(state: GameState, player_index: int) -> None:
             if advance_level_countdowns(state):              # 0x4A748-0x4A788
                 show_level_end_bonus_screen(state)           # 0x4A78C
             else:
+                # DEMO completion is owned by main_start_game at
+                # 0x480B6-0x480E2. The countdown bookkeeping above still runs,
+                # but level 2 is never committed for the recorded actors.
+                if state.game_mode == int(GameMode.DEMO):
+                    return
                 from .exits import secret_check
 
                 secret_check(state)                          # 0x480EC

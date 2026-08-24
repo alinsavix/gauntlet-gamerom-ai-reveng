@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2310 passed, 6 skipped** (gauntpy) and
+present the suites are clean: **2313 passed, 6 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,18 @@ start).
 ---
 
 ## Resolved issues
+
+### S-120 · completed demo actors started playable level 2
+
+When the third recorded actor finished its exit animation,
+`players._status8_complete` ran gauntpy's normal immediate level-handoff helper.
+That committed the demo's computed `level_next = 2`, loaded the next maze, and
+respawned the three attract actors under keyboard control. The ROM instead
+leaves the non-bonus transition to `main_start_game`: its 0x480B6 DEMO arm
+waits for shared effect slots 13-16 to clear, calls `player_resetall`, closes
+the dialog, and clears `attract_timer`. `main_attract` then advances from DEMO
+to LEGEND later in the same frame. The port now preserves that ownership and
+the completed puppet party cannot enter normal play.
 
 ### S-119 · playable host defaulted to 2x scale
 

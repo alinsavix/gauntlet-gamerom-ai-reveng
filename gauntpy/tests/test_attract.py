@@ -559,6 +559,52 @@ class TestDemoInit:
         assert reached_exit
 
     @requires_roms
+    def test_completed_demo_advances_to_legend_not_playable_level_two(
+        self, tmp_path, monkeypatch,
+    ):
+        from gauntpy.mainloop import tick
+        from gauntpy.subsystems import players
+
+        state = GameState()
+        state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
+        completed_demo_resets = 0
+        original_resetall = players.player_resetall
+
+        def tracked_resetall(reset_state):
+            nonlocal completed_demo_resets
+            if (
+                int(reset_state.game_mode) == int(GameMode.DEMO)
+                and reset_state.level_players_active == 0
+                and any(
+                    player.status == int(PlayerStatus.ALIVE_NEXT)
+                    for player in reset_state.players
+                )
+            ):
+                completed_demo_resets += 1
+            original_resetall(reset_state)
+
+        monkeypatch.setattr(players, "player_resetall", tracked_resetall)
+        start_attract_screen(state, int(GameMode.DEMO))
+        started_level_two = False
+
+        for _ in range(7600):
+            tick(state)
+            started_level_two |= (
+                int(state.game_mode) == int(GameMode.NORMAL)
+                and state.levelnum_current == 2
+                and state.level_players_active > 0
+            )
+
+        assert not started_level_two
+        assert completed_demo_resets == 1
+        assert int(state.game_mode) == int(GameMode.LEGEND)
+        assert state.level_players_active == 0
+        assert all(
+            player.status == int(PlayerStatus.REMOVED)
+            for player in state.players
+        )
+
+    @requires_roms
     def test_runner_message_suppression_does_not_break_the_demo(self, tmp_path):
         """play.bat disables gameplay hints, but DEMO dialogs are script timing."""
         from gauntpy.mainloop import tick

@@ -494,6 +494,40 @@ def test_main_start_game_advances_welcome_elapsed_frames():
     assert state.welcome_elapsed_frames == 0
 
 
+def test_main_start_game_expires_a_completed_demo_and_resets_its_players():
+    state = GameState(game_mode=GameMode.DEMO)
+    state.attract_timer = 100
+    state.dialog_timer = 20
+    for index in (0, 1, 3):
+        state.players[index].status = PlayerStatus.ALIVE_NEXT
+        state.players[index].health = 1000
+
+    main_start_game(state)
+
+    assert state.game_mode == GameMode.DEMO
+    assert state.attract_timer == 0
+    assert state.dialog_timer == 0
+    assert all(player.status == PlayerStatus.REMOVED for player in state.players)
+    assert all(player.health == 0 for player in state.players)
+
+
+def test_completed_demo_waits_for_shared_effect_slots_to_clear():
+    state = GameState(game_mode=GameMode.DEMO)
+    state.attract_timer = 100
+    state.players[1].status = PlayerStatus.ALIVE_NEXT
+    state.mobs.picture[13] = 0x0924
+
+    main_start_game(state)
+
+    assert state.attract_timer == 100
+    assert state.players[1].status == PlayerStatus.ALIVE_NEXT
+
+    state.mobs.picture[13] = 0
+    main_start_game(state)
+    assert state.attract_timer == 0
+    assert state.players[1].status == PlayerStatus.REMOVED
+
+
 # ---------------------------------------------------------------------------
 # start_attract_to_game (0x44204)
 # ---------------------------------------------------------------------------

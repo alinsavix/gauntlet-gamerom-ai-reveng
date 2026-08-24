@@ -898,6 +898,15 @@ that input during the dissolve and strands the Elf against the wall below.
 Host-side gameplay-hint suppression must therefore remain inactive in DEMO;
 it is not permitted to bypass this game-side timing event.
 
+When every recorded actor has finished the status-8 exit animation,
+`level_players_active` reaches zero but the normal level transition is not
+committed. `main_start_game` 0x48026-0x480E2 sees the status-2 players, waits
+for shared effect pictures 13-16 to clear, and takes its explicit DEMO arm at
+0x480B6: `player_resetall`, `attract_timer = 0`, and immediate dialog teardown.
+The later `main_attract` call decrements that timer below zero and rotates DEMO
+to LEGEND. The actors and their computed `level_next` never become a playable
+level.
+
 ### 6.4 Attract-Mode Interruption
 
 During attract mode, the game checks the raw input words at
