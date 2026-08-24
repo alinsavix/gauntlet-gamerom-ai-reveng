@@ -35,6 +35,11 @@ start).
 
 ## Resolved issues
 
+### S-119 · playable host defaulted to 2x scale
+
+The `gauntpy-play` CLI and `HostShell` now default to 4x game scaling.
+`--scale` continues to override it, and the diagnostics panel remains unscaled.
+
 ### S-118 · diagnostics text inherited the game scale
 
 The host initially scaled the complete 240x240 diagnostics raster by

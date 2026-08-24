@@ -103,6 +103,7 @@ class TestArguments:
 
         play.main([])
         assert called["character"] == Character.ELF
+        assert called["scale"] == 4
 
         play.main(["--character", "wizard"])
         assert called["character"] == Character.WIZARD

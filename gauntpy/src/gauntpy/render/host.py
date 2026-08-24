@@ -105,7 +105,7 @@ class HostShell:
         self,
         *,
         assets=None,
-        scale: int = 2,
+        scale: int = 4,
         player: int = 0,
         title: str = "gauntpy",
         keymap: dict[str, int] | None = None,

@@ -159,7 +159,7 @@ def build_state(
     return state
 
 
-def run(level: int = 1, character: int = Character.ELF, scale: int = 2,
+def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         from_attract: bool = False,
         suppress_first_encounter_messages: bool = False,
         keys: int = 0, potions: int = 0,
@@ -237,8 +237,8 @@ def main(argv: list[str] | None = None) -> None:
         "--character", choices=sorted(_CHARACTERS), default="elf",
         help="hero class (default: elf)",
     )
-    parser.add_argument("--scale", type=_positive_scale, default=2,
-                        help="window pixel scale")
+    parser.add_argument("--scale", type=_positive_scale, default=4,
+                        help="window pixel scale (default: 4)")
     parser.add_argument(
         "--attract", action="store_true",
         help="boot into attract and start via the real front end "

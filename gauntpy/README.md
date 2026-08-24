@@ -28,7 +28,8 @@ With [uv](https://docs.astral.sh/uv/) (recommended — it resolves the local
 cd gauntpy && uv run --all-extras gauntpy-play
 ```
 
-A window opens on a real Gauntlet II maze with your hero's genuine class sprite.
+A window opens at **4x scale** on a real Gauntlet II maze with your hero's
+genuine class sprite. Use `--scale` to override it.
 
 | Key | Action |
 |-----|--------|
