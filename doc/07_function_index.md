@@ -284,7 +284,7 @@ runtime, movement, collision, and path contracts.
 | 0x41BF0 | `player_try_move` | Frameless entry to the movement core: saves D2–D7/A2–A6, reads `player_index`, `delta` and `movement_flags` from `0x32(A7)`/`0x36(A7)`/`0x3A(A7)`, folds and clears the pending flags at `player_deferred_move_flags` (0x9048B4), points A2/A3/A4 at the picture, hpos and vpos arrays, decrements `movement_type` (0x904BF2), and BSRs into `player_try_move_core` at 0x41C30 |
 | 0x42648 | `tile_lookup_core` | Read mob_picture[d1], compute distance, set carry flag if occupied |
 | 0x4260C | `probe_down` | Rejects offsets ≥ 0x7C0 (bottom edge), then probes the row below at packed offset +0x40 and its two horizontal neighbours (±2, ±4 with 0x3E column wrap) through `tile_lookup_core`; carry set means blocked |
-| 0x425D0 | `probe_up` | Rejects offsets ≤ 0x7E (top edge), then probes the row above at packed offset −0x40 and its two horizontal neighbours (±2, ±4 with 0x3E column wrap) through `tile_lookup_core`; carry set means blocked |
+| 0x425D0 | `probe_up` | For doubled live slots ≤ 0x7E (row one), bypasses row-zero MOB contents and sets carry when the proposed full V word exceeds 0xF080; otherwise probes the row above at packed offset −0x40 and its two horizontal neighbours (±2, ±4 with 0x3E column wrap) through `tile_lookup_core`; carry set means blocked |
 | 0x4270C | `probe_right` | Check tile at (X+2) via tile_lookup_core |
 | 0x426D4 | `probe_left` | Check tile at (X−2) via tile_lookup_core |
 | 0x42744 | `squeeze_through_check` | Test pass-through flag, tile type, and corner geometry |
@@ -357,7 +357,7 @@ exception.
 | 0x41BF0 | `player_try_move` | `uint16 player_index, int16 delta, uint16 movement_flags` | `D0.w` movement result; `0x00F0` = no movement | Frameless; saves `D2-D7/A2-A6` before reading normal arguments |
 | 0x41C30 | `player_try_move_core` | `D0.w` doubled player index, `D6.w` delta, `D7.w` flags; `A2-A4` MOB arrays | `D0.w` movement result | Internal register-state reentry |
 | 0x42648 | `tile_lookup_core` | `D1.w` candidate offset, `D2.w` current offset, `D3/D4` coordinates; `A2-A4` arrays | Carry = blocking; retains `D1` | BSR-only register entry |
-| 0x425D0 | `probe_up` | `D2.w` current offset, `D3/D4` coordinates; `A2-A4` arrays | `D1.w` candidate; carry = blocked | Register entry; may tail-branch to tile core |
+| 0x425D0 | `probe_up` | `D2.w` current offset, `D3/D4` coordinates; `A2-A4` arrays | `D1.w` candidate; carry = blocked | Row-one offsets ≤ 0x7E compare full proposed D4 with 0xF080 instead of reading row zero; otherwise may tail-branch to tile core |
 | 0x4260C | `probe_down` | Same as `probe_up` | `D1.w` candidate; carry = blocked | Register entry; may tail-branch to tile core |
 | 0x426D4 | `probe_left` | Same as `probe_up` | `D1.w` candidate; carry = blocked | BSR-only register entry |
 | 0x4270C | `probe_right` | Same as `probe_up` | `D1.w` candidate; carry = blocked | BSR-only register entry |

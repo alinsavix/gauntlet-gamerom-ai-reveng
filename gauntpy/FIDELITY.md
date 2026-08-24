@@ -149,6 +149,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     exit must not commit `level_next`. `main_start_game` resets the demo actors,
     closes any dialog, and expires the DEMO timer so `main_attract` advances to
     LEGEND.
+38. **The top player boundary is coordinate state, not row-zero occupancy.**
+    `probe_up` bypasses slots 0-31 while the live record is in row one and
+    compares the proposed full V word, including size bits, with `0xF080`.
+    Fixed shot/effect channels overwrite those reserved slots during play, so
+    their current pictures cannot define the ceiling.
 
 ## Investigation workflow
 

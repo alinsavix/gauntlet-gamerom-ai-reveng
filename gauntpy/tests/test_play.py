@@ -275,6 +275,30 @@ class TestBuildState:
 
             assert hpos_x(state.mobs.hpos[player.mob_slot]) == expected_x
 
+    def test_level_one_top_wall_stops_at_rom_anchor_and_allows_diagonal_slide(self):
+        from gauntpy.coords import hpos_x, vpos_y
+        from gauntpy.mainloop import tick
+        from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT, JOY_UP
+
+        state = play.build_state(1, Character.ELF)
+        player = state.players[0]
+
+        for _ in range(40):
+            state.player_input_raw[0] = JOY_IDLE & ~JOY_UP
+            tick(state)
+
+        slot = player.mob_slot
+        assert vpos_y(state.mobs.vpos[slot]) == 16
+        x_before = hpos_x(state.mobs.hpos[slot])
+
+        for _ in range(4):
+            state.player_input_raw[0] = JOY_IDLE & ~JOY_UP & ~JOY_RIGHT
+            tick(state)
+
+        slot = player.mob_slot
+        assert vpos_y(state.mobs.vpos[slot]) == 16
+        assert hpos_x(state.mobs.hpos[slot]) > x_before
+
     def test_level_18_left_seam_coordinate_matches_rom_movement(self):
         from gauntpy.coords import (
             encode_hpos, encode_vpos_at_y, hpos_x, mob_cell_of, vpos_y,

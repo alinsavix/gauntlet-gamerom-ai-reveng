@@ -454,6 +454,17 @@ only below 0x7C0. Direct ROM execution at maze 17 pixel `(268,15)` moves
 left/right by two pixels; treating the corrected sprite origin as row zero and
 including the reserved top wall incorrectly blocks both.
 
+The vertical top edge has a separate coordinate gate at
+`probe_up` 0x425D0-0x425DE. When D2 is at most 0x007E -- every doubled row-one
+slot -- the routine does not read row-zero MOB pictures. It loads `0xF080` and
+compares that with the proposed full D4 V word, including its encoded sprite
+size bits. This matters after the frame loop assigns reserved slots 1-16 to
+shots and effects, overwriting the wall markers installed during maze setup.
+For a live 3x3 hero, direct ROM execution stops upward movement at screen Y=16
+and Up+Right continues horizontally there. Treating those transient slot
+pictures as the ceiling instead lets the hero reach Y=10 and eventually target
+the reserved row during diagonal movement.
+
 gauntpy's shipped-demo compatibility path deliberately retains its earlier
 row-zero flank behavior. Removing it currently diverts the recorded maze-102
 actor before the transporter, contradicting the retained MAME trace that reaches

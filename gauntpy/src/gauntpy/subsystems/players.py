@@ -3871,6 +3871,10 @@ _FIGHT_PASS_TYPES = frozenset((
 # rendered anchors are less than 0x7C0 native position units apart on both
 # axes.
 _PROBE_OVERLAP = 0x7C0
+# ``probe_up`` 0x425D0 bypasses row-zero MOB slots while the live record is in
+# row one. Those slots are fixed shot/effect channels during play, so the ROM
+# compares the proposed V word against this boundary instead of reading them.
+_TOP_PLAYER_BOUNDARY_V = 0xF080
 
 # Player-offscreen gate in level_flags_4. With it clear, player_try_move_core
 # compares proposed H/V anchors with scroll_hpos_origin / scroll_vpos_origin
@@ -4275,6 +4279,15 @@ def mob_probe_up(
     col = mob_slot & 0x1F
     if row == 0:
         return _VERTICAL_BOUNDARY     # vertical boundary sentinel (§4.2)
+    if row == 1 and vpos is not None:
+        # Internal probe_up 0x425D0-0x425DE uses D2 <= 0x7E (every doubled
+        # row-one slot) as a special case. It never reads row zero: those slots
+        # are shared with fixed shot/effect channels and are overwritten during
+        # the frame loop. CMP.W D4,D0 with D0=0xF080 blocks once the proposed
+        # full V word, including the hero's size bits, crosses that boundary.
+        # D1 is zero on this ROM arm. Keep that representative boundary slot
+        # so Transportability can still enter the normal squeeze-through path.
+        return 0 if (vpos & 0xFFFF) > _TOP_PLAYER_BOUNDARY_V else -1
     target_row = row - 1
     for dc in (0, -1, 1):            # centre, left flank, right flank (§4.2)
         c = col + dc

@@ -21,7 +21,7 @@ from gauntpy.constants import (
     MazeObjIds,
     PlayerStatus,
 )
-from gauntpy.coords import hpos_x, native_v, vpos_y
+from gauntpy.coords import encode_vpos_at_y, hpos_x, native_v, vpos_y
 from gauntpy.state import GameState, Player
 from gauntpy.subsystems import players as gp
 from gauntpy.subsystems.players import (
@@ -94,6 +94,18 @@ class TestMobProbeUp:
         result = mob_probe_up(state, (0 << 5) | 10)  # row 0
         assert result == _VERTICAL_BOUNDARY
         assert result != -1
+
+    def test_row_one_uses_the_rom_v_boundary_not_reserved_slot_contents(self):
+        """0x425D0 bypasses row zero, whose slots become shot/effect channels."""
+        state = GameState()
+        slot = (1 << 5) | 10
+
+        assert mob_probe_up(
+            state, slot, vpos=encode_vpos_at_y(16, 3, 3),
+        ) == -1
+        assert mob_probe_up(
+            state, slot, vpos=encode_vpos_at_y(15, 3, 3),
+        ) == 0
 
     def test_left_flank_wall_is_detected(self):
         """A wall at (row-1, col-1) blocks the probe (three-candidate check)."""
@@ -937,6 +949,7 @@ class TestCornerSqueezeGeometry:
     def test_top_border_squeeze_advances_through_wrapped_row(self):
         state = GameState(wrap_v=True)
         player = _active_player_at(state, 0, (1 << 5) | 10)
+        state.mobs.vpos[player.mob_slot] |= 0x12
         player.powers = self._POWER_INVULN
         wall = (0 << 5) | 10
         state.mobs.picture[wall] = _WALL_PICTURE

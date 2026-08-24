@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2317 passed, 7 skipped** (gauntpy) and
+present the suites are clean: **2319 passed, 7 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,22 @@ start).
 ---
 
 ## Resolved issues
+
+### S-124 · level-1 top wall used transient row-zero MOB contents
+
+The first live frame reassigns reserved MOB slots 1-16 from their setup-time
+wall markers to the fixed shot/effect channels. The upward player probe then
+treated those cleared slots as open floor, letting the hero rise from the ROM's
+Y=16 limit to Y=10. At that depth, up-right movement could target reserved row
+zero and become stuck instead of sliding along the wall.
+
+The ROM does not inspect row-zero occupancy from a row-one player.
+`player_try_move`'s internal `probe_up` (0x425D0-0x425DE) detects every doubled
+row-one slot with `D2 <= 0x007E` and compares the proposed full V word against
+`0xF080`; the hero's encoded 3x3 size bits make the next step above Y=16 block.
+Gauntpy now models that coordinate boundary independently of the transient
+fixed-channel pictures. A full-frame level-1 regression holds Up into the wall,
+then Up+Right, and verifies the Y=16 stop and lateral slide.
 
 ### S-123 · diagnostics navigation order and game-panel frame overlay
 
