@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2313 passed, 6 skipped** (gauntpy) and
+present the suites are clean: **2314 passed, 6 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,14 @@ start).
 ---
 
 ## Resolved issues
+
+### S-121 · diagnostics used Pillow's tiny bitmap font
+
+The host panel now uses an anti-aliased system monospace face (Consolas on
+Windows, DejaVu Sans Mono or Menlo elsewhere, with Pillow's scalable default as
+a final fallback). The native panel is 320 pixels wide and player state is
+compacted to two rows each, preserving the complete display at scale 1 without
+scaling the glyph raster.
 
 ### S-120 · completed demo actors started playable level 2
 

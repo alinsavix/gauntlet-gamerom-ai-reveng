@@ -5,8 +5,10 @@ from __future__ import annotations
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.render.diagnostics import (
+    DEBUG_FONT_SIZE,
     DEBUG_PANEL_HEIGHT,
     DEBUG_PANEL_WIDTH,
+    _host_font,
     capture_debug_snapshot,
     debug_snapshot_lines,
     render_debug_panel,
@@ -76,8 +78,8 @@ def test_snapshot_rows_include_global_demo_and_player_state():
     assert rows["LEVEL / MAZE"] == "7 / 102"
     assert rows["PLAYERS / IT"] == "1 / P2"
     assert rows["DEMO PTR"] == "000 118 000 020"
-    assert "hp=1600" in rows["P2 ELF"]
-    assert rows["P2 POS/SLOT"] == "188,144 / 12C"
+    assert "hp1600" in rows["P2 ELF"]
+    assert rows["P2 POS/K/P"].startswith("188,144 s12C k2 p1")
 
 
 def test_panel_is_a_separate_host_raster():
@@ -90,3 +92,10 @@ def test_panel_is_a_separate_host_raster():
     assert image.mode == "RGBA"
     assert image.getbbox() is not None
     assert tuple(state.alpha_ram) == before_alpha
+
+
+def test_panel_uses_a_scalable_antialiased_font():
+    from PIL import ImageFont
+
+    font = _host_font(DEBUG_FONT_SIZE)
+    assert isinstance(font, ImageFont.FreeTypeFont)

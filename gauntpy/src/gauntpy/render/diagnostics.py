@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -16,8 +18,10 @@ from ..constants import (
 from ..coords import hpos_x, vpos_y
 from ..state import GameState
 
-DEBUG_PANEL_WIDTH = 240
+DEBUG_PANEL_WIDTH = 320
 DEBUG_PANEL_HEIGHT = 240
+DEBUG_FONT_SIZE = 11
+DEBUG_HEADING_FONT_SIZE = 13
 
 _BACKGROUND = (16, 18, 22, 255)
 _HEADING = (120, 220, 255, 255)
@@ -25,6 +29,21 @@ _LABEL = (170, 180, 190, 255)
 _VALUE = (235, 238, 242, 255)
 _DIM = (105, 115, 125, 255)
 _DIVIDER = (55, 62, 70, 255)
+
+_FONT_CANDIDATES = (
+    (
+        Path(r"C:\Windows\Fonts\consola.ttf"),
+        Path(r"C:\Windows\Fonts\consolab.ttf"),
+    ),
+    (
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"),
+    ),
+    (
+        Path("/System/Library/Fonts/Menlo.ttc"),
+        Path("/System/Library/Fonts/Menlo.ttc"),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -132,6 +151,17 @@ def _enum_name(enum_type, value: int) -> str:  # noqa: ANN001
         return str(value)
 
 
+@lru_cache(maxsize=4)
+def _host_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
+    """Load a platform monospace font, with Pillow's scalable font as fallback."""
+    index = 1 if bold else 0
+    for pair in _FONT_CANDIDATES:
+        path = pair[index]
+        if path.is_file():
+            return ImageFont.truetype(str(path), size)
+    return ImageFont.load_default(size=size)
+
+
 def debug_snapshot_lines(snapshot: DebugSnapshot) -> tuple[tuple[str, str], ...]:
     """Format one snapshot as stable label/value rows for any host UI."""
     mode = _enum_name(GameMode, snapshot.mode)
@@ -169,16 +199,12 @@ def debug_snapshot_lines(snapshot: DebugSnapshot) -> tuple[tuple[str, str], ...]
         rows.extend((
             (
                 f"P{player.index + 1} {character[:4]}",
-                f"{status[:5]} hp={player.health} sc={player.score}",
+                f"{status[:5]} hp{player.health} sc{player.score}",
             ),
             (
-                f"P{player.index + 1} POS/SLOT",
-                f"{position} / {player.slot:03X}",
-            ),
-            (
-                f"P{player.index + 1} K/P POW",
-                f"{player.keys}/{player.potions} {player.powers:04X} "
-                f"ss={player.supershot} st={player.stun}",
+                f"P{player.index + 1} POS/K/P",
+                f"{position} s{player.slot:03X} k{player.keys} p{player.potions} "
+                f"w{player.powers:04X} x{player.supershot} t{player.stun}",
             ),
         ))
     return tuple(rows)
@@ -193,15 +219,23 @@ def render_debug_panel(
     """Render host diagnostics with PIL, never with the game's alpha layer."""
     image = Image.new("RGBA", (width, height), _BACKGROUND)
     draw = ImageDraw.Draw(image)
-    font = ImageFont.load_default()
-    draw.text((6, 4), "GAUNTPY INTERNAL STATE", font=font, fill=_HEADING)
-    draw.text((width - 52, 4), "F1 HIDE", font=font, fill=_DIM)
-    draw.line((5, 16, width - 6, 16), fill=_DIVIDER)
+    font = _host_font(DEBUG_FONT_SIZE)
+    heading_font = _host_font(DEBUG_HEADING_FONT_SIZE, bold=True)
+    draw.text((8, 4), "GAUNTPY INTERNAL STATE", font=heading_font, fill=_HEADING)
+    hide_text = "F1 HIDE"
+    hide_box = draw.textbbox((0, 0), hide_text, font=font)
+    draw.text(
+        (width - (hide_box[2] - hide_box[0]) - 8, 6),
+        hide_text,
+        font=font,
+        fill=_DIM,
+    )
+    draw.line((7, 23, width - 8, 23), fill=_DIVIDER)
 
-    y = 20
-    row_height = 9
-    label_x = 6
-    value_x = 84
+    y = 27
+    row_height = 11
+    label_x = 8
+    value_x = 104
     for label, value in debug_snapshot_lines(snapshot):
         if y + row_height > height:
             break
