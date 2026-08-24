@@ -513,6 +513,14 @@ Three outcomes, in the ROM's order:
 The same tail exists for a pushed movable wall at `failed_door_post`
 (0x427B4-0x42808), instruction for instruction.
 
+The four movable-wall arms at 0x4280E-0x42A64 advance the wall by exactly
+`0x80`, one native pixel, and return zero to the current movement axis. A base
+Elf's requested step is `0x100`, so while pushing it alternates blocked frames
+that move only the wall with clear frames that move the hero two pixels. Direct
+ROM execution and MAME 0.289 show the same 0/2-pixel hero cadence; smoothing it
+in the renderer or forcing the hero forward on every push frame would change
+the game-side MOB words.
+
 gauntpy implements this in `players.migrate_player_record`, called from
 `_apply_pixel_delta` after the position write and again after the tile pass in
 `main_move_players`, so a consumed pickup lets the record follow the hero into
@@ -592,6 +600,21 @@ clears the old label, draws/announces the new one, and then stores the new
 player in 0x9049DC.
 
 The IT player variable is at `0x9049DC` (0xFFFF = nobody is IT).
+
+The label flashes without rewriting either glyph. Every 16 frames,
+`game_vblank` 0x40328-0x4037A selects phase bit 0x10 and rewrites colors 1-3 of
+alpha palettes 12-15 at 0x910062-0x91007E. One phase copies each palette's dark
+color 0 over all three entries; the other restores the corresponding
+`alpha_palette_init` ramp from ROM 0x5AD80. Alpha RAM remains authoritative for
+the label, and live alpha color RAM supplies the animation.
+
+There is also a player-to-player transfer inside `player_try_move_core`
+0x41DAC-0x41DEC. Only a mover who is already `player_it` can tag the collided
+hero: the old label is cleared, the new one is drawn and announced, the global
+word changes to the recipient, sound 0x35 plays, and the recipient receives a
+0x40-frame stun. The whole arm is gated on nonzero `movement_type`, so recursive
+collision retries cannot transfer it. Touching the IT creature is the separate
+first-assignment path.
 
 ### 4.6 Tile Interaction (`player_tile_interact` / `tile_occupant_interact`, 0x511AC)
 
@@ -832,6 +855,12 @@ The second byte is an active-low joystick value for normal input records:
 
 For example, `0xB3` presses DOWN; `0xF3` supplies no input.
 
+The four input consumers select the source independently. In
+`main_handle_potions`, 0x47012-0x4704A reads the debounced `0x1C` Magic edge only
+when `game_mode == 0`; otherwise it tests active-low bit 0 directly in the
+current record at `demo_ptr[player]`. Feeding only the hardware debounce
+register cannot reproduce the recorded potion use.
+
 | Player | ROM Address | Exact size | Notes |
 |--------|-------------|------------|-------|
 | Player 0 | 0x5818C | 56 B | 28 command pairs; not active in the standard demo |
@@ -854,7 +883,9 @@ The join call takes the DEMO branch of player credit initialization and assigns
 search. The recorded Elf collects the row-straddling potion, uses it near the
 end, and reaches the exit; treating the hero's fixed host record as its logical
 cell, or clipping the scripted hero to a camera held by lagging joined actors,
-breaks that sequence.
+breaks that sequence. The late Magic record must also reach the potion
+consumer directly: it spends the inventory byte, clears the on-screen monsters,
+and raises the ordinary potion-use dialog before the final run to the exit.
 
 The ordinary transporter landing also calls `dialog_first_encounter` with mask
 0x01000000 at 0x50840-0x5084C. Its 150-frame message freezes

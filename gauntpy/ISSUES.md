@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2301 passed, 4 skipped** (gauntpy) and
+present the suites are clean: **2307 passed, 4 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,28 @@ start).
 ---
 
 ## Resolved issues
+
+### S-114 … S-116 · demo potion, IT state, and movable-wall cadence
+
+- **S-114:** `main_handle_potions` always read `debounce_shift_magic`, so the
+  demo's active-low Magic bit at the current `demo_ptr` was never seen. The ROM
+  branches at 0x47012: normal play matches the debounced `0x1C` edge, while any
+  nonzero game mode tests bit 0 of the current demo record directly. The Elf now
+  spends the potion, clears the on-screen monsters through the ordinary potion
+  matrix, observes the resulting dialog pause, and reaches the exit.
+- **S-115:** two independent IT paths were missing. `game_vblank`
+  0x40328-0x4037A alternates alpha-color palettes 12-15 every 16 frames, flattening
+  their three visible colors to color 0 and then restoring the ROM ramps; those
+  modeled color-RAM writes now make the `0xB000 | player<<10` label flash. Player
+  collision at 0x41DAC-0x41DEC also transfers `player_it` when the current holder
+  runs into another hero and stuns the recipient for 0x40 frames. The recorded
+  tag therefore moves the label from the red Wizard to the blue Elf.
+- **S-116:** no movement change was made. Direct ROM execution and a fresh MAME
+  0.289 RAM trace agree that the opening movable wall advances one pixel on a
+  blocked push frame while the base Elf advances two pixels only when the
+  collision gap permits it. The resulting 0/2-pixel hero cadence is original
+  game state, not a Python interpolation defect; a regression protects the
+  paired player/wall sequence.
 
 ### S-112 … S-113 · demo transporter timing and incomplete attract pages
 

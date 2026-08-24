@@ -484,9 +484,17 @@ class TestDemoInit:
         transported = False
         resumed_after_transport = False
         arrival_sparkle = False
+        reached_exit = False
+        furthest_stream_pos = 0
 
-        for _ in range(7000):
+        for _ in range(7200):
             tick(state)
+            furthest_stream_pos = max(
+                furthest_stream_pos, state.demo_stream_pos[1],
+            )
+            reached_exit |= bool(elf.exit_pending) or elf.status == int(
+                PlayerStatus.ALIVE_NEXT
+            )
             if elf.mob_slot:
                 x = hpos_x(state.mobs.hpos[elf.mob_slot])
                 y = vpos_y(state.mobs.vpos[elf.mob_slot])
@@ -507,9 +515,48 @@ class TestDemoInit:
         assert transported
         assert resumed_after_transport
         assert arrival_sparkle
-        assert state.demo_stream_pos[1] >= 148
-        assert elf.status == int(PlayerStatus.ALIVE_NEXT), "the Elf reached the exit"
+        assert furthest_stream_pos >= 148
+        assert reached_exit, "the Elf reached the exit"
         assert state.dialog_first_encounter_flags & 0x01000000
+
+    @requires_roms
+    def test_demo_transfers_it_and_spends_the_elf_potion(self, tmp_path):
+        from gauntpy.mainloop import tick
+
+        state = GameState()
+        state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
+        start_attract_screen(state, int(GameMode.DEMO))
+        elf = state.players[1]
+        elf_became_it = False
+        potion_cleared_monsters = False
+        previous_monsters = None
+        previous_potions = elf.potionsnum
+        reached_exit = False
+
+        for _ in range(7200):
+            tick(state)
+            elf_became_it |= state.player_it == 1
+            reached_exit |= bool(elf.exit_pending) or elf.status == int(
+                PlayerStatus.ALIVE_NEXT
+            )
+            monsters = sum(
+                1 for slot in range(32, 1024)
+                if int(MazeObjIds.MONST_GHOST)
+                <= state.mobs.obj_type(slot)
+                <= int(MazeObjIds.MONST_IT)
+            )
+            if (
+                previous_potions > elf.potionsnum
+                and previous_monsters is not None
+            ):
+                potion_cleared_monsters |= monsters < previous_monsters
+            previous_monsters = monsters
+            previous_potions = elf.potionsnum
+
+        assert elf_became_it
+        assert elf.potionsnum == 0
+        assert potion_cleared_monsters
+        assert reached_exit
 
     @requires_roms
     def test_runner_message_suppression_does_not_break_the_demo(self, tmp_path):
@@ -523,7 +570,7 @@ class TestDemoInit:
         elf = state.players[1]
         reached_exit = False
 
-        for _ in range(7000):
+        for _ in range(7200):
             tick(state)
             reached_exit |= (
                 bool(elf.exit_pending)

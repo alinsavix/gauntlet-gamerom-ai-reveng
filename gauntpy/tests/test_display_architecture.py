@@ -146,6 +146,29 @@ def test_vblank_cycles_the_dungeon_header_color_from_the_rom_gradient():
         assert state.alpha_color_ram[23] == VSCROLL_ALPHA_GRADIENT[folded >> 2]
 
 
+def test_vblank_flashes_the_four_it_label_palettes_from_rom_color_ram():
+    from gauntpy.subsystems.display import (
+        ALPHA_PALETTE_INIT,
+        alpha_palette_vblank,
+        restore_alpha_color_ram,
+    )
+
+    state = GameState()
+    restore_alpha_color_ram(state)
+
+    state.frame_counter = 0
+    alpha_palette_vblank(state)
+    for palette in range(12, 16):
+        base = palette * 4
+        assert state.alpha_color_ram[base:base + 4] == [
+            ALPHA_PALETTE_INIT[base],
+        ] * 4
+
+    state.frame_counter = 0x10
+    alpha_palette_vblank(state)
+    assert state.alpha_color_ram[48:64] == list(ALPHA_PALETTE_INIT[48:64])
+
+
 def test_inventory_writer_stamps_complete_rom_power_icon_words():
     state = GameState()
     state.players[2].status = 1

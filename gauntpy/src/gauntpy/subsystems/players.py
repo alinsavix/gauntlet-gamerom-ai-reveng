@@ -4065,6 +4065,28 @@ def _player_fight_collision(
             player.anim_counter = 0
         return 1
 
+    if obj_type == int(MazeObjIds.PLAYERSTART):
+        target_index = next(
+            (
+                index for index, target in enumerate(state.players)
+                if index != player_index and target.active and target.mob_slot == slot
+            ),
+            None,
+        )
+        if target_index is None:
+            return None
+        # 0x41DAC-0x41DEC: only the current IT player can transfer the curse by
+        # running into another live player on a non-recursive movement pass. The
+        # target is stunned for 0x40 frames.
+        if state.movement_type != 0 and state.player_it == player_index:
+            state.player_it = target_index
+            from .score import write_it_labels
+
+            write_it_labels(state)
+            _sound_play(state, 0x35)
+            state.players[target_index].stundelay = 0x40
+        return 0
+
     if obj_type in GENERATOR_TYPES:
         # The recorded attract run is authored as a demonstration, and its Elf
         # crosses the tier-2 generator near the final random-wall section. The

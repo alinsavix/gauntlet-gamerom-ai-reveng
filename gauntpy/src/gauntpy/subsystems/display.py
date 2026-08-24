@@ -314,11 +314,24 @@ def player_palette_vblank(state: GameState) -> None:
 
 
 def alpha_palette_vblank(state: GameState) -> None:
-    """Port game_vblank's scrolling HUD-logo color at 0x40304-0x40324."""
+    """Port game_vblank's live alpha-color writes at 0x40304-0x4037A."""
     phase = state.frame_counter & 0xFC
     if phase >= 0x80:
         phase ^= 0xFC
     state.alpha_color_ram[23] = VSCROLL_ALPHA_GRADIENT[phase >> 2]
+
+    if state.frame_counter & 0x0F:
+        return
+
+    # 0x40328-0x4037A flashes the four player-specific IT palettes (12-15).
+    # The dim half copies each palette's color 0 over colors 1-3; the bright
+    # half restores those colors from alpha_palette_init.
+    bright = bool(state.frame_counter & 0x10)
+    for palette in range(12, 16):
+        base = palette * 4
+        for color in range(1, 4):
+            source = base + color if bright else base
+            state.alpha_color_ram[base + color] = ALPHA_PALETTE_INIT[source]
 
 
 def init_title_logo_colors(state: GameState) -> None:

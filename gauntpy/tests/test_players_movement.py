@@ -300,6 +300,80 @@ class TestPlayerTryMoveWallCollision:
         assert hpos_x(state.mobs.hpos[state.players[pi].mob_slot]) == x_before
         assert hpos_x(state.mobs.hpos[slot]) == wall_before + 1
 
+    def test_movable_wall_push_keeps_the_rom_zero_two_pixel_cadence(self):
+        state, pi = self._player_at_slot((5 << 5) | 5)
+        state.players[pi].character = Character.ELF
+        slot = (5 << 5) | 6
+        state.mobs.create(
+            slot, tile=0x20F6, hpos=92 << 7, vpos=native_v(80) << 7,
+            obj_type=int(MazeObjIds.WALL_MOVABLE),
+        )
+        player_x = []
+        wall_x = []
+
+        for frame in range(6):
+            state.frame_counter = frame
+            state.movement_type = 2
+            player_try_move(state, pi, gin.JOY_RIGHT, 0)
+            player_x.append(hpos_x(state.mobs.hpos[state.players[pi].mob_slot]))
+            wall_slot = next(
+                candidate for candidate in range(32, 1024)
+                if state.mobs.obj_type(candidate) == int(MazeObjIds.WALL_MOVABLE)
+            )
+            wall_x.append(hpos_x(state.mobs.hpos[wall_slot]))
+
+        assert [b - a for a, b in zip(player_x, player_x[1:])] == [0, 2, 0, 0, 2]
+        assert [b - a for a, b in zip(wall_x, wall_x[1:])] == [1, 0, 1, 1, 0]
+
+    def test_it_player_tags_another_live_player_on_contact(self):
+        state = GameState()
+        it_slot = (5 << 5) | 5
+        target_slot = (5 << 5) | 6
+        it_player = _active_player_at(state, 0, it_slot)
+        target = _active_player_at(state, 1, target_slot)
+        state.mobs.create(
+            it_slot, tile=0x1000, hpos=76 << 7, vpos=native_v(80) << 7,
+            obj_type=int(MazeObjIds.PLAYERSTART), state=0,
+        )
+        state.mobs.create(
+            target_slot, tile=0x1000, hpos=92 << 7, vpos=native_v(80) << 7,
+            obj_type=int(MazeObjIds.PLAYERSTART), state=1,
+        )
+        it_player.mob_slot = it_slot
+        target.mob_slot = target_slot
+        state.player_it = 0
+        state.movement_type = 2
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+
+        assert state.player_it == 1
+        assert target.stundelay == 0x40
+        assert 0x35 in state.sound_log
+
+    def test_recursive_player_collision_does_not_transfer_it(self):
+        state = GameState()
+        it_slot = (5 << 5) | 5
+        target_slot = (5 << 5) | 6
+        it_player = _active_player_at(state, 0, it_slot)
+        target = _active_player_at(state, 1, target_slot)
+        state.mobs.create(
+            it_slot, tile=0x1000, hpos=76 << 7, vpos=native_v(80) << 7,
+            obj_type=int(MazeObjIds.PLAYERSTART), state=0,
+        )
+        state.mobs.create(
+            target_slot, tile=0x1000, hpos=92 << 7, vpos=native_v(80) << 7,
+            obj_type=int(MazeObjIds.PLAYERSTART), state=1,
+        )
+        it_player.mob_slot = it_slot
+        target.mob_slot = target_slot
+        state.player_it = 0
+        state.movement_type = 1
+
+        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+
+        assert state.player_it == 0
+        assert target.stundelay == 0
+
     def test_returns_0x00f0_when_blocked(self):
         state, pi = self._player_at_slot((5 << 5) | 5)
         state.mobs.picture[(4 << 5) | 5] = _WALL_PICTURE

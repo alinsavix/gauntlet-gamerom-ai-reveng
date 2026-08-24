@@ -149,6 +149,12 @@ ordinary gameplay: collision, damage, generators, the thief's schedule, the
 camera. A demo Elf who walks into a ghost loses health for the same reason
 you would.
 
+That fork happens inside each consumer, not in one shared synthetic joystick.
+The potion routine is especially revealing: normal play waits for the
+debounced Magic-edge pattern, but demo mode tests active-low bit zero of the
+current record directly. Leaving it attached to the cabinet debounce history
+lets the Elf carry its potion forever.
+
 The transporter selection is visible in a retained MAME trace: the blue Elf
 starts dissolving at slot 492 `(180,240)`, then the live LEFT record selects
 slot 486 `(92,240)` beside destination pad 487. The per-player sparkle channel
@@ -224,6 +230,12 @@ ordinary adjacent-player spawn search. Approximate pickup cells, spawning, or
 viewport clipping break the timing and leave the Elf below the final wall.
 The recording itself is finite; reaching its final input pair is not evidence
 that the cabinet necessarily exits the maze before the attract timer advances.
+
+The opening push has an intentionally uneven world-coordinate cadence. The
+wall advances one pixel on a blocked frame; the base Elf advances two pixels
+only when the new gap is clear. Direct ROM execution and MAME show the same
+0/2-pixel hero sequence, so smoothing those MOB words would make the
+reimplementation less faithful, not more.
 
 The Elf is player position 1, so its status panel and sprite are both blue.
 Hardware MOB palette slots 12–15 select color variants 0–3 within the chosen

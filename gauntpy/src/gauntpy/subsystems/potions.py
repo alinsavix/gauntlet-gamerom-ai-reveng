@@ -22,7 +22,7 @@ for monster rows.
 
 from __future__ import annotations
 
-from ..constants import MazeObjIds
+from ..constants import GameMode, MazeObjIds
 from ..state import GameState
 from .monsters import _in_cull_rect, _update_cull_rect
 from .sound import sound_play as _sound_play
@@ -185,6 +185,12 @@ def _dialog_first_encounter(
 
 
 def _magic_press_edge(state: GameState, player_index: int) -> bool:
+    if state.game_mode != GameMode.NORMAL:
+        # 0x4702E-0x47048 reads bit 0 directly from the current demo record.
+        # The hardware debounce register is only consulted in normal play.
+        from .players import demo_record_word
+
+        return not (demo_record_word(state, player_index) & 0x01)
     reg = state.debounce_shift_magic[player_index]
     return (reg & _MAGIC_EDGE_MASK) == _MAGIC_EDGE_VALUE
 
