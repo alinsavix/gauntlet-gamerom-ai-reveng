@@ -65,7 +65,17 @@ is open.
 MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,
 timers, inputs, and the RNG seed. Files are written under
 `traces/state-dumps/`, which Git ignores; the exact path is printed to the
-terminal.
+terminal. Resume one of those files without rerunning boot or level setup:
+
+```bash
+uv run --all-extras gauntpy-play --load-state traces/state-dumps/state-frame-....json
+```
+
+Saved states are versioned, exact runtime snapshots. Original schema-1 captures
+are migrated for the handful of fields added since F4 shipped; an otherwise
+incompatible schema or `GameState` shape is rejected rather than partially
+loaded. Resumed sessions do not write EEPROM JSON, so loading an older gameplay
+snapshot cannot roll back newer settings, high scores, or maze rotation.
 
 F5/F6/F7 are host troubleshooting controls, not original cabinet inputs. The
 level skip uses the live cabinet maze rotation and respawns active players

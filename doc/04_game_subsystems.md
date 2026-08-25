@@ -1909,7 +1909,11 @@ gauntpy's host diagnostics do not enter this path. The optional F1 side panel
 captures a read-only snapshot after the game frame and renders it with a
 host-owned PIL surface. Mode, maze, camera, RNG, demo pointers, MOB counts, and
 player coordinates therefore remain inspectable without changing alpha RAM or
-claiming an arcade call site.
+claiming an arcade call site. F4's complete JSON snapshot is likewise host
+owned. Loading one reconstructs the typed modeled RAM, MOB tables, decoded
+maze, path grids, display memory, and RNG seed, then resumes at the repeated
+frame body. It deliberately does not call `one_time_init` (0x4327A), level
+setup, or any display rebuilder; those would overwrite the captured state.
 
 ### 14.3 Logo Color Cycling (`main_logo_updcolors`, 0x4DCBA)
 

@@ -200,6 +200,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     position may clear both flanks. Do not widen that lane or replace it with
     sprite-box collision; use the original speed cadence and axis ordering to
     verify that the alignment remains reachable.
+48. **A resumed state must bypass initialization.** Host save/load is not an
+    arcade routine. A complete snapshot reconstructs the typed modeled RAM,
+    decoded maze, MOB links, display memory, path grids, and RNG seed, then
+    enters the repeated frame body directly. Do not call `one_time_init`, reload
+    the maze, rebuild VRAM, or repair selected fields on load; reject an
+    incompatible snapshot rather than blending it with defaults.
 
 ## Investigation workflow
 

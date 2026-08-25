@@ -550,6 +550,8 @@ def eeprom_periodic_write(state: GameState) -> None:
     docstring. It differing also triggers the write, so the original flushes
     strictly more often than this does.
     """
+    if not state.eeprom_persistence_enabled:
+        return
     if state.eeprom_write_timer > 0:
         state.eeprom_write_timer -= 1
         if state.eeprom_write_timer > 0:

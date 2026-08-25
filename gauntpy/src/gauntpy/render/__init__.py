@@ -46,7 +46,13 @@ from .diagnostics import (
     derive_debug_events,
     render_debug_panel,
 )
-from .state_dump import dump_game_state, state_dump_payload
+from .state_dump import (
+    StateDumpError,
+    dump_game_state,
+    game_state_from_payload,
+    load_game_state,
+    state_dump_payload,
+)
 from .debug_controls import debug_add_key, debug_add_potion, debug_skip_level
 from .framebuffer import Framebuffer
 
@@ -65,4 +71,9 @@ __all__ = [
     "debug_page_lines",
     "derive_debug_events",
     "render_debug_panel",
+    "StateDumpError",
+    "dump_game_state",
+    "game_state_from_payload",
+    "load_game_state",
+    "state_dump_payload",
 ]

@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2360 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2374 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -61,6 +61,26 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-136 · complete state dumps could not resume play
+
+F4 wrote all modeled fields to JSON, but the host had no inverse operation and
+serialized the thief path grid as an opaque `bytearray(...)` repr. The runner
+now accepts `--load-state PATH`, reconstructs `GameState`, `Player`,
+`InfoPanel`, `MobTable`, RNG, decoded maze, tuple-keyed maps, sets, tuples, and
+the path-grid bytearray, then enters the ordinary frame loop without running
+boot or level setup. New dumps encode bytearrays as hex; the loader safely
+accepts the earlier schema-1 repr form so already captured troubleshooting
+states remain usable, and explicitly migrates the four game fields added since
+schema 1 first shipped. It rejects unknown schemas and other mismatched state
+shapes instead of manufacturing defaults.
+
+Two independent loads of a real level-1 snapshot advance identically under the
+same input, including player/MOB positions, RNG, playfield RAM, and alpha RAM.
+Direct-start options are mutually exclusive with `--load-state`; host scale and
+first-encounter suppression remain presentation/testing choices. A resumed
+snapshot also disables external EEPROM writes, preventing a historical timer,
+high-score table, or rotation value from rolling back a newer local EEPROM.
 
 ### S-135 · maze-16 narrow wall lane matches the ROM
 

@@ -819,6 +819,9 @@ class GameState:
     eeprom_write_timer: int = 0x8CA0  # 0x904012 target; §20 periodic-write countdown, 36,000 frames (~10 min @ 60Hz)
     eeprom_settings_cache: int = 0    # 0x904B94, "last written" shadow of game_settings; §20 change detection
     eeprom_save_path: str = "gauntpy_eeprom.json"  # no ROM address -- local persistence target, see eeprom.py
+    # Host boundary: resumed historical states cannot overwrite newer external
+    # EEPROM progress. Fresh boot/direct-play states leave persistence enabled.
+    eeprom_persistence_enabled: bool = True
 
     # =========================================================================
     # Display memory · playfield/alpha VRAM and color RAM

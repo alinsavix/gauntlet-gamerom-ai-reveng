@@ -165,9 +165,10 @@ def build_state(
 
 def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         from_attract: bool = False,
-        suppress_first_encounter_messages: bool = False,
+        suppress_first_encounter_messages: bool | None = None,
         keys: int = 0, potions: int = 0,
-        powers: tuple[int, ...] = ()) -> None:
+        powers: tuple[int, ...] = (),
+        load_state_path: str | Path | None = None) -> None:
     """Open a window and run the game loop until the player closes it.
 
     Two entries: the default mid-level drop (``build_state``), or -- with
@@ -179,6 +180,29 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     screen uses the ROM's fixed playfield and procedurally built MOB records.
     """
     _ensure_rom_dir()
+
+    if load_state_path is not None:
+        from .render.state_dump import StateDumpError, load_game_state
+        try:
+            state = load_game_state(load_state_path)
+        except StateDumpError as exc:
+            raise SystemExit(f"could not load saved state: {exc}") from exc
+    elif from_attract:
+        from .subsystems.boot import one_time_init
+        state = GameState()
+        one_time_init(state)                # boots into TITLE attract
+    else:
+        from .maze import MazeError
+        try:
+            state = build_state(
+                level, character, keys=keys, potions=potions, powers=powers,
+            )
+        except MazeError as exc:
+            raise SystemExit(
+                f"could not load level {level}: {exc}\n"
+                "Check that GEX_ROM_DIR points at a complete Gauntlet II ROM "
+                "dump (file list in python-gex/README.md)."
+            ) from exc
 
     try:
         from .render.host import HostShell, PygameUnavailable
@@ -193,25 +217,8 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
             "    uv run --all-extras gauntpy-play"
         )
 
-    if from_attract:
-        from .subsystems.boot import one_time_init
-        state = GameState()
-        one_time_init(state)                # boots into TITLE attract
-    else:
-        from .maze import MazeError
-        try:
-            state = build_state(
-                level, character, keys=keys, potions=potions, powers=powers,
-            )
-        except MazeError as exc:
-            host.close()
-            raise SystemExit(
-                f"could not load level {level}: {exc}\n"
-                "Check that GEX_ROM_DIR points at a complete Gauntlet II ROM "
-                "dump (file list in python-gex/README.md)."
-            )
-
-    state.suppress_first_encounter_messages = suppress_first_encounter_messages
+    if suppress_first_encounter_messages is not None:
+        state.suppress_first_encounter_messages = suppress_first_encounter_messages
 
     # mainloop.g2mainloop's body: pump input, run a frame, present. The camera
     # (main_scroll_playfield) runs inside tick() and the compositor converts its
@@ -233,12 +240,12 @@ def main(argv: list[str] | None = None) -> None:
         prog="gauntpy-play", description="Walk a hero around a Gauntlet II maze."
     )
     parser.add_argument(
-        "--level", type=_positive_level, default=1,
+        "--level", type=_positive_level,
         help="level number; 1-5 are the fixed opening mazes 0-4, higher levels "
              "start at the matching rotation maze and advance from there",
     )
     parser.add_argument(
-        "--character", choices=sorted(_CHARACTERS), default="elf",
+        "--character", choices=sorted(_CHARACTERS),
         help="hero class (default: elf)",
     )
     parser.add_argument("--scale", type=_positive_scale, default=4,
@@ -249,7 +256,11 @@ def main(argv: list[str] | None = None) -> None:
              "(press 5 to insert a coin, arrows to pick a class, Enter to start)",
     )
     parser.add_argument(
-        "--no-first-encounter-messages", action="store_true",
+        "--load-state", type=Path,
+        help="resume from a complete JSON state saved with F4",
+    )
+    parser.add_argument(
+        "--no-first-encounter-messages", action="store_true", default=None,
         help="suppress first-encounter pop-up boxes without changing gameplay",
     )
     parser.add_argument(
@@ -267,6 +278,14 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.attract and (args.keys or args.potions or args.power):
         parser.error("--keys, --potions, and --power require direct play (no --attract)")
+    if args.load_state and (
+        args.attract or args.level is not None or args.character is not None
+        or args.keys or args.potions or args.power
+    ):
+        parser.error(
+            "--load-state cannot be combined with --attract, --level, --character, "
+            "--keys, --potions, or --power"
+        )
 
     _ensure_rom_dir()
     if not os.environ.get("GEX_ROM_DIR"):
@@ -277,11 +296,13 @@ def main(argv: list[str] | None = None) -> None:
         )
         raise SystemExit(2)
 
-    run(level=args.level, character=_CHARACTERS[args.character], scale=args.scale,
+    run(level=args.level or 1,
+        character=_CHARACTERS[args.character or "elf"], scale=args.scale,
         from_attract=args.attract,
         suppress_first_encounter_messages=args.no_first_encounter_messages,
         keys=args.keys, potions=args.potions,
-        powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power))
+        powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power),
+        load_state_path=args.load_state)
 
 
 

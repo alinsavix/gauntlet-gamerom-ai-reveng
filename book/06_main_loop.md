@@ -60,6 +60,13 @@ frames, health drain happens every so many frames, the treasure room
 countdown is frames dressed up as seconds. When this book says something
 takes half a second, the underlying truth is a counter loaded with 30.
 
+The Python host can also checkpoint this boundary. Its saved-state JSON is not
+an arcade feature: loading reconstructs the complete modeled RAM and video
+memory, including the RNG and object links, and rejoins the repeated frame body
+without calling the one-time initializer or level setup. Reinitializing even
+one of those systems would create a new session that merely resembled the
+saved frame rather than continuing it.
+
 ## One frame, twenty-nine calls
 
 The loop body is a straight line of twenty-nine direct calls. One of them,
