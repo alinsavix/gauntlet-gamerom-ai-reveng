@@ -108,6 +108,78 @@ class TestDeferredThiefPickups:
         assert not any(state.mobs.picture)
 
 
+class TestRandomPickups:
+    def test_level_six_places_and_reloads_guaranteed_hidden_potion(
+        self, monkeypatch,
+    ):
+        state = GameState(levelnum_current=6, mazenum_current=5)
+        state.rng = _FixedRNG(0x18)  # reject the optional level-3+ pickup
+        placed_types = []
+
+        def place(_state, object_type):
+            placed_types.append(int(object_type))
+            return FIRST_PLAYABLE_SLOT + len(placed_types) - 1
+
+        monkeypatch.setattr(gm, "maze_randomplace", place)
+
+        gm.maze_addrandompickups(state, False)
+
+        assert placed_types == [int(MazeObjIds.HIDDENPOT)]
+        assert state.level_next_potion == 3
+
+    def test_four_players_add_two_to_maze_pickup_count(self, monkeypatch):
+        state = GameState(levelnum_current=1, mazenum_current=0)
+        state.level_flags_3 = 1
+        state.level_players_active = 4
+        placed_types = []
+        monkeypatch.setattr(
+            gm, "maze_randomplace",
+            lambda _state, object_type: (
+                placed_types.append(int(object_type))
+                or FIRST_PLAYABLE_SLOT + len(placed_types) - 1
+            ),
+        )
+
+        gm.maze_addrandompickups(state, True)
+
+        assert placed_types == [int(MazeObjIds.FOOD_DESTRUCTABLE)] * 3
+
+    def test_spawn_bonus_attenuates_pickups(self, monkeypatch):
+        state = GameState(levelnum_current=1, mazenum_current=0)
+        state.level_flags_3 = 1
+        state.level_players_active = 3
+        state.spawn_probability_bonus = 8
+        state.rng = _FixedRNG(0)
+        placed_types = []
+        monkeypatch.setattr(
+            gm, "maze_randomplace",
+            lambda _state, object_type: (
+                placed_types.append(int(object_type)) or FIRST_PLAYABLE_SLOT
+            ),
+        )
+
+        gm.maze_addrandompickups(state, True)
+
+        assert placed_types == []
+
+    def test_negative_solo_adjustment_removes_random_food(self):
+        state = GameState(levelnum_current=1, mazenum_current=0)
+        state.level_players_active = 1
+        state.game_settings = 7 << 5
+        state.players[0].mob_slot = 100
+        state.rng = _FixedRNG(3, 1, 0)
+        for slot in range(100, 105):
+            state.mobs.create(
+                slot, 1, 0, 0, int(MazeObjIds.FOOD_INVULN), 0,
+            )
+
+        gm.maze_addrandompickups(state, True)
+
+        assert state.mobs.picture[100] != 0
+        assert state.mobs.picture[101] == 0
+        assert state.mobs.picture[102] == 0
+
+
 # ---------------------------------------------------------------------------
 # maze_place_object -- pure arithmetic, needs no ROMs
 # ---------------------------------------------------------------------------

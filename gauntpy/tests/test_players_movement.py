@@ -98,6 +98,32 @@ def test_pushing_a_movable_wall_into_an_exit_wins_trick_ten():
     assert state.mobs.picture[wall] == 0
 
 
+def test_pushing_a_movable_wall_into_a_transporter_dissolves_it():
+    wall = (5 << 5) | 5
+    transporter = wall + 1
+    state = GameState()
+    state.mobs.create(
+        wall,
+        tile=0x20F6,
+        hpos=5 * 16 << 7,
+        vpos=encode_vpos_at_y(5 * 16),
+        obj_type=int(MazeObjIds.WALL_MOVABLE),
+    )
+    state.mobs.create(
+        transporter,
+        tile=0x8001,
+        hpos=6 * 16 << 7,
+        vpos=encode_vpos_at_y(5 * 16),
+        obj_type=int(MazeObjIds.TRANSPORTER),
+    )
+
+    assert gp._push_movable_wall(
+        state, 0, wall, gp._JOY_RIGHT, vertical=False,
+    )
+    assert state.mobs.picture[wall] == 0
+    assert state.secret_winner == -1
+
+
 # ---------------------------------------------------------------------------
 # mob_probe_up
 # ---------------------------------------------------------------------------

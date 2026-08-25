@@ -335,6 +335,12 @@ placement clears it; `main_start_game` uses that path for active players on a
 normal level transition, and `player_join` uses it for a mid-level join. There
 is no all-monster or player AOE loop in either helper.
 
+Every resolved contact also calls `player_hurt_speech_timer` (0x49A98). Its
+per-player word at 0x904AFA is predecremented; a negative value reloads with
+`getrandom(8) + {0,8,12,14,20}[active_players]`. Acid-afflicted players stop
+after that first draw. Others draw once from their character's 4/10/10/9-entry
+voice bank at 0x57AAE and submit the selected sound through `sound_play`.
+
 ### 3.7 Player Hit (`monster_playerhit`, 0x495A6)
 
 Called from monster/player collision dispatch when a monster overlaps a player. It selects contact damage from the 64-word `monster_contact_damage_table` at 0x57A2E, using the contact class and player character and selecting the powered-player half when applicable. It then applies the type-specific collision behavior, including invincibility checks and hurt/low-health audio where appropriate. The `shothit_dist_H/V` words at 0x904028/0x90402A are collision-distance scratch values used by shot and MOB probes; they are not damage tables.
@@ -847,6 +853,26 @@ Otherwise: LFLAG1 bits 2–3 (long bits 26–27) are XOR'd with `getrandom(4)` e
 **Confidence: Verified** by disassembly (capstone, `row76.bin` @ 0x43774–0x4381A). *Contradicted and corrected:* the former one-line summary gave the treasure rule as unconditional "0xB0 (wraps + offscreen)" and omitted both the level==9999/attract skip guard and the TrapsLocal gate on the mazes-5–101 >103 tier.
 
 `get_random_maze_flags` (0x436CC): selects a random entry from a 13-entry ROM table at 0x57012. If LFLAG4 bit 2 (TrapsLocal) is set and the result is 0x80, overrides to 0x2.
+
+#### Random pickup setup (`maze_addrandompickups`, 0x43F68)
+
+This routine runs after the new level's party is placed. It first consumes
+`level_next_potion`: from level 6 onward, zero places type 0x3D and reloads the
+counter to 3. The low three bits of LFLAG3 are then the base signed pickup
+delta. On ordinary mazes, a nonzero caller flag adjusts that delta using the
+active-player count, the sole active character in solo play, operator
+difficulty bits 5–7, and the signed spawn-probability bonus minus class bytes
+`{3,0,4,0}` at 0x40E66.
+
+A positive delta places type-0x31 food. A negative delta calls
+`maze_scan_objects` to remove food through a forward-only randomized sweep:
+the scan pointer never rewinds, so food passed before one selection cannot be
+selected later. This pointer ownership is part of the RNG contract.
+
+The common tail restores escaped mugger/thief loot and, from level 3 onward,
+uses two bounded draws to optionally place either type 0x33 with picture 0x20FC
+or type 0x31 with picture 0x25ED. Treasure and secret mazes at 0x73+ skip the
+routine entirely.
 
 ### 5.6 Slapstic Bank Switching (`slapstic_cmd_bitwise`, 0x43826)
 
@@ -1945,6 +1971,13 @@ Treasure room mazes are indexed 104–114 (T1–T11) in the maze catalog.
 
 **Confidence: Verified** for anchors, deltas, bounds, and scroll-register
 shadow writes.
+
+Level setup uses the separate `scroll_to_slot` entry (0x46C5E) immediately
+after selecting `maze_player_start_slot`. For packed row/column `(r,c)`, its
+unclamped register target is `x = c*16 - 4 - 0x68`,
+`y = 0x1E8 - ((r<<5 XOR 0x3E0)>>1) - 0x6C`, then
+`scroll_set_position` applies the ordinary wrap/clamp rules. This is a
+single-cell snap, not the party-extent algorithm below.
 
 Computes the ideal scroll position based on all active players' positions, then smoothly scrolls toward that target. Only runs during GAMEMODE_NORMAL or GAMEMODE_DEMO, and only when `level_players_active > 0`.
 

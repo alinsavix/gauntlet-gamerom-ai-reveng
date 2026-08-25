@@ -164,6 +164,15 @@ def snap_camera(state: GameState) -> None:
     _scroll_set_position(state)
 
 
+def scroll_to_slot(state: GameState, packed_slot: int) -> None:
+    """0x46C5E -- center the hardware scroll on one packed maze cell."""
+    packed_slot &= 0x03FF
+    row_bits = packed_slot & 0x03E0
+    state.scroll_y = 0x01E8 - ((row_bits ^ 0x03E0) >> 1) - 0x6C
+    state.scroll_x = ((packed_slot & 0x1F) << 4) - 4 - CAM_X_SHIFT
+    _scroll_set_position(state)
+
+
 def _scroll_set_position(state: GameState) -> None:
     """0x46F56 -- clamp scroll registers to the legal playfield range.
 

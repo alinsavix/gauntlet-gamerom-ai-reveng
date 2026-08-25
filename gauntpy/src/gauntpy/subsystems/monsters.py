@@ -105,6 +105,17 @@ _SOUND_IT_TAG = 0x35            # "Player Touches IT"
 _SOUND_ACID_SLIME = 0x36        # "Acid Puddle Slimes Player"
 _HURT_COOLDOWN = 0x12           # hurt_cooldown reload (0x49788)
 
+# player_hurt_speech_timer, ROM 0x49A98. The four longword sound-ID banks at
+# 0x57AAE are selected by player_character; 0x57B4C gives their exact lengths.
+_HURT_SPEECH_SOUNDS = (
+    (0x83, 0x84, 0x85, 0x86),
+    (0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB2, 0xB3, 0xB4),
+    (0x6D, 0x6E, 0x70, 0x72, 0x73, 0x74, 0x75, 0x95, 0x96, 0x97),
+    (0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x79, 0x7E, 0x7F, 0x80),
+)
+# hurt_speech_cooldown_base, ROM 0x57B32, indexed by active player count.
+_HURT_SPEECH_COOLDOWN_BASE = (0, 8, 12, 14, 20)
+
 # Acid acts once every 32 frames: (frame_word & 0x1E) == 0 (0x413E6).
 _ACID_RATE_MASK = 0x1E
 
@@ -1976,11 +1987,39 @@ def _contact_apply(state: GameState, player_index: int, monster_slot: int,
         state.mobs.unlink_and_clear(monster_slot)
         player_add_score_with_mult(state, player_index, _ACID_CONTACT_SCORE)
 
+    player_hurt_speech_timer(state, player_index)         # 0x498D0
+
     # 0x498D6: any contact resets the trap-wall escape timer and wakes the
     # idle timer that opens timed doors.
     state.escape_timer = 0
     if state.idle_timer > 0:
         state.idle_timer = 0
+
+
+def player_hurt_speech_timer(state: GameState, player_index: int) -> None:
+    """0x49A98 -- tick and, on expiry, announce one hurt voice.
+
+    The cooldown is reloaded before the acid-affliction test, so an acid-slowed
+    player consumes only the first random draw and remains silent. Ordinary
+    expiry then draws once more from the selected character's literal sound
+    bank and submits that command through the normal sound path.
+    """
+    timer = (state.hurt_speech_timer[player_index] - 1) & 0xFFFF
+    state.hurt_speech_timer[player_index] = timer
+    if not timer & 0x8000:
+        return
+
+    active = max(0, min(int(state.level_players_active), 4))
+    state.hurt_speech_timer[player_index] = (
+        state.getrandom(8) + _HURT_SPEECH_COOLDOWN_BASE[active]
+    ) & 0xFFFF
+
+    if state.players[player_index].acid_timer:
+        return
+
+    character = int(state.players[player_index].character) & 0x03
+    sounds = _HURT_SPEECH_SOUNDS[character]
+    _sound_play(state, sounds[state.getrandom(len(sounds))])
 
 
 def _acid_windup(state: GameState, player_index: int, monster_slot: int,

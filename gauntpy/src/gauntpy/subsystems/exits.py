@@ -1493,6 +1493,8 @@ def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     if in_secret_room(state):                        # 0x48232
         secret_room_spawn(state)
         update_monster_spawn_bonus_from_score_per_coin(state)   # 0x4834E
+        from ..maze import maze_addrandompickups
+        maze_addrandompickups(state, True)            # 0x48358
         from .thief import thief_setup
 
         thief_setup(state)                           # 0x4835E
@@ -1510,6 +1512,8 @@ def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     # 0x4834E: both handoff arms converge here, with the heroes already back to
     # status 1, so the bonus is computed from the party that is about to play.
     update_monster_spawn_bonus_from_score_per_coin(state)
+    from ..maze import maze_addrandompickups
+    maze_addrandompickups(state, True)                # 0x48358
     from .thief import thief_setup
 
     thief_setup(state)                               # 0x4835E

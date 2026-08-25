@@ -62,8 +62,8 @@ valuable.
 
 A complete ROM analysis is not the same claim as a complete reimplementation.
 The callable inventory currently has 322 entries, while gauntpy's independent
-crosswalk classifies 263 as complete, eight as partial, fifty as deliberately
-omitted platform/ABI/dead boundaries, and one audio routine as missing. It also
+crosswalk classifies 272 live entries as complete and fifty as deliberately
+omitted platform/ABI/dead boundaries, with no live entry partial or missing. It also
 records explicit Python-only corrections separately: making the attract demo
 finish by ignoring a wall or deleting an actor proves only that the recording
 was rescued, not that the preceding game state matches the ROM.

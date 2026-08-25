@@ -147,7 +147,7 @@ python -m pytest -q
 
 Current expected result:
 
-`2347 passed, 9 skipped`
+`2359 passed, 9 skipped`
 
 ROM-free gauntpy suite:
 
@@ -159,7 +159,7 @@ python -m pytest -q
 
 Current expected result:
 
-`2110 passed, 246 skipped`
+`2122 passed, 246 skipped`
 
 Sibling decoder suite:
 

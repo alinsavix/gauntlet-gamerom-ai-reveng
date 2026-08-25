@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2347 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2359 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -35,22 +35,9 @@ start).
 
 ## Open issues
 
-### S-133 · full ROM/Python callable audit found residual gaps and compensations
+### S-133 · non-ROM compatibility compensations remain
 
-The exhaustive crosswalk in `ROM_FUNCTION_AUDIT.md` accounts for all 322
-game-ROM callable entries: 263 have complete Python equivalents (including
-merged helpers), 8 are partial, 50 are intentionally omitted platform/ABI/dead
-entries, and `player_hurt_speech_timer` (0x49A98) is missing.
-
-The highest-impact partial is `maze_addrandompickups` (0x43F68): escaped
-thief/mugger loot returns, but ordinary random-pickup scaling and the guaranteed
-hidden-potion countdown are absent, leaving `level_next_potion` write-only.
-`thief_test_move_tile` lacks its corner-squeeze arm; movable-wall traversal uses
-the player probe family instead of the ROM ray march; `scroll_to_slot` has no
-arbitrary-slot equivalent; and the SCORES color cycle is structurally
-approximate.
-
-The same audit records six non-ROM game-side compensations. DEMO can ignore
+The callable audit records six non-ROM game-side compensations. DEMO can ignore
 random walls, delete Grunts on its final input record, retain a row-zero flank,
 and bypass the normal reserved-row fallback. Player motion is also integrated
 one pixel at a time, while score display compares host latches because some
@@ -74,6 +61,27 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-134 · ROM/Python callable implementation gaps are closed
+
+The exhaustive 322-entry crosswalk now classifies 272 callable entries as
+complete Python equivalents and 50 as intentionally omitted hardware, ABI,
+dead-code, C-runtime, or representation boundaries. No live entry remains
+missing or partial.
+
+`player_hurt_speech_timer` now follows 0x49A98's predecrement, randomized
+active-party reload, acid silence gate, and literal per-character sound banks.
+`maze_addrandompickups` now consumes the guaranteed hidden-potion countdown,
+applies the solo-character/multiplayer/difficulty and spawn-bonus adjustments,
+performs the ROM's forward-only random food-removal sweep, restores escaped
+loot, and runs the level-three special-pickup draws after party placement.
+
+The thief's 0x4E7FC route test now handles learned transporters and its
+player-index-4 corner transition. Movable walls share the ROM ray-march
+geometry instead of player probes. Level setup calls the new arbitrary-slot
+`scroll_to_slot`. The SCORES cycle was rechecked and its existing full
+16-word rotation was already exact: `moveq #0xB` plus the signed loop executes
+twelve moves, not eleven.
 
 ### S-132 · secret-room invitations, hints, and direct triggers were incomplete
 

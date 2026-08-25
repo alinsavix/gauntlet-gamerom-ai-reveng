@@ -27,6 +27,7 @@ Four ROM facts shape every test below:
 from __future__ import annotations
 
 from gauntpy.constants import (
+    Character,
     GENERATOR_TYPES,
     SLOT_DEMON_SHOTS,
     SLOT_LOBBER_SHOTS,
@@ -105,6 +106,7 @@ from gauntpy.subsystems.monsters import (
     main_move_monsters,
     monster_create_shot,
     monster_find_and_shoot,
+    player_hurt_speech_timer,
     monster_playerhit,
     monster_walk_picture,
     monsters_everything,
@@ -1474,6 +1476,39 @@ class TestShotSpawnGeometry:
 # ---------------------------------------------------------------------------
 
 class TestIterationAndContact:
+    def test_hurt_speech_timer_reloads_and_selects_character_voice(self):
+        state = GameState(level_players_active=2)
+        state.rng = _FixedRNG(3, 2)
+        state.players[0].character = Character.WARRIOR
+
+        player_hurt_speech_timer(state, 0)
+
+        assert state.hurt_speech_timer[0] == 15
+        assert state.sound_log == [0x85]
+        assert state.rng.calls == 2
+
+    def test_hurt_speech_waits_for_negative_countdown(self):
+        state = GameState(level_players_active=1)
+        state.rng = _FixedRNG(0)
+        state.hurt_speech_timer[0] = 1
+
+        player_hurt_speech_timer(state, 0)
+
+        assert state.hurt_speech_timer[0] == 0
+        assert state.sound_log == []
+        assert state.rng.calls == 0
+
+    def test_acid_suppresses_voice_after_reloading_timer(self):
+        state = GameState(level_players_active=4)
+        state.rng = _FixedRNG(7, 3)
+        state.players[0].acid_timer = 1
+
+        player_hurt_speech_timer(state, 0)
+
+        assert state.hurt_speech_timer[0] == 27
+        assert state.sound_log == []
+        assert state.rng.calls == 1
+
     def test_walk_marker_follows_the_camera(self):
         state = GameState()
         slot = pack_slot(10, 10)

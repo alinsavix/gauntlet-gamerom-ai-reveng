@@ -289,6 +289,11 @@ window test decides between a weaker monster and a dead one. A destroyed
 monster is unlinked from the chain, its picture is cleared, and a sparkle
 effect is created in one of the shared effect slots.
 
+Monster contact also owns the heroes' short hurt barks. Each player has a
+randomized cooldown that gets longer as the party grows. When it expires, the
+game chooses from that character's own voice bank; an acid-afflicted hero
+reloads the timer but stays silent.
+
 Score comes out of the same arithmetic: damage dealt, times a per-class
 multiplier, times the player's treasure multiplier. Ghosts pay ten per point of
 damage, the grunt-class families pay five, and Death and IT pay one. Damaging a

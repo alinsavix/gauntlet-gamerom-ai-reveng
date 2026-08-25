@@ -17,10 +17,10 @@ set.
 
 | Classification | Entries |
 |---|---:|
-| Complete Python equivalent, including merged helpers | 263 |
-| Partial Python equivalent | 8 |
+| Complete Python equivalent, including merged helpers | 272 |
+| Partial Python equivalent | 0 |
 | Intentionally omitted platform/ABI/dead entry | 50 |
-| Missing game behavior | 1 |
+| Missing game behavior | 0 |
 | **Total** | **322** |
 
 “Complete” means the caller-visible game behavior is represented, not that the
@@ -30,22 +30,22 @@ Python helpers.
 
 ## Missing game behavior
 
-| Address | ROM function | Finding |
-|---|---|---|
-| `0x49A98` | `player_hurt_speech_timer` | No Python equivalent or `hurt_speech_timer` state exists. The ROM decrements a per-player randomized cooldown, chooses a class-specific hurt voice when it expires (unless the player is acid-slowed), and reloads from the active-player-count table. `monster_playerhit` omits this call. This is audio behavior rather than a gameplay-state divergence. |
+**None.** `player_hurt_speech_timer` (`0x49A98`) now owns the exact
+predecrement/reload cadence, acid silence gate, literal character voice banks,
+and `monster_playerhit` call site.
 
 ## Partial equivalents
 
-| Address | ROM function | Python equivalent | Missing or divergent portion |
-|---|---|---|---|
-| `0x43F68` | `maze_addrandompickups` | `maze.place_deferred_thief_pickups`, `maze.maze_randomplace` | Only the escaped thief/mugger loot-return tail is present. Header/difficulty-scaled random pickups and the guaranteed-hidden-potion countdown consumer are absent. `level_next_potion` is maintained but never consumed. |
-| `0x4E7FC` | `thief_test_move_tile` | `thief_handle_tile_collision`, `thief_enter_tport` | Transporter and ordinary blocked-tile handling exist; the thief's corner-squeeze arm does not. |
-| `0x4280E` | `door_traverse_right` | `players._push_movable_wall` | The four directional bodies are merged, but use player `mob_probe_*` helpers rather than the ROM's `ray_march_*` path. Edge/wrap behavior is therefore not proven equivalent. |
-| `0x428A4` | `door_traverse_left` | `players._push_movable_wall` | Same limitation as `door_traverse_right`. |
-| `0x4293A` | `door_traverse_up` | `players._push_movable_wall` | Same limitation as `door_traverse_right`. |
-| `0x429D0` | `door_traverse_down` | `players._push_movable_wall` | Same limitation as `door_traverse_right`. |
-| `0x46C5E` | `scroll_to_slot` | `camera.snap_camera` | The Python helper centers the active party; there is no equivalent accepting an arbitrary packed slot. |
-| `0x4DE76` | `score_screen_color_cycle` | SCORES arm of `attract.main_logo_updcolors` | Python rotates a 16-word alpha-color block. The ROM shifts eleven entries and restores four saved words, so the exact color-cycle phase is not reproduced. |
+**None.** The former eight entries are now complete:
+
+- `maze_addrandompickups` (`0x43F68`) includes its hidden-potion cadence,
+  character/player/difficulty adjustment, spawn-bonus attenuation, monotonic
+  food-removal sweep, deferred loot, and special pickup draws.
+- `thief_test_move_tile` (`0x4E7FC`) includes transporter and corner recovery.
+- The four `door_traverse_*` entries use the shared ROM-shaped ray march.
+- `scroll_to_slot` (`0x46C5E`) accepts and centers an arbitrary packed slot.
+- `score_screen_color_cycle` (`0x4DE76`) was already a correct 16-word rotation;
+  the audit had miscounted its twelve-iteration move loop as eleven.
 
 ## Intentionally omitted entries
 
@@ -69,8 +69,8 @@ marker representation.
 
 ## Complete set
 
-The **complete set is the 263 entries in the source inventory after subtracting
-the 59 addresses in the missing, partial, and intentionally omitted tables
+The **complete set is the 272 entries in the source inventory after subtracting
+the 50 addresses in the intentionally omitted table
 above**. This definition is machine-checked by
 `tests/test_rom_function_audit.py`, so every inventory entry belongs to exactly
 one category and additions cannot silently inherit “complete” status.
