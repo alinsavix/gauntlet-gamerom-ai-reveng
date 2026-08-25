@@ -47,6 +47,7 @@ from .diagnostics import (
     render_debug_panel,
 )
 from .state_dump import dump_game_state, state_dump_payload
+from .debug_controls import debug_add_key, debug_add_potion, debug_skip_level
 from .framebuffer import Framebuffer
 
 __all__ = [

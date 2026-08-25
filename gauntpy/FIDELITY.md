@@ -161,6 +161,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     whether its record changes slots. Use the live +12 H / +8 V body bias for
     handoff; an uncorrected sprite-origin cell lets a 24-pixel actor penetrate
     walls while its collision identity remains behind.
+40. **Troubleshooting mutations use game-side writers.** Host-only cheats are
+    deliberately non-arcade input, but they must update authoritative gameplay
+    state and its coupled modeled RAM. Inventory grants call
+    `player_inv_update`; level skips use the rotation and ordinary maze/player
+    setup rather than swapping renderer content.
 
 ## Investigation workflow
 

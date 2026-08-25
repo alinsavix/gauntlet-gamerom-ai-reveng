@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2325 passed, 8 skipped** (gauntpy) and
+present the suites are clean: **2329 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -52,6 +52,16 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-128 · live troubleshooting required replaying whole levels
+
+The host now provides three explicit non-arcade shortcuts. F5 computes the next
+level/maze through the cabinet rotation, reloads it immediately, respawns the
+active party, and snaps the camera while preserving inventory. F6 and F7 add
+one key or potion to the selected host player and call `player_inv_update`, so
+the authoritative counters and modeled alpha-RAM display remain synchronized.
+Inactive players and non-gameplay level skips are rejected with a terminal
+message rather than silently mutating partial state.
 
 ### S-127 · troubleshooting had no complete live-state capture
 

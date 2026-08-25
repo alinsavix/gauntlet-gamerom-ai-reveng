@@ -58,6 +58,7 @@ from .diagnostics import (
     derive_debug_events,
     render_debug_panel,
 )
+from .debug_controls import debug_add_key, debug_add_potion, debug_skip_level
 from .state_dump import dump_game_state
 
 __all__ = [
@@ -66,6 +67,7 @@ __all__ = [
     "DEFAULT_DIAGNOSTICS_NEXT_KEY", "DEFAULT_DIAGNOSTICS_PREV_KEY",
     "DEFAULT_DIAGNOSTICS_MOB_PREV_KEY", "DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY",
     "DEFAULT_STATE_DUMP_KEY",
+    "DEFAULT_SKIP_LEVEL_KEY", "DEFAULT_ADD_KEY_KEY", "DEFAULT_ADD_POTION_KEY",
 ]
 
 
@@ -101,6 +103,9 @@ DEFAULT_DIAGNOSTICS_PREV_KEY = "K_F2"
 DEFAULT_DIAGNOSTICS_MOB_PREV_KEY = "K_LEFTBRACKET"
 DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY = "K_RIGHTBRACKET"
 DEFAULT_STATE_DUMP_KEY = "K_F4"
+DEFAULT_SKIP_LEVEL_KEY = "K_F5"
+DEFAULT_ADD_KEY_KEY = "K_F6"
+DEFAULT_ADD_POTION_KEY = "K_F7"
 
 
 class HostShell:
@@ -169,6 +174,9 @@ class HostShell:
             pygame, DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY,
         )
         self._state_dump_key = getattr(pygame, DEFAULT_STATE_DUMP_KEY)
+        self._skip_level_key = getattr(pygame, DEFAULT_SKIP_LEVEL_KEY)
+        self._add_key_key = getattr(pygame, DEFAULT_ADD_KEY_KEY)
+        self._add_potion_key = getattr(pygame, DEFAULT_ADD_POTION_KEY)
 
     def _set_window_mode(self):
         game_width = LOGICAL_WIDTH * self.scale
@@ -204,6 +212,30 @@ class HostShell:
                 elif event.key == self._state_dump_key:
                     self.last_state_dump_path = dump_game_state(state)
                     print(f"gauntpy state saved: {self.last_state_dump_path}")
+                elif event.key == self._skip_level_key:
+                    if debug_skip_level(state):
+                        print(
+                            "gauntpy skipped to "
+                            f"level {state.levelnum_current} / maze {state.mazenum_current}"
+                        )
+                    else:
+                        print("gauntpy level skip ignored outside active play")
+                elif event.key == self._add_key_key:
+                    if debug_add_key(state, self.player):
+                        print(
+                            f"gauntpy P{self.player + 1} keys: "
+                            f"{state.players[self.player].keysnum}"
+                        )
+                    else:
+                        print("gauntpy add-key ignored for inactive player")
+                elif event.key == self._add_potion_key:
+                    if debug_add_potion(state, self.player):
+                        print(
+                            f"gauntpy P{self.player + 1} potions: "
+                            f"{state.players[self.player].potionsnum}"
+                        )
+                    else:
+                        print("gauntpy add-potion ignored for inactive player")
                 elif (
                     self.diagnostics_visible
                     and event.key == self._diagnostics_next_key

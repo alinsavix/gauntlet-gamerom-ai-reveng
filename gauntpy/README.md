@@ -41,6 +41,9 @@ genuine class sprite. Use `--scale` to override it.
 | **F1** | show / hide the host diagnostics panel |
 | **F2 / F3** | previous / next diagnostics page |
 | **F4** | save a complete modeled-state JSON dump |
+| **F5** | immediately load the next level |
+| **F6** | give the host player one key |
+| **F7** | give the host player one potion |
 | **[ / ]** | select the previous / next occupied MOB |
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
@@ -63,6 +66,11 @@ MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,
 timers, inputs, and the RNG seed. Files are written under
 `traces/state-dumps/`, which Git ignores; the exact path is printed to the
 terminal.
+
+F5/F6/F7 are host troubleshooting controls, not original cabinet inputs. The
+level skip uses the live cabinet maze rotation and respawns active players
+without the bonus/splash delay. Inventory grants update the selected host
+player's game-side counters and alpha-RAM inventory display.
 
 By default the runner drops you straight into a level. Options:
 

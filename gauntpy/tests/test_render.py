@@ -2258,6 +2258,41 @@ class TestHostShellInput:
         finally:
             shell.close()
 
+    def test_f5_f6_f7_route_to_troubleshooting_controls(self, monkeypatch):
+        from gauntpy.render import host
+
+        calls = []
+        monkeypatch.setattr(
+            host, "debug_skip_level",
+            lambda state: calls.append(("level", state)) or True,
+        )
+        monkeypatch.setattr(
+            host, "debug_add_key",
+            lambda state, player: calls.append(("key", player)) or True,
+        )
+        monkeypatch.setattr(
+            host, "debug_add_potion",
+            lambda state, player: calls.append(("potion", player)) or True,
+        )
+        shell = host.HostShell(assets=_FakeAssets(), player=2)
+        try:
+            pygame = shell._pygame
+            state = GameState()
+            for key in (pygame.K_F5, pygame.K_F6, pygame.K_F7):
+                pygame.event.post(
+                    pygame.event.Event(pygame.KEYDOWN, key=key)
+                )
+
+            shell.wait_for_vblank(state)
+
+            assert calls == [
+                ("level", state),
+                ("key", 2),
+                ("potion", 2),
+            ]
+        finally:
+            shell.close()
+
     def test_diagnostics_panel_stays_native_width_when_game_is_scaled(self):
         from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
         from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
