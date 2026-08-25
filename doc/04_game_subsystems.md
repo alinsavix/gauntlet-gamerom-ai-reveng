@@ -470,6 +470,28 @@ row-zero flank behavior. Removing it currently diverts the recorded maze-102
 actor before the transporter, contradicting the retained MAME trace that reaches
 slot 492 and lands at slot 486; this exception does not apply to normal play.
 
+#### 4.2.1 Character stat selectors
+
+The permanent stat bits do not select one combined character record. Each
+consumer builds its own index:
+
+- Movement speed (0x4A92C-0x4A95C) tests Speed bit 0 and indexes the parallel
+  eight-word tables at 0x580A8/0x580B8 by `character + 4*powered`.
+- Player-shot damage (0x4AFA6-0x4B00E) tests Shot Power bit 4 and indexes the
+  twelve-byte base/random tables at 0x596B6/0x596C2 by character or
+  character+8. A supershot replaces the result with 3.
+- Player-shot velocity (0x47846-0x478A6) separately tests Shot Speed bit 3 and
+  indexes the signed X/Y tables at 0x576E2/0x57792 by
+  `character*8 + direction + (0x28 if powered)`.
+- Incoming contact damage (0x497CE-0x49824) tests Armor bit 1 and adds 0x20
+  entries to the character/contact-class index into 0x57A2E. Monster shots add
+  4 to their 0x596CE character index; forcefields add 4 longword records into
+  0x5813C. These are distinct armor tables with the same power-bit selector.
+- Hand combat (0x521AE-0x52438) tests Fight bit 2 and adds 4 to the character
+  index for hand power 0x5B7D4 and generator power 0x5B7EC. The random hand
+  addend is deliberately different: 0x5B7E4 is indexed by cabinet player
+  position and contains `{0,0,0,2}`.
+
 `mob_collision_test` (0x52192) is deliberately tri-state. Collectible and floor
 types return -1 so movement proceeds and `player_tile_interact` handles them only
 after the player record enters the new cell; zero blocks; a live melee branch

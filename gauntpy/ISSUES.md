@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2336 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2340 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -52,6 +52,32 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-131 · character stat-table selector audit
+
+Direct disassembly and raw ROM reads verified all five requested stat families
+against their gauntpy consumers. No behavioral selector was wrong:
+
+- Shot Power is low-byte bit 4. `resolve_shot_hit` reads
+  `shot_damage_base_tbl`/`shot_damage_rand_tbl` at 0x596B6/0x596C2 using
+  character 0-3 or character+8 when powered; supershots override damage with 3.
+- Shot Speed is bit 3. `main_handle_shots` reads the signed X/Y tables at
+  0x576E2/0x57792 using `character*8 + direction`, plus 0x28 entries when
+  powered. A misleading `_VEL_SHOTPOWER` name and test title were corrected to
+  Shot Speed; the implemented bit and values were already right.
+- movement Speed is bit 0. `main_move_players` selects character or character+4
+  from parallel tables 0x580A8/0x580B8, including their per-frame +0x80 cadence;
+  mazes 0x73+ intentionally bypass them with fixed 0x100.
+- Armor is bit 1 and selects the protected rows of each applicable incoming
+  damage table: +0x20 entries in contact table 0x57A2E, +4 entries in monster
+  shot table 0x596CE, and +4 longwords in forcefield table 0x5813C. Death's
+  accumulator likewise selects its protected 3-point entry instead of 4.
+- Fight Power is bit 2. `mob_collision_test` indexes hand power 0x5B7D4 and
+  generator power 0x5B7EC by `character + 4*powered`. Its separate random range
+  at 0x5B7E4 is indexed by cabinet player position, not character.
+
+Cross-character regressions now protect the damage/velocity independence and
+all eight normal/powered melee base selections.
 
 ### S-130 · potion flash and special-target magic paths were absent
 

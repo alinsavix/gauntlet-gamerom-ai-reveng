@@ -83,6 +83,13 @@ shot-power upgrade moves the lookup forward eight bytes, to the third of them.
 
 A super shot skips the lookup and deals a flat 3.
 
+Shot **speed** is a separate lookup, despite the similar name. The X and Y
+velocity tables have four ordinary character rows and four powered rows.
+Extra shot speed—not extra shot power—moves the index forward by forty entries.
+The Warrior's rightward shot rises from 3 to 4 pixels per frame, the
+Valkyrie's and Wizard's from 4 to 5, and the Elf's from 5 to 7. Extra shot power
+changes damage without changing any of those velocities.
+
 Basic monsters die in one to three points of damage depending on their tier,
 so small numbers decide a lot here, and Chapter 11 does that bookkeeping.
 Armor works by the same method in the other direction, with incoming
@@ -222,7 +229,11 @@ the eight-frame fighting animation runs in your fighting direction, and the
 collision between the two bodies resolves through class data, weighing the
 monster's contact damage against your armor table on one side and your class's
 fighting ability on the other. The upgrade item called "extra fight power"
-acts here, as does the armor power-up.
+acts here, as does the armor power-up. Base hand damage is indexed by character
+plus the Fight-power row: Warrior/Valkyrie/Wizard/Elf go from 2/2/1/1 to
+3/3/2/2. One odd arcade detail remains separate—the random hand-damage range is
+indexed by cabinet player position, so only green player position four receives
+the additional `getrandom(2)` term.
 
 Shooting takes a button. Pressing Fire starts the four-frame shooting
 animation, and the shot spawns when that animation *completes*, provided your

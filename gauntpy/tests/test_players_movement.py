@@ -19,6 +19,7 @@ from gauntpy.constants import (
     Character,
     GameMode,
     MazeObjIds,
+    PlayerPower,
     PlayerStatus,
 )
 from gauntpy.coords import encode_vpos_at_y, hpos_x, native_v, vpos_y
@@ -487,6 +488,48 @@ class TestHandToHandGenerators:
         assert state.mobs.hpos[player.mob_slot] == before
         assert state.player_fighting_dir[0] == 0
         assert state.mobs.picture[slot] != 0
+
+
+class TestCharacterFightTables:
+    """mob_collision_test 0x521AE-0x52438 table selection."""
+
+    def test_fight_tables_match_the_rom(self):
+        assert gp._HAND_POWER == (2, 2, 1, 1, 3, 3, 2, 2)
+        assert gp._HAND_RANDOM == (0, 0, 0, 2)
+        assert gp._GENERATOR_FIGHT_POWER == (3, 2, 0, 0, 4, 3, 0, 1)
+
+    def test_extra_fight_power_selects_the_second_character_row(self):
+        for character, powered, expected_damage in (
+            (Character.WARRIOR, False, 2),
+            (Character.VALKYRIE, False, 2),
+            (Character.WIZARD, False, 1),
+            (Character.ELF, False, 1),
+            (Character.WARRIOR, True, 3),
+            (Character.VALKYRIE, True, 3),
+            (Character.WIZARD, True, 2),
+            (Character.ELF, True, 2),
+        ):
+            state = GameState()
+            player = _active_player_at(state, 0, (10 << 5) | 10)
+            player.character = character
+            player.powers = int(PlayerPower.FIGHT) if powered else 0
+            slot = (10 << 5) | 11
+            state.mobs.create(
+                slot, tile=0x2000, hpos=(176 << 7) | 0x0B,
+                vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_LOBBER),
+            )
+            state.player_fighting_dir[0] = 1
+            state.rng = type("ZeroRng", (), {
+                "getrandom": staticmethod(lambda _bound: 0),
+            })()
+
+            gp._player_fight_collision(state, 0, slot)
+
+            remaining = (0x0B - expected_damage) & 0x0F
+            if remaining < 9:
+                assert state.mobs.obj_type(slot) == 0
+            else:
+                assert state.mobs.hpos[slot] & 0x0F == remaining
 
 
 class TestLockedTreasureCollision:

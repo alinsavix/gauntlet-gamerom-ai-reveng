@@ -136,7 +136,7 @@ _SHOT_COUNTER_RELOAD = [
 
 # shot_velocity_x / shot_velocity_y -- ROM 0x576E2 / 0x57792, 88 signed words
 # each, 11 rows of 8 directions.  Rows 0-3 are the four characters, row 4 the
-# ordinary monster shot (+0x20), rows 5-8 the shot-power set (+0x28), row 9
+# ordinary monster shot (+0x20), rows 5-8 the shot-speed set (+0x28), row 9
 # the tier-2 monster shot (+0x48) and row 10 the max-tier shot (+0x50).
 #
 # The ROM stores positions and velocities in native ``<< 7`` words, and so do
@@ -169,7 +169,7 @@ _SHOT_VELOCITY_Y = [
     256, 128, 0, -128, -256, -128, 0, 128,
 ]
 _VEL_MONSTER_BASE = 0x20     # ordinary monster shot rows
-_VEL_SHOTPOWER = 0x28        # player shot-power rows
+_VEL_SHOTSPEED = 0x28        # player shot-speed rows
 _VEL_MONSTER_TIER2 = 0x48    # monster shot with hpos bit 5
 _VEL_MONSTER_MAXTIER = 0x50  # monster shot with hpos bits 4+5
 
@@ -1999,7 +1999,7 @@ def _velocity_row(state: GameState, shooter_id: int, direction: int) -> int:
     if shooter_id < 4:
         row = ((state.players[shooter_id].character & 0x03) << 3) + direction
         if state.players[shooter_id].powers & 0x08:      # shot-speed upgrade
-            row += _VEL_SHOTPOWER
+            row += _VEL_SHOTSPEED
         return row
     tier = _shot_tier(state, shooter_id)
     if tier == _SHOT_TIER_MASK:

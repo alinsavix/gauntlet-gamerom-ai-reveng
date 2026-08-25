@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.constants import Character, MazeObjIds, PlayerStatus
+from gauntpy.constants import Character, MazeObjIds, PlayerPower, PlayerStatus
 from gauntpy.coords import hpos_x, native_v, vpos_y
 from gauntpy.state import GameState, Player
 from gauntpy.subsystems import shots
@@ -648,6 +648,48 @@ class _FixedRandom:
         return self.values.pop(0) if self.values else 0
 
     random_word = getrandom
+
+
+class TestPlayerShotStatTables:
+    """0x4AFA6 and 0x47846 keep shot power and shot speed independent."""
+
+    def test_damage_tables_and_selectors_match_all_character_columns(self):
+        assert shots._SHOT_DAMAGE_BASE_TBL == [
+            2, 1, 1, 1,
+            1, 1, 1, 1,
+            2, 2, 2, 2,
+        ]
+        assert shots._SHOT_DAMAGE_RAND_TBL == [
+            0, 0, 1, 0,
+            0, 0, 0, 0,
+            1, 0, 0, 0,
+        ]
+        for powered, expected in (
+            (False, (2, 1, 2, 1)),
+            (True, (3, 2, 2, 2)),
+        ):
+            for character, damage in enumerate(expected):
+                state = _make_state()
+                state.players[0].character = character
+                state.players[0].powers = (
+                    int(PlayerPower.SHOTPOWER) if powered else 0
+                )
+                state.rng = _FixedRandom([1])
+                assert shots._shot_damage(state, 0) == damage
+
+    def test_velocity_tables_use_shot_speed_not_shot_power(self):
+        base_right = (0x180, 0x200, 0x200, 0x280)
+        powered_right = (0x200, 0x280, 0x280, 0x380)
+        for character in range(4):
+            state = _make_state()
+            state.players[0].character = character
+            assert shots.shot_velocity(state, 0, 2)[0] == base_right[character]
+
+            state.players[0].powers = int(PlayerPower.SHOTPOWER)
+            assert shots.shot_velocity(state, 0, 2)[0] == base_right[character]
+
+            state.players[0].powers = int(PlayerPower.SHOTSPEED)
+            assert shots.shot_velocity(state, 0, 2)[0] == powered_right[character]
 
 
 def _place_player_mob(state: GameState, slot: int, player_index: int,
@@ -1409,7 +1451,7 @@ class TestMainHandleShots:
         main_handle_shots(state)
         assert hpos_x(state.mobs.hpos[slot]) == 165   # ROM 0x280 >> 7
 
-    def test_shot_power_selects_the_0x28_row_block(self):
+    def test_shot_speed_selects_the_0x28_row_block(self):
         state, slot = self._running_shot(powers=0x08)
         main_handle_shots(state)
         assert hpos_x(state.mobs.hpos[slot]) == 164   # ROM 0x200 >> 7

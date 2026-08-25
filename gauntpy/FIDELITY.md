@@ -172,6 +172,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     changes an on-screen dragon's private state before ordinary targets consult
     the per-character effect matrix. Preserve alternate dispatch too: the potion
     scan replaces that frame's normal monster pass rather than preceding it.
+42. **Table dimensions keep their original identities.** Character, cabinet
+    player position, power bit, projectile tier, and trigger mode are independent
+    indices even when one routine combines them. In particular, melee base power
+    uses character plus Fight power while its random range uses cabinet position;
+    Shot Speed selects velocity rows and Shot Power selects damage rows.
 
 ## Investigation workflow
 
