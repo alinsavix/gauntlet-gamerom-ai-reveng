@@ -24,7 +24,15 @@ from __future__ import annotations
 
 from ..constants import GameMode, MazeObjIds
 from ..state import GameState
-from .monsters import _in_cull_rect, _update_cull_rect
+from .display import ALPHA_PALETTE_INIT
+from .monsters import (
+    _ANIM_ACID_IDLE,
+    _HPOS_FLAG_ATTACK,
+    _HPOS_FLAG_MOVING,
+    _in_cull_rect,
+    _refresh_monster_picture,
+    _update_cull_rect,
+)
 from .sound import sound_play as _sound_play
 
 
@@ -40,6 +48,7 @@ _MAGIC_EDGE_VALUE = 0x1C
 # Potion-use and unavailable-maze sounds, from 0x470A8 / 0x4705C.
 _SOUND_POTION = 0x1D
 _SOUND_POTION_UNAVAILABLE = 0x44
+_SOUND_DRAGON_POTION = 0xD5
 
 # ``dialog_first_encounter`` masks pushed at 0x470C0 / 0x4712A.  The latter is
 # record 4 ("COLLECT MAGIC POTION BEFORE PRESSING MAGIC"); the former records a
@@ -68,10 +77,11 @@ _DEATH_POTION_POPUP = (2, 5, 3, 7, 2, 9, 2, 3)
 # monster culling origins from the target's H/V words and rejects it with an
 # *unsigned* compare against 0x7F80 / 0x8380 -- the same screen-sized box
 # ``monsters._in_cull_rect`` already implements in the same native words.
-# In the ROM the potion pass is a branch *inside* ``monsters_everything``
-# (0x40EA6 -> 0x41532), reached from ``main_move_monsters`` (0x49034) right
-# after it recomputes those origins at 0x49052-0x49072; gauntpy calls
-# ``potion_blast`` directly, so it re-anchors them the same way first.
+# In the ROM the potion pass is a branch *instead of* the ordinary body of
+# ``monsters_everything`` (0x40EA6 -> 0x41532), reached from
+# ``main_move_monsters`` (0x49034) right after it recomputes those origins at
+# 0x49052-0x49072. Gauntpy uses the same alternate pass; direct test callers
+# also re-anchor here.
 
 # Per-type tier bases from ``mazeobj_hsize_tier_tbl`` (0x5864C), used to decide
 # whether tier-nibble damage kills a monster (§26 / §4.6).
@@ -166,13 +176,16 @@ def main_handle_potions(state: GameState) -> None:
         # effect handling; potion_blast will retain that provenance while it
         # adds its per-target Magic-power selector.
         state.potion_player = p.index
+        # 0x47084-0x47098 selects color 3 of the triggering player's alpha
+        # palette. VBLANK copies this latch into playfield color 0/8.
+        state.playfield_color_latch = ALPHA_PALETTE_INIT[p.index * 4 + 7]
         p.potionsnum -= 1
         _sound_play(state, _SOUND_POTION)
         from .players import player_inv_update
 
         player_inv_update(state, p.index)                 # 0x470BA
         _dialog_first_encounter(state, p.index, _DIALOG_POTION_USED)
-        potion_blast(state, p.index)
+        _apply_dragon_potion(state)
 
 
 def _dialog_first_encounter(
@@ -195,6 +208,31 @@ def _magic_press_edge(state: GameState, player_index: int) -> bool:
     return (reg & _MAGIC_EDGE_MASK) == _MAGIC_EDGE_VALUE
 
 
+def _apply_dragon_potion(state: GameState) -> None:
+    """0x470D2-0x47128 -- apply the dragon's private potion transition."""
+    from .dragon import (
+        _ST_STUNNED,
+        _ST_WAKING,
+        dragon_any_segment_near_screen,
+    )
+
+    if not dragon_any_segment_near_screen(state):
+        return
+    if state.dragon_state & _ST_WAKING:
+        if state.dragon_anim_ctr == 0:
+            state.dragon_anim_ctr = 0x31
+        elif state.dragon_anim_ctr < 0:
+            state.dragon_anim_ctr = -state.dragon_anim_ctr
+        _sound_play(state, _SOUND_DRAGON_POTION)
+        return
+    if state.dragon_state & _ST_STUNNED:
+        state.dragon_state &= ~_ST_STUNNED
+        state.dragon_state |= _ST_WAKING
+        state.dragon_anim_ctr = -0x31
+        return
+    state.dragon_state |= _ST_STUNNED
+
+
 # =============================================================================
 # Blast resolution (the 0x4153E-0x41728 MOB scan)
 # =============================================================================
@@ -211,14 +249,12 @@ def potion_blast(state: GameState, player_index: int, *,
     matrix lookup, so a generator or creature outside it is left completely
     untouched -- not damaged, not demoted, not destroyed.
     """
+    state.potion_player = player_index | (0x04 if shot_triggered else 0)
     character = state.players[player_index].character & 0x03
     magic_powered = bool(state.players[player_index].powers & _POWER_MAGIC)
     trigger = character
     if shot_triggered:
         trigger |= 0x04
-    # 0x904022 carries only player/shot provenance; 0x4159C adds the
-    # Magic-power bit while resolving each target.
-    state.potion_player = trigger
     if magic_powered:
         trigger |= 0x08
 
@@ -240,6 +276,19 @@ def potion_blast(state: GameState, player_index: int, *,
 
 def _apply_potion_effect(state: GameState, slot: int, obj_type: int,
                          trigger: int, player_index: int) -> None:
+    if obj_type == int(MazeObjIds.MONST_SUPERSORC):
+        if state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK:
+            state.mobs.state_link[slot] &= 0x1FFF
+            state.mobs.hpos[slot] &= ~(_HPOS_FLAG_MOVING | _HPOS_FLAG_ATTACK)
+            _refresh_monster_picture(state, slot, obj_type)
+            return
+    elif obj_type == int(MazeObjIds.MONST_ACID):
+        if not state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK:
+            state.mobs.picture[slot] = _ANIM_ACID_IDLE[0]
+            state.mobs.hpos[slot] |= _HPOS_FLAG_ATTACK
+            state.mobs.state_link[slot] &= 0x1FFF
+            return
+
     entry = _POTION_EFFECT_MATRIX_ROM[obj_type][trigger & 0x0F]
 
     if entry == 0:

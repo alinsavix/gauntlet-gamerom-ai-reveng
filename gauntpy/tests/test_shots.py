@@ -2267,6 +2267,7 @@ class TestEncounterRecords:
         resolve_shot_hit(state, SLOT, 0)
         assert shots._DIALOG_POTION_SHOT in _records_raised(state)
         assert shots._DIALOG_POTION_SHOT == 6
+        assert state.playfield_color_latch == 0xFF00
 
     def test_shooting_poison_raises_record_7_instead(self):
         """0x4B8F0/0x4BA40 push 0x80 for the slow-motion pictures."""
@@ -3025,7 +3026,6 @@ class TestNoResidualStubs:
         assert callable(thief.thief_remove_and_drop_loot)
         source = _shots_source()
         assert "from .thief import thief_remove_and_drop_loot" in source
-        assert "from .potions import potion_blast" in source
         assert "from .score import dialog_first_encounter" in source
 
     def test_no_helper_is_left_with_an_empty_body(self):

@@ -546,6 +546,11 @@ class GameState:
     # =========================================================================
     # WP-12 · potions and magic
     # =========================================================================
+    # 0x90401E is copied to playfield color RAM 0x910510 at VBLANK.  The main
+    # loop restores it from 0x904020 before gameplay, while potion use replaces
+    # it for one field with the triggering player's color.
+    playfield_color_latch: int = 0
+    playfield_color_base: int = 0
     # 0x904022, player index plus trigger bits for the current potion blast.
     potion_player: int = 0
 

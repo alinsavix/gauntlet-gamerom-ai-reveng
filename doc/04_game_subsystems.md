@@ -689,6 +689,37 @@ shows first-encounter record 27; a key is spent, the player is stunned for 30
 frames, and getrandom(8 + 2*players) selects Death, a key, coins, potion, or food
 (the demo forces coins).
 
+#### 4.6.1 Potion magic (`main_handle_potions`, 0x46FEA)
+
+Normal play requires the debounced Magic edge; demo play reads active-low bit 0
+of the current recording directly. A successful use stores the player index in
+`potion_player`, consumes inventory, and writes alpha-palette color
+`7 + player*4` into `playfield_color_latch` (0x90401E). VBLANK publishes that
+word at playfield color RAM 0x910510. The next main-loop pass restores the
+ordinary floor color from 0x904020, so the flash is a game-side, one-field
+palette write rather than a renderer effect. Shot-triggered potions perform the
+same write and store `player + 4`.
+
+The handler then calls `dragon_any_segment_near_screen` (0x54AF8), which applies
+`tile_near_screen_test` to all four packed segment cells. An on-screen active
+dragon gains state bit 1 and remains frozen in `main_handle_dragon`. A second
+potion clears that bit, sets wake bit 0, and writes -49 to `dragon_anim_ctr`.
+During an existing wake transition, magic starts a +49 count from zero or
+negates a negative count and plays sound 0xD5.
+
+The later `monsters_everything` call compares 0x90401E with 0x904020 and branches
+to the potion scan instead of running the ordinary monster update pass. It scans
+only the cull rectangle, so surviving targets do not also move or attack on the
+potion frame. IT is immune. Before the 28x16 table lookup, a phasing Super
+Sorcerer has its movement/attack
+flags and high animation state cleared and receives visible Sorcerer art; an
+idle Acid puddle receives its first Acid frame, attack/stun flag, and cleared
+high animation state. Other eligible states use
+`potion_effect_matrix` (0x5DA98): character columns 0-3, shot columns 4-7,
+enhanced-magic columns 8-11, and shot-plus-enhanced columns 12-15. Zero removes
+the target; nonzero monster entries subtract tier strength, while generator
+entries replace the generator type and picture.
+
 ### 4.7 Score With Multiplier (`player_add_score_with_mult`, 0x5214C)
 
 **Confidence: Verified.**

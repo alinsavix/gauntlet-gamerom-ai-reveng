@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2329 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2336 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -52,6 +52,36 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-130 · potion flash and special-target magic paths were absent
+
+`main_handle_potions` consumed inventory and ran the 28x16 effect matrix
+immediately, but omitted several parts of the ROM path. At 0x47084-0x47098, drinking
+or shooting a potion loads color 3 of the triggering player-position palette
+into the 0x90401E latch. VBLANK copies that word to playfield color RAM 0x910510;
+the next main-loop pass restores 0x90401E from the ordinary floor-color word at
+0x904020. Gauntpy now models both RAM words and the one-field color-RAM write, so
+the screen flash comes from authoritative playfield color state.
+
+The same handler calls `dragon_any_segment_near_screen` before the ordinary MOB
+scan. A visible active dragon gains stun bit 1; a second potion clears stun,
+sets wake bit 0, and loads animation counter -49; a potion during wake starts or
+reverses the 49-frame wake animation and plays sound 0xD5. Direct Unicorn
+execution of ROM 0x46FEA confirmed those exact state/animation results and the
+player-0 flash word 0xFF00.
+
+The scan is an alternate `monsters_everything` pass, not an extra call before
+ordinary monster updates; survivors therefore cannot act again on the potion
+frame. It also has pre-matrix arms: magic sets an idle Acid puddle's
+attack/stun phase and reveals a phasing Super Sorcerer, clearing their animation
+state rather than removing them. A subsequent eligible Acid hit reaches its
+zero matrix entry and destroys it. These paths now run before the literal
+matrix. The matrix selector now also keeps `potion_player` as player/shot
+provenance and reads the character separately, as 0x41588-0x41662 does. The
+per-character outcomes were otherwise already correct: normal
+Warrior/Valkyrie magic only weakens a full-tier Ghost, Wizard and Elf destroy
+ordinary monster rows outright, and Elf demotes rather than clears a top-tier
+generator.
 
 ### S-129 · F5 left the level-start splash permanently opaque
 

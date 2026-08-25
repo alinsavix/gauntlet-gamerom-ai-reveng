@@ -25,7 +25,7 @@ from .state import GameState
 from .subsystems.attract import main_attract, main_logo_updcolors
 from .subsystems.boot import one_time_init
 from .subsystems.camera import main_scroll_playfield
-from .subsystems.display import alpha_palette_vblank
+from .subsystems.display import alpha_palette_vblank, potion_flash_vblank
 from .subsystems.dragon import main_handle_dragon
 from .subsystems.eeprom import eeprom_periodic_write
 from .subsystems.exits import main_exit_move, main_treasure_timer
@@ -62,6 +62,10 @@ from .subsystems.thief import main_start_thief, main_thief_anim
 
 def game_frame(state: GameState) -> None:
     """Advance the entire world by one frame -- the body of ``g2mainloop``."""
+
+    # 0x42A8E restores the ordinary floor color before this frame can arm a
+    # one-field potion flash for the next VBLANK.
+    state.playfield_color_latch = state.playfield_color_base
 
     # Three services that run no matter what: money and controls are sampled
     # before anything can be skipped.
@@ -132,6 +136,7 @@ def tick(state: GameState) -> None:
     """
     state.frame_counter = (state.frame_counter + 1) & 0xFFFF
     state.vblank_flag = 0
+    potion_flash_vblank(state)
     player_hurt_palette_vblank(state)
     alpha_palette_vblank(state)
     playfield_palette_vblank(state)

@@ -80,7 +80,9 @@ The four differ in ways their silhouettes suggest:
   numbers sit in the middle.
 - **Wizard** turns a potion into a catastrophe for whatever stands nearby,
   and a single monster touch costs him dearly.
-- **Elf** covers ground faster than the rest. His shots are quick and light.
+- **Elf** covers ground faster than the rest. His shots are quick and light,
+  but his potion magic is as lethal as the Wizard's against ordinary monsters;
+  the strongest generators expose the difference.
 
 Those descriptions stay vague on purpose. The exact numbers live in ROM tables
 covering movement speed, shot damage, armor, and magic, one entry per

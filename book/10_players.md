@@ -253,7 +253,9 @@ going.
 
 Press Magic with a potion in your pocket and the drink dispatches a blast
 against every eligible monster and generator around. What happens to each of
-them comes out of a table.
+them mostly comes out of a table. The screen flashes in the color of the player
+position that used it: the game swaps one live playfield palette word for a
+single video field, then restores the level's floor color on the next pass.
 
 ROM holds a **potion-effect matrix** of one 16-byte record per monster or
 generator object type, 28 types in all. Within a record, the entry is selected
@@ -287,12 +289,19 @@ matrix belongs to Death, whose row is nothing else: any character's potion
 destroys Death on contact, the one reliable remedy the game offers, and it
 is one table byte.
 
+That explains the Elf's apparently oversized blast: against ordinary monster
+rows his normal column is as lethal as the Wizard's. The distinction survives
+among generators. An Elf erases lower tiers but demotes a top-tier generator to
+tier 1, while the Wizard erases that too.
+
 That one matrix answers a lot of questions at once. A Wizard's potion levels a
 room where a Warrior's singes it, because the two read different columns of
 the same record. A potion set off by a stray shot does less than one you
 drank, since the trigger bit selects a different entry, which is the game
-charging you for clumsiness by table lookup. (The dragon gets a private check
-of its own inside the potion handler; see Chapter 12.)
+charging you for clumsiness by table lookup. Two animated enemies also branch
+before the lookup: magic forces an idle Acid puddle into its stunned phase and
+reveals a phasing Super Sorcerer. The dragon gets a private check of its own
+inside the potion handler; see Chapter 12.
 
 ## The dwindling number
 

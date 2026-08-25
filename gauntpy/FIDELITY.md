@@ -166,6 +166,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     state and its coupled modeled RAM. Inventory grants call
     `player_inv_update`; level skips use the rotation and ordinary maze/player
     setup rather than swapping renderer content.
+41. **Table dispatch includes its guards and special arms.** A literal ROM table
+    is not the whole routine. Port type/state branches before its lookup as well:
+    potion magic reveals a phasing Super Sorcerer, arms an idle Acid puddle, and
+    changes an on-screen dragon's private state before ordinary targets consult
+    the per-character effect matrix. Preserve alternate dispatch too: the potion
+    scan replaces that frame's normal monster pass rather than preceding it.
 
 ## Investigation workflow
 

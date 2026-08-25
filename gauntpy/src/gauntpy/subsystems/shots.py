@@ -1364,9 +1364,12 @@ _playfield_showscore = playfield_showscore
 
 
 def _potion_blast(state: GameState, shooter_id: int) -> None:
-    """``potion_blast`` -- WP-12, reached via the shot-triggered flag."""
-    from .potions import potion_blast
-    potion_blast(state, shooter_id, shot_triggered=True)
+    """Arm the shot-triggered potion state consumed by the monster pass."""
+    from .display import ALPHA_PALETTE_INIT
+
+    # resolve_shot_hit 0x4BA6A-0x4BA82 arms the same one-field playfield flash
+    # as a drunk potion before storing shooter+4 in potion_player.
+    state.playfield_color_latch = ALPHA_PALETTE_INIT[shooter_id * 4 + 7]
 
 
 def _pf_replace(state: GameState, slot: int, obj_type: int) -> None:
