@@ -58,12 +58,14 @@ from .diagnostics import (
     derive_debug_events,
     render_debug_panel,
 )
+from .state_dump import dump_game_state
 
 __all__ = [
     "PygameUnavailable", "HostShell", "DEFAULT_KEYMAP",
     "DEFAULT_COIN_KEY", "DEFAULT_PAUSE_KEY", "DEFAULT_DIAGNOSTICS_KEY",
     "DEFAULT_DIAGNOSTICS_NEXT_KEY", "DEFAULT_DIAGNOSTICS_PREV_KEY",
     "DEFAULT_DIAGNOSTICS_MOB_PREV_KEY", "DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY",
+    "DEFAULT_STATE_DUMP_KEY",
 ]
 
 
@@ -98,6 +100,7 @@ DEFAULT_DIAGNOSTICS_NEXT_KEY = "K_F3"
 DEFAULT_DIAGNOSTICS_PREV_KEY = "K_F2"
 DEFAULT_DIAGNOSTICS_MOB_PREV_KEY = "K_LEFTBRACKET"
 DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY = "K_RIGHTBRACKET"
+DEFAULT_STATE_DUMP_KEY = "K_F4"
 
 
 class HostShell:
@@ -141,6 +144,7 @@ class HostShell:
         self.diagnostics_selected_mob = 0
         self._diagnostics_previous = None
         self._diagnostics_events: deque[str] = deque(maxlen=64)
+        self.last_state_dump_path = None
 
         pygame.init()
         self.window = self._set_window_mode()
@@ -164,6 +168,7 @@ class HostShell:
         self._diagnostics_mob_next_key = getattr(
             pygame, DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY,
         )
+        self._state_dump_key = getattr(pygame, DEFAULT_STATE_DUMP_KEY)
 
     def _set_window_mode(self):
         game_width = LOGICAL_WIDTH * self.scale
@@ -196,6 +201,9 @@ class HostShell:
                     self.diagnostics_visible = not self.diagnostics_visible
                     self._diagnostics_previous = None
                     self.window = self._set_window_mode()
+                elif event.key == self._state_dump_key:
+                    self.last_state_dump_path = dump_game_state(state)
+                    print(f"gauntpy state saved: {self.last_state_dump_path}")
                 elif (
                     self.diagnostics_visible
                     and event.key == self._diagnostics_next_key

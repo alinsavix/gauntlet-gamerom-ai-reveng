@@ -40,6 +40,7 @@ genuine class sprite. Use `--scale` to override it.
 | **P** | pause / resume |
 | **F1** | show / hide the host diagnostics panel |
 | **F2 / F3** | previous / next diagnostics page |
+| **F4** | save a complete modeled-state JSON dump |
 | **[ / ]** | select the previous / next occupied MOB |
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
@@ -56,6 +57,12 @@ Its pages cover overview, players and raw input, decoded demo records, level
 flags/timers, actor counts and raw MOB words, thief/dragon AI, display memory,
 audio queues, and a rolling event log inferred from snapshots while the panel
 is open.
+
+**F4** atomically saves every modeled `GameState` field, including players,
+MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,
+timers, inputs, and the RNG seed. Files are written under
+`traces/state-dumps/`, which Git ignores; the exact path is printed to the
+terminal.
 
 By default the runner drops you straight into a level. Options:
 

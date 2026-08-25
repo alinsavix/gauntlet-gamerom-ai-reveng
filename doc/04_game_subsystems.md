@@ -486,6 +486,13 @@ motion is also committed before a blocked vertical axis. A direct probe of maze
 block on both gauntpy and the ROM; the wrapped L/R seam is not a separate
 failure there.
 
+A reported maze-16 block at player coordinate `(396,176)` is not part of the
+static collision geometry. With the live camera snapped to that player,
+gauntpy advances Down to `(396,178)`; direct execution of `player_try_move`
+against maze 16's nearby wall records agrees. The failing live session
+therefore needs its transient MOB table and camera/RAM origins captured before
+the responsible producer can be identified.
+
 Unless `LFLAG4_PLAYER_OFFSCREEN` is set, each proposed axis also has to remain
 inside the hardware window. The H anchor minus `scroll_hpos_origin` must be
 below 0x7000; the V anchor minus `scroll_vpos_origin` must be below 0x7400

@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2322 passed, 7 skipped** (gauntpy) and
+present the suites are clean: **2325 passed, 8 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -33,7 +33,34 @@ start).
 
 ---
 
+## Open issues
+
+### S-126 · live-only downward block at level 17 / maze 16 `(396,176)`
+
+The reported session blocks Down at player coordinate `(396,176)`, although no
+visible object occupies the corridor below. This is not reproducible from a
+fresh maze-16 state: with the camera snapped to the live player, gauntpy moves
+to `(396,178)`, and direct ROM execution of `player_try_move` does the same.
+The static maze records around slots `0x179`/`0x199` therefore do not explain
+the report. A transient MOB record, stale camera origin, or another live RAM
+field is required to distinguish the failing state.
+
+F4 now captures that evidence without changing simulation memory. Reproduce
+the block, press F4 once, and retain the printed JSON path under
+`traces/state-dumps/`; the dump contains the complete player/MOB tables,
+camera origins, maze state, path grids, all modeled video/color RAM, timers,
+inputs, and RNG seed.
+
 ## Resolved issues
+
+### S-127 · troubleshooting had no complete live-state capture
+
+The F1 panel deliberately presents compact immutable projections, but that is
+not enough to reconstruct a one-frame collision divergence. F4 now atomically
+writes every modeled `GameState` field to a timestamped JSON file in the
+Git-ignored `traces/state-dumps/` directory and prints its path. The serializer
+includes slot-backed `MobTable` arrays, dataclass state, non-string-keyed maze
+maps, RNG state, and all modeled display memory. It is host-only and read-only.
 
 ### S-125 · thief collision waited for its sprite origin to enter a wall
 

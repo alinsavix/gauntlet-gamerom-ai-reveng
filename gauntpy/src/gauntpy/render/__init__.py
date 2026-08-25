@@ -46,6 +46,7 @@ from .diagnostics import (
     derive_debug_events,
     render_debug_panel,
 )
+from .state_dump import dump_game_state, state_dump_payload
 from .framebuffer import Framebuffer
 
 __all__ = [

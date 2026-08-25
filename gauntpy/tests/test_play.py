@@ -275,6 +275,34 @@ class TestBuildState:
 
             assert hpos_x(state.mobs.hpos[player.mob_slot]) == expected_x
 
+    def test_level_17_reported_coordinate_has_no_static_downward_block(self):
+        from gauntpy.coords import (
+            encode_hpos, encode_vpos_at_y, hpos_x, mob_cell_of, vpos_y,
+        )
+        from gauntpy.subsystems.camera import snap_camera
+        from gauntpy.subsystems.input import JOY_DOWN
+        from gauntpy.subsystems.players import player_try_move
+
+        state = play.build_state(17, Character.ELF)
+        player = state.players[0]
+        state.mobs.unlink_and_clear(player.mob_slot)
+        slot = mob_cell_of(encode_hpos(396), encode_vpos_at_y(176, 3, 3))
+        state.mobs.create(
+            slot, 0x1E0D, encode_hpos(396, palette=12),
+            encode_vpos_at_y(176, 3, 3), MazeObjIds.PLAYERSTART, 0,
+        )
+        player.mob_slot = slot
+        state.player_tile_pos[0] = slot
+        snap_camera(state)
+        state.movement_type = 2
+
+        player_try_move(state, 0, JOY_DOWN, 0)
+
+        live = player.mob_slot
+        assert (hpos_x(state.mobs.hpos[live]), vpos_y(state.mobs.vpos[live])) == (
+            396, 178,
+        )
+
     def test_level_one_top_wall_stops_at_rom_anchor_and_allows_diagonal_slide(self):
         from gauntpy.coords import hpos_x, vpos_y
         from gauntpy.mainloop import tick

@@ -2227,6 +2227,37 @@ class TestHostShellInput:
         finally:
             shell.close()
 
+    def test_f4_writes_a_host_state_dump_without_mutating_game_memory(
+        self, monkeypatch, tmp_path,
+    ):
+        from gauntpy.render import host
+
+        saved = tmp_path / "state.json"
+        calls = []
+
+        def _dump(state):
+            calls.append(state.frame_counter)
+            saved.write_text("{}\n", encoding="utf-8")
+            return saved
+
+        monkeypatch.setattr(host, "dump_game_state", _dump)
+        shell = host.HostShell(assets=_FakeAssets())
+        try:
+            pygame = shell._pygame
+            state = GameState(frame_counter=321)
+            before = tuple(state.mobs.picture)
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F4)
+            )
+
+            shell.wait_for_vblank(state)
+
+            assert calls == [321]
+            assert shell.last_state_dump_path == saved
+            assert tuple(state.mobs.picture) == before
+        finally:
+            shell.close()
+
     def test_diagnostics_panel_stays_native_width_when_game_is_scaled(self):
         from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
         from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
