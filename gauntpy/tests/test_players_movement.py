@@ -95,18 +95,6 @@ class TestMobProbeUp:
         assert result == _VERTICAL_BOUNDARY
         assert result != -1
 
-    def test_row_one_uses_the_rom_v_boundary_not_reserved_slot_contents(self):
-        """0x425D0 bypasses row zero, whose slots become shot/effect channels."""
-        state = GameState()
-        slot = (1 << 5) | 10
-
-        assert mob_probe_up(
-            state, slot, vpos=encode_vpos_at_y(16, 3, 3),
-        ) == -1
-        assert mob_probe_up(
-            state, slot, vpos=encode_vpos_at_y(15, 3, 3),
-        ) == 0
-
     def test_left_flank_wall_is_detected(self):
         """A wall at (row-1, col-1) blocks the probe (three-candidate check)."""
         left_flank = (4 << 5) | 4
@@ -262,6 +250,17 @@ class TestPlayerTryMoveWallCollision:
         player_try_move(state, pi, gin.JOY_UP, 0)
         y_after = vpos_y(state.mobs.vpos[state.players[pi].mob_slot])
         assert y_after == y_before, "should not move into wall above"
+
+    def test_row_one_player_boundary_ignores_cleared_reserved_mob_slots(self):
+        state, pi = self._player_at_slot((1 << 5) | 10)
+        slot = state.players[pi].mob_slot
+        for reserved in range(FIRST_PLAYABLE_SLOT):
+            state.mobs.picture[reserved] = 0
+        state.mobs.vpos[slot] = encode_vpos_at_y(16, 3, 3)
+
+        player_try_move(state, pi, gin.JOY_UP, 0)
+
+        assert vpos_y(state.mobs.vpos[state.players[pi].mob_slot]) == 16
 
     def test_blocked_down(self):
         state, pi = self._player_at_slot((5 << 5) | 5)

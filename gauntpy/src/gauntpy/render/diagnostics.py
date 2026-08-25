@@ -21,8 +21,9 @@ from ..state import GameState
 
 DEBUG_PANEL_WIDTH = 320
 DEBUG_PANEL_HEIGHT = 240
-DEBUG_FONT_SIZE = 11
-DEBUG_HEADING_FONT_SIZE = 13
+DEBUG_FONT_SIZE = 12
+DEBUG_HEADING_FONT_SIZE = 14
+DEBUG_ROW_HEIGHT = 11
 DEBUG_PAGES = (
     "OVERVIEW",
     "PLAYERS",
@@ -544,7 +545,7 @@ def render_debug_panel(
     draw.line((7, 23, width - 8, 23), fill=_DIVIDER)
 
     y = 27
-    row_height = 10
+    row_height = DEBUG_ROW_HEIGHT
     label_x = 8
     value_x = 104
     for label, value in debug_page_lines(snapshot, page, events=events):

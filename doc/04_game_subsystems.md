@@ -1313,6 +1313,24 @@ from player movement and transporter paths. If the player is the current
 position in the low path-grid nibble and updates `thief_victim_pos`. It does
 not erase a MOB or write a blank tile.
 
+The ordinary movement engine is anchor-based rather than cell-coarse.
+`thief_move_engine` (0x4EE7A) writes each proposed H or V word, then calls
+`thief_probe_axis` (0x4EE0A) with one of the generic `mob_probe_*` callbacks.
+Those callbacks test the three cells ahead against the proposed live anchor.
+If no candidate overlaps, the full thief/mugger speed is retained. An occupied
+candidate goes through `thief_handle_tile_collision`; its enclosing directional
+arm restores the proposed axis before continuing, whether the object is a
+wall, player, pickup, or non-solid transporter/floor marker. The common tail at
+0x4F4A2 derives the destination MOB slot from `(H + 0x600) >> 11` and the
+corresponding `V + 0x400` row arithmetic, then calls `moblist_replace` only when
+that biased destination is empty.
+
+This ordering is observable in maze 15. With a thief at native screen
+coordinate `(12,304)` in slot `0x261`, moving east toward the wall marker at
+`0x262`, direct ROM execution leaves H at 12. Waiting for the uncorrected sprite
+origin to reach X=32 instead lets the 24-pixel actor sink to X=28 while its MOB
+identity remains in the open cell.
+
 ### 9.3 Thief Timer (`thief_timer_set`, 0x4E4D8)
 
 Calculates next thief appearance based on target player wealth and current level number. Lower wealth → longer delay. Higher levels → shorter delays. Stored at `ram.thief_enter_time` (`0x904B9E`).

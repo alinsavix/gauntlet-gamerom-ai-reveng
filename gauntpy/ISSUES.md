@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2319 passed, 7 skipped** (gauntpy) and
+present the suites are clean: **2322 passed, 7 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,32 @@ start).
 ---
 
 ## Resolved issues
+
+### S-125 · thief collision waited for its sprite origin to enter a wall
+
+On level 16 / maze 15, a player at `(12,304)` can draw the thief east through
+the one-cell pocket beside the wall at packed slot `0x262`. Gauntpy derived the
+thief's candidate cell from its uncorrected sprite origin and did no collision
+work until that point crossed X=32. The 24-pixel thief therefore advanced to
+X=28, visibly buried itself in the wall, retained the stale open-cell MOB slot,
+and became difficult or impossible to hit while blocking the pocket.
+
+Direct ROM execution of `thief_move_engine` (0x4EE7A) with the maze-15 records
+keeps the thief at X=12. Each axis first writes the proposed native H/V word,
+then calls `thief_probe_axis` (0x4EE0A) with the generic three-cell
+`mob_probe_*` callback. The live-anchor overlap detects slot `0x262` before the
+sprite origin crosses the cell boundary. Clear space keeps the full 3/4-pixel
+step; an overlapping occupied candidate consumes that axis, with its object
+handler deciding player/item/transporter effects. The final 0x4F4A2 tail
+computes the record's new slot with the same +12 H / +8 V body bias used by the
+other dynamic MOB movers.
+
+The thief/mugger mover now follows those rules, shares the generic probe without
+the player's deferred-item policy, and migrates its MOB record from the biased
+live anchor. A ROM-backed maze-15 regression protects the reported coordinate.
+The host diagnostics font also increased from 11 to 12 pixels (heading 13 to
+14), with an 11-pixel row pitch that still fits the complete overview at native
+panel height.
 
 ### S-124 · level-1 top wall used transient row-zero MOB contents
 

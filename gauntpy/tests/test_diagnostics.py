@@ -9,6 +9,7 @@ from gauntpy.render.diagnostics import (
     DEBUG_FONT_SIZE,
     DEBUG_PANEL_HEIGHT,
     DEBUG_PANEL_WIDTH,
+    DEBUG_ROW_HEIGHT,
     _host_font,
     capture_debug_snapshot,
     debug_page_lines,
@@ -102,6 +103,10 @@ def test_panel_uses_a_scalable_antialiased_font():
 
     font = _host_font(DEBUG_FONT_SIZE)
     assert isinstance(font, ImageFont.FreeTypeFont)
+    assert DEBUG_FONT_SIZE == 12
+    snapshot = capture_debug_snapshot(_diagnostic_state())
+    assert 27 + len(debug_snapshot_lines(snapshot)) * DEBUG_ROW_HEIGHT <= \
+        DEBUG_PANEL_HEIGHT
 
 
 def test_every_diagnostics_page_has_read_only_rows():

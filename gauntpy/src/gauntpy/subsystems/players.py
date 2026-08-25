@@ -3920,6 +3920,7 @@ def _probe_candidate_blocks(
     hpos: int | None = None,
     vpos: int | None = None,
     self_slot: int | None = None,
+    defer_interactions: bool = True,
 ) -> bool:
     """Position-aware ``mob_probe_candidate`` (0x407A6).
 
@@ -3948,7 +3949,7 @@ def _probe_candidate_blocks(
         # timing differences must not let a transient phase permanently derail
         # the attract demonstration near its final exit.
         return False
-    if state.mobs.obj_type(candidate) in _FIGHT_PASS_TYPES:
+    if defer_interactions and state.mobs.obj_type(candidate) in _FIGHT_PASS_TYPES:
         transporting = any(
             player.active
             and player.mob_slot == self_slot
@@ -3960,14 +3961,15 @@ def _probe_candidate_blocks(
             # transportability, squeeze_through_check runs first and teleports
             # past them instead (0x42744 precedes mob_collision_test).
             return False
-    for player in state.players:
-        if not player.active or candidate != player.mob_slot:
-            continue
-        player_x = hpos_x(state.mobs.hpos[player.mob_slot])
-        player_y = vpos_y(state.mobs.vpos[player.mob_slot])
-        if _pixel_to_slot(player_x, player_y) == mover_slot:
-            # Two heroes sharing one cell do not block each other out of it.
-            return False
+    if defer_interactions:
+        for player in state.players:
+            if not player.active or candidate != player.mob_slot:
+                continue
+            player_x = hpos_x(state.mobs.hpos[player.mob_slot])
+            player_y = vpos_y(state.mobs.vpos[player.mob_slot])
+            if _pixel_to_slot(player_x, player_y) == mover_slot:
+                # Two heroes sharing one cell do not block each other out of it.
+                return False
 
     mover_h = state.mobs.hpos[mover_slot] if hpos is None else hpos
     mover_v = state.mobs.vpos[mover_slot] if vpos is None else vpos
@@ -4268,6 +4270,7 @@ def _push_movable_wall(
 def mob_probe_up(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
+    defer_interactions: bool = True,
 ) -> int:
     """0x406B6 -- probe the cell above for a blocking wall (§4.2).
 
@@ -4279,15 +4282,6 @@ def mob_probe_up(
     col = mob_slot & 0x1F
     if row == 0:
         return _VERTICAL_BOUNDARY     # vertical boundary sentinel (§4.2)
-    if row == 1 and vpos is not None:
-        # Internal probe_up 0x425D0-0x425DE uses D2 <= 0x7E (every doubled
-        # row-one slot) as a special case. It never reads row zero: those slots
-        # are shared with fixed shot/effect channels and are overwritten during
-        # the frame loop. CMP.W D4,D0 with D0=0xF080 blocks once the proposed
-        # full V word, including the hero's size bits, crosses that boundary.
-        # D1 is zero on this ROM arm. Keep that representative boundary slot
-        # so Transportability can still enter the normal squeeze-through path.
-        return 0 if (vpos & 0xFFFF) > _TOP_PLAYER_BOUNDARY_V else -1
     target_row = row - 1
     for dc in (0, -1, 1):            # centre, left flank, right flank (§4.2)
         c = col + dc
@@ -4298,7 +4292,7 @@ def mob_probe_up(
         candidate = (target_row << 5) | c
         if _probe_candidate_blocks(
             state, mob_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot,
+            self_slot=self_slot, defer_interactions=defer_interactions,
         ):
             return candidate
     return -1
@@ -4307,6 +4301,7 @@ def mob_probe_up(
 def mob_probe_down(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
+    defer_interactions: bool = True,
 ) -> int:
     """0x40732 -- probe the cell below for a blocking wall (§4.2).
 
@@ -4326,7 +4321,7 @@ def mob_probe_down(
         candidate = (target_row << 5) | c
         if _probe_candidate_blocks(
             state, mob_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot,
+            self_slot=self_slot, defer_interactions=defer_interactions,
         ):
             return candidate
     return -1
@@ -4335,6 +4330,7 @@ def mob_probe_down(
 def mob_probe_left(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
+    defer_interactions: bool = True,
 ) -> int:
     """0x4083A -- probe the cell to the left for a blocking wall (§4.2).
 
@@ -4366,7 +4362,7 @@ def mob_probe_left(
         candidate = (r << 5) | target_col
         if _probe_candidate_blocks(
             state, mob_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot,
+            self_slot=self_slot, defer_interactions=defer_interactions,
         ):
             return candidate
     return -1
@@ -4375,6 +4371,7 @@ def mob_probe_left(
 def mob_probe_right(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
+    defer_interactions: bool = True,
 ) -> int:
     """0x408A0 -- probe the cell to the right for a blocking wall (§4.2).
 
@@ -4402,7 +4399,7 @@ def mob_probe_right(
         candidate = (r << 5) | target_col
         if _probe_candidate_blocks(
             state, mob_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot,
+            self_slot=self_slot, defer_interactions=defer_interactions,
         ):
             return candidate
     return -1
@@ -4671,11 +4668,20 @@ def player_try_move(
             )
             outcome = _PROBE_BLOCKED
             if v_on_screen:
-                outcome = resolve_once(
-                    probe(
+                result = (
+                    0
+                    if (
+                        step_v > 0
+                        and temp_slot >> 5 == 1
+                        and (proposed_v & 0xFFFF) > _TOP_PLAYER_BOUNDARY_V
+                    )
+                    else probe(
                         state, temp_slot, hpos=temp_h, vpos=proposed_v,
                         self_slot=player.mob_slot,
-                    ),
+                    )
+                )
+                outcome = resolve_once(
+                    result,
                     temp_slot, vertical=True,
                 )
             if outcome is _PROBE_SQUEEZED:

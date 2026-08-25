@@ -154,6 +154,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     compares the proposed full V word, including size bits, with `0xF080`.
     Fixed shot/effect channels overwrite those reserved slots during play, so
     their current pictures cannot define the ceiling.
+39. **Dynamic actor probes precede cell handoff.** The thief writes a proposed
+    native axis word and runs the generic three-cell MOB probe before deciding
+    whether its record changes slots. Use the live +12 H / +8 V body bias for
+    handoff; an uncorrected sprite-origin cell lets a 24-pixel actor penetrate
+    walls while its collision identity remains behind.
 
 ## Investigation workflow
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.constants import PlayerStatus
+from gauntpy.constants import Character, PlayerStatus
 from gauntpy.coords import hpos_x, vpos_y
 from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.constants import MazeObjIds
@@ -479,7 +479,7 @@ class TestRouteGridMovement:
 
         assert state.thief_path_direction == 2
         assert state.thief_next_pos == pack_slot(10, 11)
-        assert hpos_x(state.mobs.hpos[thief_slot]) == 10 * 16 + 4
+        assert hpos_x(state.mobs.hpos[state.thief_mob_slot]) == 10 * 16 + 4
 
     def test_crossing_a_route_cell_records_reverse_escape_direction(self):
         state = GameState()
@@ -950,6 +950,35 @@ class TestMoveEngineCollisionAndAnimation:
         assert state.thief_mob_slot == start
         assert hpos_x(state.mobs.hpos[start]) == 10 * 16 + 12
 
+    @requires_roms
+    def test_maze_15_wall_beside_reported_player_position_blocks_at_x12(self):
+        from gauntpy.play import build_state
+
+        state = build_state(16, Character.ELF)
+        player = state.players[0]
+        state.mobs.unlink_and_clear(player.mob_slot)
+        player.status = PlayerStatus.REMOVED
+        player.mob_slot = 0
+
+        start = pack_slot(19, 1)
+        state.mobs.unlink_and_clear(start)
+        _thief_at(state, start)
+        state.thief_mode = THIEF_PURSUE
+        state.mobs.hpos[start] = encode_hpos(12)
+        state.mobs.vpos[start] = encode_vpos_at_y(304, 3, 3)
+
+        for _ in range(8):
+            thief_move_engine(
+                state,
+                _THIEF_DIRECTION_STEP_FLAGS[2],
+                _SPEED_THIEF,
+                _SPEED_THIEF,
+            )
+
+        assert state.mobs.picture[pack_slot(19, 2)] == 0x8000
+        assert state.thief_mob_slot == start
+        assert hpos_x(state.mobs.hpos[start]) == 12
+
     def test_collision_removes_eligible_pickup_before_retrying_the_move(self):
         state = GameState()
         start = pack_slot(10, 10)
@@ -964,7 +993,7 @@ class TestMoveEngineCollisionAndAnimation:
         assert thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF) == 0
         assert state.thief_mob_slot == destination
 
-    def test_nonblocking_occupied_cell_keeps_the_thiefs_slot_but_moves_pixels(self):
+    def test_nonblocking_occupied_cell_holds_the_axis_and_slot(self):
         state = GameState()
         start = pack_slot(10, 10)
         destination = pack_slot(10, 11)
@@ -975,7 +1004,7 @@ class TestMoveEngineCollisionAndAnimation:
 
         assert thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF) == 0
         assert state.thief_mob_slot == start
-        assert hpos_x(state.mobs.hpos[start]) == 11 * 16
+        assert hpos_x(state.mobs.hpos[start]) == 10 * 16 + 12
 
     def test_engine_contacts_the_cell_the_player_record_occupies(self):
         state = GameState()
@@ -989,6 +1018,49 @@ class TestMoveEngineCollisionAndAnimation:
         )
         _thief_at(state, thief_slot)
         state.mobs.hpos[thief_slot] = encode_hpos(10 * 16 - 1)
+        state.thief_mode = THIEF_PURSUE
+
+        thief_move_engine(
+            state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF,
+        )
+
+        assert state.players[0].keysnum == 1
+        assert state.thief_mode & THIEF_ESCAPE
+
+    def test_engine_does_not_steal_from_a_zero_health_active_record(self):
+        state = GameState()
+        thief_slot = pack_slot(10, 9)
+        player_slot = pack_slot(10, 10)
+        _active(state, 0, player_slot)
+        state.players[0].health = 0
+        state.players[0].keysnum = 2
+        state.mobs.create(
+            player_slot, 1, encode_hpos(10 * 16),
+            encode_vpos_at_y(10 * 16), MazeObjIds.PLAYERSTART,
+        )
+        _thief_at(state, thief_slot)
+        state.mobs.hpos[thief_slot] = encode_hpos(10 * 16 - 1)
+        state.thief_mode = THIEF_PURSUE
+
+        thief_move_engine(
+            state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF,
+        )
+
+        assert state.players[0].keysnum == 2
+        assert state.thief_mode == THIEF_PURSUE
+
+    def test_player_straddling_thief_cell_still_receives_contact(self):
+        state = GameState()
+        thief_slot = pack_slot(10, 9)
+        player_slot = pack_slot(10, 10)
+        _active(state, 0, player_slot)
+        state.players[0].keysnum = 2
+        state.mobs.create(
+            player_slot, 1, encode_hpos(10 * 16 - 1),
+            encode_vpos_at_y(10 * 16), MazeObjIds.PLAYERSTART,
+        )
+        _thief_at(state, thief_slot)
+        state.mobs.hpos[thief_slot] = encode_hpos(10 * 16 - 2)
         state.thief_mode = THIEF_PURSUE
 
         thief_move_engine(
@@ -1157,7 +1229,7 @@ class TestCollisionAgainstHighObjectTypes:
         assert state.mobs.obj_type(destination) == int(MazeObjIds.TRANSPORTER)
         assert state.mobs.picture[destination] == 0x8001
         assert state.thief_mob_slot == start, "an occupied cell keeps the slot"
-        assert hpos_x(state.mobs.hpos[start]) == 11 * 16, "but the pixels move"
+        assert hpos_x(state.mobs.hpos[start]) == 10 * 16 + 12
 
     def test_a_forcefield_hub_blocks_and_survives(self):
         """Flag 0 and the 0x8000 wall marker: solid, and still there after."""

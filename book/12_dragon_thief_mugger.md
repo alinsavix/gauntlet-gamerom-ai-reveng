@@ -223,6 +223,16 @@ literally following your footprints, one cell behind. Each grid byte holds two
 of these direction codes, and the thief switches to the other one the moment it
 turns to escape, which looks very much like retracing the route it came in by.
 
+Following a cell does not mean collision waits for the thief's picture origin
+to enter it. The thief is twenty-four pixels wide in a sixteen-pixel grid. For
+each axis, the game proposes the new hardware position and probes the three
+cells ahead using that live anchor. Only after collision is settled does it
+apply the same body-center bias used by the other moving MOBs to decide whether
+the thief's record changes slots. That order keeps the visible body and its
+collision identity together in tight one-cell pockets; using the raw picture
+origin instead can bury most of the thief in a wall while its record remains
+behind in the corridor.
+
 Dodging is more pointed. A helper scans the four players for one whose shot
 direction is exactly opposite the thief's own and whose position lies on that
 ray. When it finds one, the thief starts dodging, latching that player and
