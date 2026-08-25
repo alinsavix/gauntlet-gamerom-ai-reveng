@@ -197,12 +197,11 @@ the first place, not by leaving monsters unprocessed.
 
 **Collision does not walk anything.** A player probing a move asks "what
 occupies the cell I am entering?", and because slot number equals cell
-address, that is a direct read of the neighboring slots. Each of the four
-directional probes reads exactly three cells: the one straight ahead and
-its two flanking neighbors, which covers everything a 24-pixel body can
-overlap while crossing a 16-pixel cell boundary. Logg gave the same rule
-from memory in his postmortem, three grid entries in any direction, and
-the shipped Gauntlet II code does exactly that. Shots are found
+address, that is a direct read of neighboring slots. The private player
+vertical probes read the forward cell and its two horizontal flanks, covering a
+24-pixel body crossing a 16-pixel row boundary; the private horizontal probes
+read only the adjacent cell. Separate public three-cell probes serve generic
+actor movement. Shots are found
 in their fixed channels, 1 through 12, without any search at all. The
 chain orders the world; the slot arithmetic interrogates it. They share
 data, and conflating them would misdescribe both.
@@ -213,12 +212,10 @@ rounds those words; it does not reconstruct an anchor from the slot number.
 That distinction matters for corrected door and item placements near tight
 level edges.
 
-The player's side keeps one more subtle identity rule: the reserved row-zero
-slots can never become a hero's probe origin, even when a corrected sprite
-origin visually reaches that band. Near the top, horizontal probes also omit
-the row-zero flank while the hero record is still in row one. Missing those
-two boundary details makes the top wall catch lateral movement in otherwise
-open space.
+The player's side keeps one more subtle identity rule: every primary probe uses
+the live record slot, even when a corrected sprite origin visually reaches
+another band. Row-zero slots therefore never become a hero's probe origin, and
+horizontal movement never manufactures a row-zero flank from the picture.
 
 Upward movement has an additional guard for the same shared storage. Once the
 game is running, row-zero slot numbers belong to fixed shots and effects, so

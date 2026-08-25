@@ -191,7 +191,8 @@ delta = direction_deltas[facing] scaled by speed
         (reduced if stunned or acid-slowed)
 
 result = try_move(player, delta, flags):
-    probe the target cell(s) for walls and blocking objects
+    propose the complete horizontal speed; keep it or roll it all back
+    propose the complete vertical speed from the resolved H; keep or roll back
     if a door: run direction-aware door traversal (have a key?)
     if blocked diagonally: try the corner "squeeze" geometry check
     if blocked by monster or player: stop (bodies are solid)
@@ -208,6 +209,12 @@ somewhere the shared screen refuses to follow, which is Chapter 8's
 rubber-band seen from the other side. Slow effects land on the proposal
 itself. A stun freezes it briefly, and acid slows you for as long as you
 stand in it.
+
+The all-or-nothing axis proposal matters at two- and three-pixel speeds. The
+cabinet does not keep one clear pixel from a larger move whose endpoint blocks;
+its rare one-pixel retries are explicit collision-response calls with their own
+direction flags. Horizontal resolution still precedes vertical, so a blocked
+diagonal slides only through the axis whose complete proposal succeeded.
 
 All of the wall, door, and occupancy probes work on Chapter 8's packed maze
 slots and the traversability table introduced there. Movement is the biggest

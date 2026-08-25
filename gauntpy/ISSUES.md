@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2374 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2377 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -37,12 +37,13 @@ start).
 
 ### S-133 · non-ROM compatibility compensations remain
 
-The callable audit records six non-ROM game-side compensations. DEMO can ignore
-random walls, delete Grunts on its final input record, retain a row-zero flank,
-and bypass the normal reserved-row fallback. Player motion is also integrated
-one pixel at a time, while score display compares host latches because some
-producers omit dirty-bit writes. These remain open root-cause work; a passing
-attract recording must not be mistaken for state equivalence.
+The callable audit records four non-ROM game-side compensations. DEMO can ignore
+random walls, delete Grunts on its final input record, and retain a row-zero
+flank in the public generic probe family, while score display compares host
+latches because some producers omit dirty-bit writes. These remain open
+root-cause work; a passing attract recording must not be mistaken for state
+equivalence. S-137 removed the primary player mover's one-pixel integration and
+reserved-row exception.
 
 ### S-126 · live-only downward block at level 17 / maze 16 `(396,176)`
 
@@ -61,6 +62,32 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-137 · player movement integrated multi-pixel axes one pixel at a time
+
+Gauntpy split every ordinary 1–3 pixel player axis into one-pixel probes and
+kept any clear prefix before a later substep blocked. The ROM never does this:
+`player_try_move_core` adds the complete D6 speed word once, probes the proposed
+endpoint, and either retains or rolls back that whole axis before processing
+the next one. Its only `D6=0x80` moves are explicit recursive collision-response
+calls with separately constructed direction flags.
+
+The workaround also concealed a probe-family conflation. The private
+`probe_left`/`probe_right` at 0x426D4/0x4270C inspect one adjacent cell, while
+private `probe_up`/`probe_down` inspect a three-cell forward row. They share
+`tile_lookup_core` geometry with, but are not aliases of, the public generic
+`mob_probe_*` leaves used by actors such as the thief. The private Down boundary
+also tests the proposed signed V word in row 31, allowing Y=496 before rejecting
+the wrap; it does not return the generic `0x0400` sentinel.
+
+The mover now retains `active_mob_ids[player]` as probe origin, resolves the
+complete H word before V, commits both words at the common migration tail, and
+keeps ordinary blocked axes all-or-nothing. Horizontal and vertical rollback,
+private horizontal flank ownership, the signed bottom boundary, the reported
+maze-16 lane, cell migration, movable-wall cadence, and all three recorded demo
+actors have regressions. A fresh MAME 0.289 all-actor trace confirms the third
+demo actor reaches the exit from `(310,45)` and retires with the same stream
+positions after the private-probe split.
 
 ### S-136 · complete state dumps could not resume play
 
@@ -389,11 +416,10 @@ is not evidence of a separate L/R seam defect at this coordinate.
 ### S-107 … S-110 · top-edge movement, Super Sorcerers, and special potions
 
 - **S-107:** maze 17 at player pixel `(268,15)` reproduced a Python-only
-  lateral block against the reserved row-zero wall. The ROM's horizontal probe
-  suppresses its upper flank while the current doubled slot is below 0x80
-  (maze rows 0–1); the port used only a generic in-bounds test and included row
-  zero from row one. Left/right movement at that coordinate now matches direct
-  ROM execution.
+  lateral block against the reserved row-zero wall. The original repair
+  suppressed the generic probe's upper flank near rows 0–1. **Superseded by
+  S-137:** the private player horizontal probe has no vertical flanks at all and
+  retains the live record slot as its origin.
 - **S-108:** the same investigation found the narrow-passage boundary mismatch:
   `player_try_move_core` keeps `active_mob_ids[player]` in D2, while the port's
   one-pixel integration re-quantized the corrected sprite origin into reserved
@@ -402,6 +428,8 @@ is not evidence of a separate L/R seam defect at this coordinate.
   integration that prevents high-speed wall skipping. The shipped demo retains
   its prior port-side top-flank behavior because that is required to preserve
   the independently captured MAME maze-102 route and transporter landing.
+  **Superseded by S-137:** primary probes no longer derive intermediate cells;
+  private probe ownership and the full-axis transaction match the ROM directly.
 - **S-109:** Super Sorcerer placement derived its start cell from the player's
   `x>>4`, shifting a correctly placed hero one cell left, then materialized the
   sorcerer without the ROM's four-pixel H correction. It now starts from
@@ -871,6 +899,8 @@ remembered live slot before resetting the per-player RAM.
   at a time while retaining the ROM's horizontal-before-vertical order; movable
   wall and fight contacts still cancel the entire axis for that frame. The
   first-level wall and attract push sequence both have exact regressions.
+  **Superseded by S-137:** the root error was using pixel-derived/generic probe
+  ownership. Primary movement now uses the ROM's full-axis private probes.
 - **S-38 · projectile palettes were discarded.** `AssetStore.sprite` forced
   every 2x2 projectile through base palette 0. Lobber rocks now use live base
   palette 1; palette slots 12-15 resolve through the character/player colour

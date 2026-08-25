@@ -439,6 +439,13 @@ return the candidate in `D1.w` and collision status in carry. The squeeze
 helper receives candidate/current/player offsets in `D1/D2/D5`, returning a
 boolean in `D0.l` with Z set from that result.
 
+The primary move is transactional by axis. The core adds the complete `D6`
+speed word (1–3 pixels) to H once, probes that endpoint, and retains or rolls
+back the whole H delta. It then does the same for V using the resolved H. It
+does not probe ordinary movement one pixel at a time. The `D6=0x80` calls
+inside collision arms are distinct recursive response moves with newly selected
+flags.
+
 The four `mob_probe_*` stack leaves take `uint16 mob_slot` and return the first
 blocking slot in `D0.w`, or `-1` when clear. The up/down probes can instead
 return `0x0400` at the vertical boundary; callers therefore must not treat all
@@ -452,13 +459,14 @@ that distance gate turns each three-cell probe into a coarse whole-row/column
 barrier.
 
 The movement core retains the live player record slot from
-`active_mob_ids[player]` in D2. In particular, row zero is reserved hardware
-state and cannot become a player's probe origin. The horizontal triplets have
-asymmetric edge gates: their upper flank runs only when the doubled slot is at
-least 0x80, so row zero is not tested from row one, while the lower flank runs
-only below 0x7C0. Direct ROM execution at maze 17 pixel `(268,15)` moves
-left/right by two pixels; treating the corrected sprite origin as row zero and
-including the reserved top wall incorrectly blocks both.
+`active_mob_ids[player]` in D2 for that complete transaction. Its private probe
+family is asymmetric: `probe_left`/`probe_right` (0x426D4/0x4270C) inspect only
+the one horizontally adjacent cell, while `probe_up`/`probe_down` inspect the
+forward cell and its two horizontal flanks. These are not aliases of the four
+public `mob_probe_*` stack leaves, whose generic three-cell shapes remain useful
+to other actors. Direct ROM execution at maze 17 pixel `(268,15)` moves
+left/right by two pixels because a pixel-derived row-zero flank is never part of
+the private horizontal lookup.
 
 The vertical top edge has a separate coordinate gate at
 `probe_up` 0x425D0-0x425DE. When D2 is at most 0x007E -- every doubled row-one
@@ -471,10 +479,12 @@ and Up+Right continues horizontally there. Treating those transient slot
 pictures as the ceiling instead lets the hero reach Y=10 and eventually target
 the reserved row during diagonal movement.
 
-gauntpy's shipped-demo compatibility path deliberately retains its earlier
-row-zero flank behavior. Removing it currently diverts the recorded maze-102
-actor before the transporter, contradicting the retained MAME trace that reaches
-slot 492 and lands at slot 486; this exception does not apply to normal play.
+The bottom edge is likewise private coordinate state. In row 31, `probe_down`
+does not return the public probe's `0x0400` sentinel. It permits the proposed V
+word while it remains nonnegative, allowing a 3x3 hero to reach screen Y=496,
+and blocks once the next subtraction would enter the signed half of the word.
+This behavior is required by all three actors in the shipped demo and agrees
+with MAME 0.289.
 
 #### 4.2.1 Character stat selectors
 

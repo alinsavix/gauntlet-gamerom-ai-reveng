@@ -99,13 +99,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
 26. **Dragon damage is a live MOB palette change.** Counted hits 1–2, 3–5, and
     6–8 rewrite the primary dragon segment's hpos palette nibble to 8, 7, and 6.
     Do not represent this progression as a renderer tint.
-27. **Reserved row zero is never a player probe origin.** The ROM keeps the
-    current `active_mob_ids[player]` slot in D2. Gauntpy's one-pixel integration
-    may derive an intermediate body cell, but it must fall back to the live
-    record when that cell is in reserved slots 0–31. Horizontal flank gates use
-    doubled-slot thresholds, so row zero is not an upper flank from row one.
-    Keep the explicit demo compatibility path until its retained MAME route can
-    survive removal; do not weaken normal gameplay geometry to preserve it.
+27. **Player probes retain the live record identity.** The ROM keeps the current
+    `active_mob_ids[player]` slot in D2 for the complete movement transaction.
+    Its private horizontal probes test one adjacent cell; its private vertical
+    probes test the forward triplet. Do not substitute a pixel-derived cell or
+    the public four-way `mob_probe_*` family.
 28. **Special actors may have actor-specific placement anchors.** Super
     Sorcerer placement begins at the target player's live MOB slot and writes
     its destination H position four pixels left of the cell. A generic
@@ -206,6 +204,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     enters the repeated frame body directly. Do not call `one_time_init`, reload
     the maze, rebuild VRAM, or repair selected fields on load; reject an
     incompatible snapshot rather than blending it with defaults.
+49. **Primary player axes are all-or-nothing transactions.** `player_try_move`
+    adds the complete 1–3 pixel speed word once on H, probes, and either keeps or
+    rolls back all of H before doing the same for V. Only explicit collision
+    response recursion retries with `D6=0x80`; never integrate ordinary movement
+    one pixel at a time. The private bottom-row Down gate is signed-coordinate
+    state and permits Y=496 before rejecting V-word wrap.
 
 ## Investigation workflow
 

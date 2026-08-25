@@ -467,6 +467,44 @@ class TestPlayerTryMoveWallCollision:
         assert player_try_move(state, pi, gin.JOY_RIGHT, 0) != _NO_MOVE
         assert hpos_x(state.mobs.hpos[state.players[pi].mob_slot]) > before
 
+    def test_blocked_two_pixel_horizontal_axis_rolls_back_completely(self):
+        state, pi = self._player_at_slot((5 << 5) | 5)
+        player = state.players[pi]
+        player.character = Character.WARRIOR
+        state.frame_counter = 1
+        state.mobs.hpos[player.mob_slot] = 75 << 7
+        wall = (5 << 5) | 6
+        state.mobs.create(
+            wall,
+            tile=_WALL_PICTURE,
+            hpos=96 << 7,
+            vpos=encode_vpos_at_y(80),
+            obj_type=int(MazeObjIds.WALL_REGULAR),
+            link_into_chain=False,
+        )
+
+        assert player_try_move(state, pi, gin.JOY_RIGHT, 0) == _NO_MOVE
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 75
+
+    def test_blocked_two_pixel_vertical_axis_rolls_back_completely(self):
+        state, pi = self._player_at_slot((5 << 5) | 5)
+        player = state.players[pi]
+        player.character = Character.WARRIOR
+        state.frame_counter = 1
+        state.mobs.vpos[player.mob_slot] = encode_vpos_at_y(79, 3, 3)
+        wall = (6 << 5) | 5
+        state.mobs.create(
+            wall,
+            tile=_WALL_PICTURE,
+            hpos=80 << 7,
+            vpos=encode_vpos_at_y(96),
+            obj_type=int(MazeObjIds.WALL_REGULAR),
+            link_into_chain=False,
+        )
+
+        assert player_try_move(state, pi, gin.JOY_DOWN, 0) == _NO_MOVE
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == 79
+
     def test_maze16_narrow_wall_lane_has_the_rom_alignment_escape(self):
         """Regression for the frame-10310 live-state report at (41, 288)."""
         state = GameState(game_mode=GameMode.NORMAL)
@@ -874,7 +912,7 @@ class TestMobCollisionDispatch:
         assert player.mob_slot == (5 << 5) | 5
         assert gp._player_record_cell(state, 0) == player.mob_slot
 
-    def test_diagonal_frame_keeps_one_contact_per_axis(self):
+    def test_diagonal_does_not_invent_horizontal_flank_contact(self):
         state = GameState(game_mode=GameMode.NORMAL)
         player = _active_player_at(state, 0, (5 << 5) | 5)
         player.health = 1000
@@ -892,8 +930,8 @@ class TestMobCollisionDispatch:
             state, 0, gin.JOY_RIGHT | gin.JOY_DOWN, 0,
         )
 
-        assert player.health < 1000
-        assert state.mobs.picture[acid] == 0
+        assert player.health == 1000
+        assert state.mobs.picture[acid] != 0
 
     def test_fighting_thief_removes_it_and_pays_the_bounty(self):
         state = GameState()
@@ -912,7 +950,7 @@ class TestMobCollisionDispatch:
         assert state.thief_mob_slot == 0
         assert state.players[0].score == 500
 
-    def test_pass_through_item_does_not_hide_a_flank_wall(self):
+    def test_private_horizontal_probe_does_not_test_vertical_flanks(self):
         state = GameState(game_mode=GameMode.NORMAL)
         player = _active_player_at(state, 0, (5 << 5) | 5)
         player.health = 500
@@ -930,8 +968,8 @@ class TestMobCollisionDispatch:
         )
         state.movement_type = 2
 
-        assert player_try_move(state, 0, gin.JOY_RIGHT, 0) == _NO_MOVE
-        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 81
+        assert player_try_move(state, 0, gin.JOY_RIGHT, 0) != _NO_MOVE
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 82
 
 
 # ---------------------------------------------------------------------------
@@ -956,7 +994,10 @@ class TestCornerSqueezeGeometry:
         result = player_try_move(state, 0, gin.JOY_UP, 0)
 
         assert result != _NO_MOVE
-        assert state.player_tile_pos[0] == ((8 << 5) | 11)
+        # corner_squeeze_geometry receives active_mob_ids (row 10, col 10),
+        # not the sprite-biased probe cell. The empty cell directly above is
+        # therefore the landing selected by 0x4FEB2.
+        assert state.player_tile_pos[0] == ((9 << 5) | 10)
         assert state.sound_log[-1] == 0x28
 
     def test_invulnerable_player_phases_through_one_cell_wall(self):
@@ -1271,8 +1312,8 @@ class TestWraparound:
         # With wrap, position should be small (wrapped around)
         assert x_after < x_before, "x should have wrapped around"
 
-    def test_no_wraparound_without_flag(self):
-        """Without wrap_h, movement is clamped at the right edge."""
+    def test_offscreen_permission_leaves_native_word_wrap_unclamped(self):
+        """The offscreen flag bypasses the screen gate; native H still wraps."""
         state = GameState()
         state.wrap_h = False
         player = _active_player_at(state, 0, (10 << 5) | 31)
@@ -1280,7 +1321,20 @@ class TestWraparound:
         for _ in range(20):
             player_try_move(state, 0, gin.JOY_RIGHT, 0)
         x_after = hpos_x(state.mobs.hpos[player.mob_slot])
-        assert x_after >= x_before, "should not go negative when wrap disabled"
+        assert x_after < x_before
+
+    def test_bottom_row_uses_the_private_signed_v_boundary(self):
+        state = GameState()
+        player = _active_player_at(state, 0, (31 << 5) | 10)
+        state.mobs.vpos[player.mob_slot] = encode_vpos_at_y(495, 3, 3)
+
+        state.movement_type = 2
+        assert player_try_move(state, 0, gin.JOY_DOWN, 0) != _NO_MOVE
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == 496
+
+        state.movement_type = 2
+        assert player_try_move(state, 0, gin.JOY_DOWN, 0) == _NO_MOVE
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == 496
 
 
 # ---------------------------------------------------------------------------
