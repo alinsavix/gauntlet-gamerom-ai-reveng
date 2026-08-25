@@ -84,7 +84,7 @@ def test_report_exception_addresses_match_the_guard():
     def addresses(section: str) -> set[int]:
         return {
             int(value, 16)
-            for value in re.findall(r"`0x([45][0-9A-F]{4})`", section)
+            for value in re.findall(r"`0x([45][0-9A-F]{4})(?:`| )", section)
         }
 
     assert addresses(sections["missing"]) == MISSING

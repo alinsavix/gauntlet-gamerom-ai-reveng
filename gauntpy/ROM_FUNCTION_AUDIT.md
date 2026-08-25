@@ -53,13 +53,13 @@ These entries do not represent missing live game logic in the Python model.
 
 | Kind | Count | ROM entries |
 |---|---:|---|
-| Hardware veneers, traps, and reset setup | 17 | `0x40000`, `0x40006`, `0x4000C`, `0x40012`, `0x40018`, `0x4001E`, `0x40024`, `0x40030`, `0x40048`, `0x40054`, `0x400DE`, `0x400E4`, `0x400EA`, `0x400F0`, `0x400F6`, `0x40140`, `0x4014C` |
-| Slapstic paging/verification | 11 | `0x40CC4`, `0x40CF2`, `0x40D24`, `0x40D4E`, `0x43826`, `0x56E58`, `0x56E6E`, `0x56E84`, `0x56E90`, `0x56E98`, `0x56EAA` |
-| ABI-only register/stack entry variants | 12 | `0x41C30`, `0x42598`, `0x425B4`, `0x5DE44`, `0x5DED4`, `0x5E542`, `0x5E5D2`, `0x5EA26`, `0x5EAC2`, `0x5F598`, `0x5F772`, `0x5FC56` |
-| Unreferenced duplicate/legacy bodies | 3 | `0x5554E`, `0x555C4`, `0x5F644` |
-| Operator/no-op hooks | 2 | `0x449CC`, `0x5317C` |
-| C-runtime primitives | 4 | `0x45BE8`, `0x5FD58`, `0x5FD64`, `0x5FD6A` |
-| Obviated representation conversion | 1 | `0x5E868` |
+| Hardware veneers, traps, and reset setup | 17 | `0x40000 game_start_veneer`<br>`0x40006 game_vblank_veneer`<br>`0x4000C game_irq1_watchdog_trap`<br>`0x40012 game_irq3_watchdog_trap`<br>`0x40018 game_irq2_watchdog_trap`<br>`0x4001E game_irq6_sound_veneer`<br>`0x40024 game_exception_veneer`<br>`0x40030 game_playfield_init_veneer`<br>`0x40048 game_options_veneer`<br>`0x40054 game_rom_verify_veneer`<br>`0x400DE scroll_to_slot_veneer`<br>`0x400E4 init_display_veneer`<br>`0x400EA maze_setup_veneer`<br>`0x400F0 pf_replace_veneer`<br>`0x400F6 mob_clear_veneer`<br>`0x40140 game_exception_abort`<br>`0x4014C game_start` |
+| Slapstic paging/verification | 11 | `0x40CC4 maze_select_alt_bank`<br>`0x40CF2 maze_init`<br>`0x40D24 maze_select_bank`<br>`0x40D4E maze_select_bank_special`<br>`0x43826 slapstic_cmd_bitwise`<br>`0x56E58 slapstic_cmd_bank0`<br>`0x56E6E slapstic_cmd_bank3`<br>`0x56E84 slapstic_cmd_bankX`<br>`0x56E90 slapstic_cmd_maze_init`<br>`0x56E98 slapstic_cmd_bankX_special`<br>`0x56EAA slapstic_verify` |
+| ABI-only register/stack entry variants | 12 | `0x41C30 player_try_move_core`<br>`0x42598 mob_collision_test_preserve_d1_a`<br>`0x425B4 mob_collision_test_preserve_d1_b`<br>`0x5DE44 moblist_remove_and_clear_regs`<br>`0x5DED4 moblist_unlink_regs`<br>`0x5E542 pf_stamp_update_regs`<br>`0x5E5D2 tile_near_screen_d4`<br>`0x5EA26 pf_isblankfloor_stack`<br>`0x5EAC2 pf_wall_draw_stack`<br>`0x5F598 refresh_tile_visual_stack`<br>`0x5F772 pf_isdoor_stack`<br>`0x5FC56 pf_isff_d0` |
+| Unreferenced duplicate/legacy bodies | 3 | `0x5554E name_entry_step_char_copy`<br>`0x555C4 name_entry_draw_char_copy`<br>`0x5F644 refresh_tile_visual_legacy` |
+| Operator/no-op hooks | 2 | `0x449CC attract_noop_hook`<br>`0x5317C game_options_display` |
+| C-runtime primitives | 4 | `0x45BE8 string_length`<br>`0x5FD58 memclear`<br>`0x5FD64 memclear_core`<br>`0x5FD6A copy_longwords` |
+| Obviated representation conversion | 1 | `0x5E868 maze_special_floor` |
 
 The Slapstic rows are platform boundaries because gauntpy obtains decoded maze
 records through gex rather than emulating the bank-switch device. The ABI rows
