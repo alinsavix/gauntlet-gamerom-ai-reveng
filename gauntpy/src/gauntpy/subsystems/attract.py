@@ -384,6 +384,8 @@ def main_logo_updcolors(state: GameState) -> None:
     state.logo_color_timer = (state.logo_color_timer + 1) & 0xFFFF
     if int(state.game_mode) == int(GameMode.SCORES):
         if (state.frame_counter & 0x0F) == 0:
+            # 0x4DE8C-0x4DEAC preserves the last four words, shifts the
+            # preceding twelve, and restores the saved group at the front.
             block = state.alpha_color_ram[144:160]
             state.alpha_color_ram[144:160] = block[-4:] + block[:-4]
     elif int(state.game_mode) == int(GameMode.TITLE):
@@ -651,6 +653,10 @@ def attract_demo_init(state: GameState) -> None:
     if maze.reset_and_load_level(state, state.levelnum_current, maze_number=_DEMO_MAZE):
         exit_scan_level(state)
         player_join(state, _DEMO_ACTIVE_PLAYER)
+        from .exits import update_monster_spawn_bonus_from_score_per_coin
+
+        update_monster_spawn_bonus_from_score_per_coin(state)
+        maze.maze_addrandompickups(state, False)         # 0x48590
 
 
 # =============================================================================

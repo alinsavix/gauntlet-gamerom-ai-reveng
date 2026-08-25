@@ -22,7 +22,12 @@ import pytest
 from gauntpy.coords import native_v
 from gauntpy.constants import GameMode, PlayerStatus
 from gauntpy.state import GameState
-from gauntpy.subsystems.camera import main_scroll_playfield, snap_camera, viewport_scroll
+from gauntpy.subsystems.camera import (
+    main_scroll_playfield,
+    scroll_to_slot,
+    snap_camera,
+    viewport_scroll,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +141,24 @@ class TestSnapToTarget:
         main_scroll_playfield(state)
         assert state.scroll_x == 96
         assert state.scroll_y == 84
+
+
+class TestScrollToSlot:
+    def test_centers_one_packed_cell_with_rom_arithmetic(self):
+        state = GameState(wrap_h=True, wrap_v=True)
+
+        scroll_to_slot(state, (10 << 5) | 12)
+
+        assert state.scroll_x == 12 * 16 - 4 - 0x68
+        assert state.scroll_y == 10 * 16 - 0x74
+
+    def test_applies_set_scroll_position_clamps(self):
+        state = GameState()
+
+        scroll_to_slot(state, 0)
+
+        assert state.scroll_x == 0x005
+        assert state.scroll_y == 0x001
 
 
 # ---------------------------------------------------------------------------

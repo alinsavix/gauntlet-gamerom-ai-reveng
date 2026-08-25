@@ -13,7 +13,7 @@ mixture; compiler-vendor attribution remains **Strong inference**.
 - **Address:** `0x040000–0x05FFFF` (128 KB populated image; the OS accepts game entry targets through `0x07FFFF`)
 - **Language:** C plus hand-written assembly leaves; Green Hills C compiler
   attribution is **Strong inference** from code-generation patterns.
-- **Callable entries:** **Verified** 321 unique shipped entry points, each
+- **Callable entries:** **Verified** 322 unique shipped entry points, each
   reconciled to a checked purpose/argument/return/convention contract.
 
 ### 1.1 ROM Layout
@@ -303,7 +303,7 @@ Every 13th TITLE cycle: refreshes EEPROM settings. If attract sounds are enabled
 
 The game ROM is compiled C using a **stack-based, caller-cleanup convention** (cdecl) typical of the Green Hills C compiler for 68000 targets.
 
-**Confidence: Verified** as the normal convention across the 321-entry
+**Confidence: Verified** as the normal convention across the 322-entry
 contract audit. Every register/shared-stack/tail-entry exception is stated in
 `07_function_index.md` and the generated contract catalogs.
 
@@ -397,7 +397,7 @@ control-target, detailed byte-range, and RAM-operand reports.
 - **Verified:** the detailed byte report identifies 93,722 analyzed instruction
   bytes across 34 executable ranges, and all 29 main-loop top-level entries
   have checked purpose/ABI descriptions.
-- **Verified:** `generated/callable_contract_coverage.csv` reconciles all 321 indexed
+- **Verified:** `generated/callable_contract_coverage.csv` reconciles all 322 indexed
   entries to body-checked catalogs that state purpose, arguments, return
   behavior, and every discovered convention exception. Naming alone was not
   accepted as contract evidence.

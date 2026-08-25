@@ -146,6 +146,10 @@ def build_state(
         state.mazenum_current = min(level - 1, MAX_MAZE_NUM)
     maze.load_level(state, level)           # places objects with their pictures
     _spawn_player(state, character)
+    from .subsystems.exits import update_monster_spawn_bonus_from_score_per_coin
+
+    update_monster_spawn_bonus_from_score_per_coin(state)
+    maze.maze_addrandompickups(state, True)
     from .subsystems.players import (
         initialize_player_temporary_power,
         setup_infopanel,

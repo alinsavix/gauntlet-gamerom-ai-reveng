@@ -34,6 +34,7 @@ from gauntpy.subsystems.thief import (
     thief_compute_path,
     thief_track_victim_move,
     thief_target_calc,
+    thief_test_move_tile,
     thief_timer_set,
     thief_enter_tport,
     tport_route_connect,
@@ -706,6 +707,72 @@ class TestRemoveAndDropLoot:
 
 
 class TestDeployAndEscapeGraph:
+    def test_unset_route_corner_starts_thief_squeeze_transition(
+        self, monkeypatch,
+    ):
+        state = GameState()
+        state.thief_previous_pos = pack_slot(10, 9)
+        state.thief_next_pos = pack_slot(10, 10)
+        corner = pack_slot(10, 11)
+        state.thief_victim_pos = corner
+        started = []
+        monkeypatch.setattr(
+            "gauntpy.subsystems.thief.thief_start_tport_anim",
+            lambda _state, destination: started.append(destination),
+        )
+
+        result = thief_test_move_tile(
+            state, state.thief_next_pos, int(MazeObjIds.TILE_FLOOR),
+        )
+
+        assert result == -2
+        destination = state.thief_next_pos
+        assert started == [destination]
+        assert state.thief_previous_pos == destination
+        offset = (destination // 44) * 0x80 + destination % 44
+        assert state.path_direction_grid[offset] >> 4 == 7  # reverse dir 6 + 1
+
+    def test_existing_next_route_skips_corner_squeeze(self, monkeypatch):
+        state = GameState()
+        state.thief_previous_pos = pack_slot(10, 9)
+        state.thief_next_pos = pack_slot(10, 10)
+        path_grid_set_low_direction(state, state.thief_next_pos, 2)
+        started = []
+        monkeypatch.setattr(
+            "gauntpy.subsystems.thief.thief_start_tport_anim",
+            lambda _state, destination: started.append(destination),
+        )
+
+        result = thief_test_move_tile(
+            state, state.thief_next_pos, int(MazeObjIds.TILE_FLOOR),
+        )
+
+        assert result == 0
+        assert started == []
+
+    def test_corner_squeeze_rejects_monster_candidate(self, monkeypatch):
+        state = GameState()
+        state.thief_previous_pos = pack_slot(10, 9)
+        state.thief_next_pos = pack_slot(10, 10)
+        corner = pack_slot(10, 11)
+        state.thief_victim_pos = corner
+        state.mobs.create(
+            state.thief_next_pos, 1, 0, 0,
+            int(MazeObjIds.MONST_GRUNT), 0,
+        )
+        started = []
+        monkeypatch.setattr(
+            "gauntpy.subsystems.thief.thief_start_tport_anim",
+            lambda _state, destination: started.append(destination),
+        )
+
+        result = thief_test_move_tile(
+            state, state.thief_next_pos, int(MazeObjIds.MONST_GRUNT),
+        )
+
+        assert result == 0
+        assert started == []
+
     def test_deploy_retries_when_the_start_cell_is_occupied(self):
         state = GameState()
         _active(state, 0, pack_slot(5, 5))

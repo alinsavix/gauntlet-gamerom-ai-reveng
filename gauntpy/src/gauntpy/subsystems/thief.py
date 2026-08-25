@@ -713,17 +713,79 @@ def thief_handle_tile_collision(state: GameState, candidate_mob_slot: int) -> in
         return 0
 
     obj_type = state.mobs.obj_type(candidate_mob_slot)
-    if (
-        candidate_mob_slot == state.thief_next_pos
-        and obj_type == int(MazeObjIds.TRANSPORTER)
-    ):
-        return thief_enter_tport(state, candidate_mob_slot)
+    move_result = thief_test_move_tile(state, candidate_mob_slot, obj_type)
+    if move_result:
+        return -1
     if _THIEF_COLLISION_REMOVE_FLAGS[obj_type]:
         state.mobs.unlink_and_clear(candidate_mob_slot)
         return -1
     if state.mobs.picture[candidate_mob_slot] == 0x8000 or obj_type in _THIEF_SOLID_OBJECTS:
         return -1
     return 0
+
+
+def thief_test_move_tile(
+    state: GameState, candidate_pos: int, object_type: int,
+) -> int:
+    """0x4E7FC -- resolve route transport and diagonal corner recovery."""
+    if (
+        candidate_pos == state.thief_next_pos
+        and object_type == int(MazeObjIds.TRANSPORTER)
+    ):
+        return thief_enter_tport(state, candidate_pos)
+
+    if path_grid_get_direction(state, state.thief_next_pos) != 8:
+        return 0
+
+    direction = calc_direction(
+        state, state.thief_previous_pos, state.thief_next_pos,
+    )
+    if direction == 8:
+        return 0
+    corner_target = _advance_route_cell(state.thief_next_pos, direction) & 0x3FF
+    corner_direction = path_grid_get_direction(state, corner_target)
+    if (
+        corner_direction == 8
+        or (direction ^ corner_direction) == 4
+    ) and corner_target != state.thief_victim_pos:
+        return 0
+    if (state.mobs.hpos[candidate_pos] & 0x0F) > 0x0C:
+        return 0
+    if (
+        int(MazeObjIds.MONST_GHOST)
+        <= object_type
+        <= int(MazeObjIds.MONST_IT)
+    ) or object_type == int(MazeObjIds.MONST_DRAGON):
+        return 0
+
+    return _thief_corner_squeeze_geometry(state, direction)
+
+
+def _thief_corner_squeeze_geometry(
+    state: GameState, direction: int,
+) -> int:
+    """corner_squeeze_geometry's player-index-4 arm, 0x4FFB6-0x50218."""
+    target = _advance_route_cell(state.thief_previous_pos, direction) & 0x3FF
+    if target < FIRST_PLAYABLE_SLOT or state.mobs.picture[target]:
+        target = _advance_route_cell(target, direction) & 0x3FF
+        if target < FIRST_PLAYABLE_SLOT:
+            return 0
+    if (state.mobs.hpos[target] & 0x0F) > 0x0C:
+        return 0
+
+    for player_index in range(len(state.players)):
+        if (
+            state.player_tile_pos[player_index] == target
+            and state.player_tport_phase[player_index] >= 0
+        ):
+            return 0
+
+    path_grid_set_high_direction_if_empty(
+        state, target, (direction + 4) & 0x07,
+    )
+    thief_start_tport_anim(state, target)
+    state.thief_previous_pos = target
+    return -2
 
 
 def thief_start_tport_anim(state: GameState, destination_pos: int) -> None:

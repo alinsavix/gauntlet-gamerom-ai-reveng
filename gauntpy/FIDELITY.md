@@ -182,6 +182,18 @@ evidence remains in `../doc/`, generated contracts, and the book.
     not manufacture progress-byte state. Between-level hints consume
     `secret_need_hint` and inspect the already selected upcoming maze header,
     not the objective from the maze just left.
+44. **A passing demo is not proof of equivalent state.** Never special-case DEMO
+    collision, delete an obstructing actor, or ignore a live wall to keep the
+    recorded input moving. Trace and reproduce the earlier RNG, actor, wall, and
+    movement state that made the immutable ROM recording succeed.
+45. **Random pickup setup follows party placement.** `maze_addrandompickups`
+    reads the live active-player count and, in solo play, the active character.
+    Preserve its draw order: hidden-potion placement, party/difficulty
+    adjustment, spawn-bonus rounding, monotonic food removal, deferred loot,
+    then the level-three special pickup pair.
+46. **Shared ROM probes stay shared.** Movable-wall traversal uses the same
+    `ray_march_*` geometry as monster movement. Do not substitute the similarly
+    shaped player `mob_probe_*` family; its boundary ownership is different.
 
 ## Investigation workflow
 

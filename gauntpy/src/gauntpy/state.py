@@ -406,6 +406,12 @@ class GameState:
     lobber_shot_vec_v: list[int] = field(default_factory=lambda: [0] * 4)
     lobber_shot_h_accum: list[int] = field(default_factory=lambda: [0] * 4)
     lobber_shot_v_accum: list[int] = field(default_factory=lambda: [0] * 4)
+    # 0x904AFA, 2 B x 4: randomized cooldown for class-specific hurt speech.
+    # player_hurt_speech_timer predecrements it on every resolved monster
+    # contact; a negative value reloads and may emit one character voice.
+    hurt_speech_timer: list[int] = field(
+        default_factory=lambda: [0] * NUM_PLAYERS
+    )
 
     # =========================================================================
     # WP-9 · dragon
@@ -539,6 +545,9 @@ class GameState:
     # 0x9048A4, random wall current index
     random_wall_current: int = 0
     random_wall_setup_ready: bool = False
+    # Host-side ownership latch for maze_addrandompickups, which the ROM invokes
+    # once after the level's party has been placed.
+    random_pickups_setup_done: bool = False
     # 0x904A76/0x904A86, eight independently advancing door-opening fronts.
     door_endpoint_pos: list[int] = field(default_factory=lambda: [0] * 8)
     door_endpoint_dir: list[int] = field(default_factory=lambda: [0] * 8)

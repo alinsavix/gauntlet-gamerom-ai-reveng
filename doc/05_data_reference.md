@@ -972,9 +972,9 @@ generated as [`generated/rom_byte_coverage.csv`](generated/rom_byte_coverage.csv
 [`generated/rom_flag_reconciliation.csv`](generated/rom_flag_reconciliation.csv), plus
 [`generated/rom_range_overlaps.csv`](generated/rom_range_overlaps.csv).
 
-**Confidence: Verified.** Fresh analysis of all 321 indexed entries plus 80
+**Confidence: Verified.** Fresh analysis of all 322 indexed entries plus 80
 computed-dispatch destinations accounts for every byte of the two mixed
-code/data regions as an instruction byte or named ROM range. All 321 parsed §5
+code/data regions as an instruction byte or named ROM range. All 322 parsed §5
 rows have exact address/size matches in `gauntlet.r2`, while the reverse report
 gives all 347 non-code ROM flags an exact §5 or game-header row. The overlap
 report classifies 8 deliberate nested/alternate views and contains no
@@ -988,7 +988,7 @@ replaced the earlier row count of 329: false or duplicated rows were removed
 and several extents, bases and value lists were corrected.
 
 **Confidence: Verified** for the documented callable set: the generated
-[`generated/ram_operands.csv`](generated/ram_operands.csv) independently analyzes all 321 unique
+[`generated/ram_operands.csv`](generated/ram_operands.csv) independently analyzes all 322 unique
 game-ROM entry addresses in `07_function_index.md` with symbol substitution
 disabled. It extracts 318 distinct explicit `0x904000–0x905FFF` literals,
 including address-register bases used for indexed access; every literal lands

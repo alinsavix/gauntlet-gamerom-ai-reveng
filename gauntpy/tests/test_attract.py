@@ -642,7 +642,9 @@ class TestLogoColors:
 
         main_logo_updcolors(state)
 
-        assert state.alpha_color_ram[144:160] == list(range(12, 16)) + list(range(12))
+        assert state.alpha_color_ram[144:160] == (
+            list(range(12, 16)) + list(range(12))
+        )
 
         state.frame_counter = 1
         before = list(state.alpha_color_ram)

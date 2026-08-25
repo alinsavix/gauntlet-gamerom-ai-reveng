@@ -422,6 +422,12 @@ def main_start_game(state: GameState) -> None:
                 continue
             player_join_finalize(state, i)
             if initial_selection:
+                from ..maze import maze_addrandompickups
+                from .exits import update_monster_spawn_bonus_from_score_per_coin
+
+                update_monster_spawn_bonus_from_score_per_coin(state)
+                if not state.random_pickups_setup_done:
+                    maze_addrandompickups(state, True)          # 0x48672
                 clear_alpha_visible(state)
                 setup_infopanel(state, -1)
 

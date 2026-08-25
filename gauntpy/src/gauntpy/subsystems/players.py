@@ -4242,23 +4242,32 @@ def _push_movable_wall(
     if vertical:
         step_x = 0
         step_y = -1 if delta & _JOY_UP else 1
-        probe = mob_probe_up if step_y < 0 else mob_probe_down
+        ray_probe = (-1, 0) if step_y < 0 else (1, 0)
     else:
         step_x = -1 if delta & _JOY_LEFT else 1
         step_y = 0
-        probe = mob_probe_left if step_x < 0 else mob_probe_right
+        ray_probe = (0, -1) if step_x < 0 else (0, 1)
 
     old_h = state.mobs.hpos[slot]
     old_v = state.mobs.vpos[slot]
     new_h = (old_h + (step_x << POS_SHIFT)) & 0xFFFF
     # The V word grows up the screen, so a downward push subtracts.
     new_v = (old_v - (step_y << POS_SHIFT)) & 0xFFFF
-    blocker = probe(
-        state, slot, hpos=new_h, vpos=new_v, defer_interactions=False,
-    )
-    if blocker != -1:
-        if state.mobs.obj_type(blocker) == int(MazeObjIds.EXIT):
-            if state.secret_trick_id == 10:
+    # 0x42820/0x428B6/0x4294C/0x429E2 call the same ray-march family as monster
+    # movement, not the player's directional probes.
+    from .monsters import _ray_march
+
+    blocker = _ray_march(state, slot, ray_probe, new_h, new_v)
+    if blocker is not None:
+        blocker_type = state.mobs.obj_type(blocker)
+        if blocker_type in (
+            int(MazeObjIds.EXIT),
+            int(MazeObjIds.TRANSPORTER),
+        ):
+            if (
+                blocker_type == int(MazeObjIds.EXIT)
+                and state.secret_trick_id == 10
+            ):
                 state.secret_winner = player_index               # 0x42846-0x42A1A
             from .shots import tport_cycle_start
 

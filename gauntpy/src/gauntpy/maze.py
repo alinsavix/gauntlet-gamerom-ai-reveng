@@ -1002,6 +1002,125 @@ def place_deferred_thief_pickups(state: GameState) -> list[int]:
     return placed
 
 
+def _remove_random_food(state: GameState, count: int) -> list[int]:
+    """maze_scan_objects(count), 0x43D8C -- remove up to count food MOBs."""
+    removed: list[int] = []
+    food_types = {
+        int(MazeObjIds.FOOD_DESTRUCTABLE),
+        int(MazeObjIds.FOOD_INVULN),
+    }
+    foods = [
+        slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.picture))
+        if state.mobs.obj_type(slot) in food_types
+    ]
+    count = min(max(0, count), len(foods))
+    remaining_ahead = len(foods)
+    cursor = 0
+    while count:
+        choice_window = remaining_ahead // count
+        choice = state.getrandom(choice_window)
+        selected = cursor + choice
+        slot = foods[selected]
+        state.mobs.unlink_and_clear(slot)
+        removed.append(slot)
+        # maze_scan_objects keeps its A2 sweep pointer after the selected food.
+        # Foods passed over cannot be selected by a later iteration.
+        remaining_ahead -= choice + 1
+        cursor = selected + 1
+        count -= 1
+    return removed
+
+
+def maze_addrandompickups(
+    state: GameState, enable_random_pickups: bool,
+) -> list[int]:
+    """0x43F68 -- add/remove the level's complete random pickup set."""
+    if state.mazenum_current >= 0x73:
+        state.random_pickups_setup_done = True
+        return []
+
+    placed: list[int] = []
+
+    # The guaranteed hidden-potion cadence begins at level 6 and reloads its
+    # next-level countdown to three after placement.
+    if state.level_next_potion == 0 and state.levelnum_current >= 6:
+        placed.append(maze_randomplace(state, MazeObjIds.HIDDENPOT))
+        state.level_next_potion = 3
+
+    pickup_delta = state.level_flags_3 & 0x07
+    active = max(0, min(int(state.level_players_active), 4))
+    difficulty = (state.game_settings & 0xE0) >> 5
+    character_index = 1
+
+    if state.mazenum_current < 0x68 and enable_random_pickups:
+        if active == 1:
+            player_index = next(
+                (
+                    index for index in range(len(state.players) - 1, -1, -1)
+                    if state.players[index].mob_slot
+                ),
+                0,
+            )
+            character_index = int(state.players[player_index].character) & 0x03
+
+            if character_index == 2:  # Wizard
+                draw = state.getrandom(4)
+                if difficulty > 4:
+                    pickup_delta -= 2 if draw <= 8 - difficulty else 3
+                else:
+                    pickup_delta -= 1 if draw <= 4 - difficulty else 2
+            elif character_index == 0:  # Warrior
+                draw = state.getrandom(4)
+                if difficulty >= 4:
+                    pickup_delta -= 1 if draw <= 7 - difficulty else 2
+                elif draw > 3 - difficulty:
+                    pickup_delta -= 1
+            elif character_index == 3 and difficulty >= 4:  # Elf
+                if state.getrandom(4) > 6 - difficulty:
+                    pickup_delta -= 1
+        else:
+            character_index = 1
+            if active == 2:
+                if state.getrandom(4) > 7 - difficulty:
+                    pickup_delta -= 1
+            elif active == 3:
+                pickup_delta += 1
+            elif active == 4:
+                pickup_delta += 2
+
+        class_bonus = (3, 0, 4, 0)[character_index]
+        spawn_bonus = state.spawn_probability_bonus & 0xFF
+        if spawn_bonus & 0x80:
+            spawn_bonus -= 0x100
+        excess = spawn_bonus - class_bonus
+        if excess > 0:
+            pickup_delta -= excess >> 2
+            if state.getrandom(4) < (excess & 3):
+                pickup_delta -= 1
+
+    if pickup_delta < 0:
+        _remove_random_food(state, -pickup_delta)
+    else:
+        for _ in range(pickup_delta):
+            placed.append(maze_randomplace(state, MazeObjIds.FOOD_DESTRUCTABLE))
+
+    placed.extend(place_deferred_thief_pickups(state))
+
+    # From level 3 onward, a pair of independent draws can add one authored
+    # special pickup. The second draw selects slow food versus a potion.
+    if state.levelnum_current >= 3 and state.getrandom(0x40) < 0x18:
+        if state.getrandom(0x40) < 0x20:
+            slot = maze_randomplace(state, MazeObjIds.POT_DESTRUCTABLE)
+            state.mobs.picture[slot] = 0x20FC
+        else:
+            slot = maze_randomplace(state, MazeObjIds.FOOD_DESTRUCTABLE)
+            state.mobs.picture[slot] = 0x25ED
+        placed.append(slot)
+
+    state.random_pickups_setup_done = True
+    return placed
+
+
 def _write_marker(state: GameState, slot: int, object_type: int, picture: int) -> None:
     """Stamp a marker straight into the five arrays (ROM 0x46012-0x460B4).
 
@@ -1381,6 +1500,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     select_forcefield_delay_profile(state)
     state.level_treasures = 0            # fresh level: reset the bonus tally count
     state.special_bonus_score = 100      # 0x44166, ordinary score-bag value
+    state.random_pickups_setup_done = False
 
     if maze_number is not None:
         # Caller pins a specific maze (attract demo/legend, treasure rooms) that
@@ -1406,13 +1526,13 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     # maze_setupnew calls maze_place_object(0, 2, 0x20)").
     place_decoded_objects(state, maze)
     maze_place_object(state, 0, MazeObjIds.WALL_REGULAR, FIRST_PLAYABLE_SLOT)
-    place_deferred_thief_pickups(state)
-
     # Logical maze data remains useful to gameplay/catalog code. The display
     # bridge commits its random texture decisions once into hardware-shaped
     # descriptor RAM; rendering never treats this dictionary as pixels.
     state.maze = mirror_maze(state, maze)
     select_player_start_slot(state)              # maze_scan_objects(-1), 0x4395E
+    from .subsystems.camera import scroll_to_slot
+    scroll_to_slot(state, state.maze_player_start_slot)  # 0x43974
     from .subsystems.maze_objects import (
         forcefield_segments_setup, maze_forcefield_setup,
     )

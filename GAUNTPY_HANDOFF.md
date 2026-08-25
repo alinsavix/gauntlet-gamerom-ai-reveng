@@ -145,9 +145,9 @@ $env:GEX_ROM_DIR = '../ROMs'
 python -m pytest -q
 ```
 
-Current expected result at commit `04802b4`:
+Current expected result:
 
-`2270 passed, 4 skipped`
+`2359 passed, 9 skipped`
 
 ROM-free gauntpy suite:
 
@@ -159,7 +159,7 @@ python -m pytest -q
 
 Current expected result:
 
-`2046 passed, 228 skipped`
+`2122 passed, 246 skipped`
 
 Sibling decoder suite:
 

@@ -4,7 +4,7 @@
 
 ## Callable-entry coverage audit
 
-**Confidence: Verified.** All 321 unique documented game-ROM callable entries
+**Confidence: Verified.** All 322 unique documented game-ROM callable entries
 are covered by the checked contract catalogs linked in this chapter. Those
 catalogs state arguments, returns, and every convention exception found by
 fresh body/caller analysis; the union is checked by
@@ -13,7 +13,7 @@ insufficient, but the completed contract pass now supplies the missing ABI
 evidence.
 
 The target audit does not rely on prologue bytes. The checked
-[`generated/control_targets.csv`](generated/control_targets.csv) independently analyzes all 321
+[`generated/control_targets.csv`](generated/control_targets.csv) independently analyzes all 322
 documented game entries plus the 81 unique destinations proven by the 12
 computed-dispatch tables, and deduplicates overlapping bodies. Its 1,129
 direct sites comprise 996 calls/jumps to documented game entries, 124 calls to
@@ -733,7 +733,7 @@ contracts.
 **Confidence: Verified.** This seven-row catalog completed the original
 294-entry contract set and corrects four misleading thief helper names. The
 later ROM-byte closure sweep added 27 shipped veneers, pointer-installed
-leaves, and dormant/legacy entries; the current union is 321/321 as stated at
+leaves, and dormant/legacy entries; the current union is 322/322 as stated at
 the start of this chapter.
 
 | Address | Name | Arguments | Return | Convention exception |
