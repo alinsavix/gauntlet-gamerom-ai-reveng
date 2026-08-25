@@ -514,6 +514,15 @@ motion is also committed before a blocked vertical axis. A direct probe of maze
 block on both gauntpy and the ROM; the wrapped L/R seam is not a separate
 failure there.
 
+A maze-16 capture at `(41,288)` demonstrates the narrowest consequence. The
+walls flanking cell 547 have corrected collision anchors 32 pixels apart. Since
+each strict window extends just under 16 pixels, only hero H anchor 44 clears
+both flanks at once. Direct ROM execution of `probe_up`/`tile_lookup_core`
+returns wall 546 with carry set at X=41, matching gauntpy. The powered Elf's
+2/3-pixel cadence can still reach X=44 (from the capture: Right, Right, Left),
+after which Up succeeds. This is original alignment geometry, not a reason to
+widen the collision window.
+
 A reported maze-16 block at player coordinate `(396,176)` is not part of the
 static collision geometry. With the live camera snapped to that player,
 gauntpy advances Down to `(396,178)`; direct execution of `player_try_move`

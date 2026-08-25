@@ -213,6 +213,13 @@ All of the wall, door, and occupancy probes work on Chapter 8's packed maze
 slots and the traversability table introduced there. Movement is the biggest
 customer of that machinery.
 
+The narrowest one-cell lanes expose how exact those probes are. Two corrected
+wall anchors can stand 32 pixels apart while each rejects a hero anchor less
+than 15.5 pixels away. That leaves one integer alignment between them. A fast
+hero may need to step past that line and reverse onto it as the speed cadence
+changes; widening the lane would feel easier, but it would no longer be the
+cabinet's collision.
+
 And when the move commits, the last thing it does is ask which cell your new
 position actually names, biasing by half a sprite so the answer is the cell
 your body is over rather than the one its top-left corner grazes. If that is a

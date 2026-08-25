@@ -467,6 +467,38 @@ class TestPlayerTryMoveWallCollision:
         assert player_try_move(state, pi, gin.JOY_RIGHT, 0) != _NO_MOVE
         assert hpos_x(state.mobs.hpos[state.players[pi].mob_slot]) > before
 
+    def test_maze16_narrow_wall_lane_has_the_rom_alignment_escape(self):
+        """Regression for the frame-10310 live-state report at (41, 288)."""
+        state = GameState(game_mode=GameMode.NORMAL)
+        player = _active_player_at(state, 0, (18 << 5) | 3)
+        player.character = Character.ELF
+        player.powers = int(PlayerPower.SPEED | PlayerPower.REFLECT)
+        state.frame_counter = 10310
+        state.mobs.hpos[player.mob_slot] = (41 << 7) | 0x0C
+        state.mobs.vpos[player.mob_slot] = encode_vpos_at_y(288, 3, 3)
+        for slot in ((17 << 5) | 2, (17 << 5) | 4):
+            state.mobs.create(
+                slot,
+                tile=_WALL_PICTURE,
+                hpos=(slot & 0x1F) * 16 << 7,
+                vpos=encode_vpos_at_y((slot >> 5) * 16),
+                obj_type=int(MazeObjIds.WALL_REGULAR),
+                link_into_chain=False,
+            )
+
+        state.movement_type = 2
+        assert player_try_move(state, 0, gin.JOY_UP, 0) == _NO_MOVE
+
+        for direction in (gin.JOY_RIGHT, gin.JOY_RIGHT, gin.JOY_LEFT):
+            state.movement_type = 2
+            assert player_try_move(state, 0, direction, 0) != _NO_MOVE
+            state.frame_counter += 1
+
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 44
+        state.movement_type = 2
+        assert player_try_move(state, 0, gin.JOY_UP, 0) != _NO_MOVE
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == 285
+
 
 # ---------------------------------------------------------------------------
 # Diagonal partial movement (acceptance criterion 2)

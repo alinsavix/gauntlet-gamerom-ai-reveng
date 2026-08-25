@@ -194,6 +194,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
 46. **Shared ROM probes stay shared.** Movable-wall traversal uses the same
     `ray_march_*` geometry as monster movement. Do not substitute the similarly
     shaped player `mob_probe_*` family; its boundary ownership is different.
+47. **One-cell wall lanes can require exact anchor alignment.** The player probe
+    compares corrected wall and live hero words with the ROM's strict `0x7C0`
+    window. Between wall anchors 32 pixels apart, only one integer hero H
+    position may clear both flanks. Do not widen that lane or replace it with
+    sprite-box collision; use the original speed cadence and axis ordering to
+    verify that the alignment remains reachable.
 
 ## Investigation workflow
 

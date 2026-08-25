@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2359 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2360 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -61,6 +61,22 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-135 · maze-16 narrow wall lane matches the ROM
+
+The frame-10310 capture reproduces at level 17 / maze 16 with the Elf at
+`(41,288)`, slot 579. Up probes the empty cell 547 plus wall flanks 546 and 548;
+the corrected anchor of wall 546 is within the strict `0x7C0` H/V window, so
+gauntpy blocks the move.
+
+This is not a stale MOB or widened Python collision. Direct execution of
+`probe_up` (0x425D0) and `tile_lookup_core` (0x42648) against the captured
+picture/H/V arrays returns doubled wall slot 1092 with carry set, exactly as
+gauntpy does. The two wall collision anchors are 32 pixels apart, leaving one
+integer hero anchor, X=44, that clears both strict comparisons. The captured
+powered Elf reaches it through the ROM speed cadence with Right, Right, Left,
+then moves Up from `(44,288)` to `(44,285)`. No collision widening was made; a
+regression preserves both the reported block and the reachable escape.
 
 ### S-134 · ROM/Python callable implementation gaps are closed
 

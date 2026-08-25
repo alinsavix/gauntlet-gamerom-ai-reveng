@@ -235,6 +235,12 @@ the picture visibly closer to, or partly over, wall pixels even though the next
 anchor test correctly stops it. Replacing this with rectangular sprite
 collision would feel tighter than the cabinet, not more faithful.
 
+At the limit, two wall anchors 32 pixels apart leave exactly one integer hero
+anchor that clears both strict windows. The route is open, but a fast class can
+have to overshoot and reverse onto that one-pixel alignment before moving
+through. That demanding lane follows from the same live words and comparison;
+it is not a narrower renderer shape or a phantom wall.
+
 ## The invisible half
 
 Chapter 4 ended by promising that pixels are only the visible half of the
