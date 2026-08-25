@@ -875,6 +875,18 @@ def main_move_monsters(state: GameState) -> None:
         return
     _update_cull_rect(state)
 
+    # monsters_everything 0x40E9A branches to the potion scan instead of its
+    # ordinary walk while the one-field color latch differs from the level
+    # floor color. This keeps surviving/revealed targets from acting afterward.
+    if state.playfield_color_latch != state.playfield_color_base:
+        from .potions import potion_blast
+
+        owner = state.potion_player & 0x03
+        potion_blast(
+            state, owner, shot_triggered=bool(state.potion_player & 0x04),
+        )
+        return
+
     # 0x49076-0x490CC: two SLIP bucket heads bracket the on-screen band of the
     # chain -- the walk starts at one and stops at the other.
     start_slot = _walk_band_head(state, -_WALK_HALF_SPAN)

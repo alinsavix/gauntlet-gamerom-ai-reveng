@@ -220,6 +220,14 @@ the row-zero flank while the hero record is still in row one. Missing those
 two boundary details makes the top wall catch lateral movement in otherwise
 open space.
 
+Upward movement has an additional guard for the same shared storage. Once the
+game is running, row-zero slot numbers belong to fixed shots and effects, so
+their pictures may replace the wall markers written during level setup. A hero
+in row one therefore does not ask those slots whether the ceiling is solid.
+The movement routine compares the proposed full vertical MOB word -- size bits
+included -- with a fixed boundary. That is why the hero stops at the same
+height while continuing to slide left or right even as row-zero objects change.
+
 It also explains a visual trap when judging collision by eye. The hero artwork
 is wider than one cell, but the game compares corrected MOB anchors inside a
 strict window and resolves horizontal motion before vertical. A frame can move

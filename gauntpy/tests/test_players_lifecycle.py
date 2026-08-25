@@ -3709,6 +3709,44 @@ class TestTransporterObjectiveSites:
         gp.player_tport(state, 0, source)
         assert state.secret_winner == -1
 
+    def test_transporting_into_an_exit_wins_trick_three(self):
+        state, _, _ = self._world(3)
+        landing = _pack(6, 6)
+        state.mobs.create(
+            landing, tile=0x8001, hpos=6 * 16 << 7,
+            vpos=native_v(6 * 16) << 7, obj_type=int(MazeObjIds.EXIT),
+        )
+
+        gp._move_player_to_slot(state, 0, landing)
+
+        assert state.secret_winner == 0
+
+    def test_corner_transport_through_a_secret_wall_wins_trick_four(self):
+        state = _trick_state(4)
+        source = _pack(5, 5)
+        landing = _pack(6, 6)
+        state.mobs.create(
+            source, tile=0x2000, hpos=(5 * 16 - 4) << 7,
+            vpos=native_v(5 * 16) << 7,
+            obj_type=int(MazeObjIds.PLAYERSTART),
+        )
+        player = state.players[0]
+        player.status = int(PlayerStatus.ALIVE_HERE)
+        player.mob_slot = source
+        state.mobs.create(
+            landing, tile=0x8000, hpos=6 * 16 << 7,
+            vpos=native_v(6 * 16) << 7,
+            obj_type=int(MazeObjIds.WALL_SECRET),
+        )
+        state.player_tport_route_state[0] = source
+        state.player_tport_type[0] = 0
+        state.player_tile_pos[0] = landing
+
+        gp.tport_player_move(state, 0)
+
+        assert state.secret_winner == 0
+        assert state.mobs.obj_type(landing) == int(MazeObjIds.PLAYERSTART)
+
 
 class TestTransporterArrivalInteracts:
     """0x50A18-0x50A66 -- the four cells around the destination are entered."""

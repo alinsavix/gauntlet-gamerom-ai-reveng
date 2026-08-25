@@ -264,6 +264,29 @@ def _nearby_player(state: GameState, head_slot: int) -> bool:
     return False
 
 
+def _tile_near_screen(state: GameState, slot: int) -> bool:
+    """tile_near_screen_test 0x5E5D8, including its unsigned edge tests."""
+    h_delta = (
+        (((slot & 0x1F) << 4) << POS_SHIFT)
+        + 0x0780
+        - (state.scroll_x << POS_SHIFT)
+    ) & 0xFFFF
+    if h_delta >= 0x7B80:
+        return False
+
+    native_v = ((((slot & 0x3E0) ^ 0x3E0) >> 1) << POS_SHIFT) & 0xFFFF
+    v_origin = ((0x108 - state.scroll_y) << POS_SHIFT) & 0xFFFF
+    return ((native_v - v_origin + 0x0380) & 0xFFFF) < 0x7F80
+
+
+def dragon_any_segment_near_screen(state: GameState) -> bool:
+    """0x54AF8 -- test all four packed dragon segment cells."""
+    segments = state.dragon_seg_mob_ids
+    if not segments[0]:
+        return False
+    return any(_tile_near_screen(state, slot) for slot in segments)
+
+
 def _select_new_path(state: GameState) -> None:
     state.dragon_path_num = state.getrandom(len(_DRAGON_PATH_PROGRAMS))
 

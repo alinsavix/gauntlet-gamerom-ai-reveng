@@ -19,9 +19,10 @@ from gauntpy.constants import (
     Character,
     GameMode,
     MazeObjIds,
+    PlayerPower,
     PlayerStatus,
 )
-from gauntpy.coords import hpos_x, native_v, vpos_y
+from gauntpy.coords import encode_vpos_at_y, hpos_x, native_v, vpos_y
 from gauntpy.state import GameState, Player
 from gauntpy.subsystems import players as gp
 from gauntpy.subsystems.players import (
@@ -68,6 +69,33 @@ def _active_player_at(state: GameState, player_index: int, slot: int) -> Player:
     # player-offscreen flag. Dedicated tests below cover the screen gate.
     state.level_flags_4 |= 0x80
     return player
+
+
+def test_pushing_a_movable_wall_into_an_exit_wins_trick_ten():
+    wall = (5 << 5) | 5
+    exit_slot = wall + 1
+    state = GameState()
+    state.secret_trick_id = 10
+    state.mobs.create(
+        wall,
+        tile=0x20F6,
+        hpos=5 * 16 << 7,
+        vpos=encode_vpos_at_y(5 * 16),
+        obj_type=int(MazeObjIds.WALL_MOVABLE),
+    )
+    state.mobs.create(
+        exit_slot,
+        tile=0x8001,
+        hpos=6 * 16 << 7,
+        vpos=encode_vpos_at_y(5 * 16),
+        obj_type=int(MazeObjIds.EXIT),
+    )
+
+    assert gp._push_movable_wall(
+        state, 2, wall, gp._JOY_RIGHT, vertical=False,
+    )
+    assert state.secret_winner == 2
+    assert state.mobs.picture[wall] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +278,17 @@ class TestPlayerTryMoveWallCollision:
         player_try_move(state, pi, gin.JOY_UP, 0)
         y_after = vpos_y(state.mobs.vpos[state.players[pi].mob_slot])
         assert y_after == y_before, "should not move into wall above"
+
+    def test_row_one_player_boundary_ignores_cleared_reserved_mob_slots(self):
+        state, pi = self._player_at_slot((1 << 5) | 10)
+        slot = state.players[pi].mob_slot
+        for reserved in range(FIRST_PLAYABLE_SLOT):
+            state.mobs.picture[reserved] = 0
+        state.mobs.vpos[slot] = encode_vpos_at_y(16, 3, 3)
+
+        player_try_move(state, pi, gin.JOY_UP, 0)
+
+        assert vpos_y(state.mobs.vpos[state.players[pi].mob_slot]) == 16
 
     def test_blocked_down(self):
         state, pi = self._player_at_slot((5 << 5) | 5)
@@ -476,6 +515,48 @@ class TestHandToHandGenerators:
         assert state.mobs.hpos[player.mob_slot] == before
         assert state.player_fighting_dir[0] == 0
         assert state.mobs.picture[slot] != 0
+
+
+class TestCharacterFightTables:
+    """mob_collision_test 0x521AE-0x52438 table selection."""
+
+    def test_fight_tables_match_the_rom(self):
+        assert gp._HAND_POWER == (2, 2, 1, 1, 3, 3, 2, 2)
+        assert gp._HAND_RANDOM == (0, 0, 0, 2)
+        assert gp._GENERATOR_FIGHT_POWER == (3, 2, 0, 0, 4, 3, 0, 1)
+
+    def test_extra_fight_power_selects_the_second_character_row(self):
+        for character, powered, expected_damage in (
+            (Character.WARRIOR, False, 2),
+            (Character.VALKYRIE, False, 2),
+            (Character.WIZARD, False, 1),
+            (Character.ELF, False, 1),
+            (Character.WARRIOR, True, 3),
+            (Character.VALKYRIE, True, 3),
+            (Character.WIZARD, True, 2),
+            (Character.ELF, True, 2),
+        ):
+            state = GameState()
+            player = _active_player_at(state, 0, (10 << 5) | 10)
+            player.character = character
+            player.powers = int(PlayerPower.FIGHT) if powered else 0
+            slot = (10 << 5) | 11
+            state.mobs.create(
+                slot, tile=0x2000, hpos=(176 << 7) | 0x0B,
+                vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_LOBBER),
+            )
+            state.player_fighting_dir[0] = 1
+            state.rng = type("ZeroRng", (), {
+                "getrandom": staticmethod(lambda _bound: 0),
+            })()
+
+            gp._player_fight_collision(state, 0, slot)
+
+            remaining = (0x0B - expected_damage) & 0x0F
+            if remaining < 9:
+                assert state.mobs.obj_type(slot) == 0
+            else:
+                assert state.mobs.hpos[slot] & 0x0F == remaining
 
 
 class TestLockedTreasureCollision:
@@ -937,6 +1018,7 @@ class TestCornerSqueezeGeometry:
     def test_top_border_squeeze_advances_through_wrapped_row(self):
         state = GameState(wrap_v=True)
         player = _active_player_at(state, 0, (1 << 5) | 10)
+        state.mobs.vpos[player.mob_slot] |= 0x12
         player.powers = self._POWER_INVULN
         wall = (0 << 5) | 10
         state.mobs.picture[wall] = _WALL_PICTURE

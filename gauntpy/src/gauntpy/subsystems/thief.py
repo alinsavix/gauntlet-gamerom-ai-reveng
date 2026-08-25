@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from ..constants import FIRST_PLAYABLE_SLOT, MazeObjIds
 from ..coords import (
-    biased_pixels_to_slot,
     decode_hpos,
     decode_vpos,
     encode_hpos,
     encode_vpos_at_y,
     hpos_x,
+    mob_cell_of,
     vpos_y,
 )
 from ..state import GameState
@@ -660,10 +660,6 @@ def _slot_for_thief(state: GameState) -> int:
     return state.thief_mob_slot or state.thief_current_pos
 
 
-def _pixel_to_slot(x: int, y: int) -> int:
-    return biased_pixels_to_slot(x, y)
-
-
 def _clamp_or_wrap(value: int, wraps: bool) -> int:
     return value % _WORLD_PIXELS if wraps else max(0, min(_WORLD_PIXELS - 1, value))
 
@@ -818,7 +814,7 @@ def _axis_delta(move_flags: int, horizontal_speed: int, vertical_speed: int) -> 
 
 
 def _move_thief_axis(state: GameState, dx: int, dy: int) -> tuple[bool, bool]:
-    """Apply one collision-checked axis.  Returns (moved, blocked)."""
+    """Apply one ROM-probed axis. Returns (moved, blocked)."""
     if not dx and not dy:
         return False, False
     slot = _slot_for_thief(state)
@@ -827,34 +823,57 @@ def _move_thief_axis(state: GameState, dx: int, dy: int) -> tuple[bool, bool]:
     x, flags, palette = decode_hpos(state.mobs.hpos[slot])
     _, width, height = decode_vpos(state.mobs.vpos[slot])
     y = vpos_y(state.mobs.vpos[slot])
-    old_cell = _pixel_to_slot(x, y)
     new_x = _clamp_or_wrap(x + dx, state.wrap_h)
     new_y = _clamp_or_wrap(y + dy, state.wrap_v)
-    new_cell = _pixel_to_slot(new_x, new_y)
 
-    if new_cell != old_cell:
-        player_index = _player_at_cell(state, new_cell)
-        if player_index >= 0:
-            if state.thief_mode & THIEF_ESCAPE:
-                _handle_escape_player_contact(state, player_index)
-            elif thief_steal_from_player(state, player_index):
-                return False, True
+    from .players import (
+        mob_probe_down,
+        mob_probe_left,
+        mob_probe_right,
+        mob_probe_up,
+    )
 
-        if state.mobs.is_occupied(new_cell):
-            if thief_handle_tile_collision(state, new_cell):
-                return False, True
-        else:
-            state.mobs.move_slot(slot, new_cell)
-            slot = new_cell
-            state.thief_mob_slot = slot
-            state.thief_current_pos = slot
-            if state.thief_current_pos == state.thief_next_pos:
-                path_grid_set_high_direction_if_empty(
-                    state, slot, (state.thief_path_direction + 4) & 7
-                )
+    proposed_h = encode_hpos(new_x, palette, flags)
+    proposed_v = encode_vpos_at_y(new_y, width, height)
+    if dx:
+        probe = mob_probe_right if dx > 0 else mob_probe_left
+    else:
+        probe = mob_probe_down if dy > 0 else mob_probe_up
+    candidate = probe(
+        state,
+        slot,
+        hpos=proposed_h,
+        vpos=proposed_v,
+        self_slot=slot,
+        defer_interactions=False,
+    )
+    if candidate >= 0:
+        player_index = _fixed_player_at_slot(state, candidate)
+        if (
+            player_index >= 0
+            and _player_is_targetable(state, player_index)
+            and not state.thief_mode & THIEF_ESCAPE
+            and thief_steal_from_player(state, player_index)
+        ):
+            return False, True
+        if candidate > _PATH_GRID_MAX_CELL or thief_handle_tile_collision(
+            state, candidate,
+        ):
+            return False, True
+        return False, False
 
-    state.mobs.hpos[slot] = encode_hpos(new_x, palette, flags)
-    state.mobs.vpos[slot] = encode_vpos_at_y(new_y, width, height)
+    state.mobs.hpos[slot] = proposed_h
+    state.mobs.vpos[slot] = proposed_v
+    new_cell = mob_cell_of(proposed_h, proposed_v)
+    if new_cell != slot and not state.mobs.is_occupied(new_cell):
+        state.mobs.move_slot(slot, new_cell)
+        slot = new_cell
+        state.thief_mob_slot = slot
+        state.thief_current_pos = slot
+        if state.thief_current_pos == state.thief_next_pos:
+            path_grid_set_high_direction_if_empty(
+                state, slot, (state.thief_path_direction + 4) & 7
+            )
     return True, False
 
 

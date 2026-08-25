@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2317 passed, 7 skipped** (gauntpy) and
+present the suites are clean: **2344 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -33,7 +33,175 @@ start).
 
 ---
 
+## Open issues
+
+### S-126 · live-only downward block at level 17 / maze 16 `(396,176)`
+
+The reported session blocks Down at player coordinate `(396,176)`, although no
+visible object occupies the corridor below. This is not reproducible from a
+fresh maze-16 state: with the camera snapped to the live player, gauntpy moves
+to `(396,178)`, and direct ROM execution of `player_try_move` does the same.
+The static maze records around slots `0x179`/`0x199` therefore do not explain
+the report. A transient MOB record, stale camera origin, or another live RAM
+field is required to distinguish the failing state.
+
+F4 now captures that evidence without changing simulation memory. Reproduce
+the block, press F4 once, and retain the printed JSON path under
+`traces/state-dumps/`; the dump contains the complete player/MOB tables,
+camera origins, maze state, path grids, all modeled video/color RAM, timers,
+inputs, and RNG seed.
+
 ## Resolved issues
+
+### S-132 · secret-room invitations, hints, and direct triggers were incomplete
+
+The secret challenge lifecycle selected maze 115/116 and could complete its
+round trip, but `show_level_start_screen` left the 600-frame invitation curtain
+blank. ROM 0x44F7E-0x450F8 writes `SECRET ROOM`, the winning player's color and
+character, the two-line achievement message, both countdown fields, and the
+task-specific qualifier from the 14 records at 0x573D4. Those are now literal
+game-side alpha-RAM writes.
+
+The separate `secret_need_hint` latch was produced by secret-wall and dragon
+rewards but never consumed. `level_splash` 0x4C04E-0x4C108 writes `TO ENTER
+SECRET ROOM:` between levels, uses the selected upcoming maze header's trick
+when it is currently eligible (including the level-12 dragon gate), otherwise
+chooses one of the 17 ROM hint strings, then clears the latch. It does not infer
+the hint from the level just left.
+
+The trigger audit also restored three direct `trick_player` writes: ordinary
+transport into an exit (trick 3, 0x50916), corner transport through a secret
+wall (trick 4, 0x507B8), and pushing a movable wall into an exit (trick 10,
+0x42846-0x42A1A). Tricks 1-4 and 10 are completion-only producers and do not
+increment `secret_tricks_flags`; the five-transporter challenge 0x56 remains
+the distinct pad-bitmask consumer. Clearing the corner-transport wall now
+unlinks its marker while retaining H/V geometry, preventing a stale depth-chain
+link when the player occupies that cell.
+
+### S-131 · character stat-table selector audit
+
+Direct disassembly and raw ROM reads verified all five requested stat families
+against their gauntpy consumers. No behavioral selector was wrong:
+
+- Shot Power is low-byte bit 4. `resolve_shot_hit` reads
+  `shot_damage_base_tbl`/`shot_damage_rand_tbl` at 0x596B6/0x596C2 using
+  character 0-3 or character+8 when powered; supershots override damage with 3.
+- Shot Speed is bit 3. `main_handle_shots` reads the signed X/Y tables at
+  0x576E2/0x57792 using `character*8 + direction`, plus 0x28 entries when
+  powered. A misleading `_VEL_SHOTPOWER` name and test title were corrected to
+  Shot Speed; the implemented bit and values were already right.
+- movement Speed is bit 0. `main_move_players` selects character or character+4
+  from parallel tables 0x580A8/0x580B8, including their per-frame +0x80 cadence;
+  mazes 0x73+ intentionally bypass them with fixed 0x100.
+- Armor is bit 1 and selects the protected rows of each applicable incoming
+  damage table: +0x20 entries in contact table 0x57A2E, +4 entries in monster
+  shot table 0x596CE, and +4 longwords in forcefield table 0x5813C. Death's
+  accumulator likewise selects its protected 3-point entry instead of 4.
+- Fight Power is bit 2. `mob_collision_test` indexes hand power 0x5B7D4 and
+  generator power 0x5B7EC by `character + 4*powered`. Its separate random range
+  at 0x5B7E4 is indexed by cabinet player position, not character.
+
+Cross-character regressions now protect the damage/velocity independence and
+all eight normal/powered melee base selections.
+
+### S-130 · potion flash and special-target magic paths were absent
+
+`main_handle_potions` consumed inventory and ran the 28x16 effect matrix
+immediately, but omitted several parts of the ROM path. At 0x47084-0x47098, drinking
+or shooting a potion loads color 3 of the triggering player-position palette
+into the 0x90401E latch. VBLANK copies that word to playfield color RAM 0x910510;
+the next main-loop pass restores 0x90401E from the ordinary floor-color word at
+0x904020. Gauntpy now models both RAM words and the one-field color-RAM write, so
+the screen flash comes from authoritative playfield color state.
+
+The same handler calls `dragon_any_segment_near_screen` before the ordinary MOB
+scan. A visible active dragon gains stun bit 1; a second potion clears stun,
+sets wake bit 0, and loads animation counter -49; a potion during wake starts or
+reverses the 49-frame wake animation and plays sound 0xD5. Direct Unicorn
+execution of ROM 0x46FEA confirmed those exact state/animation results and the
+player-0 flash word 0xFF00.
+
+The scan is an alternate `monsters_everything` pass, not an extra call before
+ordinary monster updates; survivors therefore cannot act again on the potion
+frame. It also has pre-matrix arms: magic sets an idle Acid puddle's
+attack/stun phase and reveals a phasing Super Sorcerer, clearing their animation
+state rather than removing them. A subsequent eligible Acid hit reaches its
+zero matrix entry and destroys it. These paths now run before the literal
+matrix. The matrix selector now also keeps `potion_player` as player/shot
+provenance and reads the character separately, as 0x41588-0x41662 does. The
+per-character outcomes were otherwise already correct: normal
+Warrior/Valkyrie magic only weakens a full-tier Ghost, Wizard and Elf destroy
+ordinary monster rows outright, and Elf demotes rather than clears a top-tier
+generator.
+
+### S-129 · F5 left the level-start splash permanently opaque
+
+The immediate skip loaded and spawned the next level, then zeroed the shared
+UI timer without running the timer-expiry teardown. The `LEVEL:` alpha words
+therefore had no remaining owner that could clear them. F5 now mirrors the
+normal expiry order: load the maze without players, run `maze_show_alpha`, then
+spawn the surviving party and clear the host-side pending marker.
+
+### S-128 · live troubleshooting required replaying whole levels
+
+The host now provides three explicit non-arcade shortcuts. F5 computes the next
+level/maze through the cabinet rotation, reloads it immediately, respawns the
+active party, and snaps the camera while preserving inventory. F6 and F7 add
+one key or potion to the selected host player and call `player_inv_update`, so
+the authoritative counters and modeled alpha-RAM display remain synchronized.
+Inactive players and non-gameplay level skips are rejected with a terminal
+message rather than silently mutating partial state.
+
+### S-127 · troubleshooting had no complete live-state capture
+
+The F1 panel deliberately presents compact immutable projections, but that is
+not enough to reconstruct a one-frame collision divergence. F4 now atomically
+writes every modeled `GameState` field to a timestamped JSON file in the
+Git-ignored `traces/state-dumps/` directory and prints its path. The serializer
+includes slot-backed `MobTable` arrays, dataclass state, non-string-keyed maze
+maps, RNG state, and all modeled display memory. It is host-only and read-only.
+
+### S-125 · thief collision waited for its sprite origin to enter a wall
+
+On level 16 / maze 15, a player at `(12,304)` can draw the thief east through
+the one-cell pocket beside the wall at packed slot `0x262`. Gauntpy derived the
+thief's candidate cell from its uncorrected sprite origin and did no collision
+work until that point crossed X=32. The 24-pixel thief therefore advanced to
+X=28, visibly buried itself in the wall, retained the stale open-cell MOB slot,
+and became difficult or impossible to hit while blocking the pocket.
+
+Direct ROM execution of `thief_move_engine` (0x4EE7A) with the maze-15 records
+keeps the thief at X=12. Each axis first writes the proposed native H/V word,
+then calls `thief_probe_axis` (0x4EE0A) with the generic three-cell
+`mob_probe_*` callback. The live-anchor overlap detects slot `0x262` before the
+sprite origin crosses the cell boundary. Clear space keeps the full 3/4-pixel
+step; an overlapping occupied candidate consumes that axis, with its object
+handler deciding player/item/transporter effects. The final 0x4F4A2 tail
+computes the record's new slot with the same +12 H / +8 V body bias used by the
+other dynamic MOB movers.
+
+The thief/mugger mover now follows those rules, shares the generic probe without
+the player's deferred-item policy, and migrates its MOB record from the biased
+live anchor. A ROM-backed maze-15 regression protects the reported coordinate.
+The host diagnostics font also increased from 11 to 12 pixels (heading 13 to
+14), with an 11-pixel row pitch that still fits the complete overview at native
+panel height.
+
+### S-124 · level-1 top wall used transient row-zero MOB contents
+
+The first live frame reassigns reserved MOB slots 1-16 from their setup-time
+wall markers to the fixed shot/effect channels. The upward player probe then
+treated those cleared slots as open floor, letting the hero rise from the ROM's
+Y=16 limit to Y=10. At that depth, up-right movement could target reserved row
+zero and become stuck instead of sliding along the wall.
+
+The ROM does not inspect row-zero occupancy from a row-one player.
+`player_try_move`'s internal `probe_up` (0x425D0-0x425DE) detects every doubled
+row-one slot with `D2 <= 0x007E` and compares the proposed full V word against
+`0xF080`; the hero's encoded 3x3 size bits make the next step above Y=16 block.
+Gauntpy now models that coordinate boundary independently of the transient
+fixed-channel pictures. A full-frame level-1 regression holds Up into the wall,
+then Up+Right, and verifies the Y=16 stop and lateral slide.
 
 ### S-123 · diagnostics navigation order and game-panel frame overlay
 

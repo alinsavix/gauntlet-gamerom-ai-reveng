@@ -454,10 +454,43 @@ only below 0x7C0. Direct ROM execution at maze 17 pixel `(268,15)` moves
 left/right by two pixels; treating the corrected sprite origin as row zero and
 including the reserved top wall incorrectly blocks both.
 
+The vertical top edge has a separate coordinate gate at
+`probe_up` 0x425D0-0x425DE. When D2 is at most 0x007E -- every doubled row-one
+slot -- the routine does not read row-zero MOB pictures. It loads `0xF080` and
+compares that with the proposed full D4 V word, including its encoded sprite
+size bits. This matters after the frame loop assigns reserved slots 1-16 to
+shots and effects, overwriting the wall markers installed during maze setup.
+For a live 3x3 hero, direct ROM execution stops upward movement at screen Y=16
+and Up+Right continues horizontally there. Treating those transient slot
+pictures as the ceiling instead lets the hero reach Y=10 and eventually target
+the reserved row during diagonal movement.
+
 gauntpy's shipped-demo compatibility path deliberately retains its earlier
 row-zero flank behavior. Removing it currently diverts the recorded maze-102
 actor before the transporter, contradicting the retained MAME trace that reaches
 slot 492 and lands at slot 486; this exception does not apply to normal play.
+
+#### 4.2.1 Character stat selectors
+
+The permanent stat bits do not select one combined character record. Each
+consumer builds its own index:
+
+- Movement speed (0x4A92C-0x4A95C) tests Speed bit 0 and indexes the parallel
+  eight-word tables at 0x580A8/0x580B8 by `character + 4*powered`.
+- Player-shot damage (0x4AFA6-0x4B00E) tests Shot Power bit 4 and indexes the
+  twelve-byte base/random tables at 0x596B6/0x596C2 by character or
+  character+8. A supershot replaces the result with 3.
+- Player-shot velocity (0x47846-0x478A6) separately tests Shot Speed bit 3 and
+  indexes the signed X/Y tables at 0x576E2/0x57792 by
+  `character*8 + direction + (0x28 if powered)`.
+- Incoming contact damage (0x497CE-0x49824) tests Armor bit 1 and adds 0x20
+  entries to the character/contact-class index into 0x57A2E. Monster shots add
+  4 to their 0x596CE character index; forcefields add 4 longword records into
+  0x5813C. These are distinct armor tables with the same power-bit selector.
+- Hand combat (0x521AE-0x52438) tests Fight bit 2 and adds 4 to the character
+  index for hand power 0x5B7D4 and generator power 0x5B7EC. The random hand
+  addend is deliberately different: 0x5B7E4 is indexed by cabinet player
+  position and contains `{0,0,0,2}`.
 
 `mob_collision_test` (0x52192) is deliberately tri-state. Collectible and floor
 types return -1 so movement proceeds and `player_tile_interact` handles them only
@@ -474,6 +507,13 @@ motion is also committed before a blocked vertical axis. A direct probe of maze
 17 pixel `(16,10)` confirms left/right/down movement and an up-only top-wall
 block on both gauntpy and the ROM; the wrapped L/R seam is not a separate
 failure there.
+
+A reported maze-16 block at player coordinate `(396,176)` is not part of the
+static collision geometry. With the live camera snapped to that player,
+gauntpy advances Down to `(396,178)`; direct execution of `player_try_move`
+against maze 16's nearby wall records agrees. The failing live session
+therefore needs its transient MOB table and camera/RAM origins captured before
+the responsible producer can be identified.
 
 Unless `LFLAG4_PLAYER_OFFSCREEN` is set, each proposed axis also has to remain
 inside the hardware window. The H anchor minus `scroll_hpos_origin` must be
@@ -670,6 +710,37 @@ table. Its branch belongs to `mob_collision_test` at 0x52606: no key blocks and
 shows first-encounter record 27; a key is spent, the player is stunned for 30
 frames, and getrandom(8 + 2*players) selects Death, a key, coins, potion, or food
 (the demo forces coins).
+
+#### 4.6.1 Potion magic (`main_handle_potions`, 0x46FEA)
+
+Normal play requires the debounced Magic edge; demo play reads active-low bit 0
+of the current recording directly. A successful use stores the player index in
+`potion_player`, consumes inventory, and writes alpha-palette color
+`7 + player*4` into `playfield_color_latch` (0x90401E). VBLANK publishes that
+word at playfield color RAM 0x910510. The next main-loop pass restores the
+ordinary floor color from 0x904020, so the flash is a game-side, one-field
+palette write rather than a renderer effect. Shot-triggered potions perform the
+same write and store `player + 4`.
+
+The handler then calls `dragon_any_segment_near_screen` (0x54AF8), which applies
+`tile_near_screen_test` to all four packed segment cells. An on-screen active
+dragon gains state bit 1 and remains frozen in `main_handle_dragon`. A second
+potion clears that bit, sets wake bit 0, and writes -49 to `dragon_anim_ctr`.
+During an existing wake transition, magic starts a +49 count from zero or
+negates a negative count and plays sound 0xD5.
+
+The later `monsters_everything` call compares 0x90401E with 0x904020 and branches
+to the potion scan instead of running the ordinary monster update pass. It scans
+only the cull rectangle, so surviving targets do not also move or attack on the
+potion frame. IT is immune. Before the 28x16 table lookup, a phasing Super
+Sorcerer has its movement/attack
+flags and high animation state cleared and receives visible Sorcerer art; an
+idle Acid puddle receives its first Acid frame, attack/stun flag, and cleared
+high animation state. Other eligible states use
+`potion_effect_matrix` (0x5DA98): character columns 0-3, shot columns 4-7,
+enhanced-magic columns 8-11, and shot-plus-enhanced columns 12-15. Zero removes
+the target; nonzero monster entries subtract tier strength, while generator
+entries replace the generator type and picture.
 
 ### 4.7 Score With Multiplier (`player_add_score_with_mult`, 0x5214C)
 
@@ -1302,6 +1373,24 @@ from player movement and transporter paths. If the player is the current
 position in the low path-grid nibble and updates `thief_victim_pos`. It does
 not erase a MOB or write a blank tile.
 
+The ordinary movement engine is anchor-based rather than cell-coarse.
+`thief_move_engine` (0x4EE7A) writes each proposed H or V word, then calls
+`thief_probe_axis` (0x4EE0A) with one of the generic `mob_probe_*` callbacks.
+Those callbacks test the three cells ahead against the proposed live anchor.
+If no candidate overlaps, the full thief/mugger speed is retained. An occupied
+candidate goes through `thief_handle_tile_collision`; its enclosing directional
+arm restores the proposed axis before continuing, whether the object is a
+wall, player, pickup, or non-solid transporter/floor marker. The common tail at
+0x4F4A2 derives the destination MOB slot from `(H + 0x600) >> 11` and the
+corresponding `V + 0x400` row arithmetic, then calls `moblist_replace` only when
+that biased destination is empty.
+
+This ordering is observable in maze 15. With a thief at native screen
+coordinate `(12,304)` in slot `0x261`, moving east toward the wall marker at
+`0x262`, direct ROM execution leaves H at 12. Waiting for the uncorrected sprite
+origin to reach X=32 instead lets the 24-pixel actor sink to X=28 while its MOB
+identity remains in the open cell.
+
 ### 9.3 Thief Timer (`thief_timer_set`, 0x4E4D8)
 
 Calculates next thief appearance based on target player wealth and current level number. Lower wealth → longer delay. Higher levels → shorter delays. Stored at `ram.thief_enter_time` (`0x904B9E`).
@@ -1464,7 +1553,9 @@ Secret-room availability is paced by a pair of level counters:
   `secret_code_build` when entry completes.
 - After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-character `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
 - After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) saves the maze trick in `0x904064`, replaces `0x904065` with a random task code 0x50–0x5D, selects a time limit from tables at 0x57360/0x5737C, and displays the optional task qualifier from the 14-record table at 0x573D4. It initializes the secret maze number to 115, compares the task against 0x57, and increments the maze number for tasks 0x57–0x5D before calling `maze_select_bank_special`; tasks 0x50–0x56 therefore use maze 115 and tasks 0x57–0x5D use maze 116. Code 0x5A is valid: its qualifier is “AFTER REMOVING ALL TREASURE,” and a supershot hit on ordinary treasure increments the player's progress.
-- Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872). Ordinary-maze hooks in `resolve_shot_hit` include trick 5 (shoot food), trick 9 (get hit), and trick 17 (hurt another player); the same array is reused for challenge codes 0x50–0x5D.
+- The same routine's 0x44F7E–0x450F8 display arm writes the complete 600-frame invitation into alpha RAM: `SECRET ROOM`, the winner's color and character, `YOU HAVE PERFORMED` / `A SECRET TRICK`, the small and large countdowns, and the optional qualifier descriptor. This is game-side video state, not renderer-composed text.
+- `secret_need_hint` (0x90486E) is a separate discovery latch, set when a secret wall opens (0x4B6B0) or the dragon drops its hidden reward (0x54414). `level_splash` consumes it at 0x4C04E–0x4C108: it writes `TO ENTER SECRET ROOM:`, then uses the selected upcoming maze header's objective when the availability counter is zero and the level-12 gate for trick 9 passes; otherwise it chooses one of the 17 hint strings randomly. The latch is cleared after the alpha writes.
+- Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872). Ordinary-maze hooks in `resolve_shot_hit` include trick 5 (shoot food), trick 9 (get hit), and trick 17 (hurt another player); the same array is reused for challenge codes 0x50–0x5D. Tricks 1–4 and 10 are different: their successful movement paths write `trick_player` directly—transport beside Acid/Death (0x50C30), transport into an exit (0x50916), corner transport through a secret wall (0x507B8), or push a movable wall into an exit (0x42846–0x42A1A)—without incrementing the progress bytes.
 
 ---
 

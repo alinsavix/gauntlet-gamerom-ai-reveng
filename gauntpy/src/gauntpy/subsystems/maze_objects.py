@@ -338,19 +338,14 @@ def record_transporter_secret_progress(
     """Apply the transporter-only secret hooks at 0x5025C and 0x509E4.
 
     Task 0x56 records the one-based source and destination transporter IDs as
-    bits in the player's progress byte.  The ordinary transport tricks are
-    settled at their landing object and therefore also claim the player as the
-    secret winner, just as the ROM's 0x50922 write does.
+    bits in the player's progress byte. Ordinary tricks 1-4 are completed by
+    their exact movement consumers, which write the winner without touching
+    the progress bytes.
     """
     if not 0 <= player_index < len(state.players) or powers_gate:
         return
 
     from .exits import (
-        TRICK_TRANSPORT1,
-        TRICK_TRANSPORT2,
-        TRICK_TRANSPORT3,
-        TRICK_TRANSPORT4,
-        secret_trick_progress,
         secret_trick_set,
     )
 
@@ -364,21 +359,6 @@ def record_transporter_secret_progress(
                 mask |= 1 << pad_id
         state.tport_secret_pad_masks[player_index] = mask
         secret_trick_set(state, player_index, 0x56, mask)
-
-    landing_type = state.mobs.obj_type(landing_slot & 0x3FF)
-    target_tricks = (
-        (TRICK_TRANSPORT1, int(MazeObjIds.MONST_ACID)),
-        (TRICK_TRANSPORT2, int(MazeObjIds.MONST_DEATH)),
-        (TRICK_TRANSPORT3, int(MazeObjIds.EXIT)),
-        (TRICK_TRANSPORT4, int(MazeObjIds.WALL_SECRET)),
-    )
-    for trick_id, object_type in target_tricks:
-        if state.secret_trick_id != trick_id or landing_type != object_type:
-            continue
-        secret_trick_progress(state, player_index, trick_id)
-        state.secret_winner = player_index
-        break
-
 
 def _record_inflight_transporter_secret_progress(state: GameState) -> None:
     """Bridge the player-owned transition producer to WP-11's ROM hooks."""

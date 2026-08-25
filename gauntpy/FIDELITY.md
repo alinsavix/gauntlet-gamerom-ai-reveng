@@ -144,11 +144,44 @@ evidence remains in `../doc/`, generated contracts, and the book.
     read-only snapshots after simulation and render them on a separate host
     surface. Debug values must not occupy alpha/playfield/MOB/color RAM or feed
     back into gameplay. Rolling diagnostic events are differences between host
-    snapshots, not new producers in game routines.
+    snapshots, not new producers in game routines. Complete troubleshooting
+    dumps likewise serialize `GameState` without changing it and stay in
+    ignored host files.
 37. **Demo completion belongs to the attract state machine.** The last recorded
     exit must not commit `level_next`. `main_start_game` resets the demo actors,
     closes any dialog, and expires the DEMO timer so `main_attract` advances to
     LEGEND.
+38. **The top player boundary is coordinate state, not row-zero occupancy.**
+    `probe_up` bypasses slots 0-31 while the live record is in row one and
+    compares the proposed full V word, including size bits, with `0xF080`.
+    Fixed shot/effect channels overwrite those reserved slots during play, so
+    their current pictures cannot define the ceiling.
+39. **Dynamic actor probes precede cell handoff.** The thief writes a proposed
+    native axis word and runs the generic three-cell MOB probe before deciding
+    whether its record changes slots. Use the live +12 H / +8 V body bias for
+    handoff; an uncorrected sprite-origin cell lets a 24-pixel actor penetrate
+    walls while its collision identity remains behind.
+40. **Troubleshooting mutations use game-side writers.** Host-only cheats are
+    deliberately non-arcade input, but they must update authoritative gameplay
+    state and its coupled modeled RAM. Inventory grants call
+    `player_inv_update`; level skips use the rotation and ordinary maze/player
+    setup rather than swapping renderer content.
+41. **Table dispatch includes its guards and special arms.** A literal ROM table
+    is not the whole routine. Port type/state branches before its lookup as well:
+    potion magic reveals a phasing Super Sorcerer, arms an idle Acid puddle, and
+    changes an on-screen dragon's private state before ordinary targets consult
+    the per-character effect matrix. Preserve alternate dispatch too: the potion
+    scan replaces that frame's normal monster pass rather than preceding it.
+42. **Table dimensions keep their original identities.** Character, cabinet
+    player position, power bit, projectile tier, and trigger mode are independent
+    indices even when one routine combines them. In particular, melee base power
+    uses character plus Fight power while its random range uses cabinet position;
+    Shot Speed selects velocity rows and Shot Power selects damage rows.
+43. **Secret objectives have distinct completion shapes.** Tricks 1-4 and 10
+    write the winning player directly at the event that completes them; they do
+    not manufacture progress-byte state. Between-level hints consume
+    `secret_need_hint` and inspect the already selected upcoming maze header,
+    not the objective from the maze just left.
 
 ## Investigation workflow
 

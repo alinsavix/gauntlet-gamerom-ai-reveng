@@ -66,6 +66,14 @@ turning state that plays a rotation animation and then picks a fresh path, and
 a fire cooldown that ticks down every frame. Stun and cooldown share one word,
 because in 1986 you did that.
 
+Potion magic owns the stun switch. If any of the four dragon pieces lies in the
+game's wider near-screen window, the first potion sets the stun bit and the
+dragon stops at its current pose. A second potion clears stun and starts a
+49-frame wake transition in reverse. Magic used while it is already waking
+starts or reverses that transition instead, accompanied by the dragon's special
+sound. None of this comes from the ordinary monster-effect matrix; the potion
+handler has a private dragon branch before that scan.
+
 ## Five programs, sixteen bytes each
 
 Everything the dragon does with its head is authored. Five compact programs sit
@@ -222,6 +230,16 @@ the game uses for routing, and the thief reads that nibble as it goes. It is
 literally following your footprints, one cell behind. Each grid byte holds two
 of these direction codes, and the thief switches to the other one the moment it
 turns to escape, which looks very much like retracing the route it came in by.
+
+Following a cell does not mean collision waits for the thief's picture origin
+to enter it. The thief is twenty-four pixels wide in a sixteen-pixel grid. For
+each axis, the game proposes the new hardware position and probes the three
+cells ahead using that live anchor. Only after collision is settled does it
+apply the same body-center bias used by the other moving MOBs to decide whether
+the thief's record changes slots. That order keeps the visible body and its
+collision identity together in tight one-cell pockets; using the raw picture
+origin instead can bury most of the thief in a wall while its record remains
+behind in the corridor.
 
 Dodging is more pointed. A helper scans the four players for one whose shot
 direction is exactly opposite the thief's own and whose position lies on that

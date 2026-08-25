@@ -237,6 +237,8 @@ def clear_mob_color_ram(state: GameState) -> None:
 
 def clear_attract_display_memory(state: GameState) -> None:
     """Port pf_palette_clear/display_state_clear at 0x5FCCE/0x5FD14."""
+    state.playfield_color_latch = 0
+    state.playfield_color_base = 0
     state.alpha_color_ram[:] = [0] * 256
     state.mob_color_ram[:] = [0] * 256
     state.playfield_color_ram[:] = [0] * 128
@@ -311,6 +313,13 @@ def player_palette_vblank(state: GameState) -> None:
             state.mob_color_ram[destination + color_index] = source[
                 source_index + relative_bytes // 2
             ]
+
+
+def potion_flash_vblank(state: GameState) -> None:
+    """game_vblank 0x401D4: publish the live potion/floor color latch."""
+    from ..playfield_vram import write_playfield_color
+
+    write_playfield_color(state, 8, state.playfield_color_latch)
 
 
 def alpha_palette_vblank(state: GameState) -> None:
@@ -447,6 +456,8 @@ def init_playfield_color_ram(
     normal[80:96] = palette5
     normal[96:112] = palette6
     normal[112:128] = palette7
+    state.playfield_color_base = main[8]
+    state.playfield_color_latch = main[8]
 
     # The shadow-bank derivation is last, after palette-7 substitutions.
     shadow = [palette_fade_word(word, 0x7000) for word in normal]
@@ -467,6 +478,8 @@ def init_fixed_playfield_color_ram(
         raise ValueError("fixed playfield palette must contain 128 IRGB words")
     normal = [int(word) & 0xFFFF for word in palette_words]
     shadow = [palette_fade_word(word, 0x7000) for word in normal]
+    state.playfield_color_base = normal[8]
+    state.playfield_color_latch = normal[8]
     state.playfield_color_ram[:] = normal
     state.playfield_shadow_color_ram[:] = shadow
     state.playfield_color_generation += 1

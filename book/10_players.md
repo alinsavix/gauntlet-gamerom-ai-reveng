@@ -83,6 +83,13 @@ shot-power upgrade moves the lookup forward eight bytes, to the third of them.
 
 A super shot skips the lookup and deals a flat 3.
 
+Shot **speed** is a separate lookup, despite the similar name. The X and Y
+velocity tables have four ordinary character rows and four powered rows.
+Extra shot speed—not extra shot power—moves the index forward by forty entries.
+The Warrior's rightward shot rises from 3 to 4 pixels per frame, the
+Valkyrie's and Wizard's from 4 to 5, and the Elf's from 5 to 7. Extra shot power
+changes damage without changing any of those velocities.
+
 Basic monsters die in one to three points of damage depending on their tier,
 so small numbers decide a lot here, and Chapter 11 does that bookkeeping.
 Armor works by the same method in the other direction, with incoming
@@ -222,7 +229,11 @@ the eight-frame fighting animation runs in your fighting direction, and the
 collision between the two bodies resolves through class data, weighing the
 monster's contact damage against your armor table on one side and your class's
 fighting ability on the other. The upgrade item called "extra fight power"
-acts here, as does the armor power-up.
+acts here, as does the armor power-up. Base hand damage is indexed by character
+plus the Fight-power row: Warrior/Valkyrie/Wizard/Elf go from 2/2/1/1 to
+3/3/2/2. One odd arcade detail remains separate—the random hand-damage range is
+indexed by cabinet player position, so only green player position four receives
+the additional `getrandom(2)` term.
 
 Shooting takes a button. Pressing Fire starts the four-frame shooting
 animation, and the shot spawns when that animation *completes*, provided your
@@ -253,7 +264,9 @@ going.
 
 Press Magic with a potion in your pocket and the drink dispatches a blast
 against every eligible monster and generator around. What happens to each of
-them comes out of a table.
+them mostly comes out of a table. The screen flashes in the color of the player
+position that used it: the game swaps one live playfield palette word for a
+single video field, then restores the level's floor color on the next pass.
 
 ROM holds a **potion-effect matrix** of one 16-byte record per monster or
 generator object type, 28 types in all. Within a record, the entry is selected
@@ -287,12 +300,19 @@ matrix belongs to Death, whose row is nothing else: any character's potion
 destroys Death on contact, the one reliable remedy the game offers, and it
 is one table byte.
 
+That explains the Elf's apparently oversized blast: against ordinary monster
+rows his normal column is as lethal as the Wizard's. The distinction survives
+among generators. An Elf erases lower tiers but demotes a top-tier generator to
+tier 1, while the Wizard erases that too.
+
 That one matrix answers a lot of questions at once. A Wizard's potion levels a
 room where a Warrior's singes it, because the two read different columns of
 the same record. A potion set off by a stray shot does less than one you
 drank, since the trigger bit selects a different entry, which is the game
-charging you for clumsiness by table lookup. (The dragon gets a private check
-of its own inside the potion handler; see Chapter 12.)
+charging you for clumsiness by table lookup. Two animated enemies also branch
+before the lookup: magic forces an idle Acid puddle into its stunned phase and
+reveals a phasing Super Sorcerer. The dragon gets a private check of its own
+inside the potion handler; see Chapter 12.
 
 ## The dwindling number
 

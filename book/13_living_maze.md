@@ -274,11 +274,20 @@ without shooting your friends. Some are oddly specific: shoot the secret
 walls, push at a movable wall, be IT and be nice about it, and, as covered
 above, do not fall for a fake exit.
 
-Nothing on screen announces the objective. Progress and violations are tracked
-per player in a small array of flags, and the hooks are scattered through
-every system the objectives touch: the shot resolver notices when you shoot
-food, another player, or a secret wall; the dragon's death routine checks who
-stayed clean; the exit code knows who fell for a fake. Chapter 7
+The objective is not announced merely because it became active. Finding a
+secret wall or killing the dragon does, however, raise a discovery latch. On
+the next between-level curtain the game prints `TO ENTER SECRET ROOM:` and
+either reveals the objective in the already selected next maze (when it is
+eligible) or offers one of the seventeen objective hints at random. The latch
+is consumed by those text-layer writes.
+
+Progress and violations are tracked per player, and the hooks are scattered
+through every system the objectives touch: the shot resolver notices when you
+shoot food, another player, or a secret wall; the dragon's death routine checks
+who stayed clean; the exit code knows who fell for a fake. Five objectives skip
+the progress bytes entirely and name a winner at the completing movement:
+transport beside Acid or Death, transport into an exit, phase through a secret
+wall, or push a movable wall into an exit. Chapter 7
 described the pacing counter that decides *whether* the current level's
 objective is armed at all; wins push the next secret further away, misses
 bring it closer.
@@ -304,6 +313,11 @@ limit and, for most challenges, a qualifier line displayed under the SECRET
 ROOM banner: "AFTER COLLECTING 6 TREASURES," "AFTER SHOOTING 3 SECRET WALLS,"
 "AFTER USING 5 TRANSPORTERS," "AFTER REMOVING ALL TREASURE," "WHILE YOU ARE
 IT," and so on.
+
+The curtain also names the winning player's color and character, says that
+they performed a secret trick, and shows the time limit in both the invitation
+and the status panel. The room is therefore announced before its maze is
+revealed; it is not a renderer-side title laid over gameplay.
 
 Inside, the same per-player progress flags track the qualifier. Reach the exit
 with the challenge satisfied and the bonus screen pays 5,000 points per coin

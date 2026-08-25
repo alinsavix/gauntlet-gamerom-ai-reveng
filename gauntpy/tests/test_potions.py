@@ -14,6 +14,9 @@ from gauntpy.subsystems.potions import (
     main_handle_potions,
     potion_blast,
 )
+from gauntpy.subsystems.dragon import _ST_STUNNED, _ST_WAKING
+from gauntpy.subsystems.display import potion_flash_vblank
+from gauntpy.subsystems.monsters import main_move_monsters
 from gauntpy.subsystems import score
 from gauntpy.subsystems.players import setup_infopanel
 
@@ -24,6 +27,7 @@ def _active(state: GameState, index: int, slot: int,
     p.status = PlayerStatus.ALIVE_HERE
     p.character = character
     p.mob_slot = slot
+    state.level_players_active += 1
     state.mobs.hpos[slot] = encode_hpos((slot & 0x1F) * 16)
     state.mobs.vpos[slot] = encode_vpos_at_y((slot >> 5) * 16)
 
@@ -79,6 +83,7 @@ class TestMagicGate:
         main_handle_potions(state)
         assert state.players[0].potionsnum == 0, "potion consumed"
         assert 0x1D in state.sound_log
+        main_move_monsters(state)
         # Wizard column (0x12 col 2) is 0 -> Ghost destroyed.
         assert state.mobs.obj_type(pack_slot(8, 8)) == 0, "ghost destroyed"
 
@@ -95,6 +100,7 @@ class TestMagicGate:
         main_handle_potions(state)
 
         assert state.players[1].potionsnum == 0
+        main_move_monsters(state)
         assert state.mobs.obj_type(pack_slot(8, 8)) == 0
 
     def test_press_updates_alpha_inventory_at_the_rom_call_site(self):
@@ -140,6 +146,71 @@ class TestMagicGate:
 
         assert state.dialog_first_encounter_flags & 0x00080000
         assert not state.dialog_first_encounter_flags & 0x10
+
+    def test_use_arms_the_player_colored_playfield_flash(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        _active(state, 1, pack_slot(5, 5), character=Character.VALKYRIE)
+        state.players[1].potionsnum = 1
+        state.debounce_shift_magic[1] = 0x1C
+        state.playfield_color_base = 0x1234
+        state.playfield_color_latch = 0x1234
+        state.playfield_color_ram[8] = 0x1234
+
+        main_handle_potions(state)
+        assert state.playfield_color_latch == 0xF08F
+        assert state.playfield_color_ram[8] == 0x1234
+
+        potion_flash_vblank(state)
+        assert state.playfield_color_ram[8] == 0xF08F
+
+    def test_second_field_restores_the_ordinary_playfield_color(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        state.playfield_color_base = 0x5678
+        state.playfield_color_latch = 0xFF00
+        state.playfield_color_ram[8] = 0xFF00
+
+        from gauntpy.mainloop import game_frame
+        game_frame(state)
+        potion_flash_vblank(state)
+
+        assert state.playfield_color_latch == 0x5678
+        assert state.playfield_color_ram[8] == 0x5678
+
+    def test_on_screen_active_dragon_is_stunned(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        _active(state, 0, pack_slot(5, 5), character=Character.WARRIOR)
+        state.players[0].potionsnum = 1
+        state.debounce_shift_magic[0] = 0x1C
+        dragon = pack_slot(9, 9)
+        _place(state, dragon, MazeObjIds.MONST_DRAGON)
+        state.dragon_seg_mob_ids = [dragon, dragon - 0x20, dragon + 1, dragon - 0x1F]
+        state.dragon_mob_slot = dragon
+        state.dragon_state = 0
+        state.scroll_x = 0
+        state.scroll_y = 0
+
+        main_handle_potions(state)
+
+        assert state.dragon_state & _ST_STUNNED
+
+    def test_second_potion_restarts_a_stunned_dragon_wake_transition(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        _active(state, 0, pack_slot(5, 5), character=Character.WARRIOR)
+        state.players[0].potionsnum = 1
+        state.debounce_shift_magic[0] = 0x1C
+        dragon = pack_slot(9, 9)
+        _place(state, dragon, MazeObjIds.MONST_DRAGON)
+        state.dragon_seg_mob_ids = [dragon, dragon - 0x20, dragon + 1, dragon - 0x1F]
+        state.dragon_mob_slot = dragon
+        state.dragon_state = _ST_STUNNED
+        state.scroll_x = 0
+        state.scroll_y = 0
+
+        main_handle_potions(state)
+
+        assert state.dragon_state & _ST_WAKING
+        assert not state.dragon_state & _ST_STUNNED
+        assert state.dragon_anim_ctr == -0x31
 
 
 class TestBlastOutcomes:
@@ -211,6 +282,41 @@ class TestBlastOutcomes:
         potion_blast(state, 0)
         assert state.mobs.obj_type(gen) == int(MazeObjIds.GEN_GHOST1), \
             "GEN_GHOST3 should demote to GEN_GHOST1 under an Elf potion"
+
+    def test_magic_stuns_idle_acid_before_a_second_blast_destroys_it(self):
+        state = GameState()
+        _active(state, 0, pack_slot(5, 5), character=Character.ELF)
+        acid = pack_slot(9, 9)
+        _place(state, acid, MazeObjIds.MONST_ACID)
+        state.mobs.state_link[acid] |= 0xE000
+        _camera_on(state, _FOCUS)
+
+        potion_blast(state, 0)
+
+        assert state.mobs.obj_type(acid) == int(MazeObjIds.MONST_ACID)
+        assert state.mobs.hpos[acid] & 0x10
+        assert state.mobs.state_link[acid] & 0xE000 == 0
+        assert state.mobs.picture[acid] == 0x2300
+
+        potion_blast(state, 0)
+        assert state.mobs.obj_type(acid) == 0
+
+    def test_magic_reveals_phasing_super_sorcerer_instead_of_killing_it(self):
+        state = GameState()
+        _active(state, 0, pack_slot(5, 5), character=Character.ELF)
+        sorcerer = pack_slot(9, 9)
+        _place(state, sorcerer, MazeObjIds.MONST_SUPERSORC)
+        state.mobs.hpos[sorcerer] |= 0x30
+        state.mobs.state_link[sorcerer] |= 0xE000
+        state.mobs.picture[sorcerer] = 0x1709
+        _camera_on(state, _FOCUS)
+
+        potion_blast(state, 0)
+
+        assert state.mobs.obj_type(sorcerer) == int(MazeObjIds.MONST_SUPERSORC)
+        assert state.mobs.hpos[sorcerer] & 0x30 == 0
+        assert state.mobs.state_link[sorcerer] & 0xE000 == 0
+        assert state.mobs.picture[sorcerer] != 0x1709
 
     def test_wizard_blast_clears_multiple_monsters(self):
         """The Wizard column is zero everywhere, so it destroys outright."""
@@ -290,7 +396,27 @@ class TestBlastOutcomes:
 
         potion_blast(state, 0, shot_triggered=True)
 
-        assert state.potion_player == 0x05  # character 1 | shot 4
+        assert state.potion_player == 0x04  # player 0 | shot 4
+
+    def test_potion_scan_replaces_the_normal_monster_pass(self, monkeypatch):
+        state = GameState()
+        _active(state, 0, pack_slot(5, 5), character=Character.WARRIOR)
+        ghost = pack_slot(9, 9)
+        _place(state, ghost, MazeObjIds.MONST_GHOST, tier=4)
+        _camera_on(state, _FOCUS)
+        state.playfield_color_base = 0x1234
+        state.playfield_color_latch = 0xFF00
+        state.potion_player = 0
+
+        from gauntpy.subsystems import monsters
+        monkeypatch.setattr(
+            monsters, "monsters_everything",
+            lambda *_args, **_kwargs: pytest.fail("ordinary monster pass ran"),
+        )
+
+        main_move_monsters(state)
+
+        assert state.mobs.hpos[ghost] & 0x0F == 2
 
     def test_potion_is_rejected_on_maze_0x73_and_later(self):
         state = GameState(game_mode=GameMode.NORMAL)

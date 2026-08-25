@@ -22,12 +22,6 @@ from gauntpy.subsystems.maze_objects import (
     setup_door_graphics,
     setup_random_walls,
 )
-from gauntpy.subsystems.exits import (
-    TRICK_TRANSPORT1,
-    TRICK_TRANSPORT2,
-    TRICK_TRANSPORT3,
-    TRICK_TRANSPORT4,
-)
 
 
 class _FixedRNG:
@@ -218,29 +212,10 @@ class TestTransporterSecretProgress:
 
         assert state.secret_tricks_flags[0] == 0
 
-    def test_transport_tricks_claim_the_player_at_their_rom_landing_type(self):
-        targets = (
-            (TRICK_TRANSPORT1, MazeObjIds.MONST_ACID),
-            (TRICK_TRANSPORT2, MazeObjIds.MONST_DEATH),
-            (TRICK_TRANSPORT3, MazeObjIds.EXIT),
-            (TRICK_TRANSPORT4, MazeObjIds.WALL_SECRET),
-        )
-        for trick, object_type in targets:
-            state, source, destination, landing = self._transport_state()
-            state.secret_trick_id = trick
-            state.mobs.set_obj_type(landing, object_type)
-
-            record_transporter_secret_progress(
-                state, 0, source, destination, landing
-            )
-
-            assert state.secret_tricks_flags[0] == 1
-            assert state.secret_winner == 0
-
-    def test_transport_one_requires_the_rom_acid_type_not_the_stale_demon_label(self):
+    def test_ordinary_transport_tricks_are_not_progress_counters(self):
         state, source, destination, landing = self._transport_state()
-        state.secret_trick_id = TRICK_TRANSPORT1
-        state.mobs.set_obj_type(landing, MazeObjIds.MONST_DEMON)
+        state.secret_trick_id = 3
+        state.mobs.set_obj_type(landing, MazeObjIds.EXIT)
 
         record_transporter_secret_progress(
             state, 0, source, destination, landing

@@ -2227,6 +2227,72 @@ class TestHostShellInput:
         finally:
             shell.close()
 
+    def test_f4_writes_a_host_state_dump_without_mutating_game_memory(
+        self, monkeypatch, tmp_path,
+    ):
+        from gauntpy.render import host
+
+        saved = tmp_path / "state.json"
+        calls = []
+
+        def _dump(state):
+            calls.append(state.frame_counter)
+            saved.write_text("{}\n", encoding="utf-8")
+            return saved
+
+        monkeypatch.setattr(host, "dump_game_state", _dump)
+        shell = host.HostShell(assets=_FakeAssets())
+        try:
+            pygame = shell._pygame
+            state = GameState(frame_counter=321)
+            before = tuple(state.mobs.picture)
+            pygame.event.post(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F4)
+            )
+
+            shell.wait_for_vblank(state)
+
+            assert calls == [321]
+            assert shell.last_state_dump_path == saved
+            assert tuple(state.mobs.picture) == before
+        finally:
+            shell.close()
+
+    def test_f5_f6_f7_route_to_troubleshooting_controls(self, monkeypatch):
+        from gauntpy.render import host
+
+        calls = []
+        monkeypatch.setattr(
+            host, "debug_skip_level",
+            lambda state: calls.append(("level", state)) or True,
+        )
+        monkeypatch.setattr(
+            host, "debug_add_key",
+            lambda state, player: calls.append(("key", player)) or True,
+        )
+        monkeypatch.setattr(
+            host, "debug_add_potion",
+            lambda state, player: calls.append(("potion", player)) or True,
+        )
+        shell = host.HostShell(assets=_FakeAssets(), player=2)
+        try:
+            pygame = shell._pygame
+            state = GameState()
+            for key in (pygame.K_F5, pygame.K_F6, pygame.K_F7):
+                pygame.event.post(
+                    pygame.event.Event(pygame.KEYDOWN, key=key)
+                )
+
+            shell.wait_for_vblank(state)
+
+            assert calls == [
+                ("level", state),
+                ("key", 2),
+                ("potion", 2),
+            ]
+        finally:
+            shell.close()
+
     def test_diagnostics_panel_stays_native_width_when_game_is_scaled(self):
         from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
         from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
