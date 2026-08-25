@@ -53,6 +53,14 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-129 · F5 left the level-start splash permanently opaque
+
+The immediate skip loaded and spawned the next level, then zeroed the shared
+UI timer without running the timer-expiry teardown. The `LEVEL:` alpha words
+therefore had no remaining owner that could clear them. F5 now mirrors the
+normal expiry order: load the maze without players, run `maze_show_alpha`, then
+spawn the surviving party and clear the host-side pending marker.
+
 ### S-128 · live troubleshooting required replaying whole levels
 
 The host now provides three explicit non-arcade shortcuts. F5 computes the next

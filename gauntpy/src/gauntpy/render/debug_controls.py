@@ -58,11 +58,17 @@ def debug_skip_level(state: GameState) -> bool:
 
     clear_alpha_visible(state)
     exits.show_level_start_screen(state)
-    if not exits._load_next_level(state, next_level, survivors):
+    if not exits._load_next_level(
+        state, next_level, survivors, spawn_players=False,
+    ):
         raise RuntimeError(
             "debug level skip could not load "
             f"level {next_level} / maze {state.mazenum_current}"
         )
+    from ..subsystems.display import maze_show_alpha
+
+    maze_show_alpha(state)
+    exits._spawn_level_players(state, survivors)
 
     state.game_mode = int(GameMode.NORMAL)
     state.bonus_timer = 0

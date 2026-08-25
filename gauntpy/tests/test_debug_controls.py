@@ -62,6 +62,11 @@ def test_skip_level_uses_rotation_and_preserves_inventory():
     assert state.players[0].mob_slot
     assert state.bonus_timer == 0
     assert not state.level_start_pending
+    assert all(
+        state.alpha_ram[row * 64 + column] == 0
+        for row in range(30)
+        for column in (*range(29), *range(42, 64))
+    )
 
 
 def test_skip_level_rejects_non_gameplay_modes():
