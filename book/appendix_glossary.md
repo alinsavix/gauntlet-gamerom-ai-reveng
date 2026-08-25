@@ -32,7 +32,7 @@ and 17.
 
 **Callable contract.** A checked statement of one routine's purpose,
 arguments, return behavior, and any deviation from the normal calling
-convention. The game ROM has 321 of them, and a name alone is not accepted as
+convention. The game ROM has 322 of them, and a name alone is not accepted as
 evidence for one. Chapter 17.
 
 **Confidence labels.** The grading applied to every finding in the

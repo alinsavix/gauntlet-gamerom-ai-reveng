@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2344 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2347 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -34,6 +34,28 @@ start).
 ---
 
 ## Open issues
+
+### S-133 · full ROM/Python callable audit found residual gaps and compensations
+
+The exhaustive crosswalk in `ROM_FUNCTION_AUDIT.md` accounts for all 322
+game-ROM callable entries: 263 have complete Python equivalents (including
+merged helpers), 8 are partial, 50 are intentionally omitted platform/ABI/dead
+entries, and `player_hurt_speech_timer` (0x49A98) is missing.
+
+The highest-impact partial is `maze_addrandompickups` (0x43F68): escaped
+thief/mugger loot returns, but ordinary random-pickup scaling and the guaranteed
+hidden-potion countdown are absent, leaving `level_next_potion` write-only.
+`thief_test_move_tile` lacks its corner-squeeze arm; movable-wall traversal uses
+the player probe family instead of the ROM ray march; `scroll_to_slot` has no
+arbitrary-slot equivalent; and the SCORES color cycle is structurally
+approximate.
+
+The same audit records six non-ROM game-side compensations. DEMO can ignore
+random walls, delete Grunts on its final input record, retain a row-zero flank,
+and bypass the normal reserved-row fallback. Player motion is also integrated
+one pixel at a time, while score display compares host latches because some
+producers omit dirty-bit writes. These remain open root-cause work; a passing
+attract recording must not be mistaken for state equivalence.
 
 ### S-126 · live-only downward block at level 17 / maze 16 `(396,176)`
 

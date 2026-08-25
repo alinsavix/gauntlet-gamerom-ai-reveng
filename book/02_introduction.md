@@ -104,7 +104,7 @@ accounting*: every one of the bytes in both images is classified, whether as
 analyzed instructions (about 94 KB of them in the game ROM, across 34
 executable regions), as named and cataloged data tables, or as explicitly
 identified padding and dead residue. No byte is "mystery meat." On top of
-that, every routine that can be called, meaning 321 entries in the game ROM
+that, every routine that can be called, meaning 322 entries in the game ROM
 plus the OS's public services and internals, has a *checked contract* covering
 its arguments, returns, and side effects, verified by scripts against the ROM
 bytes.
@@ -187,7 +187,7 @@ call.
 >   `doc/generated/rom_regions.csv` and `doc/generated/rom_byte_coverage.csv`;
 >   for the OS ROM: `doc/generated/os_rom_regions.csv` and
 >   `doc/generated/os_rom_byte_coverage.csv`.
-> - The 321 checked game-ROM callable contracts:
+> - The 322 checked game-ROM callable contracts:
 >   `doc/generated/callable_contract_coverage.csv`; the OS ROM's 269-row
 >   contract union: `doc/generated/os_all_function_contracts.csv`.
 > - Validation of all 117 stored maze records and their rendered images: the

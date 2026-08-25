@@ -60,6 +60,14 @@ your reimplementation and the arcade cabinet agree on `XXX-XXX`, you
 understand the routine. When they disagree, you have learned something more
 valuable.
 
+A complete ROM analysis is not the same claim as a complete reimplementation.
+The callable inventory currently has 322 entries, while gauntpy's independent
+crosswalk classifies 263 as complete, eight as partial, fifty as deliberately
+omitted platform/ABI/dead boundaries, and one audio routine as missing. It also
+records explicit Python-only corrections separately: making the attract demo
+finish by ignoring a wall or deleting an actor proves only that the recording
+was rescued, not that the preceding game state matches the ROM.
+
 ## Proving a negative
 
 Two of this book's findings came from a technique worth naming, because it
@@ -91,10 +99,10 @@ because a language model will produce a fluent, plausible, and entirely
 invented description of a function all day long.
 
 The project's answer is to refuse to treat a name as evidence. Every one of
-the game ROM's 321 callable entries carries a *contract*: purpose, arguments,
+the game ROM's 322 callable entries carries a *contract*: purpose, arguments,
 return behavior, and any deviation from the normal calling convention. Each
 contract is checked by a generator script against the actual bytes, and the
-coverage report reconciles all 321 against those checked catalogs. A function
+coverage report reconciles all 322 against those checked catalogs. A function
 called `find_maze` earns that name only after something mechanical confirms it
 takes a maze number and returns a record pointer.
 
@@ -104,7 +112,7 @@ whole set against the ROM images:
 
 | Artifact | What it proves |
 |----------|----------------|
-| Callable contracts (321 entries) | Every reachable entry has a body-checked ABI |
+| Callable contracts (322 entries) | Every reachable entry has a body-checked ABI |
 | Contract coverage | No indexed entry lacks a contract |
 | Control targets | Every branch destination is accounted for |
 | RAM operands, plus an independent linear sweep | Every absolute data reference has a named owner |
