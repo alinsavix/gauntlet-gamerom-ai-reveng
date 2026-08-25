@@ -177,6 +177,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     indices even when one routine combines them. In particular, melee base power
     uses character plus Fight power while its random range uses cabinet position;
     Shot Speed selects velocity rows and Shot Power selects damage rows.
+43. **Secret objectives have distinct completion shapes.** Tricks 1-4 and 10
+    write the winning player directly at the event that completes them; they do
+    not manufacture progress-byte state. Between-level hints consume
+    `secret_need_hint` and inspect the already selected upcoming maze header,
+    not the objective from the maze just left.
 
 ## Investigation workflow
 

@@ -77,7 +77,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904868 | 2 B | `maze_decomp_htype2` | Maze decompression horizontal special element type 2 |
 | 0x90486A | 2 B | `maze_decomp_vtype1` | Maze decompression vertical special element type 1 |
 | 0x90486C | 2 B | `maze_decomp_vtype2` | Maze decompression vertical special element type 2 |
-| 0x90486E | 2 B | `secret_need_hint` | Set if next level should show a secret room hint |
+| 0x90486E | 2 B | `secret_need_hint` | Discovery latch set by opening a secret wall or killing the dragon. `level_splash` consumes it between levels: writes the hint header and either the eligible selected maze-header objective or a random objective hint, then clears it. |
 | 0x904870 | 2 B | `secret_prev_maze` | Maze number when secret room was triggered |
 | 0x904872 | 4 B | `secret_tricks_flags` | Array of 4 × 1B: per-player progress toward secret trick goal |
 | 0x904878 | 2 B | `secret_possible_counter` | Counts down; when 0, secret room entry is possible |
@@ -796,6 +796,11 @@ references to `player_status` (0x9049A0).
 | TRICK_NOHURTFRIENDS | 17 | Don't Hurt Friends |
 
 After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) replaces the maze trick ID with `0x50 + getrandom(14)`. These **challenge task codes** occupy 0x50–0x5D and are evaluated against `secret_tricks_flags`; they are distinct from the maze-header enum above. The optional qualifier-display records are at 0x573D4 (14 records × 8 bytes). Verified examples include 0x50 “AFTER COLLECTING 6 TREASURES,” 0x51/0x5D “AFTER COLLECTING ALL POTIONS,” 0x52/0x5B “AFTER SHOOTING 3 SECRET WALLS,” 0x56 “AFTER USING 5 TRANSPORTERS,” 0x5A “AFTER REMOVING ALL TREASURE,” and 0x5C “WHILE YOU ARE IT.” The `resolve_shot_hit` check at 0x4B826 is the 0x5A task hook: a player's supershot hitting ordinary treasure (object type 0x2E) increments that player's progress byte.
+
+Ordinary tricks 1–4 and 10 do not use that progress array as a completion
+counter. Their transport/movable-wall paths write `trick_player` directly at
+the successful event; only later exit/status checks decide whether the winner
+enters the challenge room.
 
 ### 3.18 Thief Modes
 

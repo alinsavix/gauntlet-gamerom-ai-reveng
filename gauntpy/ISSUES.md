@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2340 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2344 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -52,6 +52,31 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-132 · secret-room invitations, hints, and direct triggers were incomplete
+
+The secret challenge lifecycle selected maze 115/116 and could complete its
+round trip, but `show_level_start_screen` left the 600-frame invitation curtain
+blank. ROM 0x44F7E-0x450F8 writes `SECRET ROOM`, the winning player's color and
+character, the two-line achievement message, both countdown fields, and the
+task-specific qualifier from the 14 records at 0x573D4. Those are now literal
+game-side alpha-RAM writes.
+
+The separate `secret_need_hint` latch was produced by secret-wall and dragon
+rewards but never consumed. `level_splash` 0x4C04E-0x4C108 writes `TO ENTER
+SECRET ROOM:` between levels, uses the selected upcoming maze header's trick
+when it is currently eligible (including the level-12 dragon gate), otherwise
+chooses one of the 17 ROM hint strings, then clears the latch. It does not infer
+the hint from the level just left.
+
+The trigger audit also restored three direct `trick_player` writes: ordinary
+transport into an exit (trick 3, 0x50916), corner transport through a secret
+wall (trick 4, 0x507B8), and pushing a movable wall into an exit (trick 10,
+0x42846-0x42A1A). Tricks 1-4 and 10 are completion-only producers and do not
+increment `secret_tricks_flags`; the five-transporter challenge 0x56 remains
+the distinct pad-bitmask consumer. Clearing the corner-transport wall now
+unlinks its marker while retaining H/V geometry, preventing a stale depth-chain
+link when the player occupies that cell.
 
 ### S-131 · character stat-table selector audit
 

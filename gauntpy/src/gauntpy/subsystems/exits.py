@@ -448,6 +448,67 @@ def _enter_secret_room(state: GameState) -> bool:
     return True
 
 
+def _maze_secret_for_hint(state: GameState) -> int:
+    """Read the selected maze header byte that level_splash sees at 0x4C084."""
+    from ..maze import MazeError, decode_maze
+
+    try:
+        return int(decode_maze(state.mazenum_current).secret)
+    except MazeError:
+        return int(getattr(state.maze, "secret", TRICK_NONE) or TRICK_NONE)
+
+
+def _write_secret_hint(state: GameState) -> None:
+    """0x4C04E-0x4C108 -- consume secret_need_hint into alpha RAM."""
+    if not state.secret_need_hint:
+        return
+
+    row = 4 if state.levelnum_current == 1 else 15
+    if in_bonus_room(state):
+        row += 2
+    write_alpha_text(state, 4, row, romtext.SECRET_HINT_HEADER, 0x8000)
+    row += 1
+
+    trick = _maze_secret_for_hint(state)
+    eligible = (
+        TRICK_NONE < trick <= TRICK_NOHURTFRIENDS
+        and state.secret_possible_counter == 0
+        and (trick != TRICK_NOGETHIT or state.levelnum_current >= 12)
+    )
+    if not eligible:
+        trick = state.getrandom(len(romtext.SECRET_OBJECTIVE_HINTS)) + 1
+    text = romtext.SECRET_OBJECTIVE_HINTS[trick - 1]
+    write_alpha_text(state, 14 - len(text) // 2, row, text, 0x8000)
+    state.secret_need_hint = 0
+
+
+def _write_secret_room_start(state: GameState) -> None:
+    """0x44F7E-0x450F8 -- write the complete secret challenge invitation."""
+    winner = state.secret_winner
+    if not 0 <= winner < NUM_PLAYERS:
+        return
+
+    write_alpha_large_text(state, 4, 3, romtext.SECRET_ROOM_TITLE, 0x8000)
+    attribute = 0x8400 + (winner << 10)
+    write_alpha_text(state, 0, 7, romtext.PLAYER_COLOR_NAMES[winner], attribute)
+    character = state.players[winner].character & 3
+    write_alpha_text(state, 13, 7, romtext.CHARACTER_NAMES[character], attribute)
+    for text, column, row, text_attribute in romtext.SECRET_ROOM_LINES:
+        write_alpha_text(state, column, row, text, text_attribute)
+
+    seconds = state.treasure_timer // 60
+    write_alpha_decimal(state, 10, 13, seconds, 2, 0x8000)
+    qualifier = romtext.SECRET_CHALLENGE_QUALIFIERS[
+        state.secret_trick_id - CHALLENGE_FIRST
+    ]
+    if qualifier is not None:
+        text, column, row = qualifier
+        write_alpha_text(state, column, row, text, 0x8400)
+        if state.secret_trick_id == _CHALLENGE_WHILE_IT:
+            write_alpha_text(state, 20, row, "IT", 0x8000)
+    write_alpha_large_text(state, 34, 2, f"{seconds:>2}", 0x8000)
+
+
 def secret_room_spawn(state: GameState) -> None:
     """0x482BC-0x4834E -- only the winner goes in, and they go in empty-handed.
 
@@ -1112,7 +1173,9 @@ def show_level_start_screen(state: GameState) -> None:
 
     setup_infopanel(state, -1)                               # 0x44F38-0x44F3E
     fill_alpha_rect(state, 0, 0, 29, 30, alpha_word(0x8000)) # 0x44F44-0x44F66
-    if _TREASURE_MAZE_FIRST <= state.mazenum_current <= _TREASURE_MAZE_LAST:
+    if in_secret_room(state):
+        _write_secret_room_start(state)
+    elif _TREASURE_MAZE_FIRST <= state.mazenum_current <= _TREASURE_MAZE_LAST:
         write_alpha_large_text(
             state, 1, 5, romtext.TREASURE_ROOM_TITLE, 0x8000,
         )
@@ -1128,6 +1191,7 @@ def show_level_start_screen(state: GameState) -> None:
         write_alpha_large_text(
             state, 16, 9, f"{state.levelnum_current:>3}", 0x8000,
         )
+    _write_secret_hint(state)
 
     # 0x45228-0x45260: normal/reduced-text/secret-room display holds.
     state.bonus_timer = (

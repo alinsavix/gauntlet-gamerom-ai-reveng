@@ -71,6 +71,33 @@ def _active_player_at(state: GameState, player_index: int, slot: int) -> Player:
     return player
 
 
+def test_pushing_a_movable_wall_into_an_exit_wins_trick_ten():
+    wall = (5 << 5) | 5
+    exit_slot = wall + 1
+    state = GameState()
+    state.secret_trick_id = 10
+    state.mobs.create(
+        wall,
+        tile=0x20F6,
+        hpos=5 * 16 << 7,
+        vpos=encode_vpos_at_y(5 * 16),
+        obj_type=int(MazeObjIds.WALL_MOVABLE),
+    )
+    state.mobs.create(
+        exit_slot,
+        tile=0x8001,
+        hpos=6 * 16 << 7,
+        vpos=encode_vpos_at_y(5 * 16),
+        obj_type=int(MazeObjIds.EXIT),
+    )
+
+    assert gp._push_movable_wall(
+        state, 2, wall, gp._JOY_RIGHT, vertical=False,
+    )
+    assert state.secret_winner == 2
+    assert state.mobs.picture[wall] == 0
+
+
 # ---------------------------------------------------------------------------
 # mob_probe_up
 # ---------------------------------------------------------------------------

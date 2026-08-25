@@ -3600,6 +3600,11 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool
         state.mobs.unlink_and_clear(source)
         player.mob_slot = slot
         if state.mobs.picture[slot] != 0:
+            if (
+                state.secret_trick_id == 3
+                and state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+            ):
+                state.secret_winner = player_index               # 0x50916-0x50922
             handled = player_tile_interact(state, slot, player_index)
             if (
                 not handled
@@ -3784,6 +3789,11 @@ def tport_player_move(state: GameState, player_index: int) -> None:
         # VRAM into floor before the normal destination check and player move.
         from .shots import _pf_replace
 
+        if (
+            state.secret_trick_id == 4
+            and state.mobs.obj_type(landing) == int(MazeObjIds.WALL_SECRET)
+        ):
+            state.secret_winner = player_index                   # 0x507B8-0x507D4
         _pf_replace(state, landing, int(MazeObjIds.TILE_FLOOR))
     if destination_pad:
         _dialog(state, player_index, _DIALOG_TRANSPORTER)  # 0x50840-0x5084C
@@ -4243,8 +4253,18 @@ def _push_movable_wall(
     new_h = (old_h + (step_x << POS_SHIFT)) & 0xFFFF
     # The V word grows up the screen, so a downward push subtracts.
     new_v = (old_v - (step_y << POS_SHIFT)) & 0xFFFF
-    blocker = probe(state, slot, hpos=new_h, vpos=new_v)
+    blocker = probe(
+        state, slot, hpos=new_h, vpos=new_v, defer_interactions=False,
+    )
     if blocker != -1:
+        if state.mobs.obj_type(blocker) == int(MazeObjIds.EXIT):
+            if state.secret_trick_id == 10:
+                state.secret_winner = player_index               # 0x42846-0x42A1A
+            from .shots import tport_cycle_start
+
+            tport_cycle_start(state, slot, player_index)
+            state.mobs.unlink_and_clear(slot)
+            return True
         return False
 
     state.mobs.hpos[slot] = new_h

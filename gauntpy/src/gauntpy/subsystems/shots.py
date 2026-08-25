@@ -1395,8 +1395,11 @@ def _pf_replace(state: GameState, slot: int, obj_type: int) -> None:
     clear_cell_descriptor(state, slot)
     picture = state.mobs.picture[slot]
     if picture in (0x8000, 0x8001):
-        state.mobs.picture[slot] = 0
-        state.mobs.link[slot] = 0
+        hpos = state.mobs.hpos[slot]
+        vpos = state.mobs.vpos[slot]
+        state.mobs.unlink_and_clear(slot)
+        state.mobs.hpos[slot] = hpos
+        state.mobs.vpos[slot] = vpos
     elif picture:
         state.mobs.unlink_and_clear(slot)
 

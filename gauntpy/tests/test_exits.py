@@ -32,6 +32,7 @@ doc/05_data_reference.md §5.5.
 
 from __future__ import annotations
 
+from gauntpy import romtext
 from gauntpy.constants import GameMode, MazeObjIds, PlayerStatus
 from gauntpy.coords import encode_hpos, encode_vpos_at_y
 from gauntpy.playfield_vram import (
@@ -1001,6 +1002,31 @@ class TestLevelEndHold:
         assert state.alpha_ram[9 * 64 + 20] & 0x3FF == expected_2
         assert state.bonus_timer == 0xB4
 
+    def test_secret_hint_uses_the_armed_next_maze_objective(self, monkeypatch):
+        from gauntpy.subsystems import exits as exits_module
+
+        state = GameState()
+        state.levelnum_current = 12
+        state.mazenum_current = 41
+        state.level_next_treasure = 2
+        state.secret_need_hint = 1
+        state.secret_possible_counter = 0
+        monkeypatch.setattr(
+            exits_module, "_maze_secret_for_hint", lambda _state: TRICK_NOGETHIT,
+        )
+
+        show_level_start_screen(state)
+
+        assert "".join(
+            chr(word & 0x3FF) if word & 0x3FF else " "
+            for word in state.alpha_ram[15 * 64 + 4:15 * 64 + 25]
+        ) == "TO ENTER SECRET ROOM:"
+        assert "".join(
+            chr(word & 0x3FF) if word & 0x3FF else " "
+            for word in state.alpha_ram[16 * 64 + 8:16 * 64 + 21]
+        ) == "DON'T GET HIT"
+        assert state.secret_need_hint == 0
+
 
 # ---------------------------------------------------------------------------
 # The per-player bonus tally (0x4D516-0x4D5AA)
@@ -1417,6 +1443,39 @@ class TestSecretRoomEntry:
         assert state.treasure_timer > 0
         assert state.maze_next == 41, "the displaced rotation maze is kept"
         assert state.level_next == 13, "a secret room does not consume a level"
+
+    def test_entry_screen_writes_winner_timer_and_challenge_qualifier(self):
+        class _ChallengeRng:
+            def getrandom(self, bound):
+                return 2 if bound == CHALLENGE_COUNT else 0
+
+        state = self._won()
+        state.rng = _ChallengeRng()
+        state.players[0].character = 3
+        show_level_start_screen(state)
+
+        assert "".join(
+            chr(word & 0x3FF)
+            for word in state.alpha_ram[7 * 64:7 * 64 + 3]
+        ) == "RED"
+        assert "".join(
+            chr(word & 0x3FF)
+            for word in state.alpha_ram[7 * 64 + 13:7 * 64 + 16]
+        ) == "ELF"
+        assert "".join(
+            chr(word & 0x3FF) if word & 0x3FF else " "
+            for word in state.alpha_ram[10 * 64 + 6:10 * 64 + 24]
+        ).startswith("YOU HAVE PERFORMED")
+        assert state.secret_trick_id == 0x52
+        qualifier = romtext.SECRET_CHALLENGE_QUALIFIERS[2]
+        assert qualifier is not None
+        text, column, row = qualifier
+        assert "".join(
+            chr(word & 0x3FF) if word & 0x3FF else " "
+            for word in state.alpha_ram[
+                row * 64 + column:row * 64 + column + len(text)
+            ]
+        ) == text
 
     def test_task_decides_which_room(self):
         """0x50-0x56 play in maze 115, 0x57-0x5D in maze 116 (0x44E26)."""
