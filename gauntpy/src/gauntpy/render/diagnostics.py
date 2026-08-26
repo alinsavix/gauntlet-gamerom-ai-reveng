@@ -79,6 +79,7 @@ class PlayerDebugSnapshot:
 @dataclass(frozen=True)
 class DebugSnapshot:
     frame: int
+    frame_time_ms: float
     mode: int
     level: int
     maze: int
@@ -315,6 +316,7 @@ def _audio_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
 
 def capture_debug_snapshot(
     state: GameState, *, paused: bool = False, selected_mob: int = 0,
+    frame_time_ms: float = 0.0,
 ) -> DebugSnapshot:
     """Project live state into immutable host data without mutating the game."""
     players = []
@@ -354,6 +356,7 @@ def capture_debug_snapshot(
     creature_types = set(MONSTER_TYPES) | set(GENERATOR_TYPES)
     return DebugSnapshot(
         frame=int(state.frame_counter) & 0xFFFF,
+        frame_time_ms=float(frame_time_ms),
         mode=int(state.game_mode),
         level=int(state.levelnum_current),
         maze=int(state.mazenum_current),
@@ -405,7 +408,11 @@ def debug_snapshot_lines(snapshot: DebugSnapshot) -> tuple[tuple[str, str], ...]
     mode = _name(GameMode, snapshot.mode)
     it = "none" if snapshot.player_it == 0xFFFF else f"P{snapshot.player_it + 1}"
     rows: list[tuple[str, str]] = [
-        ("FRAME", f"{snapshot.frame:05d}" + ("  PAUSED" if snapshot.paused else "")),
+        (
+            "FRAME",
+            f"{snapshot.frame:05d}  {snapshot.frame_time_ms:.2f} ms"
+            + ("  PAUSED" if snapshot.paused else ""),
+        ),
         ("MODE", f"{mode} ({snapshot.mode})"),
         ("LEVEL / MAZE", f"{snapshot.level} / {snapshot.maze}"),
         ("CAMERA", f"{snapshot.scroll_x:03d}, {snapshot.scroll_y:03d}"),

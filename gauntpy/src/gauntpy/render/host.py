@@ -312,6 +312,7 @@ class HostShell:
                 state,
                 paused=self.paused,
                 selected_mob=self.diagnostics_selected_mob,
+                frame_time_ms=float(self.clock.get_time()),
             )
             self.diagnostics_selected_mob = snapshot.selected_mob
             for event in derive_debug_events(self._diagnostics_previous, snapshot):

@@ -2217,6 +2217,9 @@ class TestHostShellInput:
                 LOGICAL_HEIGHT,
             )
             shell.present(state)
+            assert shell._diagnostics_previous.frame_time_ms == float(
+                shell.clock.get_time()
+            )
 
             pygame.event.post(
                 pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F1)

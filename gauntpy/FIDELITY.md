@@ -144,7 +144,8 @@ evidence remains in `../doc/`, generated contracts, and the book.
     back into gameplay. Rolling diagnostic events are differences between host
     snapshots, not new producers in game routines. Complete troubleshooting
     dumps likewise serialize `GameState` without changing it and stay in
-    ignored host files.
+    ignored host files. Host performance measurements such as frame duration
+    belong in the immutable debug snapshot, never in `GameState`.
 37. **Demo completion belongs to the attract state machine.** The last recorded
     exit must not commit `level_next`. `main_start_game` resets the demo actors,
     closes any dialog, and expires the DEMO timer so `main_attract` advances to
@@ -195,9 +196,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
 47. **One-cell wall lanes can require exact anchor alignment.** The player probe
     compares corrected wall and live hero words with the ROM's strict `0x7C0`
     window. Between wall anchors 32 pixels apart, only one integer hero H
-    position may clear both flanks. Do not widen that lane or replace it with
-    sprite-box collision; use the original speed cadence and axis ordering to
-    verify that the alignment remains reachable.
+    position may clear both flanks. High-bit wall markers are rounded and
+    corrected four pixels left before that comparison, so the valid hero anchor
+    is likewise four pixels left of the visual midpoint. Do not widen that lane
+    or replace it with sprite-box collision; use the original speed cadence and
+    axis ordering to verify that the alignment remains reachable.
 48. **A resumed state must bypass initialization.** Host save/load is not an
     arcade routine. A complete snapshot reconstructs the typed modeled RAM,
     decoded maze, MOB links, display memory, path grids, and RNG seed, then

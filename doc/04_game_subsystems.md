@@ -486,6 +486,16 @@ and blocks once the next subtraction would enter the signed half of the word.
 This behavior is required by all three actors in the shipped demo and agrees
 with MAME 0.289.
 
+Three complete gauntpy state captures also confirm the ordinary vertical
+triplet's narrowest case. Down at `(365,223)` between slots `0x1F6`/`0x1F8`,
+Down at `(299,463)` between `0x3D2`/`0x3D4`, and Up at `(235,352)` between
+`0x2AE`/`0x2B0` all find an empty center but collide with a flank. The high-bit
+arm of `tile_lookup_core` at 0x42688 rounds the wall's live H word and subtracts
+`0x200` (four pixels) before the strict `< 0x7C0` test. With the flanking wall
+records 32 pixels apart, the only clear hero anchors are therefore X=364, 300,
+and 236, not the uncorrected visual midpoints. The live 2/3-pixel Elf cadence
+can reach all three positions, after which the same vertical probes pass.
+
 #### 4.2.1 Character stat selectors
 
 The permanent stat bits do not select one combined character record. Each

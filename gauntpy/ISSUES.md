@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2380 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2383 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,39 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-139 · captured vertical gaps match the ROM; diagnostics show frame time
+
+Three complete F4 captures resolved the remaining narrow-gap reports. Frame
+8945 in level 16 / maze 15 blocks Down at `(365,223)` between wall-marker slots
+`0x1F6`/`0x1F8`; frame 15793 in level 17 / maze 16 blocks Down at `(299,463)`
+between `0x3D2`/`0x3D4`; and frame 24137 blocks Up at `(235,352)` between
+`0x2AE`/`0x2B0`. In every case the center cell is empty and the two flanking
+walls are 32 pixels apart.
+
+This is the ROM's strict geometry rather than stale saved state.
+`probe_up`/`probe_down` call `tile_lookup_core` for the center and both flanks;
+its high-bit wall arm at 0x42688 rounds each marker's live H word and subtracts
+four pixels before applying the strict `< 0x7C0` comparison. Consequently each
+lane has one valid hero anchor: X=364, 300, and 236 respectively. After one
+failed vertical frame, the live Elf cadence reaches those anchors with
+Right/Left, Left/Right, and Left/Right, and the requested vertical move succeeds.
+Exact-state regressions protect both each reported rejection and each reachable
+escape.
+
+The Super Sorcerer and treasure-screen reports were traced again and remain
+original behavior. Potion handling at 0x415AC-0x415DC clears a phasing Super
+Sorcerer's flags/high animation state and skips only that potion-frame pass;
+later dispatch reaches the idle counter at 0x4112C and may fire at 0x41142.
+Likewise `main_move_players` branches directly from a zero
+`level_next_treasure` at 0x4A77A to the tally call at 0x4A78C; only after its
+hold does `show_level_start_screen` interleave the room, whose exit/timeout calls
+the tally again. Suppressing either observed behavior would diverge from
+`row76.bin`.
+
+The F1 overview now also shows the host clock's complete frame duration in
+milliseconds beside the arcade frame number. The measurement stays in the
+immutable host snapshot and never enters `GameState` or modeled video RAM.
 
 ### S-138 · fake-exit VRAM removal and disputed ROM behaviors
 

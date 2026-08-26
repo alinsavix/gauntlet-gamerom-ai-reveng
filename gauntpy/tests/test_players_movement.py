@@ -537,6 +537,70 @@ class TestPlayerTryMoveWallCollision:
         assert player_try_move(state, 0, gin.JOY_UP, 0) != _NO_MOVE
         assert vpos_y(state.mobs.vpos[player.mob_slot]) == 285
 
+    @pytest.mark.parametrize(
+        (
+            "frame", "player_slot", "x", "y", "vertical", "flanks",
+            "alignment_steps", "expected_x", "expected_y",
+        ),
+        (
+            (
+                8945, 0x1D7, 365, 223, gin.JOY_DOWN, (0x1F6, 0x1F8),
+                (gin.JOY_RIGHT, gin.JOY_LEFT), 364, 225,
+            ),
+            (
+                15793, 0x3B3, 299, 463, gin.JOY_DOWN, (0x3D2, 0x3D4),
+                (gin.JOY_LEFT, gin.JOY_RIGHT), 300, 465,
+            ),
+            (
+                24137, 0x2CF, 235, 352, gin.JOY_UP, (0x2AE, 0x2B0),
+                (gin.JOY_LEFT, gin.JOY_RIGHT), 236, 350,
+            ),
+        ),
+    )
+    def test_saved_narrow_lanes_require_the_roms_single_pixel_alignment(
+        self, frame, player_slot, x, y, vertical, flanks, alignment_steps,
+        expected_x, expected_y,
+    ):
+        """Regressions for the three captured maze-15/16 vertical gaps."""
+
+        def captured_state():
+            state = GameState(game_mode=GameMode.NORMAL, frame_counter=frame)
+            player = _active_player_at(state, 0, player_slot)
+            player.character = Character.ELF
+            player.powers = int(PlayerPower.SPEED)
+            state.mobs.hpos[player_slot] = (x << 7) | 0x0C
+            state.mobs.vpos[player_slot] = encode_vpos_at_y(y, 3, 3)
+            for slot in flanks:
+                state.mobs.create(
+                    slot,
+                    tile=_WALL_PICTURE,
+                    hpos=(slot & 0x1F) * 16 << 7,
+                    vpos=encode_vpos_at_y((slot >> 5) * 16),
+                    obj_type=int(MazeObjIds.WALL_REGULAR),
+                    link_into_chain=False,
+                )
+            return state, player
+
+        state, player = captured_state()
+        state.movement_type = 2
+        assert player_try_move(state, 0, vertical, 0) == _NO_MOVE
+        assert (
+            hpos_x(state.mobs.hpos[player.mob_slot]),
+            vpos_y(state.mobs.vpos[player.mob_slot]),
+        ) == (x, y)
+
+        # The rejected vertical frame advances the 2/3-pixel Elf cadence.
+        state.frame_counter += 1
+        for direction in alignment_steps:
+            state.movement_type = 2
+            assert player_try_move(state, 0, direction, 0) != _NO_MOVE
+            state.frame_counter += 1
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == expected_x
+
+        state.movement_type = 2
+        assert player_try_move(state, 0, vertical, 0) != _NO_MOVE
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == expected_y
+
 
 # ---------------------------------------------------------------------------
 # Diagonal partial movement (acceptance criterion 2)

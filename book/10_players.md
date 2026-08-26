@@ -225,7 +225,10 @@ wall anchors can stand 32 pixels apart while each rejects a hero anchor less
 than 15.5 pixels away. That leaves one integer alignment between them. A fast
 hero may need to step past that line and reverse onto it as the speed cadence
 changes; widening the lane would feel easier, but it would no longer be the
-cabinet's collision.
+cabinet's collision. Wall markers receive the ROM's four-pixel-left collision
+correction, so the valid hero position is four pixels left of the apparent
+midpoint. Captured examples at X=365, 299, and 235 block vertical movement until
+the Elf's alternating cadence lands on X=364, 300, and 236 respectively.
 
 And when the move commits, the last thing it does is ask which cell your new
 position actually names, biasing by half a sprite so the answer is the cell

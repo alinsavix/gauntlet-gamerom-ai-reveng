@@ -57,9 +57,10 @@ def test_snapshot_projects_internal_state_without_mutating_the_game():
         tuple(state.mobs.picture),
     )
 
-    snapshot = capture_debug_snapshot(state, paused=True)
+    snapshot = capture_debug_snapshot(state, paused=True, frame_time_ms=12.5)
 
     assert snapshot.frame == 123
+    assert snapshot.frame_time_ms == 12.5
     assert snapshot.mode == int(GameMode.DEMO)
     assert snapshot.player_it == 1
     assert snapshot.demo_positions == (0, 118, 0, 20)
@@ -76,8 +77,11 @@ def test_snapshot_projects_internal_state_without_mutating_the_game():
 
 
 def test_snapshot_rows_include_global_demo_and_player_state():
-    rows = dict(debug_snapshot_lines(capture_debug_snapshot(_diagnostic_state())))
+    rows = dict(debug_snapshot_lines(
+        capture_debug_snapshot(_diagnostic_state(), frame_time_ms=16.75)
+    ))
 
+    assert rows["FRAME"] == "00123  16.75 ms"
     assert rows["MODE"] == "DEMO (-3)"
     assert rows["LEVEL / MAZE"] == "7 / 102"
     assert rows["PLAYERS / IT"] == "1 / P2"
