@@ -41,6 +41,13 @@ a claim in these references. ROM execution, direct disassembly, or MAME must
 independently confirm it first. The fixture format and its provenance rules are
 documented in `../gauntpy/scenarios/README.md`.
 
+As host-tooling guarantees rather than ROM claims, `.gsc` input defaults to
+live keyboard control; explicit input events override it until changed back to
+`live`. The allowlisted thief event arms its victim and countdown at fixture
+construction so ordinary pre-arrival movement writes breadcrumbs. F1 exposes
+pending/fired event timers, and F4 embeds the normalized fixture, hash, source
+name, active input mode, and event progress so resume is self-contained.
+
 ---
 
 ## ROM File Checksums

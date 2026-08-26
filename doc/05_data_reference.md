@@ -47,7 +47,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904046 | 2 B | `forcefield_color` | Current forcefield color word |
 | 0x904048 | 2 B | `ff_cycle_timer` | Forcefield color cycle step timer |
 | 0x904049 | 1 B | `ff_cycle_index` | Current step index into forcefield color table (0–7) |
-| 0x90404A | 1 B | `thief_path_direction` | Current route direction byte returned by `path_grid_get_direction`. `thief_compute_path` saves the previous byte, writes the newly selected direction, and uses it when extending/recovering the thief path. |
+| 0x90404A | 1 B | `thief_path_direction` | Current route direction byte. `thief_compute_path` preserves this byte when `path_grid_get_direction` returns unset (8), replacing it only with a decoded direction 0–7; reset value zero therefore continues upward if a caller creates a thief without first supplying breadcrumbs. |
 | 0x90404B | 8 B | `soundqueue` | Array of 1-byte sound IDs in the queue |
 | 0x904053 | 1 B | `soundqueue_head` | Head of sound queue |
 | 0x904054 | 1 B | `soundqueue_tail` | Tail of sound queue |
@@ -301,10 +301,10 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x904B98 | 2 B | `thief_victim_pos` | Last packed position of the thief's target; `thief_track_victim_move` updates it and writes the old-to-new direction into the path grid. |
-| 0x904B9A | 2 B | `thief_victim` | Player number of richest player |
+| 0x904B98 | 2 B | `thief_victim_pos` | Last packed position of the thief's target. Scheduling initializes it before the arrival countdown; every later victim cell handoff updates it and writes the old-to-new direction into the pursuit nibble. |
+| 0x904B9A | 2 B | `thief_victim` | Player number of the richest player, selected before `thief_enter_time` is loaded so movement during the delay records the route. |
 | 0x904B9C | 2 B | `thief_direction` | Current thief movement/animation direction (0–8). It is produced by `calc_direction` and selects the directional row in the normal and compact thief animation tables. |
-| 0x904B9E | 2 B | `thief_enter_time` | Timer for thief entrance to level |
+| 0x904B9E | 2 B | `thief_enter_time` | Initially the scheduled arrival countdown. Deployment at zero creates the thief/mugger at `thief_start_location` and reloads this word with 0x3C for the entrance pause; ordinary thief animation remains gated until it becomes negative. |
 | 0x904BA0 | 2 B | `thief_mode` | Thief's current mode (see Thief Modes enum) |
 | 0x904BA2 | 2 B | `thief_previous_pos` | Previous thief maze/MOB slot. Movement copies `thief_next_pos` here before calculating the following cell; exit/steal and route-recovery code use it as the cell behind the thief. |
 | 0x904BA4 | 2 B | `thief_current_pos` | Thief's current maze cell, which is also the hardware MOB slot occupied by the thief. It indexes the MOB arrays and is replaced whenever movement transfers the thief into a new cell; zero means no active thief. |
@@ -314,7 +314,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904BB0 | 4 B | `mugger_item_carried` | Item that the mugger is currently carrying |
 | 0x904BB4 | 4 B | `thief_item_carried` | Item that the thief is currently carrying |
 | 0x904BB8 | 2 B | `thief_collision_direction_code` | One-based direction/contact code set when the thief first collides with its target player (`thief_direction + 1`). It suppresses repeated damage during the same contact and is folded into `thief_move_engine`'s return adjustment; zero means no active contact code. |
-| 0x904BBA | 2 B | `thief_start_location` | Location of thief victim at start of level |
+| 0x904BBA | 2 B | `thief_start_location` | Target player's packed cell when the visitor is scheduled, before the arrival delay. Deployment later creates the thief/mugger at this saved old location while the pursuit grid leads toward the player's newer cells. |
 | 0x904BBC | 2 B | `thief_stolen_item` | Tile type of last item stolen by thief |
 | 0x904BBE | 2 B | `thief_tport_active` | Thief transporter-transition latch. `thief_start_tport_anim` sets it to one; normal movement clears it, and occupied-cell replacement is suppressed while it is nonzero. |
 

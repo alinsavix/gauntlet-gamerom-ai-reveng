@@ -1458,6 +1458,17 @@ routine's opening `mazenum_current < 0x73` gate excludes secret rooms.
 
 Calculates player "wealth" using weighted sum of: shot power, extra speed/shot speed/magic power/armor/fight power, potions, bonus multiplier, keys. Selects wealthiest active player as target. Stores in `ram.thief_victim` (`0x904B9A`).
 
+Scheduling establishes route ownership before the delay begins.
+`thief_setup` (0x4E432) calls `thief_target_calc`, copies that player's current
+packed cell into both `thief_start_location` and `thief_victim_pos`, and only
+then calls `thief_timer_set` (0x4E4D8) to load `thief_enter_time`. Consequently
+every victim cell handoff during the entire arrival countdown reaches
+`thief_track_victim_move` and extends the low-nibble pursuit trail. Deployment
+at 0x4DEDC creates the visitor at the saved old player cell, not at the
+victim's then-current position; the accumulated trail is what connects the two.
+After creation the same timer is reused for the 0x3C-frame entrance pause before
+`main_thief_anim` begins moving the MOB.
+
 **Confidence: Contradicted.** The former name was corrected: the distinct routine at 0x4FCF0
 does not calculate wealth. `thief_find_aligned_shooter()` scans players 0–3,
 requires an active player MOB, requires that player's shot direction to be
@@ -1475,6 +1486,14 @@ from player movement and transporter paths. If the player is the current
 `thief_victim` and the position changed, it records the direction from the old
 position in the low path-grid nibble and updates `thief_victim_pos`. It does
 not erase a MOB or write a blank tile.
+
+`thief_compute_path` (0x4F912) is a route consumer, not a fallback pathfinder.
+It saves `thief_path_direction`, reads the selected grid nibble at the current
+cell, and replaces the saved direction only when that nibble decodes to 0–7.
+An unset nibble (decoded value 8) therefore continues the previous direction;
+on freshly reset state that direction is zero, upward. Any caller that invents
+a spawn without the scheduling/breadcrumb phase can send the visitor straight
+into the top boundary even though open floor exists elsewhere.
 
 The ordinary movement engine is anchor-based rather than cell-coarse.
 `thief_move_engine` (0x4EE7A) writes each proposed H or V word, then calls

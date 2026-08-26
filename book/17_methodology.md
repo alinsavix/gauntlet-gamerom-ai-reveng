@@ -36,6 +36,15 @@ fidelity invariants until primary evidence independently confirms it. The
 fixture, trace, and state dump all retain an explicit synthetic label to keep
 that boundary visible.
 
+The tooling makes the label hard to lose. Synthetic play defaults to live
+keyboard input unless the fixture explicitly scripts a direction. Its F1 page
+shows pending and fired event timers. An F4 snapshot embeds the complete
+normalized fixture, content hash, filename, current input mode, and event
+progress, so resuming cannot silently substitute a changed file. A scheduled
+thief is armed when the synthetic countdown begins, allowing ordinary player
+movement to write the same breadcrumb state the real scheduler would; that is a
+test-harness contract, still not evidence that Atari shipped the invented room.
+
 Above that sits **disassembly**. radare2 turns bytes into instructions, and
 this project keeps a checked-in loader script that reconstructs the whole
 annotated session: memory maps, symbol names, function boundaries, data

@@ -63,6 +63,31 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-147 · recent corrected behavior documentation audit
+
+The S-142 ROM findings were already present at the appropriate levels:
+`doc/04`, `doc/05`, `doc/07`, and Chapters 10/12/14/15 cover poison direction
+remapping, the full 0x7000 edge window, thief/mugger wall response, deterministic
+host seeding, and render timing/scale. The synthetic evidence boundary and
+self-contained fixture provenance were likewise present in `doc/INDEX`,
+`FIDELITY.md`, and Chapter 17.
+
+The audit found one substantive omission behind S-146. The references said
+that victim movement writes breadcrumbs, but did not state the scheduling
+order that makes those writes possible: `thief_setup` chooses the victim and
+saves its start/current cell before `thief_timer_set` loads the arrival delay,
+so movement during the whole countdown extends the route; deployment uses the
+saved old cell and reloads a 0x3C entrance pause. They also omitted
+`thief_compute_path`'s unset-nibble behavior: it preserves the prior direction,
+which is reset to upward, rather than finding another route. These details now
+appear in `doc/04`, the RAM rows in `doc/05`, and Chapter 12.
+
+The host-only S-143–S-145 details remain explicitly synthetic rather than being
+mixed into ROM subsystem claims. `doc/INDEX` and Chapter 17 now summarize their
+operational guarantees—live-input default, early event arming, F1 queue/timers,
+and self-contained F4 provenance—while directing the full format contract to
+`gauntpy/scenarios/README.md`.
+
 ### S-146 · synthetic mugger spawned with no pursuit breadcrumbs
 
 The `activate_thief` event set an explicit spawn cell and invoked the normal
