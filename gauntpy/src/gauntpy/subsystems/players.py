@@ -1776,13 +1776,11 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         # 0x513DA, reached for both 0x10 and 0x11 through the dispatch table at
         # 0x511EC.  Before an exit works, the ROM checks hpos bit 4
         # (0x513E4 ``btst #4,$1(a0,d0.w)``): a set bit means this exit is a
-        # *fake*.  Stepping on one shows record 30, removes the illusion and
-        # satisfies the "don't be fooled" objective -- but does not exit.
+        # *fake*.  Stepping on one shows record 30, removes only its MOB collision
+        # record, and satisfies the "don't be fooled" objective -- but does not
+        # exit.  The playfield descriptor remains an exit-shaped illusion.
         if state.mobs.hpos[tile_mob_slot] & _FAKE_EXIT_FLAG:
             _dialog(state, player_index, _DIALOG_FAKE_EXIT)   # 0x513F8
-            from ..maze import clear_cell_descriptor
-
-            clear_cell_descriptor(state, tile_mob_slot)
             state.mobs.unlink_and_clear(tile_mob_slot)        # 0x51404
             _secret_trick_set(state, player_index, _TRICK_NOFOOLED, 1)
             return -1

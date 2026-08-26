@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2377 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2380 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,30 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-138 · fake-exit VRAM removal and disputed ROM behaviors
+
+On level 16 / maze 15, stepping on a fake exit made its artwork disappear.
+The collision branch at 0x513DA-0x51424 calls
+`moblist_remove_and_clear` at 0x51404 but never calls `pf_replace`; gauntpy
+incorrectly coupled that MOB removal to `clear_cell_descriptor`. Fake-exit
+contact now removes only the collision record, preserving the exit descriptor
+and visible illusion while still showing first-encounter record 30 and
+assigning the Don't Be Fooled objective byte.
+
+Two related reports were verified as original behavior rather than changed.
+When `level_next_treasure` is already zero, `main_move_players` branches at
+0x4A77A to `show_level_end_bonus_screen` before
+`show_level_start_screen` interleaves the treasure maze. Leaving or timing out
+inside that room calls the tally again through the `mazenum_current >= 104`
+branch, so level 16 / maze 15 can legitimately show a pre-room and post-room
+tally. Potion `STUN` likewise is not a persistent Super Sorcerer freeze:
+0x415AC-0x415DC reveals every phasing target in the on-screen cull rectangle,
+clears its flags/high animation state, and skips its remaining potion-frame
+work; later passes resume the idle cycle at 0x4112C and may fire at 0x41142.
+Off-screen phasing Super Sorcerers remain invisible. Regressions cover the
+fake-exit descriptor, the level-16 transition gate, multi-target reveal/culling,
+and resumed firing.
 
 ### S-137 · player movement integrated multi-pixel axes one pixel at a time
 

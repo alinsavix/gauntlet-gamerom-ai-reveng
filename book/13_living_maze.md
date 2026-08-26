@@ -208,7 +208,9 @@ random during setup. What happens to the others depends on a second flag: they
 are either quietly replaced with floor, or kept as **fake exits**, marked with
 a single bit in the exit's record. A fake exit looks pixel-identical to the
 real one. Stepping on it does not end the level, and one of the secret
-objectives, Don't Be Fooled, is failed by exactly that step.
+objectives, Don't Be Fooled, is failed by exactly that step. The collision
+record is consumed, but no playfield replacement runs, so the false exit
+remains drawn rather than turning into floor.
 
 There is also a mercy rule. A timer counts frames since anyone took damage or
 anything died. If it reaches 21,000 frames, close to six minutes of genuine
@@ -262,6 +264,12 @@ standing, leads to the bonus tally screen: the treasures you grabbed, scored
 at 100 points multiplied by players and coins, added up in front of you. Then
 the saved level and maze are restored and the normal rotation continues as if
 the room had never happened.
+
+There is also a tally immediately before the room. On the ordinary level where
+the hidden room countdown is already zero, the end-of-level branch calls the
+same tally routine first; only after its hold does level setup substitute the
+treasure maze. The room exit or timeout calls it again for the treasure-room
+take. The apparently duplicated curtain is the program's actual ordering.
 
 ## The secret objective you did not know you had
 

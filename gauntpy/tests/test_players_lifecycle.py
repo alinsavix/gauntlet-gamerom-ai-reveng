@@ -3597,17 +3597,19 @@ class TestFakeExitObjective:
             gp.player_tile_interact(state, self._exit_slot(state, True), 0)
         assert state.secret_tricks_flags[0] == 1
 
-    def test_the_illusion_is_removed(self):
+    def test_collision_record_is_removed_but_exit_descriptor_remains(self):
         state = _trick_state(gp._TRICK_NOFOOLED)
         _make_player_active(state, 0)
         slot = self._exit_slot(state, True)
         from gauntpy.playfield_vram import (
             read_tile_descriptor, write_tile_descriptor,
         )
-        write_tile_descriptor(state, slot, (0x39E, 0x39F, 6, 6))
+        exit_descriptor = (0x39E, 0x39F, 6, 6)
+        write_tile_descriptor(state, slot, exit_descriptor)
         gp.player_tile_interact(state, slot, 0)
         assert state.mobs.obj_type(slot) == 0     # 0x51404
-        assert read_tile_descriptor(state, slot) == (0, 0, 0, 0)
+        assert read_tile_descriptor(state, slot) == exit_descriptor, \
+            "moblist_remove_and_clear does not call pf_replace"
 
     def test_a_fake_exit_speaks_record_thirty(self):
         """0x513EC pushes mask 0x40000000 -- bit 30 selects the record.

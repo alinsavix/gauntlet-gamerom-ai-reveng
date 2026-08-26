@@ -767,6 +767,13 @@ enhanced-magic columns 8-11, and shot-plus-enhanced columns 12-15. Zero removes
 the target; nonzero monster entries subtract tier strength, while generator
 entries replace the generator type and picture.
 
+For the Super Sorcerer, the legend's `STUN` result is not a persistent
+immobilization state. The potion scan at 0x415AC-0x415DC reveals every phasing
+Super Sorcerer inside the cull rectangle, then skips that target for the rest of
+the potion frame. On later monster passes its cleared flags select the ordinary
+idle phase at 0x4112C; its animation counter advances and it may fire at
+0x41142. Off-screen phasing Super Sorcerers are not scanned and remain hidden.
+
 ### 4.7 Score With Multiplier (`player_add_score_with_mult`, 0x5214C)
 
 **Confidence: Verified.**
@@ -1571,6 +1578,15 @@ path can award `5,000 × coins`. It removes departing player sprites, restores
 the saved secret-room counters, changes game mode, runs `secret_check`, and
 loads the saved next maze/level. 
 
+The treasure-room countdown deliberately produces two transition points. When
+`level_next_treasure` is already zero at an ordinary level end,
+`main_move_players` branches from 0x4A77A to the tally call at 0x4A78C before
+`show_level_start_screen` interleaves the room. Leaving or timing out inside the
+treasure room takes the `mazenum_current >= 104` branch at 0x4A756 and calls the
+tally again for the room's collected treasure. Thus the pre-room tally is ROM
+behavior, including for level 16 / maze 15; suppressing it would diverge from
+the program.
+
 For an ordinary transition, `main_start_game` decrements
 `global_ui_delay_timer` at 0x4817C outside the dialog-gated gameplay band. At
 zero it resumes the level and calls `maze_show` (0x4526A), which clears alpha
@@ -1752,6 +1768,12 @@ Player exiting state machine:
 2. Run `exit_create_player_anim` (0x5DF80): create player exit animation MOB
 3. Set player state to "exiting"
 4. Call `maze_checknum` (0x52ECA) and advance to next level when all exiting players are done
+
+The tile-interaction caller has a separate fake-exit arm at
+0x513DA-0x51424. H-position bit 4 selects it; the ROM displays first-encounter
+record 30 and calls only `moblist_remove_and_clear` at 0x51404. It does not call
+`pf_replace` or another descriptor writer, so the collision marker disappears
+but the exit-shaped playfield cell remains visible.
 
 ### 12.2 Moving Exit (`main_exit_move`, 0x5287C)
 

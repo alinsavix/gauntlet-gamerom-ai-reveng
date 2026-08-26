@@ -258,6 +258,13 @@ four-pixel correction, then faces exactly back along the selected cardinal or
 diagonal probe line. Losing either correction shifts the materialization and
 makes its supposedly aimed bolt pass beside the player.
 
+A potion's `STUN` result does not freeze this cycle indefinitely. It reveals
+each phasing Super Sorcerer inside the current monster window, clears its phase
+flags and animation high bits, and prevents another action on that potion
+frame. On subsequent monster passes the now-visible sorcerer starts from its
+idle phase, advances the same counter, and can fire normally. Phasing sorcerers
+outside the window remain invisible.
+
 **Death** is the one monster with a private economy. Touching Death costs four
 health per contact, or three if you are carrying extra armor, and the same
 number is added to a running per-player damage counter. An ordinary shot leaves

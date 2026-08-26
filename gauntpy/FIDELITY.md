@@ -210,6 +210,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     response recursion retries with `D6=0x80`; never integrate ordinary movement
     one pixel at a time. The private bottom-row Down gate is signed-coordinate
     state and permits Y=496 before rejecting V-word wrap.
+50. **Removing a MOB marker does not imply replacing its playfield cell.** Port
+    the exact producer called by the ROM. Fake-exit contact calls
+    `moblist_remove_and_clear`, so collision identity disappears while the
+    exit-shaped logical/playfield illusion remains; only an explicit
+    `pf_replace`-family call may turn that cell into floor.
 
 ## Investigation workflow
 

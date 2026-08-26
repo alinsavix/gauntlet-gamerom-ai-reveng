@@ -325,8 +325,12 @@ the same record. A potion set off by a stray shot does less than one you
 drank, since the trigger bit selects a different entry, which is the game
 charging you for clumsiness by table lookup. Two animated enemies also branch
 before the lookup: magic forces an idle Acid puddle into its stunned phase and
-reveals a phasing Super Sorcerer. The dragon gets a private check of its own
-inside the potion handler; see Chapter 12.
+reveals every phasing Super Sorcerer currently on screen. `STUN` is a slightly
+misleading legend label for that second result: the visible sorcerers skip the
+rest of the potion frame, but on later monster turns their ordinary phase cycle
+resumes, including animation and firing. Hidden sorcerers beyond the screen
+rectangle are untouched. The dragon gets a private check of its own inside the
+potion handler; see Chapter 12.
 
 ## The dwindling number
 

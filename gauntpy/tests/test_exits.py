@@ -409,6 +409,17 @@ class TestTreasureScheduling:
         assert state.level_next_potion == 1
         assert state.secret_possible_counter == 19
 
+    def test_zero_countdown_requests_the_tally_before_the_treasure_room(self):
+        """0x4A77A branches to 0x4A78C before show_level_start_screen runs."""
+        state = GameState()
+        state.levelnum_current = 16
+        state.mazenum_current = 15
+        state.level_next = 17
+        state.level_next_treasure = 0
+
+        assert advance_level_countdowns(state)
+        assert state.level_next_treasure == 0
+
     def test_countdown_is_not_ticked_in_a_bonus_room(self):
         state = GameState()
         state.mazenum_current = _TREASURE_MAZE

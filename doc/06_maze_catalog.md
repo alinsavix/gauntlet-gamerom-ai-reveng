@@ -217,6 +217,14 @@ loaded by `eeprom_load_config` and cached at 0x904B90/0x904B91.
 the end-of-level path, only while `mazenum_current` < 104 and
 `level_next` > 6 (0x4A756–0x4A788).
 
+The zero test precedes the decrement. If the word is already zero when an
+ordinary level ends, 0x4A77A branches to `show_level_end_bonus_screen` at
+0x4A78C. After that tally's hold, `show_level_start_screen` sees the same zero
+and interleaves the treasure room. The room's own exit/timeout later reaches
+the same tally through the separate `mazenum_current >= 104` branch. A
+pre-room tally followed by a post-room tally is therefore the verified ROM
+sequence, not a duplicated Python transition.
+
 `show_level_start_screen` (0x44E92–0x44F38) fires when the countdown is
 zero:
 
