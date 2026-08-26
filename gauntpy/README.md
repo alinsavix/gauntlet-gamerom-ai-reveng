@@ -59,9 +59,10 @@ raster is enlarged with `--scale`, using an anti-aliased system monospace font.
 Its pages cover overview, players and raw input, decoded demo records, level
 flags/timers, actor counts and raw MOB words, thief/dragon AI, display memory,
 audio queues, a rolling event log inferred from snapshots while the panel is
-open, and a 120-sample render-time graph. The displayed `RENDER` value is a
-rolling average of the latest ten frames. The graph labels its dynamic Y axis
-in milliseconds and marks the 16.67 ms frame budget.
+open, synthetic-scenario event queues/timers, and a 120-sample render-time
+graph. The displayed `RENDER` value is a rolling average of the latest ten
+frames. The graph labels its dynamic Y axis in milliseconds and marks the
+16.67 ms frame budget.
 
 **F4** atomically saves every modeled `GameState` field, including players,
 MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,

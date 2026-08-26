@@ -25,6 +25,11 @@ from gauntpy.render.state_dump import (
     game_state_from_payload,
     state_dump_payload,
 )
+from gauntpy.render.diagnostics import (
+    DEBUG_PAGES,
+    capture_debug_snapshot,
+    debug_page_lines,
+)
 from gauntpy.state import GameState
 from gauntpy.subsystems.thief import THIEF_IS_MUGGER
 from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
@@ -66,6 +71,30 @@ def test_live_scenario_input_does_not_overwrite_host_controls():
     apply_synthetic_events(state)
 
     assert state.player_input_raw[0] == JOY_IDLE & ~JOY_RIGHT
+
+
+def test_diagnostics_page_shows_pending_and_fired_event_timers():
+    scenario = load_synthetic_scenario(_EXAMPLE)
+    state = GameState(frame_counter=1000)
+    runtime = SyntheticScenarioRuntime(scenario)
+    attach_synthetic_runtime(state, runtime)
+    page = DEBUG_PAGES.index("SCENARIO")
+
+    pending = dict(debug_page_lines(capture_debug_snapshot(state), page))
+    runtime.fired_events.add(0)
+    fired = dict(debug_page_lines(capture_debug_snapshot(state), page))
+
+    assert pending["NAME"] == "narrow-lane-thief"
+    assert pending["SOURCE"] == _EXAMPLE.name
+    assert pending["INPUT"] == "LIVE"
+    assert pending["EVENTS"] == "0/1 fired"
+    assert pending["EVT 00"].startswith(
+        "T-00200 @01200 activate_thief 1 28 mugger"
+    )
+    assert fired["EVENTS"] == "1/1 fired"
+    assert fired["EVT 00"].startswith(
+        "FIRED @01200 activate_thief 1 28 mugger"
+    )
 
 
 @requires_roms

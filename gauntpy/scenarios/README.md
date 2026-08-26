@@ -87,3 +87,8 @@ name or numeric object ID.
 State dumps embed the normalized complete file, SHA-256, source filename,
 current scripted input, and fired-event indices. They never depend on the
 original `.gsc` file still existing or remaining unchanged.
+
+While a fixture is loaded, the F1 `SCENARIO` page shows its name, source,
+content hash, current scripted/live input mode, and every event. Pending events
+include their absolute target frame and `T-` frames remaining; completed events
+remain visible as `FIRED`.

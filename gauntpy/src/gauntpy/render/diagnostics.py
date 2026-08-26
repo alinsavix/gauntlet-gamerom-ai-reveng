@@ -34,6 +34,7 @@ DEBUG_PAGES = (
     "AI",
     "DISPLAY",
     "AUDIO",
+    "SCENARIO",
     "EVENTS",
     "PERFORMANCE",
 )
@@ -318,6 +319,38 @@ def _audio_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
+def _scenario_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
+    from ..custom_scenario import synthetic_runtime_for
+
+    runtime = synthetic_runtime_for(state)
+    if runtime is None:
+        return (("SCENARIO", "no synthetic fixture loaded"),)
+    scenario = runtime.scenario
+    input_mode = (
+        "LIVE"
+        if runtime.current_input is None
+        else _pressed_input_names(runtime.current_input).upper()
+    )
+    rows: list[tuple[str, str]] = [
+        ("NAME", scenario.name),
+        ("SOURCE", scenario.source_name or "embedded"),
+        ("HASH", scenario.sha256[:16]),
+        ("INPUT", input_mode),
+        ("EVENTS", f"{len(runtime.fired_events)}/{len(scenario.events)} fired"),
+    ]
+    current = int(state.frame_counter) & 0xFFFF
+    for index, event in enumerate(scenario.events):
+        action = " ".join((event.action, *event.args))
+        if index in runtime.fired_events:
+            value = f"FIRED @{event.frame:05d} {action}"
+        elif event.frame >= current:
+            value = f"T-{event.frame - current:05d} @{event.frame:05d} {action}"
+        else:
+            value = f"MISSED +{current - event.frame:05d} {action}"
+        rows.append((f"EVT {index:02d}", value))
+    return tuple(rows)
+
+
 def capture_debug_snapshot(
     state: GameState, *, paused: bool = False, selected_mob: int = 0,
     render_time_ms: float = 0.0,
@@ -400,6 +433,7 @@ def capture_debug_snapshot(
             ("AI", _ai_page_rows(state)),
             ("DISPLAY", _display_page_rows(state)),
             ("AUDIO", _audio_page_rows(state)),
+            ("SCENARIO", _scenario_page_rows(state)),
         ),
         paused=paused,
     )

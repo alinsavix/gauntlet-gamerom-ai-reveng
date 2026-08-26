@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2418 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2419 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,17 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-145 · synthetic event queue was invisible during interactive play
+
+The F1 panel now has a `SCENARIO` page. For a loaded `.gsc` fixture it captures
+host-only immutable rows for the scenario name, source filename, content hash,
+live/scripted input mode, and fired/total count. Every scripted event remains
+listed: pending entries show their absolute 16-bit target frame and `T-` frames
+remaining, fired entries retain their target and action, and an anomalous
+unfired event already behind the current frame is labeled `MISSED`. Ordinary
+ROM-backed play reports that no synthetic fixture is loaded. The page reads the
+attached host runtime and does not add fields to or mutate modeled arcade RAM.
 
 ### S-144 · example synthetic maze suppressed all interactive input
 
