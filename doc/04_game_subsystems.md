@@ -493,8 +493,12 @@ Down at `(299,463)` between `0x3D2`/`0x3D4`, and Up at `(235,352)` between
 arm of `tile_lookup_core` at 0x42688 rounds the wall's live H word and subtracts
 `0x200` (four pixels) before the strict `< 0x7C0` test. With the flanking wall
 records 32 pixels apart, the only clear hero anchors are therefore X=364, 300,
-and 236, not the uncorrected visual midpoints. The live 2/3-pixel Elf cadence
-can reach all three positions, after which the same vertical probes pass.
+and 236, not the uncorrected visual midpoints. Crucially, the blocked-axis wall
+arms at 0x42108-0x421B8 and 0x4233C onward do not merely reject the full-speed
+move. They round that axis to a one-pixel retry and nudge the other axis away
+from the obstructing flank. Holding the vertical direction automatically moves
+the three captured heroes onto X=364, 300, and 236, then enters on the next
+frame; no manual left/right alignment is required.
 
 #### 4.2.1 Character stat selectors
 
@@ -1588,14 +1592,15 @@ path can award `5,000 × coins`. It removes departing player sprites, restores
 the saved secret-room counters, changes game mode, runs `secret_check`, and
 loads the saved next maze/level. 
 
-The treasure-room countdown deliberately produces two transition points. When
-`level_next_treasure` is already zero at an ordinary level end,
-`main_move_players` branches from 0x4A77A to the tally call at 0x4A78C before
-`show_level_start_screen` interleaves the room. Leaving or timing out inside the
-treasure room takes the `mazenum_current >= 104` branch at 0x4A756 and calls the
-tally again for the room's collected treasure. Thus the pre-room tally is ROM
-behavior, including for level 16 / maze 15; suppressing it would diverge from
-the program.
+The reachable countdown transition produces only the post-room tally. At an
+ordinary level end, a value of one is decremented to zero and the transition
+continues without calling the tally; `show_level_start_screen` then sees zero
+and interleaves the room immediately. Leaving or timing out inside the treasure
+room takes the `mazenum_current >= 104` branch at 0x4A756 and calls the tally for
+the collected treasure. The ROM also contains an already-zero ordinary-state
+branch from 0x4A77A to 0x4A78C, but normal setup cannot begin an ordinary level
+in that state. Direct-start/resumed hosts must not turn that unreachable residue
+into a visible pre-room screen.
 
 For an ordinary transition, `main_start_game` decrements
 `global_ui_delay_timer` at 0x4817C outside the dialog-gated gameplay band. At

@@ -505,7 +505,7 @@ class TestPlayerTryMoveWallCollision:
         assert player_try_move(state, pi, gin.JOY_DOWN, 0) == _NO_MOVE
         assert vpos_y(state.mobs.vpos[player.mob_slot]) == 79
 
-    def test_maze16_narrow_wall_lane_has_the_rom_alignment_escape(self):
+    def test_maze16_narrow_wall_lane_auto_centers_under_held_input(self):
         """Regression for the frame-10310 live-state report at (41, 288)."""
         state = GameState(game_mode=GameMode.NORMAL)
         player = _active_player_at(state, 0, (18 << 5) | 3)
@@ -524,15 +524,13 @@ class TestPlayerTryMoveWallCollision:
                 link_into_chain=False,
             )
 
-        state.movement_type = 2
-        assert player_try_move(state, 0, gin.JOY_UP, 0) == _NO_MOVE
-
-        for direction in (gin.JOY_RIGHT, gin.JOY_RIGHT, gin.JOY_LEFT):
+        for expected_x in (42, 43, 44):
             state.movement_type = 2
-            assert player_try_move(state, 0, direction, 0) != _NO_MOVE
+            assert player_try_move(state, 0, gin.JOY_UP, 0) != _NO_MOVE
+            assert hpos_x(state.mobs.hpos[player.mob_slot]) == expected_x
+            assert vpos_y(state.mobs.vpos[player.mob_slot]) == 288
             state.frame_counter += 1
 
-        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 44
         state.movement_type = 2
         assert player_try_move(state, 0, gin.JOY_UP, 0) != _NO_MOVE
         assert vpos_y(state.mobs.vpos[player.mob_slot]) == 285
@@ -540,26 +538,26 @@ class TestPlayerTryMoveWallCollision:
     @pytest.mark.parametrize(
         (
             "frame", "player_slot", "x", "y", "vertical", "flanks",
-            "alignment_steps", "expected_x", "expected_y",
+            "aligned_x", "response_y", "entered_y",
         ),
         (
             (
                 8945, 0x1D7, 365, 223, gin.JOY_DOWN, (0x1F6, 0x1F8),
-                (gin.JOY_RIGHT, gin.JOY_LEFT), 364, 225,
+                364, 224, 226,
             ),
             (
                 15793, 0x3B3, 299, 463, gin.JOY_DOWN, (0x3D2, 0x3D4),
-                (gin.JOY_LEFT, gin.JOY_RIGHT), 300, 465,
+                300, 464, 466,
             ),
             (
                 24137, 0x2CF, 235, 352, gin.JOY_UP, (0x2AE, 0x2B0),
-                (gin.JOY_LEFT, gin.JOY_RIGHT), 236, 350,
+                236, 352, 350,
             ),
         ),
     )
-    def test_saved_narrow_lanes_require_the_roms_single_pixel_alignment(
-        self, frame, player_slot, x, y, vertical, flanks, alignment_steps,
-        expected_x, expected_y,
+    def test_saved_narrow_lanes_use_the_roms_automatic_one_pixel_response(
+        self, frame, player_slot, x, y, vertical, flanks, aligned_x,
+        response_y, entered_y,
     ):
         """Regressions for the three captured maze-15/16 vertical gaps."""
 
@@ -583,23 +581,21 @@ class TestPlayerTryMoveWallCollision:
 
         state, player = captured_state()
         state.movement_type = 2
-        assert player_try_move(state, 0, vertical, 0) == _NO_MOVE
+        assert player_try_move(state, 0, vertical, 0) != _NO_MOVE
         assert (
             hpos_x(state.mobs.hpos[player.mob_slot]),
             vpos_y(state.mobs.vpos[player.mob_slot]),
-        ) == (x, y)
+        ) == (aligned_x, response_y)
 
-        # The rejected vertical frame advances the 2/3-pixel Elf cadence.
+        # Holding the same direction enters the lane on the next frame; no
+        # manual left/right alignment is required.
         state.frame_counter += 1
-        for direction in alignment_steps:
-            state.movement_type = 2
-            assert player_try_move(state, 0, direction, 0) != _NO_MOVE
-            state.frame_counter += 1
-        assert hpos_x(state.mobs.hpos[player.mob_slot]) == expected_x
-
         state.movement_type = 2
         assert player_try_move(state, 0, vertical, 0) != _NO_MOVE
-        assert vpos_y(state.mobs.vpos[player.mob_slot]) == expected_y
+        assert (
+            hpos_x(state.mobs.hpos[player.mob_slot]),
+            vpos_y(state.mobs.vpos[player.mob_slot]),
+        ) == (aligned_x, entered_y)
 
 
 # ---------------------------------------------------------------------------

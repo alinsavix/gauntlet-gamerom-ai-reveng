@@ -18,7 +18,11 @@ from gauntpy.subsystems.potions import (
     main_handle_potions,
     potion_blast,
 )
-from gauntpy.subsystems.dragon import _ST_STUNNED, _ST_WAKING
+from gauntpy.subsystems.dragon import (
+    _ST_STUNNED,
+    _ST_WAKING,
+    main_handle_dragon,
+)
 from gauntpy.subsystems.display import potion_flash_vblank
 from gauntpy.subsystems.monsters import main_move_monsters
 from gauntpy.subsystems import score
@@ -196,6 +200,11 @@ class TestMagicGate:
         main_handle_potions(state)
 
         assert state.dragon_state & _ST_STUNNED
+        for _ in range(120):
+            main_handle_dragon(state)
+        assert state.dragon_state == _ST_STUNNED
+        assert state.dragon_anim_ctr == 0
+        assert not any(state.mobs.picture[5:9])
 
     def test_second_potion_restarts_a_stunned_dragon_wake_transition(self):
         state = GameState(game_mode=GameMode.NORMAL)
@@ -215,6 +224,11 @@ class TestMagicGate:
         assert state.dragon_state & _ST_WAKING
         assert not state.dragon_state & _ST_STUNNED
         assert state.dragon_anim_ctr == -0x31
+
+        for _ in range(240):
+            main_handle_dragon(state)
+        assert not state.dragon_state & (_ST_WAKING | _ST_STUNNED)
+        assert any(state.mobs.picture[5:9])
 
 
 class TestBlastOutcomes:

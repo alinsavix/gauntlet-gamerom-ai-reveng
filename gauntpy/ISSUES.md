@@ -63,34 +63,42 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
-### S-139 · captured vertical gaps match the ROM; diagnostics show frame time
+### S-139 · narrow-lane response, treasure entry, dragon stun, and frame time
 
-Three complete F4 captures resolved the remaining narrow-gap reports. Frame
+Three complete F4 captures exposed a missing movement path. Frame
 8945 in level 16 / maze 15 blocks Down at `(365,223)` between wall-marker slots
 `0x1F6`/`0x1F8`; frame 15793 in level 17 / maze 16 blocks Down at `(299,463)`
 between `0x3D2`/`0x3D4`; and frame 24137 blocks Up at `(235,352)` between
 `0x2AE`/`0x2B0`. In every case the center cell is empty and the two flanking
 walls are 32 pixels apart.
 
-This is the ROM's strict geometry rather than stale saved state.
 `probe_up`/`probe_down` call `tile_lookup_core` for the center and both flanks;
 its high-bit wall arm at 0x42688 rounds each marker's live H word and subtracts
 four pixels before applying the strict `< 0x7C0` comparison. Consequently each
-lane has one valid hero anchor: X=364, 300, and 236 respectively. After one
-failed vertical frame, the live Elf cadence reaches those anchors with
-Right/Left, Left/Right, and Left/Right, and the requested vertical move succeeds.
-Exact-state regressions protect both each reported rejection and each reachable
-escape.
+lane has one clear hero anchor: X=364, 300, and 236 respectively. The prior
+analysis stopped there. The blocked-wall arms at 0x42108-0x421B8 and
+0x4233C onward round the requested axis to a one-pixel response and nudge away
+from the obstructing flank. Gauntpy omitted that response and forced manual
+alignment. Holding the requested vertical direction now automatically centers
+all three captured heroes and enters the gap on the next frame. The older
+frame-10310 X=41 case likewise centers to X=44 in three frames.
 
-The Super Sorcerer and treasure-screen reports were traced again and remain
-original behavior. Potion handling at 0x415AC-0x415DC clears a phasing Super
-Sorcerer's flags/high animation state and skips only that potion-frame pass;
-later dispatch reaches the idle counter at 0x4112C and may fire at 0x41142.
-Likewise `main_move_players` branches directly from a zero
-`level_next_treasure` at 0x4A77A to the tally call at 0x4A78C; only after its
-hold does `show_level_start_screen` interleave the room, whose exit/timeout calls
-the tally again. Suppressing either observed behavior would diverge from
-`row76.bin`.
+The pre-room tally conclusion was also wrong. Although the image has an
+already-zero branch from 0x4A77A to the tally routine, the live scheduler reaches
+zero by decrementing `1 -> 0` and immediately calls `show_level_start_screen`,
+which interleaves the room without a tally. An ordinary level cannot start with
+zero through that path. Direct starts and historical snapshots can expose the
+residual state, so gauntpy now preserves the reachable outcome and reserves the
+visible tally for the treasure room's exit/timeout.
+
+Super Sorcerer `STUN` remains a reveal rather than a persistent freeze:
+0x415AC-0x415DC clears the phase flags/high animation state, and later dispatch
+resumes the idle cycle. Dragon potion state is different. Frame 52867 has
+`dragon_state = 2`, the ROM's persistent first-potion stun bit, so animation,
+close breath, and shots are all deliberately gated. Applying another effective
+potion while the captured segments are near-screen writes state 1/counter -49;
+the two-part wake completes and the dragon fires again. Regressions now cover
+both the indefinite one-potion stun and the second-potion wake/fire lifecycle.
 
 The F1 overview now also shows the host clock's complete frame duration in
 milliseconds beside the arcade frame number. The measurement stays in the
@@ -106,19 +114,14 @@ contact now removes only the collision record, preserving the exit descriptor
 and visible illusion while still showing first-encounter record 30 and
 assigning the Don't Be Fooled objective byte.
 
-Two related reports were verified as original behavior rather than changed.
-When `level_next_treasure` is already zero, `main_move_players` branches at
-0x4A77A to `show_level_end_bonus_screen` before
-`show_level_start_screen` interleaves the treasure maze. Leaving or timing out
-inside that room calls the tally again through the `mazenum_current >= 104`
-branch, so level 16 / maze 15 can legitimately show a pre-room and post-room
-tally. Potion `STUN` likewise is not a persistent Super Sorcerer freeze:
+One related report was verified as original behavior. Potion `STUN` is not a
+persistent Super Sorcerer freeze:
 0x415AC-0x415DC reveals every phasing target in the on-screen cull rectangle,
 clears its flags/high animation state, and skips its remaining potion-frame
 work; later passes resume the idle cycle at 0x4112C and may fire at 0x41142.
 Off-screen phasing Super Sorcerers remain invisible. Regressions cover the
-fake-exit descriptor, the level-16 transition gate, multi-target reveal/culling,
-and resumed firing.
+fake-exit descriptor, multi-target reveal/culling, and resumed firing. S-139
+supersedes this entry's former pre-room-tally conclusion.
 
 ### S-137 · player movement integrated multi-pixel axes one pixel at a time
 

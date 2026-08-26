@@ -227,8 +227,10 @@ hero may need to step past that line and reverse onto it as the speed cadence
 changes; widening the lane would feel easier, but it would no longer be the
 cabinet's collision. Wall markers receive the ROM's four-pixel-left collision
 correction, so the valid hero position is four pixels left of the apparent
-midpoint. Captured examples at X=365, 299, and 235 block vertical movement until
-the Elf's alternating cadence lands on X=364, 300, and 236 respectively.
+midpoint. The cabinet does not make you align that pixel by hand: its collision
+response keeps a rounded one-pixel step and nudges away from whichever flank
+blocked. In captured examples at X=365, 299, and 235, holding the vertical
+direction centers the Elf at X=364, 300, and 236 and enters on the next frame.
 
 And when the move commits, the last thing it does is ask which cell your new
 position actually names, biasing by half a sprite so the answer is the cell

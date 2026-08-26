@@ -198,9 +198,10 @@ evidence remains in `../doc/`, generated contracts, and the book.
     window. Between wall anchors 32 pixels apart, only one integer hero H
     position may clear both flanks. High-bit wall markers are rounded and
     corrected four pixels left before that comparison, so the valid hero anchor
-    is likewise four pixels left of the visual midpoint. Do not widen that lane
-    or replace it with sprite-box collision; use the original speed cadence and
-    axis ordering to verify that the alignment remains reachable.
+    is likewise four pixels left of the visual midpoint. The collision response
+    automatically keeps a rounded one-pixel move and nudges away from the
+    obstructing flank; holding toward the opening must center the hero without
+    manual lateral input. Port that response instead of widening the lane.
 48. **A resumed state must bypass initialization.** Host save/load is not an
     arcade routine. A complete snapshot reconstructs the typed modeled RAM,
     decoded maze, MOB links, display memory, path grids, and RNG seed, then
@@ -218,6 +219,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     `moblist_remove_and_clear`, so collision identity disappears while the
     exit-shaped logical/playfield illusion remains; only an explicit
     `pf_replace`-family call may turn that cell into floor.
+51. **Treasure-room entry has no pre-room tally.** The reachable scheduler
+    decrements `level_next_treasure` from one to zero and immediately runs
+    `show_level_start_screen`, which substitutes the room. The visible
+    `show_level_end_bonus_screen` hold belongs to the room's exit or timeout.
+    Do not expose the ROM's already-zero ordinary-state branch from a direct
+    start or historical snapshot.
 
 ## Investigation workflow
 

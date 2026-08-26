@@ -3920,6 +3920,22 @@ def _wrapped_position_delta(a: int, b: int) -> int:
     return abs(value)
 
 
+def _probe_candidate_anchor(state: GameState, candidate: int) -> tuple[int, int]:
+    """Return tile_lookup_core's live/rounded collision anchor."""
+    candidate_h = state.mobs.hpos[candidate]
+    candidate_v = state.mobs.vpos[candidate]
+
+    if candidate_h == 0 and candidate_v == 0:
+        # Synthetic records in isolated tests may omit placement geometry.
+        candidate_h = ((candidate & 0x1F) * 16 << POS_SHIFT) & 0xFFFF
+        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
+
+    if state.mobs.picture[candidate] & 0x8000:
+        candidate_h = (((candidate_h + 0x280) & 0xF800) - 0x200) & 0xFFFF
+        candidate_v = (candidate_v + 0x100) & 0xF800
+    return candidate_h, candidate_v
+
+
 def _probe_candidate_blocks(
     state: GameState,
     mover_slot: int,
@@ -3981,22 +3997,7 @@ def _probe_candidate_blocks(
 
     mover_h = state.mobs.hpos[mover_slot] if hpos is None else hpos
     mover_v = state.mobs.vpos[mover_slot] if vpos is None else vpos
-    picture = state.mobs.picture[candidate]
-    candidate_h = state.mobs.hpos[candidate]
-    candidate_v = state.mobs.vpos[candidate]
-
-    if candidate_h == 0 and candidate_v == 0:
-        # Synthetic records in isolated tests may omit placement geometry.
-        candidate_h = ((candidate & 0x1F) * 16 << POS_SHIFT) & 0xFFFF
-        candidate_v = (native_v((candidate >> 5) * 16) << POS_SHIFT) & 0xFFFF
-
-    if picture & 0x8000:
-        # A software marker's collision anchor is derived from its cell-aligned
-        # H/V words by the rounding sequence at 0x407EA-0x40820.  Use the live
-        # words: high-bit pictures include positioned door art, whose V anchor
-        # intentionally differs from the packed cell.
-        candidate_h = (((candidate_h + 0x280) & 0xF800) - 0x200) & 0xFFFF
-        candidate_v = (candidate_v + 0x100) & 0xF800
+    candidate_h, candidate_v = _probe_candidate_anchor(state, candidate)
 
     return (
         _wrapped_position_delta(candidate_h, mover_h) < _PROBE_OVERLAP
@@ -4500,6 +4501,113 @@ def _player_probe_down(
     )
 
 
+def _wall_collision_response(
+    state: GameState,
+    result: int,
+    cur_slot: int,
+    delta: int,
+    *,
+    hpos: int,
+    vpos: int,
+    blocked_vertical: bool,
+    requested_axis: int,
+) -> tuple[int, int, int, int] | None:
+    """Port the one-pixel wall response arms in player_try_move_core."""
+    if (
+        blocked_vertical
+        and result == 0
+        and cur_slot >> 5 in (1, _MAZE_ROWS - 1)
+    ):
+        # The private top/bottom coordinate gates put zero in D1 without
+        # probing slot zero. It is not a wall candidate for the response arms.
+        return None
+    if not 0 <= result < len(state.mobs.picture):
+        return None
+    if state.mobs.picture[result] != _WALL_PICTURE:
+        return None
+
+    wall_h, wall_v = _probe_candidate_anchor(state, result)
+    if blocked_vertical:
+        if _wrapped_position_delta(wall_h, hpos) <= 0x540:
+            return None
+        col_delta = ((result & 0x1F) - (cur_slot & 0x1F)) & 0x1F
+        if col_delta == 0x1F:
+            if delta & _JOY_LEFT:
+                return None
+            nudge = 1
+        elif col_delta == 1:
+            if delta & _JOY_RIGHT:
+                return None
+            nudge = -1
+        else:
+            return None
+
+        new_h = replace_position(
+            hpos, encode_hpos((hpos_x(hpos) + nudge) & 0x1FF),
+        )
+        # 0x42112/0x42346 round the blocked V axis to a one-pixel retry.
+        new_v = (
+            vpos & 0xFF7F
+            if requested_axis < 0
+            else (vpos + 0x80) & 0xFF7F
+        )
+        if not all(_inside_player_screen_window(state, new_h, new_v)):
+            return None
+        if _player_probe_horizontal(
+            state,
+            cur_slot,
+            (cur_slot & 0x1F) + nudge,
+            hpos=new_h,
+            vpos=new_v,
+        ) != -1:
+            return None
+        response_dv = (
+            0
+            if position_field(new_v) == position_field(vpos)
+            else (1 if requested_axis > 0 else -1)
+        )
+        return new_h, new_v, nudge, response_dv
+
+    if _wrapped_position_delta(wall_v, vpos) <= 0x540:
+        return None
+    row_delta = ((result >> 5) - (cur_slot >> 5)) & 0x1F
+    if row_delta == 1:
+        if delta & _JOY_DOWN:
+            return None
+        nudge_v = 1
+    elif row_delta == 0x1F:
+        if delta & _JOY_UP:
+            return None
+        nudge_v = -1
+    else:
+        return None
+
+    # 0x41CD2/0x41F0A perform the matching one-pixel H-axis retry.
+    new_h = (
+        (hpos + 0x80) & 0xFF7F
+        if requested_axis > 0
+        else hpos & 0xFF7F
+    )
+    new_v = replace_position(
+        vpos, encode_vpos((vpos_v(vpos) + nudge_v) & 0x1FF),
+    )
+    if not all(_inside_player_screen_window(state, new_h, new_v)):
+        return None
+    probe = _player_probe_up if nudge_v > 0 else _player_probe_down
+    if probe(state, cur_slot, hpos=new_h, vpos=new_v) != -1:
+        return None
+    return (
+        new_h,
+        new_v,
+        (
+            0
+            if position_field(new_h) == position_field(hpos)
+            else (1 if requested_axis > 0 else -1)
+        ),
+        nudge_v,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Door traversal helpers (§4.2 -- "door_traverse_{left,right,up,down}")
 # ---------------------------------------------------------------------------
@@ -4653,6 +4761,7 @@ def player_try_move(
     dx = 0
     dv = 0
     fight_contact = False
+    collision_response = False
 
     def resolve(result: int, *, vertical: bool) -> str:
         return _resolve_probe(
@@ -4661,6 +4770,7 @@ def player_try_move(
 
     cur_slot = player.mob_slot
     final_h = hpos
+    final_v = vpos
     if requested_dx:
         proposed_h = replace_position(
             hpos, encode_hpos((x + requested_dx) & 0x1FF),
@@ -4669,15 +4779,17 @@ def player_try_move(
             state, proposed_h, vpos,
         )
         outcome = _PROBE_BLOCKED
+        result = -1
         if h_on_screen:
+            result = _player_probe_horizontal(
+                state,
+                cur_slot,
+                (cur_slot & 0x1F) + (1 if requested_dx > 0 else -1),
+                hpos=proposed_h,
+                vpos=vpos,
+            )
             outcome = resolve(
-                _player_probe_horizontal(
-                    state,
-                    cur_slot,
-                    (cur_slot & 0x1F) + (1 if requested_dx > 0 else -1),
-                    hpos=proposed_h,
-                    vpos=vpos,
-                ),
+                result,
                 vertical=False,
             )
         if outcome is _PROBE_SQUEEZED:
@@ -4686,13 +4798,26 @@ def player_try_move(
         if outcome is _PROBE_CLEAR:
             dx = requested_dx
             final_h = proposed_h
+        elif outcome is _PROBE_BLOCKED:
+            response = _wall_collision_response(
+                state,
+                result,
+                cur_slot,
+                delta,
+                hpos=hpos,
+                vpos=vpos,
+                blocked_vertical=False,
+                requested_axis=requested_dx,
+            )
+            if response is not None:
+                final_h, final_v, dx, dv = response
+                collision_response = True
 
     # The ROM applies H before probing V. A diagonal therefore tests the second
     # axis at the already-updated horizontal position. Each primary axis probes
-    # only its complete proposed word; the ROM's separate collision-response
-    # recursion is the only path that retries with a one-pixel 0x80 delta.
-    final_v = vpos
-    if requested_dv:
+    # its complete proposed word; the wall-response arms can then retain a
+    # rounded one-pixel retry and nudge away from the obstructing flank.
+    if requested_dv and not collision_response:
         proposed_v = replace_position(
             vpos, encode_vpos((v + requested_dv) & 0x1FF),
         )
@@ -4700,6 +4825,7 @@ def player_try_move(
             state, final_h, proposed_v,
         )
         outcome = _PROBE_BLOCKED
+        result = -1
         if v_on_screen:
             probe = (
                 _player_probe_up if requested_dv > 0 else _player_probe_down
@@ -4714,6 +4840,20 @@ def player_try_move(
         if outcome is _PROBE_CLEAR:
             dv = requested_dv
             final_v = proposed_v
+        elif outcome is _PROBE_BLOCKED:
+            response = _wall_collision_response(
+                state,
+                result,
+                cur_slot,
+                delta,
+                hpos=final_h,
+                vpos=vpos,
+                blocked_vertical=True,
+                requested_axis=requested_dv,
+            )
+            if response is not None:
+                final_h, final_v, response_dx, dv = response
+                dx += response_dx
 
     if not fight_contact:
         state.player_fighting_dir[player_index] = 0

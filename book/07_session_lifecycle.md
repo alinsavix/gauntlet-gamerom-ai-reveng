@@ -155,9 +155,6 @@ treasure room is its own mode value: the room ends by timeout or by exit,
 a bonus screen tallies the take (the displayed arithmetic multiplies
 treasures by players and coins at 100 points a unit), and the saved
 normal-game state is restored so the climb resumes where it left off.
-The same tally routine also runs immediately before room entry when the
-ordinary level-end countdown is already zero; level setup interleaves the
-treasure maze only after that first hold.
 Chapter 13 covers the rooms, including the countdown voice that sometimes
 lies.
 

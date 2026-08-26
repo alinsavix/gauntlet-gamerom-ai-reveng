@@ -265,11 +265,9 @@ at 100 points multiplied by players and coins, added up in front of you. Then
 the saved level and maze are restored and the normal rotation continues as if
 the room had never happened.
 
-There is also a tally immediately before the room. On the ordinary level where
-the hidden room countdown is already zero, the end-of-level branch calls the
-same tally routine first; only after its hold does level setup substitute the
-treasure maze. The room exit or timeout calls it again for the treasure-room
-take. The apparently duplicated curtain is the program's actual ordering.
+There is no tally before entry. The transition that decrements the hidden-room
+countdown to zero immediately substitutes the treasure maze. Only the room's
+exit or timeout opens the bonus curtain and pays for the treasure-room take.
 
 ## The secret objective you did not know you had
 
