@@ -2196,11 +2196,14 @@ class TestHostShellInput:
         finally:
             shell.close()
 
-    def test_f1_toggles_the_separate_host_diagnostics_panel(self):
+    def test_f1_toggles_the_separate_host_diagnostics_panel(self, monkeypatch):
         from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
         from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
+        from gauntpy.render import host
         from gauntpy.render.host import HostShell
 
+        times = iter((10.0, 10.0125))
+        monkeypatch.setattr(host, "perf_counter", lambda: next(times))
         shell = HostShell(assets=_FakeAssets(), scale=1)
         try:
             pygame = shell._pygame
@@ -2217,6 +2220,8 @@ class TestHostShellInput:
                 LOGICAL_HEIGHT,
             )
             shell.present(state)
+            assert shell._diagnostics_previous.render_time_ms == pytest.approx(12.5)
+            assert shell._diagnostics_previous.render_time_history_ms == (12.5,)
 
             pygame.event.post(
                 pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F1)

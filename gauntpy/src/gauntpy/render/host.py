@@ -46,6 +46,7 @@ anywhere to put the interrupt. Tests that need overflow behaviour set
 from __future__ import annotations
 
 from collections import deque
+from time import perf_counter
 
 from ..constants import FRAMES_PER_SECOND
 from ..state import GameState
@@ -149,6 +150,7 @@ class HostShell:
         self.diagnostics_selected_mob = 0
         self._diagnostics_previous = None
         self._diagnostics_events: deque[str] = deque(maxlen=64)
+        self._render_times_ms: deque[float] = deque(maxlen=120)
         self.last_state_dump_path = None
 
         pygame.init()
@@ -292,6 +294,7 @@ class HostShell:
 
     def present(self, state: GameState) -> None:
         """Render the current state and flip it to the window."""
+        render_started = perf_counter()
         if self._assets is None:
             from ..assets import AssetStore
 
@@ -307,11 +310,17 @@ class HostShell:
                 surface, (LOGICAL_WIDTH * self.scale, LOGICAL_HEIGHT * self.scale)
             )
         self.window.blit(surface, (0, 0))
+        render_time_ms = (perf_counter() - render_started) * 1000.0
+        self._render_times_ms.append(render_time_ms)
         if self.diagnostics_visible:
+            recent = tuple(self._render_times_ms)
             snapshot = capture_debug_snapshot(
                 state,
                 paused=self.paused,
                 selected_mob=self.diagnostics_selected_mob,
+                render_time_ms=sum(recent[-10:]) / min(10, len(recent)),
+                render_time_current_ms=render_time_ms,
+                render_time_history_ms=recent,
             )
             self.diagnostics_selected_mob = snapshot.selected_mob
             for event in derive_debug_events(self._diagnostics_previous, snapshot):

@@ -1046,6 +1046,32 @@ class TestMoveEngineCollisionAndAnimation:
         assert state.thief_mob_slot == start
         assert hpos_x(state.mobs.hpos[start]) == 12
 
+    def test_captured_mugger_centers_through_the_narrow_lane(self):
+        state = GameState(wrap_h=True)
+        start = pack_slot(8, 15)
+        _thief_at(state, start)
+        state.thief_mode = THIEF_PURSUE | THIEF_IS_MUGGER
+        state.thief_speed = 0x180
+        state.thief_next_pos = pack_slot(9, 15)
+        state.mobs.hpos[start] = encode_hpos(241, palette=1)
+        state.mobs.vpos[start] = encode_vpos_at_y(127, 3, 3)
+        for slot in (pack_slot(9, 14), pack_slot(9, 16)):
+            state.mobs.create(
+                slot, 0x8000,
+                encode_hpos((slot & 0x1F) * 16),
+                encode_vpos_at_y((slot >> 5) * 16),
+                MazeObjIds.WALL_REGULAR,
+            )
+
+        result = thief_move_engine(
+            state, _THIEF_DIRECTION_STEP_FLAGS[4],
+            state.thief_speed, state.thief_speed,
+        )
+
+        assert result == 1
+        assert hpos_x(state.mobs.hpos[state.thief_mob_slot]) == 240
+        assert vpos_y(state.mobs.vpos[state.thief_mob_slot]) == 127
+
     def test_collision_removes_eligible_pickup_before_retrying_the_move(self):
         state = GameState()
         start = pack_slot(10, 10)

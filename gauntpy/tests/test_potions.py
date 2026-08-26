@@ -9,12 +9,20 @@ from __future__ import annotations
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.state import GameState
-from gauntpy.subsystems.monsters import _in_cull_rect, _update_cull_rect
+from gauntpy.subsystems.monsters import (
+    _in_cull_rect,
+    _supersorc_dispatch,
+    _update_cull_rect,
+)
 from gauntpy.subsystems.potions import (
     main_handle_potions,
     potion_blast,
 )
-from gauntpy.subsystems.dragon import _ST_STUNNED, _ST_WAKING
+from gauntpy.subsystems.dragon import (
+    _ST_STUNNED,
+    _ST_WAKING,
+    main_handle_dragon,
+)
 from gauntpy.subsystems.display import potion_flash_vblank
 from gauntpy.subsystems.monsters import main_move_monsters
 from gauntpy.subsystems import score
@@ -192,6 +200,11 @@ class TestMagicGate:
         main_handle_potions(state)
 
         assert state.dragon_state & _ST_STUNNED
+        for _ in range(120):
+            main_handle_dragon(state)
+        assert state.dragon_state == _ST_STUNNED
+        assert state.dragon_anim_ctr == 0
+        assert not any(state.mobs.picture[5:9])
 
     def test_second_potion_restarts_a_stunned_dragon_wake_transition(self):
         state = GameState(game_mode=GameMode.NORMAL)
@@ -211,6 +224,23 @@ class TestMagicGate:
         assert state.dragon_state & _ST_WAKING
         assert not state.dragon_state & _ST_STUNNED
         assert state.dragon_anim_ctr == -0x31
+
+        for _ in range(49):
+            main_handle_dragon(state)
+        assert state.dragon_state == _ST_WAKING
+        assert state.dragon_anim_ctr == 0
+
+        from gauntpy.subsystems.shots import _dragon_proximity
+
+        _dragon_proximity(state, dragon)
+        assert state.dragon_anim_ctr == 0x31
+        for _ in range(49):
+            main_handle_dragon(state)
+        assert not state.dragon_state & (_ST_WAKING | _ST_STUNNED)
+
+        for _ in range(240):
+            main_handle_dragon(state)
+        assert any(state.mobs.picture[5:9])
 
 
 class TestBlastOutcomes:
@@ -317,6 +347,44 @@ class TestBlastOutcomes:
         assert state.mobs.hpos[sorcerer] & 0x30 == 0
         assert state.mobs.state_link[sorcerer] & 0xE000 == 0
         assert state.mobs.picture[sorcerer] != 0x1709
+
+    def test_magic_reveals_every_on_screen_phasing_super_sorcerer(self):
+        state = GameState()
+        _active(state, 0, pack_slot(5, 5), character=Character.ELF)
+        on_screen = (pack_slot(8, 8), pack_slot(10, 10))
+        for slot in (*on_screen, _OFFSCREEN):
+            _place(state, slot, MazeObjIds.MONST_SUPERSORC)
+            state.mobs.hpos[slot] |= 0x30
+            state.mobs.state_link[slot] |= 0xE000
+            state.mobs.picture[slot] = 0x1709
+        _camera_on(state, _FOCUS)
+
+        potion_blast(state, 0)
+
+        for slot in on_screen:
+            assert state.mobs.hpos[slot] & 0x30 == 0
+            assert state.mobs.state_link[slot] & 0xE000 == 0
+            assert state.mobs.picture[slot] != 0x1709
+        assert state.mobs.hpos[_OFFSCREEN] & 0x30 == 0x30
+        assert state.mobs.state_link[_OFFSCREEN] & 0xE000 == 0xE000
+        assert state.mobs.picture[_OFFSCREEN] == 0x1709
+
+    def test_revealed_super_sorcerer_resumes_its_cycle_and_fires(self):
+        state = GameState()
+        _active(state, 0, pack_slot(5, 5), character=Character.ELF)
+        sorcerer = pack_slot(9, 9)
+        _place(state, sorcerer, MazeObjIds.MONST_SUPERSORC)
+        state.mobs.hpos[sorcerer] |= 0x30
+        state.mobs.state_link[sorcerer] |= 0xE000
+        state.mobs.picture[sorcerer] = 0x1709
+        _camera_on(state, _FOCUS)
+        potion_blast(state, 0)
+
+        for _ in range(8):
+            _supersorc_dispatch(state, sorcerer, 0)
+
+        assert any(state.mobs.picture[slot] for slot in range(5, 9))
+        assert state.mobs.hpos[sorcerer] & 0x20
 
     def test_wizard_blast_clears_multiple_monsters(self):
         """The Wizard column is zero everywhere, so it destroys outright."""

@@ -2827,6 +2827,41 @@ class TestPoisonedPickups:
             gp.main_move_players(state)                             # 0x4A89E
             assert state.player_dizzy_timer[0] == expected
 
+    def test_dizzy_timer_remaps_live_movement_by_frame_phase(self):
+        cases = (
+            (0x00, gp._JOY_UP, gp._JOY_UP | gp._JOY_RIGHT),
+            (0x00, gp._JOY_DOWN, gp._JOY_DOWN | gp._JOY_LEFT),
+            (0x10, gp._JOY_UP, gp._JOY_UP),
+            (0x20, gp._JOY_UP, gp._JOY_UP | gp._JOY_LEFT),
+        )
+        for frame, raw_direction, expected_direction in cases:
+            state = _active_state()
+            _make_player_active(state, 0, health=500)
+            state.frame_counter = frame
+            state.level_flags_4 |= 0x80
+            state.player_dizzy_timer[0] = 2
+            state.player_input_raw[0] = 0xFFFF & ~raw_direction
+
+            from unittest.mock import patch
+            with patch.object(gp, "player_try_move", return_value=0xF0) as move:
+                gp.main_move_players(state)
+
+            assert move.call_args.args[2] == expected_direction
+
+    def test_last_dizzy_frame_expires_before_input_remap(self):
+        state = _active_state()
+        _make_player_active(state, 0, health=500)
+        state.level_flags_4 |= 0x80
+        state.player_dizzy_timer[0] = 1
+        state.player_input_raw[0] = 0xFFFF & ~gp._JOY_UP
+
+        from unittest.mock import patch
+        with patch.object(gp, "player_try_move", return_value=0xF0) as move:
+            gp.main_move_players(state)
+
+        assert state.player_dizzy_timer[0] == 0
+        assert move.call_args.args[2] == gp._JOY_UP
+
 
 # =============================================================================
 # 22. Treasure bonus multiplier (0x51A16-0x51AAE)
@@ -3597,17 +3632,19 @@ class TestFakeExitObjective:
             gp.player_tile_interact(state, self._exit_slot(state, True), 0)
         assert state.secret_tricks_flags[0] == 1
 
-    def test_the_illusion_is_removed(self):
+    def test_collision_record_is_removed_but_exit_descriptor_remains(self):
         state = _trick_state(gp._TRICK_NOFOOLED)
         _make_player_active(state, 0)
         slot = self._exit_slot(state, True)
         from gauntpy.playfield_vram import (
             read_tile_descriptor, write_tile_descriptor,
         )
-        write_tile_descriptor(state, slot, (0x39E, 0x39F, 6, 6))
+        exit_descriptor = (0x39E, 0x39F, 6, 6)
+        write_tile_descriptor(state, slot, exit_descriptor)
         gp.player_tile_interact(state, slot, 0)
         assert state.mobs.obj_type(slot) == 0     # 0x51404
-        assert read_tile_descriptor(state, slot) == (0, 0, 0, 0)
+        assert read_tile_descriptor(state, slot) == exit_descriptor, \
+            "moblist_remove_and_clear does not call pf_replace"
 
     def test_a_fake_exit_speaks_record_thirty(self):
         """0x513EC pushes mask 0x40000000 -- bit 30 selects the record.
@@ -3885,6 +3922,11 @@ class TestStunDelayGate:
 
         assert p.health == 1000 - 2       # Warrior, unarmoured (0x5813C)
         assert p.stundelay == 4
+        assert p.hurt_cooldown == 0x12
+        before = tuple(state.mob_color_ram[192:208])
+        gp.player_hurt_palette_vblank(state)
+        assert p.hurt_cooldown == 0x0C
+        assert tuple(state.mob_color_ram[192:208]) != before
 
 
 class TestForcefieldIsChargedAfterTheMove:

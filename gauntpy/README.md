@@ -58,14 +58,25 @@ video/game memory. Its text remains at native host resolution when the game
 raster is enlarged with `--scale`, using an anti-aliased system monospace font.
 Its pages cover overview, players and raw input, decoded demo records, level
 flags/timers, actor counts and raw MOB words, thief/dragon AI, display memory,
-audio queues, and a rolling event log inferred from snapshots while the panel
-is open.
+audio queues, a rolling event log inferred from snapshots while the panel is
+open, and a 120-sample render-time graph. The displayed `RENDER` value is a
+rolling average of the latest ten frames.
 
 **F4** atomically saves every modeled `GameState` field, including players,
 MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,
 timers, inputs, and the RNG seed. Files are written under
 `traces/state-dumps/`, which Git ignores; the exact path is printed to the
-terminal.
+terminal. Resume one of those files without rerunning boot or level setup:
+
+```bash
+uv run --all-extras gauntpy-play --load-state traces/state-dumps/state-frame-....json
+```
+
+Saved states are versioned, exact runtime snapshots. Original schema-1 captures
+are migrated for the handful of fields added since F4 shipped; an otherwise
+incompatible schema or `GameState` shape is rejected rather than partially
+loaded. Resumed sessions do not write EEPROM JSON, so loading an older gameplay
+snapshot cannot roll back newer settings, high scores, or maze rotation.
 
 F5/F6/F7 are host troubleshooting controls, not original cabinet inputs. The
 level skip uses the live cabinet maze rotation and respawns active players
@@ -88,6 +99,11 @@ uv run --all-extras gauntpy-play --keys 3 --potions 2 \
 `--power` may be repeated and accepts `invisibility`, `repulsiveness`,
 `reflective-shots`, `transportability`, `super-shots`, and `invulnerability`.
 These test-start options cannot be combined with `--attract`.
+
+Runs use RNG seed zero by default so repeated playthroughs stay reproducible.
+Select another repeatable stream with `--seed 1234`, or request a host-random
+power-on value with `--seed random`. A seed applies to direct and attract starts;
+loaded state dumps retain their saved RNG state and reject `--seed`.
 
 For uninterrupted testing, suppress first-encounter pop-up boxes (speech and
 gameplay effects still occur):

@@ -875,7 +875,10 @@ def _axis_delta(move_flags: int, horizontal_speed: int, vertical_speed: int) -> 
     return dx, dy
 
 
-def _move_thief_axis(state: GameState, dx: int, dy: int) -> tuple[bool, bool]:
+def _move_thief_axis(
+    state: GameState, dx: int, dy: int, move_flags: int,
+    *, allow_wall_response: bool = True,
+) -> tuple[bool, bool]:
     """Apply one ROM-probed axis. Returns (moved, blocked)."""
     if not dx and not dy:
         return False, False
@@ -910,6 +913,29 @@ def _move_thief_axis(state: GameState, dx: int, dy: int) -> tuple[bool, bool]:
         defer_interactions=False,
     )
     if candidate >= 0:
+        if allow_wall_response and state.mobs.picture[candidate] in (0x8000, 0x8001):
+            from .players import _probe_candidate_anchor, _wrapped_position_delta
+
+            candidate_h, candidate_v = _probe_candidate_anchor(state, candidate)
+            row_delta = ((candidate >> 5) - (slot >> 5)) & 0x1F
+            col_delta = ((candidate & 0x1F) - (slot & 0x1F)) & 0x1F
+            nudge_x = nudge_y = 0
+            if dy and _wrapped_position_delta(candidate_h, state.mobs.hpos[slot]) > 0x200:
+                if col_delta == 0x1F and move_flags & 0x20:
+                    nudge_x = 1
+                elif col_delta == 1 and move_flags & 0x10:
+                    nudge_x = -1
+            elif dx and _wrapped_position_delta(candidate_v, state.mobs.vpos[slot]) > 0x200:
+                if row_delta == 1 and move_flags & 0x40:
+                    nudge_y = -1
+                elif row_delta == 0x1F and move_flags & 0x80:
+                    nudge_y = 1
+            if nudge_x or nudge_y:
+                moved, _ = _move_thief_axis(
+                    state, nudge_x, nudge_y, move_flags,
+                    allow_wall_response=False,
+                )
+                return moved, True
         player_index = _fixed_player_at_slot(state, candidate)
         if (
             player_index >= 0
@@ -965,9 +991,9 @@ def thief_move_engine(
     dx, dy = _axis_delta(move_flags, horizontal_speed, vertical_speed)
 
     blocked = False
-    moved_h, blocked_h = _move_thief_axis(state, dx, 0)
+    moved_h, blocked_h = _move_thief_axis(state, dx, 0, move_flags)
     blocked |= blocked_h
-    moved_v, blocked_v = _move_thief_axis(state, 0, dy)
+    moved_v, blocked_v = _move_thief_axis(state, 0, dy, move_flags)
     blocked |= blocked_v
     if not moved_h and not moved_v and not blocked and not contacted_current_player:
         player_index = _player_at_cell(state, state.thief_current_pos)

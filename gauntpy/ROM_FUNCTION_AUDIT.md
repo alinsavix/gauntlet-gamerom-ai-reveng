@@ -108,8 +108,6 @@ upstream behavior.
 | `players._probe_candidate_blocks` | In DEMO, every random-wall candidate is treated as nonblocking so host timing cannot derail the recorded route. |
 | `players._player_fight_collision` | On the final active demo record, colliding Grunt/Aux-Grunt records are deleted because Python's earlier monster evolution put them across the route. |
 | `players.mob_probe_left/right` | DEMO retains an upper flank from maze row one where the normal ROM threshold suppresses it. |
-| `players.player_try_move` | DEMO bypasses the normal fallback from reserved row-zero intermediate cells to the live player record. |
-| `players.player_try_move` | Multi-pixel movement is integrated and collision-resolved one pixel at a time; the ROM proposes the complete axis delta once. |
 | `score.main_score_display` | Live score/health values are compared with host latches to force redraws because some Python producers do not set the ROM dirty bits. |
 
 Host-only controls, diagnostics, ROM-free glyph fallbacks, and the

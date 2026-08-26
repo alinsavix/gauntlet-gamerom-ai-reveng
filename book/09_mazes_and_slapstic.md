@@ -260,6 +260,13 @@ itself, the coupling has no reset: the stream runs from power-on to power-off
 through attract screens and sessions alike. Chapter 15 comes back to that
 when it asks how much of the attract demo repeats.
 
+That odd hardware origin matters to a reimplementation. Starting every new
+process with a tidy zero word makes every fresh run consume the same stream:
+maze mirrors, fake-exit choices, and later "random" events repeat. gauntpy gives
+the word one unpredictable value when its playable host powers on, then follows
+the ROM rule and never reseeds it. Tests and saved replays can still provide an
+explicit seed.
+
 ---
 
 > **Under the hood**

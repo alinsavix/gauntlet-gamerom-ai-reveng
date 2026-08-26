@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2359 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2397 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -37,12 +37,13 @@ start).
 
 ### S-133 · non-ROM compatibility compensations remain
 
-The callable audit records six non-ROM game-side compensations. DEMO can ignore
-random walls, delete Grunts on its final input record, retain a row-zero flank,
-and bypass the normal reserved-row fallback. Player motion is also integrated
-one pixel at a time, while score display compares host latches because some
-producers omit dirty-bit writes. These remain open root-cause work; a passing
-attract recording must not be mistaken for state equivalence.
+The callable audit records four non-ROM game-side compensations. DEMO can ignore
+random walls, delete Grunts on its final input record, and retain a row-zero
+flank in the public generic probe family, while score display compares host
+latches because some producers omit dirty-bit writes. These remain open
+root-cause work; a passing attract recording must not be mistaken for state
+equivalence. S-137 removed the primary player mover's one-pixel integration and
+reserved-row exception.
 
 ### S-126 · live-only downward block at level 17 / maze 16 `(396,176)`
 
@@ -61,6 +62,213 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-142 · captured mugger/edge stalls, poison wobble, seed controls, and timing graph
+
+Frame 3876 on level 16 / maze 15 captured a mugger at `(241,127)` trying to
+enter slot `0x12F` between the wall flanks at `0x12E`/`0x130`. The shared
+three-cell probe correctly returned the right flank, but gauntpy stopped there.
+`thief_move_engine` 0x4F1C4-0x4F2C2 tests that high-bit collision, compares the
+perpendicular distance, and moves H one pixel away from the flank before probing
+again. The mugger now centers to X=240 and proceeds down the lane instead of
+remaining in its compact blocked pose indefinitely.
+
+Frame 51368 on level 20 / maze 19 captured the Elf at `(491,320)`, slot `0x29F`,
+beside the non-wrapping right edge. Down correctly hit left wall flank `0x2BE`,
+but the automatic response from S-139 tried to center at X=492 and was rejected
+by gauntpy's port-only 208-pixel screen span. The ROM compares the MOB anchor,
+not its full 24-pixel box, against literal H window 0x7000 (224 pixels). Restoring
+that gate permits the response and the following Down input enters the opening.
+
+Poison food/potions already loaded and decremented the 0x4B0-frame word at
+0x905F48, but its only gameplay consumer was missing. In normal play,
+0x4A8B8-0x4A8EA uses `(frame_counter & 0x30) + input_direction_nibble` to read
+the literal 64-byte table at 0x4A4FA and replaces only the active-low direction
+nibble. Holding Up therefore alternates Up+Right, Up, Up+Left, Up across the four
+phases while Fire/Magic remain untouched; the timer's final decrement disables
+the remap immediately.
+
+The playable host again defaults to seed zero for reproducible runs.
+`--seed 1234` chooses an explicit 16-bit stream and `--seed random` requests one
+host-random power-on word; neither path reseeds later. The F1 diagnostics also
+keeps 120 host-only render samples, reports a rolling ten-frame average, and
+adds a PERFORMANCE graph with the 16.67 ms budget line. This supersedes S-141's
+host-random default while preserving its finding that the ROM never initializes
+the seed itself.
+
+### S-141 · forcefield hurt flash, fresh-run RNG, and render timing
+
+Forcefield contact subtracted the correct health and armed its looping sound,
+but did not flash the hero. The missing instruction was at the end of the same
+ROM branch: after damage, dialog, and sound-timer work,
+0x4AAFC-0x4AB06 writes 0x12 to `hurt_cooldown`. VBLANK
+0x401DE-0x40304 then steps 0x12→0x0C→0x06→0 and copies the
+player-position/character-specific hurt words into live MOB color RAM. The
+Python branch now writes that game-side timer, so continuous forcefield contact
+holds the first hurt color and leaving the beam completes the flash cycle.
+
+Fake-exit selection itself was already the ROM path: `maze_scan_objects(0)`
+calls `getrandom(exit_count)` at 0x43E2E, keeps that indexed exit real, and sets
+hpos bit 4 on every loser when LFLAG4 bit 6 is active. Fresh gauntpy processes,
+however, always initialized the ROM's otherwise-uninitialized `random_seed`
+word to zero, so the complete pre-selection draw stream and its result repeated
+on every launch. The playable host now supplies one random 16-bit power-on
+value, then leaves the ROM LCG to free-run without reseeding. Explicit
+`build_state(..., rng_seed=...)` remains deterministic for tests and replay;
+level-16 regressions prove different initial words choose opposite real exits.
+
+The F1 value was pygame Clock cadence (`get_time()`), so a healthy 60 Hz host
+could report only 16/17 ms regardless of rendering cost. `HostShell.present`
+now times the game raster's composition, conversion, scale, and window blit
+directly with `perf_counter`, before drawing the diagnostics panel. The field is
+named `RENDER` and excludes the frame limiter, input wait, diagnostics panel,
+and display swap.
+
+### S-140 · dragon stun never cleared on proximity-entry events
+
+Frame 52867 correctly captured `dragon_state = 2`, but gauntpy treated that bit
+as permanent until another potion. The main handler does freeze path, pose, and
+fire while stunned, and there is no stun countdown. The missing owner was
+`dragon_player_proximity` (0x549EA): after confirming that current entered the
+wrapped head-column -4..+5 / row -5..+4 rectangle from a zero or outside
+previous cell, its 0x54AD0 arm clears state bit 1 and plays sound 0xD5.
+
+The Python helper had collapsed the two-cell contract to one point, used an
+incorrect ±9/±5 box, handled only sleeping wake, and was not called from
+ordinary player movement. It now preserves previous/current geometry, receives
+every player move, starts/reverses sleep-wake state, and clears stun. Shot
+handlers already call proximity before `dragon_shot_hit`; with the missing arm
+restored, the first shot at the captured stunned dragon changes state 2→0 before
+hits 6→7. The dragon therefore resumes posing, locking, and firing instead of
+remaining harmless through the rest of the fight.
+
+A second potion is a separate control path: it clears stun, sets bit 0, and
+writes -49, reversing toward sleep. That count stops at zero until another
+proximity entry starts +49; it does not automatically complete a two-part wake.
+Regressions cover rectangle edges/wrap, outside→inside versus inside→inside
+movement, direct player-move wiring, first-shot unstun-before-damage, and both
+potion transitions.
+
+### S-139 · narrow-lane response, treasure entry, dragon stun, and frame time
+
+Three complete F4 captures exposed a missing movement path. Frame
+8945 in level 16 / maze 15 blocks Down at `(365,223)` between wall-marker slots
+`0x1F6`/`0x1F8`; frame 15793 in level 17 / maze 16 blocks Down at `(299,463)`
+between `0x3D2`/`0x3D4`; and frame 24137 blocks Up at `(235,352)` between
+`0x2AE`/`0x2B0`. In every case the center cell is empty and the two flanking
+walls are 32 pixels apart.
+
+`probe_up`/`probe_down` call `tile_lookup_core` for the center and both flanks;
+its high-bit wall arm at 0x42688 rounds each marker's live H word and subtracts
+four pixels before applying the strict `< 0x7C0` comparison. Consequently each
+lane has one clear hero anchor: X=364, 300, and 236 respectively. The prior
+analysis stopped there. The blocked-wall arms at 0x42108-0x421B8 and
+0x4233C onward round the requested axis to a one-pixel response and nudge away
+from the obstructing flank. Gauntpy omitted that response and forced manual
+alignment. Holding the requested vertical direction now automatically centers
+all three captured heroes and enters the gap on the next frame. The older
+frame-10310 X=41 case likewise centers to X=44 in three frames.
+
+The pre-room tally conclusion was also wrong. Although the image has an
+already-zero branch from 0x4A77A to the tally routine, the live scheduler reaches
+zero by decrementing `1 -> 0` and immediately calls `show_level_start_screen`,
+which interleaves the room without a tally. An ordinary level cannot start with
+zero through that path. Direct starts and historical snapshots can expose the
+residual state, so gauntpy now preserves the reachable outcome and reserves the
+visible tally for the treasure room's exit/timeout.
+
+Super Sorcerer `STUN` remains a reveal rather than a persistent freeze:
+0x415AC-0x415DC clears the phase flags/high animation state, and later dispatch
+resumes the idle cycle. Dragon potion state is different. Frame 52867 has
+`dragon_state = 2`, so the main handler gates animation, breath, and shots.
+S-140 supersedes the former conclusion that only another potion releases it:
+proximity-entry events, including the first shot at the dragon, clear stun.
+
+The F1 overview also gained a host timing field beside the arcade frame number.
+S-141 supersedes its original whole-frame cadence measurement with the actual
+game-raster render duration. The measurement stays in the immutable host
+snapshot and never enters `GameState` or modeled video RAM.
+
+### S-138 · fake-exit VRAM removal and disputed ROM behaviors
+
+On level 16 / maze 15, stepping on a fake exit made its artwork disappear.
+The collision branch at 0x513DA-0x51424 calls
+`moblist_remove_and_clear` at 0x51404 but never calls `pf_replace`; gauntpy
+incorrectly coupled that MOB removal to `clear_cell_descriptor`. Fake-exit
+contact now removes only the collision record, preserving the exit descriptor
+and visible illusion while still showing first-encounter record 30 and
+assigning the Don't Be Fooled objective byte.
+
+One related report was verified as original behavior. Potion `STUN` is not a
+persistent Super Sorcerer freeze:
+0x415AC-0x415DC reveals every phasing target in the on-screen cull rectangle,
+clears its flags/high animation state, and skips its remaining potion-frame
+work; later passes resume the idle cycle at 0x4112C and may fire at 0x41142.
+Off-screen phasing Super Sorcerers remain invisible. Regressions cover the
+fake-exit descriptor, multi-target reveal/culling, and resumed firing. S-139
+supersedes this entry's former pre-room-tally conclusion.
+
+### S-137 · player movement integrated multi-pixel axes one pixel at a time
+
+Gauntpy split every ordinary 1–3 pixel player axis into one-pixel probes and
+kept any clear prefix before a later substep blocked. The ROM never does this:
+`player_try_move_core` adds the complete D6 speed word once, probes the proposed
+endpoint, and either retains or rolls back that whole axis before processing
+the next one. Its only `D6=0x80` moves are explicit recursive collision-response
+calls with separately constructed direction flags.
+
+The workaround also concealed a probe-family conflation. The private
+`probe_left`/`probe_right` at 0x426D4/0x4270C inspect one adjacent cell, while
+private `probe_up`/`probe_down` inspect a three-cell forward row. They share
+`tile_lookup_core` geometry with, but are not aliases of, the public generic
+`mob_probe_*` leaves used by actors such as the thief. The private Down boundary
+also tests the proposed signed V word in row 31, allowing Y=496 before rejecting
+the wrap; it does not return the generic `0x0400` sentinel.
+
+The mover now retains `active_mob_ids[player]` as probe origin, resolves the
+complete H word before V, commits both words at the common migration tail, and
+keeps ordinary blocked axes all-or-nothing. Horizontal and vertical rollback,
+private horizontal flank ownership, the signed bottom boundary, the reported
+maze-16 lane, cell migration, movable-wall cadence, and all three recorded demo
+actors have regressions. A fresh MAME 0.289 all-actor trace confirms the third
+demo actor reaches the exit from `(310,45)` and retires with the same stream
+positions after the private-probe split.
+
+### S-136 · complete state dumps could not resume play
+
+F4 wrote all modeled fields to JSON, but the host had no inverse operation and
+serialized the thief path grid as an opaque `bytearray(...)` repr. The runner
+now accepts `--load-state PATH`, reconstructs `GameState`, `Player`,
+`InfoPanel`, `MobTable`, RNG, decoded maze, tuple-keyed maps, sets, tuples, and
+the path-grid bytearray, then enters the ordinary frame loop without running
+boot or level setup. New dumps encode bytearrays as hex; the loader safely
+accepts the earlier schema-1 repr form so already captured troubleshooting
+states remain usable, and explicitly migrates the four game fields added since
+schema 1 first shipped. It rejects unknown schemas and other mismatched state
+shapes instead of manufacturing defaults.
+
+Two independent loads of a real level-1 snapshot advance identically under the
+same input, including player/MOB positions, RNG, playfield RAM, and alpha RAM.
+Direct-start options are mutually exclusive with `--load-state`; host scale and
+first-encounter suppression remain presentation/testing choices. A resumed
+snapshot also disables external EEPROM writes, preventing a historical timer,
+high-score table, or rotation value from rolling back a newer local EEPROM.
+
+### S-135 · maze-16 narrow wall lane matches the ROM
+
+The frame-10310 capture reproduces at level 17 / maze 16 with the Elf at
+`(41,288)`, slot 579. Up probes the empty cell 547 plus wall flanks 546 and 548;
+the corrected anchor of wall 546 is within the strict `0x7C0` H/V window, so
+gauntpy blocks the move.
+
+This is not a stale MOB or widened Python collision. Direct execution of
+`probe_up` (0x425D0) and `tile_lookup_core` (0x42648) against the captured
+picture/H/V arrays returns doubled wall slot 1092 with carry set, exactly as
+gauntpy does. The two wall collision anchors are 32 pixels apart, leaving one
+integer hero anchor, X=44, that clears both strict comparisons. The captured
+powered Elf reaches it through the ROM speed cadence with Right, Right, Left,
+then moves Up from `(44,288)` to `(44,285)`. No collision widening was made; a
+regression preserves both the reported block and the reachable escape.
 
 ### S-134 · ROM/Python callable implementation gaps are closed
 
@@ -353,11 +561,10 @@ is not evidence of a separate L/R seam defect at this coordinate.
 ### S-107 … S-110 · top-edge movement, Super Sorcerers, and special potions
 
 - **S-107:** maze 17 at player pixel `(268,15)` reproduced a Python-only
-  lateral block against the reserved row-zero wall. The ROM's horizontal probe
-  suppresses its upper flank while the current doubled slot is below 0x80
-  (maze rows 0–1); the port used only a generic in-bounds test and included row
-  zero from row one. Left/right movement at that coordinate now matches direct
-  ROM execution.
+  lateral block against the reserved row-zero wall. The original repair
+  suppressed the generic probe's upper flank near rows 0–1. **Superseded by
+  S-137:** the private player horizontal probe has no vertical flanks at all and
+  retains the live record slot as its origin.
 - **S-108:** the same investigation found the narrow-passage boundary mismatch:
   `player_try_move_core` keeps `active_mob_ids[player]` in D2, while the port's
   one-pixel integration re-quantized the corrected sprite origin into reserved
@@ -366,6 +573,8 @@ is not evidence of a separate L/R seam defect at this coordinate.
   integration that prevents high-speed wall skipping. The shipped demo retains
   its prior port-side top-flank behavior because that is required to preserve
   the independently captured MAME maze-102 route and transporter landing.
+  **Superseded by S-137:** primary probes no longer derive intermediate cells;
+  private probe ownership and the full-axis transaction match the ROM directly.
 - **S-109:** Super Sorcerer placement derived its start cell from the player's
   `x>>4`, shifting a correctly placed hero one cell left, then materialized the
   sorcerer without the ROM's four-pixel H correction. It now starts from
@@ -835,6 +1044,8 @@ remembered live slot before resetting the per-player RAM.
   at a time while retaining the ROM's horizontal-before-vertical order; movable
   wall and fight contacts still cancel the entire axis for that frame. The
   first-level wall and attract push sequence both have exact regressions.
+  **Superseded by S-137:** the root error was using pixel-derived/generic probe
+  ownership. Primary movement now uses the ROM's full-axis private probes.
 - **S-38 · projectile palettes were discarded.** `AssetStore.sprite` forced
   every 2x2 projectile through base palette 0. Lobber rocks now use live base
   palette 1; palette slots 12-15 resolve through the character/player colour

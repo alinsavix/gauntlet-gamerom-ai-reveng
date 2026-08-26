@@ -355,9 +355,9 @@ class TestLevelEndBonus:
 class TestTreasureRoomRoundTrip:
     """A treasure room borrows a level number and hands it straight back.
 
-    Level N ends -> the bonus tally holds -> ``show_level_start_screen`` swaps
-    the rotation maze for ``treas_mazerand_num`` -> the countdown expires ->
-    the saved ``maze_next`` is played, still as level N (§3.5).
+    Level N ends -> ``show_level_start_screen`` swaps the rotation maze for
+    ``treas_mazerand_num`` -> the countdown expires -> the post-room tally holds
+    -> the saved ``maze_next`` is played, still as level N (§3.5).
     """
 
     def _level_12_with_a_hero(self) -> GameState:
@@ -367,7 +367,7 @@ class TestTreasureRoomRoundTrip:
         state.game_mode = GameMode.NORMAL
         maze.load_level(state, 12, maze_number=40)
         ex.exit_scan_level(state)
-        state.level_next_treasure = 0          # the next level is a treasure room
+        state.level_next_treasure = 1          # this transition schedules the room
         state.treas_mazerand_num = 104
         state.treas_mazerand_adder = 0
         assert gp.player_start_inner(state, 0) == -1
@@ -375,7 +375,7 @@ class TestTreasureRoomRoundTrip:
         return state
 
     def _run_out_the_hold(self, state: GameState) -> None:
-        """Finish the exit dissolve, then sit out the bonus display."""
+        """Sit out the current level-start or bonus display hold."""
         _run_exit_animation(state)
         while state.bonus_timer > 0:
             sess.main_start_game(state)
@@ -387,7 +387,8 @@ class TestTreasureRoomRoundTrip:
                                 int(MazeObjIds.EXIT))
         assert (state.level_next, state.maze_next) == (13, 41)
         _run_exit_animation(state)
-        assert state.game_mode == int(GameMode.TREAS_EXIT)
+        assert state.game_mode == int(GameMode.NORMAL)
+        assert state.mazenum_current == 104
 
         self._run_out_the_hold(state)
         # The treasure room replaced the rotation maze but kept its level number.

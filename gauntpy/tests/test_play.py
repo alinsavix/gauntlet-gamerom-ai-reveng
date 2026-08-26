@@ -33,6 +33,16 @@ requires_roms = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 class TestArguments:
+    def test_seed_accepts_integers_and_random(self):
+        import argparse
+
+        assert play._seed_value("1234") == 1234
+        assert play._seed_value("0xBEEF") == 0xBEEF
+        assert play._seed_value("random") == "random"
+        for bad in ("-1", "65536", "not-a-seed"):
+            with pytest.raises(argparse.ArgumentTypeError):
+                play._seed_value(bad)
+
     def test_level_must_be_at_least_one(self):
         """``maze_for_level`` returns None below 1, which silently fell
         through to ``mazenum_current`` (maze 0) instead of complaining."""
@@ -96,6 +106,17 @@ class TestArguments:
 
         assert called["suppress_first_encounter_messages"] is True
 
+    def test_message_suppression_defaults_to_no_saved_state_override(
+        self, monkeypatch,
+    ):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+
+        play.main(["--load-state", "state.json"])
+
+        assert called["suppress_first_encounter_messages"] is None
+
     def test_direct_play_defaults_to_elf_and_accepts_an_override(self, monkeypatch):
         monkeypatch.setenv("GEX_ROM_DIR", "configured")
         called = {}
@@ -104,9 +125,23 @@ class TestArguments:
         play.main([])
         assert called["character"] == Character.ELF
         assert called["scale"] == 4
+        assert called["rng_seed"] == 0
 
         play.main(["--character", "wizard"])
         assert called["character"] == Character.WIZARD
+
+    def test_explicit_seed_is_forwarded_and_random_uses_host_entropy(
+        self, monkeypatch,
+    ):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        monkeypatch.setattr("os.urandom", lambda count: b"\x12\x34")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+
+        play.main(["--seed", "1234"])
+        assert called["rng_seed"] == 1234
+        play.main(["--seed", "random"])
+        assert called["rng_seed"] == 0x1234
 
     def test_direct_inventory_and_repeatable_powers_are_forwarded(self, monkeypatch):
         monkeypatch.setenv("GEX_ROM_DIR", "configured")
@@ -131,6 +166,40 @@ class TestArguments:
 
         with pytest.raises(SystemExit):
             play.main(["--attract", "--potions", "1"])
+
+    def test_saved_state_path_is_forwarded_without_direct_start_options(
+        self, monkeypatch, tmp_path,
+    ):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+        path = tmp_path / "state.json"
+
+        play.main(["--load-state", str(path), "--scale", "2"])
+
+        assert called["load_state_path"] == path
+        assert called["scale"] == 2
+
+    @pytest.mark.parametrize("option", [
+        "--attract", "--level", "--character", "--keys", "--potions", "--power",
+        "--seed",
+    ])
+    def test_saved_state_rejects_other_start_modes(self, monkeypatch, option):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        values = {
+            "--level": "2",
+            "--character": "wizard",
+            "--keys": "1",
+            "--potions": "1",
+            "--power": "invisibility",
+            "--seed": "1234",
+        }
+        argv = ["--load-state", "state.json", option]
+        if option in values:
+            argv.append(values[option])
+
+        with pytest.raises(SystemExit):
+            play.main(argv)
 
 
 def test_front_end_character_commit_uses_the_selected_hero_picture():
@@ -236,6 +305,19 @@ class TestBuildState:
             state.mobs.obj_type(slot) == int(MazeObjIds.MONST_IT)
             for slot in range(32, 1024)
         ) == 4
+
+    def test_power_on_seed_changes_which_level_16_exit_is_fake(self):
+        first = play.build_state(16, Character.ELF, rng_seed=0)
+        second = play.build_state(16, Character.ELF, rng_seed=10)
+
+        def real_exit_index(state):
+            return next(
+                index for index, slot in enumerate(state.exit_slots)
+                if not state.mobs.hpos[slot] & 0x10
+            )
+
+        assert real_exit_index(first) == 0
+        assert real_exit_index(second) == 1
 
     def test_level_20_upper_right_passage_accepts_continued_downward_motion(self):
         from gauntpy.coords import hpos_x, vpos_y
@@ -406,6 +488,34 @@ class TestBuildState:
 
         assert state.frame_counter == 120
         assert state.players[0].active
+
+    def test_f4_state_can_resume_deterministically(self, tmp_path):
+        from gauntpy.coords import hpos_x
+        from gauntpy.mainloop import tick
+        from gauntpy.render.state_dump import dump_game_state, load_game_state
+        from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
+
+        saved = dump_game_state(
+            play.build_state(1, Character.ELF, keys=2, potions=1), tmp_path,
+        )
+        first = load_game_state(saved)
+        second = load_game_state(saved)
+        start_x = hpos_x(first.mobs.hpos[first.players[0].mob_slot])
+
+        for state in (first, second):
+            state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
+            for _ in range(12):
+                tick(state)
+
+        assert first.frame_counter == second.frame_counter == 12
+        assert hpos_x(first.mobs.hpos[first.players[0].mob_slot]) > start_x
+        assert first.rng.seed == second.rng.seed
+        assert first.players == second.players
+        assert first.mobs.picture == second.mobs.picture
+        assert first.mobs.hpos == second.mobs.hpos
+        assert first.mobs.vpos == second.mobs.vpos
+        assert first.playfield_ram == second.playfield_ram
+        assert first.alpha_ram == second.alpha_ram
 
     def test_the_mid_level_drop_arrives_with_a_scanned_exit_table(self):
         """The drop-in goes straight to ``maze.load_level`` -- it never touches

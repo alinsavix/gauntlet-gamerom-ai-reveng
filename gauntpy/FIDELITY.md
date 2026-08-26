@@ -99,13 +99,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
 26. **Dragon damage is a live MOB palette change.** Counted hits 1–2, 3–5, and
     6–8 rewrite the primary dragon segment's hpos palette nibble to 8, 7, and 6.
     Do not represent this progression as a renderer tint.
-27. **Reserved row zero is never a player probe origin.** The ROM keeps the
-    current `active_mob_ids[player]` slot in D2. Gauntpy's one-pixel integration
-    may derive an intermediate body cell, but it must fall back to the live
-    record when that cell is in reserved slots 0–31. Horizontal flank gates use
-    doubled-slot thresholds, so row zero is not an upper flank from row one.
-    Keep the explicit demo compatibility path until its retained MAME route can
-    survive removal; do not weaken normal gameplay geometry to preserve it.
+27. **Player probes retain the live record identity.** The ROM keeps the current
+    `active_mob_ids[player]` slot in D2 for the complete movement transaction.
+    Its private horizontal probes test one adjacent cell; its private vertical
+    probes test the forward triplet. Do not substitute a pixel-derived cell or
+    the public four-way `mob_probe_*` family.
 28. **Special actors may have actor-specific placement anchors.** Super
     Sorcerer placement begins at the target player's live MOB slot and writes
     its destination H position four pixels left of the cell. A generic
@@ -146,7 +144,8 @@ evidence remains in `../doc/`, generated contracts, and the book.
     back into gameplay. Rolling diagnostic events are differences between host
     snapshots, not new producers in game routines. Complete troubleshooting
     dumps likewise serialize `GameState` without changing it and stay in
-    ignored host files.
+    ignored host files. Host performance measurements such as frame duration
+    belong in the immutable debug snapshot, never in `GameState`.
 37. **Demo completion belongs to the attract state machine.** The last recorded
     exit must not commit `level_next`. `main_start_game` resets the demo actors,
     closes any dialog, and expires the DEMO timer so `main_attract` advances to
@@ -194,6 +193,66 @@ evidence remains in `../doc/`, generated contracts, and the book.
 46. **Shared ROM probes stay shared.** Movable-wall traversal uses the same
     `ray_march_*` geometry as monster movement. Do not substitute the similarly
     shaped player `mob_probe_*` family; its boundary ownership is different.
+47. **One-cell wall lanes can require exact anchor alignment.** The player probe
+    compares corrected wall and live hero words with the ROM's strict `0x7C0`
+    window. Between wall anchors 32 pixels apart, only one integer hero H
+    position may clear both flanks. High-bit wall markers are rounded and
+    corrected four pixels left before that comparison, so the valid hero anchor
+    is likewise four pixels left of the visual midpoint. The collision response
+    automatically keeps a rounded one-pixel move and nudges away from the
+    obstructing flank; holding toward the opening must center the hero without
+    manual lateral input. Port that response instead of widening the lane.
+48. **A resumed state must bypass initialization.** Host save/load is not an
+    arcade routine. A complete snapshot reconstructs the typed modeled RAM,
+    decoded maze, MOB links, display memory, path grids, and RNG seed, then
+    enters the repeated frame body directly. Do not call `one_time_init`, reload
+    the maze, rebuild VRAM, or repair selected fields on load; reject an
+    incompatible snapshot rather than blending it with defaults.
+49. **Primary player axes are all-or-nothing transactions.** `player_try_move`
+    adds the complete 1–3 pixel speed word once on H, probes, and either keeps or
+    rolls back all of H before doing the same for V. Only explicit collision
+    response recursion retries with `D6=0x80`; never integrate ordinary movement
+    one pixel at a time. The private bottom-row Down gate is signed-coordinate
+    state and permits Y=496 before rejecting V-word wrap.
+50. **Removing a MOB marker does not imply replacing its playfield cell.** Port
+    the exact producer called by the ROM. Fake-exit contact calls
+    `moblist_remove_and_clear`, so collision identity disappears while the
+    exit-shaped logical/playfield illusion remains; only an explicit
+    `pf_replace`-family call may turn that cell into floor.
+51. **Treasure-room entry has no pre-room tally.** The reachable scheduler
+    decrements `level_next_treasure` from one to zero and immediately runs
+    `show_level_start_screen`, which substitutes the room. The visible
+    `show_level_end_bonus_screen` hold belongs to the room's exit or timeout.
+    Do not expose the ROM's already-zero ordinary-state branch from a direct
+    start or historical snapshot.
+52. **Dragon stun clears on proximity entry, not elapsed time.**
+    `dragon_player_proximity` consumes previous/current packed cells and reacts
+    only when current is inside its wrapped 10x10 rectangle and previous is zero
+    or outside. It starts/reverses sleep-wake state or clears stun. Shot handling
+    calls it before `dragon_shot_hit`, preventing a frozen dragon from taking
+    nine risk-free hits. Do not invent a stun timer or omit event producers.
+53. **Damage feedback is part of the producer.** Subtracting health and marking
+    the HUD dirty does not imply a hurt flash. Each ROM damage arm that writes
+    `hurt_cooldown` must do so explicitly; VBLANK alone owns the subsequent live
+    MOB-color writes. Forcefield contact reloads 0x12 every damaging frame.
+54. **The global RNG is seeded once per host power-on.** The ROM never
+    initializes `random_seed`; the cabinet inherits a RAM-test residue and then
+    free-runs one shared stream across modes and sessions. The playable host uses
+    seed zero by default for repeatable testing; `--seed N` selects another
+    repeatable stream and `--seed random` supplies one host-random initial word.
+    No path may reseed at attract, level, or fake-exit setup.
+55. **Performance labels name their measured interval.** A render-duration
+    metric times raster composition and host blitting directly; frame cadence
+    from a 60 Hz limiter is not render cost. Keep either measurement in the
+    immutable host snapshot and outside modeled game/video memory.
+56. **Timed input effects transform the consumer word.** Poison dizziness
+    decrements its timer, then in normal play remaps only the active-low direction
+    nibble through ROM 0x4A4FA using `frame_counter & 0x30`; buttons and stored
+    hardware input remain unchanged, and the last timer frame is already clear.
+57. **Special movers own their wall responses.** The thief/mugger generic probes
+    find the wall, but `thief_move_engine` owns the one-pixel perpendicular
+    flank nudge. Player screen gates likewise compare the live MOB anchor against
+    the literal 0x7000/0x7400 hardware windows, not a host-side sprite-box inset.
 
 ## Investigation workflow
 

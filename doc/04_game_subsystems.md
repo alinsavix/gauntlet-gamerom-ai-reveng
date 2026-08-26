@@ -408,6 +408,15 @@ Processes all 4 player slots each frame. Four main sections:
      picture selection in §2.2. This happens for every active slot, not in a
      host-only presentation pass.
 
+Poison dizziness is part of that input step, not a speed reduction. Poison
+food/potions load 0x4B0 into the per-player word at 0x905F48. At
+0x4A892-0x4A8EA the loop decrements it, and while it remains nonzero in normal
+play replaces the active-low joystick direction nibble through the 4x16 byte
+table at 0x4A4FA. The row is `frame_counter & 0x30`; Fire and Magic bits are
+preserved. Holding Up maps to Up+Right, Up, Up+Left, Up over the four phases.
+The DEMO arm bypasses this remap, and a timer that decrements to zero no longer
+affects that frame's input.
+
 4. **Post-loop:** When the idle timer exceeds its configured threshold,
    `open_timed_doors` removes every active type-0x0D/0x0E door object and plays
    sound 0x12 ("Doors Open"); independently, trigger trap-wall conversion if
@@ -439,6 +448,13 @@ return the candidate in `D1.w` and collision status in carry. The squeeze
 helper receives candidate/current/player offsets in `D1/D2/D5`, returning a
 boolean in `D0.l` with Z set from that result.
 
+The primary move is transactional by axis. The core adds the complete `D6`
+speed word (1–3 pixels) to H once, probes that endpoint, and retains or rolls
+back the whole H delta. It then does the same for V using the resolved H. It
+does not probe ordinary movement one pixel at a time. The `D6=0x80` calls
+inside collision arms are distinct recursive response moves with newly selected
+flags.
+
 The four `mob_probe_*` stack leaves take `uint16 mob_slot` and return the first
 blocking slot in `D0.w`, or `-1` when clear. The up/down probes can instead
 return `0x0400` at the vertical boundary; callers therefore must not treat all
@@ -452,13 +468,14 @@ that distance gate turns each three-cell probe into a coarse whole-row/column
 barrier.
 
 The movement core retains the live player record slot from
-`active_mob_ids[player]` in D2. In particular, row zero is reserved hardware
-state and cannot become a player's probe origin. The horizontal triplets have
-asymmetric edge gates: their upper flank runs only when the doubled slot is at
-least 0x80, so row zero is not tested from row one, while the lower flank runs
-only below 0x7C0. Direct ROM execution at maze 17 pixel `(268,15)` moves
-left/right by two pixels; treating the corrected sprite origin as row zero and
-including the reserved top wall incorrectly blocks both.
+`active_mob_ids[player]` in D2 for that complete transaction. Its private probe
+family is asymmetric: `probe_left`/`probe_right` (0x426D4/0x4270C) inspect only
+the one horizontally adjacent cell, while `probe_up`/`probe_down` inspect the
+forward cell and its two horizontal flanks. These are not aliases of the four
+public `mob_probe_*` stack leaves, whose generic three-cell shapes remain useful
+to other actors. Direct ROM execution at maze 17 pixel `(268,15)` moves
+left/right by two pixels because a pixel-derived row-zero flank is never part of
+the private horizontal lookup.
 
 The vertical top edge has a separate coordinate gate at
 `probe_up` 0x425D0-0x425DE. When D2 is at most 0x007E -- every doubled row-one
@@ -471,10 +488,33 @@ and Up+Right continues horizontally there. Treating those transient slot
 pictures as the ceiling instead lets the hero reach Y=10 and eventually target
 the reserved row during diagonal movement.
 
-gauntpy's shipped-demo compatibility path deliberately retains its earlier
-row-zero flank behavior. Removing it currently diverts the recorded maze-102
-actor before the transporter, contradicting the retained MAME trace that reaches
-slot 492 and lands at slot 486; this exception does not apply to normal play.
+The bottom edge is likewise private coordinate state. In row 31, `probe_down`
+does not return the public probe's `0x0400` sentinel. It permits the proposed V
+word while it remains nonnegative, allowing a 3x3 hero to reach screen Y=496,
+and blocks once the next subtraction would enter the signed half of the word.
+This behavior is required by all three actors in the shipped demo and agrees
+with MAME 0.289.
+
+Three complete gauntpy state captures also confirm the ordinary vertical
+triplet's narrowest case. Down at `(365,223)` between slots `0x1F6`/`0x1F8`,
+Down at `(299,463)` between `0x3D2`/`0x3D4`, and Up at `(235,352)` between
+`0x2AE`/`0x2B0` all find an empty center but collide with a flank. The high-bit
+arm of `tile_lookup_core` at 0x42688 rounds the wall's live H word and subtracts
+`0x200` (four pixels) before the strict `< 0x7C0` test. With the flanking wall
+records 32 pixels apart, the only clear hero anchors are therefore X=364, 300,
+and 236, not the uncorrected visual midpoints. Crucially, the blocked-axis wall
+arms at 0x42108-0x421B8 and 0x4233C onward do not merely reject the full-speed
+move. They round that axis to a one-pixel retry and nudge the other axis away
+from the obstructing flank. Holding the vertical direction automatically moves
+the three captured heroes onto X=364, 300, and 236, then enters on the next
+frame; no manual left/right alignment is required.
+
+A fourth capture at level 20 / maze 19 `(491,320)` exercises the same response
+against the non-wrapping right edge. Down finds left flank `0x2BE`; the response
+must move the hero anchor to X=492 before the next frame enters. This is inside
+the ROM's literal 0x7000 H-anchor window from a `scroll_hpos_origin` of 284.
+Shrinking that gate by the 24-pixel sprite width rejects a valid game-side
+response and recreates the stuck narrow entrance only at the level edge.
 
 #### 4.2.1 Character stat selectors
 
@@ -513,6 +553,15 @@ motion is also committed before a blocked vertical axis. A direct probe of maze
 17 pixel `(16,10)` confirms left/right/down movement and an up-only top-wall
 block on both gauntpy and the ROM; the wrapped L/R seam is not a separate
 failure there.
+
+A maze-16 capture at `(41,288)` demonstrates the narrowest consequence. The
+walls flanking cell 547 have corrected collision anchors 32 pixels apart. Since
+each strict window extends just under 16 pixels, only hero H anchor 44 clears
+both flanks at once. Direct ROM execution of `probe_up`/`tile_lookup_core`
+returns wall 546 with carry set at X=41, matching gauntpy. The powered Elf's
+2/3-pixel cadence can still reach X=44 (from the capture: Right, Right, Left),
+after which Up succeeds. This is original alignment geometry, not a reason to
+widen the collision window.
 
 A reported maze-16 block at player coordinate `(396,176)` is not part of the
 static collision geometry. With the live camera snapped to that player,
@@ -731,9 +780,19 @@ same write and store `player + 4`.
 The handler then calls `dragon_any_segment_near_screen` (0x54AF8), which applies
 `tile_near_screen_test` to all four packed segment cells. An on-screen active
 dragon gains state bit 1 and remains frozen in `main_handle_dragon`. A second
-potion clears that bit, sets wake bit 0, and writes -49 to `dragon_anim_ctr`.
-During an existing wake transition, magic starts a +49 count from zero or
-negates a negative count and plays sound 0xD5.
+potion clears that bit, sets sleeping/wake bit 0, and writes -49 to
+`dragon_anim_ctr`, reversing the dragon toward sleep. During an existing
+sleep/wake transition, magic starts a +49 count from zero or negates a negative
+count and plays sound 0xD5.
+
+Stun has no countdown, but it is not a permanent safe state.
+`dragon_player_proximity` (0x549EA) clears bit 1 when an event enters the
+dragon's wrapped 10x10 proximity rectangle. Player movement supplies its
+previous/current cells; shot and interaction events pass zero/current. In
+particular, the dragon shot handler calls this routine before
+`dragon_shot_hit`, so the first shot at a stunned dragon clears stun before the
+hit is evaluated. The reversed -49 sleep transition likewise stops at zero
+until a new entry event starts the positive 49-frame wake.
 
 The later `monsters_everything` call compares 0x90401E with 0x904020 and branches
 to the potion scan instead of running the ordinary monster update pass. It scans
@@ -747,6 +806,13 @@ high animation state. Other eligible states use
 enhanced-magic columns 8-11, and shot-plus-enhanced columns 12-15. Zero removes
 the target; nonzero monster entries subtract tier strength, while generator
 entries replace the generator type and picture.
+
+For the Super Sorcerer, the legend's `STUN` result is not a persistent
+immobilization state. The potion scan at 0x415AC-0x415DC reveals every phasing
+Super Sorcerer inside the cull rectangle, then skips that target for the rest of
+the potion frame. On later monster passes its cleared flags select the ordinary
+idle phase at 0x4112C; its animation counter advances and it may fire at
+0x41142. Off-screen phasing Super Sorcerers are not scanned and remain hidden.
 
 ### 4.7 Score With Multiplier (`player_add_score_with_mult`, 0x5214C)
 
@@ -1202,6 +1268,11 @@ the `lea` at 0x4AA96, so this is the table's sole consumer; the former
 `health_drain_table` name and its "per tick, indexed by difficulty" gloss were
 **Contradicted** — the time-based drain is the flat `subq.l #1` in §4.3.
 Contact also arms the looping hurt/silencer sound timers in §21.
+The branch then writes 0x12 to `hurt_cooldown[player]` at 0x4AAFC-0x4AB06.
+On the following VBLANK, 0x401DE-0x40304 subtracts six and copies the
+player-position/character-specific hurt colors into that hero's live MOB
+palette. Continued contact reloads 0x12 after every VBLANK; after the hero
+leaves, the remaining 0x0C→0x06→0 sequence completes.
 
 ---
 
@@ -1216,19 +1287,25 @@ Dragon state is encoded in `ram.dragon_state` (`0x904890`) as a bitmask:
 
 | Bit | Meaning |
 |-----|---------|
-| 0 | Awake (1) / sleeping (0) |
+| 0 | Sleeping / wake transition (normal active state is 0) |
 | 1 | Stunned |
 | 2 | Turning |
 | 3 | Locked firing pose (sustained close-range flame) |
 
-**Wakeup:** Triggered by `dragon_player_proximity` (0x549EA) which checks if any player is within col ±9, row ±5. Starts wake animation (negative `ram.dragon_anim_ctr`).
+**Wakeup:** `dragon_player_proximity` (0x549EA) receives previous/current packed
+cells. It reacts when current enters the wrapped rectangle from head column
+-4..+5 and row -5..+4 while previous is zero or outside. Sleeping state with a
+zero/negative counter starts or reverses the positive 49-frame wake.
 
 **Active:** Tests the current path byte's fire trigger, allocates a shot with
 `dragon_find_free_shot_slot`, calls `dragon_fire_setup` when possible, chooses
 movement state with `dragon_choose_move_direction`, and updates the rendered
 segments with `dragon_update_segments` when the movement phase requires it.
 
-**Stunned:** Decrements `ram.dragon_stun_timer` (`0x90487C`), returns to active when 0.
+**Stunned:** `main_handle_dragon` freezes path/pose/fire work while bit 1 is set;
+0x90487C remains the independent fire cooldown. A proximity-entry event clears
+stun immediately and plays sound 0xD5. Because shot collision invokes proximity
+first, the dragon cannot remain harmless while the player shoots it.
 
 ### 8.2 Dragon Movement and Attacks
 
@@ -1411,6 +1488,15 @@ wall, player, pickup, or non-solid transporter/floor marker. The common tail at
 corresponding `V + 0x400` row arithmetic, then calls `moblist_replace` only when
 that biased destination is empty.
 
+High-bit wall candidates have an earlier special response inside each
+directional arm. When the collision is a horizontal flank more than 0x200 from
+the thief/mugger anchor, the engine nudges H one pixel away and calls the
+opposite horizontal probe; horizontal travel has the symmetric one-pixel V
+response. Frame 3876 on maze 15 captures the down arm at `(241,127)`: right
+flank `0x130` blocks the full three-pixel mugger step, so 0x4F278-0x4F2C2 moves
+left to X=240. Repeating the requested direction then clears the one-cell lane.
+Stopping after the shared probe leaves the actor permanently compact and idle.
+
 This ordering is observable in maze 15. With a thief at native screen
 coordinate `(12,304)` in slot `0x261`, moving east toward the wall marker at
 `0x262`, direct ROM execution leaves H at 12. Waiting for the uncorrected sprite
@@ -1551,6 +1637,16 @@ displayed `100 × players × coins × treasures` result, while the secret-room
 path can award `5,000 × coins`. It removes departing player sprites, restores
 the saved secret-room counters, changes game mode, runs `secret_check`, and
 loads the saved next maze/level. 
+
+The reachable countdown transition produces only the post-room tally. At an
+ordinary level end, a value of one is decremented to zero and the transition
+continues without calling the tally; `show_level_start_screen` then sees zero
+and interleaves the room immediately. Leaving or timing out inside the treasure
+room takes the `mazenum_current >= 104` branch at 0x4A756 and calls the tally for
+the collected treasure. The ROM also contains an already-zero ordinary-state
+branch from 0x4A77A to 0x4A78C, but normal setup cannot begin an ordinary level
+in that state. Direct-start/resumed hosts must not turn that unreachable residue
+into a visible pre-room screen.
 
 For an ordinary transition, `main_start_game` decrements
 `global_ui_delay_timer` at 0x4817C outside the dialog-gated gameplay band. At
@@ -1734,6 +1830,12 @@ Player exiting state machine:
 3. Set player state to "exiting"
 4. Call `maze_checknum` (0x52ECA) and advance to next level when all exiting players are done
 
+The tile-interaction caller has a separate fake-exit arm at
+0x513DA-0x51424. H-position bit 4 selects it; the ROM displays first-encounter
+record 30 and calls only `moblist_remove_and_clear` at 0x51404. It does not call
+`pf_replace` or another descriptor writer, so the collision marker disappears
+but the exit-shaped playfield cell remains visible.
+
 ### 12.2 Moving Exit (`main_exit_move`, 0x5287C)
 
 When the maze has the ExitMoves flag, the routine walks the exit slots collected
@@ -1900,7 +2002,15 @@ gauntpy's host diagnostics do not enter this path. The optional F1 side panel
 captures a read-only snapshot after the game frame and renders it with a
 host-owned PIL surface. Mode, maze, camera, RNG, demo pointers, MOB counts, and
 player coordinates therefore remain inspectable without changing alpha RAM or
-claiming an arcade call site.
+other modeled memory, or claiming an arcade call site. Its `RENDER` duration directly times game-raster
+composition, surface conversion/scaling, and the game-window blit. It excludes
+the 60 Hz wait, diagnostics-panel rendering, and display swap, so it is render
+cost rather than presentation cadence.
+F4's complete JSON snapshot is likewise host owned. Loading one reconstructs
+the typed modeled RAM, MOB tables, decoded
+maze, path grids, display memory, and RNG seed, then resumes at the repeated
+frame body. It deliberately does not call `one_time_init` (0x4327A), level
+setup, or any display rebuilder; those would overwrite the captured state.
 
 ### 14.3 Logo Color Cycling (`main_logo_updcolors`, 0x4DCBA)
 

@@ -54,25 +54,27 @@ sprite is replaced and its position is recomputed as a delta from the body,
 which is how the neck appears to extend, curl, and swing without any of the
 segments actually moving.
 
-The dragon spends most of its life asleep. Once per frame its handler asks
-whether any player has come within about nine cells horizontally and five
-vertically. When one has, a wake animation starts, counting a signed animation
-counter up to zero while the body picture cycles. When the counter lands on
-zero the transition state clears and the dragon chooses a random one of its
-five path programs.
+The dragon spends most of its life asleep. Player movement and combat events
+feed their old and new cells to a proximity routine. Crossing into a wrapped
+ten-by-ten rectangle around the dragon starts a 49-frame wake animation; a
+static player already inside does not repeatedly retrigger it. When the positive
+counter lands on zero the transition state clears and the dragon chooses a
+random one of its five path programs.
 
 The same handler carries a stun state that freezes the dragon entirely, a
 turning state that plays a rotation animation and then picks a fresh path, and
-a fire cooldown that ticks down every frame. Stun and cooldown share one word,
-because in 1986 you did that.
+a separate fire cooldown that ticks down every frame.
 
 Potion magic owns the stun switch. If any of the four dragon pieces lies in the
 game's wider near-screen window, the first potion sets the stun bit and the
 dragon stops at its current pose. A second potion clears stun and starts a
-49-frame wake transition in reverse. Magic used while it is already waking
-starts or reverses that transition instead, accompanied by the dragon's special
-sound. None of this comes from the ordinary monster-effect matrix; the potion
-handler has a private dragon branch before that scan.
+49-frame transition back toward sleep. Magic used while it is already in the
+sleep/wake transition starts or reverses it instead, accompanied by the dragon's
+special sound. A proximity entry clears stun directly; most importantly, the
+first shot at a stunned dragon performs that check before damage, so a potion
+cannot leave it harmless through nine unanswered hits. None of this comes from
+the ordinary monster-effect matrix; the potion handler has a private dragon
+branch before that scan.
 
 ## Five programs, sixteen bytes each
 
@@ -240,6 +242,13 @@ the thief's record changes slots. That order keeps the visible body and its
 collision identity together in tight one-cell pockets; using the raw picture
 origin instead can bury most of the thief in a wall while its record remains
 behind in the corridor.
+
+The private mover also gives the visitor the same sort of polish players get in
+tight lanes. When a forward probe hits a flanking wall, it can move one pixel
+sideways away from that flank and probe the correction before trying forward
+again. A captured mugger aimed down between two walls at X=241 therefore centers
+to X=240 and continues; omitting this special arm leaves it staring at empty
+floor forever even though the shared probe itself is correct.
 
 Dodging is more pointed. A helper scans the four players for one whose shot
 direction is exactly opposite the thief's own and whose position lies on that

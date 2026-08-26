@@ -34,6 +34,7 @@ DEBUG_PAGES = (
     "DISPLAY",
     "AUDIO",
     "EVENTS",
+    "PERFORMANCE",
 )
 
 _BACKGROUND = (16, 18, 22, 255)
@@ -79,6 +80,9 @@ class PlayerDebugSnapshot:
 @dataclass(frozen=True)
 class DebugSnapshot:
     frame: int
+    render_time_ms: float
+    render_time_current_ms: float
+    render_time_history_ms: tuple[float, ...]
     mode: int
     level: int
     maze: int
@@ -315,6 +319,9 @@ def _audio_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
 
 def capture_debug_snapshot(
     state: GameState, *, paused: bool = False, selected_mob: int = 0,
+    render_time_ms: float = 0.0,
+    render_time_current_ms: float | None = None,
+    render_time_history_ms: tuple[float, ...] = (),
 ) -> DebugSnapshot:
     """Project live state into immutable host data without mutating the game."""
     players = []
@@ -354,6 +361,14 @@ def capture_debug_snapshot(
     creature_types = set(MONSTER_TYPES) | set(GENERATOR_TYPES)
     return DebugSnapshot(
         frame=int(state.frame_counter) & 0xFFFF,
+        render_time_ms=float(render_time_ms),
+        render_time_current_ms=float(
+            render_time_ms if render_time_current_ms is None
+            else render_time_current_ms
+        ),
+        render_time_history_ms=tuple(
+            float(value) for value in render_time_history_ms
+        ),
         mode=int(state.game_mode),
         level=int(state.levelnum_current),
         maze=int(state.mazenum_current),
@@ -405,7 +420,11 @@ def debug_snapshot_lines(snapshot: DebugSnapshot) -> tuple[tuple[str, str], ...]
     mode = _name(GameMode, snapshot.mode)
     it = "none" if snapshot.player_it == 0xFFFF else f"P{snapshot.player_it + 1}"
     rows: list[tuple[str, str]] = [
-        ("FRAME", f"{snapshot.frame:05d}" + ("  PAUSED" if snapshot.paused else "")),
+        (
+            "FRAME",
+            f"{snapshot.frame:05d}  RENDER {snapshot.render_time_ms:.2f} ms"
+            + ("  PAUSED" if snapshot.paused else ""),
+        ),
         ("MODE", f"{mode} ({snapshot.mode})"),
         ("LEVEL / MAZE", f"{snapshot.level} / {snapshot.maze}"),
         ("CAMERA", f"{snapshot.scroll_x:03d}, {snapshot.scroll_y:03d}"),
@@ -515,6 +534,17 @@ def debug_page_lines(
             (f"{index + 1:02d}", event)
             for index, event in enumerate(events[-20:])
         )
+    if name == "PERFORMANCE":
+        history = snapshot.render_time_history_ms
+        return (
+            ("RENDER AVG10", f"{snapshot.render_time_ms:.2f} ms"),
+            ("CURRENT", f"{snapshot.render_time_current_ms:.2f} ms"),
+            ("SAMPLES", str(len(history))),
+            ("RANGE", (
+                f"{min(history):.2f} - {max(history):.2f} ms"
+                if history else "no samples"
+            )),
+        )
     return dict(snapshot.page_rows).get(name, ())
 
 
@@ -554,4 +584,20 @@ def render_debug_panel(
         draw.text((label_x, y), label, font=font, fill=_LABEL)
         draw.text((value_x, y), value, font=font, fill=_VALUE)
         y += row_height
+    if DEBUG_PAGES[page] == "PERFORMANCE" and snapshot.render_time_history_ms:
+        history = snapshot.render_time_history_ms
+        left, top, right, bottom = 8, 82, width - 8, height - 10
+        draw.rectangle((left, top, right, bottom), outline=_DIVIDER)
+        ceiling = max(16.67, max(history))
+        points = []
+        for index, value in enumerate(history):
+            x = left + 1 + index * (right - left - 2) / max(1, len(history) - 1)
+            y = bottom - 1 - min(value, ceiling) * (bottom - top - 2) / ceiling
+            points.append((x, y))
+        if len(points) == 1:
+            draw.point(points[0], fill=_HEADING)
+        else:
+            draw.line(points, fill=_HEADING, width=2)
+        budget_y = bottom - 1 - 16.67 * (bottom - top - 2) / ceiling
+        draw.line((left + 1, budget_y, right - 1, budget_y), fill=(120, 80, 80, 255))
     return image

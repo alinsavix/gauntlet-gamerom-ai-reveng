@@ -191,7 +191,8 @@ delta = direction_deltas[facing] scaled by speed
         (reduced if stunned or acid-slowed)
 
 result = try_move(player, delta, flags):
-    probe the target cell(s) for walls and blocking objects
+    propose the complete horizontal speed; keep it or roll it all back
+    propose the complete vertical speed from the resolved H; keep or roll back
     if a door: run direction-aware door traversal (have a key?)
     if blocked diagonally: try the corner "squeeze" geometry check
     if blocked by monster or player: stop (bodies are solid)
@@ -207,11 +208,35 @@ constrains movement too: unless the level flags say otherwise, you cannot walk
 somewhere the shared screen refuses to follow, which is Chapter 8's
 rubber-band seen from the other side. Slow effects land on the proposal
 itself. A stun freezes it briefly, and acid slows you for as long as you
-stand in it.
+stand in it. Poison is different again: for twenty seconds it rewrites the
+direction nibble through a four-phase ROM table. Holding Up alternates
+Up+Right, Up, Up+Left, Up while Fire and Magic remain intact, producing the
+characteristic drunken wobble without changing the stored joystick sample.
+
+The all-or-nothing axis proposal matters at two- and three-pixel speeds. The
+cabinet does not keep one clear pixel from a larger move whose endpoint blocks;
+its rare one-pixel retries are explicit collision-response calls with their own
+direction flags. Horizontal resolution still precedes vertical, so a blocked
+diagonal slides only through the axis whose complete proposal succeeded.
 
 All of the wall, door, and occupancy probes work on Chapter 8's packed maze
 slots and the traversability table introduced there. Movement is the biggest
 customer of that machinery.
+
+The narrowest one-cell lanes expose how exact those probes are. Two corrected
+wall anchors can stand 32 pixels apart while each rejects a hero anchor less
+than 15.5 pixels away. That leaves one integer alignment between them. A fast
+hero may need to step past that line and reverse onto it as the speed cadence
+changes; widening the lane would feel easier, but it would no longer be the
+cabinet's collision. Wall markers receive the ROM's four-pixel-left collision
+correction, so the valid hero position is four pixels left of the apparent
+midpoint. The cabinet does not make you align that pixel by hand: its collision
+response keeps a rounded one-pixel step and nudges away from whichever flank
+blocked. In captured examples at X=365, 299, and 235, holding the vertical
+direction centers the Elf at X=364, 300, and 236 and enters on the next frame.
+The same response works at a level edge: the screen gate measures the hero's
+live anchor against the hardware's 224-pixel window, not a 24-pixel-inset sprite
+box, so a captured X=491 Elf can center to X=492 and enter the edge lane.
 
 And when the move commits, the last thing it does is ask which cell your new
 position actually names, biasing by half a sprite so the answer is the cell
@@ -311,8 +336,12 @@ the same record. A potion set off by a stray shot does less than one you
 drank, since the trigger bit selects a different entry, which is the game
 charging you for clumsiness by table lookup. Two animated enemies also branch
 before the lookup: magic forces an idle Acid puddle into its stunned phase and
-reveals a phasing Super Sorcerer. The dragon gets a private check of its own
-inside the potion handler; see Chapter 12.
+reveals every phasing Super Sorcerer currently on screen. `STUN` is a slightly
+misleading legend label for that second result: the visible sorcerers skip the
+rest of the potion frame, but on later monster turns their ordinary phase cycle
+resumes, including animation and firing. Hidden sorcerers beyond the screen
+rectangle are untouched. The dragon gets a private check of its own inside the
+potion handler; see Chapter 12.
 
 ## The dwindling number
 

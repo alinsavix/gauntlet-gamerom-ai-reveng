@@ -57,9 +57,10 @@ def test_snapshot_projects_internal_state_without_mutating_the_game():
         tuple(state.mobs.picture),
     )
 
-    snapshot = capture_debug_snapshot(state, paused=True)
+    snapshot = capture_debug_snapshot(state, paused=True, render_time_ms=12.5)
 
     assert snapshot.frame == 123
+    assert snapshot.render_time_ms == 12.5
     assert snapshot.mode == int(GameMode.DEMO)
     assert snapshot.player_it == 1
     assert snapshot.demo_positions == (0, 118, 0, 20)
@@ -76,14 +77,35 @@ def test_snapshot_projects_internal_state_without_mutating_the_game():
 
 
 def test_snapshot_rows_include_global_demo_and_player_state():
-    rows = dict(debug_snapshot_lines(capture_debug_snapshot(_diagnostic_state())))
+    rows = dict(debug_snapshot_lines(
+        capture_debug_snapshot(_diagnostic_state(), render_time_ms=16.75)
+    ))
 
+    assert rows["FRAME"] == "00123  RENDER 16.75 ms"
     assert rows["MODE"] == "DEMO (-3)"
     assert rows["LEVEL / MAZE"] == "7 / 102"
     assert rows["PLAYERS / IT"] == "1 / P2"
     assert rows["DEMO PTR"] == "000 118 000 020"
     assert "hp1600" in rows["P2 ELF"]
     assert rows["P2 POS/K/P"].startswith("188,144 s12C k2 p1")
+
+
+def test_performance_page_reports_history_and_renders_a_graph():
+    snapshot = capture_debug_snapshot(
+        _diagnostic_state(),
+        render_time_ms=8.5,
+        render_time_current_ms=10.0,
+        render_time_history_ms=(7.0, 8.0, 10.0),
+    )
+    page = DEBUG_PAGES.index("PERFORMANCE")
+
+    rows = dict(debug_page_lines(snapshot, page))
+    image = render_debug_panel(snapshot, page=page)
+
+    assert rows["RENDER AVG10"] == "8.50 ms"
+    assert rows["CURRENT"] == "10.00 ms"
+    assert rows["SAMPLES"] == "3"
+    assert image.getbbox() is not None
 
 
 def test_panel_is_a_separate_host_raster():

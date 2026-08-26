@@ -1094,12 +1094,11 @@ def player_exit_sequence(state: GameState, player_index: int,
 def advance_level_countdowns(state: GameState) -> bool:
     """The end-of-level bookkeeping at main_move_players 0x4A748-0x4A788.
 
-    Runs once, when the last player has left the level, and returns whether the
-    ROM branches to ``show_level_end_bonus_screen`` at 0x4A78C. The secret-room
-    availability counter ticks down, and -- outside a bonus room, past level 6 --
-    so do the hidden-potion and treasure-room countdowns.  ``level_next_treasure``
-    reaching zero is what makes the *next* level a treasure room; see
-    ``show_level_start_screen``.
+    Runs once when the last player has left. The secret-room availability
+    counter ticks down, and -- outside a bonus room, past level 6 -- so do the
+    hidden-potion and treasure-room countdowns. A live 1 -> 0 transition proceeds
+    directly to ``show_level_start_screen``, which interleaves the treasure room;
+    only leaving a bonus room requests the visible tally.
 
     Lives here rather than in WP-6's ``main_move_players`` because the whole
     block exists to feed WP-15's treasure scheduling, and this reimplementation
@@ -1114,8 +1113,12 @@ def advance_level_countdowns(state: GameState) -> bool:
         return False
     if state.level_next_potion:                          # 0x4A76C
         state.level_next_potion -= 1
-    if not state.level_next_treasure:                    # 0x4A77A
-        return True
+    if not state.level_next_treasure:
+        # The live schedule enters the room on the transition that decrements
+        # 1 -> 0. Direct starts and historical snapshots can expose an
+        # already-zero ordinary state; preserve the reachable arcade outcome
+        # rather than showing an otherwise unreachable pre-room tally.
+        return False
     state.level_next_treasure -= 1
     return False
 

@@ -29,11 +29,10 @@ _SOUND_DRAGON_HIT = 0x3A
 _FIRE_COOLDOWN = 8
 _DRAGON_MAX_HITS = 9
 
-# dragon_state (0x904890).  Bit 0 is the sleeping/wake transition, not the
-# active pursuit state; the old private _ST_AWAKE name is retained for callers
-# that used the previous module.
+# dragon_state (0x904890). Bit 0 owns the sleeping/wake transition; zero is
+# normal active pursuit. Keep the established _ST_WAKING name for import
+# compatibility even though the stable counter-zero state is sleeping.
 _ST_WAKING = 0x01
-_ST_AWAKE = _ST_WAKING
 _ST_STUNNED = 0x02
 _ST_TURNING = 0x04
 _ST_LOCKED = 0x08
@@ -246,24 +245,6 @@ def _player_cell(state: GameState, player_index: int) -> tuple[int, int]:
     return y >> 4, x >> 4
 
 
-def _nearby_player(state: GameState, head_slot: int) -> bool:
-    """The proximity envelope behind ``dragon_player_proximity`` (0x549EA)."""
-    head_row, head_col = head_slot >> 5, head_slot & 0x1F
-    for player in state.players:
-        if not player.active or player.mob_slot == 0:
-            continue
-        row, col = _player_cell(state, player.index)
-        dx = abs(col - head_col)
-        dy = abs(row - head_row)
-        if state.wrap_h:
-            dx = min(dx, 32 - dx)
-        if state.wrap_v:
-            dy = min(dy, 32 - dy)
-        if dx <= 9 and dy <= 5:
-            return True
-    return False
-
-
 def _tile_near_screen(state: GameState, slot: int) -> bool:
     """tile_near_screen_test 0x5E5D8, including its unsigned edge tests."""
     h_delta = (
@@ -295,8 +276,6 @@ def _advance_wake_or_turn(state: GameState, head_slot: int) -> bool:
     """Run a transition frame and return whether normal path execution is blocked."""
     if state.dragon_state & _ST_WAKING:
         if state.dragon_anim_ctr == 0:
-            if _nearby_player(state, head_slot):
-                state.dragon_anim_ctr = 0x31
             return True
         was_positive = state.dragon_anim_ctr > 0
         state.dragon_anim_ctr += -1 if was_positive else 1

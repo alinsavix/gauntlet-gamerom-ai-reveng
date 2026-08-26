@@ -409,6 +409,17 @@ class TestTreasureScheduling:
         assert state.level_next_potion == 1
         assert state.secret_possible_counter == 19
 
+    def test_zero_countdown_enters_the_room_without_a_pre_room_tally(self):
+        """An already-zero direct state preserves the live 1 -> 0 outcome."""
+        state = GameState()
+        state.levelnum_current = 16
+        state.mazenum_current = 15
+        state.level_next = 17
+        state.level_next_treasure = 0
+
+        assert not advance_level_countdowns(state)
+        assert state.level_next_treasure == 0
+
     def test_countdown_is_not_ticked_in_a_bonus_room(self):
         state = GameState()
         state.mazenum_current = _TREASURE_MAZE

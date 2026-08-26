@@ -272,6 +272,12 @@ on, at the start of a level, or at the start of the demo. It begins at
 whatever the boot memory tests left in that word and advances one step per
 draw, forever, across attract screens and paid sessions alike.
 
+For repeatable testing, gauntpy chooses zero as that one power-on word unless
+the runner receives `--seed N`; `--seed random` deliberately models an
+indeterminate host power-on value. This is a host initialization choice, not a
+new game routine: every mode still shares and advances the same stream without
+reseeding.
+
 So the demo draws from a stream whose position depends on everything the
 cabinet has done since it was switched on. The consequences are visible. The
 level-flag routine runs on the demo maze like any other, and it re-rolls two
