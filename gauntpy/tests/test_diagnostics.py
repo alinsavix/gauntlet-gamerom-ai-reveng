@@ -11,6 +11,7 @@ from gauntpy.render.diagnostics import (
     DEBUG_PANEL_WIDTH,
     DEBUG_ROW_HEIGHT,
     _host_font,
+    _performance_graph_scale,
     capture_debug_snapshot,
     debug_page_lines,
     debug_snapshot_lines,
@@ -106,6 +107,17 @@ def test_performance_page_reports_history_and_renders_a_graph():
     assert rows["CURRENT"] == "10.00 ms"
     assert rows["SAMPLES"] == "3"
     assert image.getbbox() is not None
+
+
+def test_performance_graph_has_a_labeled_millisecond_scale():
+    assert _performance_graph_scale((7.0, 16.67, 18.0)) == (
+        20.0,
+        (0.0, 10.0, 20.0),
+    )
+    assert _performance_graph_scale((41.0,)) == (
+        50.0,
+        (0.0, 25.0, 50.0),
+    )
 
 
 def test_panel_is_a_separate_host_raster():

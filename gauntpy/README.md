@@ -60,7 +60,8 @@ Its pages cover overview, players and raw input, decoded demo records, level
 flags/timers, actor counts and raw MOB words, thief/dragon AI, display memory,
 audio queues, a rolling event log inferred from snapshots while the panel is
 open, and a 120-sample render-time graph. The displayed `RENDER` value is a
-rolling average of the latest ten frames.
+rolling average of the latest ten frames. The graph labels its dynamic Y axis
+in milliseconds and marks the 16.67 ms frame budget.
 
 **F4** atomically saves every modeled `GameState` field, including players,
 MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,
@@ -77,6 +78,9 @@ are migrated for the handful of fields added since F4 shipped; an otherwise
 incompatible schema or `GameState` shape is rejected rather than partially
 loaded. Resumed sessions do not write EEPROM JSON, so loading an older gameplay
 snapshot cannot roll back newer settings, high scores, or maze rotation.
+Synthetic-scenario dumps additionally embed the complete normalized fixture,
+its SHA-256 and source filename, plus event progress, so resume never depends on
+the original file remaining present or unchanged.
 
 F5/F6/F7 are host troubleshooting controls, not original cabinet inputs. The
 level skip uses the live cabinet maze rotation and respawns active players
@@ -149,6 +153,20 @@ GEX_ROM_DIR=../ROMs uv run gauntpy-scenario run forcefields \
 The catalog includes level 1, the level-7 seam, forcefields, dragon range,
 attract-demo playback, and point-blank combat. Traces are compact JSON and
 deterministic from the same committed state.
+
+For minimized reproductions, load a declarative synthetic maze:
+
+```bash
+uv run --all-extras gauntpy-play --scenario scenarios/narrow-lane-thief.gsc
+uv run --all-extras gauntpy-scenario run scenarios/narrow-lane-thief.gsc \
+  --every 60
+```
+
+The `.gsc` format is documented in `scenarios/README.md`: a normal level-flags
+longword and other setup fields, an exact 32x32 ASCII grid, optional symbol
+bindings, and a small allowlisted event language. These fixtures use normal
+game-side state/VRAM writers but are always labeled **synthetic**. They are
+reproduction tools, not evidence of ROM behavior.
 
 Without uv, everything still runs from the source tree directly (set
 `PYTHONPATH=src`, and `GEX_ROM_DIR` for the graphical runner):

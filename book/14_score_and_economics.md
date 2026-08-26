@@ -165,7 +165,8 @@ the host loop is stopped. Beside the frame number, `RENDER` reports a rolling te
 measured time spent composing, converting/scaling, and blitting the game raster.
 It does not report the 16/17 ms cadence imposed by the 60 Hz limiter. A separate
 performance page graphs the latest 120 render samples against the 16.67 ms
-budget line.
+budget line. Its Y axis is labeled in milliseconds at zero, midpoint, and a
+ceiling rounded to the next ten milliseconds.
 Maze numbers and player coordinates likewise live on that host panel, never in
 modeled alpha RAM.
 

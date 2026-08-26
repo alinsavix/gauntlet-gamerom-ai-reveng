@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2397 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2416 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,32 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-143 · declarative synthetic maze fixtures and readable graph scale
+
+`gauntpy-scenario run PATH.gsc` and `gauntpy-play --scenario PATH.gsc` now load
+a versioned declarative fixture: manifest fields for the ordinary level-flags
+longword, seed, hero, health, maze graphics selectors, and default frame count;
+an exact 32x32 one-character grid; optional symbol bindings to any object ID;
+and allowlisted absolute-frame events. The initial event vocabulary changes
+scripted input or deploys a thief/mugger from a named empty cell through the
+normal game-side routine. It cannot execute arbitrary code.
+
+Construction uses the existing maze placement, MOB creation, forcefield, door,
+exit, playfield/color-RAM, player-spawn, and info-panel writers. Synthetic
+provenance remains host metadata rather than a modeled RAM field. F4 embeds the
+normalized complete `.gsc` content, SHA-256, source filename, persistent input,
+and fired-event indices at the dump root; resume verifies the hash and restores
+pending events without needing the source file.
+
+These fixtures are explicitly non-evidence. They can minimize a reproduction
+and motivate a ROM/MAME trace, but a result observed only in one cannot become
+a fidelity invariant, technical-document fact, or book claim. The committed
+format guide and methodology chapter carry that boundary.
+
+The PERFORMANCE graph now also reserves a left axis and labels zero, midpoint,
+and ceiling in milliseconds. Its ceiling rounds upward in ten-millisecond
+steps, so both the values and the 16.67 ms budget line have a readable scale.
 
 ### S-142 · captured mugger/edge stalls, poison wobble, seed controls, and timing graph
 

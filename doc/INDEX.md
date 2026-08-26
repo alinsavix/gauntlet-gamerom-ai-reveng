@@ -33,6 +33,14 @@ reserved-intent, and physical open-bus questions remain in
 `08_known_issues.md`; findings raised by the 2026-08-11 full semantic audit
 that are still open are tracked in the repository-root `SOL_ISSUES.md`.
 
+**Synthetic gauntpy scenarios are outside this evidence corpus.** Declarative
+`.gsc` layouts are useful for minimizing a collision or state-machine test, but
+they are invented inputs rather than Slapstic records or MAME observations. A
+synthetic-only result must remain labeled as such and cannot establish or amend
+a claim in these references. ROM execution, direct disassembly, or MAME must
+independently confirm it first. The fixture format and its provenance rules are
+documented in `../gauntpy/scenarios/README.md`.
+
 ---
 
 ## ROM File Checksums

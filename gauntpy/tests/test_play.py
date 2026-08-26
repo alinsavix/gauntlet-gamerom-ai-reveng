@@ -180,6 +180,41 @@ class TestArguments:
         assert called["load_state_path"] == path
         assert called["scale"] == 2
 
+    def test_synthetic_scenario_path_is_forwarded(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+        path = tmp_path / "repro.gsc"
+
+        play.main(["--scenario", str(path), "--scale", "2"])
+
+        assert called["scenario_path"] == path
+        assert called["scale"] == 2
+
+    @pytest.mark.parametrize("option", [
+        "--load-state", "--attract", "--level", "--character", "--keys",
+        "--potions", "--power", "--seed",
+    ])
+    def test_synthetic_scenario_rejects_other_start_modes(
+        self, monkeypatch, option,
+    ):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        values = {
+            "--load-state": "state.json",
+            "--level": "2",
+            "--character": "wizard",
+            "--keys": "1",
+            "--potions": "1",
+            "--power": "invisibility",
+            "--seed": "1234",
+        }
+        argv = ["--scenario", "repro.gsc", option]
+        if option in values:
+            argv.append(values[option])
+
+        with pytest.raises(SystemExit):
+            play.main(argv)
+
     @pytest.mark.parametrize("option", [
         "--attract", "--level", "--character", "--keys", "--potions", "--power",
         "--seed",

@@ -189,6 +189,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         keys: int = 0, potions: int = 0,
         powers: tuple[int, ...] = (),
         load_state_path: str | Path | None = None,
+        scenario_path: str | Path | None = None,
         rng_seed: int = 0) -> None:
     """Open a window and run the game loop until the player closes it.
 
@@ -208,6 +209,16 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
             state = load_game_state(load_state_path)
         except StateDumpError as exc:
             raise SystemExit(f"could not load saved state: {exc}") from exc
+    elif scenario_path is not None:
+        from .custom_scenario import (
+            SyntheticScenarioError,
+            build_synthetic_state,
+            load_synthetic_scenario,
+        )
+        try:
+            state = build_synthetic_state(load_synthetic_scenario(scenario_path))
+        except SyntheticScenarioError as exc:
+            raise SystemExit(f"could not load synthetic scenario: {exc}") from exc
     elif from_attract:
         from .subsystems.boot import one_time_init
         state = GameState(rng=GameRandom(rng_seed))
@@ -249,6 +260,9 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         while True:
             host.wait_for_vblank(state)     # pump events + sample keyboard + coins
             if not host.paused:
+                from .custom_scenario import apply_synthetic_events
+
+                apply_synthetic_events(state)
                 tick(state)                 # one full 60 Hz game frame
             host.present(state)             # composite + flip
     except SystemExit:
@@ -286,6 +300,10 @@ def main(argv: list[str] | None = None) -> None:
         help="resume from a complete JSON state saved with F4",
     )
     parser.add_argument(
+        "--scenario", type=Path,
+        help="load a declarative synthetic 32x32 maze fixture",
+    )
+    parser.add_argument(
         "--no-first-encounter-messages", action="store_true", default=None,
         help="suppress first-encounter pop-up boxes without changing gameplay",
     )
@@ -312,6 +330,15 @@ def main(argv: list[str] | None = None) -> None:
             "--load-state cannot be combined with --attract, --level, --character, "
             "--keys, --potions, --power, or --seed"
         )
+    if args.scenario and (
+        args.load_state or args.attract or args.level is not None
+        or args.character is not None or args.keys or args.potions
+        or args.power or args.seed is not None
+    ):
+        parser.error(
+            "--scenario cannot be combined with --load-state, --attract, --level, "
+            "--character, --keys, --potions, --power, or --seed"
+        )
 
     _ensure_rom_dir()
     if not os.environ.get("GEX_ROM_DIR"):
@@ -334,7 +361,8 @@ def main(argv: list[str] | None = None) -> None:
         suppress_first_encounter_messages=args.no_first_encounter_messages,
         keys=args.keys, potions=args.potions,
         powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power),
-        load_state_path=args.load_state, rng_seed=rng_seed)
+        load_state_path=args.load_state, scenario_path=args.scenario,
+        rng_seed=rng_seed)
 
 
 

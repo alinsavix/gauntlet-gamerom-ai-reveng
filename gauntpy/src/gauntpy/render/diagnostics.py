@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+from math import ceil
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -548,6 +549,13 @@ def debug_page_lines(
     return dict(snapshot.page_rows).get(name, ())
 
 
+def _performance_graph_scale(
+    history: tuple[float, ...],
+) -> tuple[float, tuple[float, float, float]]:
+    ceiling = max(20.0, ceil(max(history, default=0.0) / 10.0) * 10.0)
+    return ceiling, (0.0, ceiling / 2.0, ceiling)
+
+
 def render_debug_panel(
     snapshot: DebugSnapshot,
     *,
@@ -586,9 +594,20 @@ def render_debug_panel(
         y += row_height
     if DEBUG_PAGES[page] == "PERFORMANCE" and snapshot.render_time_history_ms:
         history = snapshot.render_time_history_ms
-        left, top, right, bottom = 8, 82, width - 8, height - 10
+        left, top, right, bottom = 46, 82, width - 8, height - 10
         draw.rectangle((left, top, right, bottom), outline=_DIVIDER)
-        ceiling = max(16.67, max(history))
+        ceiling, ticks = _performance_graph_scale(history)
+        for value in ticks:
+            tick_y = bottom - 1 - value * (bottom - top - 2) / ceiling
+            label = f"{value:g} ms"
+            label_box = draw.textbbox((0, 0), label, font=font)
+            draw.text(
+                (left - (label_box[2] - label_box[0]) - 5, tick_y - 5),
+                label,
+                font=font,
+                fill=_DIM,
+            )
+            draw.line((left - 3, tick_y, right - 1, tick_y), fill=_DIVIDER)
         points = []
         for index, value in enumerate(history):
             x = left + 1 + index * (right - left - 2) / max(1, len(history) - 1)
@@ -599,5 +618,8 @@ def render_debug_panel(
         else:
             draw.line(points, fill=_HEADING, width=2)
         budget_y = bottom - 1 - 16.67 * (bottom - top - 2) / ceiling
-        draw.line((left + 1, budget_y, right - 1, budget_y), fill=(120, 80, 80, 255))
+        draw.line(
+            (left + 1, budget_y, right - 1, budget_y),
+            fill=(120, 80, 80, 255),
+        )
     return image

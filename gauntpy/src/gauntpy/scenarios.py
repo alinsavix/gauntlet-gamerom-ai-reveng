@@ -328,6 +328,32 @@ def run_scenario(name: str, frames: int | None = None, every: int = 1) -> list[d
     return trace
 
 
+def run_synthetic_scenario(
+    path: str | Path, frames: int | None = None, every: int = 1,
+) -> tuple[object, list[dict]]:
+    """Run a declarative synthetic fixture through the ordinary frame loop."""
+    from .custom_scenario import (
+        apply_synthetic_events,
+        build_synthetic_state,
+        load_synthetic_scenario,
+    )
+
+    scenario = load_synthetic_scenario(path)
+    frame_count = scenario.default_frames if frames is None else frames
+    if frame_count < 0:
+        raise ValueError("frames must be non-negative")
+    if every < 1:
+        raise ValueError("every must be at least one")
+    state = build_synthetic_state(scenario)
+    trace = [digest_state(state)]
+    for frame in range(frame_count):
+        apply_synthetic_events(state)
+        tick(state)
+        if (frame + 1) % every == 0:
+            trace.append(digest_state(state))
+    return scenario, trace
+
+
 def _write_trace(payload: object, output: str | None) -> None:
     text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if output:
@@ -343,7 +369,7 @@ def main(argv: list[str] | None = None) -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("list", help="list deterministic scenarios")
     run = subparsers.add_parser("run", help="run and trace one scenario")
-    run.add_argument("scenario", choices=sorted(SCENARIOS))
+    run.add_argument("scenario", help="built-in scenario name or synthetic .gsc path")
     run.add_argument("--frames", type=int)
     run.add_argument("--every", type=int, default=1)
     run.add_argument("--output")
@@ -363,13 +389,25 @@ def main(argv: list[str] | None = None) -> None:
         )
         return
 
-    trace = run_scenario(args.scenario, args.frames, args.every)
+    if args.scenario in SCENARIOS:
+        trace = run_scenario(args.scenario, args.frames, args.every)
+        scenario_name = args.scenario
+        default_frames = SCENARIOS[args.scenario].default_frames
+        synthetic = False
+    else:
+        scenario, trace = run_synthetic_scenario(
+            args.scenario, args.frames, args.every,
+        )
+        scenario_name = scenario.name
+        default_frames = scenario.default_frames
+        synthetic = True
     _write_trace(
         {
-            "scenario": args.scenario,
+            "scenario": scenario_name,
+            "synthetic": synthetic,
             "frames": args.frames
             if args.frames is not None
-            else SCENARIOS[args.scenario].default_frames,
+            else default_frames,
             "every": args.every,
             "trace": trace,
         },

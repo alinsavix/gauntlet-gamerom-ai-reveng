@@ -253,6 +253,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     find the wall, but `thief_move_engine` owns the one-pixel perpendicular
     flank nudge. Player screen gates likewise compare the live MOB anchor against
     the literal 0x7000/0x7400 hardware windows, not a host-side sprite-box inset.
+58. **Synthetic scenarios are test inputs, never evidence.** Declarative `.gsc`
+    mazes may reproduce a mechanism through normal game-side writers and suggest
+    a ROM/MAME investigation, but no behavior observed only in a synthetic layout
+    may enter `FIDELITY.md`, `doc/`, or the book as an original-game fact. Label
+    synthetic fixtures and results explicitly; promote a conclusion only after
+    ROM execution, MAME, or direct disassembly independently establishes it.
 
 ## Investigation workflow
 
@@ -280,6 +286,13 @@ evidence remains in `../doc/`, generated contracts, and the book.
 
 Use these before writing an ad hoc reproduction. Save disposable output under
 `traces/scenarios/`, which Git ignores.
+
+`gauntpy-scenario run path/to/repro.gsc` and
+`gauntpy-play --scenario path/to/repro.gsc` load declarative synthetic 32x32
+fixtures documented in `scenarios/README.md`. They use normal MOB, maze, and
+playfield writers, support a small allowlisted event vocabulary, and carry
+their complete normalized source and hash into F4 state dumps. Their
+**synthetic** provenance is part of every trace/dump and must remain visible.
 
 ## MAME traces
 

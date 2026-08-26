@@ -97,12 +97,18 @@ def _json_value(value: object, seen: set[int]) -> Any:
 
 def state_dump_payload(state: GameState) -> dict[str, object]:
     """Return every modeled GameState field in a complete JSON-safe shape."""
-    return {
+    payload = {
         "schema": STATE_DUMP_SCHEMA,
         "captured_at_utc": datetime.now(timezone.utc).isoformat(),
         "frame": state.frame_counter,
         "state": _json_value(state, set()),
     }
+    from ..custom_scenario import synthetic_runtime_payload
+
+    synthetic = synthetic_runtime_payload(state)
+    if synthetic is not None:
+        payload["synthetic_scenario"] = synthetic
+    return payload
 
 
 def _mapping_key(value: object) -> object:
@@ -315,6 +321,16 @@ def game_state_from_payload(payload: object) -> GameState:
     # A historical snapshot must not roll current operator/high-score/rotation
     # persistence backward when its captured timer next expires.
     state.eeprom_persistence_enabled = False
+    if "synthetic_scenario" in payload:
+        from ..custom_scenario import (
+            SyntheticScenarioError,
+            restore_synthetic_runtime,
+        )
+
+        try:
+            restore_synthetic_runtime(state, payload["synthetic_scenario"])
+        except SyntheticScenarioError as exc:
+            raise StateDumpError(f"invalid synthetic scenario metadata: {exc}") from exc
     return state
 
 
