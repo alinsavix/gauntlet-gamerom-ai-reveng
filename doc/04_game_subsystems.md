@@ -764,9 +764,19 @@ same write and store `player + 4`.
 The handler then calls `dragon_any_segment_near_screen` (0x54AF8), which applies
 `tile_near_screen_test` to all four packed segment cells. An on-screen active
 dragon gains state bit 1 and remains frozen in `main_handle_dragon`. A second
-potion clears that bit, sets wake bit 0, and writes -49 to `dragon_anim_ctr`.
-During an existing wake transition, magic starts a +49 count from zero or
-negates a negative count and plays sound 0xD5.
+potion clears that bit, sets sleeping/wake bit 0, and writes -49 to
+`dragon_anim_ctr`, reversing the dragon toward sleep. During an existing
+sleep/wake transition, magic starts a +49 count from zero or negates a negative
+count and plays sound 0xD5.
+
+Stun has no countdown, but it is not a permanent safe state.
+`dragon_player_proximity` (0x549EA) clears bit 1 when an event enters the
+dragon's wrapped 10x10 proximity rectangle. Player movement supplies its
+previous/current cells; shot and interaction events pass zero/current. In
+particular, the dragon shot handler calls this routine before
+`dragon_shot_hit`, so the first shot at a stunned dragon clears stun before the
+hit is evaluated. The reversed -49 sleep transition likewise stops at zero
+until a new entry event starts the positive 49-frame wake.
 
 The later `monsters_everything` call compares 0x90401E with 0x904020 and branches
 to the potion scan instead of running the ordinary monster update pass. It scans
@@ -1256,19 +1266,25 @@ Dragon state is encoded in `ram.dragon_state` (`0x904890`) as a bitmask:
 
 | Bit | Meaning |
 |-----|---------|
-| 0 | Awake (1) / sleeping (0) |
+| 0 | Sleeping / wake transition (normal active state is 0) |
 | 1 | Stunned |
 | 2 | Turning |
 | 3 | Locked firing pose (sustained close-range flame) |
 
-**Wakeup:** Triggered by `dragon_player_proximity` (0x549EA) which checks if any player is within col ±9, row ±5. Starts wake animation (negative `ram.dragon_anim_ctr`).
+**Wakeup:** `dragon_player_proximity` (0x549EA) receives previous/current packed
+cells. It reacts when current enters the wrapped rectangle from head column
+-4..+5 and row -5..+4 while previous is zero or outside. Sleeping state with a
+zero/negative counter starts or reverses the positive 49-frame wake.
 
 **Active:** Tests the current path byte's fire trigger, allocates a shot with
 `dragon_find_free_shot_slot`, calls `dragon_fire_setup` when possible, chooses
 movement state with `dragon_choose_move_direction`, and updates the rendered
 segments with `dragon_update_segments` when the movement phase requires it.
 
-**Stunned:** Decrements `ram.dragon_stun_timer` (`0x90487C`), returns to active when 0.
+**Stunned:** `main_handle_dragon` freezes path/pose/fire work while bit 1 is set;
+0x90487C remains the independent fire cooldown. A proximity-entry event clears
+stun immediately and plays sound 0xD5. Because shot collision invokes proximity
+first, the dragon cannot remain harmless while the player shoots it.
 
 ### 8.2 Dragon Movement and Attacks
 

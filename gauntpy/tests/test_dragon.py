@@ -102,14 +102,14 @@ class TestSetupAndWake:
         assert state.dragon_seg_mob_ids[0] == primary
         assert state.dragon_state & _ST_WAKING
 
-    def test_sleeping_dragon_starts_wake_transition_when_party_is_near(self):
+    def test_sleeping_dragon_waits_for_a_proximity_entry_event(self):
         state = GameState()
         _place_dragon(state)
         _place_player(state, 18 * 16, 10 * 16)
 
         main_handle_dragon(state)
 
-        assert state.dragon_anim_ctr == 0x31
+        assert state.dragon_anim_ctr == 0
         assert state.dragon_state & _ST_WAKING
 
     def test_sleeping_dragon_does_not_wake_for_a_distant_party(self):

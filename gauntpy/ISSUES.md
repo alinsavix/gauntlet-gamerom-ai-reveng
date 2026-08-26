@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2383 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2388 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -63,6 +63,31 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-140 · dragon stun never cleared on proximity-entry events
+
+Frame 52867 correctly captured `dragon_state = 2`, but gauntpy treated that bit
+as permanent until another potion. The main handler does freeze path, pose, and
+fire while stunned, and there is no stun countdown. The missing owner was
+`dragon_player_proximity` (0x549EA): after confirming that current entered the
+wrapped head-column -4..+5 / row -5..+4 rectangle from a zero or outside
+previous cell, its 0x54AD0 arm clears state bit 1 and plays sound 0xD5.
+
+The Python helper had collapsed the two-cell contract to one point, used an
+incorrect ±9/±5 box, handled only sleeping wake, and was not called from
+ordinary player movement. It now preserves previous/current geometry, receives
+every player move, starts/reverses sleep-wake state, and clears stun. Shot
+handlers already call proximity before `dragon_shot_hit`; with the missing arm
+restored, the first shot at the captured stunned dragon changes state 2→0 before
+hits 6→7. The dragon therefore resumes posing, locking, and firing instead of
+remaining harmless through the rest of the fight.
+
+A second potion is a separate control path: it clears stun, sets bit 0, and
+writes -49, reversing toward sleep. That count stops at zero until another
+proximity entry starts +49; it does not automatically complete a two-part wake.
+Regressions cover rectangle edges/wrap, outside→inside versus inside→inside
+movement, direct player-move wiring, first-shot unstun-before-damage, and both
+potion transitions.
+
 ### S-139 · narrow-lane response, treasure entry, dragon stun, and frame time
 
 Three complete F4 captures exposed a missing movement path. Frame
@@ -94,11 +119,9 @@ visible tally for the treasure room's exit/timeout.
 Super Sorcerer `STUN` remains a reveal rather than a persistent freeze:
 0x415AC-0x415DC clears the phase flags/high animation state, and later dispatch
 resumes the idle cycle. Dragon potion state is different. Frame 52867 has
-`dragon_state = 2`, the ROM's persistent first-potion stun bit, so animation,
-close breath, and shots are all deliberately gated. Applying another effective
-potion while the captured segments are near-screen writes state 1/counter -49;
-the two-part wake completes and the dragon fires again. Regressions now cover
-both the indefinite one-potion stun and the second-potion wake/fire lifecycle.
+`dragon_state = 2`, so the main handler gates animation, breath, and shots.
+S-140 supersedes the former conclusion that only another potion releases it:
+proximity-entry events, including the first shot at the dragon, clear stun.
 
 The F1 overview now also shows the host clock's complete frame duration in
 milliseconds beside the arcade frame number. The measurement stays in the

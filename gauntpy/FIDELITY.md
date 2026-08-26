@@ -225,6 +225,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     `show_level_end_bonus_screen` hold belongs to the room's exit or timeout.
     Do not expose the ROM's already-zero ordinary-state branch from a direct
     start or historical snapshot.
+52. **Dragon stun clears on proximity entry, not elapsed time.**
+    `dragon_player_proximity` consumes previous/current packed cells and reacts
+    only when current is inside its wrapped 10x10 rectangle and previous is zero
+    or outside. It starts/reverses sleep-wake state or clears stun. Shot handling
+    calls it before `dragon_shot_hit`, preventing a frozen dragon from taking
+    nine risk-free hits. Do not invent a stun timer or omit event producers.
 
 ## Investigation workflow
 

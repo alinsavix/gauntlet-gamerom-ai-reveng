@@ -98,8 +98,8 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904886 | 2 B | `dragon_path_num` | Current path program number 0–4 (row into `dragon_path_programs` 0x5D578); re-randomized via getrandom(5) on every hit. |
 | 0x90488C | 2 B | `dragon_move_state` | Dragon movement sub-state; low nibble also limits simultaneous fireballs (< 4 to fire) |
 | 0x90488E | 2 B | `dragon_facing` | Current cardinal facing encoded as 0, 2, 4, or 6. Head pose/fire tables use `(path_byte >> 1) + dragon_facing × 2`, producing four non-overlapping four-entry pose blocks; spawn-offset tables use `dragon_facing >> 1`. |
-| 0x904890 | 2 B | `dragon_state` | State bitmask (see Dragon Activity enum) |
-| 0x904892 | 2 B | `dragon_anim_ctr` | Animation counter 0–127 (wraps); path phase = ctr >> 3 (advances every 8 frames) |
+| 0x904890 | 2 B | `dragon_state` | State bitmask: bit 0 sleeping/wake transition (zero is normal active), bit 1 stunned, bit 2 turning, bit 3 locked flame. `dragon_player_proximity` clears stun on a proximity-box entry event. |
+| 0x904892 | 2 B | `dragon_anim_ctr` | Signed sleep/wake/turn counter or active 0–127 path counter. Path phase = ctr >> 3. A reverse-to-sleep count stops at zero until a proximity entry starts +49. |
 | 0x904894 | 2 B × 4 | `dragon_seg_mob_ids` | Dragon segment MOB slot IDs: [0] = head/main MOB (used by `main_handle_dragon`), [1..3] = body segments (0x904896/98/9A, previously undocumented); fireballs spawn from the segment selected by table 0x5D4B8[pose + facing*2] |
 | 0x90489C | 4 B | `ptr_exit_openclose_anim` | Pointer to exit open/close animation for current tileset |
 

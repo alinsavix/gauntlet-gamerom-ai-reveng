@@ -567,7 +567,7 @@ movement, segment, and shot contracts.
 | Address | Name | Brief Description |
 |---------|------|-------------------|
 | 0x54454 | `main_handle_dragon` | Dragon state machine (sleeping/awake/stunned/turning/fire) |
-| 0x549EA | `dragon_player_proximity` | Check if any player is in aggro range; start wake animation |
+| 0x549EA | `dragon_player_proximity` | Detect previous/current-cell entry into the wrapped 10x10 dragon box; start/reverse wake or clear stun |
 | 0x5496E | `dragon_setup_segments` | Derive and store all four 2×2 dragon segment MOB IDs from the primary cell and initialize dragon state/facing/movement/hit counters |
 | 0x54748 | `dragon_fire_setup` | Arms one *monster*-shot channel (MOB slots 5–8) with the dragon's projectile: sets fire cooldown (0x90487C) = 8; records the origin segment MOB via `dragon_fire_segment_tbl` 0x5D4B8[(byte>>1)+facing*2] (the path byte is halved at 0x54790 before the index is formed at 0x5479E) into `active_mob_ids[shot_slot-1]`; writes `shot_direction[shot_slot-1] = dragon_facing` — every per-channel word is indexed by `shot_slot - 1`, never by the MOB slot. Two branches on the caller's flag: close-range breath (0x5480A, counter 0x13, `special_projectile_picture_table`, H low byte 0x38 = max-tier bits + palette 8, V low byte 0x12 = live 3x3 size) and long-range fireball (0x54894, `shot_counter_reload`, `projectile_picture_table`, H low byte 0x2E, V low byte 9 = 2x2). Position comes from `dragon_seg_mob_ids[0]` masked 0xFF80, not from the origin segment |
 | 0x53E4A | `dragon_choose_move_direction` | Compare the dragon with active players, test candidate maze cells, and update packed movement state/facing toward the best unobstructed direction |

@@ -2707,10 +2707,10 @@ class TestDragonProximity:
         state = _make_state()
         head = (10 << 5) | 10
         self._sleeping_dragon(state, head)
-        shots._dragon_proximity(state, (13 << 5) | 18)      # dy 3, dx 8
+        shots._dragon_proximity(state, (13 << 5) | 15)      # offsets +3, +5
         assert state.dragon_anim_ctr == 0x31
 
-    @pytest.mark.parametrize("cell_offset", [(0, 10), (6, 0)])
+    @pytest.mark.parametrize("cell_offset", [(0, 6), (5, 0)])
     def test_a_kill_outside_the_box_is_ignored(self, cell_offset):
         state = _make_state()
         head = (10 << 5) | 10
@@ -2719,11 +2719,13 @@ class TestDragonProximity:
         shots._dragon_proximity(state, ((10 + drow) << 5) | (10 + dcol))
         assert state.dragon_anim_ctr == 0
 
-    def test_the_box_is_nine_by_five(self):
-        """0x549FE / 0x54A0C."""
+    def test_the_box_is_ten_by_ten_around_the_primary_segment(self):
+        """0x54A10-0x54A66: columns -4..+5 and rows -5..+4."""
         state = _make_state()
         head = (10 << 5) | 10
-        for dcol, drow, wakes in ((9, 5, True), (10, 5, False), (9, 6, False)):
+        for dcol, drow, wakes in (
+            (-4, -5, True), (5, 4, True), (-5, 0, False), (0, 5, False),
+        ):
             self._sleeping_dragon(state, head)
             shots._dragon_proximity(state, ((10 + drow) << 5) | (10 + dcol))
             assert (state.dragon_anim_ctr == 0x31) is wakes
@@ -2744,10 +2746,42 @@ class TestDragonProximity:
 
     def test_the_box_folds_on_a_wrapping_level(self):
         state = _make_state()
-        state.wrap_h = True
         self._sleeping_dragon(state, (10 << 5) | 1)
         shots._dragon_proximity(state, (10 << 5) | 30)      # dx 29 -> 3
         assert state.dragon_anim_ctr == 0x31
+
+    def test_stun_clears_when_an_event_enters_the_box(self):
+        state = _make_state()
+        head = (10 << 5) | 10
+        state.dragon_seg_mob_ids[0] = head
+        state.dragon_state = 0x02
+
+        shots._dragon_proximity(state, head)
+
+        assert state.dragon_state == 0
+        assert state.sound_log[-1] == 0xD5
+
+    def test_movement_remaining_inside_the_box_does_not_clear_stun(self):
+        state = _make_state()
+        head = (10 << 5) | 10
+        state.dragon_seg_mob_ids[0] = head
+        state.dragon_state = 0x02
+
+        shots._dragon_proximity(state, head + 1, head)
+
+        assert state.dragon_state == 0x02
+
+    def test_crossing_into_the_box_clears_stun(self):
+        state = _make_state()
+        head = (10 << 5) | 10
+        state.dragon_seg_mob_ids[0] = head
+        state.dragon_state = 0x02
+        outside = (10 << 5) | 16
+        inside = (10 << 5) | 15
+
+        shots._dragon_proximity(state, inside, outside)
+
+        assert state.dragon_state == 0
 
     def test_a_kill_wakes_the_dragon_through_resolve_shot_hit(self):
         state = _make_state()
@@ -2757,6 +2791,20 @@ class TestDragonProximity:
         state.players[0].character = Character.WIZARD
         resolve_shot_hit(state, SLOT, 0)
         assert state.dragon_anim_ctr == 0x31
+
+    def test_first_shot_at_a_stunned_dragon_clears_stun_before_damage(self):
+        state = _make_state()
+        head = (12 << 5) | 12
+        _place_monster(state, head, MazeObjIds.MONST_DRAGON, health_nibble=8)
+        state.dragon_seg_mob_ids[0] = head
+        state.dragon_state = 0x02
+        state.dragon_path_num = 0
+        state.dragon_anim_ctr = 8
+
+        resolve_shot_hit(state, head | 0x0800, 0)
+
+        assert state.dragon_state == 0
+        assert state.dragon_hits == 1
 
 
 class TestPlayfieldShowscore:

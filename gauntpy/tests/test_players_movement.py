@@ -457,6 +457,24 @@ class TestPlayerTryMoveWallCollision:
         y_after = vpos_y(state.mobs.vpos[state.players[pi].mob_slot])
         assert y_after < y_before, "player should move up when clear"
 
+    def test_entering_the_dragon_proximity_box_clears_stun(self):
+        state, pi = self._player_at_slot((10 << 5) | 16)
+        player = state.players[pi]
+        player.character = Character.ELF
+        player.powers = int(PlayerPower.SPEED)
+        state.dragon_seg_mob_ids[0] = (10 << 5) | 10
+        state.dragon_state = 0x02
+
+        for _ in range(8):
+            state.movement_type = 2
+            player_try_move(state, pi, gin.JOY_LEFT, 0)
+            state.frame_counter += 1
+            if player.mob_slot & 0x1F == 15:
+                break
+
+        assert player.mob_slot & 0x1F == 15
+        assert state.dragon_state == 0
+
     def test_flank_wall_does_not_block_parallel_empty_floor(self):
         """The three-cell probe is position-aware, not a whole-row barrier."""
         state, pi = self._player_at_slot((5 << 5) | 5)

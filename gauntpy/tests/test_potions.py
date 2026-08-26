@@ -225,9 +225,21 @@ class TestMagicGate:
         assert not state.dragon_state & _ST_STUNNED
         assert state.dragon_anim_ctr == -0x31
 
-        for _ in range(240):
+        for _ in range(49):
+            main_handle_dragon(state)
+        assert state.dragon_state == _ST_WAKING
+        assert state.dragon_anim_ctr == 0
+
+        from gauntpy.subsystems.shots import _dragon_proximity
+
+        _dragon_proximity(state, dragon)
+        assert state.dragon_anim_ctr == 0x31
+        for _ in range(49):
             main_handle_dragon(state)
         assert not state.dragon_state & (_ST_WAKING | _ST_STUNNED)
+
+        for _ in range(240):
+            main_handle_dragon(state)
         assert any(state.mobs.picture[5:9])
 
 

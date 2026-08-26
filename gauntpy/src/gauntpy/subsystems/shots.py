@@ -1292,29 +1292,51 @@ def resolve_shot_hit(state: GameState, target: int, shooter_id: int) -> int:
 # Shared routines the ROM calls from resolve_shot_hit
 # =============================================================================
 
-_DRAGON_WAKE_FRAMES = 0x31       # 0x54A2E, the wake animation the ROM starts
-_DRAGON_BOX_H = 9                # 0x549FE
-_DRAGON_BOX_V = 5                # 0x54A0C
+_DRAGON_WAKE_FRAMES = 0x31       # 0x54ABC, the wake animation the ROM starts
+_DRAGON_BOX_WIDTH = 10           # inclusive offsets -4..+5
+_DRAGON_BOX_HEIGHT = 10          # inclusive offsets -5..+4
 
 
-def _dragon_proximity(state: GameState, cell: int) -> None:
-    """``dragon_player_proximity`` (0x549EA) -- wake the dragon at ``cell``.
+def _dragon_proximity(
+    state: GameState, cell: int, previous_cell: int = 0,
+) -> None:
+    """``dragon_player_proximity`` (0x549EA) -- react to entry into its box.
 
-    The ROM re-checks the box from every kill site rather than waiting for the
-    dragon's own frame.  Only the sleeping dragon reacts, and the wake is the
-    same counter ``main_handle_dragon`` starts, so the two agree.
+    The current cell must be inside the wrapped 10x10 rectangle around the
+    primary segment, while a nonzero previous cell must be outside it. Sleeping
+    dragons start/reverse their wake transition; stunned dragons clear stun.
     """
     head = state.dragon_seg_mob_ids[0]
-    if not head or not state.dragon_state & 0x01 or state.dragon_anim_ctr:
+    if not head:
         return
-    dx = abs((cell & 0x1F) - (head & 0x1F))
-    dy = abs(((cell >> 5) & 0x1F) - ((head >> 5) & 0x1F))
-    if state.wrap_h:
-        dx = min(dx, 32 - dx)
-    if state.wrap_v:
-        dy = min(dy, 32 - dy)
-    if dx <= _DRAGON_BOX_H and dy <= _DRAGON_BOX_V:
-        state.dragon_anim_ctr = _DRAGON_WAKE_FRAMES
+
+    start_col = ((head & 0x1F) - 4) & 0x1F
+    start_row = (((head >> 5) & 0x1F) - 5) & 0x1F
+
+    def inside(value: int) -> bool:
+        col = value & 0x1F
+        row = (value >> 5) & 0x1F
+        return (
+            ((col - start_col) & 0x1F) < _DRAGON_BOX_WIDTH
+            and ((row - start_row) & 0x1F) < _DRAGON_BOX_HEIGHT
+        )
+
+    if not inside(cell) or (previous_cell and inside(previous_cell)):
+        return
+
+    from .dragon import _ST_STUNNED, _ST_WAKING
+
+    if state.dragon_state & _ST_WAKING:
+        if state.dragon_anim_ctr > 0:
+            return
+        if state.dragon_anim_ctr == 0:
+            state.dragon_anim_ctr = _DRAGON_WAKE_FRAMES
+        else:
+            state.dragon_anim_ctr = -state.dragon_anim_ctr
+        _sound(state, 0xD5)
+    elif state.dragon_state & _ST_STUNNED:
+        state.dragon_state &= ~_ST_STUNNED
+        _sound(state, 0xD5)
 
 
 # 0x579F2, the second word of each ``score_popup_tbl`` record: the picture the

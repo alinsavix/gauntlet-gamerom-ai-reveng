@@ -4870,6 +4870,9 @@ def player_try_move(
     migrate_player_record(state, player_index)
     if track_thief:
         _track_thief_victim_move(state, player_index, destination)
+    from .shots import _dragon_proximity
+
+    _dragon_proximity(state, destination, cur_slot)
     moved_dirs = _NO_MOVE
     if dx > 0:
         moved_dirs &= ~_JOY_RIGHT
