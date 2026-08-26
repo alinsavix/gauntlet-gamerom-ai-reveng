@@ -90,6 +90,24 @@ def test_snapshot_rows_include_global_demo_and_player_state():
     assert rows["P2 POS/K/P"].startswith("188,144 s12C k2 p1")
 
 
+def test_performance_page_reports_history_and_renders_a_graph():
+    snapshot = capture_debug_snapshot(
+        _diagnostic_state(),
+        render_time_ms=8.5,
+        render_time_current_ms=10.0,
+        render_time_history_ms=(7.0, 8.0, 10.0),
+    )
+    page = DEBUG_PAGES.index("PERFORMANCE")
+
+    rows = dict(debug_page_lines(snapshot, page))
+    image = render_debug_panel(snapshot, page=page)
+
+    assert rows["RENDER AVG10"] == "8.50 ms"
+    assert rows["CURRENT"] == "10.00 ms"
+    assert rows["SAMPLES"] == "3"
+    assert image.getbbox() is not None
+
+
 def test_panel_is_a_separate_host_raster():
     state = _diagnostic_state()
     before_alpha = tuple(state.alpha_ram)

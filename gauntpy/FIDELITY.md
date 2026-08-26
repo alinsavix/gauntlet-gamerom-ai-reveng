@@ -237,13 +237,22 @@ evidence remains in `../doc/`, generated contracts, and the book.
     MOB-color writes. Forcefield contact reloads 0x12 every damaging frame.
 54. **The global RNG is seeded once per host power-on.** The ROM never
     initializes `random_seed`; the cabinet inherits a RAM-test residue and then
-    free-runs one shared stream across modes and sessions. A playable host may
-    supply one indeterminate initial word, but must not reseed at attract,
-    level, or fake-exit setup. Tests and replays pass an explicit seed.
+    free-runs one shared stream across modes and sessions. The playable host uses
+    seed zero by default for repeatable testing; `--seed N` selects another
+    repeatable stream and `--seed random` supplies one host-random initial word.
+    No path may reseed at attract, level, or fake-exit setup.
 55. **Performance labels name their measured interval.** A render-duration
     metric times raster composition and host blitting directly; frame cadence
     from a 60 Hz limiter is not render cost. Keep either measurement in the
     immutable host snapshot and outside modeled game/video memory.
+56. **Timed input effects transform the consumer word.** Poison dizziness
+    decrements its timer, then in normal play remaps only the active-low direction
+    nibble through ROM 0x4A4FA using `frame_counter & 0x30`; buttons and stored
+    hardware input remain unchanged, and the last timer frame is already clear.
+57. **Special movers own their wall responses.** The thief/mugger generic probes
+    find the wall, but `thief_move_engine` owns the one-pixel perpendicular
+    flank nudge. Player screen gates likewise compare the live MOB anchor against
+    the literal 0x7000/0x7400 hardware windows, not a host-side sprite-box inset.
 
 ## Investigation workflow
 

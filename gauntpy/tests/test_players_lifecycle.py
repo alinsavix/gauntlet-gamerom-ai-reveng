@@ -2827,6 +2827,41 @@ class TestPoisonedPickups:
             gp.main_move_players(state)                             # 0x4A89E
             assert state.player_dizzy_timer[0] == expected
 
+    def test_dizzy_timer_remaps_live_movement_by_frame_phase(self):
+        cases = (
+            (0x00, gp._JOY_UP, gp._JOY_UP | gp._JOY_RIGHT),
+            (0x00, gp._JOY_DOWN, gp._JOY_DOWN | gp._JOY_LEFT),
+            (0x10, gp._JOY_UP, gp._JOY_UP),
+            (0x20, gp._JOY_UP, gp._JOY_UP | gp._JOY_LEFT),
+        )
+        for frame, raw_direction, expected_direction in cases:
+            state = _active_state()
+            _make_player_active(state, 0, health=500)
+            state.frame_counter = frame
+            state.level_flags_4 |= 0x80
+            state.player_dizzy_timer[0] = 2
+            state.player_input_raw[0] = 0xFFFF & ~raw_direction
+
+            from unittest.mock import patch
+            with patch.object(gp, "player_try_move", return_value=0xF0) as move:
+                gp.main_move_players(state)
+
+            assert move.call_args.args[2] == expected_direction
+
+    def test_last_dizzy_frame_expires_before_input_remap(self):
+        state = _active_state()
+        _make_player_active(state, 0, health=500)
+        state.level_flags_4 |= 0x80
+        state.player_dizzy_timer[0] = 1
+        state.player_input_raw[0] = 0xFFFF & ~gp._JOY_UP
+
+        from unittest.mock import patch
+        with patch.object(gp, "player_try_move", return_value=0xF0) as move:
+            gp.main_move_players(state)
+
+        assert state.player_dizzy_timer[0] == 0
+        assert move.call_args.args[2] == gp._JOY_UP
+
 
 # =============================================================================
 # 22. Treasure bonus multiplier (0x51A16-0x51AAE)

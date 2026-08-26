@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2390 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2397 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,39 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-142 · captured mugger/edge stalls, poison wobble, seed controls, and timing graph
+
+Frame 3876 on level 16 / maze 15 captured a mugger at `(241,127)` trying to
+enter slot `0x12F` between the wall flanks at `0x12E`/`0x130`. The shared
+three-cell probe correctly returned the right flank, but gauntpy stopped there.
+`thief_move_engine` 0x4F1C4-0x4F2C2 tests that high-bit collision, compares the
+perpendicular distance, and moves H one pixel away from the flank before probing
+again. The mugger now centers to X=240 and proceeds down the lane instead of
+remaining in its compact blocked pose indefinitely.
+
+Frame 51368 on level 20 / maze 19 captured the Elf at `(491,320)`, slot `0x29F`,
+beside the non-wrapping right edge. Down correctly hit left wall flank `0x2BE`,
+but the automatic response from S-139 tried to center at X=492 and was rejected
+by gauntpy's port-only 208-pixel screen span. The ROM compares the MOB anchor,
+not its full 24-pixel box, against literal H window 0x7000 (224 pixels). Restoring
+that gate permits the response and the following Down input enters the opening.
+
+Poison food/potions already loaded and decremented the 0x4B0-frame word at
+0x905F48, but its only gameplay consumer was missing. In normal play,
+0x4A8B8-0x4A8EA uses `(frame_counter & 0x30) + input_direction_nibble` to read
+the literal 64-byte table at 0x4A4FA and replaces only the active-low direction
+nibble. Holding Up therefore alternates Up+Right, Up, Up+Left, Up across the four
+phases while Fire/Magic remain untouched; the timer's final decrement disables
+the remap immediately.
+
+The playable host again defaults to seed zero for reproducible runs.
+`--seed 1234` chooses an explicit 16-bit stream and `--seed random` requests one
+host-random power-on word; neither path reseeds later. The F1 diagnostics also
+keeps 120 host-only render samples, reports a rolling ten-frame average, and
+adds a PERFORMANCE graph with the 16.67 ms budget line. This supersedes S-141's
+host-random default while preserving its finding that the ROM never initializes
+the seed itself.
 
 ### S-141 · forcefield hurt flash, fresh-run RNG, and render timing
 

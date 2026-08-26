@@ -243,6 +243,13 @@ collision identity together in tight one-cell pockets; using the raw picture
 origin instead can bury most of the thief in a wall while its record remains
 behind in the corridor.
 
+The private mover also gives the visitor the same sort of polish players get in
+tight lanes. When a forward probe hits a flanking wall, it can move one pixel
+sideways away from that flank and probe the correction before trying forward
+again. A captured mugger aimed down between two walls at X=241 therefore centers
+to X=240 and continues; omitting this special arm leaves it staring at empty
+floor forever even though the shared probe itself is correct.
+
 Dodging is more pointed. A helper scans the four players for one whose shot
 direction is exactly opposite the thief's own and whose position lies on that
 ray. When it finds one, the thief starts dodging, latching that player and

@@ -208,7 +208,10 @@ constrains movement too: unless the level flags say otherwise, you cannot walk
 somewhere the shared screen refuses to follow, which is Chapter 8's
 rubber-band seen from the other side. Slow effects land on the proposal
 itself. A stun freezes it briefly, and acid slows you for as long as you
-stand in it.
+stand in it. Poison is different again: for twenty seconds it rewrites the
+direction nibble through a four-phase ROM table. Holding Up alternates
+Up+Right, Up, Up+Left, Up while Fire and Magic remain intact, producing the
+characteristic drunken wobble without changing the stored joystick sample.
 
 The all-or-nothing axis proposal matters at two- and three-pixel speeds. The
 cabinet does not keep one clear pixel from a larger move whose endpoint blocks;
@@ -231,6 +234,9 @@ midpoint. The cabinet does not make you align that pixel by hand: its collision
 response keeps a rounded one-pixel step and nudges away from whichever flank
 blocked. In captured examples at X=365, 299, and 235, holding the vertical
 direction centers the Elf at X=364, 300, and 236 and enters on the next frame.
+The same response works at a level edge: the screen gate measures the hero's
+live anchor against the hardware's 224-pixel window, not a 24-pixel-inset sprite
+box, so a captured X=491 Elf can center to X=492 and enter the edge lane.
 
 And when the move commits, the last thing it does is ask which cell your new
 position actually names, biasing by half a sprite so the answer is the cell

@@ -408,6 +408,15 @@ Processes all 4 player slots each frame. Four main sections:
      picture selection in §2.2. This happens for every active slot, not in a
      host-only presentation pass.
 
+Poison dizziness is part of that input step, not a speed reduction. Poison
+food/potions load 0x4B0 into the per-player word at 0x905F48. At
+0x4A892-0x4A8EA the loop decrements it, and while it remains nonzero in normal
+play replaces the active-low joystick direction nibble through the 4x16 byte
+table at 0x4A4FA. The row is `frame_counter & 0x30`; Fire and Magic bits are
+preserved. Holding Up maps to Up+Right, Up, Up+Left, Up over the four phases.
+The DEMO arm bypasses this remap, and a timer that decrements to zero no longer
+affects that frame's input.
+
 4. **Post-loop:** When the idle timer exceeds its configured threshold,
    `open_timed_doors` removes every active type-0x0D/0x0E door object and plays
    sound 0x12 ("Doors Open"); independently, trigger trap-wall conversion if
@@ -499,6 +508,13 @@ move. They round that axis to a one-pixel retry and nudge the other axis away
 from the obstructing flank. Holding the vertical direction automatically moves
 the three captured heroes onto X=364, 300, and 236, then enters on the next
 frame; no manual left/right alignment is required.
+
+A fourth capture at level 20 / maze 19 `(491,320)` exercises the same response
+against the non-wrapping right edge. Down finds left flank `0x2BE`; the response
+must move the hero anchor to X=492 before the next frame enters. This is inside
+the ROM's literal 0x7000 H-anchor window from a `scroll_hpos_origin` of 284.
+Shrinking that gate by the 24-pixel sprite width rejects a valid game-side
+response and recreates the stuck narrow entrance only at the level edge.
 
 #### 4.2.1 Character stat selectors
 
@@ -1471,6 +1487,15 @@ wall, player, pickup, or non-solid transporter/floor marker. The common tail at
 0x4F4A2 derives the destination MOB slot from `(H + 0x600) >> 11` and the
 corresponding `V + 0x400` row arithmetic, then calls `moblist_replace` only when
 that biased destination is empty.
+
+High-bit wall candidates have an earlier special response inside each
+directional arm. When the collision is a horizontal flank more than 0x200 from
+the thief/mugger anchor, the engine nudges H one pixel away and calls the
+opposite horizontal probe; horizontal travel has the symmetric one-pixel V
+response. Frame 3876 on maze 15 captures the down arm at `(241,127)`: right
+flank `0x130` blocks the full three-pixel mugger step, so 0x4F278-0x4F2C2 moves
+left to X=240. Repeating the requested direction then clears the one-cell lane.
+Stopping after the shared probe leaves the actor permanently compact and idle.
 
 This ordering is observable in maze 15. With a thief at native screen
 coordinate `(12,304)` in slot `0x261`, moving east toward the wall marker at

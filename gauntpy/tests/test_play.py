@@ -33,9 +33,15 @@ requires_roms = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 class TestArguments:
-    def test_power_on_rng_seed_comes_from_host_entropy(self, monkeypatch):
-        monkeypatch.setattr(play.os, "urandom", lambda count: b"\x12\x34")
-        assert play._power_on_seed() == 0x1234
+    def test_seed_accepts_integers_and_random(self):
+        import argparse
+
+        assert play._seed_value("1234") == 1234
+        assert play._seed_value("0xBEEF") == 0xBEEF
+        assert play._seed_value("random") == "random"
+        for bad in ("-1", "65536", "not-a-seed"):
+            with pytest.raises(argparse.ArgumentTypeError):
+                play._seed_value(bad)
 
     def test_level_must_be_at_least_one(self):
         """``maze_for_level`` returns None below 1, which silently fell
@@ -119,9 +125,23 @@ class TestArguments:
         play.main([])
         assert called["character"] == Character.ELF
         assert called["scale"] == 4
+        assert called["rng_seed"] == 0
 
         play.main(["--character", "wizard"])
         assert called["character"] == Character.WIZARD
+
+    def test_explicit_seed_is_forwarded_and_random_uses_host_entropy(
+        self, monkeypatch,
+    ):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        monkeypatch.setattr("os.urandom", lambda count: b"\x12\x34")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+
+        play.main(["--seed", "1234"])
+        assert called["rng_seed"] == 1234
+        play.main(["--seed", "random"])
+        assert called["rng_seed"] == 0x1234
 
     def test_direct_inventory_and_repeatable_powers_are_forwarded(self, monkeypatch):
         monkeypatch.setenv("GEX_ROM_DIR", "configured")
@@ -162,6 +182,7 @@ class TestArguments:
 
     @pytest.mark.parametrize("option", [
         "--attract", "--level", "--character", "--keys", "--potions", "--power",
+        "--seed",
     ])
     def test_saved_state_rejects_other_start_modes(self, monkeypatch, option):
         monkeypatch.setenv("GEX_ROM_DIR", "configured")
@@ -171,6 +192,7 @@ class TestArguments:
             "--keys": "1",
             "--potions": "1",
             "--power": "invisibility",
+            "--seed": "1234",
         }
         argv = ["--load-state", "state.json", option]
         if option in values:

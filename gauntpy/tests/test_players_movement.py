@@ -615,6 +615,25 @@ class TestPlayerTryMoveWallCollision:
             vpos_y(state.mobs.vpos[player.mob_slot]),
         ) == (aligned_x, entered_y)
 
+    def test_right_edge_lane_uses_the_roms_full_anchor_window(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        player = _active_player_at(state, 0, 0x29F)
+        player.character = Character.ELF
+        state.scroll_x = 292
+        state.scroll_y = 203
+        state.mobs.hpos[player.mob_slot] = (491 << 7) | 0x0C
+        state.mobs.vpos[player.mob_slot] = encode_vpos_at_y(320, 3, 3)
+        state.mobs.create(
+            0x2BE, tile=_WALL_PICTURE, hpos=480 << 7,
+            vpos=encode_vpos_at_y(336),
+            obj_type=int(MazeObjIds.WALL_REGULAR), link_into_chain=False,
+        )
+        state.movement_type = 2
+
+        assert player_try_move(state, 0, gin.JOY_DOWN, 0) != _NO_MOVE
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 492
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == 320
+
 
 # ---------------------------------------------------------------------------
 # Diagonal partial movement (acceptance criterion 2)
@@ -1326,9 +1345,9 @@ class TestPlayerScreenWindow:
         state.scroll_y = 80
         return state, player
 
-    def test_player_cannot_walk_under_the_hud(self):
+    def test_player_anchor_cannot_leave_the_rom_hardware_window(self):
         state, player = self._state()
-        state.mobs.hpos[player.mob_slot] = ((100 + 207) << 7)
+        state.mobs.hpos[player.mob_slot] = ((100 + 223) << 7)
         before = state.mobs.hpos[player.mob_slot]
 
         assert player_try_move(state, 0, gin.JOY_RIGHT, 0) == _NO_MOVE
@@ -1345,7 +1364,7 @@ class TestPlayerScreenWindow:
     def test_player_offscreen_flag_bypasses_both_screen_edges(self):
         state, player = self._state()
         state.level_flags_4 |= 0x80
-        state.mobs.hpos[player.mob_slot] = ((100 + 207) << 7)
+        state.mobs.hpos[player.mob_slot] = ((100 + 223) << 7)
         state.mobs.vpos[player.mob_slot] = (native_v(80 + 231) << 7)
 
         assert player_try_move(

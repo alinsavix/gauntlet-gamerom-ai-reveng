@@ -639,6 +639,17 @@ _RANDOM_FOOD_POPUP = (
 #: 0x4B0 frames (0x51C68/0x5166E).
 _POISON_DAMAGE = 0x32
 _DIZZY_TIMER_LOAD = 0x4B0
+# 0x4A4FA, four frame-counter phase rows by active-low joystick nibble.
+_DIZZY_DIRECTION_REMAP = (
+    0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0x70, 0xE0, 0x60,
+    0xF0, 0xD0, 0xB0, 0x90, 0xF0, 0x50, 0xA0, 0xF0,
+    0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0x50, 0x60, 0x70,
+    0xF0, 0x90, 0xA0, 0xB0, 0xF0, 0xD0, 0xE0, 0xF0,
+    0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xD0, 0x70, 0x50,
+    0xF0, 0xB0, 0xE0, 0xA0, 0xF0, 0x90, 0x60, 0xF0,
+    0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0x50, 0x60, 0x70,
+    0xF0, 0x90, 0xA0, 0xB0, 0xF0, 0xD0, 0xE0, 0xF0,
+)
 
 
 def _dialog(state: GameState, player_index: int, mask: int,
@@ -2800,6 +2811,20 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
         state.player_dizzy_timer[player_index] -= 1                  # 0x4A89E
 
 
+def _player_movement_direction_bits(
+    state: GameState, player_index: int,
+) -> int:
+    """Return the ROM-remapped movement nibble for a dizzy live player."""
+    if (
+        state.game_mode != int(GameMode.NORMAL)
+        or not state.player_dizzy_timer[player_index]
+    ):
+        return _joystick_direction_bits(state, player_index)
+    raw = player_joystick_word(state, player_index)
+    index = (state.frame_counter & 0x30) + ((raw >> 4) & 0x0F)
+    return (~_DIZZY_DIRECTION_REMAP[index]) & _JOY_DIRECTIONS
+
+
 def _status8_complete(state: GameState, player_index: int) -> None:
     """0x4A6AA-0x4A6E6 -- the status-0x08 animation has finished.
 
@@ -3066,7 +3091,7 @@ def main_move_players(state: GameState) -> None:
         if player.stundelay:                                     # 0x4A90E
             player.stundelay -= 1
         stunned = player.stundelay != 0                          # 0x4A918
-        dirn = _joystick_direction_bits(state, player_index)
+        dirn = _player_movement_direction_bits(state, player_index)
         if (not stunned and dirn
                 and (not state.player_shooting[player_index]
                      or player.anim_counter
@@ -3889,10 +3914,10 @@ _TOP_PLAYER_BOUNDARY_V = 0xF080
 # compares proposed H/V anchors with scroll_hpos_origin / scroll_vpos_origin
 # against 0x7000 / 0x7400 (0x41C52-0x41C6A and 0x42092-0x420AA).
 _PLAYER_OFFSCREEN = 0x80
-# The hardware origin comparison permits the MOB anchor through 224 px, but a
-# 24px hero would then sit beneath alpha column 29. The playable boundary is the
-# full sprite box: 232px maze area - 24px hero width.
-_SCREEN_H_SPAN = (232 - 24) << POS_SHIFT
+# The ROM compares the live MOB anchor against the literal hardware windows.
+# Do not inset this by the 24px sprite width: its collision response can validly
+# place the anchor at offset 208 beside the non-wrapping right edge.
+_SCREEN_H_SPAN = 0x7000
 _SCREEN_V_SPAN = 0x7400
 
 

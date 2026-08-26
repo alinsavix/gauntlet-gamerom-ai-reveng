@@ -2221,6 +2221,7 @@ class TestHostShellInput:
             )
             shell.present(state)
             assert shell._diagnostics_previous.render_time_ms == pytest.approx(12.5)
+            assert shell._diagnostics_previous.render_time_history_ms == (12.5,)
 
             pygame.event.post(
                 pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F1)

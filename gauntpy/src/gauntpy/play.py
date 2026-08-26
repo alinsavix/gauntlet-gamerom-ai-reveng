@@ -81,9 +81,21 @@ def _ensure_rom_dir() -> None:
         os.environ["GEX_ROM_DIR"] = str(repo_roms)
 
 
-def _power_on_seed() -> int:
-    """Model the indeterminate RAM word the cabinet RNG inherits at power-on."""
-    return int.from_bytes(os.urandom(2), "big")
+def _seed_value(value: str) -> int | str:
+    """Parse an explicit 16-bit seed or the host-random sentinel."""
+    if value.lower() == "random":
+        return "random"
+    try:
+        seed = int(value, 0)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "seed must be a 16-bit integer or 'random'"
+        ) from exc
+    if not 0 <= seed <= 0xFFFF:
+        raise argparse.ArgumentTypeError(
+            "seed must be between 0 and 65535"
+        )
+    return seed
 
 
 def _spawn_player(state: GameState, character: int) -> int:
@@ -177,7 +189,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         keys: int = 0, potions: int = 0,
         powers: tuple[int, ...] = (),
         load_state_path: str | Path | None = None,
-        rng_seed: int | None = None) -> None:
+        rng_seed: int = 0) -> None:
     """Open a window and run the game loop until the player closes it.
 
     Two entries: the default mid-level drop (``build_state``), or -- with
@@ -198,16 +210,14 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
             raise SystemExit(f"could not load saved state: {exc}") from exc
     elif from_attract:
         from .subsystems.boot import one_time_init
-        state = GameState(rng=GameRandom(
-            _power_on_seed() if rng_seed is None else rng_seed
-        ))
+        state = GameState(rng=GameRandom(rng_seed))
         one_time_init(state)                # boots into TITLE attract
     else:
         from .maze import MazeError
         try:
             state = build_state(
                 level, character, keys=keys, potions=potions, powers=powers,
-                rng_seed=_power_on_seed() if rng_seed is None else rng_seed,
+                rng_seed=rng_seed,
             )
         except MazeError as exc:
             raise SystemExit(
@@ -263,6 +273,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--scale", type=_positive_scale, default=4,
                         help="window pixel scale (default: 4)")
     parser.add_argument(
+        "--seed", type=_seed_value,
+        help="initial RNG seed (default: 0); use 'random' for host entropy",
+    )
+    parser.add_argument(
         "--attract", action="store_true",
         help="boot into attract and start via the real front end "
              "(press 5 to insert a coin, arrows to pick a class, Enter to start)",
@@ -292,11 +306,11 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("--keys, --potions, and --power require direct play (no --attract)")
     if args.load_state and (
         args.attract or args.level is not None or args.character is not None
-        or args.keys or args.potions or args.power
+        or args.keys or args.potions or args.power or args.seed is not None
     ):
         parser.error(
             "--load-state cannot be combined with --attract, --level, --character, "
-            "--keys, --potions, or --power"
+            "--keys, --potions, --power, or --seed"
         )
 
     _ensure_rom_dir()
@@ -308,13 +322,19 @@ def main(argv: list[str] | None = None) -> None:
         )
         raise SystemExit(2)
 
+    rng_seed = (
+        int.from_bytes(os.urandom(2), "big")
+        if args.seed == "random"
+        else 0 if args.seed is None
+        else args.seed
+    )
     run(level=args.level or 1,
         character=_CHARACTERS[args.character or "elf"], scale=args.scale,
         from_attract=args.attract,
         suppress_first_encounter_messages=args.no_first_encounter_messages,
         keys=args.keys, potions=args.potions,
         powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power),
-        load_state_path=args.load_state)
+        load_state_path=args.load_state, rng_seed=rng_seed)
 
 
 
