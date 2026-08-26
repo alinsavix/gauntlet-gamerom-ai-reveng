@@ -126,6 +126,12 @@ looping-sound timer that plays the buzz on first touch and a silencer sound
 when you break away. A forcefield never blocks movement the way a wall does.
 The whole design is a timing puzzle: watch the flicker, cross in the dark.
 
+The burn also uses the ordinary hurt-color machinery. Every damaging contact
+frame reloads the hero's hurt timer to eighteen; VBLANK subtracts six before
+copying that class and player-position's hurt colors into live motion-object
+palette RAM. While contact continues the first flash color is held. Once the
+hero leaves, the remaining two palette steps finish.
+
 The visible beam uses that same live color word. Each VBLANK writes it into the
 forcefield entries of all three selected playfield palettes, so the segment
 cells must be re-paletted every frame even though the maze's tile raster is
@@ -211,6 +217,10 @@ real one. Stepping on it does not end the level, and one of the secret
 objectives, Don't Be Fooled, is failed by exactly that step. The collision
 record is consumed, but no playfield replacement runs, so the false exit
 remains drawn rather than turning into floor.
+
+The choice is one draw from the game's shared RNG stream, not a fixed maze
+property. Because that stream is never reset by the ROM, revisiting the level
+does not imply the same exit will be real.
 
 There is also a mercy rule. A timer counts frames since anyone took damage or
 anything died. If it reaches 21,000 frames, close to six minutes of genuine

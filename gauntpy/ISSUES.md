@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2388 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2390 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,34 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-141 · forcefield hurt flash, fresh-run RNG, and render timing
+
+Forcefield contact subtracted the correct health and armed its looping sound,
+but did not flash the hero. The missing instruction was at the end of the same
+ROM branch: after damage, dialog, and sound-timer work,
+0x4AAFC-0x4AB06 writes 0x12 to `hurt_cooldown`. VBLANK
+0x401DE-0x40304 then steps 0x12→0x0C→0x06→0 and copies the
+player-position/character-specific hurt words into live MOB color RAM. The
+Python branch now writes that game-side timer, so continuous forcefield contact
+holds the first hurt color and leaving the beam completes the flash cycle.
+
+Fake-exit selection itself was already the ROM path: `maze_scan_objects(0)`
+calls `getrandom(exit_count)` at 0x43E2E, keeps that indexed exit real, and sets
+hpos bit 4 on every loser when LFLAG4 bit 6 is active. Fresh gauntpy processes,
+however, always initialized the ROM's otherwise-uninitialized `random_seed`
+word to zero, so the complete pre-selection draw stream and its result repeated
+on every launch. The playable host now supplies one random 16-bit power-on
+value, then leaves the ROM LCG to free-run without reseeding. Explicit
+`build_state(..., rng_seed=...)` remains deterministic for tests and replay;
+level-16 regressions prove different initial words choose opposite real exits.
+
+The F1 value was pygame Clock cadence (`get_time()`), so a healthy 60 Hz host
+could report only 16/17 ms regardless of rendering cost. `HostShell.present`
+now times the game raster's composition, conversion, scale, and window blit
+directly with `perf_counter`, before drawing the diagnostics panel. The field is
+named `RENDER` and excludes the frame limiter, input wait, diagnostics panel,
+and display swap.
 
 ### S-140 · dragon stun never cleared on proximity-entry events
 
@@ -123,9 +151,10 @@ resumes the idle cycle. Dragon potion state is different. Frame 52867 has
 S-140 supersedes the former conclusion that only another potion releases it:
 proximity-entry events, including the first shot at the dragon, clear stun.
 
-The F1 overview now also shows the host clock's complete frame duration in
-milliseconds beside the arcade frame number. The measurement stays in the
-immutable host snapshot and never enters `GameState` or modeled video RAM.
+The F1 overview also gained a host timing field beside the arcade frame number.
+S-141 supersedes its original whole-frame cadence measurement with the actual
+game-raster render duration. The measurement stays in the immutable host
+snapshot and never enters `GameState` or modeled video RAM.
 
 ### S-138 · fake-exit VRAM removal and disputed ROM behaviors
 

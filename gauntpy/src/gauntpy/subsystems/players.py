@@ -3136,6 +3136,7 @@ def main_move_players(state: GameState) -> None:
             elif 0 < state.forcefield_hurt_timer[player_index] < _FORCEFIELD_HURT_TIMEOUT:
                 state.forcefield_hurt_timer[player_index] = _FORCEFIELD_HURT_TIMEOUT
             _dialog(state, player_index, _DIALOG_FORCEFIELD)   # 0x4AAEE
+            player.hurt_cooldown = 0x12                        # 0x4AAFC-0x4AB06
 
         # 0x4A91C jumps past the tile work but still lands on the shared
         # picture-table tail: a stunned hero keeps its sprite updated and still

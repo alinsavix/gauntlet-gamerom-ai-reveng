@@ -161,7 +161,9 @@ four-channel popup mechanism.
 `gauntpy` keeps the current frame on its separate F1 diagnostics overview
 rather than writing it over the arcade status panel. The only host text that
 can appear over the game raster is `PAUSED`, in the lower-right corner while
-the host loop is stopped.
+the host loop is stopped. Beside the frame number, `RENDER` reports the measured
+time spent composing, converting/scaling, and blitting the game raster. It does
+not report the 16/17 ms cadence imposed by the 60 Hz limiter.
 Maze numbers and player coordinates likewise live on that host panel, never in
 modeled alpha RAM.
 

@@ -46,6 +46,7 @@ anywhere to put the interrupt. Tests that need overflow behaviour set
 from __future__ import annotations
 
 from collections import deque
+from time import perf_counter
 
 from ..constants import FRAMES_PER_SECOND
 from ..state import GameState
@@ -292,6 +293,7 @@ class HostShell:
 
     def present(self, state: GameState) -> None:
         """Render the current state and flip it to the window."""
+        render_started = perf_counter()
         if self._assets is None:
             from ..assets import AssetStore
 
@@ -307,12 +309,13 @@ class HostShell:
                 surface, (LOGICAL_WIDTH * self.scale, LOGICAL_HEIGHT * self.scale)
             )
         self.window.blit(surface, (0, 0))
+        render_time_ms = (perf_counter() - render_started) * 1000.0
         if self.diagnostics_visible:
             snapshot = capture_debug_snapshot(
                 state,
                 paused=self.paused,
                 selected_mob=self.diagnostics_selected_mob,
-                frame_time_ms=float(self.clock.get_time()),
+                render_time_ms=render_time_ms,
             )
             self.diagnostics_selected_mob = snapshot.selected_mob
             for event in derive_debug_events(self._diagnostics_previous, snapshot):

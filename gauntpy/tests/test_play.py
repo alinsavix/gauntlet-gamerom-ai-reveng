@@ -33,6 +33,10 @@ requires_roms = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 class TestArguments:
+    def test_power_on_rng_seed_comes_from_host_entropy(self, monkeypatch):
+        monkeypatch.setattr(play.os, "urandom", lambda count: b"\x12\x34")
+        assert play._power_on_seed() == 0x1234
+
     def test_level_must_be_at_least_one(self):
         """``maze_for_level`` returns None below 1, which silently fell
         through to ``mazenum_current`` (maze 0) instead of complaining."""
@@ -279,6 +283,19 @@ class TestBuildState:
             state.mobs.obj_type(slot) == int(MazeObjIds.MONST_IT)
             for slot in range(32, 1024)
         ) == 4
+
+    def test_power_on_seed_changes_which_level_16_exit_is_fake(self):
+        first = play.build_state(16, Character.ELF, rng_seed=0)
+        second = play.build_state(16, Character.ELF, rng_seed=10)
+
+        def real_exit_index(state):
+            return next(
+                index for index, slot in enumerate(state.exit_slots)
+                if not state.mobs.hpos[slot] & 0x10
+            )
+
+        assert real_exit_index(first) == 0
+        assert real_exit_index(second) == 1
 
     def test_level_20_upper_right_passage_accepts_continued_downward_motion(self):
         from gauntpy.coords import hpos_x, vpos_y

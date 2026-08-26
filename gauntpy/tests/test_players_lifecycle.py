@@ -3887,6 +3887,11 @@ class TestStunDelayGate:
 
         assert p.health == 1000 - 2       # Warrior, unarmoured (0x5813C)
         assert p.stundelay == 4
+        assert p.hurt_cooldown == 0x12
+        before = tuple(state.mob_color_ram[192:208])
+        gp.player_hurt_palette_vblank(state)
+        assert p.hurt_cooldown == 0x0C
+        assert tuple(state.mob_color_ram[192:208]) != before
 
 
 class TestForcefieldIsChargedAfterTheMove:

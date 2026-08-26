@@ -1252,6 +1252,11 @@ the `lea` at 0x4AA96, so this is the table's sole consumer; the former
 `health_drain_table` name and its "per tick, indexed by difficulty" gloss were
 **Contradicted** — the time-based drain is the flat `subq.l #1` in §4.3.
 Contact also arms the looping hurt/silencer sound timers in §21.
+The branch then writes 0x12 to `hurt_cooldown[player]` at 0x4AAFC-0x4AB06.
+On the following VBLANK, 0x401DE-0x40304 subtracts six and copies the
+player-position/character-specific hurt colors into that hero's live MOB
+palette. Continued contact reloads 0x12 after every VBLANK; after the hero
+leaves, the remaining 0x0C→0x06→0 sequence completes.
 
 ---
 
@@ -1972,8 +1977,12 @@ gauntpy's host diagnostics do not enter this path. The optional F1 side panel
 captures a read-only snapshot after the game frame and renders it with a
 host-owned PIL surface. Mode, maze, camera, RNG, demo pointers, MOB counts, and
 player coordinates therefore remain inspectable without changing alpha RAM or
-claiming an arcade call site. F4's complete JSON snapshot is likewise host
-owned. Loading one reconstructs the typed modeled RAM, MOB tables, decoded
+other modeled memory, or claiming an arcade call site. Its `RENDER` duration directly times game-raster
+composition, surface conversion/scaling, and the game-window blit. It excludes
+the 60 Hz wait, diagnostics-panel rendering, and display swap, so it is render
+cost rather than presentation cadence.
+F4's complete JSON snapshot is likewise host owned. Loading one reconstructs
+the typed modeled RAM, MOB tables, decoded
 maze, path grids, display memory, and RNG seed, then resumes at the repeated
 frame body. It deliberately does not call `one_time_init` (0x4327A), level
 setup, or any display rebuilder; those would overwrite the captured state.

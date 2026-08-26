@@ -231,6 +231,19 @@ evidence remains in `../doc/`, generated contracts, and the book.
     or outside. It starts/reverses sleep-wake state or clears stun. Shot handling
     calls it before `dragon_shot_hit`, preventing a frozen dragon from taking
     nine risk-free hits. Do not invent a stun timer or omit event producers.
+53. **Damage feedback is part of the producer.** Subtracting health and marking
+    the HUD dirty does not imply a hurt flash. Each ROM damage arm that writes
+    `hurt_cooldown` must do so explicitly; VBLANK alone owns the subsequent live
+    MOB-color writes. Forcefield contact reloads 0x12 every damaging frame.
+54. **The global RNG is seeded once per host power-on.** The ROM never
+    initializes `random_seed`; the cabinet inherits a RAM-test residue and then
+    free-runs one shared stream across modes and sessions. A playable host may
+    supply one indeterminate initial word, but must not reseed at attract,
+    level, or fake-exit setup. Tests and replays pass an explicit seed.
+55. **Performance labels name their measured interval.** A render-duration
+    metric times raster composition and host blitting directly; frame cadence
+    from a 60 Hz limiter is not render cost. Keep either measurement in the
+    immutable host snapshot and outside modeled game/video memory.
 
 ## Investigation workflow
 

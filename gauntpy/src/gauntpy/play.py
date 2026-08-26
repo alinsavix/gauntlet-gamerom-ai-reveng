@@ -23,6 +23,7 @@ from pathlib import Path
 from .constants import Character, GameMode, MazeObjIds, PlayerStatus
 from .coords import encode_hpos, encode_vpos_at_y, pack_slot, slot_to_pixels
 from .mainloop import tick
+from .rng import GameRandom
 from .state import GameState
 from .subsystems.camera import snap_camera
 from .subsystems.players import player_join, update_player_sprite
@@ -80,6 +81,11 @@ def _ensure_rom_dir() -> None:
         os.environ["GEX_ROM_DIR"] = str(repo_roms)
 
 
+def _power_on_seed() -> int:
+    """Model the indeterminate RAM word the cabinet RNG inherits at power-on."""
+    return int.from_bytes(os.urandom(2), "big")
+
+
 def _spawn_player(state: GameState, character: int) -> int:
     """Drop player 0 into the loaded maze at a PLAYERSTART and return its slot.
 
@@ -126,6 +132,7 @@ def build_state(
     keys: int = 0,
     potions: int = 0,
     powers: tuple[int, ...] = (),
+    rng_seed: int = 0,
 ) -> GameState:
     """Load ``level`` and spawn a hero directly (the mid-level drop)."""
     from . import maze
@@ -136,6 +143,7 @@ def build_state(
     state = GameState(
         game_mode=GameMode.NORMAL,
         game_settings=GAME_DEFAULT_SETTINGS,
+        rng=GameRandom(rng_seed),
     )
     init_alpha_color_ram(state)
     if level > 5:
@@ -168,7 +176,8 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         suppress_first_encounter_messages: bool | None = None,
         keys: int = 0, potions: int = 0,
         powers: tuple[int, ...] = (),
-        load_state_path: str | Path | None = None) -> None:
+        load_state_path: str | Path | None = None,
+        rng_seed: int | None = None) -> None:
     """Open a window and run the game loop until the player closes it.
 
     Two entries: the default mid-level drop (``build_state``), or -- with
@@ -189,13 +198,16 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
             raise SystemExit(f"could not load saved state: {exc}") from exc
     elif from_attract:
         from .subsystems.boot import one_time_init
-        state = GameState()
+        state = GameState(rng=GameRandom(
+            _power_on_seed() if rng_seed is None else rng_seed
+        ))
         one_time_init(state)                # boots into TITLE attract
     else:
         from .maze import MazeError
         try:
             state = build_state(
                 level, character, keys=keys, potions=potions, powers=powers,
+                rng_seed=_power_on_seed() if rng_seed is None else rng_seed,
             )
         except MazeError as exc:
             raise SystemExit(
