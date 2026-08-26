@@ -18,7 +18,7 @@ from gauntpy.custom_scenario import (
     parse_synthetic_scenario,
     synthetic_runtime_for,
 )
-from gauntpy.coords import hpos_x
+from gauntpy.coords import hpos_x, vpos_y
 from gauntpy.mainloop import tick
 from gauntpy.render.state_dump import (
     StateDumpError,
@@ -32,6 +32,7 @@ from gauntpy.render.diagnostics import (
 )
 from gauntpy.state import GameState
 from gauntpy.subsystems.thief import THIEF_IS_MUGGER
+from gauntpy.subsystems.thief import path_grid_get_direction
 from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
 
 from gex.roms import SLAPSTIC_ROMS, TILE_ROMS, _rom_dir
@@ -89,11 +90,11 @@ def test_diagnostics_page_shows_pending_and_fired_event_timers():
     assert pending["INPUT"] == "LIVE"
     assert pending["EVENTS"] == "0/1 fired"
     assert pending["EVT 00"].startswith(
-        "T-00200 @01200 activate_thief 1 28 mugger"
+        "T-00200 @01200 activate_thief 1 16 mugger"
     )
     assert fired["EVENTS"] == "1/1 fired"
     assert fired["EVT 00"].startswith(
-        "FIRED @01200 activate_thief 1 28 mugger"
+        "FIRED @01200 activate_thief 1 16 mugger"
     )
 
 
@@ -114,7 +115,13 @@ def test_parser_rejects_unknown_symbols_and_non_wall_row_zero():
     text = _EXAMPLE.read_text(encoding="utf-8")
 
     with pytest.raises(SyntheticScenarioError, match="undefined symbols"):
-        parse_synthetic_scenario(text.replace("#.@", "#x@", 1))
+        parse_synthetic_scenario(
+            text.replace(
+                "#..............................#",
+                "#x.............................#",
+                1,
+            )
+        )
     with pytest.raises(SyntheticScenarioError, match="row 0"):
         parse_synthetic_scenario(text.replace("################################", ".###############################", 1))
 
@@ -122,7 +129,7 @@ def test_parser_rejects_unknown_symbols_and_non_wall_row_zero():
 def test_parser_rejects_arbitrary_event_actions():
     text = _EXAMPLE.read_text(encoding="utf-8")
     text = text.replace(
-        "1200 activate_thief 1 28 mugger",
+        "1200 activate_thief 1 16 mugger",
         "1200 execute_python dangerous.py",
     )
 
@@ -136,6 +143,16 @@ def test_parser_rejects_events_beyond_the_wrapping_frame_counter():
     )
 
     with pytest.raises(SyntheticScenarioError, match="event frame"):
+        parse_synthetic_scenario(text)
+
+
+def test_parser_rejects_multiple_prearmed_thief_events():
+    text = _EXAMPLE.read_text(encoding="utf-8").replace(
+        "1200 activate_thief 1 16 mugger",
+        "600 activate_thief 1 16 thief\n1200 activate_thief 1 16 mugger",
+    )
+
+    with pytest.raises(SyntheticScenarioError, match="only one activate_thief"):
         parse_synthetic_scenario(text)
 
 
@@ -155,24 +172,51 @@ def test_synthetic_build_uses_modeled_maze_mob_and_playfield_memory():
 @requires_roms
 def test_scheduled_mugger_deploys_at_the_absolute_frame():
     state = build_synthetic_state(load_synthetic_scenario(_EXAMPLE))
-    state.frame_counter = 1200
-
-    apply_synthetic_events(state)
+    assert state.thief_victim == 0
+    assert state.thief_enter_time == 1200
+    for _ in range(1201):
+        apply_synthetic_events(state)
+        tick(state)
 
     assert state.thief_current_pos
     assert state.thief_mode & THIEF_IS_MUGGER
     assert synthetic_runtime_for(state).fired_events == {0}
+
+    start_y = vpos_y(state.mobs.vpos[state.thief_mob_slot])
+    for _ in range(70):
+        tick(state)
+    assert vpos_y(state.mobs.vpos[state.thief_mob_slot]) > start_y
+
+
+@requires_roms
+def test_player_movement_before_spawn_extends_the_armed_pursuit_route():
+    state = build_synthetic_state(load_synthetic_scenario(_EXAMPLE))
+    player = state.players[0]
+    old_slot = player.mob_slot
+    assert path_grid_get_direction(state, old_slot) == 8
+    state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
+
+    for _ in range(10):
+        apply_synthetic_events(state)
+        tick(state)
+        if state.players[0].mob_slot != old_slot:
+            break
+
+    assert state.players[0].mob_slot != old_slot
+    assert path_grid_get_direction(state, old_slot) == 2
 
 
 @requires_roms
 def test_pending_scheduled_event_survives_state_dump_resume():
     state = build_synthetic_state(load_synthetic_scenario(_EXAMPLE))
     state.frame_counter = 1200
+    state.thief_enter_time = 0
     restored = game_state_from_payload(
         json.loads(json.dumps(state_dump_payload(state)))
     )
 
     apply_synthetic_events(restored)
+    tick(restored)
 
     assert restored.thief_current_pos
     assert restored.thief_mode & THIEF_IS_MUGGER

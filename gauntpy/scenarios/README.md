@@ -66,8 +66,15 @@ Input events persist until another input event changes them.
 
 `activate_thief row column [thief|mugger]` deploys the selected visitor from an
 empty live packed-maze cell through the normal game-side thief deployment
-routine. Event frames are absolute 16-bit `GameState.frame_counter` values
-(`0`–`65535`), so pending and fired events survive an F4 dump/resume.
+routine. Because a normal delayed arrival follows breadcrumbs laid by the
+moving victim, this synthetic event arms the victim and countdown when the
+scenario is built, first computes a cardinal traversable bridge from the
+explicit spawn to player one's initial cell, and writes the same pursuit
+nibbles. Ordinary movement during the countdown then extends those breadcrumbs
+before the normal deployment routine runs at the target frame. It fails rather
+than arming if no initial route exists. Event frames are absolute 16-bit
+`GameState.frame_counter` values (`0`–`65535`), so pending and fired events
+survive an F4 dump/resume.
 
 Default symbols:
 

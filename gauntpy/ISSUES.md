@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2419 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2421 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,29 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-146 · synthetic mugger spawned with no pursuit breadcrumbs
+
+The `activate_thief` event set an explicit spawn cell and invoked the normal
+deployment routine, but normal gameplay schedules that cell at the victim's old
+position and spends the arrival delay recording every subsequent victim move
+into the low route-grid nibbles. The synthetic shortcut supplied none. At frame
+1200 the mugger spawned at slot `0x03C`, `path_grid_get_direction` returned
+unset, and `thief_compute_path` retained reset direction zero, targeting row-zero
+slot `0x01C` and stopping against its wall.
+
+Scenario construction now arms the victim and arrival countdown immediately,
+matching normal scheduling ownership. It finds a cardinal traversable bridge
+from the explicit live spawn cell to the player's initial cell and writes that
+route through `path_grid_set_low_direction`; ordinary player movement during
+the countdown then extends the same route through
+`thief_track_victim_move`. The normal deployment, diagonal optimization,
+movement probes, cell handoff, and reverse escape-route production remain the
+game's implementations. An unreachable requested spawn fails explicitly rather
+than creating another inert visitor. The example disables mirroring and places
+the mugger at row 1, column 16 above a complete wall row whose sole opening is
+column 16, with the player below it. After its 60-frame arrival pause the mugger
+advances downward through that forced lane.
 
 ### S-145 · synthetic event queue was invisible during interactive play
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import shlex
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -242,6 +243,10 @@ def parse_synthetic_scenario(
             raise SyntheticScenarioError(
                 f"event {index}: unsupported action {event.action!r}"
             )
+    if sum(event.action == "activate_thief" for event in events) > 1:
+        raise SyntheticScenarioError(
+            "a synthetic scenario may schedule only one activate_thief event"
+        )
 
     return SyntheticScenario(
         name=headers.get("name", Path(source_name).stem if source_name else "synthetic"),
@@ -357,12 +362,17 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
     state.players[0].health = scenario.health
     setup_infopanel(state, -1)
 
-    attach_synthetic_runtime(state, SyntheticScenarioRuntime(scenario))
+    runtime = SyntheticScenarioRuntime(scenario)
+    for event in scenario.events:
+        if event.action == "activate_thief":
+            _prepare_thief(state, event.frame, *event.args)
+    attach_synthetic_runtime(state, runtime)
     return state
 
 
-def _activate_thief(
-    state: GameState, row_text: str, column_text: str, variant: str = "thief",
+def _prepare_thief(
+    state: GameState, target_frame: int, row_text: str, column_text: str,
+    variant: str = "thief",
 ) -> None:
     from .coords import pack_slot
     from .subsystems import thief
@@ -387,9 +397,61 @@ def _activate_thief(
         state.thief_speed = thief._SPEED_MUGGER
     else:
         state.thief_speed = thief._SPEED_THIEF
-    state.thief_enter_time = 0
+    _seed_synthetic_thief_route(state, slot, player.mob_slot)
+    state.thief_enter_time = (target_frame - state.frame_counter) & 0xFFFF
     state.thief_level_setup_done = True
-    thief.main_start_thief(state)
+
+
+def _seed_synthetic_thief_route(
+    state: GameState, start: int, target: int,
+) -> None:
+    """Create the victim breadcrumbs a delayed normal deployment would inherit."""
+    from .subsystems import thief
+
+    directions = ((0, -1, 0), (2, 0, 1), (4, 1, 0), (6, 0, -1))
+    queue = deque([start])
+    previous: dict[int, tuple[int, int]] = {}
+    visited = {start}
+    while queue:
+        current = queue.popleft()
+        if current == target:
+            break
+        row, column = current >> 5, current & 0x1F
+        for direction, row_delta, column_delta in directions:
+            next_row = row + row_delta
+            next_column = column + column_delta
+            if state.wrap_v:
+                next_row &= 0x1F
+            elif not 1 <= next_row < 32:
+                continue
+            if state.wrap_h:
+                next_column &= 0x1F
+            elif not 0 <= next_column < 32:
+                continue
+            candidate = (next_row << 5) | next_column
+            if candidate in visited:
+                continue
+            if (
+                candidate != target
+                and not thief._route_cell_is_traversable(state, candidate)
+            ):
+                continue
+            visited.add(candidate)
+            previous[candidate] = (current, direction)
+            queue.append(candidate)
+    if target not in visited:
+        raise SyntheticScenarioError(
+            "activate_thief has no traversable route to player 1"
+        )
+
+    route: list[tuple[int, int]] = []
+    current = target
+    while current != start:
+        parent, direction = previous[current]
+        route.append((parent, direction))
+        current = parent
+    for cell, direction in reversed(route):
+        thief.path_grid_set_low_direction(state, cell, direction)
 
 
 def apply_synthetic_events(state: GameState) -> None:
@@ -403,7 +465,9 @@ def apply_synthetic_events(state: GameState) -> None:
         if event.action == "input":
             runtime.current_input = _input_word(event.args[0])
         elif event.action == "activate_thief":
-            _activate_thief(state, *event.args)
+            # The victim and countdown were armed at scenario construction so
+            # ordinary player movement could extend the pursuit breadcrumbs.
+            pass
         runtime.fired_events.add(index)
     if runtime.current_input is not None:
         state.player_input_raw[0] = runtime.current_input
