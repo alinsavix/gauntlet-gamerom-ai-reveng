@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2416 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2418 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,17 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-144 · example synthetic maze suppressed all interactive input
+
+The committed `narrow-lane-thief.gsc` declared `input = idle`. The synthetic
+controller correctly treated that as a persistent script and rewrote player
+one's sampled keyboard word to idle before every tick, making the displayed
+maze appear completely non-interactive. The example now uses `input = live`,
+and omitted `input` fields default to live host control. Explicit `idle` and
+direction values remain available for deterministic scripted runs; the headless
+runner is still idle naturally because a fresh `GameState` starts with no
+buttons pressed.
 
 ### S-143 · declarative synthetic maze fixtures and readable graph scale
 

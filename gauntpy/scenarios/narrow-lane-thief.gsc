@@ -12,7 +12,7 @@ wallpattern = 0
 wallcolor = 0
 floorpattern = 0
 floorcolor = 0
-input = idle
+input = live
 
 [events]
 1200 activate_thief 1 28 mugger

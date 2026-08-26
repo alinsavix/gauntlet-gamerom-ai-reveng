@@ -221,7 +221,7 @@ def parse_synthetic_scenario(
     character_name = headers.get("character", "elf").lower()
     if character_name not in _CHARACTERS:
         raise SyntheticScenarioError(f"unknown character {character_name!r}")
-    initial_input = _input_word(headers.get("input", "idle"))
+    initial_input = _input_word(headers.get("input", "live"))
     for index, event in enumerate(events):
         if event.action == "input":
             if len(event.args) != 1:

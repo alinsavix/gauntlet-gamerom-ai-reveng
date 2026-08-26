@@ -43,7 +43,7 @@ wallpattern = 0
 wallcolor = 0
 floorpattern = 0
 floorcolor = 0
-input = idle
+input = live
 
 [legend]
 x = MONST_SUPERSORC
@@ -60,8 +60,9 @@ x = MONST_SUPERSORC
 ```
 
 `input` accepts `live`, `idle`, the four cardinal directions, and hyphenated
-diagonals. `live` leaves player-one input under the interactive host. Input
-events persist until another input event changes them.
+diagonals. It defaults to `live`, which leaves player-one input under the
+interactive host; use `idle` for an explicitly scripted stationary player.
+Input events persist until another input event changes them.
 
 `activate_thief row column [thief|mugger]` deploys the selected visitor from an
 empty live packed-maze cell through the normal game-side thief deployment

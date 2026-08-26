@@ -18,6 +18,8 @@ from gauntpy.custom_scenario import (
     parse_synthetic_scenario,
     synthetic_runtime_for,
 )
+from gauntpy.coords import hpos_x
+from gauntpy.mainloop import tick
 from gauntpy.render.state_dump import (
     StateDumpError,
     game_state_from_payload,
@@ -25,6 +27,7 @@ from gauntpy.render.state_dump import (
 )
 from gauntpy.state import GameState
 from gauntpy.subsystems.thief import THIEF_IS_MUGGER
+from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
 
 from gex.roms import SLAPSTIC_ROMS, TILE_ROMS, _rom_dir
 
@@ -51,6 +54,31 @@ def test_example_is_an_exact_versioned_32_by_32_fixture():
     assert len(scenario.sha256) == 64
     assert scenario.events[0].frame == 1200
     assert scenario.events[0].action == "activate_thief"
+    assert scenario.initial_input is None
+
+
+def test_live_scenario_input_does_not_overwrite_host_controls():
+    scenario = load_synthetic_scenario(_EXAMPLE)
+    state = GameState()
+    state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
+    attach_synthetic_runtime(state, SyntheticScenarioRuntime(scenario))
+
+    apply_synthetic_events(state)
+
+    assert state.player_input_raw[0] == JOY_IDLE & ~JOY_RIGHT
+
+
+@requires_roms
+def test_example_accepts_live_movement_through_the_frame_loop():
+    state = build_synthetic_state(load_synthetic_scenario(_EXAMPLE))
+    player = state.players[0]
+    before = hpos_x(state.mobs.hpos[player.mob_slot])
+    state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
+
+    apply_synthetic_events(state)
+    tick(state)
+
+    assert hpos_x(state.mobs.hpos[player.mob_slot]) > before
 
 
 def test_parser_rejects_unknown_symbols_and_non_wall_row_zero():
