@@ -612,6 +612,9 @@ The four movable-wall arms at 0x4280E-0x42A64 advance the wall by exactly
 `0x80`, one native pixel, and return zero to the current movement axis. A base
 Elf's requested step is `0x100`, so while pushing it alternates blocked frames
 that move only the wall with clear frames that move the hero two pixels. Direct
+destination testing stays on the shared `ray_march_*` family used by monster
+movement. It does not call the similarly shaped private player probes; changing
+probe families changes boundary ownership and corner geometry.
 ROM execution and MAME 0.289 show the same 0/2-pixel hero cadence; smoothing it
 in the renderer or forcing the hero forward on every push frame would change
 the game-side MOB words.
@@ -2035,7 +2038,12 @@ setup, or any display rebuilder; those would overwrite the captured state.
 
 `title_logo_init` (0x4DA3E) is the separate no-argument initializer called only by the TITLE branch of `start_attract_screen`. It initializes the brightness sequence and timers, clears ten MOB-color words, then constructs the multi-row logo from MOB slots beginning at 0x21 by writing picture, H/V position, and link arrays. It selects the full or short four-byte motion program at 0x5AC2E/0x5AC4E from `title_intro_state`, backs the pointer up one record for the update routine's pre-increment convention, and starts the logo off-screen with `scroll_apply(-128, 0)`. The routine has its own frame and returns at 0x4DCB8; it is not a tail of `scroll_apply`.
 
-**SCORES mode:** Calls `score_screen_color_cycle` (0x4DE76): every 16th frame, shifts 11 color RAM entries one slot, creating a scrolling rainbow effect on the high-score text.
+**SCORES mode:** Calls `score_screen_color_cycle` (0x4DE76): every 16th frame,
+saves the final four words of alpha color-RAM block 144–159, shifts the
+preceding twelve words forward by four, and restores the saved group at the
+front. The signed loop seeded with `moveq #0xB` executes twelve moves, not
+eleven, rotating the complete 16-word palette and creating a scrolling rainbow
+on the high-score text.
 
 **TITLE mode:** Two nested timers:
 1. **Outer timer** (`0x904A18`): When negative, resets from ROM value at 0x5BA68. Copies 7 words from `0x910206` to `0x910204` (scrolling rainbow on logo text). Repeats for 10 rows.

@@ -346,6 +346,10 @@ maze 103's cyan floor pattern is visible around the ladder. Updated MAME 0.289
 captures distinguish these cases: SCORES visibly retains the maze; LEGEND is
 intentionally black across its 29-column curtain. The upper score boxes begin
 on alpha row one, leaving the maze's complete cyan top border visible.
+Every sixteenth frame the SCORES color cycle saves the final four words of its
+sixteen-word alpha palette, shifts the preceding twelve words by four, and puts
+the saved group at the front. The loop count is twelve moves, not eleven; the
+result is the rainbow moving through the ladder text without rewriting glyphs.
 
 The pages come in reverse order of their numbering. The first is headed
 LEGEND and shows the item and terrain vocabulary: wall and floor types,

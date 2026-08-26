@@ -180,6 +180,10 @@ shimmer after 25 player shots; two of the secret objectives reward shoving at
 these. A destructible wall is softer and crumbles when shot. At maximum shot
 power, projectiles pass through walls entirely, and a player with the reflect
 power bounces shots off them at computed angles instead of losing them.
+When a hero pushes a movable wall, the game tests the wall's destination with
+the same directional ray-march geometry used by monster movement, not the
+similar-looking private player probe family. That shared ownership is what keeps
+wall traversal and actor traversal in agreement at boundaries and corners.
 Secret shootable walls keep the ordinary level-wall palette until revealed;
 a brighter special palette would give the secret away.
 On ordinary wall sets, damage advances a live color-RAM nibble rather than

@@ -63,6 +63,27 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-148 · complete 72-hour behavior documentation audit
+
+All 40 current-branch commits from the preceding 72 hours were compared against
+their diffs, issue entries, `FIDELITY.md`, technical references, and narrative
+chapters. Movement/probe ownership, narrow-lane response, fake-exit VRAM,
+treasure entry, dragon proximity/stun, potion paths, secret-room flow,
+demo/legend timing, save-state behavior, stat selectors, and host diagnostics
+were already covered or correctly confined to host documentation.
+
+Five residual gaps were corrected. Chapter 9's old random-stocking summary now
+matches `maze_addrandompickups`' post-party ordering, signed add/remove behavior,
+deferred loot, and level-three special draws; it no longer misattributes
+`getrandom(32)` generator spawning to ordinary monster movement. Chapter 10 now
+records `player_hurt_speech_timer`'s party-sized reload, acid silence gate, and
+per-character second draw. Chapter 13 and `doc/04` now state that movable-wall
+destination checks share monster `ray_march_*` geometry. The SCORES color cycle
+is corrected from eleven shifts to the ROM's twelve moves over one 16-word
+palette, in both `doc/04` and Chapter 15. Chapter 14 now gives the exact host
+render-timing boundary: game raster composition/conversion/scale/blit only,
+excluding diagnostics, display flip, input/event work, and the limiter wait.
+
 ### S-147 · recent corrected behavior documentation audit
 
 The S-142 ROM findings were already present at the appropriate levels:

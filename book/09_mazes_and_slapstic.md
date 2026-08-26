@@ -234,10 +234,15 @@ keeping them apart matters:
    drawn from a 13-entry table, with wraparound geometry forced past
    certain depths. Late in the game, nearly any maze can arrive fast,
    odd-angled, invisible, or wrapped regardless of what its header says.
-3. **Random placement** happens after flags. A per-maze count of extra
-   food (0 to 7) is scattered onto random empty cells, invulnerable food
-   picks a random variant, and Chapter 13's misbehaving walls draw their
-   timing from the same well.
+3. **Random placement** happens after the party has been placed, because the
+   active-player count and, in solo play, the selected character change the
+   result. A three-level countdown may first place a hidden potion. The maze
+   header's signed pickup adjustment is then combined with party size,
+   difficulty, class, and the live monster-spawn bonus: a positive result adds
+   food, while a negative one removes food in a forward-only randomized sweep.
+   Escaped thief/mugger loot is restored afterward, and levels three and above
+   make the final pair of poisoned-food/potion draws. Chapter 13's misbehaving
+   walls draw their timing from the same shared random stream.
 
 The well itself is one small function, `getrandom`, and one 16-bit seed
 word. Each call advances the seed with a textbook linear congruential
@@ -248,13 +253,15 @@ seed = (13849 × seed + 23861) mod 65536             # one shared word of state
 return (N × ((seed + 32768) mod 65536)) div 65536    # 0..N-1 for observed N < 32768
 ```
 
-Everything random in Gauntlet II drinks from this stream: flag flips, food
-scatter, monster movement odds (a monster's "speed" is a probability its
-step happens this frame), generator spawns, forcefield timing, the thief's
-schedule, treasure-room countdown pranks, secret-task choices. One
-consequence is worth savoring: because every consumer advances the same
-seed, apparently unrelated events are coupled. Whether a ghost shuffles
-left this frame changes which secret task you draw two levels later. And
+Everything random in Gauntlet II drinks from this stream: flag flips, pickup
+placement/removal, generator spawn rolls, forcefield timing, the thief's
+schedule, treasure-room countdown pranks, secret-task choices. Ordinary monster
+movement cadence is not a `getrandom(32)` roll; that comparison belongs to
+generator creation, while movement uses the frame-derived control word Chapter
+11 describes. One consequence is worth savoring: because every consumer
+advances the same seed, apparently unrelated events are coupled. Whether a
+generator produces a ghost this frame changes which secret task you draw two
+levels later. And
 because nothing in either ROM ever writes that word except the generator
 itself, the coupling has no reset: the stream runs from power-on to power-off
 through attract screens and sessions alike. Chapter 15 comes back to that
