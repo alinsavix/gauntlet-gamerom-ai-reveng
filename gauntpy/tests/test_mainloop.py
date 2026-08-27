@@ -152,6 +152,19 @@ def test_all_calls_run_without_a_dialog(monkeypatch):
     assert ran == loop_calls()
 
 
+def test_host_can_pause_only_the_treasure_timer(monkeypatch):
+    timer_calls = []
+    monkeypatch.setattr(
+        mainloop, "main_treasure_timer", lambda state: timer_calls.append(state),
+    )
+    state = GameState(game_mode=GameMode.NORMAL)
+
+    tick(state, treasure_timer_paused=True)
+
+    assert timer_calls == []
+    assert state.frame_counter == 1
+
+
 def test_frame_overflow_sets_then_decays():
     """Set to 8 when the display laps us mid-frame; halved on each good one."""
     state = GameState(game_mode=GameMode.NORMAL)

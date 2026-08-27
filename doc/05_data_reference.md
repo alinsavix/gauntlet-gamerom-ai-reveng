@@ -47,7 +47,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904046 | 2 B | `forcefield_color` | Current forcefield color word |
 | 0x904048 | 2 B | `ff_cycle_timer` | Forcefield color cycle step timer |
 | 0x904049 | 1 B | `ff_cycle_index` | Current step index into forcefield color table (0–7) |
-| 0x90404A | 1 B | `thief_path_direction` | Current route direction byte returned by `path_grid_get_direction`. `thief_compute_path` saves the previous byte, writes the newly selected direction, and uses it when extending/recovering the thief path. |
+| 0x90404A | 1 B | `thief_path_direction` | Current route direction byte. `thief_compute_path` preserves this byte when `path_grid_get_direction` returns unset (8), replacing it only with a decoded direction 0–7; reset value zero therefore continues upward if a caller creates a thief without first supplying breadcrumbs. |
 | 0x90404B | 8 B | `soundqueue` | Array of 1-byte sound IDs in the queue |
 | 0x904053 | 1 B | `soundqueue_head` | Head of sound queue |
 | 0x904054 | 1 B | `soundqueue_tail` | Tail of sound queue |
@@ -91,7 +91,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
 | 0x90487C | 2 B | `dragon_fire_cooldown` | Fire cooldown/hold timer: set to 8 by `dragon_fire_setup` (0x54748), decremented per frame in `main_handle_dragon`, gates fireball rate and holds the path counter during locked-in sustained fire. |
-| 0x90487E | 2 B | `dialog_once_flags` | WORD bitfield of "dialog shown once" flags (one bit per dialog id; tested/set by `dialog_first_encounter` code). **Bit 0 = dragon first-encounter dialog** (the old `dragon_encounter_flag`); bit 0 cleared per level by `maze_new_level_setup`, whole word cleared at game init. |
+| 0x90487E | 2 B | `dialog_once_flags` | Secondary WORD bitfield for repeat dialog/speech events. Bit 0 is cleared by every `maze_new_level_setup` and set by `dialog_first_encounter` when the already-seen fake-exit mask 0x40000000 plays sound 0xA6, limiting that repeat taunt to once per level. The whole word is cleared when gameplay or the attract demo starts. |
 | 0x904880 | 2 B | `dragon_hits` | Number of hits on the dragon (9th hit = death) |
 | 0x904882 | 2 B | `dragon_head_hpos` | Horizontal position of the dragon's HEAD: `(mob_hpos[dragon_seg_mob_ids[0]] + head hdelta) & 0xFF80` (0x5466C) — position field only, no palette. |
 | 0x904884 | 2 B | `dragon_head_vpos` | Vertical position of the dragon's head, `(mob_vpos[seg 0] + head vdelta) & 0xFF80` (0x5469E), delta table 0x5D478 |
@@ -156,7 +156,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x9049C4 | 2 B × 12 | `shot_direction` | Direction/state word for each of 12 projectile channels. Values 0–7 are compass directions; reflection and special-shot paths also retain flag bits in the same word. |
 | 0x9049DC | 2 B | `player_it` | Player who is IT (0–3) or 0xFFFF (-1) if nobody |
 | 0x9049DE | 2 B | `mob_depth_list_head` | Head MOB ID of the global depth-sorted display list; the placement routines update it when inserting before the current first MOB |
-| 0x9049E0 | 2 B | `maze_player_start_slot` | Packed maze slot randomly selected by `maze_scan_objects(-1)` from the PLAYERSTART records before that marker is replaced with floor. It remains the first-player and post-death continue spawn even after no PLAYERSTART marker remains live. |
+| 0x9049E0 | 2 B | `maze_player_start_slot` | Packed maze slot randomly selected by `maze_scan_objects(-1)` from the PLAYERSTART records before that marker is replaced with floor. Non-selected starts follow the shared loser arm: hpos bit 4 under LFLAG4 bit 6, otherwise replacement with floor. It remains the first-player and post-death continue spawn even after no PLAYERSTART marker remains live. |
 | 0x9049E2 | 2 B | `two_player_mode` | Game pricing/two-player mode config |
 | 0x9049E4 | 4 B | `dialog_first_encounter_flags` | Bitmask of which first-encounter dialogs have been shown |
 | 0x9049E8 | 2 B | `treasure_timer` | Time spent in treasure room |
@@ -301,10 +301,10 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x904B98 | 2 B | `thief_victim_pos` | Last packed position of the thief's target; `thief_track_victim_move` updates it and writes the old-to-new direction into the path grid. |
-| 0x904B9A | 2 B | `thief_victim` | Player number of richest player |
+| 0x904B98 | 2 B | `thief_victim_pos` | Last packed position of the thief's target. Scheduling initializes it before the arrival countdown; every later victim cell handoff updates it and writes the old-to-new direction into the pursuit nibble. |
+| 0x904B9A | 2 B | `thief_victim` | Player number of the richest player, selected before `thief_enter_time` is loaded so movement during the delay records the route. |
 | 0x904B9C | 2 B | `thief_direction` | Current thief movement/animation direction (0–8). It is produced by `calc_direction` and selects the directional row in the normal and compact thief animation tables. |
-| 0x904B9E | 2 B | `thief_enter_time` | Timer for thief entrance to level |
+| 0x904B9E | 2 B | `thief_enter_time` | Initially the scheduled arrival countdown. Deployment at zero creates the thief/mugger at `thief_start_location` and reloads this word with 0x3C for the entrance pause; ordinary thief animation remains gated until it becomes negative. |
 | 0x904BA0 | 2 B | `thief_mode` | Thief's current mode (see Thief Modes enum) |
 | 0x904BA2 | 2 B | `thief_previous_pos` | Previous thief maze/MOB slot. Movement copies `thief_next_pos` here before calculating the following cell; exit/steal and route-recovery code use it as the cell behind the thief. |
 | 0x904BA4 | 2 B | `thief_current_pos` | Thief's current maze cell, which is also the hardware MOB slot occupied by the thief. It indexes the MOB arrays and is replaced whenever movement transfers the thief into a new cell; zero means no active thief. |
@@ -314,7 +314,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904BB0 | 4 B | `mugger_item_carried` | Item that the mugger is currently carrying |
 | 0x904BB4 | 4 B | `thief_item_carried` | Item that the thief is currently carrying |
 | 0x904BB8 | 2 B | `thief_collision_direction_code` | One-based direction/contact code set when the thief first collides with its target player (`thief_direction + 1`). It suppresses repeated damage during the same contact and is folded into `thief_move_engine`'s return adjustment; zero means no active contact code. |
-| 0x904BBA | 2 B | `thief_start_location` | Location of thief victim at start of level |
+| 0x904BBA | 2 B | `thief_start_location` | Target player's packed cell when the visitor is scheduled, before the arrival delay. Deployment later creates the thief/mugger at this saved old location while the pursuit grid leads toward the player's newer cells. |
 | 0x904BBC | 2 B | `thief_stolen_item` | Tile type of last item stolen by thief |
 | 0x904BBE | 2 B | `thief_tport_active` | Thief transporter-transition latch. `thief_start_tport_anim` sets it to one; normal movement clears it, and occupied-cell replacement is suppressed while it is nonzero. |
 
@@ -658,6 +658,11 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 | LFLAG4_EXIT_FAKE | 0x40 |
 | LFLAG4_PLAYER_OFFSCREEN | 0x80 |
 
+`LFLAG4_TRAPS_RANDOM` does not randomize each trap independently. Level setup
+draws one value from `getrandom(3)` and adds it modulo three to every live
+type-10/11/12 trap marker, preserving their grouping while rotating which
+trigger controls which wall family.
+
 ### 3.13 Maze Numbers
 
 | Name | Value |
@@ -777,23 +782,23 @@ references to `player_status` (0x9049A0).
 | Name | Value | Description |
 |------|-------|-------------|
 | TRICK_NONE | 0 | No trick |
-| TRICK_TRANSPORT1 | 1 | Try Transportability (onto demon) |
+| TRICK_TRANSPORT1 | 1 | Try Transportability (land beside Acid) |
 | TRICK_TRANSPORT2 | 2 | Try Transportability (onto death) |
 | TRICK_TRANSPORT3 | 3 | Try Transportability (into exit) |
-| TRICK_TRANSPORT4 | 4 | Try Transportability (into exit, variant) |
-| TRICK_WATCHSHOOT1 | 5 | Watch What You Shoot (shoot foods) |
-| TRICK_WATCHSHOOT2 | 6 | Watch What You Shoot (shoot secret walls) |
-| TRICK_SAVESUPERSHOTS | 7 | Save Super Shots |
-| TRICK_NOUSEINVUL | 8 | Don't Use Invulnerability |
-| TRICK_NOGETHIT | 9 | Don't Get Hit (while killing a dragon) |
-| TRICK_PUSHWALL | 10 | Try Pushing a Wall |
-| TRICK_NOFOOLED | 11 | Don't Be Fooled |
+| TRICK_TRANSPORT4 | 4 | Try Transportability (corner-transport through a secret wall) |
+| TRICK_WATCHSHOOT1 | 5 | Watch What You Shoot (shoot two food items) |
+| TRICK_WATCHSHOOT2 | 6 | Watch What You Shoot (shoot two secret walls) |
+| TRICK_SAVESUPERSHOTS | 7 | Save Super Shots (exit with at least 11) |
+| TRICK_NOUSEINVUL | 8 | Don't Use Invulnerability (collect it, then avoid monster contact/fire while protected) |
+| TRICK_NOGETHIT | 9 | Don't Get Hit (literal exit predicate: progress low two bits are zero; dragon fire increments progress, while killing the dragon writes 2 unless it was already 1) |
+| TRICK_PUSHWALL | 10 | Try Pushing a Wall (push a movable wall into an exit) |
+| TRICK_NOFOOLED | 11 | Don't Be Fooled (avoid fake exits) |
 | TRICK_NOGREEDY1 | 12 | Don't Be Greedy (no keys or potions) |
 | TRICK_DIET | 13 | Go On a Diet (no food) |
 | TRICK_NOGREEDY2 | 14 | Don't Be Greedy (no treasure) |
-| TRICK_BEPUSHY | 15 | Be Pushy |
-| TRICK_IT | 16 | IT Could Be Nice |
-| TRICK_NOHURTFRIENDS | 17 | Don't Hurt Friends |
+| TRICK_BEPUSHY | 15 | Be Pushy (enter the exit on a recursive collision-response move) |
+| TRICK_IT | 16 | IT Could Be Nice (exit while IT) |
+| TRICK_NOHURTFRIENDS | 17 | Don't Hurt Friends (hit no player with a shot, including the shooter after reflection, even when damage/stun is suppressed) |
 
 After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) replaces the maze trick ID with `0x50 + getrandom(14)`. These **challenge task codes** occupy 0x50–0x5D and are evaluated against `secret_tricks_flags`; they are distinct from the maze-header enum above. The optional qualifier-display records are at 0x573D4 (14 records × 8 bytes). Verified examples include 0x50 “AFTER COLLECTING 6 TREASURES,” 0x51/0x5D “AFTER COLLECTING ALL POTIONS,” 0x52/0x5B “AFTER SHOOTING 3 SECRET WALLS,” 0x56 “AFTER USING 5 TRANSPORTERS,” 0x5A “AFTER REMOVING ALL TREASURE,” and 0x5C “WHILE YOU ARE IT.” The `resolve_shot_hit` check at 0x4B826 is the 0x5A task hook: a player's supershot hitting ordinary treasure (object type 0x2E) increments that player's progress byte.
 
@@ -1126,7 +1131,7 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x57012 | 13 × 4B | Random maze flags table (selected by `get_random_maze_flags` via getrandom(0xD)) |
 | 0x57046 | 8 B | `slapstic_bitwise_addr_a` — four word offsets indexed by half the current slapstic command offset |
 | 0x5704E | 8 B | `slapstic_bitwise_addr_b` — four parallel word offsets for the second access in `slapstic_cmd_bitwise` |
-| 0x57056 | 28 B | `challenge_target_object_types` — 14 object-type words indexed by `trick_tasknum - 0x50`: `{0x2C,0x2A,0x2A,0x29,0x2D,0x28,0x2B,0x2D,0x28,0x2C,0x29,0x2A,0x2A,0x2B}`. Secret-challenge setup uses the selected type while scanning eligible maze objects. |
+| 0x57056 | 28 B | `challenge_target_object_types` — 14 object-type words indexed by `trick_tasknum - 0x50`: `{0x2C,0x2A,0x2A,0x29,0x2D,0x28,0x2B,0x2D,0x28,0x2C,0x29,0x2A,0x2A,0x2B}`. Secret-challenge setup 0x43C20–0x43D10 converts each matching generator into an exit, clears the other type-0x28–0x2D generators, and replaces object types 0x13–0x18 with hidden potions. |
 | 0x57072 | 66 B | `character_select_instruction_chain` — three formatted-text nodes plus inline NUL strings “CHARACTER”, “TO SELECT”, and “USE JOYSTICK”, exact range 0x57072–0x570B3. Nodes use `{row,column,string_ptr,flags[,previous_ptr]}`; the latter two have flag 0x0200 and link backward to form the chain. |
 | 0x57340 | 16 B | `character_hud_text_ptrs` — four longword pointers to character HUD/name strings |
 | 0x57350 | 8 B | `player_text_palette_words` — four player-indexed alpha/text attribute words `{0xD000,0xD400,0xD800,0xDC00}`. Score, health, entry animation, dialog, and information-panel paths pass the selected word as the player's text palette/attribute. |
@@ -1311,10 +1316,10 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x576DA | 8 B | `score_effect_picture_cycle_b` — four words `{0x1C5C,0x1C5C,0x1C60,0x1C64}` used by the alternate branch. |
 | 0x571FA | 4 × 4B | `forcefield_cycle_delay_ptrs` — pointers to the four eight-byte profiles at 0x571DA/0x571E2/0x571EA/0x571F2, indexed by `(level & 3)` during maze setup. The former “color table” name was contradicted by the consumer, which uses these bytes only as randomized timer bases. |
 | 0x5720A | 8 B | `secret_player_palette_words` — four player-indexed text attributes `{0x8400,0x8800,0x8C00,0x9000}` used for the secret-room winner's color label. |
-| 0x57212 | 16 B | `player_color_name_ptrs` — four longword pointers to fixed-width color strings RED, BLUE, YELLOW, and GREEN at 0x57222–0x57241. |
-| 0x57222 | 32 B | `player_color_name_strings` — four padded eight-byte/NUL-terminated color labels targeted by `player_color_name_ptrs`. |
+| 0x57212 | 16 B | `player_color_name_ptrs` — four longword pointers to fixed-width color strings `" RED  "`, `" BLUE "`, `"YELLOW"`, and `"GREEN "` at 0x57222–0x57241. |
+| 0x57222 | 32 B | `player_color_name_strings` — four padded eight-byte/NUL-terminated color labels targeted by `player_color_name_ptrs`. `show_level_start_screen` passes them to OS large-text API 0x26C at column 0; the leading large-space glyph supplies the intended margin. |
 | 0x57242 | 16 B | `character_name_ptrs` — four pointers to the padded character labels WARRIOR, VALKYRIE, WIZARD, and ELF at 0x57252–0x57279. |
-| 0x57252 | 40 B | `character_name_strings` — four fixed-width ten-byte character labels targeted by `character_name_ptrs`. |
+| 0x57252 | 40 B | `character_name_strings` — four fixed-width ten-byte character labels `"WARRIOR "`, `"VALKYRIE"`, `" WIZARD "`, and `"  ELF   "` targeted by `character_name_ptrs` and drawn as large text at column 13. |
 | 0x5727A | 180 B | `level_start_message_strings` — NUL-terminated strings used by `show_level_start_screen`, from “SECRET ROOM” through “LEVEL ”; exact range 0x5727A–0x5732D. Call sites pass explicit row/column/attribute arguments rather than using a descriptor table. |
 | 0x5732E | 6 B | `player_power_icon_column_offsets` — bytes `{0x0B,0x0A,0x03,0x02,0x01,0x00}` read by `player_inv_update` at 0x45BBA–0x45BC0. Added to the name-row base at alpha column 29, they place power bits 0–5 at columns 40, 39, 32, 31, 30, and 29. |
 | 0x57334 | 12 B | `player_power_icon_words` — six complete alpha words `{0x983B,0x9D7A,0xA0A2,0xA49C,0xA97B,0xACA3}` parallel to the column offsets and selected by low-byte `player_powers` bits 0–5 at 0x45B9E–0x45BDC. The former `dead_header_byte_block` and `level_start_*` classifications were **Contradicted** by the direct `player_inv_update` consumer. |

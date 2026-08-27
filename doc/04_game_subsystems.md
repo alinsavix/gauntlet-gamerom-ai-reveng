@@ -612,6 +612,9 @@ The four movable-wall arms at 0x4280E-0x42A64 advance the wall by exactly
 `0x80`, one native pixel, and return zero to the current movement axis. A base
 Elf's requested step is `0x100`, so while pushing it alternates blocked frames
 that move only the wall with clear frames that move the hero two pixels. Direct
+destination testing stays on the shared `ray_march_*` family used by monster
+movement. It does not call the similarly shaped private player probes; changing
+probe families changes boundary ownership and corner geometry.
 ROM execution and MAME 0.289 show the same 0/2-pixel hero cadence; smoothing it
 in the renderer or forcing the hero forward on every push frame would change
 the game-side MOB words.
@@ -675,8 +678,12 @@ PLAYERSTART marker: 0x48C1A–0x48C92 tries left, right, up, and down around eac
 existing player's current cell, accepting the first empty on-screen candidate.
 `maze_scan_objects(-1)` chooses that first-player slot randomly from the decoded
 PLAYERSTART records, stores it at 0x9049E0, and replaces the selected marker with
-floor. The saved word therefore remains authoritative after death; a continue
-must not search the live MOB table for a marker that setup deliberately removed.
+floor. Every non-selected start then takes the scanner's shared loser arm:
+LFLAG4 bit 6 marks it with hpos bit 4, otherwise `pf_replace(..., floor)` removes
+it too. Treasure rooms never set that fake-exit bit, so all of their one-to-five
+stored start records become ordinary floor before play. The saved word therefore
+remains authoritative after death; a continue must not search the live MOB table
+for a marker that setup deliberately removed.
 
 ### 4.5 IT Mechanic
 
@@ -848,15 +855,24 @@ Maps maze number → data pointer + slapstic bank. See `06_maze_catalog.md` for 
 
 Called when transitioning to a new level:
 1. Resets thief timer and target to 0xFF
-2. Clears dragon encounter flag
-3. Optionally sets a random level timer (`0x904B80`)
+2. Clears bit 0 of `dialog_once_flags` (the per-level fake-exit repeat-taunt latch)
+3. At level 6, sets the treasure-room interval (`0x904B80`) to `getrandom(3)+3`
 4. Calls `slapstic_cmd_bitwise` to switch ROM banks
 5. Calls `maze_setupnew` with `ram.cur_maze_ptr`
 6. Sets up secret room state from maze byte 0
-7. Calls `maze_food_mob_consume(0xFFFF)` to find a food tile and mark it as level start slot
+7. Calls `maze_scan_objects(0xFFFF)` to choose `maze_player_start_slot` and process every PLAYERSTART loser
 8. Calls `scroll_to_slot` to center the view at level start
 9. Clears the transporter and exit position tables (`0x910700` and `ram.exit_pos_table` at `0x910740`)
-10. Scans all mob_link slots to repopulate tport and exit tables
+10. If LFLAG4 `TrapsRandom` is set, draws `getrandom(3)` once and rotates every type-10/11/12 trap identity by that common offset modulo three.
+11. Scans all `mob_link` slots to repopulate transporter/exit tables and initialize the random-wall low/current/target cursors.
+12. Below maze 115 and above level 6, chooses one authored type-49/50 food uniformly, changes its picture to adaptive food `0x277B`, and normalizes its type to 49.
+13. On secret mazes, runs the challenge-target transformation described in §10.6 after the position-table scan, then clears the reserved low MOB pictures used by ordinary play.
+
+The Python representation initializes random-wall cursors eagerly during this
+setup. It derives the transporter table as an ordered live-MOB scan because the
+stored values are the packed slots themselves. Reachable level loads replace
+the complete `MobTable`, which is equivalent to the secret path's explicit
+reserved-picture clear.
 
 ### 5.3 Maze Decode (`maze_decode`, 0x4C1BC)
 
@@ -1458,6 +1474,17 @@ routine's opening `mazenum_current < 0x73` gate excludes secret rooms.
 
 Calculates player "wealth" using weighted sum of: shot power, extra speed/shot speed/magic power/armor/fight power, potions, bonus multiplier, keys. Selects wealthiest active player as target. Stores in `ram.thief_victim` (`0x904B9A`).
 
+Scheduling establishes route ownership before the delay begins.
+`thief_setup` (0x4E432) calls `thief_target_calc`, copies that player's current
+packed cell into both `thief_start_location` and `thief_victim_pos`, and only
+then calls `thief_timer_set` (0x4E4D8) to load `thief_enter_time`. Consequently
+every victim cell handoff during the entire arrival countdown reaches
+`thief_track_victim_move` and extends the low-nibble pursuit trail. Deployment
+at 0x4DEDC creates the visitor at the saved old player cell, not at the
+victim's then-current position; the accumulated trail is what connects the two.
+After creation the same timer is reused for the 0x3C-frame entrance pause before
+`main_thief_anim` begins moving the MOB.
+
 **Confidence: Contradicted.** The former name was corrected: the distinct routine at 0x4FCF0
 does not calculate wealth. `thief_find_aligned_shooter()` scans players 0–3,
 requires an active player MOB, requires that player's shot direction to be
@@ -1475,6 +1502,14 @@ from player movement and transporter paths. If the player is the current
 `thief_victim` and the position changed, it records the direction from the old
 position in the low path-grid nibble and updates `thief_victim_pos`. It does
 not erase a MOB or write a blank tile.
+
+`thief_compute_path` (0x4F912) is a route consumer, not a fallback pathfinder.
+It saves `thief_path_direction`, reads the selected grid nibble at the current
+cell, and replaces the saved direction only when that nibble decodes to 0–7.
+An unset nibble (decoded value 8) therefore continues the previous direction;
+on freshly reset state that direction is zero, upward. Any caller that invents
+a spawn without the scheduling/breadcrumb phase can send the visitor straight
+into the top boundary even though open floor exists elsewhere.
 
 The ordinary movement engine is anchor-based rather than cell-coarse.
 `thief_move_engine` (0x4EE7A) writes each proposed H or V word, then calls
@@ -1675,9 +1710,16 @@ Secret-room availability is paced by a pair of level counters:
   `secret_code_build` when entry completes.
 - After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-character `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
 - After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) saves the maze trick in `0x904064`, replaces `0x904065` with a random task code 0x50–0x5D, selects a time limit from tables at 0x57360/0x5737C, and displays the optional task qualifier from the 14-record table at 0x573D4. It initializes the secret maze number to 115, compares the task against 0x57, and increments the maze number for tasks 0x57–0x5D before calling `maze_select_bank_special`; tasks 0x50–0x56 therefore use maze 115 and tasks 0x57–0x5D use maze 116. Code 0x5A is valid: its qualifier is “AFTER REMOVING ALL TREASURE,” and a supershot hit on ordinary treasure increments the player's progress.
+- Neither stored secret maze contains an exit. During `maze_new_level_setup`, 0x43C20–0x43D10 selects one generator type from the 14-word table at 0x57056, indexed by challenge code minus 0x50. The scan converts every matching type-0x28–0x2D generator into an exit and removes the other generators in that range. It also replaces ordinary object types 0x13–0x18 with hidden potions whose pictures are `0xA728 + 4 * (type - 0x13)`. The generated exit is therefore part of challenge setup, not compressed maze data or a renderer overlay.
+- The ordinary exit/transporter scan occurs before that secret transformation. Generated challenge exits are live collision/playfield markers but are not entered into the cleared ordinary exit-position table; no moving/choose-one logic applies to them.
 - The same routine's 0x44F7E–0x450F8 display arm writes the complete 600-frame invitation into alpha RAM: `SECRET ROOM`, the winner's color and character, `YOU HAVE PERFORMED` / `A SECRET TRICK`, the small and large countdowns, and the optional qualifier descriptor. This is game-side video state, not renderer-composed text.
+- The winner labels are OS large text, not ordinary alpha strings. At 0x44FB8/0x44FE4 the routine follows pointers to fixed-width ROM records (`" RED  "`, `" BLUE "`, `"YELLOW"`, `"GREEN "` and `"WARRIOR "`, `"VALKYRIE"`, `" WIZARD "`, `"  ELF   "`), then calls API 0x26C at columns 0 and 13 on row 7. Their leading/trailing spaces are positioning data: the large space glyph advances two alpha cells, so stripping the padding or using the small-font writer moves `RED` to the physical left edge. A direct MAME 0.289 call to 0x44DB4 confirms that the arcade intentionally presents the color and class as two widely separated fields; `RED` and `ELF` are not a single adjacent phrase.
 - `secret_need_hint` (0x90486E) is a separate discovery latch, set when a secret wall opens (0x4B6B0) or the dragon drops its hidden reward (0x54414). `level_splash` consumes it at 0x4C04E–0x4C108: it writes `TO ENTER SECRET ROOM:`, then uses the selected upcoming maze header's objective when the availability counter is zero and the level-12 gate for trick 9 passes; otherwise it chooses one of the 17 hint strings randomly. The latch is cleared after the alpha writes.
 - Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872). Ordinary-maze hooks in `resolve_shot_hit` include trick 5 (shoot food), trick 9 (get hit), and trick 17 (hurt another player); the same array is reused for challenge codes 0x50–0x5D. Tricks 1–4 and 10 are different: their successful movement paths write `trick_player` directly—transport beside Acid/Death (0x50C30), transport into an exit (0x50916), corner transport through a secret wall (0x507B8), or push a movable wall into an exit (0x42846–0x42A1A)—without incrementing the progress bytes.
+- The seventeen strings at 0x59786 are hints, not unique specifications: tricks 1–4 all say `TRY TRANSPORTABILITY`, 5–6 both say `WATCH WHAT YOU SHOOT`, and 12/14 both say `DON'T BE GREEDY`. Their consumers distinguish them. In particular, trick 1 requires landing beside object type 0x19 (Acid), not a Demon; trick 4 is corner transport through a secret wall; tricks 5/6 require two food/secret-wall shots; and tricks 12/13/14 forbid keys-or-potions, food, and treasure respectively.
+- Two English names are looser than their predicates. Trick 9 accepts when `secret_tricks_flags[player] & 3 == 0` at 0x52BF0–0x52BFC. Dragon fire increments that byte at 0x4B2A2, but the killing shot writes 2 at 0x54420–0x54444 unless the byte is already 1; consequently “kill the dragon without getting hit” is not an accurate specification of the shipped code. Trick 17 writes 1 as soon as a player shot resolves any player at 0x4B046–0x4B052, before the damage/stun gates and before the later shooter/victim comparison; a harmless hit, including a reflected self-hit, still fails it.
+- `secret_bonus_earned` 0x4D1A4 gates the secret-room reward independently of finding the exit. Codes 0x50/0x51/0x5D require exact counts of six treasures/potions, 0x52/0x5B require three secret walls, 0x53 requires no remaining monster or generator, 0x56 requires the five-pad bitmask 0x3E, 0x5A requires all nineteen treasure removals, and 0x5C requires at least one IT event. Codes 0x54/0x55/0x57/0x58/0x59 have no extra progress predicate. The payout at 0x4D720 additionally requires the entrant to have reached exit status 2 or 8; only then does it award 5,000 points per coin and call `secret_getname`. The contest code editor opens only when game-settings bit 13 is enabled.
+- Availability is sampled, not continuously consulted. `maze_new_level_setup` 0x43930–0x43958 tests `secret_possible_counter` and copies the current maze-header byte into `trick_tasknum` once; changing only the counter after setup cannot arm the maze already in progress. At exit, `player_exit_sequence` 0x52B40 checks the live task and may write `trick_player` before status becomes 8. After the dissolve changes that player to status 2, `show_level_start_screen` 0x44DD6–0x44E00 requires exactly that valid player/status pair before substituting maze 115/116.
 
 ---
 
@@ -2016,7 +2058,12 @@ setup, or any display rebuilder; those would overwrite the captured state.
 
 `title_logo_init` (0x4DA3E) is the separate no-argument initializer called only by the TITLE branch of `start_attract_screen`. It initializes the brightness sequence and timers, clears ten MOB-color words, then constructs the multi-row logo from MOB slots beginning at 0x21 by writing picture, H/V position, and link arrays. It selects the full or short four-byte motion program at 0x5AC2E/0x5AC4E from `title_intro_state`, backs the pointer up one record for the update routine's pre-increment convention, and starts the logo off-screen with `scroll_apply(-128, 0)`. The routine has its own frame and returns at 0x4DCB8; it is not a tail of `scroll_apply`.
 
-**SCORES mode:** Calls `score_screen_color_cycle` (0x4DE76): every 16th frame, shifts 11 color RAM entries one slot, creating a scrolling rainbow effect on the high-score text.
+**SCORES mode:** Calls `score_screen_color_cycle` (0x4DE76): every 16th frame,
+saves the final four words of alpha color-RAM block 144–159, shifts the
+preceding twelve words forward by four, and restores the saved group at the
+front. The signed loop seeded with `moveq #0xB` executes twelve moves, not
+eleven, rotating the complete 16-word palette and creating a scrolling rainbow
+on the high-score text.
 
 **TITLE mode:** Two nested timers:
 1. **Outer timer** (`0x904A18`): When negative, resets from ROM value at 0x5BA68. Copies 7 words from `0x910206` to `0x910204` (scrolling rainbow on logo text). Repeats for 10 rows.

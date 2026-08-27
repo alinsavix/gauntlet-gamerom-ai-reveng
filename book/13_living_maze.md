@@ -180,6 +180,10 @@ shimmer after 25 player shots; two of the secret objectives reward shoving at
 these. A destructible wall is softer and crumbles when shot. At maximum shot
 power, projectiles pass through walls entirely, and a player with the reflect
 power bounces shots off them at computed angles instead of losing them.
+When a hero pushes a movable wall, the game tests the wall's destination with
+the same directional ray-march geometry used by monster movement, not the
+similar-looking private player probe family. That shared ownership is what keeps
+wall traversal and actor traversal in agreement at boundaries and corners.
 Secret shootable walls keep the ordinary level-wall palette until revealed;
 a brighter special palette would give the secret away.
 On ordinary wall sets, damage advances a live color-RAM nibble rather than
@@ -282,13 +286,34 @@ exit or timeout opens the bonus curtain and pays for the treasure-room take.
 ## The secret objective you did not know you had
 
 Every normal maze from level 6 onward carries a hidden objective in its
-header, one of seventeen. Some are dares: transport yourself onto a demon,
-onto Death, into the exit. Some are abstinence: kill a dragon without taking a
-hit, finish without eating food, without picking up keys or potions, without
-hoarding treasure, without using invulnerability, without shooting the food,
-without shooting your friends. Some are oddly specific: shoot the secret
-walls, push at a movable wall, be IT and be nice about it, and, as covered
-above, do not fall for a fake exit.
+header, one of seventeen. Some are dares: transport beside Acid or Death,
+transport into the exit, or pass through a secret wall. Some are abstinence:
+finish without eating food, without picking up keys or potions, without
+hoarding treasure, or without hitting any player with a shot. Some are oddly
+specific: shoot food or secret walls twice, bank eleven super shots, collect
+invulnerability without being hit while protected, push a movable wall into an
+exit, exit while IT, and, as covered above, do not fall for a fake exit. The
+dragon objective is stranger than its English hint, as explained below.
+
+The cabinet phrases are clues rather than complete specifications, and several
+different objectives share one clue. `TRY TRANSPORTABILITY` can mean landing
+beside Acid, landing beside Death, transporting into the exit, or
+corner-transporting through a secret wall. `WATCH WHAT YOU SHOOT` distinguishes
+two food shots from two secret-wall shots. The two `DON'T BE GREEDY` objectives
+mean either collect no keys or potions, or collect no treasure; `GO ON A DIET`
+is the separate no-food objective. Even `DON'T USE INVULNERABILITY` is
+deliberately coy: the actual test requires collecting it and then avoiding
+monster contact or fire while protected.
+
+One clue is stranger still. `DON'T GET HIT` sounds like a clean dragon kill,
+but the shipped predicate only asks whether the low two bits of a per-player
+byte are zero. Dragon fire increments that byte; killing the dragon writes two
+unless it was already one. A clean non-killer therefore passes while a clean
+killer does not, and four fire hits make the masked test pass again. This is
+counterintuitive, but it is what the ROM executes. `DON'T HURT FRIENDS` is
+strict in the opposite direction: merely hitting any player with a shot,
+including the shooter after a reflection, fails it before the game decides
+whether that hit can damage or stun.
 
 The objective is not announced merely because it became active. Finding a
 secret wall or killing the dragon does, however, raise a discovery latch. On
@@ -296,6 +321,13 @@ the next between-level curtain the game prints `TO ENTER SECRET ROOM:` and
 either reveals the objective in the already selected next maze (when it is
 eligible) or offers one of the seventeen objective hints at random. The latch
 is consumed by those text-layer writes.
+
+Availability is sampled when the maze is set up, not checked continuously
+while the party plays. When the pacing counter is already zero, setup copies
+the maze header's objective into the live task byte; making the counter zero
+later would not arm that same maze by itself. The exit path checks the copied
+task, records the winning player, and only after that player's dissolve reaches
+the between-level status can the next-level curtain substitute a secret room.
 
 Progress and violations are tracked per player, and the hooks are scattered
 through every system the objectives touch: the shot resolver notices when you
@@ -330,16 +362,39 @@ ROOM banner: "AFTER COLLECTING 6 TREASURES," "AFTER SHOOTING 3 SECRET WALLS,"
 "AFTER USING 5 TRANSPORTERS," "AFTER REMOVING ALL TREASURE," "WHILE YOU ARE
 IT," and so on.
 
+The two stored layouts contain no exit tile. Setup creates the way out for the
+particular challenge: a fourteen-word table names one generator type for each
+task code, every generator of that type becomes an exit, and the other
+high-tier generators disappear. The ordinary monsters in the room become
+hidden potions, with the former monster family selecting which permanent power
+the potion contains. This transformation follows the ordinary exit-position
+scan, so challenge exits never participate in moving- or choose-one-exit logic.
+An implementation that merely loads maze 115 or 116 will therefore show no exit
+at all.
+
 The curtain also names the winning player's color and character, says that
 they performed a secret trick, and shows the time limit in both the invitation
 and the status panel. The room is therefore announced before its maze is
 revealed; it is not a renderer-side title laid over gameplay.
 
-Inside, the same per-player progress flags track the qualifier. Reach the exit
-with the challenge satisfied and the bonus screen pays 5,000 points per coin
-you have inserted, a rate that respects the score-per-coin economy Chapter 14
-explains. Your saved supershot state survives the detour, the saved maze and
-level are restored, and the rotation resumes.
+Those color and character labels are large text too. Their ROM strings are
+fixed-width and visibly padded—`" RED  "` and `"  ELF   "`, for example—and
+the spaces advance through the same two-cell large-glyph machinery as letters.
+The padding positions the two fields; trimming it would pin RED to the left
+edge. A direct MAME 0.289 capture confirms the remaining broad separation is
+intentional arcade formatting: the color and class are two fields, not the
+adjacent phrase “RED ELF.”
+
+Inside, the same per-player progress flags track the qualifier. Five challenge
+codes need no extra progress beyond reaching the exit. The others require six
+treasures, all six potions, three secret walls, no monsters or generators left,
+five distinct transporters, all nineteen treasures removed, or at least one IT
+event. Merely finding the exit does not earn a failed challenge: the bonus
+screen pays 5,000 points per inserted coin only when the code-specific predicate
+passes and the entrant reached the exit. Only that successful path can continue
+to contest name entry, and only when the operator enabled the contest option.
+Your saved supershot state survives the detour, the saved maze and level are
+restored, and the rotation resumes.
 
 For most cabinets that is the end of the story. But if the operator has
 enabled one particular option, winning the challenge leads somewhere stranger.

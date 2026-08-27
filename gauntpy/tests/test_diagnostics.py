@@ -11,6 +11,7 @@ from gauntpy.render.diagnostics import (
     DEBUG_PANEL_WIDTH,
     DEBUG_ROW_HEIGHT,
     _host_font,
+    _performance_graph_scale,
     capture_debug_snapshot,
     debug_page_lines,
     debug_snapshot_lines,
@@ -108,6 +109,17 @@ def test_performance_page_reports_history_and_renders_a_graph():
     assert image.getbbox() is not None
 
 
+def test_performance_graph_has_a_labeled_millisecond_scale():
+    assert _performance_graph_scale((7.0, 16.67, 18.0)) == (
+        20.0,
+        (0.0, 10.0, 20.0),
+    )
+    assert _performance_graph_scale((41.0,)) == (
+        50.0,
+        (0.0, 25.0, 50.0),
+    )
+
+
 def test_panel_is_a_separate_host_raster():
     state = _diagnostic_state()
     before_alpha = tuple(state.alpha_ram)
@@ -146,6 +158,71 @@ def test_every_diagnostics_page_has_read_only_rows():
             snapshot, page=page, events=("00123 test event",), height=960,
         )
         assert image.size == (DEBUG_PANEL_WIDTH, 960)
+
+
+def test_level_page_names_the_current_maze_secret_trick():
+    state = _diagnostic_state()
+    state.maze = type("Maze", (), {"secret": 13})()
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["SECRET TRICK"] == "0D EAT NO FOOD"
+
+
+def test_level_page_distinguishes_reused_secret_hint_text():
+    expected = (
+        "TRANSPORT NEXT TO ACID",
+        "TRANSPORT NEXT TO DEATH",
+        "TRANSPORT INTO EXIT",
+        "TRANSPORT THRU SECRET WALL",
+        "SHOOT 2 FOOD ITEMS",
+        "SHOOT 2 SECRET WALLS",
+        "EXIT WITH 11 SUPER SHOTS",
+        "TAKE INVULN; AVOID HITS",
+        "DRAGON FLAG LOW 2 BITS = 0",
+        "PUSH MOVABLE WALL INTO EXIT",
+        "AVOID FAKE EXITS",
+        "COLLECT NO KEYS/POTIONS",
+        "EAT NO FOOD",
+        "COLLECT NO TREASURE",
+        "ENTER EXIT ON PUSH RETRY",
+        "EXIT WHILE IT",
+        "SHOOT NO PLAYER (SELF TOO)",
+    )
+    state = _diagnostic_state()
+    page = DEBUG_PAGES.index("LEVEL")
+
+    for trick, detail in enumerate(expected, start=1):
+        state.maze = type("Maze", (), {"secret": trick})()
+        rows = dict(debug_page_lines(capture_debug_snapshot(state), page))
+        assert rows["SECRET TRICK"] == f"{trick:02X} {detail}"
+
+
+def test_level_page_does_not_present_bonus_header_byte_as_entry_trick():
+    state = _diagnostic_state()
+    state.mazenum_current = 104
+    state.maze = type("Maze", (), {"secret": 14})()
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["SECRET TRICK"] == "n/a in bonus room"
+
+
+def test_level_page_suppresses_stale_bonus_header_during_tally_transition():
+    state = _diagnostic_state()
+    state.game_mode = GameMode.TREAS_EXIT
+    state.mazenum_current = 40
+    state.maze = type("Maze", (), {"secret": 14})()
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["SECRET TRICK"] == "n/a during transition"
 
 
 def test_event_log_is_derived_from_snapshots_without_game_instrumentation():

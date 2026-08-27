@@ -640,6 +640,7 @@ def attract_demo_init(state: GameState) -> None:
     from .session import player_init_for_coin
 
     setup_infopanel(state, -1)                     # 0x449DE-0x449E4
+    state.dialog_once_flags = 0                    # 0x449EC
     state.dialog_first_encounter_flags = 0         # 0x449F6
 
     # Player 1 is the Elf hero driving the standard demo (§6.3).

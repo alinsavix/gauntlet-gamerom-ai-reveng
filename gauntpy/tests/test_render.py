@@ -1475,7 +1475,9 @@ class TestRomTextTables:
         assert [len(run) for run in romtext.CHARACTER_HUD_GLYPHS] == [4, 5, 4, 2]
 
     def test_the_player_colour_names_are_the_rom_ones(self):
-        assert romtext.PLAYER_COLOR_NAMES == ("RED", "BLUE", "YELLOW", "GREEN")
+        assert romtext.PLAYER_COLOR_NAMES == (
+            " RED  ", " BLUE ", "YELLOW", "GREEN ",
+        )
         assert score.PLAYER_TEXT_PALETTE_WORDS == (0xD000, 0xD400, 0xD800, 0xDC00)
 
     def test_glyph_runs_render_or_fall_back_to_their_ascii_spelling(self):
@@ -2263,7 +2265,7 @@ class TestHostShellInput:
         finally:
             shell.close()
 
-    def test_f5_f6_f7_route_to_troubleshooting_controls(self, monkeypatch):
+    def test_troubleshooting_function_keys_route_to_controls(self, monkeypatch):
         from gauntpy.render import host
 
         calls = []
@@ -2279,11 +2281,26 @@ class TestHostShellInput:
             host, "debug_add_potion",
             lambda state, player: calls.append(("potion", player)) or True,
         )
+        monkeypatch.setattr(
+            host, "debug_enable_secret_room",
+            lambda state: calls.append(("enable-secret", state)) or True,
+        )
+        monkeypatch.setattr(
+            host, "debug_force_secret_room",
+            lambda state, player: calls.append(("force-secret", player)) or True,
+        )
         shell = host.HostShell(assets=_FakeAssets(), player=2)
         try:
             pygame = shell._pygame
-            state = GameState()
-            for key in (pygame.K_F5, pygame.K_F6, pygame.K_F7):
+            state = GameState(
+                game_mode=GameMode.NORMAL,
+                mazenum_current=104,
+                treasure_timer=60,
+            )
+            for key in (
+                pygame.K_F5, pygame.K_F6, pygame.K_F7, pygame.K_F8,
+                pygame.K_F9, pygame.K_F10,
+            ):
                 pygame.event.post(
                     pygame.event.Event(pygame.KEYDOWN, key=key)
                 )
@@ -2294,7 +2311,35 @@ class TestHostShellInput:
                 ("level", state),
                 ("key", 2),
                 ("potion", 2),
+                ("enable-secret", state),
+                ("force-secret", 2),
             ]
+            assert shell.treasure_timer_paused
+        finally:
+            shell.close()
+
+    def test_f8_unpauses_and_clears_when_bonus_room_ends(self):
+        from gauntpy.render.host import HostShell
+
+        shell = HostShell(assets=_FakeAssets())
+        try:
+            pygame = shell._pygame
+            state = GameState(
+                game_mode=GameMode.NORMAL,
+                mazenum_current=115,
+                treasure_timer=120,
+            )
+            for expected in (True, False):
+                pygame.event.post(
+                    pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F8)
+                )
+                shell.wait_for_vblank(state)
+                assert shell.treasure_timer_paused is expected
+
+            shell.treasure_timer_paused = True
+            state.treasure_timer = 0
+            shell.wait_for_vblank(state)
+            assert not shell.treasure_timer_paused
         finally:
             shell.close()
 

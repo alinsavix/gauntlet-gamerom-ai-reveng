@@ -358,6 +358,15 @@ paths to the same number. Damage also gets *sampled*: a 60-frame window
 accumulates what you have taken and maintains a running average, which the
 game consults when deciding whether your situation deserves spoken commentary.
 
+Monster contact has a second speech gate of its own. A per-player cooldown is
+predecremented; when it becomes negative, one draw reloads it from a range that
+grows with the active party, making repeated hurt lines less frequent in a
+crowd. Acid-afflicted players stop after that reload draw and remain silent.
+Everyone else makes one more draw from the character's literal hurt-voice bank:
+four Warrior lines, ten each for Valkyrie and Wizard, and nine for the Elf.
+That two-draw order matters to the shared random stream even when acid suppresses
+the audible result.
+
 Food adds a flat hundred, and coins add the operator-configured amount. Those
 two sources are the entire supply, and health is scarce by design.
 

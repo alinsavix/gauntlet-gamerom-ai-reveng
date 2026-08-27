@@ -180,6 +180,41 @@ class TestArguments:
         assert called["load_state_path"] == path
         assert called["scale"] == 2
 
+    def test_synthetic_scenario_path_is_forwarded(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+        path = tmp_path / "repro.gsc"
+
+        play.main(["--scenario", str(path), "--scale", "2"])
+
+        assert called["scenario_path"] == path
+        assert called["scale"] == 2
+
+    @pytest.mark.parametrize("option", [
+        "--load-state", "--attract", "--level", "--character", "--keys",
+        "--potions", "--power", "--seed",
+    ])
+    def test_synthetic_scenario_rejects_other_start_modes(
+        self, monkeypatch, option,
+    ):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        values = {
+            "--load-state": "state.json",
+            "--level": "2",
+            "--character": "wizard",
+            "--keys": "1",
+            "--potions": "1",
+            "--power": "invisibility",
+            "--seed": "1234",
+        }
+        argv = ["--scenario", "repro.gsc", option]
+        if option in values:
+            argv.append(values[option])
+
+        with pytest.raises(SystemExit):
+            play.main(argv)
+
     @pytest.mark.parametrize("option", [
         "--attract", "--level", "--character", "--keys", "--potions", "--power",
         "--seed",
@@ -316,8 +351,10 @@ class TestBuildState:
                 if not state.mobs.hpos[slot] & 0x10
             )
 
-        assert real_exit_index(first) == 0
-        assert real_exit_index(second) == 1
+        # maze_new_level_setup's adaptive-food choice runs before
+        # maze_scan_objects(0) chooses the real exit.
+        assert real_exit_index(first) == 1
+        assert real_exit_index(second) == 0
 
     def test_level_20_upper_right_passage_accepts_continued_downward_motion(self):
         from gauntpy.coords import hpos_x, vpos_y

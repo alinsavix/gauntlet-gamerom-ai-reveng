@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+from math import ceil
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -33,6 +34,7 @@ DEBUG_PAGES = (
     "AI",
     "DISPLAY",
     "AUDIO",
+    "SCENARIO",
     "EVENTS",
     "PERFORMANCE",
 )
@@ -43,6 +45,29 @@ _LABEL = (170, 180, 190, 255)
 _VALUE = (235, 238, 242, 255)
 _DIM = (105, 115, 125, 255)
 _DIVIDER = (55, 62, 70, 255)
+
+# Host explanations of the seventeen maze-header objectives. The cabinet's ROM
+# hints are deliberately vague and many-to-one; these follow the actual event
+# producers and exit predicates instead.
+_SECRET_OBJECTIVE_DETAILS = (
+    "TRANSPORT NEXT TO ACID",
+    "TRANSPORT NEXT TO DEATH",
+    "TRANSPORT INTO EXIT",
+    "TRANSPORT THRU SECRET WALL",
+    "SHOOT 2 FOOD ITEMS",
+    "SHOOT 2 SECRET WALLS",
+    "EXIT WITH 11 SUPER SHOTS",
+    "TAKE INVULN; AVOID HITS",
+    "DRAGON FLAG LOW 2 BITS = 0",
+    "PUSH MOVABLE WALL INTO EXIT",
+    "AVOID FAKE EXITS",
+    "COLLECT NO KEYS/POTIONS",
+    "EAT NO FOOD",
+    "COLLECT NO TREASURE",
+    "ENTER EXIT ON PUSH RETRY",
+    "EXIT WHILE IT",
+    "SHOOT NO PLAYER (SELF TOO)",
+)
 
 _FONT_CANDIDATES = (
     (
@@ -187,6 +212,17 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         for slot in range(32, len(state.mobs.picture))
         if state.mobs.picture[slot]
     )
+    maze_trick = int(getattr(state.maze, "secret", 0) or 0)
+    if state.game_mode == int(GameMode.TREAS_EXIT):
+        secret_trick = "n/a during transition"
+    elif state.mazenum_current >= 104:
+        secret_trick = "n/a in bonus room"
+    elif 1 <= maze_trick <= len(_SECRET_OBJECTIVE_DETAILS):
+        secret_trick = (
+            f"{maze_trick:02X} {_SECRET_OBJECTIVE_DETAILS[maze_trick - 1]}"
+        )
+    else:
+        secret_trick = "none"
     return (
         ("CURRENT", f"level {state.levelnum_current} maze {state.mazenum_current}"),
         ("NEXT", f"level {state.level_next} maze {state.maze_next}"),
@@ -204,6 +240,7 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         ("EXITS", f"{len(state.exit_slots)} open={state.exit_open_id:03X}"),
         ("EXIT MOVE", f"timer={state.exit_move_timer} frame={state.exit_anim_frame}"),
         ("TRANSPORTERS", str(transporters)),
+        ("SECRET TRICK", secret_trick),
         ("SECRET ID", f"{state.secret_trick_id:02X} last={state.secret_trick_last:02X}"),
         ("SECRET WIN", f"{state.secret_winner} hint={state.secret_need_hint}"),
         ("SECRET COUNT", f"{state.secret_possible_counter}/{state.secret_possible_start}"),
@@ -317,6 +354,38 @@ def _audio_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
+def _scenario_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
+    from ..custom_scenario import synthetic_runtime_for
+
+    runtime = synthetic_runtime_for(state)
+    if runtime is None:
+        return (("SCENARIO", "no synthetic fixture loaded"),)
+    scenario = runtime.scenario
+    input_mode = (
+        "LIVE"
+        if runtime.current_input is None
+        else _pressed_input_names(runtime.current_input).upper()
+    )
+    rows: list[tuple[str, str]] = [
+        ("NAME", scenario.name),
+        ("SOURCE", scenario.source_name or "embedded"),
+        ("HASH", scenario.sha256[:16]),
+        ("INPUT", input_mode),
+        ("EVENTS", f"{len(runtime.fired_events)}/{len(scenario.events)} fired"),
+    ]
+    current = int(state.frame_counter) & 0xFFFF
+    for index, event in enumerate(scenario.events):
+        action = " ".join((event.action, *event.args))
+        if index in runtime.fired_events:
+            value = f"FIRED @{event.frame:05d} {action}"
+        elif event.frame >= current:
+            value = f"T-{event.frame - current:05d} @{event.frame:05d} {action}"
+        else:
+            value = f"MISSED +{current - event.frame:05d} {action}"
+        rows.append((f"EVT {index:02d}", value))
+    return tuple(rows)
+
+
 def capture_debug_snapshot(
     state: GameState, *, paused: bool = False, selected_mob: int = 0,
     render_time_ms: float = 0.0,
@@ -399,6 +468,7 @@ def capture_debug_snapshot(
             ("AI", _ai_page_rows(state)),
             ("DISPLAY", _display_page_rows(state)),
             ("AUDIO", _audio_page_rows(state)),
+            ("SCENARIO", _scenario_page_rows(state)),
         ),
         paused=paused,
     )
@@ -548,6 +618,13 @@ def debug_page_lines(
     return dict(snapshot.page_rows).get(name, ())
 
 
+def _performance_graph_scale(
+    history: tuple[float, ...],
+) -> tuple[float, tuple[float, float, float]]:
+    ceiling = max(20.0, ceil(max(history, default=0.0) / 10.0) * 10.0)
+    return ceiling, (0.0, ceiling / 2.0, ceiling)
+
+
 def render_debug_panel(
     snapshot: DebugSnapshot,
     *,
@@ -586,9 +663,20 @@ def render_debug_panel(
         y += row_height
     if DEBUG_PAGES[page] == "PERFORMANCE" and snapshot.render_time_history_ms:
         history = snapshot.render_time_history_ms
-        left, top, right, bottom = 8, 82, width - 8, height - 10
+        left, top, right, bottom = 46, 82, width - 8, height - 10
         draw.rectangle((left, top, right, bottom), outline=_DIVIDER)
-        ceiling = max(16.67, max(history))
+        ceiling, ticks = _performance_graph_scale(history)
+        for value in ticks:
+            tick_y = bottom - 1 - value * (bottom - top - 2) / ceiling
+            label = f"{value:g} ms"
+            label_box = draw.textbbox((0, 0), label, font=font)
+            draw.text(
+                (left - (label_box[2] - label_box[0]) - 5, tick_y - 5),
+                label,
+                font=font,
+                fill=_DIM,
+            )
+            draw.line((left - 3, tick_y, right - 1, tick_y), fill=_DIVIDER)
         points = []
         for index, value in enumerate(history):
             x = left + 1 + index * (right - left - 2) / max(1, len(history) - 1)
@@ -599,5 +687,8 @@ def render_debug_panel(
         else:
             draw.line(points, fill=_HEADING, width=2)
         budget_y = bottom - 1 - 16.67 * (bottom - top - 2) / ceiling
-        draw.line((left + 1, budget_y, right - 1, budget_y), fill=(120, 80, 80, 255))
+        draw.line(
+            (left + 1, budget_y, right - 1, budget_y),
+            fill=(120, 80, 80, 255),
+        )
     return image

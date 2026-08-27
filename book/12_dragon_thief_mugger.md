@@ -215,6 +215,10 @@ The highest total becomes the victim. Nothing else about you matters: not your
 health, not your score, not your class. The thief wants your upgrades, and it
 has a strict opinion about which upgrade is worth the most.
 
+That choice happens when the visit is scheduled, not when the figure finally
+appears. The game saves the victim's current cell as both the deployment point
+and the head of the route, then starts the arrival countdown.
+
 **Choosing a moment.** The arrival timer is computed from a second measure
 entirely, the victim's score divided by the coins they have inserted. Call that
 number W, clamped to fifteen, and let D shrink from 50 down to 0 as the level
@@ -223,6 +227,10 @@ works out to `(20 − W) + random(W + 10 + D)`, multiplied by sixty to get frame
 Treasure rooms run a tighter version of the same formula. A player
 who is doing well on very little money is visited sooner and more variably; a
 deep level narrows the random component until the wait is short no matter what.
+Throughout that wait, every cell the already-selected victim leaves extends the
+trail. When the timer expires, the visitor appears where that player had been
+when scheduling began, pauses for sixty frames, and then has a complete set of
+footprints leading from that old cell toward the player's newer position.
 
 **Getting to you.** Once deployed, the thief has a small set of modes: entering,
 pursuing, dodging, and escaping. Pursuit does not use a general path finder.
@@ -232,6 +240,13 @@ the game uses for routing, and the thief reads that nibble as it goes. It is
 literally following your footprints, one cell behind. Each grid byte holds two
 of these direction codes, and the thief switches to the other one the moment it
 turns to escape, which looks very much like retracing the route it came in by.
+
+There is no emergency search when a footprint is absent. The route reader keeps
+the direction it was already following; from freshly reset state that means
+up. This normally cannot matter because scheduling and the countdown build the
+trail before deployment. A test harness that simply drops a thief into an
+arbitrary cell without those breadcrumbs can therefore make it march into the
+top wall and stop, a failure of the setup rather than evidence of different AI.
 
 Following a cell does not mean collision waits for the thief's picture origin
 to enter it. The thief is twenty-four pixels wide in a sixteen-pixel grid. For

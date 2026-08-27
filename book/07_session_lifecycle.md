@@ -85,10 +85,12 @@ level happens to be in progress.
 
 The first-player case does not search for a surviving start marker. During maze
 setup the cabinet randomly chooses a PLAYERSTART, remembers its packed cell, and
-replaces the marker with floor. Fresh starts and post-death continues reuse that
-saved cell; later joiners search beside a hero who is already active. A placement
-failure never advances to the finalizer, because "alive with no MOB" would leave
-the camera tracking an absent player.
+replaces the marker with floor. The scan normally replaces the unchosen start
+markers with floor as well; this matters in treasure rooms, which can store as
+many as five candidate starts but must expose only walkable floor. Fresh starts
+and post-death continues reuse the saved cell; later joiners search beside a hero
+who is already active. A placement failure never advances to the finalizer,
+because "alive with no MOB" would leave the camera tracking an absent player.
 
 ## Starting a level
 

@@ -48,7 +48,7 @@ from __future__ import annotations
 from collections import deque
 from time import perf_counter
 
-from ..constants import FRAMES_PER_SECOND
+from ..constants import FRAMES_PER_SECOND, GameMode
 from ..state import GameState
 from ..subsystems.input import JOY_DOWN, JOY_FIRE_BIT, JOY_IDLE, JOY_LEFT, JOY_MAGIC_BIT, JOY_RIGHT, JOY_UP
 from .compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH, RenderCache, render_frame
@@ -59,7 +59,13 @@ from .diagnostics import (
     derive_debug_events,
     render_debug_panel,
 )
-from .debug_controls import debug_add_key, debug_add_potion, debug_skip_level
+from .debug_controls import (
+    debug_add_key,
+    debug_add_potion,
+    debug_enable_secret_room,
+    debug_force_secret_room,
+    debug_skip_level,
+)
 from .state_dump import dump_game_state
 
 __all__ = [
@@ -69,6 +75,8 @@ __all__ = [
     "DEFAULT_DIAGNOSTICS_MOB_PREV_KEY", "DEFAULT_DIAGNOSTICS_MOB_NEXT_KEY",
     "DEFAULT_STATE_DUMP_KEY",
     "DEFAULT_SKIP_LEVEL_KEY", "DEFAULT_ADD_KEY_KEY", "DEFAULT_ADD_POTION_KEY",
+    "DEFAULT_TREASURE_TIMER_PAUSE_KEY",
+    "DEFAULT_ENABLE_SECRET_ROOM_KEY", "DEFAULT_FORCE_SECRET_ROOM_KEY",
 ]
 
 
@@ -107,6 +115,10 @@ DEFAULT_STATE_DUMP_KEY = "K_F4"
 DEFAULT_SKIP_LEVEL_KEY = "K_F5"
 DEFAULT_ADD_KEY_KEY = "K_F6"
 DEFAULT_ADD_POTION_KEY = "K_F7"
+DEFAULT_TREASURE_TIMER_PAUSE_KEY = "K_F8"
+DEFAULT_ENABLE_SECRET_ROOM_KEY = "K_F9"
+DEFAULT_FORCE_SECRET_ROOM_KEY = "K_F10"
+_FIRST_BONUS_MAZE = 104
 
 
 class HostShell:
@@ -145,6 +157,7 @@ class HostShell:
         self._cache = RenderCache()
         self._title = title
         self.paused = False
+        self.treasure_timer_paused = False
         self.diagnostics_visible = diagnostics
         self.diagnostics_page = 0
         self.diagnostics_selected_mob = 0
@@ -179,6 +192,15 @@ class HostShell:
         self._skip_level_key = getattr(pygame, DEFAULT_SKIP_LEVEL_KEY)
         self._add_key_key = getattr(pygame, DEFAULT_ADD_KEY_KEY)
         self._add_potion_key = getattr(pygame, DEFAULT_ADD_POTION_KEY)
+        self._treasure_timer_pause_key = getattr(
+            pygame, DEFAULT_TREASURE_TIMER_PAUSE_KEY,
+        )
+        self._enable_secret_room_key = getattr(
+            pygame, DEFAULT_ENABLE_SECRET_ROOM_KEY,
+        )
+        self._force_secret_room_key = getattr(
+            pygame, DEFAULT_FORCE_SECRET_ROOM_KEY,
+        )
 
     def _set_window_mode(self):
         game_width = LOGICAL_WIDTH * self.scale
@@ -196,6 +218,12 @@ class HostShell:
         drive ``state.vblank_flag``.
         """
         pygame = self._pygame
+        if self.treasure_timer_paused and (
+            state.game_mode != int(GameMode.NORMAL)
+            or state.mazenum_current < _FIRST_BONUS_MAZE
+            or state.treasure_timer <= 0
+        ):
+            self.treasure_timer_paused = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 raise SystemExit(0)
@@ -238,6 +266,37 @@ class HostShell:
                         )
                     else:
                         print("gauntpy add-potion ignored for inactive player")
+                elif event.key == self._treasure_timer_pause_key:
+                    if (
+                        state.game_mode == int(GameMode.NORMAL)
+                        and state.mazenum_current >= _FIRST_BONUS_MAZE
+                        and state.treasure_timer > 0
+                    ):
+                        self.treasure_timer_paused = (
+                            not self.treasure_timer_paused
+                        )
+                        status = (
+                            "paused" if self.treasure_timer_paused else "resumed"
+                        )
+                        print(f"gauntpy treasure/secret timer {status}")
+                    else:
+                        print("gauntpy timer pause ignored outside a bonus room")
+                elif event.key == self._enable_secret_room_key:
+                    if debug_enable_secret_room(state):
+                        print(
+                            "gauntpy secret trick armed: "
+                            f"{state.secret_trick_id:02X}"
+                        )
+                    else:
+                        print("gauntpy secret trick unavailable on this level")
+                elif event.key == self._force_secret_room_key:
+                    if debug_force_secret_room(state, self.player):
+                        print(
+                            "gauntpy secret-room entry forced for "
+                            f"P{self.player + 1} on exit"
+                        )
+                    else:
+                        print("gauntpy force-secret ignored outside active play")
                 elif (
                     self.diagnostics_visible
                     and event.key == self._diagnostics_next_key

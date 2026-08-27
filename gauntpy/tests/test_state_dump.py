@@ -114,6 +114,7 @@ def test_load_migrates_original_schema_one_shape(tmp_path):
         "playfield_color_latch",
         "playfield_color_base",
         "eeprom_persistence_enabled",
+        "dialog_once_flags",
     ):
         del payload["state"][name]
     payload["state"]["playfield_color_ram"][8] = 0x2468
@@ -126,6 +127,7 @@ def test_load_migrates_original_schema_one_shape(tmp_path):
     assert restored.playfield_color_base == 0x2468
     assert restored.playfield_color_latch == 0x2468
     assert restored.eeprom_persistence_enabled is False
+    assert restored.dialog_once_flags == 0
 
 
 def test_loaded_state_cannot_overwrite_external_eeprom(tmp_path, monkeypatch):

@@ -111,15 +111,15 @@ _GSETTING_SPEECH_DISABLE = 0x800
 # 0x51CCC). The names below follow the ROM, so 13 is the food trick and 14 the
 # treasure trick. Prefer the behaviour-named aliases in progress hooks.
 TRICK_NONE = 0
-TRICK_TRANSPORT1 = 1        # try transportability (onto demon)
+TRICK_TRANSPORT1 = 1        # try transportability (land beside acid)
 TRICK_TRANSPORT2 = 2        # ... onto death
 TRICK_TRANSPORT3 = 3        # ... into the exit
-TRICK_TRANSPORT4 = 4        # ... into the exit, variant
+TRICK_TRANSPORT4 = 4        # ... corner-transport through a secret wall
 TRICK_WATCHSHOOT1 = 5       # watch what you shoot (foods)
 TRICK_WATCHSHOOT2 = 6       # watch what you shoot (secret walls)
 TRICK_SAVESUPERSHOTS = 7
 TRICK_NOUSEINVUL = 8
-TRICK_NOGETHIT = 9          # while killing a dragon
+TRICK_NOGETHIT = 9          # dragon progress byte must have low two bits clear
 TRICK_PUSHWALL = 10
 TRICK_NOFOOLED = 11
 TRICK_NOGREEDY1 = 12        # 0x0C, no keys or potions (0x514D4, 0x5179C)
@@ -490,9 +490,13 @@ def _write_secret_room_start(state: GameState) -> None:
 
     write_alpha_large_text(state, 4, 3, romtext.SECRET_ROOM_TITLE, 0x8000)
     attribute = 0x8400 + (winner << 10)
-    write_alpha_text(state, 0, 7, romtext.PLAYER_COLOR_NAMES[winner], attribute)
+    write_alpha_large_text(
+        state, 0, 7, romtext.PLAYER_COLOR_NAMES[winner], attribute,
+    )
     character = state.players[winner].character & 3
-    write_alpha_text(state, 13, 7, romtext.CHARACTER_NAMES[character], attribute)
+    write_alpha_large_text(
+        state, 13, 7, romtext.SECRET_CHARACTER_NAMES[character], attribute,
+    )
     for text, column, row, text_attribute in romtext.SECRET_ROOM_LINES:
         write_alpha_text(state, column, row, text, text_attribute)
 
@@ -1478,7 +1482,6 @@ def _load_next_level(
     if not maze.reset_and_load_level(state, level, maze_number=state.mazenum_current):
         return False                                  # no ROMs: nothing to respawn into
 
-    exit_scan_level(state)                           # maze_new_level_setup exit table
     # player_start_inner clears player_treascount on every spawn (0x48E86); the
     # level total is cleared by load_level.
     state.player_treascount = [0] * len(state.players)

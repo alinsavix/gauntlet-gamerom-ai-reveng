@@ -30,6 +30,7 @@ from __future__ import annotations
 
 __all__ = [
     "CHARACTER_NAMES", "CHARACTER_NAME_PLURALS", "PLAYER_COLOR_NAMES",
+    "SECRET_CHARACTER_NAMES",
     "CHARACTER_HUD_GLYPHS", "LABEL_SCORE_GLYPHS",
     "LABEL_HEALTH_GLYPHS", "LABEL_IT_GLYPHS", "GLYPH_KEY", "GLYPH_POTION",
     "TEXT_LEVEL", "TEXT_LEVEL_SPLASH", "TEXT_INSERT_COIN", "TEXT_PRESS_START",
@@ -62,7 +63,11 @@ CHARACTER_NAME_PLURALS = ("WARRIORS", "VALKYRIES", "WIZARDS", "ELVES")
 #: ``player_color_name_strings`` -- ROM 0x57222, the four padded colour labels
 #: the game uses to name players ("RED WARRIOR" ... "GREEN ELF", the speech
 #: table at 0xBD-0xCC in doc/04 §11.5).
-PLAYER_COLOR_NAMES = ("RED", "BLUE", "YELLOW", "GREEN")
+PLAYER_COLOR_NAMES = (" RED  ", " BLUE ", "YELLOW", "GREEN ")
+
+#: ``character_name_strings`` -- ROM 0x57252, fixed-width labels used by the
+#: secret-room invitation's OS large-text call at 0x44FD4.
+SECRET_CHARACTER_NAMES = ("WARRIOR ", "VALKYRIE", " WIZARD ", "  ELF   ")
 
 #: ``character_hud_text_ptrs`` -- ROM 0x57340, four longword pointers to the
 #: name runs at 0x57508 / 0x5750E / 0x57514 / 0x5751A. Each run is a NUL

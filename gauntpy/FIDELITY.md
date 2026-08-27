@@ -63,9 +63,10 @@ evidence remains in `../doc/`, generated contracts, and the book.
     While that shared transition timer is nonnegative, the actor's ordinary
     movement loop must remain gated; only the transition owner moves its record.
 17. **Persistent spawn identity outlives its marker.** Maze setup stores the
-    randomly selected PLAYERSTART slot before replacing that marker with floor.
-    First starts and continues use the saved word, not a search for a marker that
-    no longer exists.
+    randomly selected PLAYERSTART slot before replacing it with floor. Every
+    non-selected start also follows `maze_scan_objects`' loser arm: it is marked
+    only under the fake-exit flag and otherwise becomes floor. First starts and
+    continues use the saved word, not a search for a marker that no longer exists.
 18. **Dragon movement probes gate targeting.** In `dragon_choose_move_direction`,
     the two leading `0x8000` wall checks occur before the player/distance is
     published. Flame-lock targeting must not bypass blocked footprint probes.
@@ -253,6 +254,41 @@ evidence remains in `../doc/`, generated contracts, and the book.
     find the wall, but `thief_move_engine` owns the one-pixel perpendicular
     flank nudge. Player screen gates likewise compare the live MOB anchor against
     the literal 0x7000/0x7400 hardware windows, not a host-side sprite-box inset.
+58. **Synthetic scenarios are test inputs, never evidence.** Declarative `.gsc`
+    mazes may reproduce a mechanism through normal game-side writers and suggest
+    a ROM/MAME investigation, but no behavior observed only in a synthetic layout
+    may enter `FIDELITY.md`, `doc/`, or the book as an original-game fact. Label
+    synthetic fixtures and results explicitly; promote a conclusion only after
+    ROM execution, MAME, or direct disassembly independently establishes it.
+59. **Secret eligibility is copied at level setup.** Zeroing
+    `secret_possible_counter` during live play does not retroactively arm the
+    maze: `maze_new_level_setup` must copy the current header trick into
+    `trick_tasknum`, followed by the normal solo-party cancellation. A forced
+    invitation needs a stable valid `trick_player`; disable the ordinary task so
+    later exit checks cannot replace it, then let the ordinary exit status and
+    `show_level_start_screen` consume it.
+60. **Secret hint text is many-to-one.** The ROM's invitation hints deliberately
+    reuse strings across distinct objectives. Diagnostics and documentation must
+    identify the objective from its numeric maze-header ID and consuming
+    predicates, not infer behavior from `TRY TRANSPORTABILITY`, `WATCH WHAT YOU
+    SHOOT`, `DON'T GET HIT`, or `DON'T BE GREEDY`. Even apparently plain English
+    can be weaker or stricter than the actual progress-byte test.
+61. **Fixed-width ROM strings retain their spaces.** Leading and trailing spaces
+    can be layout data, especially when OS large text gives a space a two-cell
+    advance. Transcribe the complete pointed-to record and use the caller's
+    actual text routine; do not normalize labels before writing alpha RAM.
+62. **Secret exits are generated from challenge targets.** Mazes 115/116 store no
+    exit. Their level-setup arm must use task code 0x50–0x5D to select a generator
+    type from ROM 0x57056, replace matches with exit markers, clear the other
+    eligible generators, and turn ordinary monsters into typed hidden potions
+    after the ordinary exit-position scan. Generated exits remain absent from
+    that table.
+63. **Post-decode setup draws keep ROM order.** Playfield texture RNG is consumed
+    inside maze construction before the shared trap rotation and adaptive-food
+    draws. `TrapsRandom` rotates all type-10/11/12 identities by one common
+    `getrandom(3)` result; above level six, non-secret mazes then designate one
+    authored food as picture 0x277B. Initialize random-wall cursors in the same
+    setup pass, not on their first gameplay call.
 
 ## Investigation workflow
 
@@ -280,6 +316,13 @@ evidence remains in `../doc/`, generated contracts, and the book.
 
 Use these before writing an ad hoc reproduction. Save disposable output under
 `traces/scenarios/`, which Git ignores.
+
+`gauntpy-scenario run path/to/repro.gsc` and
+`gauntpy-play --scenario path/to/repro.gsc` load declarative synthetic 32x32
+fixtures documented in `scenarios/README.md`. They use normal MOB, maze, and
+playfield writers, support a small allowlisted event vocabulary, and carry
+their complete normalized source and hash into F4 state dumps. Their
+**synthetic** provenance is part of every trace/dump and must remain visible.
 
 ## MAME traces
 

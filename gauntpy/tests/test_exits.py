@@ -1465,14 +1465,22 @@ class TestSecretRoomEntry:
         state.players[0].character = 3
         show_level_start_screen(state)
 
-        assert "".join(
-            chr(word & 0x3FF)
-            for word in state.alpha_ram[7 * 64:7 * 64 + 3]
-        ) == "RED"
-        assert "".join(
-            chr(word & 0x3FF)
-            for word in state.alpha_ram[7 * 64 + 13:7 * 64 + 16]
-        ) == "ELF"
+        from gauntpy.subsystems.display import (
+            _LARGE_GLYPH_INDEX_MAP,
+            _LARGE_GLYPH_QUADS,
+        )
+
+        red_glyph = _LARGE_GLYPH_QUADS[
+            _LARGE_GLYPH_INDEX_MAP[ord("R")]
+        ][0] | 0x8500
+        elf_glyph = _LARGE_GLYPH_QUADS[
+            _LARGE_GLYPH_INDEX_MAP[ord("E")]
+        ][0] | 0x8500
+        assert romtext.PLAYER_COLOR_NAMES[0] == " RED  "
+        assert romtext.SECRET_CHARACTER_NAMES[3] == "  ELF   "
+        assert state.alpha_ram[7 * 64 + 2] == red_glyph
+        assert state.alpha_ram[7 * 64 + 17] == elf_glyph
+        assert state.alpha_ram[8 * 64 + 2] != 0, "large labels occupy two rows"
         assert "".join(
             chr(word & 0x3FF) if word & 0x3FF else " "
             for word in state.alpha_ram[10 * 64 + 6:10 * 64 + 24]

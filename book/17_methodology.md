@@ -26,6 +26,25 @@ tell you which routine ran, what state changed, or why the thief chose you.
 Decades of the project owner's notes started here and climbed upward by
 guesswork and patience.
 
+Below even that evidentiary rung sit gauntpy's **synthetic scenarios**. A small
+ASCII maze can isolate a one-cell passage, arrange an otherwise rare collision,
+or deploy a thief at a precise frame. It is valuable because it removes noise,
+not because Atari shipped that room. A result seen only there proves how the
+Python model responds to invented input. It may motivate a ROM or MAME test, but
+it cannot become a claim in this book, the technical references, or the
+fidelity invariants until primary evidence independently confirms it. The
+fixture, trace, and state dump all retain an explicit synthetic label to keep
+that boundary visible.
+
+The tooling makes the label hard to lose. Synthetic play defaults to live
+keyboard input unless the fixture explicitly scripts a direction. Its F1 page
+shows pending and fired event timers. An F4 snapshot embeds the complete
+normalized fixture, content hash, filename, current input mode, and event
+progress, so resuming cannot silently substitute a changed file. A scheduled
+thief is armed when the synthetic countdown begins, allowing ordinary player
+movement to write the same breadcrumb state the real scheduler would; that is a
+test-harness contract, still not evidence that Atari shipped the invented room.
+
 Above that sits **disassembly**. radare2 turns bytes into instructions, and
 this project keeps a checked-in loader script that reconstructs the whole
 annotated session: memory maps, symbol names, function boundaries, data

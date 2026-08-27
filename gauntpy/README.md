@@ -44,6 +44,9 @@ genuine class sprite. Use `--scale` to override it.
 | **F5** | immediately load the next level |
 | **F6** | give the host player one key |
 | **F7** | give the host player one potion |
+| **F8** | pause / resume the current treasure or secret-room timer |
+| **F9** | arm this maze's secret trick; perform it and exit |
+| **F10** | force the host player into a secret room on exit |
 | **[ / ]** | select the previous / next occupied MOB |
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
@@ -59,8 +62,10 @@ raster is enlarged with `--scale`, using an anti-aliased system monospace font.
 Its pages cover overview, players and raw input, decoded demo records, level
 flags/timers, actor counts and raw MOB words, thief/dragon AI, display memory,
 audio queues, a rolling event log inferred from snapshots while the panel is
-open, and a 120-sample render-time graph. The displayed `RENDER` value is a
-rolling average of the latest ten frames.
+open, synthetic-scenario event queues/timers, and a 120-sample render-time
+graph. The displayed `RENDER` value is a rolling average of the latest ten
+frames. The graph labels its dynamic Y axis in milliseconds and marks the
+16.67 ms frame budget.
 
 **F4** atomically saves every modeled `GameState` field, including players,
 MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,
@@ -77,11 +82,23 @@ are migrated for the handful of fields added since F4 shipped; an otherwise
 incompatible schema or `GameState` shape is rejected rather than partially
 loaded. Resumed sessions do not write EEPROM JSON, so loading an older gameplay
 snapshot cannot roll back newer settings, high scores, or maze rotation.
+Synthetic-scenario dumps additionally embed the complete normalized fixture,
+its SHA-256 and source filename, plus event progress, so resume never depends on
+the original file remaining present or unchanged.
 
-F5/F6/F7 are host troubleshooting controls, not original cabinet inputs. The
+F5–F10 are host troubleshooting controls, not original cabinet inputs. The
 level skip uses the live cabinet maze rotation and respawns active players
 without the bonus/splash delay. Inventory grants update the selected host
-player's game-side counters and alpha-RAM inventory display.
+player's game-side counters and alpha-RAM inventory display. F8 gates only
+`main_treasure_timer`, so actors, input, combat, and every other frame routine
+continue while the room clock is held; it clears automatically when that room
+ends. F9 runs the
+current maze through the ROM's objective-setup block with the availability
+counter open, including the normal solo-party cancellation, so the listed trick
+must still be completed before exiting. From level 6 onward, F10 sets the
+selected live player as the sole winner and disables further ordinary-objective
+selection, but the exit animation and between-level secret-room handoff still
+run.
 
 By default the runner drops you straight into a level. Options:
 
@@ -149,6 +166,20 @@ GEX_ROM_DIR=../ROMs uv run gauntpy-scenario run forcefields \
 The catalog includes level 1, the level-7 seam, forcefields, dragon range,
 attract-demo playback, and point-blank combat. Traces are compact JSON and
 deterministic from the same committed state.
+
+For minimized reproductions, load a declarative synthetic maze:
+
+```bash
+uv run --all-extras gauntpy-play --scenario scenarios/narrow-lane-thief.gsc
+uv run --all-extras gauntpy-scenario run scenarios/narrow-lane-thief.gsc \
+  --every 60
+```
+
+The `.gsc` format is documented in `scenarios/README.md`: a normal level-flags
+longword and other setup fields, an exact 32x32 ASCII grid, optional symbol
+bindings, and a small allowlisted event language. These fixtures use normal
+game-side state/VRAM writers but are always labeled **synthetic**. They are
+reproduction tools, not evidence of ROM behavior.
 
 Without uv, everything still runs from the source tree directly (set
 `PYTHONPATH=src`, and `GEX_ROM_DIR` for the graphical runner):

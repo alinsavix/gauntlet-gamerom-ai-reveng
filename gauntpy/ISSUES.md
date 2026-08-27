@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2397 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2443 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,265 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-154 · complete level/maze setup audit closed four residual gaps
+
+The complete `maze_new_level_setup` body (0x438AE–0x43D8A) and every Python
+entry path were audited after the secret-exit and PLAYERSTART fixes. Four net
+state differences remained.
+
+LFLAG4 `TrapsRandom` drew no setup value, so type-10/11/12 trap identities never
+rotated together as 0x439B0–0x43A8E requires. The 0x43AF0–0x43B5A authored-food
+pass was absent, so levels above six never changed one non-secret-maze food to
+adaptive picture 0x277B. Random-wall low/current/target fields were initialized
+lazily on the first gameplay call rather than during the setup scan. Finally,
+the secondary word at 0x90487E was not modeled: level setup could not clear its
+bit 0, and an already-seen fake exit could not play repeat taunt 0xA6 once per
+level.
+
+All four now run in ROM order after playfield texture generation. Trap markers
+and logical types rotate by one shared draw; one uniformly selected type-49/50
+food becomes type 49/picture 0x277B; random-wall cursors are ready before play;
+and `dialog_once_flags` is reset at level, game, and demo setup and consumed by
+the fake-exit dialog path. Schema-1 state dumps default the newly modeled word
+to zero. Restoring the authored-food draw also advances the shared RNG before
+choose-one/fake-exit selection, correcting the deterministic level-16 outcomes.
+
+The audit also corrected the secret-exit order from S-152: the ordinary
+position-table scan precedes challenge generation, so generated secret exits
+are live markers but do not enter that table. The caller-side duplicate scan
+was removed. Apparent low-slot and transporter-array omissions were
+representation differences with equivalent reachable state: transitions
+install a fresh `MobTable`, and transporter consumers derive the same ordered
+packed slots from live records.
+
+### S-153 · treasure rooms retained solid PLAYERSTART records
+
+Treasure layouts store one to five candidate PLAYERSTART cells. Gauntpy's
+`select_player_start_slot` chose one, saved it, and cleared only that record,
+leaving every loser as a visible `0x1E0D` MOB and an impassable type-15
+collision target.
+
+ROM `maze_scan_objects(-1)` 0x43D8C–0x43EC4 shares its post-selection loser
+arm with exit scanning. The chosen start is saved to 0x9049E0 and replaced with
+floor; each non-selected start is marked with hpos bit 4 only when LFLAG4 bit 6
+is set, and otherwise is also replaced with floor. Treasure rooms do not set
+that flag, so none of their stored start records remains live.
+
+The setup helper now processes every candidate and updates both the MOB table
+and logical maze before playfield initialization. A ROM-backed regression loads
+all eleven treasure rooms and verifies that the saved spawn identity remains
+while no PLAYERSTART survives in collision or logical maze state.
+
+### S-152 · secret challenge mazes loaded without generated exits
+
+Mazes 115 and 116 correctly decode with no stored `EXIT`, but gauntpy stopped
+after loading that compressed data. The missing `maze_new_level_setup` arm at
+0x43C20–0x43D10 indexes the literal 14-word table at 0x57056 by challenge code,
+turns each matching type-0x28–0x2D generator into an exit, clears the other
+generators in that range, and replaces ordinary types 0x13–0x18 with hidden
+potions whose power picture derives from the former monster type.
+
+That game-side setup now runs after playfield initialization and after the
+exit-position scan. Every challenge code 0x50–0x5D produces at least one real
+logical/MOB/playfield exit in its assigned secret maze, and the round-trip
+regression now consumes one of those generated exits instead of calling
+`player_exit_sequence` against the player's own slot.
+
+The reported winner-name spacing is not another divergence. A direct MAME
+0.289 capture made by calling `show_level_start_screen` 0x44DB4 with a red Elf
+matches gauntpy: the ROM deliberately draws padded color and class records as
+separate large-text fields at columns 0 and 13.
+
+### S-151 · secret invitation stripped padded large winner labels
+
+The invitation rendered `RED` as small text at alpha column 0, visibly pinning
+it to the left edge while `ELF` appeared separately near the center. ROM
+0x44FB8 and 0x44FE4 follow fixed-width string pointers and both call OS
+large-text API 0x26C. The records are significantly padded: `" RED  "`,
+`" BLUE "`, `"YELLOW"`, `"GREEN "` and `"WARRIOR "`, `"VALKYRIE"`,
+`" WIZARD "`, `"  ELF   "`. Because the large space quad advances two cells,
+those bytes are positioning data rather than cosmetic whitespace.
+
+The game-side invitation writer now sends the literal padded records through
+the modeled large-font writer at the ROM's columns 0 and 13. A regression
+checks the first visible RED/ELF glyphs at columns 2 and 17 and verifies the
+second glyph row, so a small-font or stripped-string reversion fails.
+
+F8 now pauses and resumes only the current treasure/secret-room countdown. The
+flag lives on the host, and `tick` gates only `main_treasure_timer`; player and
+monster movement, combat, input, and the other main-loop calls continue. The
+toggle is accepted only while a bonus-room timer exists and clears
+automatically when that room ends.
+
+### S-150 · F1 secret hints hid distinct objectives
+
+The F1 LEVEL page initially reused the cabinet's deliberately vague hint
+strings. That made tricks 1–4, 5–6, and 12/14 indistinguishable even though
+their ROM consumers are different. It also exposed a stale prose label:
+0x50C30–0x50C52 compares trick 1's transporter landing against object type
+0x19 (Acid), not a Demon, while trick 4 is the separate corner-transport path
+through a secret wall at 0x507B8.
+
+The host page now gives an objective-specific instruction for all seventeen
+maze-header IDs, including two food versus two secret-wall shots and separate
+no-keys-or-potions, no-food, and no-treasure variants. The data reference,
+subsystem reference, maze chapter, and fidelity rules now preserve the
+many-to-one hint distinction.
+
+The complete mapping review also rejected two tempting paraphrases. Trick 9
+does not test for a hitless dragon kill: 0x52BF0 masks the progress byte with 3,
+dragon fire increments it, and dragon death writes 2 unless it is already 1.
+F1 therefore reports the literal low-two-bits predicate. Trick 17 is failed by
+player-shot contact at 0x4B046 before damage/stun eligibility or the later
+shooter/victim comparison, so F1 explicitly forbids every player hit, including
+a reflected self-hit.
+
+The adjacent challenge-room audit found no missing completion gate.
+`secret_bonus_earned` 0x4D1A4 implements every 0x50–0x5D predicate, including
+the exact counts, five-transporter bitmask, empty-monster scan, and five tasks
+with no extra qualifier. The payout additionally requires the winning player
+to have reached exit status 2/8; only a completed challenge awards 5,000 points
+per coin and reaches `secret_getname`, whose contest-code editor remains gated
+by game-settings bit 13.
+
+### S-149 · secret-room testing required waiting through the pacing interval
+
+The live objective is not derived continuously from
+`secret_possible_counter`. ROM `maze_new_level_setup` 0x43930–0x43958 samples
+that counter once and copies the current maze-header trick into
+`trick_tasknum`; changing only the counter after the maze has loaded leaves the
+current level unarmed. At the other end, `player_exit_sequence` 0x52B40 checks
+the live task and writes `trick_player` before status 8, while
+`show_level_start_screen` 0x44DD6–0x44E00 waits for that winner to reach status
+2 before selecting secret maze 115/116.
+
+F9 now opens the pacing gate, reruns that exact objective setup for the current
+ordinary maze, and applies the normal solo-party cancellation, so entry still
+requires performing its real trick and then exiting. From level 6 onward, F10
+clears the ordinary task so later player exits cannot replace its selected
+`trick_player`, then relies on the same exit animation and transition pipeline
+for unconditional entry. Both reject bonus rooms and non-play states. The F1
+LEVEL page names the current ordinary maze-header objective even while it is
+unarmed, and explicitly suppresses bonus-room or stale tally-transition header
+bytes; the README lists both host-only controls.
+
+### S-148 · complete 72-hour behavior documentation audit
+
+All 40 current-branch commits from the preceding 72 hours were compared against
+their diffs, issue entries, `FIDELITY.md`, technical references, and narrative
+chapters. Movement/probe ownership, narrow-lane response, fake-exit VRAM,
+treasure entry, dragon proximity/stun, potion paths, secret-room flow,
+demo/legend timing, save-state behavior, stat selectors, and host diagnostics
+were already covered or correctly confined to host documentation.
+
+Five residual gaps were corrected. Chapter 9's old random-stocking summary now
+matches `maze_addrandompickups`' post-party ordering, signed add/remove behavior,
+deferred loot, and level-three special draws; it no longer misattributes
+`getrandom(32)` generator spawning to ordinary monster movement. Chapter 10 now
+records `player_hurt_speech_timer`'s party-sized reload, acid silence gate, and
+per-character second draw. Chapter 13 and `doc/04` now state that movable-wall
+destination checks share monster `ray_march_*` geometry. The SCORES color cycle
+is corrected from eleven shifts to the ROM's twelve moves over one 16-word
+palette, in both `doc/04` and Chapter 15. Chapter 14 now gives the exact host
+render-timing boundary: game raster composition/conversion/scale/blit only,
+excluding diagnostics, display flip, input/event work, and the limiter wait.
+
+### S-147 · recent corrected behavior documentation audit
+
+The S-142 ROM findings were already present at the appropriate levels:
+`doc/04`, `doc/05`, `doc/07`, and Chapters 10/12/14/15 cover poison direction
+remapping, the full 0x7000 edge window, thief/mugger wall response, deterministic
+host seeding, and render timing/scale. The synthetic evidence boundary and
+self-contained fixture provenance were likewise present in `doc/INDEX`,
+`FIDELITY.md`, and Chapter 17.
+
+The audit found one substantive omission behind S-146. The references said
+that victim movement writes breadcrumbs, but did not state the scheduling
+order that makes those writes possible: `thief_setup` chooses the victim and
+saves its start/current cell before `thief_timer_set` loads the arrival delay,
+so movement during the whole countdown extends the route; deployment uses the
+saved old cell and reloads a 0x3C entrance pause. They also omitted
+`thief_compute_path`'s unset-nibble behavior: it preserves the prior direction,
+which is reset to upward, rather than finding another route. These details now
+appear in `doc/04`, the RAM rows in `doc/05`, and Chapter 12.
+
+The host-only S-143–S-145 details remain explicitly synthetic rather than being
+mixed into ROM subsystem claims. `doc/INDEX` and Chapter 17 now summarize their
+operational guarantees—live-input default, early event arming, F1 queue/timers,
+and self-contained F4 provenance—while directing the full format contract to
+`gauntpy/scenarios/README.md`.
+
+### S-146 · synthetic mugger spawned with no pursuit breadcrumbs
+
+The `activate_thief` event set an explicit spawn cell and invoked the normal
+deployment routine, but normal gameplay schedules that cell at the victim's old
+position and spends the arrival delay recording every subsequent victim move
+into the low route-grid nibbles. The synthetic shortcut supplied none. At frame
+1200 the mugger spawned at slot `0x03C`, `path_grid_get_direction` returned
+unset, and `thief_compute_path` retained reset direction zero, targeting row-zero
+slot `0x01C` and stopping against its wall.
+
+Scenario construction now arms the victim and arrival countdown immediately,
+matching normal scheduling ownership. It finds a cardinal traversable bridge
+from the explicit live spawn cell to the player's initial cell and writes that
+route through `path_grid_set_low_direction`; ordinary player movement during
+the countdown then extends the same route through
+`thief_track_victim_move`. The normal deployment, diagonal optimization,
+movement probes, cell handoff, and reverse escape-route production remain the
+game's implementations. An unreachable requested spawn fails explicitly rather
+than creating another inert visitor. The example disables mirroring and places
+the mugger at row 1, column 16 above a complete wall row whose sole opening is
+column 16, with the player below it. After its 60-frame arrival pause the mugger
+advances downward through that forced lane.
+
+### S-145 · synthetic event queue was invisible during interactive play
+
+The F1 panel now has a `SCENARIO` page. For a loaded `.gsc` fixture it captures
+host-only immutable rows for the scenario name, source filename, content hash,
+live/scripted input mode, and fired/total count. Every scripted event remains
+listed: pending entries show their absolute 16-bit target frame and `T-` frames
+remaining, fired entries retain their target and action, and an anomalous
+unfired event already behind the current frame is labeled `MISSED`. Ordinary
+ROM-backed play reports that no synthetic fixture is loaded. The page reads the
+attached host runtime and does not add fields to or mutate modeled arcade RAM.
+
+### S-144 · example synthetic maze suppressed all interactive input
+
+The committed `narrow-lane-thief.gsc` declared `input = idle`. The synthetic
+controller correctly treated that as a persistent script and rewrote player
+one's sampled keyboard word to idle before every tick, making the displayed
+maze appear completely non-interactive. The example now uses `input = live`,
+and omitted `input` fields default to live host control. Explicit `idle` and
+direction values remain available for deterministic scripted runs; the headless
+runner is still idle naturally because a fresh `GameState` starts with no
+buttons pressed.
+
+### S-143 · declarative synthetic maze fixtures and readable graph scale
+
+`gauntpy-scenario run PATH.gsc` and `gauntpy-play --scenario PATH.gsc` now load
+a versioned declarative fixture: manifest fields for the ordinary level-flags
+longword, seed, hero, health, maze graphics selectors, and default frame count;
+an exact 32x32 one-character grid; optional symbol bindings to any object ID;
+and allowlisted absolute-frame events. The initial event vocabulary changes
+scripted input or deploys a thief/mugger from a named empty cell through the
+normal game-side routine. It cannot execute arbitrary code.
+
+Construction uses the existing maze placement, MOB creation, forcefield, door,
+exit, playfield/color-RAM, player-spawn, and info-panel writers. Synthetic
+provenance remains host metadata rather than a modeled RAM field. F4 embeds the
+normalized complete `.gsc` content, SHA-256, source filename, persistent input,
+and fired-event indices at the dump root; resume verifies the hash and restores
+pending events without needing the source file.
+
+These fixtures are explicitly non-evidence. They can minimize a reproduction
+and motivate a ROM/MAME trace, but a result observed only in one cannot become
+a fidelity invariant, technical-document fact, or book claim. The committed
+format guide and methodology chapter carry that boundary.
+
+The PERFORMANCE graph now also reserves a left axis and labels zero, midpoint,
+and ceiling in milliseconds. Its ceiling rounds upward in ten-millisecond
+steps, so both the values and the 16.67 ms budget line have a readable scale.
 
 ### S-142 · captured mugger/edge stalls, poison wobble, seed controls, and timing graph
 

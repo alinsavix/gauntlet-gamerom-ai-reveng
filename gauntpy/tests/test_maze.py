@@ -83,6 +83,51 @@ class _FixedRNG:
         return self.values.pop(0)
 
 
+class TestPostDecodeSetup:
+    def test_random_trap_flag_rotates_all_three_trap_identities_together(self):
+        state = GameState()
+        state.level_flags_4 = 0x08
+        state.rng = _FixedRNG(2)
+        slots = (pack_slot(5, 5), pack_slot(5, 6), pack_slot(5, 7))
+        state.maze = type("Maze", (), {"data": {}})()
+        for slot, object_type in zip(
+            slots,
+            (MazeObjIds.TILE_TRAP1, MazeObjIds.TILE_TRAP2, MazeObjIds.TILE_TRAP3),
+            strict=True,
+        ):
+            gm._place_one(state, slot, int(object_type))
+            row, col = divmod(slot, 32)
+            state.maze.data[(col, row)] = int(object_type)
+
+        gm._randomize_trap_types(state)
+
+        assert [state.mobs.obj_type(slot) for slot in slots] == [12, 10, 11]
+        assert list(state.maze.data.values()) == [12, 10, 11]
+
+    def test_one_authored_food_becomes_the_adaptive_food_above_level_six(self):
+        state = GameState(levelnum_current=7, mazenum_current=20)
+        state.rng = _FixedRNG(1)
+        slots = (pack_slot(5, 5), pack_slot(5, 6))
+        state.maze = type("Maze", (), {"data": {
+            (5, 5): int(MazeObjIds.FOOD_DESTRUCTABLE),
+            (6, 5): int(MazeObjIds.FOOD_INVULN),
+        }})()
+        for slot, object_type in zip(
+            slots,
+            (MazeObjIds.FOOD_DESTRUCTABLE, MazeObjIds.FOOD_INVULN),
+            strict=True,
+        ):
+            hpos, vpos = gm.placement_geometry(int(object_type), slot)
+            state.mobs.create(slot, 0x1234, hpos, vpos, int(object_type), 0)
+
+        gm._mark_adaptive_food(state)
+
+        assert state.mobs.picture[slots[0]] == 0x1234
+        assert state.mobs.picture[slots[1]] == 0x277B
+        assert state.mobs.obj_type(slots[1]) == int(MazeObjIds.FOOD_DESTRUCTABLE)
+        assert state.maze.data[(6, 5)] == int(MazeObjIds.FOOD_DESTRUCTABLE)
+
+
 class TestDeferredThiefPickups:
     def test_mugger_food_and_encoded_thief_loot_return_on_the_next_level(self):
         state = GameState()
@@ -736,6 +781,47 @@ class TestLoadLevel:
         for slot in range(FIRST_PLAYABLE_SLOT):
             assert state.mobs.obj_type(slot) == MazeObjIds.WALL_REGULAR
 
+    def test_treasure_rooms_replace_every_player_start_with_floor(self):
+        for maze_number in range(104, 115):
+            state = GameState(game_mode=GameMode.NORMAL)
+
+            gm.load_level(state, 20, maze_number=maze_number)
+
+            assert state.maze_player_start_slot >= FIRST_PLAYABLE_SLOT
+            assert all(
+                state.mobs.obj_type(slot) != int(MazeObjIds.PLAYERSTART)
+                for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+            ), maze_number
+            assert all(
+                int(object_type) != int(MazeObjIds.PLAYERSTART)
+                for object_type in state.maze.data.values()
+            ), maze_number
+
+    def test_load_initializes_random_wall_cursors_before_the_first_frame(self):
+        maze_number = next(
+            number for number in range(5, 102)
+            if MazeObjIds.WALL_RANDOM in gm.decode_maze(number).data.values()
+        )
+        state = GameState(game_mode=GameMode.NORMAL)
+
+        gm.load_level(state, 20, maze_number=maze_number)
+
+        slots = [
+            slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+            if state.mobs.obj_type(slot) == int(MazeObjIds.WALL_RANDOM)
+        ]
+        assert state.random_wall_setup_ready
+        assert state.random_wall_low_mark == slots[0]
+        assert state.random_wall_target == slots[-1]
+        assert state.random_wall_current == slots[0] - 1
+
+    def test_load_clears_the_per_level_dialog_latch(self):
+        state = GameState(game_mode=GameMode.NORMAL, dialog_once_flags=0xFFFF)
+
+        gm.load_level(state, 1)
+
+        assert state.dialog_once_flags == 0xFFFE
+
     def test_decoded_objects_present_after_load(self):
         """Every cell of the maze ``load_level`` stored is occupied.
 
@@ -827,6 +913,62 @@ class TestLoadLevelExitScan:
         for slot in state.exit_slots:
             assert state.mobs.obj_type(slot) == MazeObjIds.EXIT
             assert slot >= FIRST_PLAYABLE_SLOT, "the ROM's scan starts at slot 0x20"
+
+    def test_every_secret_challenge_builds_a_real_exit(self):
+        for task in range(0x50, 0x5E):
+            maze_number = 115 if task < 0x57 else 116
+            state = GameState(
+                game_mode=GameMode.NORMAL,
+                levelnum_current=20,
+                mazenum_current=maze_number,
+                secret_trick_id=task,
+            )
+
+            gm.load_level(state, 20, maze_number=maze_number)
+
+            exits = [
+                slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+                if state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+            ]
+            assert exits, hex(task)
+            assert state.exit_slots == [], "ROM scans before generating challenge exits"
+            assert all(
+                state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+                for slot in exits
+            )
+            from gauntpy.playfield_vram import EXIT_SETTLED_DESC, read_tile_descriptor
+
+            for slot in exits:
+                row, col = divmod(slot, 32)
+                assert state.maze.data[(col, row)] == int(MazeObjIds.EXIT)
+                assert read_tile_descriptor(state, slot) == EXIT_SETTLED_DESC
+
+    def test_secret_challenge_replaces_monsters_and_non_target_generators(self):
+        task = 0x52
+        maze_number = 115
+        state = GameState(
+            game_mode=GameMode.NORMAL,
+            levelnum_current=20,
+            mazenum_current=maze_number,
+            secret_trick_id=task,
+        )
+
+        gm.load_level(state, 20, maze_number=maze_number)
+
+        live_types = [
+            state.mobs.obj_type(slot)
+            for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+        ]
+        assert not any(0x28 <= object_type <= 0x2D for object_type in live_types)
+        assert int(MazeObjIds.EXIT) in live_types
+        hidden_pictures = {
+            state.mobs.picture[slot]
+            for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+            if state.mobs.obj_type(slot) == int(MazeObjIds.HIDDENPOT)
+        }
+        assert hidden_pictures == {
+            0xA728 + index * 4 for index in range(6)
+        }
 
     def test_exit_slots_are_the_mirrored_ones(self):
         """The scan reads the MobTable, so it picks up wherever mirroring put
