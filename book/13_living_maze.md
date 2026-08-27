@@ -286,13 +286,34 @@ exit or timeout opens the bonus curtain and pays for the treasure-room take.
 ## The secret objective you did not know you had
 
 Every normal maze from level 6 onward carries a hidden objective in its
-header, one of seventeen. Some are dares: transport yourself onto a demon,
-onto Death, into the exit. Some are abstinence: kill a dragon without taking a
-hit, finish without eating food, without picking up keys or potions, without
-hoarding treasure, without using invulnerability, without shooting the food,
-without shooting your friends. Some are oddly specific: shoot the secret
-walls, push at a movable wall, be IT and be nice about it, and, as covered
-above, do not fall for a fake exit.
+header, one of seventeen. Some are dares: transport beside Acid or Death,
+transport into the exit, or pass through a secret wall. Some are abstinence:
+finish without eating food, without picking up keys or potions, without
+hoarding treasure, or without hitting any player with a shot. Some are oddly
+specific: shoot food or secret walls twice, bank eleven super shots, collect
+invulnerability without being hit while protected, push a movable wall into an
+exit, exit while IT, and, as covered above, do not fall for a fake exit. The
+dragon objective is stranger than its English hint, as explained below.
+
+The cabinet phrases are clues rather than complete specifications, and several
+different objectives share one clue. `TRY TRANSPORTABILITY` can mean landing
+beside Acid, landing beside Death, transporting into the exit, or
+corner-transporting through a secret wall. `WATCH WHAT YOU SHOOT` distinguishes
+two food shots from two secret-wall shots. The two `DON'T BE GREEDY` objectives
+mean either collect no keys or potions, or collect no treasure; `GO ON A DIET`
+is the separate no-food objective. Even `DON'T USE INVULNERABILITY` is
+deliberately coy: the actual test requires collecting it and then avoiding
+monster contact or fire while protected.
+
+One clue is stranger still. `DON'T GET HIT` sounds like a clean dragon kill,
+but the shipped predicate only asks whether the low two bits of a per-player
+byte are zero. Dragon fire increments that byte; killing the dragon writes two
+unless it was already one. A clean non-killer therefore passes while a clean
+killer does not, and four fire hits make the masked test pass again. This is
+counterintuitive, but it is what the ROM executes. `DON'T HURT FRIENDS` is
+strict in the opposite direction: merely hitting any player with a shot,
+including the shooter after a reflection, fails it before the game decides
+whether that hit can damage or stun.
 
 The objective is not announced merely because it became active. Finding a
 secret wall or killing the dragon does, however, raise a discovery latch. On
@@ -346,11 +367,16 @@ they performed a secret trick, and shows the time limit in both the invitation
 and the status panel. The room is therefore announced before its maze is
 revealed; it is not a renderer-side title laid over gameplay.
 
-Inside, the same per-player progress flags track the qualifier. Reach the exit
-with the challenge satisfied and the bonus screen pays 5,000 points per coin
-you have inserted, a rate that respects the score-per-coin economy Chapter 14
-explains. Your saved supershot state survives the detour, the saved maze and
-level are restored, and the rotation resumes.
+Inside, the same per-player progress flags track the qualifier. Five challenge
+codes need no extra progress beyond reaching the exit. The others require six
+treasures, all six potions, three secret walls, no monsters or generators left,
+five distinct transporters, all nineteen treasures removed, or at least one IT
+event. Merely finding the exit does not earn a failed challenge: the bonus
+screen pays 5,000 points per inserted coin only when the code-specific predicate
+passes and the entrant reached the exit. Only that successful path can continue
+to contest name entry, and only when the operator enabled the contest option.
+Your saved supershot state survives the detour, the saved maze and level are
+restored, and the rotation resumes.
 
 For most cabinets that is the end of the story. But if the operator has
 enabled one particular option, winning the challenge leads somewhere stranger.

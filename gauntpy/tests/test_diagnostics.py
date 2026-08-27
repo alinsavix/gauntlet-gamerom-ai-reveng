@@ -168,7 +168,36 @@ def test_level_page_names_the_current_maze_secret_trick():
         capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
     ))
 
-    assert rows["SECRET TRICK"] == "0D GO ON A DIET"
+    assert rows["SECRET TRICK"] == "0D EAT NO FOOD"
+
+
+def test_level_page_distinguishes_reused_secret_hint_text():
+    expected = (
+        "TRANSPORT NEXT TO ACID",
+        "TRANSPORT NEXT TO DEATH",
+        "TRANSPORT INTO EXIT",
+        "TRANSPORT THRU SECRET WALL",
+        "SHOOT 2 FOOD ITEMS",
+        "SHOOT 2 SECRET WALLS",
+        "EXIT WITH 11 SUPER SHOTS",
+        "TAKE INVULN; AVOID HITS",
+        "DRAGON FLAG LOW 2 BITS = 0",
+        "PUSH MOVABLE WALL INTO EXIT",
+        "AVOID FAKE EXITS",
+        "COLLECT NO KEYS/POTIONS",
+        "EAT NO FOOD",
+        "COLLECT NO TREASURE",
+        "ENTER EXIT ON PUSH RETRY",
+        "EXIT WHILE IT",
+        "SHOOT NO PLAYER (SELF TOO)",
+    )
+    state = _diagnostic_state()
+    page = DEBUG_PAGES.index("LEVEL")
+
+    for trick, detail in enumerate(expected, start=1):
+        state.maze = type("Maze", (), {"secret": trick})()
+        rows = dict(debug_page_lines(capture_debug_snapshot(state), page))
+        assert rows["SECRET TRICK"] == f"{trick:02X} {detail}"
 
 
 def test_level_page_does_not_present_bonus_header_byte_as_entry_trick():

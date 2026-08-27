@@ -111,15 +111,15 @@ _GSETTING_SPEECH_DISABLE = 0x800
 # 0x51CCC). The names below follow the ROM, so 13 is the food trick and 14 the
 # treasure trick. Prefer the behaviour-named aliases in progress hooks.
 TRICK_NONE = 0
-TRICK_TRANSPORT1 = 1        # try transportability (onto demon)
+TRICK_TRANSPORT1 = 1        # try transportability (land beside acid)
 TRICK_TRANSPORT2 = 2        # ... onto death
 TRICK_TRANSPORT3 = 3        # ... into the exit
-TRICK_TRANSPORT4 = 4        # ... into the exit, variant
+TRICK_TRANSPORT4 = 4        # ... corner-transport through a secret wall
 TRICK_WATCHSHOOT1 = 5       # watch what you shoot (foods)
 TRICK_WATCHSHOOT2 = 6       # watch what you shoot (secret walls)
 TRICK_SAVESUPERSHOTS = 7
 TRICK_NOUSEINVUL = 8
-TRICK_NOGETHIT = 9          # while killing a dragon
+TRICK_NOGETHIT = 9          # dragon progress byte must have low two bits clear
 TRICK_PUSHWALL = 10
 TRICK_NOFOOLED = 11
 TRICK_NOGREEDY1 = 12        # 0x0C, no keys or potions (0x514D4, 0x5179C)

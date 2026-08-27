@@ -18,7 +18,6 @@ from ..constants import (
     PlayerStatus,
 )
 from ..coords import hpos_x, vpos_y
-from ..romtext import SECRET_OBJECTIVE_HINTS
 from ..state import GameState
 
 DEBUG_PANEL_WIDTH = 320
@@ -46,6 +45,29 @@ _LABEL = (170, 180, 190, 255)
 _VALUE = (235, 238, 242, 255)
 _DIM = (105, 115, 125, 255)
 _DIVIDER = (55, 62, 70, 255)
+
+# Host explanations of the seventeen maze-header objectives. The cabinet's ROM
+# hints are deliberately vague and many-to-one; these follow the actual event
+# producers and exit predicates instead.
+_SECRET_OBJECTIVE_DETAILS = (
+    "TRANSPORT NEXT TO ACID",
+    "TRANSPORT NEXT TO DEATH",
+    "TRANSPORT INTO EXIT",
+    "TRANSPORT THRU SECRET WALL",
+    "SHOOT 2 FOOD ITEMS",
+    "SHOOT 2 SECRET WALLS",
+    "EXIT WITH 11 SUPER SHOTS",
+    "TAKE INVULN; AVOID HITS",
+    "DRAGON FLAG LOW 2 BITS = 0",
+    "PUSH MOVABLE WALL INTO EXIT",
+    "AVOID FAKE EXITS",
+    "COLLECT NO KEYS/POTIONS",
+    "EAT NO FOOD",
+    "COLLECT NO TREASURE",
+    "ENTER EXIT ON PUSH RETRY",
+    "EXIT WHILE IT",
+    "SHOOT NO PLAYER (SELF TOO)",
+)
 
 _FONT_CANDIDATES = (
     (
@@ -195,9 +217,9 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         secret_trick = "n/a during transition"
     elif state.mazenum_current >= 104:
         secret_trick = "n/a in bonus room"
-    elif 1 <= maze_trick <= len(SECRET_OBJECTIVE_HINTS):
+    elif 1 <= maze_trick <= len(_SECRET_OBJECTIVE_DETAILS):
         secret_trick = (
-            f"{maze_trick:02X} {SECRET_OBJECTIVE_HINTS[maze_trick - 1]}"
+            f"{maze_trick:02X} {_SECRET_OBJECTIVE_DETAILS[maze_trick - 1]}"
         )
     else:
         secret_trick = "none"

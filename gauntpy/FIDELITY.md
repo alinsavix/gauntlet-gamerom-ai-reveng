@@ -266,6 +266,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     invitation needs a stable valid `trick_player`; disable the ordinary task so
     later exit checks cannot replace it, then let the ordinary exit status and
     `show_level_start_screen` consume it.
+60. **Secret hint text is many-to-one.** The ROM's invitation hints deliberately
+    reuse strings across distinct objectives. Diagnostics and documentation must
+    identify the objective from its numeric maze-header ID and consuming
+    predicates, not infer behavior from `TRY TRANSPORTABILITY`, `WATCH WHAT YOU
+    SHOOT`, `DON'T GET HIT`, or `DON'T BE GREEDY`. Even apparently plain English
+    can be weaker or stricter than the actual progress-byte test.
 
 ## Investigation workflow
 

@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2433 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2434 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,37 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-150 · F1 secret hints hid distinct objectives
+
+The F1 LEVEL page initially reused the cabinet's deliberately vague hint
+strings. That made tricks 1–4, 5–6, and 12/14 indistinguishable even though
+their ROM consumers are different. It also exposed a stale prose label:
+0x50C30–0x50C52 compares trick 1's transporter landing against object type
+0x19 (Acid), not a Demon, while trick 4 is the separate corner-transport path
+through a secret wall at 0x507B8.
+
+The host page now gives an objective-specific instruction for all seventeen
+maze-header IDs, including two food versus two secret-wall shots and separate
+no-keys-or-potions, no-food, and no-treasure variants. The data reference,
+subsystem reference, maze chapter, and fidelity rules now preserve the
+many-to-one hint distinction.
+
+The complete mapping review also rejected two tempting paraphrases. Trick 9
+does not test for a hitless dragon kill: 0x52BF0 masks the progress byte with 3,
+dragon fire increments it, and dragon death writes 2 unless it is already 1.
+F1 therefore reports the literal low-two-bits predicate. Trick 17 is failed by
+player-shot contact at 0x4B046 before damage/stun eligibility or the later
+shooter/victim comparison, so F1 explicitly forbids every player hit, including
+a reflected self-hit.
+
+The adjacent challenge-room audit found no missing completion gate.
+`secret_bonus_earned` 0x4D1A4 implements every 0x50–0x5D predicate, including
+the exact counts, five-transporter bitmask, empty-monster scan, and five tasks
+with no extra qualifier. The payout additionally requires the winning player
+to have reached exit status 2/8; only a completed challenge awards 5,000 points
+per coin and reaches `secret_getname`, whose contest-code editor remains gated
+by game-settings bit 13.
 
 ### S-149 · secret-room testing required waiting through the pacing interval
 

@@ -354,10 +354,10 @@ The raw pointer/header/boundary fields are also checked into `generated/maze_cat
 | 53 | 6+ | 1 | 0x3530 | No Hurt Friends | 0 | OddAuxGrunt |
 | 54 | 6+ | 1 | 0x361B | No Invulnerability | 5 | (none) |
 | 55 | 6+ | 1 | 0x37F3 | Be Pushy | 1 | FastGrunt, FastDemon |
-| 56 | 6+ | 1 | 0x388C | Transport1 (onto demon) | 0 | (none) |
+| 56 | 6+ | 1 | 0x388C | Transport1 (beside Acid) | 0 | (none) |
 | 57 | 6+ | 1 | 0x3966 | No Hurt Friends | 0 | Exit1of, ShotHurt |
-| 58 | 6+ | 1 | 0x3A55 | Transport1 (onto demon) | 0 | DelWalls1 |
-| 59 | 6+ | 1 | 0x3B4F | Transport1 (onto demon) | 0 | OddGrunt |
+| 58 | 6+ | 1 | 0x3A55 | Transport1 (beside Acid) | 0 | DelWalls1 |
+| 59 | 6+ | 1 | 0x3B4F | Transport1 (beside Acid) | 0 | OddGrunt |
 | 60 | 6+ | 1 | 0x3C63 | Don't Be Fooled | 0 | FastSorc, Exit1of, FakeExit |
 | 61 | 6+ | 1 | 0x3D90 | No Greedy (keys/pots) | 0 | Exit1of, WrapH |
 | 62 | 6+ | 1 | 0x3EB9 | Push a Wall | 0 | WrapH |
@@ -370,10 +370,10 @@ The raw pointer/header/boundary fields are also checked into `generated/maze_cat
 | 69 | 6+ | 2 | 0x46E1 | Don't Be Fooled | 0 | Exit1of, TrapRand, WrapV, WrapH, FakeExit |
 | 70 | 6+ | 2 | 0x47CB | WatchShoot2 (walls) | 0 | WrapH |
 | 71 | 6+ | 2 | 0x4932 | WatchShoot2 (walls) | 0 | Exit1of, FakeExit |
-| 72 | 6+ | 2 | 0x4A45 | Transport1 (onto demon) | 0 | FastAuxGrunt |
-| 73 | 6+ | 2 | 0x4B68 | Transport4 (into exit) | 0 | TrapLocal |
+| 72 | 6+ | 2 | 0x4A45 | Transport1 (beside Acid) | 0 | FastAuxGrunt |
+| 73 | 6+ | 2 | 0x4B68 | Transport4 (through secret wall) | 0 | TrapLocal |
 | 74 | 6+ | 2 | 0x4D14 | Save Super Shots | 0 | ExitMoves, WrapV, WrapH |
-| 75 | 6+ | 2 | 0x4EB5 | Transport1 (onto demon) | 0 | WrapV, WrapH |
+| 75 | 6+ | 2 | 0x4EB5 | Transport1 (beside Acid) | 0 | WrapV, WrapH |
 | 76 | 6+ | 2 | 0x4FDD | No Greedy (treasure) | 0 | TrapRand, WrapH |
 | 77 | 6+ | 2 | 0x50F7 | Don't Be Fooled | 3 | FastGhost–FastDeath (all), CyclicWalls, Exit1of, FakeExit |
 | 78 | 6+ | 2 | 0x5254 | No Hit (dragon) | 0 | OddGhost, FastGrunt, FastLobber, FastSorc, TrapLocal |
@@ -381,7 +381,7 @@ The raw pointer/header/boundary fields are also checked into `generated/maze_cat
 | 80 | 6+ | 2 | 0x546C | Transport2 (onto death) | 0 | ShotHurt, TrapLocal, WrapH |
 | 81 | 6+ | 2 | 0x55F7 | No Greedy (keys/pots) | 0 | WrapH |
 | 82 | 6+ | 2 | 0x5789 | Save Super Shots | 0 | WrapH |
-| 83 | 6+ | 2 | 0x5917 | Transport1 (onto demon) | 0 | FastGrunt, FastSorc |
+| 83 | 6+ | 2 | 0x5917 | Transport1 (beside Acid) | 0 | FastGrunt, FastSorc |
 | 84 | 6+ | 2 | 0x5A2F | No Invulnerability | 0 | FastGhost, TrapRand |
 | 85 | 6+ | 2 | 0x5B41 | Save Super Shots | 0 | FastGrunt |
 | 86 | 6+ | 2 | 0x5C36 | Transport3 (into exit) | 0 | (none) |
@@ -430,23 +430,23 @@ rotation mazes (5–101); mazes 0–4 store trick ID 0 and are excluded:
 
 | Secret Trick | Count | Description |
 |:-------------|------:|:------------|
-| Push a Wall | 7 | Try pushing a movable wall |
+| Push a Wall | 7 | Push a movable wall into an exit |
 | No Greedy (keys/pots) | 7 | Complete without collecting keys or potions |
-| No Hurt Friends | 7 | Don't damage other players |
-| Transport1 (onto demon) | 6 | Use Transportability to teleport onto a demon |
+| No Hurt Friends | 7 | Hit no player with a shot, including reflected self-hits |
+| Transport1 (beside Acid) | 6 | Use Transportability to land beside Acid |
 | Transport2 (onto death) | 6 | Teleport onto Death |
 | Transport3 (into exit) | 6 | Teleport into the exit |
-| WatchShoot1 (food) | 6 | Avoid shooting food items |
-| Save Super Shots | 6 | Don't waste super shot power-ups |
-| No Invulnerability | 6 | Complete without using invulnerability |
-| No Hit (dragon) | 6 | Kill the dragon without getting hit |
+| WatchShoot1 (food) | 6 | Shoot two food items |
+| Save Super Shots | 6 | Exit with at least 11 super shots |
+| No Invulnerability | 6 | Collect invulnerability, then avoid hits while protected |
+| No Hit (dragon) | 6 | Exit with the dragon-progress byte's low two bits clear |
 | Don't Be Fooled | 6 | Avoid fake exits |
 | No Greedy (treasure) | 6 | Complete without collecting treasure |
-| IT Could Be Nice | 6 | Use the IT mechanic strategically |
-| Transport4 (into exit) | 5 | Teleport into the exit (variant) |
-| WatchShoot2 (walls) | 3 | Shoot secret/destructible walls |
+| IT Could Be Nice | 6 | Exit while IT |
+| Transport4 (through secret wall) | 5 | Corner-transport through a secret wall |
+| WatchShoot2 (walls) | 3 | Shoot two secret walls |
 | Diet (no food) | 4 | Complete without eating food |
-| Be Pushy | 4 | Push movable walls aggressively |
+| Be Pushy | 4 | Enter the exit on a recursive collision-response move |
 
 ---
 

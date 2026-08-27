@@ -777,23 +777,23 @@ references to `player_status` (0x9049A0).
 | Name | Value | Description |
 |------|-------|-------------|
 | TRICK_NONE | 0 | No trick |
-| TRICK_TRANSPORT1 | 1 | Try Transportability (onto demon) |
+| TRICK_TRANSPORT1 | 1 | Try Transportability (land beside Acid) |
 | TRICK_TRANSPORT2 | 2 | Try Transportability (onto death) |
 | TRICK_TRANSPORT3 | 3 | Try Transportability (into exit) |
-| TRICK_TRANSPORT4 | 4 | Try Transportability (into exit, variant) |
-| TRICK_WATCHSHOOT1 | 5 | Watch What You Shoot (shoot foods) |
-| TRICK_WATCHSHOOT2 | 6 | Watch What You Shoot (shoot secret walls) |
-| TRICK_SAVESUPERSHOTS | 7 | Save Super Shots |
-| TRICK_NOUSEINVUL | 8 | Don't Use Invulnerability |
-| TRICK_NOGETHIT | 9 | Don't Get Hit (while killing a dragon) |
-| TRICK_PUSHWALL | 10 | Try Pushing a Wall |
-| TRICK_NOFOOLED | 11 | Don't Be Fooled |
+| TRICK_TRANSPORT4 | 4 | Try Transportability (corner-transport through a secret wall) |
+| TRICK_WATCHSHOOT1 | 5 | Watch What You Shoot (shoot two food items) |
+| TRICK_WATCHSHOOT2 | 6 | Watch What You Shoot (shoot two secret walls) |
+| TRICK_SAVESUPERSHOTS | 7 | Save Super Shots (exit with at least 11) |
+| TRICK_NOUSEINVUL | 8 | Don't Use Invulnerability (collect it, then avoid monster contact/fire while protected) |
+| TRICK_NOGETHIT | 9 | Don't Get Hit (literal exit predicate: progress low two bits are zero; dragon fire increments progress, while killing the dragon writes 2 unless it was already 1) |
+| TRICK_PUSHWALL | 10 | Try Pushing a Wall (push a movable wall into an exit) |
+| TRICK_NOFOOLED | 11 | Don't Be Fooled (avoid fake exits) |
 | TRICK_NOGREEDY1 | 12 | Don't Be Greedy (no keys or potions) |
 | TRICK_DIET | 13 | Go On a Diet (no food) |
 | TRICK_NOGREEDY2 | 14 | Don't Be Greedy (no treasure) |
-| TRICK_BEPUSHY | 15 | Be Pushy |
-| TRICK_IT | 16 | IT Could Be Nice |
-| TRICK_NOHURTFRIENDS | 17 | Don't Hurt Friends |
+| TRICK_BEPUSHY | 15 | Be Pushy (enter the exit on a recursive collision-response move) |
+| TRICK_IT | 16 | IT Could Be Nice (exit while IT) |
+| TRICK_NOHURTFRIENDS | 17 | Don't Hurt Friends (hit no player with a shot, including the shooter after reflection, even when damage/stun is suppressed) |
 
 After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) replaces the maze trick ID with `0x50 + getrandom(14)`. These **challenge task codes** occupy 0x50–0x5D and are evaluated against `secret_tricks_flags`; they are distinct from the maze-header enum above. The optional qualifier-display records are at 0x573D4 (14 records × 8 bytes). Verified examples include 0x50 “AFTER COLLECTING 6 TREASURES,” 0x51/0x5D “AFTER COLLECTING ALL POTIONS,” 0x52/0x5B “AFTER SHOOTING 3 SECRET WALLS,” 0x56 “AFTER USING 5 TRANSPORTERS,” 0x5A “AFTER REMOVING ALL TREASURE,” and 0x5C “WHILE YOU ARE IT.” The `resolve_shot_hit` check at 0x4B826 is the 0x5A task hook: a player's supershot hitting ordinary treasure (object type 0x2E) increments that player's progress byte.
 
