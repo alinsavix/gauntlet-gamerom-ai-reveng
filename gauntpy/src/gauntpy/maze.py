@@ -904,6 +904,22 @@ _FOOD_INVULN_PICTURES_ADDR = 0x58F20
 _FOOD_INVULN_PICTURES_COUNT = 3
 _food_invuln_pictures: tuple[int, ...] | None = None
 
+# challenge_target_object_types, ROM 0x57056 -- one generator type selected by
+# each challenge code 0x50-0x5D. maze_new_level_setup 0x43C20-0x43D10 turns
+# every matching generator into an exit and removes the other eligible ones.
+_CHALLENGE_TARGET_OBJECT_TYPES = (
+    0x2C, 0x2A, 0x2A, 0x29, 0x2D, 0x28, 0x2B,
+    0x2D, 0x28, 0x2C, 0x29, 0x2A, 0x2A, 0x2B,
+)
+_CHALLENGE_FIRST = 0x50
+_CHALLENGE_LAST = 0x5D
+_SECRET_MAZE_FIRST = 0x73
+_CHALLENGE_MONSTER_FIRST = 0x13
+_CHALLENGE_MONSTER_LAST = 0x18
+_CHALLENGE_GENERATOR_FIRST = 0x28
+_CHALLENGE_GENERATOR_LAST = 0x2D
+_CHALLENGE_HIDDEN_POTION_BASE = 0xA728
+
 
 def _food_invuln_pictures_read() -> tuple[int, ...]:
     global _food_invuln_pictures
@@ -1269,6 +1285,43 @@ def _create_generic(state: GameState, slot: int, object_type: int) -> None:
         setup_dragon_segments(state, slot)
 
 
+def _prepare_secret_challenge(state: GameState) -> None:
+    """0x43C20-0x43D10 -- replace secret-maze actors and create its exits."""
+    if state.mazenum_current < _SECRET_MAZE_FIRST:
+        return
+    task = int(state.secret_trick_id)
+    if not _CHALLENGE_FIRST <= task <= _CHALLENGE_LAST:
+        return
+
+    target_type = _CHALLENGE_TARGET_OBJECT_TYPES[task - _CHALLENGE_FIRST]
+    for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link)):
+        object_type = state.mobs.obj_type(slot)
+        if _CHALLENGE_MONSTER_FIRST <= object_type <= _CHALLENGE_MONSTER_LAST:
+            picture = (
+                _CHALLENGE_HIDDEN_POTION_BASE
+                + (object_type - _CHALLENGE_MONSTER_FIRST) * 4
+            )
+            state.mobs.unlink_and_clear(slot)
+            hpos, vpos = placement_geometry(int(MazeObjIds.HIDDENPOT), slot)
+            state.mobs.create(
+                slot, picture, hpos, vpos, int(MazeObjIds.HIDDENPOT), 0,
+            )
+            set_cell_descriptor(state, slot, int(MazeObjIds.HIDDENPOT))
+            continue
+        if not _CHALLENGE_GENERATOR_FIRST <= object_type <= _CHALLENGE_GENERATOR_LAST:
+            continue
+
+        state.mobs.unlink_and_clear(slot)
+        replacement = (
+            int(MazeObjIds.EXIT)
+            if object_type == target_type
+            else int(MazeObjIds.TILE_FLOOR)
+        )
+        if replacement == int(MazeObjIds.EXIT):
+            _place_one(state, slot, replacement)
+        set_cell_descriptor(state, slot, replacement)
+
+
 def place_decoded_objects(state: GameState, maze: Maze) -> None:
     """Populate ``MobTable`` from gex's decoded ``Maze.data``: slot number
     is the packed cell address, so placement is arithmetic, not a search
@@ -1542,6 +1595,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     initialize_playfield_ram(state, state.maze)
     from .subsystems.maze_objects import setup_door_graphics
     setup_door_graphics(state)
+    _prepare_secret_challenge(state)
 
     # maze_new_level_setup step 10: rebuild the exit table from the MOBs just
     # placed (0x43B3A-0x43B9A). It has to live on the common load path, not in

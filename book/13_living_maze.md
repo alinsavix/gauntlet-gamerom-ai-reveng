@@ -362,6 +362,14 @@ ROOM banner: "AFTER COLLECTING 6 TREASURES," "AFTER SHOOTING 3 SECRET WALLS,"
 "AFTER USING 5 TRANSPORTERS," "AFTER REMOVING ALL TREASURE," "WHILE YOU ARE
 IT," and so on.
 
+The two stored layouts contain no exit tile. Setup creates the way out for the
+particular challenge: a fourteen-word table names one generator type for each
+task code, every generator of that type becomes an exit, and the other
+high-tier generators disappear. The ordinary monsters in the room become
+hidden potions, with the former monster family selecting which permanent power
+the potion contains. An implementation that merely loads maze 115 or 116 will
+therefore show no exit at all.
+
 The curtain also names the winning player's color and character, says that
 they performed a secret trick, and shows the time limit in both the invitation
 and the status panel. The room is therefore announced before its maze is
@@ -371,7 +379,9 @@ Those color and character labels are large text too. Their ROM strings are
 fixed-width and visibly padded—`" RED  "` and `"  ELF   "`, for example—and
 the spaces advance through the same two-cell large-glyph machinery as letters.
 The padding positions the two fields; trimming it would pin RED to the left
-edge and make the invitation look like unrelated labels.
+edge. A direct MAME 0.289 capture confirms the remaining broad separation is
+intentional arcade formatting: the color and class are two fields, not the
+adjacent phrase “RED ELF.”
 
 Inside, the same per-player progress flags track the qualifier. Five challenge
 codes need no extra progress beyond reaching the exit. The others require six

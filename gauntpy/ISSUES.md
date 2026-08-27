@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2435 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2437 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,26 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-152 · secret challenge mazes loaded without generated exits
+
+Mazes 115 and 116 correctly decode with no stored `EXIT`, but gauntpy stopped
+after loading that compressed data. The missing `maze_new_level_setup` arm at
+0x43C20–0x43D10 indexes the literal 14-word table at 0x57056 by challenge code,
+turns each matching type-0x28–0x2D generator into an exit, clears the other
+generators in that range, and replaces ordinary types 0x13–0x18 with hidden
+potions whose power picture derives from the former monster type.
+
+That game-side setup now runs after playfield initialization and before the
+exit-table scan. Every challenge code 0x50–0x5D produces at least one real
+logical/MOB/playfield exit in its assigned secret maze, and the round-trip
+regression now consumes one of those generated exits instead of calling
+`player_exit_sequence` against the player's own slot.
+
+The reported winner-name spacing is not another divergence. A direct MAME
+0.289 capture made by calling `show_level_start_screen` 0x44DB4 with a red Elf
+matches gauntpy: the ROM deliberately draws padded color and class records as
+separate large-text fields at columns 0 and 13.
 
 ### S-151 · secret invitation stripped padded large winner labels
 

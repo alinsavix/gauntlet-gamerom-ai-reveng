@@ -419,6 +419,12 @@ The raw pointer/header/boundary fields are also checked into `generated/maze_cat
 | 115 | — | 3 | 0x7D29 | **Secret Room 1 (tasks 0x50–0x56)** | 0 | (none) |
 | 116 | — | 3 | 0x7E48 | **Secret Room 2 (tasks 0x57–0x5D)** | 0 | CyclicWalls |
 
+Neither compressed record stores an exit. `maze_new_level_setup`
+0x43C20–0x43D10 selects a generator type from the task-indexed table at
+0x57056 and replaces every matching generator with an exit before rebuilding
+the live exit table. The same pass clears the other eligible generators and
+turns ordinary monsters into hidden potions.
+
 ---
 
 ## 7. Secret Trick Distribution

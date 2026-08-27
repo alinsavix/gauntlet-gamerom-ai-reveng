@@ -828,6 +828,57 @@ class TestLoadLevelExitScan:
             assert state.mobs.obj_type(slot) == MazeObjIds.EXIT
             assert slot >= FIRST_PLAYABLE_SLOT, "the ROM's scan starts at slot 0x20"
 
+    def test_every_secret_challenge_builds_a_real_exit(self):
+        for task in range(0x50, 0x5E):
+            maze_number = 115 if task < 0x57 else 116
+            state = GameState(
+                game_mode=GameMode.NORMAL,
+                levelnum_current=20,
+                mazenum_current=maze_number,
+                secret_trick_id=task,
+            )
+
+            gm.load_level(state, 20, maze_number=maze_number)
+
+            assert state.exit_slots, hex(task)
+            assert all(
+                state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+                for slot in state.exit_slots
+            )
+            from gauntpy.playfield_vram import EXIT_SETTLED_DESC, read_tile_descriptor
+
+            for slot in state.exit_slots:
+                row, col = divmod(slot, 32)
+                assert state.maze.data[(col, row)] == int(MazeObjIds.EXIT)
+                assert read_tile_descriptor(state, slot) == EXIT_SETTLED_DESC
+
+    def test_secret_challenge_replaces_monsters_and_non_target_generators(self):
+        task = 0x52
+        maze_number = 115
+        state = GameState(
+            game_mode=GameMode.NORMAL,
+            levelnum_current=20,
+            mazenum_current=maze_number,
+            secret_trick_id=task,
+        )
+
+        gm.load_level(state, 20, maze_number=maze_number)
+
+        live_types = [
+            state.mobs.obj_type(slot)
+            for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+        ]
+        assert not any(0x28 <= object_type <= 0x2D for object_type in live_types)
+        assert int(MazeObjIds.EXIT) in live_types
+        hidden_pictures = {
+            state.mobs.picture[slot]
+            for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+            if state.mobs.obj_type(slot) == int(MazeObjIds.HIDDENPOT)
+        }
+        assert hidden_pictures == {
+            0xA728 + index * 4 for index in range(6)
+        }
+
     def test_exit_slots_are_the_mirrored_ones(self):
         """The scan reads the MobTable, so it picks up wherever mirroring put
         the exits -- a scan against the unmirrored decode would name cells that

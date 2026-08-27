@@ -717,7 +717,10 @@ class TestSecretRoomRoundTrip:
         self._hold(state)
 
         state.secret_trick_id = 0x54            # an unconditional task
-        ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
+        assert state.exit_slots, "secret setup must create its task-specific exit"
+        ex.player_exit_sequence(
+            state, 0, state.exit_slots[0], int(MazeObjIds.EXIT),
+        )
         _run_exit_animation(state)
         assert state.bonus_amount == ex._SECRET_ROOM_BONUS
         assert p.score == ex._SECRET_ROOM_BONUS
@@ -813,7 +816,10 @@ class TestSecretRoomRoundTrip:
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
         self._hold(state)                        # into the secret room
         state.secret_trick_id = 0x54
-        ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
+        assert state.exit_slots
+        ex.player_exit_sequence(
+            state, 0, state.exit_slots[0], int(MazeObjIds.EXIT),
+        )
         self._hold(state)                        # back to the rotation
 
         assert state.secret_winner == -1

@@ -1126,7 +1126,7 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x57012 | 13 × 4B | Random maze flags table (selected by `get_random_maze_flags` via getrandom(0xD)) |
 | 0x57046 | 8 B | `slapstic_bitwise_addr_a` — four word offsets indexed by half the current slapstic command offset |
 | 0x5704E | 8 B | `slapstic_bitwise_addr_b` — four parallel word offsets for the second access in `slapstic_cmd_bitwise` |
-| 0x57056 | 28 B | `challenge_target_object_types` — 14 object-type words indexed by `trick_tasknum - 0x50`: `{0x2C,0x2A,0x2A,0x29,0x2D,0x28,0x2B,0x2D,0x28,0x2C,0x29,0x2A,0x2A,0x2B}`. Secret-challenge setup uses the selected type while scanning eligible maze objects. |
+| 0x57056 | 28 B | `challenge_target_object_types` — 14 object-type words indexed by `trick_tasknum - 0x50`: `{0x2C,0x2A,0x2A,0x29,0x2D,0x28,0x2B,0x2D,0x28,0x2C,0x29,0x2A,0x2A,0x2B}`. Secret-challenge setup 0x43C20–0x43D10 converts each matching generator into an exit, clears the other type-0x28–0x2D generators, and replaces object types 0x13–0x18 with hidden potions. |
 | 0x57072 | 66 B | `character_select_instruction_chain` — three formatted-text nodes plus inline NUL strings “CHARACTER”, “TO SELECT”, and “USE JOYSTICK”, exact range 0x57072–0x570B3. Nodes use `{row,column,string_ptr,flags[,previous_ptr]}`; the latter two have flag 0x0200 and link backward to form the chain. |
 | 0x57340 | 16 B | `character_hud_text_ptrs` — four longword pointers to character HUD/name strings |
 | 0x57350 | 8 B | `player_text_palette_words` — four player-indexed alpha/text attribute words `{0xD000,0xD400,0xD800,0xDC00}`. Score, health, entry animation, dialog, and information-panel paths pass the selected word as the player's text palette/attribute. |

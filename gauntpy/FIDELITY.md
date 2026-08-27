@@ -276,6 +276,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     can be layout data, especially when OS large text gives a space a two-cell
     advance. Transcribe the complete pointed-to record and use the caller's
     actual text routine; do not normalize labels before writing alpha RAM.
+62. **Secret exits are generated from challenge targets.** Mazes 115/116 store no
+    exit. Their level-setup arm must use task code 0x50–0x5D to select a generator
+    type from ROM 0x57056, replace matches with exit markers, clear the other
+    eligible generators, and turn ordinary monsters into typed hidden potions
+    before rebuilding the exit table.
 
 ## Investigation workflow
 
