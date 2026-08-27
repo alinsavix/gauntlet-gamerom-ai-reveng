@@ -272,6 +272,10 @@ evidence remains in `../doc/`, generated contracts, and the book.
     predicates, not infer behavior from `TRY TRANSPORTABILITY`, `WATCH WHAT YOU
     SHOOT`, `DON'T GET HIT`, or `DON'T BE GREEDY`. Even apparently plain English
     can be weaker or stricter than the actual progress-byte test.
+61. **Fixed-width ROM strings retain their spaces.** Leading and trailing spaces
+    can be layout data, especially when OS large text gives a space a two-cell
+    advance. Transcribe the complete pointed-to record and use the caller's
+    actual text routine; do not normalize labels before writing alpha RAM.
 
 ## Investigation workflow
 

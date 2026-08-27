@@ -60,8 +60,8 @@ from .subsystems.sound import main_update_sound, sound_response
 from .subsystems.thief import main_start_thief, main_thief_anim
 
 
-def game_frame(state: GameState) -> None:
-    """Advance the entire world by one frame -- the body of ``g2mainloop``."""
+def game_frame(state: GameState, *, treasure_timer_paused: bool = False) -> None:
+    """Advance the world; optionally omit only the host-paused bonus timer."""
 
     # 0x42A8E restores the ordinary floor color before this frame can arm a
     # one-field potion flash for the next VBLANK.
@@ -88,7 +88,8 @@ def game_frame(state: GameState) -> None:
         main_thief_anim(state)              # 0x4E8DC
         main_start_thief(state)             # 0x4DEB8
         main_health_countdown(state)        # 0x466F6
-        main_treasure_timer(state)          # 0x4D29E
+        if not treasure_timer_paused:
+            main_treasure_timer(state)      # 0x4D29E
         main_handle_death(state)            # 0x4664C
         main_exit_move(state)               # 0x5287C
         main_walls_cyclic_move(state)       # 0x5E62A
@@ -126,13 +127,14 @@ def check_frame_overflow(state: GameState) -> None:
         state.frame_overflow >>= 1
 
 
-def tick(state: GameState) -> None:
+def tick(state: GameState, *, treasure_timer_paused: bool = False) -> None:
     """Consume one VBLANK and run one frame.
 
     Deliberately not tied to a clock: the host decides whether this happens on
     a 60 Hz timer, as fast as possible in a headless test, or one keypress at a
     time in a debugger. Determinism lives here -- same state, same inputs, same
-    RNG seed produces the same frame, always.
+    RNG seed produces the same frame, always. ``treasure_timer_paused`` is the
+    playable host's explicit non-arcade F8 gate around only call 15.
     """
     state.frame_counter = (state.frame_counter + 1) & 0xFFFF
     state.vblank_flag = 0
@@ -141,7 +143,7 @@ def tick(state: GameState) -> None:
     alpha_palette_vblank(state)
     playfield_palette_vblank(state)
 
-    game_frame(state)
+    game_frame(state, treasure_timer_paused=treasure_timer_paused)
 
     check_frame_overflow(state)
 
@@ -161,5 +163,10 @@ def g2mainloop(state: GameState, host) -> None:  # noqa: ANN001
 
     while True:
         host.wait_for_vblank(state)
-        tick(state)
+        tick(
+            state,
+            treasure_timer_paused=bool(
+                getattr(host, "treasure_timer_paused", False)
+            ),
+        )
         host.present(state)

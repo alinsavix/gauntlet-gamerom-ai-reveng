@@ -53,6 +53,10 @@ solo-party cancellation. From level 6 onward, F10 clears the ordinary task and
 writes the selected live player as the stable winner. Both leave the normal
 exit animation and between-level room substitution in charge, and the F1 LEVEL
 page names the current ordinary maze-header trick.
+F8 is another explicit host-only control: while a treasure or secret-room
+timer is live it omits only `main_treasure_timer` from the frame, leaving
+gameplay and every other ROM-modeled call running, and resets when the room
+ends.
 
 ---
 

@@ -367,6 +367,12 @@ they performed a secret trick, and shows the time limit in both the invitation
 and the status panel. The room is therefore announced before its maze is
 revealed; it is not a renderer-side title laid over gameplay.
 
+Those color and character labels are large text too. Their ROM strings are
+fixed-width and visibly padded—`" RED  "` and `"  ELF   "`, for example—and
+the spaces advance through the same two-cell large-glyph machinery as letters.
+The padding positions the two fields; trimming it would pin RED to the left
+edge and make the invitation look like unrelated labels.
+
 Inside, the same per-player progress flags track the qualifier. Five challenge
 codes need no extra progress beyond reaching the exit. The others require six
 treasures, all six potions, three secret walls, no monsters or generators left,

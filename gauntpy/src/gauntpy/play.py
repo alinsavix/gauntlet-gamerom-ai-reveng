@@ -263,7 +263,10 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                 from .custom_scenario import apply_synthetic_events
 
                 apply_synthetic_events(state)
-                tick(state)                 # one full 60 Hz game frame
+                tick(
+                    state,
+                    treasure_timer_paused=host.treasure_timer_paused,
+                )                           # one full 60 Hz game frame
             host.present(state)             # composite + flip
     except SystemExit:
         pass

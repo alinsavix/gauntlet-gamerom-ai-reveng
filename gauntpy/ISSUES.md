@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2434 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2435 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,27 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-151 · secret invitation stripped padded large winner labels
+
+The invitation rendered `RED` as small text at alpha column 0, visibly pinning
+it to the left edge while `ELF` appeared separately near the center. ROM
+0x44FB8 and 0x44FE4 follow fixed-width string pointers and both call OS
+large-text API 0x26C. The records are significantly padded: `" RED  "`,
+`" BLUE "`, `"YELLOW"`, `"GREEN "` and `"WARRIOR "`, `"VALKYRIE"`,
+`" WIZARD "`, `"  ELF   "`. Because the large space quad advances two cells,
+those bytes are positioning data rather than cosmetic whitespace.
+
+The game-side invitation writer now sends the literal padded records through
+the modeled large-font writer at the ROM's columns 0 and 13. A regression
+checks the first visible RED/ELF glyphs at columns 2 and 17 and verifies the
+second glyph row, so a small-font or stripped-string reversion fails.
+
+F8 now pauses and resumes only the current treasure/secret-room countdown. The
+flag lives on the host, and `tick` gates only `main_treasure_timer`; player and
+monster movement, combat, input, and the other main-loop calls continue. The
+toggle is accepted only while a bonus-room timer exists and clears
+automatically when that room ends.
 
 ### S-150 · F1 secret hints hid distinct objectives
 

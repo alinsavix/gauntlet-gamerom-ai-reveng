@@ -44,6 +44,7 @@ genuine class sprite. Use `--scale` to override it.
 | **F5** | immediately load the next level |
 | **F6** | give the host player one key |
 | **F7** | give the host player one potion |
+| **F8** | pause / resume the current treasure or secret-room timer |
 | **F9** | arm this maze's secret trick; perform it and exit |
 | **F10** | force the host player into a secret room on exit |
 | **[ / ]** | select the previous / next occupied MOB |
@@ -85,10 +86,13 @@ Synthetic-scenario dumps additionally embed the complete normalized fixture,
 its SHA-256 and source filename, plus event progress, so resume never depends on
 the original file remaining present or unchanged.
 
-F5–F7 and F9–F10 are host troubleshooting controls, not original cabinet inputs. The
+F5–F10 are host troubleshooting controls, not original cabinet inputs. The
 level skip uses the live cabinet maze rotation and respawns active players
 without the bonus/splash delay. Inventory grants update the selected host
-player's game-side counters and alpha-RAM inventory display. F9 runs the
+player's game-side counters and alpha-RAM inventory display. F8 gates only
+`main_treasure_timer`, so actors, input, combat, and every other frame routine
+continue while the room clock is held; it clears automatically when that room
+ends. F9 runs the
 current maze through the ROM's objective-setup block with the availability
 counter open, including the normal solo-party cancellation, so the listed trick
 must still be completed before exiting. From level 6 onward, F10 sets the

@@ -490,9 +490,13 @@ def _write_secret_room_start(state: GameState) -> None:
 
     write_alpha_large_text(state, 4, 3, romtext.SECRET_ROOM_TITLE, 0x8000)
     attribute = 0x8400 + (winner << 10)
-    write_alpha_text(state, 0, 7, romtext.PLAYER_COLOR_NAMES[winner], attribute)
+    write_alpha_large_text(
+        state, 0, 7, romtext.PLAYER_COLOR_NAMES[winner], attribute,
+    )
     character = state.players[winner].character & 3
-    write_alpha_text(state, 13, 7, romtext.CHARACTER_NAMES[character], attribute)
+    write_alpha_large_text(
+        state, 13, 7, romtext.SECRET_CHARACTER_NAMES[character], attribute,
+    )
     for text, column, row, text_attribute in romtext.SECRET_ROOM_LINES:
         write_alpha_text(state, column, row, text, text_attribute)
 
