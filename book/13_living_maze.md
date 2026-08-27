@@ -301,6 +301,13 @@ either reveals the objective in the already selected next maze (when it is
 eligible) or offers one of the seventeen objective hints at random. The latch
 is consumed by those text-layer writes.
 
+Availability is sampled when the maze is set up, not checked continuously
+while the party plays. When the pacing counter is already zero, setup copies
+the maze header's objective into the live task byte; making the counter zero
+later would not arm that same maze by itself. The exit path checks the copied
+task, records the winning player, and only after that player's dissolve reaches
+the between-level status can the next-level curtain substitute a secret room.
+
 Progress and violations are tracked per player, and the hooks are scattered
 through every system the objectives touch: the shot resolver notices when you
 shoot food, another player, or a secret wall; the dragon's death routine checks

@@ -259,6 +259,13 @@ evidence remains in `../doc/`, generated contracts, and the book.
     may enter `FIDELITY.md`, `doc/`, or the book as an original-game fact. Label
     synthetic fixtures and results explicitly; promote a conclusion only after
     ROM execution, MAME, or direct disassembly independently establishes it.
+59. **Secret eligibility is copied at level setup.** Zeroing
+    `secret_possible_counter` during live play does not retroactively arm the
+    maze: `maze_new_level_setup` must copy the current header trick into
+    `trick_tasknum`, followed by the normal solo-party cancellation. A forced
+    invitation needs a stable valid `trick_player`; disable the ordinary task so
+    later exit checks cannot replace it, then let the ordinary exit status and
+    `show_level_start_screen` consume it.
 
 ## Investigation workflow
 

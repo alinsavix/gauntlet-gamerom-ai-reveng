@@ -18,6 +18,7 @@ from ..constants import (
     PlayerStatus,
 )
 from ..coords import hpos_x, vpos_y
+from ..romtext import SECRET_OBJECTIVE_HINTS
 from ..state import GameState
 
 DEBUG_PANEL_WIDTH = 320
@@ -189,6 +190,17 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         for slot in range(32, len(state.mobs.picture))
         if state.mobs.picture[slot]
     )
+    maze_trick = int(getattr(state.maze, "secret", 0) or 0)
+    if state.game_mode == int(GameMode.TREAS_EXIT):
+        secret_trick = "n/a during transition"
+    elif state.mazenum_current >= 104:
+        secret_trick = "n/a in bonus room"
+    elif 1 <= maze_trick <= len(SECRET_OBJECTIVE_HINTS):
+        secret_trick = (
+            f"{maze_trick:02X} {SECRET_OBJECTIVE_HINTS[maze_trick - 1]}"
+        )
+    else:
+        secret_trick = "none"
     return (
         ("CURRENT", f"level {state.levelnum_current} maze {state.mazenum_current}"),
         ("NEXT", f"level {state.level_next} maze {state.maze_next}"),
@@ -206,6 +218,7 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         ("EXITS", f"{len(state.exit_slots)} open={state.exit_open_id:03X}"),
         ("EXIT MOVE", f"timer={state.exit_move_timer} frame={state.exit_anim_frame}"),
         ("TRANSPORTERS", str(transporters)),
+        ("SECRET TRICK", secret_trick),
         ("SECRET ID", f"{state.secret_trick_id:02X} last={state.secret_trick_last:02X}"),
         ("SECRET WIN", f"{state.secret_winner} hint={state.secret_need_hint}"),
         ("SECRET COUNT", f"{state.secret_possible_counter}/{state.secret_possible_start}"),

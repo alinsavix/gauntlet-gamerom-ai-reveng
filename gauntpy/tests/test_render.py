@@ -2263,7 +2263,7 @@ class TestHostShellInput:
         finally:
             shell.close()
 
-    def test_f5_f6_f7_route_to_troubleshooting_controls(self, monkeypatch):
+    def test_troubleshooting_function_keys_route_to_controls(self, monkeypatch):
         from gauntpy.render import host
 
         calls = []
@@ -2279,11 +2279,21 @@ class TestHostShellInput:
             host, "debug_add_potion",
             lambda state, player: calls.append(("potion", player)) or True,
         )
+        monkeypatch.setattr(
+            host, "debug_enable_secret_room",
+            lambda state: calls.append(("enable-secret", state)) or True,
+        )
+        monkeypatch.setattr(
+            host, "debug_force_secret_room",
+            lambda state, player: calls.append(("force-secret", player)) or True,
+        )
         shell = host.HostShell(assets=_FakeAssets(), player=2)
         try:
             pygame = shell._pygame
             state = GameState()
-            for key in (pygame.K_F5, pygame.K_F6, pygame.K_F7):
+            for key in (
+                pygame.K_F5, pygame.K_F6, pygame.K_F7, pygame.K_F9, pygame.K_F10,
+            ):
                 pygame.event.post(
                     pygame.event.Event(pygame.KEYDOWN, key=key)
                 )
@@ -2294,6 +2304,8 @@ class TestHostShellInput:
                 ("level", state),
                 ("key", 2),
                 ("potion", 2),
+                ("enable-secret", state),
+                ("force-secret", 2),
             ]
         finally:
             shell.close()

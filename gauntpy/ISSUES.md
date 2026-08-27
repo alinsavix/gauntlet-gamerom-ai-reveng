@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2421 passed, 9 skipped** (gauntpy) and
+present the suites are clean: **2433 passed, 9 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,27 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-149 · secret-room testing required waiting through the pacing interval
+
+The live objective is not derived continuously from
+`secret_possible_counter`. ROM `maze_new_level_setup` 0x43930–0x43958 samples
+that counter once and copies the current maze-header trick into
+`trick_tasknum`; changing only the counter after the maze has loaded leaves the
+current level unarmed. At the other end, `player_exit_sequence` 0x52B40 checks
+the live task and writes `trick_player` before status 8, while
+`show_level_start_screen` 0x44DD6–0x44E00 waits for that winner to reach status
+2 before selecting secret maze 115/116.
+
+F9 now opens the pacing gate, reruns that exact objective setup for the current
+ordinary maze, and applies the normal solo-party cancellation, so entry still
+requires performing its real trick and then exiting. From level 6 onward, F10
+clears the ordinary task so later player exits cannot replace its selected
+`trick_player`, then relies on the same exit animation and transition pipeline
+for unconditional entry. Both reject bonus rooms and non-play states. The F1
+LEVEL page names the current ordinary maze-header objective even while it is
+unarmed, and explicitly suppresses bonus-room or stale tally-transition header
+bytes; the README lists both host-only controls.
 
 ### S-148 · complete 72-hour behavior documentation audit
 

@@ -34,6 +34,59 @@ def debug_add_potion(state: GameState, player_index: int) -> bool:
     return True
 
 
+def debug_enable_secret_room(state: GameState) -> bool:
+    """Arm the current ordinary maze's ROM objective for normal exit checking."""
+    if state.game_mode != int(GameMode.NORMAL):
+        return False
+
+    from ..subsystems import exits
+
+    if exits.in_bonus_room(state):
+        return False
+    if not any(
+        player.status == int(PlayerStatus.ALIVE_HERE)
+        for player in state.players
+    ):
+        return False
+    if state.secret_trick_id != exits.TRICK_NONE:
+        return True
+
+    previous_counter = state.secret_possible_counter
+    state.secret_possible_counter = 0
+    exits.secret_new_level_setup(state)
+    from ..subsystems.session import _cancel_solo_only_trick
+
+    _cancel_solo_only_trick(state)
+    if state.secret_trick_id == exits.TRICK_NONE:
+        state.secret_possible_counter = previous_counter
+        return False
+    return True
+
+
+def debug_force_secret_room(state: GameState, player_index: int) -> bool:
+    """Select one live player for the normal secret-room exit handoff."""
+    if state.game_mode != int(GameMode.NORMAL):
+        return False
+    if not 0 <= player_index < len(state.players):
+        return False
+
+    from ..subsystems import exits
+
+    if exits.in_bonus_room(state):
+        return False
+    # The ROM does not consult trick_player until the destination is past level
+    # six (show_level_start_screen 0x44DCA).
+    if state.levelnum_current < 6:
+        return False
+    if state.players[player_index].status != int(PlayerStatus.ALIVE_HERE):
+        return False
+    # Disable ordinary objective producers so another player cannot replace the
+    # explicitly selected winner before the last exit dissolve completes.
+    state.secret_trick_id = exits.TRICK_NONE
+    state.secret_winner = player_index
+    return True
+
+
 def debug_skip_level(state: GameState) -> bool:
     """Load the next rotation level immediately, preserving live-player state."""
     if state.game_mode != int(GameMode.NORMAL):

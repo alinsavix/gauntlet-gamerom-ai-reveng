@@ -47,6 +47,12 @@ live keyboard control; explicit input events override it until changed back to
 construction so ordinary pre-arrival movement writes breadcrumbs. F1 exposes
 pending/fired event timers, and F4 embeds the normalized fixture, hash, source
 name, active input mode, and event progress so resume is self-contained.
+The playable host's F9 shortcut arms the current maze by rerunning the verified
+secret-objective setup block with its pacing gate open and applies the normal
+solo-party cancellation. From level 6 onward, F10 clears the ordinary task and
+writes the selected live player as the stable winner. Both leave the normal
+exit animation and between-level room substitution in charge, and the F1 LEVEL
+page names the current ordinary maze-header trick.
 
 ---
 

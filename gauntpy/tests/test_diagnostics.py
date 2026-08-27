@@ -160,6 +160,42 @@ def test_every_diagnostics_page_has_read_only_rows():
         assert image.size == (DEBUG_PANEL_WIDTH, 960)
 
 
+def test_level_page_names_the_current_maze_secret_trick():
+    state = _diagnostic_state()
+    state.maze = type("Maze", (), {"secret": 13})()
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["SECRET TRICK"] == "0D GO ON A DIET"
+
+
+def test_level_page_does_not_present_bonus_header_byte_as_entry_trick():
+    state = _diagnostic_state()
+    state.mazenum_current = 104
+    state.maze = type("Maze", (), {"secret": 14})()
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["SECRET TRICK"] == "n/a in bonus room"
+
+
+def test_level_page_suppresses_stale_bonus_header_during_tally_transition():
+    state = _diagnostic_state()
+    state.game_mode = GameMode.TREAS_EXIT
+    state.mazenum_current = 40
+    state.maze = type("Maze", (), {"secret": 14})()
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["SECRET TRICK"] == "n/a during transition"
+
+
 def test_event_log_is_derived_from_snapshots_without_game_instrumentation():
     state = _diagnostic_state()
     before = capture_debug_snapshot(state)

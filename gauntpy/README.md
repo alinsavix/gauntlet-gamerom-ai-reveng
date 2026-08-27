@@ -44,6 +44,8 @@ genuine class sprite. Use `--scale` to override it.
 | **F5** | immediately load the next level |
 | **F6** | give the host player one key |
 | **F7** | give the host player one potion |
+| **F9** | arm this maze's secret trick; perform it and exit |
+| **F10** | force the host player into a secret room on exit |
 | **[ / ]** | select the previous / next occupied MOB |
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
@@ -83,10 +85,16 @@ Synthetic-scenario dumps additionally embed the complete normalized fixture,
 its SHA-256 and source filename, plus event progress, so resume never depends on
 the original file remaining present or unchanged.
 
-F5/F6/F7 are host troubleshooting controls, not original cabinet inputs. The
+F5–F7 and F9–F10 are host troubleshooting controls, not original cabinet inputs. The
 level skip uses the live cabinet maze rotation and respawns active players
 without the bonus/splash delay. Inventory grants update the selected host
-player's game-side counters and alpha-RAM inventory display.
+player's game-side counters and alpha-RAM inventory display. F9 runs the
+current maze through the ROM's objective-setup block with the availability
+counter open, including the normal solo-party cancellation, so the listed trick
+must still be completed before exiting. From level 6 onward, F10 sets the
+selected live player as the sole winner and disables further ordinary-objective
+selection, but the exit animation and between-level secret-room handoff still
+run.
 
 By default the runner drops you straight into a level. Options:
 
