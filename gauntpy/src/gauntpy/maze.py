@@ -112,6 +112,7 @@ __all__ = [
     "set_cell_descriptor",
     "clear_cell_descriptor",
     "write_floor_descriptor",
+    "postdecode_level_setup",
     "initialize_playfield_ram",
     "initialize_maze_color_ram",
     "load_attract_display_tilemap",
@@ -919,6 +920,10 @@ _CHALLENGE_MONSTER_LAST = 0x18
 _CHALLENGE_GENERATOR_FIRST = 0x28
 _CHALLENGE_GENERATOR_LAST = 0x2D
 _CHALLENGE_HIDDEN_POTION_BASE = 0xA728
+_LFLAG4_TRAPS_RANDOM = 0x08
+_TRAP_TYPE_FIRST = int(MazeObjIds.TILE_TRAP1)
+_TRAP_TYPE_COUNT = 3
+_ADAPTIVE_FOOD_PICTURE = 0x277B
 
 
 def _food_invuln_pictures_read() -> tuple[int, ...]:
@@ -1322,6 +1327,57 @@ def _prepare_secret_challenge(state: GameState) -> None:
         set_cell_descriptor(state, slot, replacement)
 
 
+def _randomize_trap_types(state: GameState) -> None:
+    """0x439B0-0x43A8E -- rotate type-10/11/12 trap identities together."""
+    if not state.level_flags_4 & _LFLAG4_TRAPS_RANDOM:
+        return
+    rotation = state.getrandom(_TRAP_TYPE_COUNT)
+    for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link)):
+        object_type = state.mobs.obj_type(slot)
+        if not _TRAP_TYPE_FIRST <= object_type < _TRAP_TYPE_FIRST + _TRAP_TYPE_COUNT:
+            continue
+        randomized = _TRAP_TYPE_FIRST + (
+            object_type - _TRAP_TYPE_FIRST + rotation
+        ) % _TRAP_TYPE_COUNT
+        state.mobs.set_obj_type(slot, randomized)
+        data = getattr(state.maze, "data", None)
+        if data is not None:
+            row, col = coords.unpack_slot(slot)
+            data[(col, row)] = randomized
+
+
+def _mark_adaptive_food(state: GameState) -> None:
+    """0x43AF0-0x43B5A -- choose one authored food for adaptive healing."""
+    if state.mazenum_current >= _SECRET_MAZE_FIRST or state.levelnum_current <= 6:
+        return
+    food_types = {
+        int(MazeObjIds.FOOD_DESTRUCTABLE),
+        int(MazeObjIds.FOOD_INVULN),
+    }
+    foods = [
+        slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+        if state.mobs.obj_type(slot) in food_types
+    ]
+    if not foods:
+        return
+    slot = foods[state.getrandom(len(foods))]
+    state.mobs.picture[slot] = _ADAPTIVE_FOOD_PICTURE
+    state.mobs.set_obj_type(slot, int(MazeObjIds.FOOD_DESTRUCTABLE))
+    data = getattr(state.maze, "data", None)
+    if data is not None:
+        row, col = coords.unpack_slot(slot)
+        data[(col, row)] = int(MazeObjIds.FOOD_DESTRUCTABLE)
+
+
+def postdecode_level_setup(state: GameState) -> None:
+    """Apply the shared post-playfield portion of maze_new_level_setup."""
+    _randomize_trap_types(state)
+    from .subsystems.maze_objects import setup_random_walls
+
+    setup_random_walls(state)
+    _mark_adaptive_food(state)
+
+
 def place_decoded_objects(state: GameState, maze: Maze) -> None:
     """Populate ``MobTable`` from gex's decoded ``Maze.data``: slot number
     is the packed cell address, so placement is arithmetic, not a search
@@ -1524,17 +1580,10 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     WP-17's attract demo, and the ``gauntpy-play`` runner all arrive here,
     usually through ``reset_and_load_level`` below.
 
-    Ports ``maze_new_level_setup``'s (0x438AE) decode+setup order (doc/04
-    sec 5.2) for the steps that are WP-3's own job:
-
-        4. slapstic_cmd_bitwise bank switch + maze_setupnew(cur_maze_ptr)
-           -- here, decode via gex (``decode_maze``).
-        5. maze_load_pickup_config, which must run *before* placement: it
-           settles the two mirror bits every cell is then placed through.
-        6. Populate MobTable from the decoded tokens.
-        7. Row-0 fill: maze_place_object(0, 2, 0x20).
-       10. Rebuild the exit table from the placed MOBs
-           (``exits.exit_scan_level``).
+    Consolidates ``maze_new_level_setup``'s (0x438AE) game-side setup:
+    decode and mirrored placement, row-zero fill, start selection, camera snap,
+    playfield construction, trap/random-wall/food post-processing, exit-table
+    scan, and the secret-challenge transformation.
 
     (The original calls ``maze_load_pickup_config`` from ``maze_setupnew``
     only for the 9999 sentinel and attract -- ROM 0x44B30-0x44B4E -- and from
@@ -1543,15 +1592,13 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     consolidated entry point, and it is the only way the flags are set at all
     in normal play.)
 
-    Steps 1-3, 8 and the transporter half of 9-10 (thief timer/target reset,
-    dragon-encounter flag clear, random treasure-level timer, scroll-to-slot
-    camera centering, the transporter position table) touch state that belongs
-    to other work packages (WP-9, WP-10, WP-11, WP-13, WP-16) and does not
-    exist under their GameState headings yet. Ground rule 1 forbids adding
-    fields to another package's block, so those steps are left for those
-    packages to wire in when they land, rather than guessed at here.
+    The common post-spawn tail in ``exits._spawn_level_players`` owns thief
+    scheduling and party-dependent random pickups. Transporter position-table
+    reads are represented by ordered live-MOB scans because packed slot is
+    already the stored table value.
     """
     state.levelnum_current = level_number
+    state.dialog_once_flags &= ~1                       # 0x438DC
     state.thief_level_setup_done = False
     from .subsystems.maze_objects import select_forcefield_delay_profile
     select_forcefield_delay_profile(state)
@@ -1599,6 +1646,12 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     initialize_playfield_ram(state, state.maze)
     from .subsystems.maze_objects import setup_door_graphics
     setup_door_graphics(state)
+    postdecode_level_setup(state)                        # 0x439B0-0x43B5A
+    # The ROM scans existing exits before its secret-maze transformation, so
+    # generated challenge exits are deliberately absent from the position table.
+    # Player collision still sees their live marker records.
+    from .subsystems.exits import exit_scan_level
+    exit_scan_level(state)
     _prepare_secret_challenge(state)
 
     # maze_new_level_setup step 10: rebuild the exit table from the MOBs just
@@ -1609,8 +1662,6 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     # scan; this is the call site the ROM puts it at. Function-local because
     # exits.py reaches back into this module for its own reload, and it must
     # run last: the scan reads the placed EXIT MOBs and the level flags.
-    from .subsystems.exits import exit_scan_level
-    exit_scan_level(state)
 
 
 def reset_and_load_level(

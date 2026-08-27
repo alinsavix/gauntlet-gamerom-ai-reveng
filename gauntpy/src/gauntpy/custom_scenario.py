@@ -357,6 +357,7 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
         maze_forcefield_setup(state)
     maze_module.initialize_playfield_ram(state, state.maze)
     setup_door_graphics(state)
+    maze_module.postdecode_level_setup(state)
     exit_scan_level(state)
     _spawn_player(state, scenario.character)
     state.players[0].health = scenario.health

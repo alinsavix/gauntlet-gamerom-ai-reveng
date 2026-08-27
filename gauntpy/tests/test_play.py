@@ -351,8 +351,10 @@ class TestBuildState:
                 if not state.mobs.hpos[slot] & 0x10
             )
 
-        assert real_exit_index(first) == 0
-        assert real_exit_index(second) == 1
+        # maze_new_level_setup's adaptive-food choice runs before
+        # maze_scan_objects(0) chooses the real exit.
+        assert real_exit_index(first) == 1
+        assert real_exit_index(second) == 0
 
     def test_level_20_upper_right_passage_accepts_continued_downward_motion(self):
         from gauntpy.coords import hpos_x, vpos_y

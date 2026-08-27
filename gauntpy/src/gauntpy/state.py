@@ -604,6 +604,10 @@ class GameState:
     # 0x9049E4 ``dialog_first_encounter_flags``: 32-bit "already shown" bitmask,
     # one bit per first-encounter dialog (§10.4).
     dialog_first_encounter_flags: int = 0
+    # 0x90487E ``dialog_once_flags``: secondary per-level dialog/speech latches.
+    # Bit 0 lets an already-seen fake-exit encounter play its repeat taunt once
+    # on each level; maze setup clears that bit.
+    dialog_once_flags: int = 0
     # 0x904AA4 message buffer: the lines of the message box currently on screen
     # (empty when no box is up). ``dialog_timer`` is its countdown.
     dialog_message: list[str] = field(default_factory=list)

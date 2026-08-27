@@ -250,6 +250,14 @@ keeping them apart matters:
    make the final pair of poisoned-food/potion draws. Chapter 13's misbehaving
    walls draw their timing from the same shared random stream.
 
+Two smaller setup draws specialize authored objects before party-dependent
+placement. `TrapsRandom` rotates every trap among the same three identities
+using one shared `getrandom(3)` result, so trap groups stay coherent. Above
+level six, one authored food in any non-secret maze becomes the `0x277B`
+adaptive food whose healing amount is selected later when eaten. Random-wall
+cursor bounds are also established here, before the first live frame rather
+than lazily after play has begun.
+
 The well itself is one small function, `getrandom`, and one 16-bit seed
 word. Each call advances the seed with a textbook linear congruential
 step and scales it to the caller's range:

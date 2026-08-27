@@ -829,9 +829,8 @@ def dialog_first_encounter(
 
     Verified structure (disassembly of 0x4C440-0x4C708):
 
-    * already-flagged masks return immediately (the 0x40000000 mask has an
-      extra one-shot sound branch of its own, which belongs to its caller's
-      state and is not reached from here);
+    * already-flagged masks return immediately, except that fake exits
+      (0x40000000) play sound 0xA6 once per level through dialog_once_flags;
     * a box already on screen is force-expired by setting ``dialog_timer`` to 1
       and calling ``main_msgbox_countdown``;
     * the mask's bit number selects the record; the 0x5A300 bank is used only
@@ -845,6 +844,9 @@ def dialog_first_encounter(
     """
     mask = encounter_mask & 0xFFFFFFFF
     if state.dialog_first_encounter_flags & mask:
+        if mask == 0x40000000 and not (state.dialog_once_flags & 1):
+            state.dialog_once_flags |= 1
+            sound_play(state, 0xA6)
         return 0
 
     state.dialog_first_encounter_flags |= mask

@@ -367,8 +367,10 @@ particular challenge: a fourteen-word table names one generator type for each
 task code, every generator of that type becomes an exit, and the other
 high-tier generators disappear. The ordinary monsters in the room become
 hidden potions, with the former monster family selecting which permanent power
-the potion contains. An implementation that merely loads maze 115 or 116 will
-therefore show no exit at all.
+the potion contains. This transformation follows the ordinary exit-position
+scan, so challenge exits never participate in moving- or choose-one-exit logic.
+An implementation that merely loads maze 115 or 116 will therefore show no exit
+at all.
 
 The curtain also names the winning player's color and character, says that
 they performed a secret trick, and shows the time limit in both the invitation

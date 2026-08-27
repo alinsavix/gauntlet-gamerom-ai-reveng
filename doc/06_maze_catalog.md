@@ -421,9 +421,11 @@ The raw pointer/header/boundary fields are also checked into `generated/maze_cat
 
 Neither compressed record stores an exit. `maze_new_level_setup`
 0x43C20–0x43D10 selects a generator type from the task-indexed table at
-0x57056 and replaces every matching generator with an exit before rebuilding
-the live exit table. The same pass clears the other eligible generators and
-turns ordinary monsters into hidden potions.
+0x57056 and replaces every matching generator with an exit after the ordinary
+exit-position scan. The generated exit is therefore a live tile/MOB marker but
+is absent from the position table used by moving/choose-one exits. The same pass
+clears the other eligible generators and turns ordinary monsters into hidden
+potions.
 
 ---
 

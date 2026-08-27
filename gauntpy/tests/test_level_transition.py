@@ -685,6 +685,13 @@ class TestSecretRoomRoundTrip:
         while state.bonus_timer > 0:
             sess.main_start_game(state)
 
+    @staticmethod
+    def _secret_exit(state: GameState) -> int:
+        return next(
+            slot for slot in range(32, len(state.mobs.link))
+            if state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+        )
+
     def test_no_treasure_trick_wins_and_opens_a_secret_room(self):
         state = self._level_12(self._GREEDY_MAZE)
         assert state.secret_trick_id == ex.TRICK_NO_TREASURE == 0x0E
@@ -717,9 +724,8 @@ class TestSecretRoomRoundTrip:
         self._hold(state)
 
         state.secret_trick_id = 0x54            # an unconditional task
-        assert state.exit_slots, "secret setup must create its task-specific exit"
         ex.player_exit_sequence(
-            state, 0, state.exit_slots[0], int(MazeObjIds.EXIT),
+            state, 0, self._secret_exit(state), int(MazeObjIds.EXIT),
         )
         _run_exit_animation(state)
         assert state.bonus_amount == ex._SECRET_ROOM_BONUS
@@ -816,9 +822,8 @@ class TestSecretRoomRoundTrip:
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
         self._hold(state)                        # into the secret room
         state.secret_trick_id = 0x54
-        assert state.exit_slots
         ex.player_exit_sequence(
-            state, 0, state.exit_slots[0], int(MazeObjIds.EXIT),
+            state, 0, self._secret_exit(state), int(MazeObjIds.EXIT),
         )
         self._hold(state)                        # back to the rotation
 

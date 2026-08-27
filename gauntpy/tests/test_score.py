@@ -1081,3 +1081,15 @@ def test_a_missing_value_renders_a_blank_field() -> None:
     state = _normal_state()
     dialog_first_encounter(state, 0, 1 << 15)
     assert state.dialog_message[1] == "  PLAYER LOSES  0 HEALTH  "
+
+
+def test_seen_fake_exit_plays_its_repeat_taunt_once_per_level() -> None:
+    state = _normal_state()
+    state.dialog_first_encounter_flags = 0x40000000
+
+    assert dialog_first_encounter(state, 0, 0x40000000) == 0
+    assert state.dialog_once_flags & 1
+    assert state.sound_log == [0xA6]
+
+    assert dialog_first_encounter(state, 0, 0x40000000) == 0
+    assert state.sound_log == [0xA6]

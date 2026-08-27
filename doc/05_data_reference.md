@@ -91,7 +91,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
 | 0x90487C | 2 B | `dragon_fire_cooldown` | Fire cooldown/hold timer: set to 8 by `dragon_fire_setup` (0x54748), decremented per frame in `main_handle_dragon`, gates fireball rate and holds the path counter during locked-in sustained fire. |
-| 0x90487E | 2 B | `dialog_once_flags` | WORD bitfield of "dialog shown once" flags (one bit per dialog id; tested/set by `dialog_first_encounter` code). **Bit 0 = dragon first-encounter dialog** (the old `dragon_encounter_flag`); bit 0 cleared per level by `maze_new_level_setup`, whole word cleared at game init. |
+| 0x90487E | 2 B | `dialog_once_flags` | Secondary WORD bitfield for repeat dialog/speech events. Bit 0 is cleared by every `maze_new_level_setup` and set by `dialog_first_encounter` when the already-seen fake-exit mask 0x40000000 plays sound 0xA6, limiting that repeat taunt to once per level. The whole word is cleared when gameplay or the attract demo starts. |
 | 0x904880 | 2 B | `dragon_hits` | Number of hits on the dragon (9th hit = death) |
 | 0x904882 | 2 B | `dragon_head_hpos` | Horizontal position of the dragon's HEAD: `(mob_hpos[dragon_seg_mob_ids[0]] + head hdelta) & 0xFF80` (0x5466C) — position field only, no palette. |
 | 0x904884 | 2 B | `dragon_head_vpos` | Vertical position of the dragon's head, `(mob_vpos[seg 0] + head vdelta) & 0xFF80` (0x5469E), delta table 0x5D478 |
@@ -657,6 +657,11 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 | LFLAG4_WRAP_H | 0x20 |
 | LFLAG4_EXIT_FAKE | 0x40 |
 | LFLAG4_PLAYER_OFFSCREEN | 0x80 |
+
+`LFLAG4_TRAPS_RANDOM` does not randomize each trap independently. Level setup
+draws one value from `getrandom(3)` and adds it modulo three to every live
+type-10/11/12 trap marker, preserving their grouping while rotating which
+trigger controls which wall family.
 
 ### 3.13 Maze Numbers
 

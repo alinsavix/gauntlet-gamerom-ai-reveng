@@ -166,6 +166,7 @@ def test_synthetic_build_uses_modeled_maze_mob_and_playfield_memory():
     assert any(state.playfield_ram)
     assert state.levelnum_current == 16
     assert state.mazenum_current == 15
+    assert state.random_wall_setup_ready
     assert synthetic_runtime_for(state) is not None
 
 

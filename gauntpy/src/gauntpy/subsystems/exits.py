@@ -1482,7 +1482,6 @@ def _load_next_level(
     if not maze.reset_and_load_level(state, level, maze_number=state.mazenum_current):
         return False                                  # no ROMs: nothing to respawn into
 
-    exit_scan_level(state)                           # maze_new_level_setup exit table
     # player_start_inner clears player_treascount on every spawn (0x48E86); the
     # level total is cleared by load_level.
     state.player_treascount = [0] * len(state.players)

@@ -281,7 +281,14 @@ evidence remains in `../doc/`, generated contracts, and the book.
     exit. Their level-setup arm must use task code 0x50–0x5D to select a generator
     type from ROM 0x57056, replace matches with exit markers, clear the other
     eligible generators, and turn ordinary monsters into typed hidden potions
-    before rebuilding the exit table.
+    after the ordinary exit-position scan. Generated exits remain absent from
+    that table.
+63. **Post-decode setup draws keep ROM order.** Playfield texture RNG is consumed
+    inside maze construction before the shared trap rotation and adaptive-food
+    draws. `TrapsRandom` rotates all type-10/11/12 identities by one common
+    `getrandom(3)` result; above level six, non-secret mazes then designate one
+    authored food as picture 0x277B. Initialize random-wall cursors in the same
+    setup pass, not on their first gameplay call.
 
 ## Investigation workflow
 

@@ -104,6 +104,7 @@ def start_attract_to_game(state: GameState) -> None:
     from .players import player_resetall
     from .sound import sound_play
 
+    state.dialog_once_flags = 0              # 0x4423A
     state.dialog_first_encounter_flags = 0   # 0x44244
     if state.game_mode == GameMode.DEMO:     # 0x4424A
         player_resetall(state)               # 0x44254

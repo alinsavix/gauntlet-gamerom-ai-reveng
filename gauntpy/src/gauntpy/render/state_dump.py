@@ -23,6 +23,7 @@ _SCHEMA_1_ADDED_FIELDS = {
     "playfield_color_latch",
     "playfield_color_base",
     "eeprom_persistence_enabled",
+    "dialog_once_flags",
 }
 
 
@@ -275,6 +276,8 @@ def game_state_from_payload(payload: object) -> GameState:
         serialized["playfield_color_latch"] = serialized["playfield_color_base"]
     if "eeprom_persistence_enabled" not in serialized:
         serialized["eeprom_persistence_enabled"] = True
+    if "dialog_once_flags" not in serialized:
+        serialized["dialog_once_flags"] = 0
 
     for field in fields(state):
         name = field.name

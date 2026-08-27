@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2438 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2443 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -63,6 +63,37 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-154 · complete level/maze setup audit closed four residual gaps
+
+The complete `maze_new_level_setup` body (0x438AE–0x43D8A) and every Python
+entry path were audited after the secret-exit and PLAYERSTART fixes. Four net
+state differences remained.
+
+LFLAG4 `TrapsRandom` drew no setup value, so type-10/11/12 trap identities never
+rotated together as 0x439B0–0x43A8E requires. The 0x43AF0–0x43B5A authored-food
+pass was absent, so levels above six never changed one non-secret-maze food to
+adaptive picture 0x277B. Random-wall low/current/target fields were initialized
+lazily on the first gameplay call rather than during the setup scan. Finally,
+the secondary word at 0x90487E was not modeled: level setup could not clear its
+bit 0, and an already-seen fake exit could not play repeat taunt 0xA6 once per
+level.
+
+All four now run in ROM order after playfield texture generation. Trap markers
+and logical types rotate by one shared draw; one uniformly selected type-49/50
+food becomes type 49/picture 0x277B; random-wall cursors are ready before play;
+and `dialog_once_flags` is reset at level, game, and demo setup and consumed by
+the fake-exit dialog path. Schema-1 state dumps default the newly modeled word
+to zero. Restoring the authored-food draw also advances the shared RNG before
+choose-one/fake-exit selection, correcting the deterministic level-16 outcomes.
+
+The audit also corrected the secret-exit order from S-152: the ordinary
+position-table scan precedes challenge generation, so generated secret exits
+are live markers but do not enter that table. The caller-side duplicate scan
+was removed. Apparent low-slot and transporter-array omissions were
+representation differences with equivalent reachable state: transitions
+install a fresh `MobTable`, and transporter consumers derive the same ordered
+packed slots from live records.
+
 ### S-153 · treasure rooms retained solid PLAYERSTART records
 
 Treasure layouts store one to five candidate PLAYERSTART cells. Gauntpy's
@@ -90,8 +121,8 @@ turns each matching type-0x28–0x2D generator into an exit, clears the other
 generators in that range, and replaces ordinary types 0x13–0x18 with hidden
 potions whose power picture derives from the former monster type.
 
-That game-side setup now runs after playfield initialization and before the
-exit-table scan. Every challenge code 0x50–0x5D produces at least one real
+That game-side setup now runs after playfield initialization and after the
+exit-position scan. Every challenge code 0x50–0x5D produces at least one real
 logical/MOB/playfield exit in its assigned secret maze, and the round-trip
 regression now consumes one of those generated exits instead of calling
 `player_exit_sequence` against the player's own slot.

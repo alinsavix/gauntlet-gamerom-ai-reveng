@@ -855,15 +855,24 @@ Maps maze number → data pointer + slapstic bank. See `06_maze_catalog.md` for 
 
 Called when transitioning to a new level:
 1. Resets thief timer and target to 0xFF
-2. Clears dragon encounter flag
-3. Optionally sets a random level timer (`0x904B80`)
+2. Clears bit 0 of `dialog_once_flags` (the per-level fake-exit repeat-taunt latch)
+3. At level 6, sets the treasure-room interval (`0x904B80`) to `getrandom(3)+3`
 4. Calls `slapstic_cmd_bitwise` to switch ROM banks
 5. Calls `maze_setupnew` with `ram.cur_maze_ptr`
 6. Sets up secret room state from maze byte 0
-7. Calls `maze_food_mob_consume(0xFFFF)` to find a food tile and mark it as level start slot
+7. Calls `maze_scan_objects(0xFFFF)` to choose `maze_player_start_slot` and process every PLAYERSTART loser
 8. Calls `scroll_to_slot` to center the view at level start
 9. Clears the transporter and exit position tables (`0x910700` and `ram.exit_pos_table` at `0x910740`)
-10. Scans all mob_link slots to repopulate tport and exit tables
+10. If LFLAG4 `TrapsRandom` is set, draws `getrandom(3)` once and rotates every type-10/11/12 trap identity by that common offset modulo three.
+11. Scans all `mob_link` slots to repopulate transporter/exit tables and initialize the random-wall low/current/target cursors.
+12. Below maze 115 and above level 6, chooses one authored type-49/50 food uniformly, changes its picture to adaptive food `0x277B`, and normalizes its type to 49.
+13. On secret mazes, runs the challenge-target transformation described in §10.6 after the position-table scan, then clears the reserved low MOB pictures used by ordinary play.
+
+The Python representation initializes random-wall cursors eagerly during this
+setup. It derives the transporter table as an ordered live-MOB scan because the
+stored values are the packed slots themselves. Reachable level loads replace
+the complete `MobTable`, which is equivalent to the secret path's explicit
+reserved-picture clear.
 
 ### 5.3 Maze Decode (`maze_decode`, 0x4C1BC)
 
@@ -1702,6 +1711,7 @@ Secret-room availability is paced by a pair of level counters:
 - After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-character `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
 - After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) saves the maze trick in `0x904064`, replaces `0x904065` with a random task code 0x50–0x5D, selects a time limit from tables at 0x57360/0x5737C, and displays the optional task qualifier from the 14-record table at 0x573D4. It initializes the secret maze number to 115, compares the task against 0x57, and increments the maze number for tasks 0x57–0x5D before calling `maze_select_bank_special`; tasks 0x50–0x56 therefore use maze 115 and tasks 0x57–0x5D use maze 116. Code 0x5A is valid: its qualifier is “AFTER REMOVING ALL TREASURE,” and a supershot hit on ordinary treasure increments the player's progress.
 - Neither stored secret maze contains an exit. During `maze_new_level_setup`, 0x43C20–0x43D10 selects one generator type from the 14-word table at 0x57056, indexed by challenge code minus 0x50. The scan converts every matching type-0x28–0x2D generator into an exit and removes the other generators in that range. It also replaces ordinary object types 0x13–0x18 with hidden potions whose pictures are `0xA728 + 4 * (type - 0x13)`. The generated exit is therefore part of challenge setup, not compressed maze data or a renderer overlay.
+- The ordinary exit/transporter scan occurs before that secret transformation. Generated challenge exits are live collision/playfield markers but are not entered into the cleared ordinary exit-position table; no moving/choose-one logic applies to them.
 - The same routine's 0x44F7E–0x450F8 display arm writes the complete 600-frame invitation into alpha RAM: `SECRET ROOM`, the winner's color and character, `YOU HAVE PERFORMED` / `A SECRET TRICK`, the small and large countdowns, and the optional qualifier descriptor. This is game-side video state, not renderer-composed text.
 - The winner labels are OS large text, not ordinary alpha strings. At 0x44FB8/0x44FE4 the routine follows pointers to fixed-width ROM records (`" RED  "`, `" BLUE "`, `"YELLOW"`, `"GREEN "` and `"WARRIOR "`, `"VALKYRIE"`, `" WIZARD "`, `"  ELF   "`), then calls API 0x26C at columns 0 and 13 on row 7. Their leading/trailing spaces are positioning data: the large space glyph advances two alpha cells, so stripping the padding or using the small-font writer moves `RED` to the physical left edge. A direct MAME 0.289 call to 0x44DB4 confirms that the arcade intentionally presents the color and class as two widely separated fields; `RED` and `ELF` are not a single adjacent phrase.
 - `secret_need_hint` (0x90486E) is a separate discovery latch, set when a secret wall opens (0x4B6B0) or the dragon drops its hidden reward (0x54414). `level_splash` consumes it at 0x4C04E–0x4C108: it writes `TO ENTER SECRET ROOM:`, then uses the selected upcoming maze header's objective when the availability counter is zero and the level-12 gate for trick 9 passes; otherwise it chooses one of the 17 hint strings randomly. The latch is cleared after the alpha writes.
