@@ -678,8 +678,12 @@ PLAYERSTART marker: 0x48C1A–0x48C92 tries left, right, up, and down around eac
 existing player's current cell, accepting the first empty on-screen candidate.
 `maze_scan_objects(-1)` chooses that first-player slot randomly from the decoded
 PLAYERSTART records, stores it at 0x9049E0, and replaces the selected marker with
-floor. The saved word therefore remains authoritative after death; a continue
-must not search the live MOB table for a marker that setup deliberately removed.
+floor. Every non-selected start then takes the scanner's shared loser arm:
+LFLAG4 bit 6 marks it with hpos bit 4, otherwise `pf_replace(..., floor)` removes
+it too. Treasure rooms never set that fake-exit bit, so all of their one-to-five
+stored start records become ordinary floor before play. The saved word therefore
+remains authoritative after death; a continue must not search the live MOB table
+for a marker that setup deliberately removed.
 
 ### 4.5 IT Mechanic
 

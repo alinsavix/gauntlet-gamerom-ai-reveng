@@ -736,6 +736,22 @@ class TestLoadLevel:
         for slot in range(FIRST_PLAYABLE_SLOT):
             assert state.mobs.obj_type(slot) == MazeObjIds.WALL_REGULAR
 
+    def test_treasure_rooms_replace_every_player_start_with_floor(self):
+        for maze_number in range(104, 115):
+            state = GameState(game_mode=GameMode.NORMAL)
+
+            gm.load_level(state, 20, maze_number=maze_number)
+
+            assert state.maze_player_start_slot >= FIRST_PLAYABLE_SLOT
+            assert all(
+                state.mobs.obj_type(slot) != int(MazeObjIds.PLAYERSTART)
+                for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+            ), maze_number
+            assert all(
+                int(object_type) != int(MazeObjIds.PLAYERSTART)
+                for object_type in state.maze.data.values()
+            ), maze_number
+
     def test_decoded_objects_present_after_load(self):
         """Every cell of the maze ``load_level`` stored is occupied.
 

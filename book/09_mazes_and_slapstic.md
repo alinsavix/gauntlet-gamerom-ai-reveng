@@ -221,6 +221,12 @@ case is pure pacing: the dragon is written out of the maze data entirely
 before level 12 of a normal game, so the deep dungeon keeps something in
 reserve.
 
+The start scan is also destructive. It remembers one randomly chosen
+PLAYERSTART cell, then normally replaces every stored start record with floor.
+Treasure layouts contain up to five such candidates; none survives as a visible
+or solid `START` object. The saved cell, not a remaining marker, is what later
+player placement consumes.
+
 ## Three kinds of random
 
 The word "random" hides three different mechanisms in this game, and

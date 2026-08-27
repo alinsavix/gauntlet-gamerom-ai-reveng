@@ -1357,7 +1357,7 @@ def place_decoded_objects(state: GameState, maze: Maze) -> None:
 
 
 def select_player_start_slot(state: GameState) -> None:
-    """Port maze_scan_objects(-1): select and consume one PLAYERSTART marker."""
+    """Port maze_scan_objects(-1): select a start and process every loser."""
     starts = [
         slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
         if state.mobs.obj_type(slot) == int(MazeObjIds.PLAYERSTART)
@@ -1365,13 +1365,17 @@ def select_player_start_slot(state: GameState) -> None:
     state.maze_player_start_slot = 0
     if not starts:
         return
-    slot = starts[state.getrandom(len(starts))]
-    state.maze_player_start_slot = slot
-    state.mobs.unlink_and_clear(slot)
+    selected = starts[state.getrandom(len(starts))]
+    state.maze_player_start_slot = selected
     data = getattr(state.maze, "data", None)
-    if data is not None:
-        row, col = coords.unpack_slot(slot)
-        data.pop((col, row), None)
+    for slot in starts:
+        if slot != selected and state.level_flags_4 & 0x40:
+            state.mobs.hpos[slot] |= 0x10
+            continue
+        state.mobs.unlink_and_clear(slot)
+        if data is not None:
+            row, col = coords.unpack_slot(slot)
+            data.pop((col, row), None)
 
 
 # ---------------------------------------------------------------------------

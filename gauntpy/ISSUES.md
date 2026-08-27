@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2437 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2438 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,24 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-153 · treasure rooms retained solid PLAYERSTART records
+
+Treasure layouts store one to five candidate PLAYERSTART cells. Gauntpy's
+`select_player_start_slot` chose one, saved it, and cleared only that record,
+leaving every loser as a visible `0x1E0D` MOB and an impassable type-15
+collision target.
+
+ROM `maze_scan_objects(-1)` 0x43D8C–0x43EC4 shares its post-selection loser
+arm with exit scanning. The chosen start is saved to 0x9049E0 and replaced with
+floor; each non-selected start is marked with hpos bit 4 only when LFLAG4 bit 6
+is set, and otherwise is also replaced with floor. Treasure rooms do not set
+that flag, so none of their stored start records remains live.
+
+The setup helper now processes every candidate and updates both the MOB table
+and logical maze before playfield initialization. A ROM-backed regression loads
+all eleven treasure rooms and verifies that the saved spawn identity remains
+while no PLAYERSTART survives in collision or logical maze state.
 
 ### S-152 · secret challenge mazes loaded without generated exits
 

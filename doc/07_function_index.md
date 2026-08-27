@@ -1269,5 +1269,5 @@ left eight, while masking high bits with 0x3E0 and shifting them right three.
 
 Multi-mode maze object scanner over all 0x400 `mob_link` tiles. Modes by argument (object types are the §3.14 Maze Object IDs, not the old "food" readings):
 - **arg=0:** count **EXIT** tiles (type 0x10). Implements EXIT_CHOOSEONE: keeps one randomly chosen exit (slot → 0x904A0A); the others become fake exits (hpos |= 0x10) when LFLAG4 bit 6 (EXIT_FAKE) is set, otherwise are replaced with floor via `pf_replace`. When only one exit exists, clears LFLAG3 bit 6 (EXIT_MOVES, long bit 14 of 0x90491C).
-- **arg=0xFFFF:** count **PLAYERSTART** tiles (type 0xF).
+- **arg=0xFFFF:** count **PLAYERSTART** tiles (type 0xF), randomly select one into `maze_player_start_slot`, replace it with floor, and send every non-selected start through the shared loser arm (mark hpos bit 4 under LFLAG4 bit 6, otherwise replace with floor).
 - **arg=N (N≥1):** count **food** (types 0x31 FOOD_DESTRUCTABLE / 0x32 FOOD_INVULN) — used by the has-food logic. (This food-counting mode is what led to the original misnaming.)
