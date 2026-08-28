@@ -90,6 +90,8 @@ player-record fields omit a redundant `player_` prefix; `player_in_maze` is a
 polarity-normalized view of `player_tport_phase`; Python lists replace the
 sound-ring head/tail words; and merged/decomposed renderer, maze, probe, palette,
 and dispatch helpers remain explicitly classified in `ROM_FUNCTION_AUDIT.csv`.
+The complete human-readable rename and exception report is
+[`NAMING_AUDIT.md`](NAMING_AUDIT.md).
 New regressions join the crosswalk to `doc/07`, bind direct Python ports to their
 canonical symbol/module, bind modeled RAM fields and literal tables to `doc/05`,
 and reject stale crosswalk source paths. The data/subsystem references also now
