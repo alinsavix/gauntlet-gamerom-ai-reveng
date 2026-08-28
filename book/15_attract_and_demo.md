@@ -450,7 +450,7 @@ reached one byte at a time. Chapter 16 walks the wire.
 >   same register `main_handle_potions` reads at 0x47020;
 >   `doc/04_game_subsystems.md` §15 and §6.4;
 >   the free-play arm at 0x484A8–0x484C4 pairs it with
->   `player_init_for_coin` (0x488CA).
+>   `player_coindrop` (0x488CA).
 > - Legend: `load_legend_page` (0x4CD1C) loads maze 103, blanks a 29×30
 >   text block, then dispatches selector 2 to the item page (0x4CFDA),
 >   selector 1 to the monster page (0x4CDB8, which also forces palette

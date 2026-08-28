@@ -134,7 +134,7 @@ repeat steps times:                            # 0x52E04-0x52E16
                 return
             if maze_next > 101:
                 maze_next = 5
-                eeprom_write_timer (0x904012) = 1   # force a save next tick
+                timer_eepromwrite (0x904012) = 1   # force a save next tick
             else:
                 maze_next += 1
 

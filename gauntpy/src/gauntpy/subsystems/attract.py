@@ -88,7 +88,7 @@ _LEGEND_MAZE = 103
 
 # logo_motion_program_full/short, ROM 0x5AC2E/0x5AC4E. Each record is
 # (duration, ordinary-logo V delta, "II" V delta, playfield V-scroll delta).
-_TITLE_MOTION_FULL = (
+_LOGO_MOTION_PROGRAM_FULL = (
     (0x90, 2, 0, 0),
     (0x03, -2, 0, 2),
     (0x06, 1, 0, -1),
@@ -205,7 +205,7 @@ def _scroll_title_mobs(
 
 
 def _update_title_logo_motion(state: GameState) -> None:
-    program = _TITLE_MOTION_FULL if state.title_logo_full_program else _TITLE_MOTION_SHORT
+    program = _LOGO_MOTION_PROGRAM_FULL if state.title_logo_full_program else _TITLE_MOTION_SHORT
     while True:
         if state.logo_scroll_timer == 0:
             state.logo_motion_index += 1
@@ -309,7 +309,7 @@ def _adjust_legend_monster_mobs(state: GameState) -> None:
         array[slot] = (array[slot] + delta) & 0xFFFF
 
 
-def _load_legend_page(state: GameState) -> None:
+def load_legend_page(state: GameState) -> None:
     """Port load_legend_page 0x4CD1C, including its maze/palette reload."""
     from .. import maze
     from .players import setup_infopanel
@@ -491,7 +491,7 @@ def _attract_timer_expired(state: GameState, mode: int) -> None:
             from .players import player_resetall
 
             player_resetall(state)
-            _load_legend_page(state)                # 0x4488C-0x4489C
+            load_legend_page(state)                # 0x4488C-0x4489C
             return
     elif mode == int(GameMode.NORMAL):             # 0x448A4
         # The character-select screen timed out. A player still holding health
@@ -593,17 +593,17 @@ def start_attract_screen(state: GameState, mode: int) -> None:
         attract_demo_init(state)
     elif mode == int(GameMode.LEGEND):
         state.attract_legend = 2
-        _load_legend_page(state)                    # 0x44536-0x44552
+        load_legend_page(state)                    # 0x44536-0x44552
     elif mode == int(GameMode.SCORES):
         from .. import maze
-        from .score import write_high_score_screen
+        from .score import attract_highscores
 
         maze.reset_and_load_level(
             state, state.levelnum_current, maze_number=_LEGEND_MAZE,
         )
         state.scroll_x = 9
         state.scroll_y = 5
-        write_high_score_screen(state)              # attract_highscores 0x4450C
+        attract_highscores(state)              # attract_highscores 0x4450C
 
 
 def attract_demo_init(state: GameState) -> None:
@@ -637,7 +637,7 @@ def attract_demo_init(state: GameState) -> None:
     from .. import maze
     from .exits import exit_scan_level
     from .players import player_join, setup_infopanel
-    from .session import player_init_for_coin
+    from .session import player_coindrop
 
     setup_infopanel(state, -1)                     # 0x449DE-0x449E4
     state.dialog_once_flags = 0                    # 0x449EC
@@ -646,7 +646,7 @@ def attract_demo_init(state: GameState) -> None:
     # Player 1 is the Elf hero driving the standard demo (§6.3).
     elf = state.players[_DEMO_ACTIVE_PLAYER]
     elf.character = _DEMO_ELF_CLASS
-    player_init_for_coin(state, _DEMO_ACTIVE_PLAYER)
+    player_coindrop(state, _DEMO_ACTIVE_PLAYER)
 
     # Load the demo maze and place the Elf, so the recorded inputs have a world
     # to move through. Guarded so a ROM-less environment still sets up the demo
@@ -709,7 +709,7 @@ def _check_attract_interrupt(state: GameState, mode: int) -> bool:
             from .players import player_resetall
 
             player_resetall(state)
-            _load_legend_page(state)
+            load_legend_page(state)
         else:
             start_attract_screen(state, int(GameMode.SCORES))
         return True

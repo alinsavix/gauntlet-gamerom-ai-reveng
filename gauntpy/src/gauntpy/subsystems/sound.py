@@ -15,7 +15,7 @@ command-count query (replies 0xDB), 0x07 the diagnostic fault query.
 ``sound_play`` (§11.1) is ROM-faithful, fast path included: when the recovery
 holdoff is zero it offers the byte straight to the board and an accepted
 command is *never* queued; only a busy latch (or a nonzero holdoff) falls back
-to the seven-entry ring. So ``sound_log`` -- not ``sound_queue`` -- is what
+to the seven-entry ring. So ``sound_log`` -- not ``soundqueue`` -- is what
 "the board was told", and it is where every emitted command shows up exactly
 once, whether it went out immediately or was drained later. Capacity and
 drop-when-full behaviour on the ring path are preserved exactly.
@@ -112,8 +112,8 @@ def enqueue_sound(state: GameState, sound_id: int) -> None:
     """0x4ADD6 -- the ring fallback: append if there is room, otherwise drop
     the byte silently. Usable capacity is 7 (§11.1-11.2).
     """
-    if len(state.sound_queue) < SOUND_QUEUE_CAPACITY:
-        state.sound_queue.append(sound_id & 0xFF)
+    if len(state.soundqueue) < SOUND_QUEUE_CAPACITY:
+        state.soundqueue.append(sound_id & 0xFF)
     # else: ring full, command dropped without complaint (§11.2)
 
 
@@ -131,7 +131,7 @@ def sound_play(state: GameState, sound_id: int) -> None:
     ``main_update_sound`` only logs the commands it drains out of the ring.
     """
     sound_id &= 0xFF
-    if not state.sound_holdoff and try_send_sound_command(state, sound_id):
+    if not state.speech_counter and try_send_sound_command(state, sound_id):
         state.sound_log.append(sound_id)
         return
     enqueue_sound(state, sound_id)
@@ -157,10 +157,10 @@ def sound_system_reset(state: GameState) -> None:
     0x4ADAE: fills the physical ring with 0xFF and zeroes both indices --
     equivalent here to emptying the Python queue). §11.3.
     """
-    state.sound_queue.clear()
-    state.sound_holdoff = SOUND_RESET_HOLDOFF
+    state.soundqueue.clear()
+    state.speech_counter = SOUND_RESET_HOLDOFF
     state.sound_queue_state = 0
-    state.sound_retry_count = 0
+    state.sound_cpu_retry_count = 0
 
 
 def sound_response(state: GameState) -> None:
@@ -178,9 +178,9 @@ def sound_response(state: GameState) -> None:
         byte = SOUND_NO_RESPONSE
 
     if byte != SOUND_NO_RESPONSE:
-        if state.sound_holdoff:
+        if state.speech_counter:
             if byte == 0xFF:
-                state.sound_holdoff = 0  # the board is back (§11.3)
+                state.speech_counter = 0  # the board is back (§11.3)
             else:
                 sound_system_reset(state)
         else:
@@ -192,9 +192,9 @@ def sound_response(state: GameState) -> None:
         sound_system_reset(state)  # the board's own fault report
         return
 
-    if state.sound_holdoff:
-        state.sound_holdoff -= 1
-        if state.sound_holdoff == 0:
+    if state.speech_counter:
+        state.speech_counter -= 1
+        if state.speech_counter == 0:
             sound_system_reset(state)  # holdoff expired with no 0xFF ack
         return
 
@@ -207,14 +207,14 @@ def sound_response(state: GameState) -> None:
     state.sound_queue_state = 0
     if send_status_query(state):
         state.sound_idle_timer = SOUND_IDLE_RELOAD
-        state.sound_retry_count = 0
+        state.sound_cpu_retry_count = 0
         return
 
     # Failed send: clear the timer so the next frame retries immediately, count
     # the attempt, and reset the whole engine once the count passes 0xB4.
     state.sound_idle_timer = 0
-    state.sound_retry_count += 1
-    if state.sound_retry_count > SOUND_RETRY_LIMIT:
+    state.sound_cpu_retry_count += 1
+    if state.sound_cpu_retry_count > SOUND_RETRY_LIMIT:
         sound_system_reset(state)
 
 
@@ -233,14 +233,14 @@ def main_update_sound(state: GameState) -> None:
     eight attempts and leaves the read head alone, so the same byte is offered
     again on the next attempt (and, if the eight run out, next frame).
     """
-    if state.frame_overflow or state.sound_holdoff:
+    if state.frame_overflow or state.speech_counter:
         return
 
     attempts = 0
-    while state.sound_queue and attempts < SOUND_DRAIN_MAX_ATTEMPTS:
+    while state.soundqueue and attempts < SOUND_DRAIN_MAX_ATTEMPTS:
         attempts += 1
-        command = state.sound_queue[0]
+        command = state.soundqueue[0]
         if not try_send_sound_command(state, command):
             continue        # busy: the byte stays at the head of the ring
-        state.sound_queue.pop(0)
+        state.soundqueue.pop(0)
         state.sound_log.append(command)

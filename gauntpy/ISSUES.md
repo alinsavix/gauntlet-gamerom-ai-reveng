@@ -63,6 +63,40 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-155 · documentation/Python naming contract had drifted
+
+A whole-codebase comparison against the address-associated names in
+`doc/07_function_index.md` and `doc/05_data_reference.md` found three classes of
+real drift. Thirty-five one-to-one `GameState` fields still carried
+work-package-era descriptive names (`vblank_flag`, `secret_winner`,
+`exit_move_timer`, `maze_resume`, and related wall, forcefield, sound, EEPROM,
+collision-scratch, and dialog fields). Direct ports in the dragon, monster,
+score, camera, door, shot, session, and display modules often retained private
+paraphrases despite having exact indexed entries. Literal tables likewise mixed
+canonical names with shortened aliases such as `_SPAWN_PROB_TABLE`,
+`_PLAYER_WALKING_PICTURE`, and `_COIN_HEALTH_TABLE`.
+
+The one-to-one identifiers now use the canonical words (with Python constant
+casing). Schema-1 state loading translates every former field name so existing
+F4 captures remain resumable, and EEPROM loading accepts the former
+`maze_resume`/`maze_stride` JSON keys so cabinet rotation state survives the
+rename. The callable crosswalk now points at the actual
+`subsystems/` files and correct modules for five entries whose implementations
+had moved.
+
+The audit deliberately retained representation names where there is no
+one-to-one object: `MobTable` methods encapsulate several ROM leaves;
+player-record fields omit a redundant `player_` prefix; `player_in_maze` is a
+polarity-normalized view of `player_tport_phase`; Python lists replace the
+sound-ring head/tail words; and merged/decomposed renderer, maze, probe, palette,
+and dispatch helpers remain explicitly classified in `ROM_FUNCTION_AUDIT.csv`.
+New regressions join the crosswalk to `doc/07`, bind direct Python ports to their
+canonical symbol/module, bind modeled RAM fields and literal tables to `doc/05`,
+and reject stale crosswalk source paths. The data/subsystem references also now
+state the dual tile/transport and phase/in-maze lifetimes at 0x904BD8/0x904BCE,
+the achieved-movement meaning of `player_joystick`, and the historical
+`shot_reflect_*` tables' use during initial shot creation.
+
 ### S-154 · complete level/maze setup audit closed four residual gaps
 
 The complete `maze_new_level_setup` body (0x438AE–0x43D8A) and every Python
@@ -636,7 +670,7 @@ generator.
 The immediate skip loaded and spawned the next level, then zeroed the shared
 UI timer without running the timer-expiry teardown. The `LEVEL:` alpha words
 therefore had no remaining owner that could clear them. F5 now mirrors the
-normal expiry order: load the maze without players, run `maze_show_alpha`, then
+normal expiry order: load the maze without players, run `maze_show`, then
 spawn the surviving party and clear the host-side pending marker.
 
 ### S-128 · live troubleshooting required replaying whole levels
@@ -1154,7 +1188,7 @@ remembered live slot before resetting the per-player RAM.
   exactly as 0x42542 does, and the record follows the hero in on the same frame
   once the tile is consumed.
 
-  Consumers lost their overlays: `shots._candidate_core` evaluates the probed
+  Consumers lost their overlays: `shots.shot_collision_candidate_core` evaluates the probed
   cell's own occupant, `monsters` resolves contact and rendered occupancy from
   the cell, `render.mobs` walks one geometric band window, `player_tile_pos`
   and the forcefield query read the record's cell, `nearby_mob_clearance_test`
@@ -1664,7 +1698,7 @@ the arrays directly.
 
 ### I-14 · WP-8 · Super Sorcerer placement
 
-Was re-aim only. **Fixed:** `_supersorc_place` now performs the documented
+Was re-aim only. **Fixed:** `supersorc_place` now performs the documented
 relocation — all four players cyclically, three directions behind facing (biases
 {0,−1,+1}, clear runs {4,3,3}), rows 1–31, with an eight-cell proximity
 rejection — relocating the MOB via `move_slot`. Covered by a new test.

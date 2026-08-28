@@ -11,7 +11,7 @@ Acceptance criteria (PLAN §6, WP-6 brief):
      when the last player is removed, show_continue_prompt is called.
   5. player_add_score_with_mult: adds base_score × bonusmult; does NOT call
      highscore_check.
-  6. main_handle_death: a negative forcefield_hurt_timer plays sound 0x2E;
+  6. main_handle_death: a negative ff_hurt_timer plays sound 0x2E;
      when the countdown reaches 0, sound 0x2F plays.
 
 Later sections cover the routines that used to be stubs or guesses, each
@@ -215,10 +215,10 @@ class TestMainHealthCountdown:
 
     def test_heartbeat_uses_rom_mask_table_and_per_player_sound(self):
         """0x576A8 gates 0x18 + player, not the spoken warning (0x46BC0)."""
-        assert gp._HEALTH_SOUND_MASK_TABLE == [
+        assert gp._HEARTBEAT_MASK_TABLE == [
             0x1F, 0x3F, 0x3F, 0x7F, 0x7F, 0xFF, 0xFF,
         ]
-        assert gp._HEARTBEAT_SOUND == [0x18, 0x19, 0x1A, 0x1B]
+        assert gp._HEARTBEAT_SOUND_TABLE == [0x18, 0x19, 0x1A, 0x1B]
 
         state = _active_state()
         p = _make_player_active(state, 1, health=0x20)   # health >> 5 == 1
@@ -626,11 +626,11 @@ class TestForcefieldDamageTable:
         state.forcefield_color = 1
         p = _make_player_active(state, 0, health=1000)
         self._stand_on_forcefield(state, p)
-        state.forcefield_hurt_timer[0] = 7
+        state.ff_hurt_timer[0] = 7
 
         gp.main_move_players(state)
 
-        assert state.forcefield_hurt_timer[0] == 0x10
+        assert state.ff_hurt_timer[0] == 0x10
 
     def test_unpaired_hub_does_not_hurt(self):
         from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
@@ -763,7 +763,7 @@ class TestDyingStatusSequence:
         for _ in range(4):
             gp.main_move_players(state)
         assert state.player_death_anim_frame[0] == 6
-        assert state.mobs.picture[30] == gp._PLAYER_DEATH_PICTURE[6]
+        assert state.mobs.picture[30] == gp._ANIM_TABLE_IDLE[6]
 
         for _ in range(8):
             gp.main_move_players(state)
@@ -903,42 +903,42 @@ class TestPlayerAddScoreWithMult:
 class TestMainHandleDeath:
 
     def test_negative_forcefield_timer_plays_0x2E(self):
-        """A negative forcefield_hurt_timer → sound 0x2E (§21)."""
+        """A negative ff_hurt_timer → sound 0x2E (§21)."""
         state = _active_state()
-        state.forcefield_hurt_timer[0] = -30
+        state.ff_hurt_timer[0] = -30
         gp.main_handle_death(state)
         _emitted(state)
         assert 0x2E in state.sound_log, \
-            "negative forcefield_hurt_timer must play sound 0x2E"
+            "negative ff_hurt_timer must play sound 0x2E"
 
     def test_negative_forcefield_timer_negated_after_start_sound(self):
         """Timer flips positive so the countdown begins (§21)."""
         state = _active_state()
-        state.forcefield_hurt_timer[0] = -30
+        state.ff_hurt_timer[0] = -30
         gp.main_handle_death(state)
-        assert state.forcefield_hurt_timer[0] == 30
+        assert state.ff_hurt_timer[0] == 30
 
     def test_forcefield_timer_counts_down(self):
         """Positive timer decrements by 1 per frame (§21)."""
         state = _active_state()
-        state.forcefield_hurt_timer[0] = 10
+        state.ff_hurt_timer[0] = 10
         gp.main_handle_death(state)
-        assert state.forcefield_hurt_timer[0] == 9
+        assert state.ff_hurt_timer[0] == 9
 
     def test_forcefield_timer_zero_plays_0x2F(self):
         """When the forcefield countdown reaches 0, sound 0x2F plays (§21)."""
         state = _active_state()
-        state.forcefield_hurt_timer[0] = 1  # one step from zero
+        state.ff_hurt_timer[0] = 1  # one step from zero
         gp.main_handle_death(state)
         _emitted(state)
         assert 0x2F in state.sound_log, \
             "forcefield timer reaching 0 must play sound 0x2F"
-        assert state.forcefield_hurt_timer[0] == 0
+        assert state.ff_hurt_timer[0] == 0
 
     def test_zero_forcefield_timer_plays_no_sound(self):
         """A timer already at 0 (no contact) plays nothing."""
         state = _active_state()
-        state.forcefield_hurt_timer[0] = 0
+        state.ff_hurt_timer[0] = 0
         gp.main_handle_death(state)
         _emitted(state)
         assert 0x2E not in state.sound_log
@@ -964,10 +964,10 @@ class TestMainHandleDeath:
         """All four player slots are processed in a single call (§21)."""
         state = _active_state()
         for i in range(4):
-            state.forcefield_hurt_timer[i] = -5
+            state.ff_hurt_timer[i] = -5
         gp.main_handle_death(state)
         for i in range(4):
-            assert state.forcefield_hurt_timer[i] == 5, \
+            assert state.ff_hurt_timer[i] == 5, \
                 f"player {i} timer should have been negated"
         _emitted(state)
         # One 0x2E per player = four occurrences.
@@ -1541,30 +1541,30 @@ class TestSecretNameEntry:
     def test_secret_code_matches_the_rom_crc_pipeline(self):
         state = GameState()
         state.secret_name_buffer = list(b"ALINSA" + b" " * 23)
-        state.secret_trick_last = 5
-        state.secret_trick_id = 0x5A
+        state.trick_last = 5
+        state.trick_tasknum = 0x5A
         state.secret_prev_maze = 73
 
         assert gp.secret_code_build(state) == "FB9-AD9"
 
     def test_timeout_builds_code_then_hands_the_player_back(self):
         state = _active_state()
-        state.secret_winner = 1
+        state.trick_player = 1
         p = state.players[1]
         state.game_settings |= 0x2000
         gp.secret_getname(state)
         assert p.status == int(PlayerStatus.SECRET_NAME_ENTRY)
         assert state.alpha_ram[1 * 64 + 4] & 0x0100
-        state.bonus_timer = 4
+        state.global_ui_delay_timer = 4
         gp.main_move_players(state)
         assert p.status == int(PlayerStatus.ALIVE_NEXT)   # 0x54FD4
-        assert state.secret_winner == -1                  # 0x54FDA
+        assert state.trick_player == -1                  # 0x54FDA
         assert len(state.secret_code) == 7
         assert state.secret_code[3] == "-"
 
     def test_ignores_a_winner_index_that_is_not_a_player(self):
         state = _active_state()
-        state.secret_winner = -1
+        state.trick_player = -1
         state.players[0].status = int(PlayerStatus.SECRET_NAME_ENTRY)
         state.players[0].state_timer = 5
         gp.main_move_players(state)
@@ -1736,7 +1736,7 @@ class TestPlayerTport:
 
         # Scan order is direction 0..7 and the final loop keeps only the
         # diagonals, so direction 1 (up-right of the destination) wins.
-        assert state.player_tile_pos[0] == _pack(4, 10)     # 0x50606
+        assert state.player_tile_or_tport_dest[0] == _pack(4, 10)     # 0x50606
         assert state.player_tport_type[0] == _pack(5, 9)    # 0x5051A
         assert state.player_tport_phase[0] == 0             # 0x5052A
         assert state.mobs.picture[0x19] == gp._TPORT_ARRIVAL_PICTURE
@@ -1752,14 +1752,14 @@ class TestPlayerTport:
         state, source = self._world(pads=((5, 5), (5, 12), (7, 6)))
         gp.player_tport(state, 0, source)
         # (7,6) is 3 away, (5,12) is 7 away -> the destination is (7,6).
-        assert state.player_tile_pos[0] == _pack(6, 7)
+        assert state.player_tile_or_tport_dest[0] == _pack(6, 7)
 
     def test_off_screen_pads_are_not_candidates(self):
         """A pad outside tile_on_screen_test's window is skipped (0x502D8)."""
         state, source = self._world(pads=((5, 5), (20, 20)))
         gp.player_tport(state, 0, source)
         # No usable destination -> the source pad is the destination (0x503AA).
-        assert state.player_tile_pos[0] == _pack(4, 6)
+        assert state.player_tile_or_tport_dest[0] == _pack(4, 6)
 
     def test_aborts_when_no_landing_cell_is_clear(self):
         state, source = self._world()
@@ -1787,8 +1787,8 @@ class TestPlayerTport:
     def test_transporter_visibility_wraps_across_the_maze_seam(self):
         state = GameState(scroll_x=480, scroll_y=4 * 16)
 
-        assert gp._tile_on_screen_test(state, _pack(4, 2))
-        assert not gp._tile_on_screen_test(state, _pack(4, 20))
+        assert gp.tile_on_screen_test(state, _pack(4, 2))
+        assert not gp.tile_on_screen_test(state, _pack(4, 20))
 
     def test_another_players_sprite_blocks_a_landing_cell(self):
         state, _ = self._world()
@@ -1820,11 +1820,11 @@ class TestPlayerTport:
         state, source = self._world()
         state.players[0].powers = gp._POWER_TRANSPORT
         assert gp.player_tport(state, 0, source) == -2
-        assert state.player_tile_pos[0] == _pack(4, 6)    # diagonal of (5,5)
+        assert state.player_tile_or_tport_dest[0] == _pack(4, 6)    # diagonal of (5,5)
 
     def test_secret_trick_0x56_records_the_pad_index(self):
         state, source = self._world(pads=((5, 5), (5, 9), (7, 6)))
-        state.secret_trick_id = 0x56
+        state.trick_tasknum = 0x56
         gp.player_tport(state, 0, _pack(7, 6))
         # tport_find_id is one-based: sorted index 2 becomes bit 3.
         assert state.secret_tricks_flags[0] & (1 << 3)
@@ -1886,10 +1886,10 @@ class TestShotSpawnGeometry:
         return state, p
 
     def test_tables_match_the_rom_image(self):
-        assert gp._SHOT_SPAWN_DH == [
+        assert gp._SHOT_REFLECT_HDELTA == [
             0x0200, 0x0500, 0x0600, 0x0300, 0x0200, -0x0080, -0x0200, -0x0100,
         ]
-        assert gp._SHOT_SPAWN_DV == [
+        assert gp._SHOT_REFLECT_VDELTA == [
             0x0700, 0x0300, 0x0180, -0x0080, -0x0100, -0x0280, 0x0180, 0x0380,
         ]
         assert gp._PORT_DIR_TO_ROM_DIR == [2, 3, 4, 5, 6, 7, 0, 1]
@@ -2018,7 +2018,7 @@ class TestDeathAnimationSeed:
         p.cumulative_damage = 70
         p.damage_sample_timer = 1
         p.hurt_cooldown = 9
-        state.forcefield_hurt_timer[0] = 7
+        state.ff_hurt_timer[0] = 7
         state.death_touch_timer[0] = 8
         assert gp.player_start_inner(state, 0) == -1
         assert p.death_damage_counter == 0
@@ -2026,7 +2026,7 @@ class TestDeathAnimationSeed:
         assert p.cumulative_damage == 0
         assert p.damage_sample_timer == 60
         assert p.hurt_cooldown == 0
-        assert state.forcefield_hurt_timer[0] == 0
+        assert state.ff_hurt_timer[0] == 0
         assert state.death_touch_timer[0] == 0
         assert state.secret_tricks_flags[0] == 0xFF
         x, _flags, palette = decode_hpos(state.mobs.hpos[p.mob_slot])
@@ -2081,7 +2081,7 @@ class TestForcefieldUsesTheSegmentTable:
         gp.main_move_players(state)
 
         assert state.forcefield_segments_ready
-        assert state.forcefield_segments, "the packed segment table must be built"
+        assert state.ff_segment_table, "the packed segment table must be built"
         assert p.health < 1000
 
     def test_query_follows_the_table_not_the_mob_grid(self):
@@ -2094,7 +2094,7 @@ class TestForcefieldUsesTheSegmentTable:
         state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         # horizontal, length 4, hub at (5,3) -- see doc/04 §7.3.
-        state.forcefield_segments = [0x8000 | (3 << 10) | pack_slot(5, 3)]
+        state.ff_segment_table = [0x8000 | (3 << 10) | pack_slot(5, 3)]
         state.forcefield_segments_ready = True
 
         gp.main_move_players(state)
@@ -2111,7 +2111,7 @@ class TestForcefieldUsesTheSegmentTable:
         state.mobs.hpos[p.mob_slot] = (1 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         # horizontal + wrap, length 4, hub at (5,30): covers 31, 0, 1.
-        state.forcefield_segments = [
+        state.ff_segment_table = [
             0x8000 | 0x4000 | (3 << 10) | pack_slot(5, 30)
         ]
         state.forcefield_segments_ready = True
@@ -2168,8 +2168,8 @@ class TestDoorOpeningFronts:
         slot = (8 << 5) | 8
         self._door_line(state, [slot - 0x20, slot, slot + 0x20],
                         self._DOOR_VERT_PICTURE, MazeObjIds.DOOR_VERT)
-        gp.door_open_start(state, slot, 1)
-        # door_open_start ends by stepping both fronts once (0x51F9E), so they
+        gp.door_record_endpoints(state, slot, 1)
+        # door_record_endpoints ends by stepping both fronts once (0x51F9E), so they
         # now sit on the cells above and below, which are already open.
         assert state.door_endpoint_dir[2:4] == [0, 2]
         assert state.door_endpoint_pos[2:4] == [slot - 0x20, slot + 0x20]
@@ -2182,7 +2182,7 @@ class TestDoorOpeningFronts:
         slot = (8 << 5) | 8
         self._door_line(state, [slot - 1, slot, slot + 1],
                         self._DOOR_HORIZ_PICTURE, MazeObjIds.DOOR_HORIZ)
-        gp.door_open_start(state, slot, 0)
+        gp.door_record_endpoints(state, slot, 0)
         assert state.door_endpoint_dir[0:2] == [3, 1]
         assert state.door_endpoint_pos[0:2] == [slot - 1, slot + 1]
         assert not state.mobs.is_occupied(slot - 1)
@@ -2205,7 +2205,7 @@ class TestDoorOpeningFronts:
             obj_type=int(MazeObjIds.DOOR_VERT),
         )
 
-        gp.door_open_start(state, slot, 0)
+        gp.door_record_endpoints(state, slot, 0)
 
         assert state.door_endpoint_dir[0:2] == [3, 0]
         assert state.mobs.picture[slot - 1] == 0
@@ -2226,7 +2226,7 @@ class TestDoorOpeningFronts:
             obj_type=int(MazeObjIds.DOOR_HORIZ),
         )
 
-        gp.door_open_start(state, slot, 0)
+        gp.door_record_endpoints(state, slot, 0)
 
         assert state.door_endpoint_pos[0:2] == [0, 0]
         assert state.mobs.picture[reserved] == 0x9D3C
@@ -2237,7 +2237,7 @@ class TestDoorOpeningFronts:
         slot = (8 << 5) | 8
         self._door_line(state, [slot], self._DOOR_HORIZ_PICTURE,
                         MazeObjIds.DOOR_HORIZ)
-        gp.door_open_start(state, slot, 0)
+        gp.door_record_endpoints(state, slot, 0)
         assert state.door_endpoint_pos[0:2] == [0, 0]
 
     def test_each_player_owns_its_own_channel_pair(self):
@@ -2245,7 +2245,7 @@ class TestDoorOpeningFronts:
         slot = (8 << 5) | 8
         self._door_line(state, [slot - 1, slot, slot + 1],
                         self._DOOR_HORIZ_PICTURE, MazeObjIds.DOOR_HORIZ)
-        gp.door_open_start(state, slot, 3)
+        gp.door_record_endpoints(state, slot, 3)
         assert state.door_endpoint_pos[6:8] == [slot - 1, slot + 1]
         assert state.door_endpoint_pos[0:6] == [0] * 6
 
@@ -2278,7 +2278,7 @@ class TestDoorOpeningFronts:
                         MazeObjIds.DOOR_HORIZ)
 
         gp.player_tile_interact(state, slot, 0)
-        # door_open_start already ran one step (0x51F9E).
+        # door_record_endpoints already ran one step (0x51F9E).
         assert not state.mobs.is_occupied(slot + 1)
         main_open_doors(state)
         assert not state.mobs.is_occupied(slot + 2)
@@ -3020,7 +3020,7 @@ class TestTimedPowerSemantics:
         state.mobs.create(slot, tile=1, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_REPULSE))
         gp.player_tile_interact(state, slot, 0)
-        assert state.player_repulse_timer[0] == gp._REPULSE_TIMER_INIT[2]
+        assert state.player_repulse_timer[0] == gp._CHARACTER_REPULSE_TIMER_INIT[2]
         assert state.players[0].powers & int(
             __import__("gauntpy.constants", fromlist=["PlayerPower"]).PlayerPower.REPULSE
         )
@@ -3185,7 +3185,7 @@ class TestTransportTransition:
         gp.player_tport(state, 0, source)
         for _ in range(4):
             self._frame(state)
-        assert state.player_tile_pos[0] == _pack(4, 10), (
+        assert state.player_tile_or_tport_dest[0] == _pack(4, 10), (
             "player_tile_or_tport_dest must keep pointing at the destination"
         )
 
@@ -3271,7 +3271,7 @@ class TestCornerSqueezeUsesTheSameTransition:
 
         state, player = self._world()
         gp.corner_squeeze_geometry(state, player.mob_slot, 0, 0x10)
-        target = state.player_tile_pos[0]
+        target = state.player_tile_or_tport_dest[0]
         for frame in range(80):
             state.frame_counter = frame
             gp.main_move_players(state)
@@ -3289,7 +3289,7 @@ class TestCornerSqueezeUsesTheSameTransition:
 
         state, player = self._world()
         gp.corner_squeeze_geometry(state, player.mob_slot, 0, JOY_RIGHT)
-        target = state.player_tile_pos[0]
+        target = state.player_tile_or_tport_dest[0]
         state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
 
         for frame in range(80):
@@ -3323,7 +3323,7 @@ class TestCornerSqueezeUsesTheSameTransition:
 
 def _trick_state(trick_id: int) -> GameState:
     state = _active_state()
-    state.secret_trick_id = trick_id
+    state.trick_tasknum = trick_id
     return state
 
 
@@ -3725,26 +3725,26 @@ class TestTransporterObjectiveSites:
     def test_transported_beside_acid_wins_trick_one(self):
         state = self._land_beside(gp._TRICK_TRANSPORT1,
                                   int(MazeObjIds.MONST_ACID))
-        assert state.secret_winner == 0        # 0x50C52
+        assert state.trick_player == 0        # 0x50C52
 
     def test_transported_beside_death_wins_trick_two(self):
         state = self._land_beside(gp._TRICK_TRANSPORT2,
                                   int(MazeObjIds.MONST_DEATH))
-        assert state.secret_winner == 0
+        assert state.trick_player == 0
 
     def test_the_two_landing_tricks_want_different_monsters(self):
         """0x50C3A wants 0x19 and 0x50C4C wants 0x18 -- not interchangeable."""
         state = self._land_beside(gp._TRICK_TRANSPORT1,
                                   int(MazeObjIds.MONST_DEATH))
-        assert state.secret_winner == -1
+        assert state.trick_player == -1
         state = self._land_beside(gp._TRICK_TRANSPORT2,
                                   int(MazeObjIds.MONST_ACID))
-        assert state.secret_winner == -1
+        assert state.trick_player == -1
 
     def test_landing_beside_nothing_wins_nothing(self):
         state, source, _ = self._world(gp._TRICK_TRANSPORT1)
         gp.player_tport(state, 0, source)
-        assert state.secret_winner == -1
+        assert state.trick_player == -1
 
     def test_transporting_into_an_exit_wins_trick_three(self):
         state, _, _ = self._world(3)
@@ -3756,7 +3756,7 @@ class TestTransporterObjectiveSites:
 
         gp._move_player_to_slot(state, 0, landing)
 
-        assert state.secret_winner == 0
+        assert state.trick_player == 0
 
     def test_corner_transport_through_a_secret_wall_wins_trick_four(self):
         state = _trick_state(4)
@@ -3777,11 +3777,11 @@ class TestTransporterObjectiveSites:
         )
         state.player_tport_route_state[0] = source
         state.player_tport_type[0] = 0
-        state.player_tile_pos[0] = landing
+        state.player_tile_or_tport_dest[0] = landing
 
         gp.tport_player_move(state, 0)
 
-        assert state.secret_winner == 0
+        assert state.trick_player == 0
         assert state.mobs.obj_type(landing) == int(MazeObjIds.PLAYERSTART)
 
 
@@ -3915,7 +3915,7 @@ class TestStunDelayGate:
         p.mob_slot = pack_slot(5, 5)
         state.mobs.hpos[p.mob_slot] = (5 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
-        state.forcefield_segments = [0x8000 | (3 << 10) | pack_slot(5, 3)]
+        state.ff_segment_table = [0x8000 | (3 << 10) | pack_slot(5, 3)]
         state.forcefield_segments_ready = True
 
         gp.main_move_players(state)
@@ -3944,7 +3944,7 @@ class TestForcefieldIsChargedAfterTheMove:
         state.mobs.hpos[p.mob_slot] = (4 * 16) << 7
         state.mobs.vpos[p.mob_slot] = native_v(5 * 16) << 7
         state.forcefield_color = 1
-        state.forcefield_segments = [0x8000 | (3 << 10) | pack_slot(5, 3)]
+        state.ff_segment_table = [0x8000 | (3 << 10) | pack_slot(5, 3)]
         state.forcefield_segments_ready = True
         state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
 
@@ -4397,16 +4397,16 @@ class TestHeroPictures:
         return player
 
     def test_literal_animation_tables_match_the_rom_dimensions_and_sentinels(self):
-        assert len(gp._PLAYER_IDLE_PICTURE) == 4 * 8
-        assert len(gp._PLAYER_WALKING_PICTURE) == 4 * 8 * 4
-        assert len(gp._PLAYER_FIGHTING_PICTURE) == 4 * 8 * 8
-        assert len(gp._PLAYER_SHOOTING_PICTURE) == 4 * 8 * 4
-        assert gp._PLAYER_WALKING_PICTURE[:4] == (0x0BCF, 0x0BD8, 0x0BE1, 0x0BD8)
-        assert gp._PLAYER_FIGHTING_PICTURE[128:136] == (
+        assert len(gp._ANIM_TABLE_IDLE) == 4 * 8
+        assert len(gp._ANIM_TABLE_WALKING) == 4 * 8 * 4
+        assert len(gp._ANIM_TABLE_FIGHTING) == 4 * 8 * 8
+        assert len(gp._ANIM_TABLE_SHOOTING) == 4 * 8 * 4
+        assert gp._ANIM_TABLE_WALKING[:4] == (0x0BCF, 0x0BD8, 0x0BE1, 0x0BD8)
+        assert gp._ANIM_TABLE_FIGHTING[128:136] == (
             0x1412, 0x14C6, 0x14C6, 0x14CF,
             0x14CF, 0x14C6, 0x14C6, 0x1412,
         )
-        assert gp._PLAYER_SHOOTING_PICTURE[96:100] == (
+        assert gp._ANIM_TABLE_SHOOTING[96:100] == (
             0x156C, 0x1524, 0x1524, 0x1524,
         )
 
@@ -4417,7 +4417,7 @@ class TestHeroPictures:
         gp.main_move_players(state)
 
         rom_direction = gp._PORT_DIR_TO_ROM_DIR[player.direction]
-        assert state.mobs.picture[player.mob_slot] == gp._PLAYER_IDLE_PICTURE[
+        assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_IDLE[
             int(Character.WIZARD) * 8 + rom_direction
         ]
         assert player.anim_counter == 0
@@ -4431,7 +4431,7 @@ class TestHeroPictures:
         tick(state)
 
         rom_direction = gp._PORT_DIR_TO_ROM_DIR[player.direction]
-        assert state.mobs.picture[player.mob_slot] == gp._PLAYER_IDLE_PICTURE[
+        assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_IDLE[
             int(Character.VALKYRIE) * 8 + rom_direction
         ]
 
@@ -4449,7 +4449,7 @@ class TestHeroPictures:
 
         right = gp._PORT_DIR_TO_ROM_DIR[0]
         for character, player in enumerate(heroes):
-            assert state.mobs.picture[player.mob_slot] == gp._PLAYER_WALKING_PICTURE[
+            assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_WALKING[
                 character * 32 + right * 4
             ]
             assert state.mobs.picture[player.mob_slot] != self._PLAYERSTART_PICTURE
@@ -4466,7 +4466,7 @@ class TestHeroPictures:
 
         right = gp._PORT_DIR_TO_ROM_DIR[player.direction]
         assert state.player_shooting[0] == -1
-        assert state.mobs.picture[player.mob_slot] == gp._PLAYER_SHOOTING_PICTURE[
+        assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_SHOOTING[
             int(Character.WIZARD) * 32 + right * 4
         ]
         assert player.anim_counter == 1
@@ -4501,8 +4501,8 @@ class TestHeroPictures:
         right = gp._PORT_DIR_TO_ROM_DIR[player.direction]
         row = int(Character.ELF) * 32 + right * 4
         assert set(pictures) >= {
-            gp._PLAYER_SHOOTING_PICTURE[row],
-            gp._PLAYER_SHOOTING_PICTURE[row + 1],
+            gp._ANIM_TABLE_SHOOTING[row],
+            gp._ANIM_TABLE_SHOOTING[row + 1],
         }
 
     def test_fighting_selects_its_eight_frame_table(self):
@@ -4514,7 +4514,7 @@ class TestHeroPictures:
         gp.update_player_sprite(state, 0)
 
         rom_direction = gp._PORT_DIR_TO_ROM_DIR[player.direction]
-        assert state.mobs.picture[player.mob_slot] == gp._PLAYER_FIGHTING_PICTURE[
+        assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_FIGHTING[
             int(Character.ELF) * 64 + rom_direction * 8 + 7
         ]
 

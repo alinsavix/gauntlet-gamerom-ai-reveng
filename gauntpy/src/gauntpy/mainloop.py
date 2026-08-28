@@ -121,7 +121,7 @@ def check_frame_overflow(state: GameState) -> None:
     the crowd instead of stuttering its display. It does not bound how many
     monsters are processed -- the chain walk still visits every one.
     """
-    if state.vblank_flag:
+    if state.vblank_semaphore:
         state.frame_overflow = FRAME_OVERFLOW_SET
     else:
         state.frame_overflow >>= 1
@@ -137,7 +137,7 @@ def tick(state: GameState, *, treasure_timer_paused: bool = False) -> None:
     playable host's explicit non-arcade F8 gate around only call 15.
     """
     state.frame_counter = (state.frame_counter + 1) & 0xFFFF
-    state.vblank_flag = 0
+    state.vblank_semaphore = 0
     potion_flash_vblank(state)
     player_hurt_palette_vblank(state)
     alpha_palette_vblank(state)

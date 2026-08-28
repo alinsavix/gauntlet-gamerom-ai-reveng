@@ -13,8 +13,8 @@ from gauntpy.subsystems.dragon import (
     _FIRE_H_BY_POSE,
     _FIRE_V_BY_FACING,
     _FIRE_V_BY_POSE,
-    _HEAD_HDELTA,
-    _HEAD_VDELTA,
+    _DRAGON_HEAD_HDELTA,
+    _DRAGON_HEAD_VDELTA,
     _ST_LOCKED,
     _ST_STUNNED,
     _ST_TURNING,
@@ -23,7 +23,7 @@ from gauntpy.subsystems.dragon import (
     _pose_index,
     dragon_shot_hit,
     main_handle_dragon,
-    setup_dragon_segments,
+    dragon_setup_segments,
 )
 from gauntpy.subsystems.exits import TRICK_NOGETHIT
 from gauntpy.subsystems.shots import shot_cell
@@ -62,7 +62,7 @@ def _place_dragon(state: GameState, primary: int = pack_slot(10, 10)) -> int:
             vpos=encode_vpos_at_y(160 + number * 16),
             obj_type=MazeObjIds.MONST_DRAGON,
         )
-    setup_dragon_segments(state, primary)
+    dragon_setup_segments(state, primary)
     return primary
 
 
@@ -193,8 +193,8 @@ class TestPoseAndAttack:
         """The 32-entry tables' whole point: index+1 is the open-mouth frame."""
         openings = {}
         for facing, axis in ((0, "v"), (2, "h"), (4, "v"), (6, "h")):
-            closed = (_HEAD_HDELTA[facing * 4], _HEAD_VDELTA[facing * 4])
-            opened = (_HEAD_HDELTA[facing * 4 + 1], _HEAD_VDELTA[facing * 4 + 1])
+            closed = (_DRAGON_HEAD_HDELTA[facing * 4], _DRAGON_HEAD_VDELTA[facing * 4])
+            opened = (_DRAGON_HEAD_HDELTA[facing * 4 + 1], _DRAGON_HEAD_VDELTA[facing * 4 + 1])
             openings[facing] = (closed, opened)
             if axis == "h":
                 assert closed[1] == opened[1], facing
@@ -327,7 +327,7 @@ class TestPoseAndAttack:
         pose = _pose_index(state)
         seg_y = decode_vpos_at_y(state.mobs.vpos[state.dragon_seg_mob_ids[0]])[0]
         assert decode_vpos_at_y(state.dragon_head_vpos)[0] == \
-            seg_y - _HEAD_VDELTA[head_index]
+            seg_y - _DRAGON_HEAD_VDELTA[head_index]
         assert decode_vpos_at_y(state.mobs.vpos[8])[0] == \
             seg_y - (_FIRE_V_BY_FACING[0] + _FIRE_V_BY_POSE[pose])
 
@@ -508,7 +508,7 @@ class TestDamage:
 
     def test_dragon_kill_sets_no_get_hit_progress_to_two(self):
         state, primary = self._exposed_dragon()
-        state.secret_trick_id = TRICK_NOGETHIT
+        state.trick_tasknum = TRICK_NOGETHIT
         state.dragon_hits = 8
 
         dragon_shot_hit(state, 0x400 + primary, 2)
@@ -517,7 +517,7 @@ class TestDamage:
 
     def test_disqualified_no_get_hit_player_stays_disqualified_on_dragon_kill(self):
         state, primary = self._exposed_dragon()
-        state.secret_trick_id = TRICK_NOGETHIT
+        state.trick_tasknum = TRICK_NOGETHIT
         state.secret_tricks_flags[1] = 1
         state.dragon_hits = 8
 
@@ -551,8 +551,8 @@ class TestPoseTablesAgainstRom:
         for facing in (0, 2, 4, 6):
             for byte in range(8):
                 index = byte + facing * 4
-                assert 0 <= index < len(_HEAD_HDELTA) == 32
-                assert index < len(_HEAD_VDELTA) == 32
+                assert 0 <= index < len(_DRAGON_HEAD_HDELTA) == 32
+                assert index < len(_DRAGON_HEAD_VDELTA) == 32
                 assert index < len(_DRAGON_HEAD_PICS) == 32
 
     @requires_roms
@@ -564,8 +564,8 @@ class TestPoseTablesAgainstRom:
             return raw - 0x10000 if raw >= 0x8000 else raw
 
         for index in range(32):
-            assert _HEAD_HDELTA[index] == word(0x5D438 + index * 2) >> 7, index
-            assert _HEAD_VDELTA[index] == word(0x5D478 + index * 2) >> 7, index
+            assert _DRAGON_HEAD_HDELTA[index] == word(0x5D438 + index * 2) >> 7, index
+            assert _DRAGON_HEAD_VDELTA[index] == word(0x5D478 + index * 2) >> 7, index
             assert _DRAGON_HEAD_PICS[index] == \
                 word(0x5D528 + index * 2) & 0xFFFF, index
 

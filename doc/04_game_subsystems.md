@@ -1575,7 +1575,7 @@ Called every frame. Change-detection pattern: compares `ram.coin_counters` (`0x9
 Per-player logic:
 - If all players have zero health OR `game_mode` is DEMO, AND `game_mode` < 0: call `start_attract_to_game` (0x42BE2). The extra DEMO test at 0x42BD0 exists because the demo's scripted heroes do hold health.
 - If player HAS health (active re-coining): add health from `0x57862` table, set redraw flag
-- If player has NO health (new player joining): call `player_init_for_coin` (0x488CA)
+- If player has NO health (new player joining): call `player_coindrop` (0x488CA)
 
 **Where the coin counters come from (Verified).** `coincheck` only polls
 `0x904FEC`; it never reads a coin port. That word is written exclusively by OS
@@ -2158,8 +2158,11 @@ Computes the ideal scroll position based on all active players' positions, then 
    leaves a permanent −512 delta and produces endless leftward scrolling.
 
 **RAM used:**
-- `0x904BD8`: per-player tile position
-- `0x904BCE`: per-player "in maze" flag
+- `0x904BD8` `player_tile_or_tport_dest`: per-player tile position outside a
+  transport, destination slot during one
+  transition
+- `0x904BCE` `player_tport_phase`: transport phase; its sign also supplies the
+  camera's in-maze eligibility view
 - `0x9048C8`: per-player MOB slot
 - `0x90491F` bit 5: X-wrap flag; bit 4: Y-wrap flag
 

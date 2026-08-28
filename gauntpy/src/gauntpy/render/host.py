@@ -25,7 +25,7 @@ its bit. Getting this backwards inverts every control in the game, so it is
 asserted in ``tests/test_render.py``'s ROM-free input-mapping test.
 
 **The VBLANK semaphore is a hardware boundary, not a gap.** On the cabinet
-``vblank_flag`` (0x904002) is set by an asynchronous interrupt, so it can be
+``vblank_semaphore`` (0x904002) is set by an asynchronous interrupt, so it can be
 re-raised *while* ``game_frame`` is still running -- that is exactly how
 ``check_frame_overflow`` learns the frame ran long. ``mainloop.tick()`` clears
 it as its first statement and checks it afterward, so the only way to observe
@@ -215,7 +215,7 @@ class HostShell:
         """Pump the event queue, sample the keyboard into
         ``state.player_input_raw``, and block until the next 60Hz tick
         boundary. See the module docstring for why this does not attempt to
-        drive ``state.vblank_flag``.
+        drive ``state.vblank_semaphore``.
         """
         pygame = self._pygame
         if self.treasure_timer_paused and (
@@ -285,7 +285,7 @@ class HostShell:
                     if debug_enable_secret_room(state):
                         print(
                             "gauntpy secret trick armed: "
-                            f"{state.secret_trick_id:02X}"
+                            f"{state.trick_tasknum:02X}"
                         )
                     else:
                         print("gauntpy secret trick unavailable on this level")

@@ -258,7 +258,7 @@ _FAMILIES: dict[str, dict] = {
 #: other as well as with the Wizard). Lookup order in ``_frame_for`` is scoped
 #: map first, flat map second, so ``kind`` never *loses* a picture -- a hero
 #: slot momentarily holding a non-hero picture (the death-animation frames of
-#: ``players._PLAYER_DEATH_PICTURE``, the bonus-screen icon ``score`` parks in
+#: ``players._ANIM_TABLE_IDLE``, the bonus-screen icon ``score`` parks in
 #: the player's slot) still resolves exactly as it did before.
 def _build_scoped_indexes() -> dict[str, dict[int, SpriteFrame]]:
     scoped: dict[str, dict[int, SpriteFrame]] = {}

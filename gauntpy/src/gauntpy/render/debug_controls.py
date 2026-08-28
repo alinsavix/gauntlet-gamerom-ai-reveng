@@ -48,7 +48,7 @@ def debug_enable_secret_room(state: GameState) -> bool:
         for player in state.players
     ):
         return False
-    if state.secret_trick_id != exits.TRICK_NONE:
+    if state.trick_tasknum != exits.TRICK_NONE:
         return True
 
     previous_counter = state.secret_possible_counter
@@ -57,7 +57,7 @@ def debug_enable_secret_room(state: GameState) -> bool:
     from ..subsystems.session import _cancel_solo_only_trick
 
     _cancel_solo_only_trick(state)
-    if state.secret_trick_id == exits.TRICK_NONE:
+    if state.trick_tasknum == exits.TRICK_NONE:
         state.secret_possible_counter = previous_counter
         return False
     return True
@@ -82,8 +82,8 @@ def debug_force_secret_room(state: GameState, player_index: int) -> bool:
         return False
     # Disable ordinary objective producers so another player cannot replace the
     # explicitly selected winner before the last exit dissolve completes.
-    state.secret_trick_id = exits.TRICK_NONE
-    state.secret_winner = player_index
+    state.trick_tasknum = exits.TRICK_NONE
+    state.trick_player = player_index
     return True
 
 
@@ -118,13 +118,13 @@ def debug_skip_level(state: GameState) -> bool:
             "debug level skip could not load "
             f"level {next_level} / maze {state.mazenum_current}"
         )
-    from ..subsystems.display import maze_show_alpha
+    from ..subsystems.display import maze_show
 
-    maze_show_alpha(state)
+    maze_show(state)
     exits._spawn_level_players(state, survivors)
 
     state.game_mode = int(GameMode.NORMAL)
-    state.bonus_timer = 0
+    state.global_ui_delay_timer = 0
     state.bonus_amount = 0
     state.level_start_pending = False
     from ..subsystems.camera import snap_camera

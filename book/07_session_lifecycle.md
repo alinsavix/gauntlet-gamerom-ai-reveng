@@ -268,7 +268,7 @@ and how hundreds of them are kept alive at once.
 >   `doc/03_game_rom_structure.md` §2.3–2.5,
 >   `doc/04_game_subsystems.md` §6.
 > - Coin handling every frame: `coincheck` (0x42B6A), new-player
->   initialization `player_init_for_coin` (0x488CA), attract interruption
+>   initialization `player_coindrop` (0x488CA), attract interruption
 >   `start_attract_to_game` (0x44204): `doc/04_game_subsystems.md` §6.4,
 >   §10.1; `doc/07_function_index.md`.
 > - Per-player status byte values (0x9049A0):

@@ -1050,7 +1050,7 @@ class TestHud:
         state = GameState()
         state.dialog_timer = 30
         state.dialog_message = ["HELLO"]
-        state.dialog_box_rows, state.dialog_box_width = 3, 5
+        state.dialog_dim_V, state.dialog_dim_H = 3, 5
 
         fb_dialog = Framebuffer(336, 240)
         draw_hud(fb_dialog, state, HUD_PANEL)
@@ -1098,8 +1098,8 @@ class TestMessageBox:
         draw_message_box(fb, state, PLAYFIELD_VIEWPORT)
 
         vx, vy, vw, vh = PLAYFIELD_VIEWPORT
-        expected_h = state.dialog_box_rows * 8
-        expected_w = (state.dialog_box_width + 2) * 8
+        expected_h = state.dialog_dim_V * 8
+        expected_w = (state.dialog_dim_H + 2) * 8
         top = vy + state.dialog_box_row * 8
         left = vx + state.dialog_box_column * 8
         top_word = state.alpha_ram[
@@ -1319,7 +1319,7 @@ class TestTitleMobs:
         fb.image.paste(Image.new("RGBA", (336, 240), (12, 34, 56, 255)))
         state = GameState(game_mode=GameMode.SCORES)
         init_alpha_color_ram(state)
-        score.write_high_score_screen(state)
+        score.attract_highscores(state)
 
         from gauntpy.render.alpha import draw_alpha_layer
         draw_alpha_layer(fb, state)
@@ -1365,7 +1365,7 @@ class TestFrontEndTextIsRomData:
         )
 
         state = GameState()
-        score.write_high_score_screen(state)
+        score.attract_highscores(state)
         column, row = romtext.TEXT_SCORE_PER_COIN_POS
         start = row * score.ALPHA_ROW_STRIDE + column
         expected_s = _LARGE_GLYPH_QUADS[_LARGE_GLYPH_INDEX_MAP[ord("S")]][0] | 0x100
@@ -1382,7 +1382,7 @@ class TestFrontEndTextIsRomData:
 
     def test_scores_screen_preserves_the_maze_border_above_the_top_ladders(self):
         state = GameState()
-        score.write_high_score_screen(state)
+        score.attract_highscores(state)
 
         assert state.alpha_ram[1] == 0
         assert state.alpha_ram[20] == 0
@@ -1391,7 +1391,7 @@ class TestFrontEndTextIsRomData:
 
     def test_scores_screen_shows_the_rom_factory_ladder(self):
         state = GameState()
-        score.write_high_score_screen(state)
+        score.attract_highscores(state)
         assert _alpha_text(state, 2, 3, 7) == " #1 AWC"
         assert _alpha_text(state, 11, 3, 7) == "   8000"
         assert _alpha_text(state, 24, 3, 7) == " #1 T H"
@@ -1399,7 +1399,7 @@ class TestFrontEndTextIsRomData:
     def test_scores_screen_follows_the_live_table_not_the_rom_constant(self):
         state = GameState()
         score.high_scores(state)[0][0] = (123456, "ZZZ")
-        score.write_high_score_screen(state)
+        score.attract_highscores(state)
         assert _alpha_text(state, 2, 3, 7) == " #1 ZZZ"
         assert _alpha_text(state, 11, 3, 7) == " 123456"
 
@@ -1455,8 +1455,8 @@ class TestFrontEndTextIsRomData:
         state = GameState()
         start_attract_screen(state, int(GameMode.LEGEND))
         state.attract_legend = 1
-        from gauntpy.subsystems.attract import _load_legend_page
-        _load_legend_page(state)
+        from gauntpy.subsystems.attract import load_legend_page
+        load_legend_page(state)
 
         assert _alpha_text(state, 6, 0, 8) == "MONSTERS"
         assert _alpha_text(state, 0, 19, 5) == "GHOST"
@@ -1863,9 +1863,9 @@ class TestTheLayerNoLongerDropsEffectsAndDissolves:
         tiles wide for a score value, two for a bonus -- and the effect index
         has to keep them apart or the sprite is stamped from the wrong tiles.
         """
-        from gauntpy.subsystems.shots import _SCORE_POPUP_PICTURE
+        from gauntpy.subsystems.shots import _SCORE_POPUP_PICTURE_TABLE
 
-        for index, picture in enumerate(_SCORE_POPUP_PICTURE):
+        for index, picture in enumerate(_SCORE_POPUP_PICTURE_TABLE):
             expected_width = 3 if index < 0x0A else 2
             assets, fb = self._draw_one_effect(
                 picture, _block_for(picture)
@@ -1931,14 +1931,14 @@ class TestTheHeroDissolveIsDrawnToTheEnd:
                 assert _drawn_pixels(fb) > 0, where
 
     def test_the_death_spin_frames_are_drawn_too(self):
-        """``_PLAYER_DEATH_PICTURE`` is ``anim_table_idle`` and every frame of
+        """``_ANIM_TABLE_IDLE`` is ``anim_table_idle`` and every frame of
         it is in gex's hero data -- pinned so that stays true rather than
         quietly starting to depend on the fallback."""
-        from gauntpy.subsystems.players import _PLAYER_DEATH_PICTURE
+        from gauntpy.subsystems.players import _ANIM_TABLE_IDLE
 
         for character in range(4):
             for frame in range(8):
-                picture = _PLAYER_DEATH_PICTURE[character * 8 + frame]
+                picture = _ANIM_TABLE_IDLE[character * 8 + frame]
                 assets, fb, name = self._draw(character, picture)
                 assert assets.skipped == [], (name, frame, hex(picture))
                 (_p, stamp), = assets.resolved
@@ -2022,7 +2022,7 @@ class TestAWizardRendersAsAWizard:
         from gauntpy.constants import Character
         from gauntpy.render.mobs import sprite_kind
         from gauntpy.subsystems.players import (
-            _PLAYER_IDLE_PICTURE,
+            _ANIM_TABLE_IDLE,
             _PORT_DIR_TO_ROM_DIR,
             update_player_sprite,
         )
@@ -2032,7 +2032,7 @@ class TestAWizardRendersAsAWizard:
         update_player_sprite(state, 0)
 
         player = state.players[0]
-        expected = _PLAYER_IDLE_PICTURE[
+        expected = _ANIM_TABLE_IDLE[
             int(Character.WIZARD) * 8
             + _PORT_DIR_TO_ROM_DIR[player.direction]
         ]

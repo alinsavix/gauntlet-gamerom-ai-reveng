@@ -103,12 +103,12 @@ def _forcefield_state() -> GameState:
         state=0,
     )
     state.player_in_maze[0] = 1
-    state.player_tile_pos[0] = player.mob_slot
+    state.player_tile_or_tport_dest[0] = player.mob_slot
     return state
 
 
 def _dragon_state() -> GameState:
-    from .subsystems.dragon import setup_dragon_segments
+    from .subsystems.dragon import dragon_setup_segments
 
     state = GameState(game_mode=GameMode.NORMAL, level_players_active=1)
     primary = pack_slot(10, 10)
@@ -126,7 +126,7 @@ def _dragon_state() -> GameState:
             vpos=encode_vpos_at_y((slot >> 5) * 16, 4, 4),
             obj_type=MazeObjIds.MONST_DRAGON,
         )
-    setup_dragon_segments(state, primary)
+    dragon_setup_segments(state, primary)
     player = state.players[0]
     player.status = PlayerStatus.ALIVE_HERE
     player.health = 2000
@@ -139,7 +139,7 @@ def _dragon_state() -> GameState:
         obj_type=MazeObjIds.PLAYERSTART,
     )
     state.player_in_maze[0] = 1
-    state.player_tile_pos[0] = player.mob_slot
+    state.player_tile_or_tport_dest[0] = player.mob_slot
     return state
 
 
@@ -265,7 +265,7 @@ def digest_state(state: GameState) -> dict:
                 "status": int(player.status),
                 "health": player.health,
                 "score": player.score,
-                "cell": state.player_tile_pos[player.index],
+                "cell": state.player_tile_or_tport_dest[player.index],
             }
         )
     shots = []
@@ -296,10 +296,10 @@ def digest_state(state: GameState) -> dict:
         "creatures": dict(sorted(creature_counts.items())),
         "shots": shots,
         "forcefield": {
-            "step": state.forcefield_step,
-            "timer": state.forcefield_step_timer,
+            "step": state.ff_cycle_index,
+            "timer": state.ff_cycle_timer,
             "color": state.forcefield_color,
-            "segments": list(state.forcefield_segments),
+            "segments": list(state.ff_segment_table),
         },
         "dragon": {
             "slot": state.dragon_mob_slot,

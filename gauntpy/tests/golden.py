@@ -69,7 +69,7 @@ def digest_frame(state: GameState) -> dict[str, Any]:
     """
     return {
         "frame_counter": state.frame_counter,          # 0x904006
-        "vblank_flag": state.vblank_flag,               # 0x904002
+        "vblank_semaphore": state.vblank_semaphore,               # 0x904002
         "frame_overflow": state.frame_overflow,          # 0x904916
         "game_mode": int(state.game_mode),               # 0x904918
         "dialog_timer": state.dialog_timer,              # 0x904A9E

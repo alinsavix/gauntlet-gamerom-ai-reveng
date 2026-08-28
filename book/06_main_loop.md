@@ -47,9 +47,9 @@ whole relationship with time looks like this:
 one_time_init()                  # once, before the first frame
 
 loop forever:
-    wait until vblank_flag != 0  # the interrupt sets it, 60 times/sec
+    wait until vblank_semaphore != 0  # the interrupt sets it, 60 times/sec
     frame_counter += 1
-    vblank_flag = 0              # consume it
+    vblank_semaphore = 0              # consume it
     ... advance the entire world by one frame ...
 ```
 

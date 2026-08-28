@@ -306,7 +306,7 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
         forcefield_segments_setup,
         maze_forcefield_setup,
         select_forcefield_delay_profile,
-        setup_door_graphics,
+        maze_doors_setup,
     )
     from .subsystems.players import setup_infopanel
     from .subsystems.eeprom import GAME_DEFAULT_SETTINGS
@@ -356,7 +356,7 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
     if state.level_flags_3 & 0x08:
         maze_forcefield_setup(state)
     maze_module.initialize_playfield_ram(state, state.maze)
-    setup_door_graphics(state)
+    maze_doors_setup(state)
     maze_module.postdecode_level_setup(state)
     exit_scan_level(state)
     _spawn_player(state, scenario.character)

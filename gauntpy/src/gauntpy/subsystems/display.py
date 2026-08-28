@@ -616,7 +616,7 @@ def clear_alpha_visible(state: GameState) -> None:
     fill_alpha_rect(state, 0, 0, ALPHA_VISIBLE_COLUMNS, ALPHA_ROWS, 0)
 
 
-def maze_show_alpha(state: GameState) -> None:
+def maze_show(state: GameState) -> None:
     """Port maze_show 0x4526A: reveal the maze while preserving its info panel."""
     fill_alpha_rect(state, 0, 0, 29, ALPHA_ROWS, 0)
     fill_alpha_rect(state, 42, 0, ALPHA_COLUMNS - 42, ALPHA_ROWS, 0)

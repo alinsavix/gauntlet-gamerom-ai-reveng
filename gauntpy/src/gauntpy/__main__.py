@@ -49,7 +49,7 @@ def main() -> None:
     state.dialog_timer = 0
 
     # A long frame throttles the generators, then the signal decays.
-    state.vblank_flag = 1        # the display finished another field mid-frame
+    state.vblank_semaphore = 1        # the display finished another field mid-frame
     check_frame_overflow(state)
     print(f"\nframe ran long -> frame_overflow = {state.frame_overflow} "
           "(generators stop spawning)")

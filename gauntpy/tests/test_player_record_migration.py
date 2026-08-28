@@ -50,7 +50,7 @@ def _spawn(state: GameState, index: int, slot: int) -> object:
         obj_type=int(MazeObjIds.PLAYERSTART),
         state=index,
     )
-    state.player_tile_pos[index] = slot
+    state.player_tile_or_tport_dest[index] = slot
     state.player_in_maze[index] = 1
     # These tests are about the record, not the independent offscreen gate.
     state.level_flags_4 |= 0x80
@@ -300,7 +300,7 @@ class TestShotsFindTheMigratedRecord:
         # the candidate's physical record, not synthesize a player overlay.
         state.mobs.hpos[record_slot] = encode_hpos(11 * 16 - 4, 0x0C)
 
-        assert shots._candidate_core(
+        assert shots.shot_collision_candidate_core(
             state, empty_slot * 2, 4, 1, 1, 0, 0, -1, False,
         ) is None
 
@@ -363,7 +363,7 @@ class TestCameraAndTilePositionAgree:
                 break
 
         assert player.mob_slot != start
-        assert state.player_tile_pos[0] == player.mob_slot
+        assert state.player_tile_or_tport_dest[0] == player.mob_slot
         assert state.player_in_maze[0] == 1
 
         target = _camera_target(state, include_camera=False)
@@ -379,7 +379,7 @@ class TestTheTransporterStillRelocatesTheRecord:
         start = pack_slot(10, 10)
         landing = pack_slot(20, 20)
         player = _spawn(state, 0, start)
-        state.player_tile_pos[0] = landing
+        state.player_tile_or_tport_dest[0] = landing
 
         gp.tport_player_move(state, 0)
 
@@ -399,7 +399,7 @@ class TestTheTransporterStillRelocatesTheRecord:
         player.bonusmult = 1
         state.mobs.create(landing, tile=0x3333, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
-        state.player_tile_pos[0] = landing
+        state.player_tile_or_tport_dest[0] = landing
 
         gp.tport_player_move(state, 0)
 
@@ -419,7 +419,7 @@ class TestTheTransporterStillRelocatesTheRecord:
             vpos=encode_vpos_at_y(20 * 16, 3, 3),
             obj_type=int(MazeObjIds.MONST_DEMON),
         )
-        state.player_tile_pos[0] = landing
+        state.player_tile_or_tport_dest[0] = landing
 
         gp.tport_player_move(state, 0)
 
@@ -442,7 +442,7 @@ class TestTheTransporterStillRelocatesTheRecord:
             vpos=encode_vpos_at_y(20 * 16, 3, 3),
             obj_type=int(MazeObjIds.PLAYERSTART),
         )
-        state.player_tile_pos[0] = landing
+        state.player_tile_or_tport_dest[0] = landing
 
         gp.tport_player_move(state, 0)
 
@@ -460,13 +460,13 @@ class TestTheTransporterStillRelocatesTheRecord:
             landing, tile=0x8000, hpos=0, vpos=0,
             obj_type=int(MazeObjIds.WALL_REGULAR),
         )
-        state.player_tile_pos[0] = landing
+        state.player_tile_or_tport_dest[0] = landing
 
         gp.tport_player_move(state, 0)
 
         assert player.mob_slot == start
         assert state.mobs.picture[landing] == 0x8000
-        assert state.player_tile_pos[0] == start
+        assert state.player_tile_or_tport_dest[0] == start
 
     def test_aborted_transport_entry_restores_the_player_move(self):
         state = GameState(game_mode=GameMode.NORMAL, level_players_active=1)
@@ -503,7 +503,7 @@ class TestTheTransporterStillRelocatesTheRecord:
         assert state.player_tport_phase[0] < 0
         assert player.mob_slot == start
         assert (state.mobs.hpos[start], state.mobs.vpos[start]) == before
-        assert state.player_tile_pos[0] == start
+        assert state.player_tile_or_tport_dest[0] == start
         assert state.thief_victim_pos == start
         assert state.path_direction_grid == bytearray(route_before)
 
@@ -563,7 +563,7 @@ class TestForcefieldContactUsesTheRecordCell:
         player = _spawn(state, 0, start)
         state.forcefield_color = 1
         # horizontal, length 4, hub at (5,3) -- doc/04 §7.3.
-        state.forcefield_segments = [0x8000 | (3 << 10) | pack_slot(5, 3)]
+        state.ff_segment_table = [0x8000 | (3 << 10) | pack_slot(5, 3)]
         state.forcefield_segments_ready = True
 
         assert gp._check_forcefield_collision(state, 0)
@@ -587,7 +587,7 @@ class TestSpawnPlacesTheRecordInItsOwnCell:
         assert joined in (first - 1, first + 1, first - 0x20, first + 0x20)
         assert state.mobs.state(joined) == 1
         assert state.mobs.obj_type(joined) == int(MazeObjIds.PLAYERSTART)
-        assert state.player_tile_pos[1] == joined
+        assert state.player_tile_or_tport_dest[1] == joined
         assert mob_cell_of(
             state.mobs.hpos[joined], state.mobs.vpos[joined],
         ) == joined

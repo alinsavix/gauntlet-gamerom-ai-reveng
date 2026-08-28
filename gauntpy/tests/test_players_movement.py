@@ -75,7 +75,7 @@ def test_pushing_a_movable_wall_into_an_exit_wins_trick_ten():
     wall = (5 << 5) | 5
     exit_slot = wall + 1
     state = GameState()
-    state.secret_trick_id = 10
+    state.trick_tasknum = 10
     state.mobs.create(
         wall,
         tile=0x20F6,
@@ -94,7 +94,7 @@ def test_pushing_a_movable_wall_into_an_exit_wins_trick_ten():
     assert gp._push_movable_wall(
         state, 2, wall, gp._JOY_RIGHT, vertical=False,
     )
-    assert state.secret_winner == 2
+    assert state.trick_player == 2
     assert state.mobs.picture[wall] == 0
 
 
@@ -121,7 +121,7 @@ def test_pushing_a_movable_wall_into_a_transporter_dissolves_it():
         state, 0, wall, gp._JOY_RIGHT, vertical=False,
     )
     assert state.mobs.picture[wall] == 0
-    assert state.secret_winner == -1
+    assert state.trick_player == -1
 
 
 # ---------------------------------------------------------------------------
@@ -883,7 +883,7 @@ class TestMobCollisionDispatch:
         player.health = 500
         state.mobs.hpos[player.mob_slot] = 156 << 7
         state.mobs.vpos[player.mob_slot] = native_v(160) << 7
-        state.player_tile_pos[0] = (10 << 5) | 10
+        state.player_tile_or_tport_dest[0] = (10 << 5) | 10
         marker = (10 << 5) | 11
         state.mobs.create(
             marker, tile=0x8001, hpos=0, vpos=0,
@@ -903,7 +903,7 @@ class TestMobCollisionDispatch:
         player.health = 500
         state.mobs.hpos[player.mob_slot] = 156 << 7
         state.mobs.vpos[player.mob_slot] = native_v(160) << 7
-        state.player_tile_pos[0] = (10 << 5) | 10
+        state.player_tile_or_tport_dest[0] = (10 << 5) | 10
         potion = (10 << 5) | 11
         state.mobs.create(
             potion, tile=0x89FC, hpos=176 << 7, vpos=native_v(160) << 7,
@@ -1094,7 +1094,7 @@ class TestCornerSqueezeGeometry:
         # corner_squeeze_geometry receives active_mob_ids (row 10, col 10),
         # not the sprite-biased probe cell. The empty cell directly above is
         # therefore the landing selected by 0x4FEB2.
-        assert state.player_tile_pos[0] == ((9 << 5) | 10)
+        assert state.player_tile_or_tport_dest[0] == ((9 << 5) | 10)
         assert state.sound_log[-1] == 0x28
 
     def test_invulnerable_player_phases_through_one_cell_wall(self):
@@ -1108,7 +1108,7 @@ class TestCornerSqueezeGeometry:
 
         player_try_move(state, 0, gin.JOY_RIGHT, 0)
 
-        assert state.player_tile_pos[0] == ((10 << 5) | 12)
+        assert state.player_tile_or_tport_dest[0] == ((10 << 5) | 12)
 
     def test_transport_can_land_on_and_remove_the_second_wall(self):
         from types import SimpleNamespace
@@ -1132,7 +1132,7 @@ class TestCornerSqueezeGeometry:
 
         player_try_move(state, 0, gin.JOY_RIGHT, 0)
         assert state.player_tport_type[0] == 0
-        assert state.player_tile_pos[0] == landing
+        assert state.player_tile_or_tport_dest[0] == landing
 
         gp.tport_player_move(state, 0)
 
@@ -1153,7 +1153,7 @@ class TestCornerSqueezeGeometry:
 
         player_try_move(state, 0, gin.JOY_RIGHT, 0)
 
-        assert state.player_tile_pos[0] == ((10 << 5) | 12)
+        assert state.player_tile_or_tport_dest[0] == ((10 << 5) | 12)
         assert state.mobs.obj_type(key) == int(MazeObjIds.KEY)
         assert player.keysnum == 0
 
@@ -1192,7 +1192,7 @@ class TestCornerSqueezeGeometry:
         result = player_try_move(state, 0, gin.JOY_RIGHT, 0)
 
         assert result == _NO_MOVE
-        assert state.player_tile_pos[0] == 0
+        assert state.player_tile_or_tport_dest[0] == 0
 
     def test_transporter_destination_rejects_squeeze(self):
         state = GameState()
@@ -1209,7 +1209,7 @@ class TestCornerSqueezeGeometry:
         )
 
         assert result == 0
-        assert state.player_tile_pos[0] == 0
+        assert state.player_tile_or_tport_dest[0] == 0
 
     def test_top_border_squeeze_advances_through_wrapped_row(self):
         state = GameState(wrap_v=True)
@@ -1223,7 +1223,7 @@ class TestCornerSqueezeGeometry:
 
         player_try_move(state, 0, gin.JOY_UP, 0)
 
-        assert state.player_tile_pos[0] == ((31 << 5) | 10)
+        assert state.player_tile_or_tport_dest[0] == ((31 << 5) | 10)
 
     def test_left_border_squeeze_cannot_cross_an_offscreen_seam(self):
         state = GameState(wrap_h=False, scroll_x=0, scroll_y=10 * 16)

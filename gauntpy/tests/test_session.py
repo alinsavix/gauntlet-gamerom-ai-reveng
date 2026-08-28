@@ -16,7 +16,7 @@ from gauntpy.subsystems.session import (
     character_select_input_update,
     coincheck,
     main_start_game,
-    player_init_for_coin,
+    player_coindrop,
     start_attract_to_game,
 )
 
@@ -79,9 +79,9 @@ def test_coincheck_active_player_health_uses_table_index():
 
 
 def test_coin_health_table_matches_all_32_rom_words():
-    from gauntpy.subsystems.session import _COIN_HEALTH_TABLE
+    from gauntpy.subsystems.session import _HEALTH_PER_COIN_TABLE
 
-    assert _COIN_HEALTH_TABLE == [
+    assert _HEALTH_PER_COIN_TABLE == [
         100, 125, 150, 175, 200, 225, 250, 300,
         350, 400, 450, 500, 550, 600, 650, 700,
         750, 800, 850, 900, 950, 1000, 1100, 1200,
@@ -408,7 +408,7 @@ def test_main_start_game_first_warrior_sets_spawn_bonus_not_multiplier():
     main_start_game(state)
 
     assert state.players[0].bonusmult == 1
-    assert state.spawn_probability_bonus == 3
+    assert state.monster_spawn_probability_bonus == 3
 
 
 def test_main_start_game_first_wizard_sets_spawn_bonus_not_multiplier():
@@ -423,7 +423,7 @@ def test_main_start_game_first_wizard_sets_spawn_bonus_not_multiplier():
     main_start_game(state)
 
     assert state.players[0].bonusmult == 1
-    assert state.spawn_probability_bonus == 4
+    assert state.monster_spawn_probability_bonus == 4
 
 
 def test_main_start_game_later_join_clears_spawn_bonus_not_multiplier():
@@ -439,7 +439,7 @@ def test_main_start_game_later_join_clears_spawn_bonus_not_multiplier():
     state.players[0].health = 800
     state.players[0].mob_slot = 0x100
     state.level_players_active = 1
-    state.spawn_probability_bonus = 3
+    state.monster_spawn_probability_bonus = 3
 
     # Player 1 commits.
     state.players[1].status = PlayerStatus.SELECTING
@@ -449,7 +449,7 @@ def test_main_start_game_later_join_clears_spawn_bonus_not_multiplier():
     main_start_game(state)
 
     assert state.players[1].bonusmult == 1
-    assert state.spawn_probability_bonus == 0
+    assert state.monster_spawn_probability_bonus == 0
 
 
 def test_main_start_game_free_play_magic_in_attract_starts_game():
@@ -556,7 +556,7 @@ class TestStartAttractToGame:
         """global_ui_delay_timer = 0 at 0x44366; no stale treasure countdown."""
         state = GameState()
         state.game_mode = GameMode.DEMO
-        state.bonus_timer = 90
+        state.global_ui_delay_timer = 90
         state.bonus_amount = 1234
         state.treasure_timer = 600
         state.welcome_elapsed_frames = 900
@@ -565,7 +565,7 @@ class TestStartAttractToGame:
         state.mugger_item_carried = int(MazeObjIds.FOOD_INVULN)
         state.mugger_item_nextlevel = int(MazeObjIds.FOOD_INVULN)
         start_attract_to_game(state)
-        assert (state.bonus_timer, state.bonus_amount, state.treasure_timer) == (0, 0, 0)
+        assert (state.global_ui_delay_timer, state.bonus_amount, state.treasure_timer) == (0, 0, 0)
         assert state.welcome_elapsed_frames == 0
         assert (
             state.thief_item_carried,
@@ -593,7 +593,7 @@ class TestStartAttractToGame:
 
 
 # ---------------------------------------------------------------------------
-# player_init_for_coin (0x488CA) and the info-panel rebuilds it drives
+# player_coindrop (0x488CA) and the info-panel rebuilds it drives
 # ---------------------------------------------------------------------------
 
 class TestPlayerInitForCoin:
@@ -603,7 +603,7 @@ class TestPlayerInitForCoin:
         state = GameState()
         state.game_mode = GameMode.NORMAL
         state.two_player_mode = 0
-        player_init_for_coin(state, 2)
+        player_coindrop(state, 2)
         p = state.players[2]
         assert p.health == 0x7D0            # 0x578A0 free-play start
         assert p.coin_count == 1            # 0x48962
@@ -618,7 +618,7 @@ class TestPlayerInitForCoin:
         state.players[0].health = 17
         state.players[0].bonusmult = 7
 
-        player_init_for_coin(state, 0)
+        player_coindrop(state, 0)
 
         assert state.players[0].health == 0x7D0
         assert state.players[0].bonusmult == 1
@@ -629,7 +629,7 @@ class TestPlayerInitForCoin:
         state.game_mode = GameMode.NORMAL
         state.two_player_mode = 1
         state.game_settings = 8             # table index 8 -> 350
-        player_init_for_coin(state, 0)
+        player_coindrop(state, 0)
         assert state.players[0].health == 350
 
     def test_coin_slot_sound_is_per_slot(self):
@@ -637,14 +637,14 @@ class TestPlayerInitForCoin:
         for slot, expected in enumerate((0x22, 0x23, 0x24, 0x25)):
             state = GameState()
             state.game_mode = GameMode.NORMAL
-            player_init_for_coin(state, slot)
+            player_coindrop(state, slot)
             assert expected in state.sound_log
 
     def test_demo_join_is_silent(self):
         """0x488E4: the demo's scripted joins take free-play health, no sound."""
         state = GameState()
         state.game_mode = GameMode.DEMO
-        player_init_for_coin(state, 0)
+        player_coindrop(state, 0)
         assert state.players[0].health == 0x7D0
         assert 0x22 not in state.sound_log
 
@@ -655,7 +655,7 @@ class TestPlayerInitForCoin:
         state.game_mode = GameMode.NORMAL
         state.score_dirty[1] = 1
         state.health_dirty[1] = 1
-        player_init_for_coin(state, 1)
+        player_coindrop(state, 1)
         assert state.score_dirty[1] == 0
         assert state.health_dirty[1] == 0
         panel = state.info_panel.players[1]
@@ -827,7 +827,7 @@ class TestSpawnProbabilityBonus:
         state.players[1].score = 60_000
         update_monster_spawn_bonus_from_score_per_coin(state)
         # (160000 >> 14) // 2 == 9 // 2 == 4
-        assert state.spawn_probability_bonus == 4
+        assert state.monster_spawn_probability_bonus == 4
 
     def test_only_players_on_the_level_count(self):
         from gauntpy.subsystems.exits import (
@@ -840,7 +840,7 @@ class TestSpawnProbabilityBonus:
         state.players[1].status = PlayerStatus.ALIVE_NEXT     # not counted
         state.players[1].score, state.players[1].coin_count = 9_000_000, 1
         update_monster_spawn_bonus_from_score_per_coin(state)
-        assert state.spawn_probability_bonus == 1_000_000 >> 14
+        assert state.monster_spawn_probability_bonus == 1_000_000 >> 14
 
     def test_a_coinless_party_is_left_alone(self):
         """The ROM's divs.w would trap; nothing is added instead."""
@@ -851,9 +851,9 @@ class TestSpawnProbabilityBonus:
         state = GameState()
         state.players[0].status = PlayerStatus.ALIVE_HERE
         state.players[0].score = 1_000_000
-        state.spawn_probability_bonus = 7
+        state.monster_spawn_probability_bonus = 7
         update_monster_spawn_bonus_from_score_per_coin(state)
-        assert state.spawn_probability_bonus == 7
+        assert state.monster_spawn_probability_bonus == 7
 
     def test_the_bonus_is_a_byte(self):
         from gauntpy.subsystems.exits import (
@@ -863,9 +863,9 @@ class TestSpawnProbabilityBonus:
         state = GameState()
         state.players[0].status = PlayerStatus.ALIVE_HERE
         state.players[0].score, state.players[0].coin_count = 0x7F0000, 1
-        state.spawn_probability_bonus = 0xFF
+        state.monster_spawn_probability_bonus = 0xFF
         update_monster_spawn_bonus_from_score_per_coin(state)
-        assert 0 <= state.spawn_probability_bonus <= 0xFF     # add.b wraps
+        assert 0 <= state.monster_spawn_probability_bonus <= 0xFF     # add.b wraps
 
     def test_a_re_coin_walks_a_positive_bonus_back(self):
         """0x42C30-0x42C38: paying to stay alive buys a calmer level."""
@@ -873,30 +873,30 @@ class TestSpawnProbabilityBonus:
         state.game_mode = GameMode.NORMAL
         state.players[0].health = 100
         state.players[0].coin_count = 1
-        state.spawn_probability_bonus = 3
+        state.monster_spawn_probability_bonus = 3
         _coin_for_player(state, 0)
         coincheck(state)
-        assert state.spawn_probability_bonus == 2
+        assert state.monster_spawn_probability_bonus == 2
 
     def test_a_re_coin_does_not_push_a_negative_bonus_further_down(self):
         state = GameState()
         state.game_mode = GameMode.NORMAL
         state.players[0].health = 100
         state.players[0].coin_count = 1
-        state.spawn_probability_bonus = 0xFE           # -2
+        state.monster_spawn_probability_bonus = 0xFE           # -2
         _coin_for_player(state, 0)
         coincheck(state)
-        assert state.spawn_probability_bonus == 0xFE   # 0x42C36 ``ble``
+        assert state.monster_spawn_probability_bonus == 0xFE   # 0x42C36 ``ble``
 
     def test_a_re_coin_leaves_a_zero_bonus_alone(self):
         state = GameState()
         state.game_mode = GameMode.NORMAL
         state.players[0].health = 100
         state.players[0].coin_count = 1
-        state.spawn_probability_bonus = 0
+        state.monster_spawn_probability_bonus = 0
         _coin_for_player(state, 0)
         coincheck(state)
-        assert state.spawn_probability_bonus == 0
+        assert state.monster_spawn_probability_bonus == 0
 
     def test_a_re_coin_re_arms_the_low_health_warning(self):
         """0x42C46-0x42C64 clear the latch, the spacing timer and the cadence."""

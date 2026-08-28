@@ -49,7 +49,7 @@ from gauntpy.coords import (
 from gauntpy.state import GameState
 from gauntpy.subsystems.exits import (
     TRICK_NOUSEINVUL,
-    secret_check_winner,
+    secret_bonus_earned,
     secret_trick_check,
 )
 from gauntpy.subsystems.monsters import (
@@ -57,9 +57,9 @@ from gauntpy.subsystems.monsters import (
     _GEN_ATTRACT_GHOST_FAMILIES,
     _GEN_ATTRACT_START_GHOST,
     _GEN_ATTRACT_START_OTHER,
-    _GEN_CANDIDATE_COL,
-    _GEN_CANDIDATE_DIR,
-    _GEN_CANDIDATE_ROW,
+    _GENERATOR_CELL_DX,
+    _GENERATOR_SPAWN_DIRECTION,
+    _GENERATOR_CELL_DY,
     _GENERATOR_SPAWN,
     _GENERATOR_TIER_PENALTY,
     _HPOS_FLAG_ATTACK,
@@ -68,7 +68,7 @@ from gauntpy.subsystems.monsters import (
     _LOBBER_SHOT_SPAWN_H,
     _LOBBER_SHOT_SPAWN_V,
     _MAZEOBJ_VSIZE,
-    _MONSTER_ODDANGLE_TBL,
+    _MONSTER_ODDANGLE_TABLE,
     _MONSTER_SHOT_SPAWN_H,
     _MONSTER_SHOT_SPAWN_V,
     _MONSTER_SPEED_BASE,
@@ -76,12 +76,12 @@ from gauntpy.subsystems.monsters import (
     _MONSTER_WALK_PICTURES,
     _MONSTER_IDLE_ANIMS,
     _MONSTER_MOVING_ANIMS,
-    _OCCUPANCY_NEIGHBOUR_COL,
-    _OCCUPANCY_NEIGHBOUR_ROW,
-    _SHOOT_AXIS_THRESHOLDS,
+    _SPAWN_CANDIDATE_COLUMN_DELTA,
+    _SPAWN_CANDIDATE_ROW_DELTA,
+    _MONSTER_SHOOT_AXIS_THRESHOLDS,
     _SHOT_COOLDOWN,
     _SHOT_VPOS_LOW,
-    _SPAWN_PROB_TABLE,
+    _MONSTER_SPAWN_PROBABILITY_TABLE,
     _aim_direction,
     _destination_cell,
     _dispatch_monster,
@@ -93,12 +93,12 @@ from gauntpy.subsystems.monsters import (
     _monster_speed,
     _oddangle_override,
     _probe_phase,
-    _refresh_monster_picture,
-    _shooter_in_view,
+    monster_update_anim_tile,
+    monster_shooter_in_view,
     _spawn_probability,
     _supersorc_dispatch,
-    _supersorc_place,
-    _tile_on_screen,
+    supersorc_place,
+    tile_on_screen_d4,
     _update_cull_rect,
     GENERATOR_RETRY_RELOAD,
     generator_candidate_slot,
@@ -336,8 +336,8 @@ class TestCullingRectangle:
         state.scroll_x = 0x100
         state.scroll_y = 0x80
         _update_cull_rect(state)
-        assert state.cull_rect_x == ((0x100 - 0x17) << 7)
-        assert state.cull_rect_y == ((0xF9 - 0x80) << 7)
+        assert state.monster_cull_h_origin == ((0x100 - 0x17) << 7)
+        assert state.monster_cull_v_origin == ((0xF9 - 0x80) << 7)
 
     def test_wrapped_left_camera_keeps_right_seam_monsters_live(self):
         """Level 7 wraps horizontally; scroll 0 must include column 31."""
@@ -349,7 +349,7 @@ class TestCullingRectangle:
 
         _update_cull_rect(state)
 
-        assert state.cull_rect_x == ((-0x17 << 7) & 0xFFFF)
+        assert state.monster_cull_h_origin == ((-0x17 << 7) & 0xFFFF)
         assert _in_cull_rect(state, slot)
 
     def test_the_cull_window_wraps_on_the_16_bit_word_itself(self):
@@ -362,7 +362,7 @@ class TestCullingRectangle:
         _update_cull_rect(state)
         seam = pack_slot(10, 31)
         _place_monster(state, seam, MazeObjIds.MONST_GRUNT)
-        delta = (state.mobs.hpos[seam] - state.cull_rect_x) & 0xFFFF
+        delta = (state.mobs.hpos[seam] - state.monster_cull_h_origin) & 0xFFFF
         assert delta < 0x7F80, "inside the ROM's 255 px window across the seam"
         assert _in_cull_rect(state, seam)
 
@@ -375,8 +375,8 @@ class TestCullingRectangle:
         _update_cull_rect(state)
         slot = pack_slot(10, 10)
         _place_monster(state, slot, MazeObjIds.MONST_GRUNT)
-        assert state.cull_rect_y == ((0xF9 - state.scroll_y) << 7) & 0xFFFF
-        assert ((state.mobs.vpos[slot] - state.cull_rect_y) & 0xFFFF) < 0x8380
+        assert state.monster_cull_v_origin == ((0xF9 - state.scroll_y) << 7) & 0xFFFF
+        assert ((state.mobs.vpos[slot] - state.monster_cull_v_origin) & 0xFFFF) < 0x8380
 
     def test_level_seven_seam_lobber_is_processed_and_throws(self):
         state = GameState(
@@ -401,8 +401,8 @@ class TestCullingRectangle:
     def test_tile_visibility_wraps_across_the_level_seven_seam(self):
         state = GameState(scroll_x=480, scroll_y=10 * 16)
 
-        assert _tile_on_screen(state, pack_slot(10, 2))
-        assert not _tile_on_screen(state, pack_slot(10, 20))
+        assert tile_on_screen_d4(state, pack_slot(10, 2))
+        assert not tile_on_screen_d4(state, pack_slot(10, 20))
 
     @requires_roms
     def test_level_seven_left_seam_keeps_its_visible_generator_active(self):
@@ -472,11 +472,11 @@ class TestCullingRectangle:
         _camera_on(state, slot)
         _update_cull_rect(state)
         _place_monster(state, slot, MazeObjIds.MONST_DEMON)
-        assert _shooter_in_view(state, slot)
-        edge_x = (state.cull_rect_x >> 7) + 8
+        assert monster_shooter_in_view(state, slot)
+        edge_x = (state.monster_cull_h_origin >> 7) + 8
         state.mobs.hpos[slot] = encode_hpos(edge_x)
         assert _in_cull_rect(state, slot)
-        assert not _shooter_in_view(state, slot)
+        assert not monster_shooter_in_view(state, slot)
 
     def test_out_of_view_demon_holds_fire(self):
         """In the cull box but inside the shooter margin: it never fires."""
@@ -698,11 +698,11 @@ class TestAnimationState:
 
     def test_oddangle_table_bytes(self):
         """monster_oddangle_table (0x40E1E), transcribed byte for byte."""
-        assert len(_MONSTER_ODDANGLE_TBL) == 10
-        assert _MONSTER_ODDANGLE_TBL[0] == (0x0E, 0x06, 0x80, 0x00)   # ghost
-        assert _MONSTER_ODDANGLE_TBL[4] == (0xFF, 0x06, 0xFF, 0x00)   # sorcerer
-        assert _MONSTER_ODDANGLE_TBL[6] == (0x00, 0x06, 0x40, 0xE0)   # Death
-        assert _MONSTER_ODDANGLE_TBL[9] == (0x01, 0x02, 0x00, 0x00)   # IT
+        assert len(_MONSTER_ODDANGLE_TABLE) == 10
+        assert _MONSTER_ODDANGLE_TABLE[0] == (0x0E, 0x06, 0x80, 0x00)   # ghost
+        assert _MONSTER_ODDANGLE_TABLE[4] == (0xFF, 0x06, 0xFF, 0x00)   # sorcerer
+        assert _MONSTER_ODDANGLE_TABLE[6] == (0x00, 0x06, 0x40, 0xE0)   # Death
+        assert _MONSTER_ODDANGLE_TABLE[9] == (0x01, 0x02, 0x00, 0x00)   # IT
 
 
 # ---------------------------------------------------------------------------
@@ -712,16 +712,16 @@ class TestAnimationState:
 class TestGenerators:
     def test_probability_table_is_the_rom_table(self):
         """0x40E46: 32 entries, difficulty x player count."""
-        assert len(_SPAWN_PROB_TABLE) == 32
-        assert _SPAWN_PROB_TABLE[:4] == [0x04, 0x0B, 0x0F, 0x12]
-        assert _SPAWN_PROB_TABLE[-4:] == [0x12, 0x19, 0x1D, 0x20]
+        assert len(_MONSTER_SPAWN_PROBABILITY_TABLE) == 32
+        assert _MONSTER_SPAWN_PROBABILITY_TABLE[:4] == [0x04, 0x0B, 0x0F, 0x12]
+        assert _MONSTER_SPAWN_PROBABILITY_TABLE[-4:] == [0x12, 0x19, 0x1D, 0x20]
 
     def test_probability_index_uses_difficulty_and_players(self):
         state = GameState()
         state.levelnum_current = 1               # no level cap
         state.game_settings = 0x60               # difficulty 3 -> index 12
         state.level_players_active = 2           # +1
-        assert _spawn_probability(state) == _SPAWN_PROB_TABLE[13]
+        assert _spawn_probability(state) == _MONSTER_SPAWN_PROBABILITY_TABLE[13]
 
     def test_level_caps_probability(self):
         state = GameState()
@@ -839,9 +839,9 @@ class TestOddAngleOverride:
 
     def test_axis_thresholds_table(self):
         """monster_shoot_axis_thresholds (0x40D8A)."""
-        assert len(_SHOOT_AXIS_THRESHOLDS) == 10
-        assert _SHOOT_AXIS_THRESHOLDS[0] == (8, 1)                    # ghost
-        assert _SHOOT_AXIS_THRESHOLDS[7] == (0, 0)                    # acid
+        assert len(_MONSTER_SHOOT_AXIS_THRESHOLDS) == 10
+        assert _MONSTER_SHOOT_AXIS_THRESHOLDS[0] == (8, 1)                    # ghost
+        assert _MONSTER_SHOOT_AXIS_THRESHOLDS[7] == (0, 0)                    # acid
 
     def test_default_picker_uses_cardinals(self):
         # (u, v) are hardware-axis deltas: v positive means the target is above.
@@ -1283,7 +1283,7 @@ class TestShotSpawnPicture:
         _place_monster(state, slot, MazeObjIds.MONST_LOBBER, direction=0)
         _place_player(state, 0, pack_slot(10, 8))
         state.players[0].direction = 2                 # the hero runs downward
-        state.player_walk_dirs[0] = 0xB0              # achieved DOWN movement
+        state.player_joystick[0] = 0xB0              # achieved DOWN movement
         monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_LOBBER))
         channel = next(s for s in range(9, 13) if state.mobs.picture[s])
         assert state.lobber_shot_vec_h[channel - 9] != 0
@@ -1293,7 +1293,7 @@ class TestShotSpawnPicture:
         state = GameState()
         state.players[0].character = 0
         state.players[0].direction = 0
-        state.player_walk_dirs[0] = 0xE0              # achieved RIGHT movement
+        state.player_joystick[0] = 0xE0              # achieved RIGHT movement
 
         # Raw 0x41978 arithmetic yields (0x138, -0x28) and both components are
         # stored as the ROM computes them.
@@ -1303,7 +1303,7 @@ class TestShotSpawnPicture:
         state = GameState()
         state.players[0].character = 0
         state.players[0].direction = 0
-        state.player_walk_dirs[0] = 0xF0
+        state.player_joystick[0] = 0xF0
 
         assert _lobber_lead(state, 0, 0, 0, 30, -10) == (0x78, -0x28)
 
@@ -1657,7 +1657,7 @@ class TestSuperSorcerer:
         _place_monster(state, origin, MazeObjIds.MONST_SUPERSORC)
         self._blinked_out(state, origin)
 
-        destination = _supersorc_place(state, origin)
+        destination = supersorc_place(state, origin)
 
         assert destination == pack_slot(10, 6)
         assert decode_hpos(state.mobs.hpos[destination])[0] == 6 * 16 - 4
@@ -1676,7 +1676,7 @@ class TestSuperSorcerer:
         _place_monster(state, origin, MazeObjIds.MONST_SUPERSORC)
         self._blinked_out(state, origin)
 
-        destination = _supersorc_place(state, origin)
+        destination = supersorc_place(state, origin)
 
         assert destination == pack_slot(6, 6)
         assert state.mobs.state(destination) & 7 == 1
@@ -1975,7 +1975,7 @@ class TestSecretRoomProgress:
              player=0, it=-1):
         state = GameState()
         state.game_mode = 0
-        state.secret_trick_id = task
+        state.trick_tasknum = task
         state.secret_tricks_flags[player] = progress
         state.player_it = it
         mslot = pack_slot(5, 5)
@@ -2013,14 +2013,14 @@ class TestSecretRoomProgress:
 
     def test_the_counter_satisfies_the_exit_check(self):
         state = self._hit(MazeObjIds.MONST_IT, 8, task=0x5C)
-        state.secret_winner = 0
-        assert secret_check_winner(state) is True
+        state.trick_player = 0
+        assert secret_bonus_earned(state) is True
 
     def test_an_untagged_player_fails_the_exit_check(self):
         state = self._hit(MazeObjIds.MONST_IT, 8, task=0x5B, progress=0)
-        state.secret_trick_id = 0x5C
-        state.secret_winner = 0
-        assert secret_check_winner(state) is False
+        state.trick_tasknum = 0x5C
+        state.trick_player = 0
+        assert secret_bonus_earned(state) is False
 
     def test_ordinary_contact_never_bumps_the_it_task(self):
         state = self._hit(MazeObjIds.MONST_GRUNT, 4, task=0x5C)
@@ -2074,7 +2074,7 @@ class TestSecretRoomProgress:
         state = self._hit(MazeObjIds.MONST_GRUNT, 4, task=TRICK_NOUSEINVUL,
                           acid_timer=30, progress=1)
         secret_trick_check(state, 0)
-        assert state.secret_winner < 0
+        assert state.trick_player < 0
 
 
 # ---------------------------------------------------------------------------
@@ -2175,15 +2175,15 @@ class TestGeneratorCandidateOrder:
                 gen + drow + dcol, index
 
     def test_the_direction_codes_are_the_rom_table(self):
-        assert _GEN_CANDIDATE_DIR[:8] == tuple(
+        assert _GENERATOR_SPAWN_DIRECTION[:8] == tuple(
             code for _, _, code in _ROM_GEN_CANDIDATES
         )
 
     def test_entries_eight_to_eleven_repeat_the_cardinals(self):
         """The tail is what turns ``start .. start+7`` into a rotation."""
-        assert _GEN_CANDIDATE_COL[8:12] == _GEN_CANDIDATE_COL[:4]
-        assert _GEN_CANDIDATE_ROW[8:12] == _GEN_CANDIDATE_ROW[:4]
-        assert _GEN_CANDIDATE_DIR[8:12] == _GEN_CANDIDATE_DIR[:4]
+        assert _GENERATOR_CELL_DX[8:12] == _GENERATOR_CELL_DX[:4]
+        assert _GENERATOR_CELL_DY[8:12] == _GENERATOR_CELL_DY[:4]
+        assert _GENERATOR_SPAWN_DIRECTION[8:12] == _GENERATOR_SPAWN_DIRECTION[:4]
 
     def test_every_start_tries_all_four_cardinals_before_any_diagonal(self):
         gen = pack_slot(10, 10)
@@ -2502,8 +2502,8 @@ class TestTileOccupancyTest:
         candidate = pack_slot(10, 10)
         for index in range(8):
             state = GameState()
-            row = ((candidate & 0x3E0) + _OCCUPANCY_NEIGHBOUR_ROW[index])
-            col = (candidate + _OCCUPANCY_NEIGHBOUR_COL[index]) & 0x1F
+            row = ((candidate & 0x3E0) + _SPAWN_CANDIDATE_ROW_DELTA[index])
+            col = (candidate + _SPAWN_CANDIDATE_COLUMN_DELTA[index]) & 0x1F
             _place_wall_marker(state, row + col)
             assert tile_occupancy_test(state, candidate), index
 
@@ -2599,7 +2599,7 @@ class TestSpawnPictures:
         )
         state.mobs.set_state(slot, (3 << 3) | 4)
 
-        _refresh_monster_picture(
+        monster_update_anim_tile(
             state, slot, int(MazeObjIds.MONST_GRUNT),
         )
 
@@ -2876,9 +2876,9 @@ class TestAttractModeGeneration:
     def test_the_seven_seed_runs_the_counter_to_fourteen(self):
         """Indices 12-14 exist only because 0x4942C-0x49438 never masks."""
         assert _GEN_ATTRACT_START_GHOST + 7 == 14
-        assert len(_GEN_CANDIDATE_COL) == 15
-        assert len(_GEN_CANDIDATE_ROW) == 15
-        assert len(_GEN_CANDIDATE_DIR) == 15
+        assert len(_GENERATOR_CELL_DX) == 15
+        assert len(_GENERATOR_CELL_DY) == 15
+        assert len(_GENERATOR_SPAWN_DIRECTION) == 15
 
     @requires_roms
     def test_indices_twelve_to_fourteen_are_the_next_tables_first_words(self):
@@ -2896,11 +2896,11 @@ class TestAttractModeGeneration:
         def signed(value: int) -> int:
             return value - 0x10000 if value & 0x8000 else value
 
-        assert tuple(_GEN_CANDIDATE_COL[12:]) == \
+        assert tuple(_GENERATOR_CELL_DX[12:]) == \
             tuple(signed(w) for w in words(0x57B68, 3))
-        assert tuple(_GEN_CANDIDATE_ROW[12:]) == \
+        assert tuple(_GENERATOR_CELL_DY[12:]) == \
             tuple(signed(w) for w in words(0x57B80, 3))
-        assert tuple(_GEN_CANDIDATE_DIR[12:]) == words(0x57B98, 3)
+        assert tuple(_GENERATOR_SPAWN_DIRECTION[12:]) == words(0x57B98, 3)
 
     def test_the_read_past_candidates_are_always_the_generators_own_cell(self):
         """Every aliased column delta is a multiple of 32 and every aliased row
@@ -2908,8 +2908,8 @@ class TestAttractModeGeneration:
         ``andi #0x3E0`` annihilate all six -- the candidate cannot be anything
         but the generator itself, anywhere in the maze."""
         for index in (12, 13, 14):
-            assert _GEN_CANDIDATE_COL[index] % 0x20 == 0, index
-            assert 0 <= _GEN_CANDIDATE_ROW[index] < 0x20, index
+            assert _GENERATOR_CELL_DX[index] % 0x20 == 0, index
+            assert 0 <= _GENERATOR_CELL_DY[index] < 0x20, index
             for row in range(32):
                 for col in range(32):
                     gen = pack_slot(row, col)

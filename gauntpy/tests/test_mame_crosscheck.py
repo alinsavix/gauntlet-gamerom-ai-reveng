@@ -39,7 +39,7 @@ def test_field_address_map_matches_state_py_verbatim():
     assert addresses["frame_counter"] == 0x904006  # doc/05_data_reference.md line 20
     assert addresses["game_mode"] == 0x904918
     assert addresses["dialog_timer"] == 0x904A9E
-    assert addresses["vblank_flag"] == 0x904002
+    assert addresses["vblank_semaphore"] == 0x904002
 
     # Composite fields (no single address of their own) must not appear.
     assert "mobs" not in addresses

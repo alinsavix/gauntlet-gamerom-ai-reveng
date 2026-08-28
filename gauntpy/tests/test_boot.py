@@ -35,7 +35,7 @@ class TestOneTimeInit:
 
     def test_sound_system_reset(self):
         state = GameState()
-        state.sound_queue.extend([1, 2, 3])
+        state.soundqueue.extend([1, 2, 3])
         one_time_init(state)
         # The ring is flushed (§5 step 1) and the reset arms the 180-frame
         # holdoff, so the TITLE hand-off's own screen-change sounds
@@ -43,8 +43,8 @@ class TestOneTimeInit:
         # instead of going straight out to the board.  The factory settings
         # word 0xE090 has the attract-sound bit (0x4000) set, so the first
         # TITLE screen also queues the theme (0x3B, 0x444EC).
-        assert state.sound_queue == [0x01, 0x3C, 0x3B]
-        assert state.sound_holdoff == 0xB4
+        assert state.soundqueue == [0x01, 0x3C, 0x3B]
+        assert state.speech_counter == 0xB4
         assert state.sound_log == [], "nothing can reach the board during the holdoff"
 
     def test_game_state_cleared(self):
@@ -75,7 +75,7 @@ class TestOneTimeInit:
         state = GameState(eeprom_save_path=str(tmp_path / "absent.json"))
         one_time_init(state)
         assert state.game_settings == 0xE090
-        assert state.eeprom_settings_cache == 0xE090
+        assert state.eeprom_cache_settings == 0xE090
 
     def test_players_start_removed_and_inactive(self):
         state = GameState()

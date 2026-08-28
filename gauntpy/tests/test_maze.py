@@ -193,7 +193,7 @@ class TestRandomPickups:
         state = GameState(levelnum_current=1, mazenum_current=0)
         state.level_flags_3 = 1
         state.level_players_active = 3
-        state.spawn_probability_bonus = 8
+        state.monster_spawn_probability_bonus = 8
         state.rng = _FixedRNG(0)
         placed_types = []
         monkeypatch.setattr(
@@ -811,9 +811,9 @@ class TestLoadLevel:
             if state.mobs.obj_type(slot) == int(MazeObjIds.WALL_RANDOM)
         ]
         assert state.random_wall_setup_ready
-        assert state.random_wall_low_mark == slots[0]
-        assert state.random_wall_target == slots[-1]
-        assert state.random_wall_current == slots[0] - 1
+        assert state.randwall_low_watermark == slots[0]
+        assert state.randwall_target == slots[-1]
+        assert state.randwall_current == slots[0] - 1
 
     def test_load_clears_the_per_level_dialog_latch(self):
         state = GameState(game_mode=GameMode.NORMAL, dialog_once_flags=0xFFFF)
@@ -921,7 +921,7 @@ class TestLoadLevelExitScan:
                 game_mode=GameMode.NORMAL,
                 levelnum_current=20,
                 mazenum_current=maze_number,
-                secret_trick_id=task,
+                trick_tasknum=task,
             )
 
             gm.load_level(state, 20, maze_number=maze_number)
@@ -950,7 +950,7 @@ class TestLoadLevelExitScan:
             game_mode=GameMode.NORMAL,
             levelnum_current=20,
             mazenum_current=maze_number,
-            secret_trick_id=task,
+            trick_tasknum=task,
         )
 
         gm.load_level(state, 20, maze_number=maze_number)
@@ -991,7 +991,7 @@ class TestLoadLevelExitScan:
         assert state.exit_open_id in state.exit_slots, (
             "one exit must be picked, or main_exit_move returns at its first gate"
         )
-        assert state.exit_move_timer == 0x12C
+        assert state.exit_timer == 0x12C
 
     def test_the_open_exit_actually_moves_once_the_timer_runs_out(self):
         """The whole point of the scan: drive ``main_exit_move`` past its
@@ -1020,11 +1020,11 @@ class TestLoadLevelExitScan:
         number = self._first_maze_with_moving_exits()
         state = GameState(game_mode=GameMode.NORMAL)
         gm.load_level(state, 1, maze_number=number)
-        before = (list(state.exit_slots), state.exit_open_id, state.exit_move_timer)
+        before = (list(state.exit_slots), state.exit_open_id, state.exit_timer)
 
         exit_scan_level(state)
 
-        assert (list(state.exit_slots), state.exit_open_id, state.exit_move_timer) == before
+        assert (list(state.exit_slots), state.exit_open_id, state.exit_timer) == before
 
     def test_a_reload_rescans_for_the_new_level(self):
         """A level change must not leave the previous maze's exits behind."""

@@ -261,7 +261,7 @@ a demo that replays a human's hands.
 >   `check_and_deduct_credits` (0x3804): `doc/02_os_rom.md` §8.10.
 > - Game-side coin watch: `coincheck` (0x42B6A) against cached counters,
 >   active re-coining from the 32-entry health table at 0x57862 indexed by
->   the settings word's low five bits; joining via `player_init_for_coin`
+>   the settings word's low five bits; joining via `player_coindrop`
 >   (0x488CA): `doc/04_game_subsystems.md` §10.1, §1.10 in
 >   `doc/05_data_reference.md`.
 > - Scoring: `player_add_score_with_mult` (0x5214C), multiplier array

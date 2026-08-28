@@ -128,7 +128,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x9048C8 | 2 B × 12 | `active_mob_ids` | Logical actor/projectile channel → hardware MOB slot mapping. Entries 0–3 are the four player MOB IDs; later entries are used for monster/dragon shot channels. Exact range 0x9048C8–0x9048DF. |
 | 0x9048E0 | 2 B × 4 | `player_powers` | Per-player power bits (see Character Powers enum) |
 | 0x9048E8 | 2 B × 4 | `player_character` | Per-player character identity (0=Warrior, 1=Valkyrie, 2=Wizard, 3=Elf) |
-| 0x9048F0 | 2 B × 4 | `player_joystick` | Per-player last joystick direction |
+| 0x9048F0 | 2 B × 4 | `player_joystick` | Per-player active-low direction result achieved by `main_move_players` in the current frame (`0xF0` = stationary). Lobber lead reads this movement result; it is not the raw input word at 0x904920. |
 | 0x9048F8 | 2 B × 4 | `lobber_shot_vec_h` | Horizontal component for lobber shots |
 | 0x904900 | 2 B × 4 | `lobber_shot_vec_v` | Vertical component for lobber shots |
 | 0x904908 | 1 B × 4 | `player_redraw` | Per-player redraw flags (bit 0 = score needs redraw, cleared by `draw_player_score`; bit 1 = health, set on damage, cleared by `draw_player_health`). |
@@ -1195,9 +1195,9 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x5BA6C | 2 B | `logo_bright_min` |
 | 0x5BA6E | 2 B | `logo_bright_max` |
 | 0x5BA70 | 64 B | `forcefield_gfx_ptrs` — one 16-longword pointer table (not two 8-entry tables) into forcefield/floor tile descriptors at 0x5CAB0–0x5CB20; indexed by the 4-bit forcefield graphic state |
-| 0x5BAB0 | 16 B | `shot_reflect_hdelta` — 8 signed horizontal-position correction words indexed by reflected shot direction |
-| 0x5BAC0 | 16 B | `shot_reflect_vdelta` — 8 signed vertical-position correction words parallel to `shot_reflect_hdelta` |
-| 0x5BAD0 | 16 B | `shot_reflect_sound_tbl` — four longword sound IDs indexed by player character: 0x45, 0x47, 0x46, 0x48 |
+| 0x5BAB0 | 16 B | `shot_reflect_hdelta` — 8 signed horizontal-position correction words indexed by direction. Despite the historical `reflect` name, `player_create_shot` uses these as the initial shot H offsets. |
+| 0x5BAC0 | 16 B | `shot_reflect_vdelta` — 8 signed vertical-position correction words parallel to `shot_reflect_hdelta`; likewise used for initial shot placement. |
+| 0x5BAD0 | 16 B | `shot_reflect_sound_tbl` — four longword sound IDs indexed by player character: 0x45, 0x47, 0x46, 0x48. `player_create_shot` uses this historically named table for the class firing sound. |
 | 0x5BAE0 | 256 B | `floor_desc_base` — 32 contiguous 8-byte floor descriptors, exact range 0x5BAE0–0x5BBDF. `pf_floor_draw` selects the connectivity variant here and offsets each tile code by `floorpattern × 0x30`; it does not select a separate floor block. Wall data begins independently at 0x5BBE0. |
 | 0x5BBE0 | 3264 B | `wall_desc_blocks` — six normal wall-pattern blocks × 68 descriptors × 8 bytes, exact range 0x5BBE0–0x5C89F. Each descriptor contains four picture words written to the tile's 2×2 playfield cells. `wall_pattern_offsets` contains descriptor-index bases `{0x000,0x044,...,0x154}`; `pf_wall_draw` adds the connectivity variant and multiplies by eight. |
 | 0x5C8A0 | 8 B | `floor_type10_desc` — single four-word 2×2 descriptor selected directly for tile type 0x10. The former 520-byte size incorrectly swallowed the unrelated sequential block that follows. |

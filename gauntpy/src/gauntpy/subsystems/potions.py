@@ -11,7 +11,7 @@ before implementing.
 Reference: ``doc/05_data_reference.md`` (0x5DA98); ``doc/04_game_subsystems.md``
 §4.6.
 
-The 448-byte matrix is transcribed from ROM 0x5DA98 (``_POTION_EFFECT_MATRIX_ROM``
+The 448-byte matrix is transcribed from ROM 0x5DA98 (``_POTION_EFFECT_MATRIX``
 below). Its per-character damage values are nuanced: e.g. a Warrior drink does
 2 to a Ghost (which survives as a weaker tier), while a Wizard or Elf drink,
 and any Magic-power potion, destroy it outright. The documented invariants
@@ -30,7 +30,7 @@ from .monsters import (
     _HPOS_FLAG_ATTACK,
     _HPOS_FLAG_MOVING,
     _in_cull_rect,
-    _refresh_monster_picture,
+    monster_update_anim_tile,
     _update_cull_rect,
 )
 from .sound import sound_play as _sound_play
@@ -70,8 +70,8 @@ _IT_TYPE = int(MazeObjIds.MONST_IT)   # 0x1B / 27
 _GENERATOR_SPLIT = 0x1C
 
 # 0x579D2 / 0x579E2, indexed by death_hits & 7.
-_DEATH_POTION_SCORE = (1000, 4000, 2000, 6000, 1000, 8000, 1000, 2000)
-_DEATH_POTION_POPUP = (2, 5, 3, 7, 2, 9, 2, 3)
+_DEATH_POTION_SCORE_TABLE = (1000, 4000, 2000, 6000, 1000, 8000, 1000, 2000)
+_DEATH_POTION_POPUP_TYPE_TABLE = (2, 5, 3, 7, 2, 9, 2, 3)
 
 # The blast is not global.  0x41560-0x41584 subtracts the two camera-derived
 # monster culling origins from the target's H/V words and rejects it with an
@@ -115,7 +115,7 @@ _GENERATOR_BASE_PICTURES = (
 # The data confirms the documented invariants: Death/Acid/Super-Sorcerer rows
 # (0x18-0x1A) are all-zero, IT (0x1B) is an unreachable all-0x1B filler row, the
 # Wizard column is zero everywhere, and the Elf column is zero for monster rows.
-_POTION_EFFECT_MATRIX_ROM: dict[int, list[int]] = {
+_POTION_EFFECT_MATRIX: dict[int, list[int]] = {
     0x12: [2, 2, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],   # MONST_GHOST
     0x13: [2, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],   # MONST_GRUNT
     0x14: [2, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],   # MONST_DEMON
@@ -280,7 +280,7 @@ def _apply_potion_effect(state: GameState, slot: int, obj_type: int,
         if state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK:
             state.mobs.state_link[slot] &= 0x1FFF
             state.mobs.hpos[slot] &= ~(_HPOS_FLAG_MOVING | _HPOS_FLAG_ATTACK)
-            _refresh_monster_picture(state, slot, obj_type)
+            monster_update_anim_tile(state, slot, obj_type)
             return
     elif obj_type == int(MazeObjIds.MONST_ACID):
         if not state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK:
@@ -289,7 +289,7 @@ def _apply_potion_effect(state: GameState, slot: int, obj_type: int,
             state.mobs.state_link[slot] &= 0x1FFF
             return
 
-    entry = _POTION_EFFECT_MATRIX_ROM[obj_type][trigger & 0x0F]
+    entry = _POTION_EFFECT_MATRIX[obj_type][trigger & 0x0F]
 
     if entry == 0:
         if obj_type == int(MazeObjIds.MONST_DEATH):
@@ -297,9 +297,9 @@ def _apply_potion_effect(state: GameState, slot: int, obj_type: int,
 
             index = state.death_hits & 7
             playfield_showscore(
-                state, slot, _DEATH_POTION_POPUP[index],
+                state, slot, _DEATH_POTION_POPUP_TYPE_TABLE[index],
             )
-            state.players[player_index].score += _DEATH_POTION_SCORE[index]
+            state.players[player_index].score += _DEATH_POTION_SCORE_TABLE[index]
             state.score_dirty[player_index] = 1
         state.mobs.unlink_and_clear(slot)        # zero destroys outright
         return

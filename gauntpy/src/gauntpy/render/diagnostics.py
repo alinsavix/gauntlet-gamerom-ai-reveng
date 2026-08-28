@@ -174,7 +174,7 @@ def _player_page_rows(
                 f"{state.debounce_shift_fire[player.index]:04X} "
                 f"a{live.anim_counter:04X} f{state.player_fighting_dir[player.index]} "
                 f"s{state.player_shooting[player.index]:04X} "
-                f"w{state.player_walk_dirs[player.index]:02X}",
+                f"w{state.player_joystick[player.index]:02X}",
             ),
             (
                 "  TIMERS",
@@ -232,17 +232,17 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
             f"{state.level_flags_3:02X} {state.level_flags_4:02X}",
         ),
         ("WRAP", f"H={int(state.wrap_h)} V={int(state.wrap_v)}"),
-        ("ROTATION", f"resume={state.maze_resume} stride={state.maze_stride}"),
+        ("ROTATION", f"resume={state.mazerand_num} stride={state.mazerand_adder}"),
         ("IDLE/ESCAPE", f"{state.idle_timer} / {state.escape_timer}"),
         ("TREASURE", f"timer={state.treasure_timer} next={state.level_next_treasure}"),
         ("POTION NEXT", str(state.level_next_potion)),
-        ("BONUS", f"timer={state.bonus_timer} amount={state.bonus_amount}"),
+        ("BONUS", f"timer={state.global_ui_delay_timer} amount={state.bonus_amount}"),
         ("EXITS", f"{len(state.exit_slots)} open={state.exit_open_id:03X}"),
-        ("EXIT MOVE", f"timer={state.exit_move_timer} frame={state.exit_anim_frame}"),
+        ("EXIT MOVE", f"timer={state.exit_timer} frame={state.exit_anim_frame}"),
         ("TRANSPORTERS", str(transporters)),
         ("SECRET TRICK", secret_trick),
-        ("SECRET ID", f"{state.secret_trick_id:02X} last={state.secret_trick_last:02X}"),
-        ("SECRET WIN", f"{state.secret_winner} hint={state.secret_need_hint}"),
+        ("SECRET ID", f"{state.trick_tasknum:02X} last={state.trick_last:02X}"),
+        ("SECRET WIN", f"{state.trick_player} hint={state.secret_need_hint}"),
         ("SECRET COUNT", f"{state.secret_possible_counter}/{state.secret_possible_start}"),
         (
             "SECRET FLAGS",
@@ -294,7 +294,7 @@ def _ai_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return (
         ("IT TARGET", "none" if state.player_it == 0xFFFF else f"P{state.player_it + 1}"),
         ("MONSTER ITER", f"{state.monster_iter_ptr:03X}"),
-        ("SPAWN BONUS", str(state.spawn_probability_bonus)),
+        ("SPAWN BONUS", str(state.monster_spawn_probability_bonus)),
         ("GEN RETRY", str(state.monster_generation_retry_timer)),
         ("SLOWMO", str(state.monster_slowmo_timer)),
         ("THIEF MODE", str(state.thief_mode)),
@@ -331,9 +331,9 @@ def _display_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         ("MOB CHAIN", str(chain_length)),
         ("SLIP HEADS", f"{nonzero_slips}/64"),
         ("TPORT CYCLE", f"{state.tport_cycle_pos} dir={state.tport_cycle_dir}"),
-        ("FORCEFIELD", f"{state.forcefield_color:04X} step={state.forcefield_step}"),
-        ("FF TIMER", str(state.forcefield_step_timer)),
-        ("FF SEGMENTS", str(len(state.forcefield_segments))),
+        ("FORCEFIELD", f"{state.forcefield_color:04X} step={state.ff_cycle_index}"),
+        ("FF TIMER", str(state.ff_cycle_timer)),
+        ("FF SEGMENTS", str(len(state.ff_segment_table))),
         ("PALETTE A/B", f"{state.palette_pulse_dir_a}/{state.palette_pulse_dir_b}"),
         ("DISPLAY ENABLE", str(state.score_display_enabled)),
     )
@@ -341,15 +341,15 @@ def _display_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
 
 def _audio_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return (
-        ("QUEUE", " ".join(f"{value:02X}" for value in state.sound_queue) or "empty"),
-        ("QUEUE SIZE", str(len(state.sound_queue))),
+        ("QUEUE", " ".join(f"{value:02X}" for value in state.soundqueue) or "empty"),
+        ("QUEUE SIZE", str(len(state.soundqueue))),
         ("LAST COMMAND", f"{state.sound_log[-1]:02X}" if state.sound_log else "none"),
         ("LOG SIZE", str(len(state.sound_log))),
         ("RECENT", " ".join(f"{value:02X}" for value in state.sound_log[-12:])),
-        ("HOLDOFF", str(state.sound_holdoff)),
+        ("HOLDOFF", str(state.speech_counter)),
         ("QUEUE STATE", f"{state.sound_queue_state:04X}"),
         ("IDLE TIMER", str(state.sound_idle_timer)),
-        ("RETRIES", str(state.sound_retry_count)),
+        ("RETRIES", str(state.sound_cpu_retry_count)),
         ("INCOMING", " ".join(f"{value:02X}" for value in state.sound_incoming) or "empty"),
     )
 
