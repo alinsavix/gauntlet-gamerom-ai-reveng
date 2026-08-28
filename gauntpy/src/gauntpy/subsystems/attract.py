@@ -2,7 +2,7 @@
 
 Demo playback is the engine running on recorded inputs: the same
 ``main_move_players`` path, fed from per-player streams of ``[timer, joystick]``
-pairs, with ``0xFF`` = speech and ``0xFE`` = a join record (hi nibble =
+pairs, with ``0xFF`` = a dialog message and ``0xFE`` = a join record (hi nibble =
 character class, lo nibble = slot; §6.2 -- it is *not* an end-of-sequence
 marker: a stream ends with an ordinary record whose duration byte is 0).
 Demo joystick bytes are active low, like the hardware.
@@ -331,7 +331,7 @@ def load_legend_page(state: GameState) -> None:
     _write_legend_alpha(state)
 
 # Recorded demo input streams, transcribed from ROM (row76.bin).  Each is a
-# flat list of bytes read as [timer, joystick] pairs, with 0xFF = speech marker
+# flat list of bytes read as [timer, joystick] pairs, with 0xFF = message marker
 # and 0xFE = join record (hi nibble = character class, lo nibble = slot).  The
 # initial pointer table at 0x58098 is {0x5818C, 0x581C4, 0x5825A, 0x5825C}.
 # Player 1's stream (0x581C4) is the active Elf run in standard attract (§6.2).

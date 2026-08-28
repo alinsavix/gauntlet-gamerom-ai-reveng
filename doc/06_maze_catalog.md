@@ -108,8 +108,8 @@ range-checked by `eeprom_load_config` (0x42F86) and written back by
 
 | Word | Name | Role | Fresh-EEPROM default |
 |------|------|------|----------------------|
-| 0x904010 | `mazerand_num` | **Resume position** — where this cabinet's rotation through mazes 5–101 currently stands | 5 |
-| 0x90400E | `mazerand_adder` | **Stride**, masked to 0–7 — extra mazes advanced per level | 0 |
+| 0x904010 | `maze_number` | **Resume position** — where this cabinet's rotation through mazes 5–101 currently stands | 5 |
+| 0x90400E | `maze_stride` | **Stride**, masked to 0–7 — extra mazes advanced per level | 0 |
 
 `player_exit_sequence` (0x52B40) computes the next level and maze in its
 tail at 0x52DB2–0x52E56, using `maze_checknum` (0x52ECA) to validate each
@@ -134,7 +134,7 @@ repeat steps times:                            # 0x52E04-0x52E16
                 return
             if maze_next > 101:
                 maze_next = 5
-                timer_eepromwrite (0x904012) = 1   # force a save next tick
+                eeprom_write_timer (0x904012) = 1   # force a save next tick
             else:
                 maze_next += 1
 

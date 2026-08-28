@@ -232,7 +232,7 @@ _FIRST_ENCOUNTER_MASK = {
 }
 _IT_ENCOUNTER_MASK = 0x10000000
 
-# Secret-room progress (§10.6).  ``trick_tasknum`` (gex ``trick_tasknum``,
+# Secret-room progress (§10.6).  ``secret_trick_id`` (gex ``secret_trick_id``,
 # 0x904065) holds the maze's trick outside a secret room and the challenge
 # task inside one, and the per-player progress bytes live at 0x904872.  A
 # search of the whole ROM for either address finds exactly two sites inside the

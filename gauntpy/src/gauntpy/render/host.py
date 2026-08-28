@@ -285,7 +285,7 @@ class HostShell:
                     if debug_enable_secret_room(state):
                         print(
                             "gauntpy secret trick armed: "
-                            f"{state.trick_tasknum:02X}"
+                            f"{state.secret_trick_id:02X}"
                         )
                     else:
                         print("gauntpy secret trick unavailable on this level")

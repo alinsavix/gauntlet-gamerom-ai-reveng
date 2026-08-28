@@ -20,6 +20,6 @@ address,name,arguments,return,exceptional_convention,direct_control_sites,confid
 0x4C72A,player_give_item_with_message,"uint16 player_index, uint16 item_index","D0.l = 1 when the item is newly granted, else 0",,0x517C4;0x517E8;0x5184E;0x51866;0x51892;0x518F2,Verified
 0x4CB50,dialog_position_box,int16 player_index_or_minus1,void,,0x4C584;0x4C802;0x4CA30,Verified
 0x4CCBC,main_msgbox_countdown,void,void,,0x42B14;0x44232;0x44448;0x46B48;0x480DC;0x4C4AA;0x4C7CC;0x4C9DC,Verified
-0x4D1A4,secret_bonus_earned,void,"D0.l = -1 when the current secret-task/progress state earns the secret-room coin bonus, else 0",,0x4D4B0,Verified
+0x4D1A4,secret_check_winner,void,"D0.l = -1 when the current secret-task/progress state earns the secret-room coin bonus, else 0",,0x4D4B0,Verified
 0x4DE76,score_screen_color_cycle,void,void,,0x4DCD8,Verified
 0x5214C,player_add_score_with_mult,"uint16 player_index, uint16 base_score",void,,0x496EE;0x49778;0x498C4;0x4BD88;0x4F5F4;0x514FE;0x5196A;0x51AC4;0x52336;0x5245A;0x524E4;0x52578,Verified

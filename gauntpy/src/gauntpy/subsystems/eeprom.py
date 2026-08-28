@@ -23,7 +23,7 @@ The cabinet's maze rotation is the third block: doc/06 §3.2 is explicit that
 "the level -> maze mapping is cabinet state", and ``eeprom_load_config``
 (0x42F86) reads its four values back as single bytes and range-checks each
 one. ``eeprom_validate_rotation`` below is that check, and WP-15's
-``maze_checknum`` already sets ``timer_eepromwrite = 1`` to force a save when
+``maze_checknum`` already sets ``eeprom_write_timer = 1`` to force a save when
 a lap wraps -- a line that only started meaning anything once these fields
 were actually in the saved image.
 
@@ -223,8 +223,8 @@ def _parse_high_score_image(data) -> list | None:
 # range-checks each before it lets the rotation run. Verified at
 # 0x42FF2-0x43066 in row76.bin, in this order:
 #
-#   0x904010 mazerand_num       -> mazerand_num         (>= 5, real maze record)
-#   0x90400E mazerand_adder     -> mazerand_adder         (& 7)
+#   0x904010 maze_number       -> maze_number         (>= 5, real maze record)
+#   0x90400E maze_stride     -> maze_stride         (& 7)
 #   0x904018 treas_mazerand_num -> treas_mazerand_num  (104..114 else 104)
 #   0x904016 treas_mazerand_adder -> treas_mazerand_adder (& 3)
 #
@@ -233,15 +233,15 @@ def _parse_high_score_image(data) -> list | None:
 # so a rotation that has moved on is exactly what makes the cabinet save.
 
 #: Rotation resume position: where this cabinet stands in mazes 5-101.
-MAZE_RESUME_DEFAULT = 5
-MAZE_RESUME_MIN = 5
+MAZE_NUMBER_DEFAULT = 5
+MAZE_NUMBER_MIN = 5
 #: The ROM's upper guard is not a number: it indexes the Slapstic maze-pointer
 #: table with the stored byte and rejects a zero entry (0x4300A-0x4301A), i.e.
 #: "is there a maze record here at all". Every one of the 117 shipped mazes has
 #: one (doc/06 §1; ``gex.constants.MAX_MAZE_NUM``), so a range check is the
 #: ROM-free equivalent -- and this module must stay importable with no ROMs,
 #: because ``boot.one_time_init`` calls it before anything else exists.
-MAZE_RESUME_MAX = 116
+MAZE_NUMBER_MAX = 116
 
 #: Extra mazes advanced per level, masked to three bits (0x43026).
 MAZE_STRIDE_MASK = 0x07
@@ -255,17 +255,13 @@ TREASURE_STRIDE_MASK = 0x03
 
 #: The saved-image keys, in the order ``eeprom_load_config`` reads their bytes.
 _ROTATION_FIELDS = (
-    "mazerand_num", "mazerand_adder", "treas_mazerand_num", "treas_mazerand_adder",
+    "maze_number", "maze_stride", "treas_mazerand_num", "treas_mazerand_adder",
 )
-_LEGACY_ROTATION_FIELDS = {
-    "mazerand_num": "maze_resume",
-    "mazerand_adder": "maze_stride",
-}
 
 
-def _valid_maze_resume(value: int) -> int:
+def _valid_maze_number(value: int) -> int:
     """0x43002-0x4301C: below 5, or naming no maze record, resets to 5."""
-    return int(value) if MAZE_RESUME_MIN <= value <= MAZE_RESUME_MAX else MAZE_RESUME_DEFAULT
+    return int(value) if MAZE_NUMBER_MIN <= value <= MAZE_NUMBER_MAX else MAZE_NUMBER_DEFAULT
 
 
 def _valid_treasure_maze(value: int) -> int:
@@ -286,8 +282,8 @@ def eeprom_validate_rotation(state: GameState) -> None:
     file, and as the one place that states the ranges WP-15's rotation is
     allowed to walk.
     """
-    state.mazerand_num = _valid_maze_resume(state.mazerand_num)
-    state.mazerand_adder &= MAZE_STRIDE_MASK
+    state.maze_number = _valid_maze_number(state.maze_number)
+    state.maze_stride &= MAZE_STRIDE_MASK
     state.treas_mazerand_num = _valid_treasure_maze(state.treas_mazerand_num)
     state.treas_mazerand_adder &= TREASURE_STRIDE_MASK
 
@@ -301,8 +297,8 @@ def _rotation_image(state: GameState) -> dict:
     power cycle.
     """
     return {
-        "mazerand_num": _valid_maze_resume(state.mazerand_num),
-        "mazerand_adder": int(state.mazerand_adder) & MAZE_STRIDE_MASK,
+        "maze_number": _valid_maze_number(state.maze_number),
+        "maze_stride": int(state.maze_stride) & MAZE_STRIDE_MASK,
         "treas_mazerand_num": _valid_treasure_maze(state.treas_mazerand_num),
         "treas_mazerand_adder": int(state.treas_mazerand_adder) & TREASURE_STRIDE_MASK,
     }
@@ -311,8 +307,8 @@ def _rotation_image(state: GameState) -> dict:
 def _factory_rotation() -> dict:
     """A fresh cabinet's config block (ROM 0x42FC4-0x42FC8 builds it inline)."""
     return {
-        "mazerand_num": MAZE_RESUME_DEFAULT,
-        "mazerand_adder": 0,
+        "maze_number": MAZE_NUMBER_DEFAULT,
+        "maze_stride": 0,
         "treas_mazerand_num": TREASURE_MAZE_DEFAULT,
         "treas_mazerand_adder": 0,
     }
@@ -324,7 +320,7 @@ def _parse_rotation_image(data) -> dict | None:
         return None
     values = {}
     for name in _ROTATION_FIELDS:
-        value = data.get(name, data.get(_LEGACY_ROTATION_FIELDS.get(name)))
+        value = data.get(name)
         if not isinstance(value, int) or isinstance(value, bool):
             return None
         values[name] = value
@@ -382,7 +378,7 @@ def eeprom_load_settings(state: GameState) -> None:
     ``one_time_init`` sees that and installs ``game_default_settings``
     (ROM 0x40070 = 0xE090) instead, then writes it back so the part is
     programmed from then on. That is what this does: the settings word takes
-    the factory value and ``eeprom_cache_settings`` is synchronised with it, so
+    the factory value and ``eeprom_settings_cache`` is synchronised with it, so
     the first periodic write does not immediately re-flush a word nothing
     changed. Leaving ``game_settings`` on its dataclass default of 0 was wrong
     in a way the whole cabinet could feel -- difficulty 0, attract sound off,
@@ -425,7 +421,7 @@ def eeprom_load_settings(state: GameState) -> None:
         _install_factory_settings(state)
     else:
         state.game_settings = settings
-        state.eeprom_cache_settings = state.game_settings
+        state.eeprom_settings_cache = state.game_settings
     try:
         state.two_player_mode = int(
             data.get("two_player_mode", state.two_player_mode)
@@ -455,7 +451,7 @@ def _install_factory_settings(state: GameState) -> None:
     this" statement without a spurious flush.
     """
     state.game_settings = GAME_DEFAULT_SETTINGS & ~GSETTING_RESTORE_DEFAULTS
-    state.eeprom_cache_settings = state.game_settings
+    state.eeprom_settings_cache = state.game_settings
 
 
 def eeprom_save_settings(state: GameState) -> None:
@@ -496,7 +492,7 @@ def _stored_image(state: GameState) -> tuple[int | None, int | None, list, dict]
     back as the factory table, its rotation as the fresh-cabinet block, and its
     settings word is unknown (``None``). Only the ladders and the rotation are
     used for change detection -- the settings half stays on
-    ``eeprom_cache_settings``, the RAM shadow the ROM itself compares against
+    ``eeprom_settings_cache``, the RAM shadow the ROM itself compares against
     at 0x43262 -- but returning all three keeps "what is on the part" in one
     place.
     """
@@ -531,7 +527,7 @@ def eeprom_periodic_write(state: GameState) -> None:
     zero. It then reloads to ``EEPROM_WRITE_INTERVAL`` (0x8CA0, ~10 min
     @ 60Hz) and compares the current settings against the cached "last
     written" copy (0x904B94 in the original,
-    ``state.eeprom_cache_settings`` here). If they differ, ``eeprom_write``
+    ``state.eeprom_settings_cache`` here). If they differ, ``eeprom_write``
     flushes them and the cache is updated; if they match, nothing is written
     -- an EEPROM has a finite number of write cycles, and this is what
     protects them.
@@ -556,14 +552,14 @@ def eeprom_periodic_write(state: GameState) -> None:
     """
     if not state.eeprom_persistence_enabled:
         return
-    if state.timer_eepromwrite > 0:
-        state.timer_eepromwrite -= 1
-        if state.timer_eepromwrite > 0:
+    if state.eeprom_write_timer > 0:
+        state.eeprom_write_timer -= 1
+        if state.eeprom_write_timer > 0:
             return
-    state.timer_eepromwrite = EEPROM_WRITE_INTERVAL
+    state.eeprom_write_timer = EEPROM_WRITE_INTERVAL
 
     _stored_settings, stored_pricing, stored_scores, stored_rotation = _stored_image(state)
-    settings_changed = state.game_settings != state.eeprom_cache_settings
+    settings_changed = state.game_settings != state.eeprom_settings_cache
     pricing_changed = (
         state.two_player_mode != 1
         if stored_pricing is None
@@ -574,4 +570,4 @@ def eeprom_periodic_write(state: GameState) -> None:
 
     if settings_changed or pricing_changed or scores_changed or rotation_changed:
         eeprom_save_settings(state)
-        state.eeprom_cache_settings = state.game_settings
+        state.eeprom_settings_cache = state.game_settings

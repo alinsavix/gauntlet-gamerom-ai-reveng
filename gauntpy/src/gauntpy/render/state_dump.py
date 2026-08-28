@@ -25,43 +25,6 @@ _SCHEMA_1_ADDED_FIELDS = {
     "eeprom_persistence_enabled",
     "dialog_once_flags",
 }
-_SCHEMA_1_RENAMED_FIELDS = {
-    "bonus_timer": "global_ui_delay_timer",
-    "cull_rect_x": "monster_cull_h_origin",
-    "cull_rect_y": "monster_cull_v_origin",
-    "cyclic_wall_assign": "cycle_phase_assignments",
-    "cyclic_wall_phase": "wallcycle_type",
-    "cyclic_wall_timer": "wallcycle_time",
-    "dialog_box_rows": "dialog_dim_V",
-    "dialog_box_width": "dialog_dim_H",
-    "eeprom_settings_cache": "eeprom_cache_settings",
-    "eeprom_write_timer": "timer_eepromwrite",
-    "exit_move_timer": "exit_timer",
-    "forcefield_segments": "ff_segment_table",
-    "forcefield_hurt_timer": "ff_hurt_timer",
-    "forcefield_step": "ff_cycle_index",
-    "forcefield_step_timer": "ff_cycle_timer",
-    "maze_resume": "mazerand_num",
-    "maze_stride": "mazerand_adder",
-    "player_tile_pos": "player_tile_or_tport_dest",
-    "player_walk_dirs": "player_joystick",
-    "random_wall_current": "randwall_current",
-    "random_wall_low_mark": "randwall_low_watermark",
-    "random_wall_target": "randwall_target",
-    "random_wall_timer": "randwall_timer",
-    "secret_trick_id": "trick_tasknum",
-    "secret_trick_last": "trick_last",
-    "secret_winner": "trick_player",
-    "shot_sep_h": "shothit_dist_H",
-    "shot_sep_h_abs": "collision_dist_H",
-    "shot_sep_v": "shothit_dist_V",
-    "shot_sep_v_abs": "collision_dist_V",
-    "sound_holdoff": "speech_counter",
-    "sound_queue": "soundqueue",
-    "sound_retry_count": "sound_cpu_retry_count",
-    "spawn_probability_bonus": "monster_spawn_probability_bonus",
-    "vblank_flag": "vblank_semaphore",
-}
 
 
 class StateDumpError(ValueError):
@@ -284,10 +247,6 @@ def game_state_from_payload(payload: object) -> GameState:
     serialized = payload.get("state")
     if not isinstance(serialized, dict):
         raise StateDumpError("saved state has no GameState object")
-    for old_name, canonical_name in _SCHEMA_1_RENAMED_FIELDS.items():
-        if old_name in serialized and canonical_name not in serialized:
-            serialized[canonical_name] = serialized.pop(old_name)
-
     state = GameState()
     expected = {field.name for field in fields(state)}
     missing_fields = expected - set(serialized)

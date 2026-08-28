@@ -10,7 +10,7 @@ address,name,arguments,return,exceptional_convention,direct_control_sites,confid
 0x44A82,game_playfield_init,void,void,OS invokes this callback through the JMP veneer at game-ROM 0x40030,0x40030,Verified
 0x44DB4,show_level_start_screen,void,void,calls fixed draw_string service indirectly through A3 = 0x25A,0x442AC;0x4813A;0x48204,Verified
 0x4800C,main_start_game,void,void,,0x42B20,Verified
-0x4C9A2,demo_speech_cmd,"uint16 player_index, uint16 message_index",void,,0x4A5A8,Verified
+0x4C9A2,demo_message_show,"uint16 player_index, uint16 message_index",void,,0x4A5A8,Verified
 0x4CD1C,load_legend_page,uint16 page_selector,void,,0x44552;0x44856;0x4489C,Verified
 0x4CDB8,draw_legend_monsters_page,void,void,calls fixed draw_string service indirectly through A3 = 0x25A,0x4CDA8,Verified
 0x4CFAE,draw_legend_overview_page,void,void,,0x4CD94,Verified

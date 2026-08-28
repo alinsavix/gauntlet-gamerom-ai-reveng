@@ -700,7 +700,7 @@ each loaded timer, and gate **screen switching only**).
 
 **Demo playback is the engine running on recorded inputs** — the same
 `main_move_players` path, fed from per-player streams of `[timer, joystick]`
-pairs, with `0xFF` = speech and `0xFE` = player switch/end. Demo bytes are
+pairs, with `0xFF` = a dialog message and `0xFE` = player switch/end. Demo bytes are
 active low, like the hardware.
 
 The five attract-interruption test blocks are tabulated in §6.4 — note they

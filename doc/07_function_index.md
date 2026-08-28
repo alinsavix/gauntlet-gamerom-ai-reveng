@@ -79,7 +79,7 @@ The non-normal control-transfer cases in this group are:
 |---------|------|-------------------|
 | 0x42A66 | `g2mainloop` | Main game loop entry point; VBLANK-synchronized frame dispatch |
 | 0x4017E | `game_vblank` | Game-ROM VBLANK interrupt handler: acknowledge watchdog/VBLANK, publish scroll registers, increment the semaphore, update palette effects/timers (including the 16-frame IT-label alpha-palette alternation at 0x40328), and run the per-frame interrupt-side hooks before restoring registers |
-| 0x40528 | `main_cycle_tport_and_ffield` | Runs two independent palette cycles. Every fourth frame (`tport_cycle_divider` 0x904034 incremented and masked with 3) it adds `tport_cycle_dir` (0x904032) to `tport_cycle_pos` (0x904030) and bounces the direction to +1 at 0 or -1 once the position reaches 5. Independently it decrements `ff_cycle_timer` (0x904048) and, on zero, advances `ff_cycle_index` (0x904049) modulo 8 and reloads the timer with `random_word(8)` plus the profile byte from `ptr_ff_cycle_delay` (0x904042); on even indices `forcefield_color` (0x904046) is taken from the ROM table at 0x405C0 selected by bits 2–3 of `pf_vscroll_hi` (0x904006), and on odd indices it is cleared |
+| 0x40528 | `main_cycle_tport_and_ffield` | Runs two independent palette cycles. Every fourth frame (`tport_cycle_divider` 0x904034 incremented and masked with 3) it adds `tport_cycle_dir` (0x904032) to `tport_cycle_pos` (0x904030) and bounces the direction to +1 at 0 or -1 once the position reaches 5. Independently it decrements `forcefield_step_timer` (0x904048) and, on zero, advances `forcefield_step` (0x904049) modulo 8 and reloads the timer with `random_word(8)` plus the profile byte from `ptr_ff_cycle_delay` (0x904042); on even indices `forcefield_color` (0x904046) is taken from the ROM table at 0x405C0 selected by bits 2–3 of `pf_vscroll_hi` (0x904006), and on odd indices it is cleared |
 | 0x42B6A | `coincheck` | Per-frame coin/start input and player-credit handling |
 | 0x44562 | `main_attract` | Attract mode state machine (SCORES→TITLE→DEMO→LEGEND); in NORMAL with no live player it also writes the continue seconds field at alpha (13,14) once per second |
 | 0x457C0 | `main_score_display` | Updates one player's score, health, bonus-multiplier, low-health/acid palette effect, and IT-label HUD state each frame |
@@ -92,7 +92,7 @@ The non-normal control-transfer cases in this group are:
 | 0x474F6 | `main_handle_shots` | Per-frame processing for exactly 12 projectile slots (0–3 player, 4–7 ordinary monster, 8–11 special/dragon): decrements each slot's animation/lifetime counter, reloads it from the character/slot-indexed table at 0x578C2 when appropriate, advances the class-specific picture sequence, performs MOB/tile collision and visibility handling, and removes or explodes expired shots |
 | 0x4800C | `main_start_game` | Per-frame game-start and level-transition state machine: when a completed DEMO has zero active players and shared effect slots 13-16 are clear, resets the puppet party and expires the attract timer instead of loading `level_next`; otherwise waits on presentation timers, initializes normal or secret levels, places active players, and handles join/continue and secret-room bookkeeping |
 | 0x49034 | `main_move_monsters` | Per-frame monster movement/AI dispatch |
-| 0x4A53A | `main_move_players` | Per-frame per-player update looping `D4` 0–3 and setting `current_player` (0x904876): in demo mode (`game_mode` = -3) it decodes the `demo_ptr` byte stream, routing 0xFF to `demo_speech_cmd` and joins to `player_join`; each player then dispatches on `player_status` (0x9049A0) for secret-entry, death, join or active. The active path ticks the invis/repulse/acid/dizzy timers; normal play remaps the direction nibble through 0x4A4FA while dizziness remains; then it moves via `player_try_move`, fires via `player_create_shot`, tests forcefields via `check_forcefield_collision`, updates the sprite frame, and drives `open_timed_doors` and the 0x5208 escape timeout into `maze_convert_walls_to_exits`. |
+| 0x4A53A | `main_move_players` | Per-frame per-player update looping `D4` 0–3 and setting `current_player` (0x904876): in demo mode (`game_mode` = -3) it decodes the `demo_ptr` byte stream, routing 0xFF to `demo_message_show` and joins to `player_join`; each player then dispatches on `player_status` (0x9049A0) for secret-entry, death, join or active. The active path ticks the invis/repulse/acid/dizzy timers; normal play remaps the direction nibble through 0x4A4FA while dizziness remains; then it moves via `player_try_move`, fires via `player_create_shot`, tests forcefields via `check_forcefield_collision`, updates the sprite frame, and drives `open_timed_doors` and the 0x5208 escape timeout into `maze_convert_walls_to_exits`. |
 | 0x4AE20 | `main_update_sound` | Processes sound queue and sends to sound CPU |
 | 0x4CCBC | `main_msgbox_countdown` | Decrements the dialog timer through the pointer at 0x904A9E and, only on the transition to zero, erases the message box by walking 0x904A9C rows × 0x904A9A columns, clearing each word through the auto-incrementing write pointer at 0x904A96 and advancing it by `(0x40 - width) × 2` per row |
 | 0x4D29E | `main_treasure_timer` | Decrements `treasure_timer` (0x9049E8) each frame while the UI delay and `game_mode` allow it and the maze number is at least 0x68; `divu.w #0x3C` converts frames to seconds and each new second announces the count through OS `display_large_decimal_value` (0x272) at alpha (34,2) plus `sound_play` using the voice tables at 0x5ABE0/0x5ABF0/0x5AC08, and reaching zero calls `show_level_end_bonus_screen` when a player remains |
@@ -335,7 +335,7 @@ use the normal convention from `03_game_rom_structure.md` §3.
 | 0x48BEC | `player_start_inner` | `uint16 player_index` | D0.l=-1 on successful placement/MOB initialization; 0 when no spawn position is usable | — |
 | 0x49DE6 | `player_death_sequence` | `uint16 player_index` | void | — |
 | 0x4A2CA | `draw_player_initials_entry` | `uint16 player_index` | void | — |
-| 0x4D1A4 | `secret_bonus_earned` | void | D0.l=-1 when challenge progress earns the secret-room coin bonus; 0 otherwise | — |
+| 0x4D1A4 | `secret_check_winner` | void | D0.l=-1 when challenge progress earns the secret-room coin bonus; 0 otherwise | — |
 | 0x4D476 | `show_level_end_bonus_screen` | void | void | Calls fixed `draw_string` through A3=0x25A |
 | 0x4D900 | `player_activecount` | void | D0.l=0..4 count of statuses 1, 2, 8, or 0x10 | — |
 
@@ -706,7 +706,7 @@ exceptional conventions below. Normal rows use the stack ABI from
 | 0x4C72A | `player_give_item_with_message` | `uint16 player_index, uint16 item_index` | `D0.l=1` newly granted, 0 already owned | — |
 | 0x4CB50 | `dialog_position_box` | `int16 player_index_or_minus1` | void | — |
 | 0x4CCBC | `main_msgbox_countdown` | void | void | — |
-| 0x4D1A4 | `secret_bonus_earned` | void | `D0.l=-1` when challenge progress earns the secret-room coin bonus, else 0 | — |
+| 0x4D1A4 | `secret_check_winner` | void | `D0.l=-1` when challenge progress earns the secret-room coin bonus, else 0 | — |
 | 0x4DE76 | `score_screen_color_cycle` | void | void | — |
 | 0x5214C | `player_add_score_with_mult` | `uint16 player_index, uint16 base_score` | void | — |
 
@@ -1076,8 +1076,8 @@ These functions are called from multiple top-level subsystems:
 
 | Address | Name | Brief Description |
 |---------|------|-------------------|
-| 0x42DC8 | `sound_system_reset` | Flush sound ring buffer, reset speech counter, send HW reset |
-| 0x4C9A2 | `demo_speech_cmd` | Renders the scripted demo dialog selected by `message_index`: indexes the record table at 0x5815C by index × 4, sets `dialog_timer` (0x904A9E), derives the box width and height from the record fields plus `string_length`, positions it with `dialog_position_box`, emits the glyphs into `dialog_msg_buf` (0x904AA4) through OS `draw_string`, and finally sets the timer to 0x96 or 0x78 according to bit 0x400 of `game_settings`. The 0xFF stream marker is tested by the caller `main_move_players` at 0x4A59E, not here |
+| 0x42DC8 | `sound_system_reset` | Flush the sound ring, load the recovery holdoff, and send the hardware reset |
+| 0x4C9A2 | `demo_message_show` | Renders the scripted demo dialog selected by `message_index`: indexes the record table at 0x5815C by index × 4, sets `dialog_timer` (0x904A9E), derives the box width and height from the record fields plus `string_length`, positions it with `dialog_position_box`, emits the glyphs into `dialog_msg_buf` (0x904AA4) through OS `draw_string`, and finally sets the timer to 0x96 or 0x78 according to bit 0x400 of `game_settings`. The 0xFF stream marker is tested by the caller `main_move_players` at 0x4A59E, not here |
 | 0x48BEC | `player_start_inner` | Find a usable spawn tile, install character-specific RAM jump stubs, initialize player state/MOB data (including clearing `player_death_damage_counter`), and return -1 on success or 0 when placement fails. Called for active players during normal level entry and for mid-level joins. |
 | 0x48F12 | `tile_occupancy_test` (aka `check_tile_passable`) | Return -1 only for an in-bounds empty candidate whose eight neighboring cells contain no MOB within 0x7C0 on both rendered axes |
 | 0x55440 | `name_entry_step_char` | Increment/decrement and wrap a name-entry character through space, A–Z, and optional backspace |
@@ -1103,7 +1103,7 @@ These functions are called from multiple top-level subsystems:
 | 0x459A2 | `draw_player_health` | Draw bonus multiplier “×N” when greater than one and the player's 5-digit HEALTH value; apply low-health/acid palette dimming and clear `player_redraw` bit 1. This is numeric HUD rendering, not a health bar or lives display. |
 | 0x4A2CA | `draw_player_initials_entry` | Render the score-per-coin value, high-score rank, “Enter your initials” labels, and the three editable initial sprites for one player |
 | 0x54AF8 | `dragon_any_segment_near_screen` | Test the dragon's four segment positions with the indirect stack entry at 0x5E5D8; returns -1 when any segment is within the wider playfield window and 0 otherwise. Used by the potion handler's dragon-effect path. |
-| 0x4D1A4 | `secret_bonus_earned` | Check the active secret-challenge code/progress and return whether the entrant earns the 5,000-per-coin secret-room bonus |
+| 0x4D1A4 | `secret_check_winner` | Check the active secret-challenge code/progress and return whether the entrant earns the 5,000-per-coin secret-room bonus |
 | 0x489B8 | `remove_dying_player_sprites` | Remove the two auxiliary sprite slots associated with a dying/departing player and clear that player's animation-state word |
 | 0x50B88 | `tport_restore_player_picture` | Stack-argument leaf: maps `player_index` through `ram.active_mob_ids` (0x9048C8), then restores that MOB's picture word in `vram.mob_picture` (0x902000) from `ram.tport_saved_picture` (0x904BC4) when transporter movement completes |
 | 0x4119A | `monster_special_handler` | Per-MOB AI body inside the monster loop (`D2` slot, `D4`/`D5` state, `D6` type): probes four directions with `ray_march_up`/`down`/`left`/`right` using the heading in `mob_state` bits 0x1C00, relocates the MOB into the chosen empty cell with `move_mob_slot`, fires through `monster_find_and_shoot`, damages overlapping players via `monster_playerhit`, and handles the teleport/phase types by adding 0x2000 to the state word plus the acid (0x1C) and IT-chase (0x24) cases driven by `random_word` |
@@ -1130,7 +1130,7 @@ These functions are called from multiple top-level subsystems:
 | 0x50BB8 | `scan_move_path_interactions` | Repeatedly call a directional neighbor probe and resolve each encountered interior MOB/tile until the probe fails or the path is blocked |
 | 0x50C7A | `resolve_move_tile_interaction` | Resolve a traversed tile; return -1 for blocking/preserved interactions and zero after removable-object cleanup, recursively retrying type 0x0F after thief/exit cleanup |
 | 0x50D14 | `nearby_mob_clearance_test` | Scan eight neighboring cells and return -1 unless a qualifying MOB falls within the 0x7C0-by-0x7C0 rendered-axis window |
-| 0x51E80 | `door_record_endpoints` | Classify a door picture and populate one two-ended door record in 0x904A76 (positions) and 0x904A86 (endpoint direction codes) |
+| 0x51E80 | `door_open_start` | Classify a door picture, populate one two-ended record in 0x904A76/0x904A86, and immediately call `main_open_doors` |
 | 0x51FAE | `door_scan_vertical_endpoints` | Test the immediate above/below cells, append direction codes 0/2, and return the endpoint count capped at two |
 | 0x5207C | `door_scan_horizontal_endpoints` | Test the immediate left/right cells, append direction codes 3/1, and return the endpoint count capped at two |
 
@@ -1150,7 +1150,7 @@ are stated where the former prose did not establish an ABI.
 | 0x51000 | `path_grid_set_high_direction_if_empty` | `uint16 grid_index, uint8 direction` | void | Disabled by thief-mode bit 1; writes only an empty high nibble |
 | 0x5103E | `path_grid_get_direction` | `uint16 grid_index` | D0.l=direction 0–7; 8 unset/invalid | Bit 1 selects high nibble, otherwise low |
 | 0x510FC | `calc_direction` | `uint16 from_packed_slot, uint16 to_packed_slot` | D0.w=direction 0–7; 8 if equal | Honors horizontal/vertical wrap flags |
-| 0x51E80 | `door_record_endpoints` | `uint16 packed_door_slot, uint16 player_index, uint16 door_object_type` | void | Fills the player's two endpoint records and calls `main_open_doors` |
+| 0x51E80 | `door_open_start` | `uint16 packed_door_slot, uint16 player_index, uint16 door_object_type` | void | Fills the player's two endpoint records and calls `main_open_doors` |
 | 0x51FAE | `door_scan_vertical_endpoints` | `uint16 packed_door_slot, uint16 player_index, uint16 next_endpoint_index` | D0.l=updated index, capped at 2 | Immediate above/below only; direction codes 0/2 |
 | 0x5207C | `door_scan_horizontal_endpoints` | `uint16 packed_door_slot, uint16 player_index, uint16 next_endpoint_index` | D0.l=updated index, capped at 2 | Immediate left/right only; direction codes 3/1 |
 
@@ -1210,7 +1210,7 @@ exception cells use the normal convention from `03_game_rom_structure.md` §3.
 | 0x44A82 | `game_playfield_init` | void | void | OS reaches it through the JMP veneer at 0x40030 |
 | 0x44DB4 | `show_level_start_screen` | void | void | Calls fixed `draw_string` through A3=0x25A |
 | 0x4800C | `main_start_game` | void | void | — |
-| 0x4C9A2 | `demo_speech_cmd` | `uint16 player_index`, `uint16 message_index` | void | — |
+| 0x4C9A2 | `demo_message_show` | `uint16 player_index`, `uint16 message_index` | void | — |
 | 0x4CD1C | `load_legend_page` | `uint16 page_selector` | void | — |
 | 0x4CDB8 | `draw_legend_monsters_page` | void | void | Calls fixed `draw_string` through A3=0x25A |
 | 0x4CFAE | `draw_legend_overview_page` | void | void | — |

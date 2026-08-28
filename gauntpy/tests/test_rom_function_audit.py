@@ -7,6 +7,7 @@ from dataclasses import fields
 import importlib
 from pathlib import Path
 import re
+import subprocess
 
 from gauntpy.state import GameState
 
@@ -115,14 +116,14 @@ def test_direct_python_ports_keep_canonical_function_names():
         0x488CA: ("gauntpy.subsystems.session", "player_coindrop"),
         0x4A124: ("gauntpy.subsystems.score", "attract_highscores"),
         0x4A2CA: ("gauntpy.subsystems.score", "draw_player_initials_entry"),
-        0x4C9A2: ("gauntpy.subsystems.score", "demo_speech_cmd"),
+        0x4C9A2: ("gauntpy.subsystems.score", "demo_message_show"),
         0x4CB50: ("gauntpy.subsystems.score", "dialog_position_box"),
         0x4CD1C: ("gauntpy.subsystems.attract", "load_legend_page"),
-        0x4D1A4: ("gauntpy.subsystems.exits", "secret_bonus_earned"),
+        0x4D1A4: ("gauntpy.subsystems.exits", "secret_check_winner"),
         0x4D900: ("gauntpy.subsystems.exits", "player_activecount"),
         0x4E7C0: ("gauntpy.subsystems.maze_objects", "tport_find_id"),
         0x50BB8: ("gauntpy.subsystems.players", "scan_move_path_interactions"),
-        0x51E80: ("gauntpy.subsystems.players", "door_record_endpoints"),
+        0x51E80: ("gauntpy.subsystems.players", "door_open_start"),
         0x5214C: ("gauntpy.subsystems.shots", "player_add_score_with_mult"),
         0x540E8: ("gauntpy.subsystems.dragon", "dragon_find_free_shot_slot"),
         0x545FA: ("gauntpy.subsystems.dragon", "dragon_head_pose_update"),
@@ -174,37 +175,39 @@ def test_crosswalk_source_paths_exist():
 def test_modeled_ram_fields_keep_canonical_data_reference_names():
     addressed_fields = {
         0x904002: "vblank_semaphore",
-        0x90400E: "mazerand_adder",
-        0x904010: "mazerand_num",
-        0x904012: "timer_eepromwrite",
-        0x90401A: "wallcycle_time",
-        0x90401C: "wallcycle_type",
-        0x904048: "ff_cycle_timer",
-        0x904049: "ff_cycle_index",
-        0x90404B: "soundqueue",
+        0x90400E: "maze_stride",
+        0x904010: "maze_number",
+        0x904012: "eeprom_write_timer",
+        0x90401A: "cyclic_wall_timer",
+        0x90401C: "cyclic_wall_phase",
+        0x904048: "forcefield_step_timer",
+        0x904049: "forcefield_step",
+        0x90404B: "sound_queue",
         0x90405F: "monster_spawn_probability_bonus",
-        0x904063: "trick_player",
-        0x904064: "trick_last",
-        0x904065: "trick_tasknum",
-        0x9048A0: "randwall_low_watermark",
-        0x9048A2: "randwall_target",
-        0x9048A4: "randwall_current",
-        0x9048A6: "randwall_timer",
+        0x904063: "secret_player",
+        0x904064: "secret_trick_last",
+        0x904065: "secret_trick_id",
+        0x9048A0: "random_wall_low_mark",
+        0x9048A2: "random_wall_target",
+        0x9048A4: "random_wall_current",
+        0x9048A6: "random_wall_timer",
         0x9048F0: "player_joystick",
-        0x9049EE: "speech_counter",
-        0x9049F4: "sound_cpu_retry_count",
+        0x9049EE: "sound_holdoff",
+        0x9049F4: "sound_retry_count",
         0x904024: "collision_dist_H",
         0x904026: "collision_dist_V",
         0x904028: "shothit_dist_H",
         0x90402A: "shothit_dist_V",
-        0x904A08: "exit_timer",
-        0x904A4E: "global_ui_delay_timer",
+        0x904A08: "exit_move_timer",
+        0x904A4E: "global_delay_timer",
         0x904A62: "monster_cull_h_origin",
         0x904A64: "monster_cull_v_origin",
-        0x904A9A: "dialog_dim_H",
-        0x904A9C: "dialog_dim_V",
-        0x904B4A: "ff_hurt_timer",
-        0x904B94: "eeprom_cache_settings",
+        0x904A9A: "dialog_box_width",
+        0x904A9C: "dialog_box_height",
+        0x904B4A: "forcefield_hurt_timer",
+        0x904B94: "eeprom_settings_cache",
+        0x910600: "cyclic_wall_assignments",
+        0x910780: "forcefield_segment_table",
     }
     canonical = _addressed_names(DATA_REFERENCE, 3, all_names=True)
     modeled = {field.name for field in fields(GameState)}
@@ -212,6 +215,63 @@ def test_modeled_ram_fields_keep_canonical_data_reference_names():
     for address, name in addressed_fields.items():
         assert name in canonical[address]
         assert name in modeled
+
+
+def test_approved_names_replace_stale_identifiers_on_tracked_audit_surfaces():
+    stale_names = {
+        "ff_" + "hurt_timer",
+        "ff_" + "cycle_index",
+        "ff_" + "cycle_timer",
+        "forcefield_" + "segments",
+        "ff_" + "segment_table",
+        "wallcycle_" + "time",
+        "wallcycle_" + "type",
+        "wallcycle_type_" + "pad",
+        "cyclic_wall_" + "assign",
+        "cycle_phase_" + "assignments",
+        "randwall_" + "timer",
+        "randwall_" + "low_watermark",
+        "randwall_" + "target",
+        "randwall_" + "current",
+        "dialog_dim_" + "H",
+        "dialog_box_" + "rows",
+        "dialog_dim_" + "V",
+        "exit_" + "timer",
+        "secret_" + "winner",
+        "trick_" + "player",
+        "trick_" + "tasknum",
+        "trick_" + "last",
+        "bonus_" + "timer",
+        "global_ui_delay_" + "timer",
+        "sound" + "queue",
+        "speech_" + "counter",
+        "sound_cpu_retry_" + "count",
+        "timer_" + "eepromwrite",
+        "eeprom_cache_" + "settings",
+        "maze_" + "resume",
+        "mazerand_" + "num",
+        "mazerand_" + "adder",
+        "secret_bonus_" + "earned",
+        "door_record_" + "endpoints",
+        "demo_speech_" + "cmd",
+    }
+    result = subprocess.run(
+        ["git", "ls-files"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    violations = []
+    for relative in result.stdout.splitlines():
+        path = ROOT / relative
+        if path.suffix not in {".py", ".md", ".csv", ".json", ".r2"}:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for name in stale_names:
+            if re.search(rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])", text):
+                violations.append((relative, name))
+    assert not violations
 
 
 def test_literal_tables_keep_canonical_data_reference_names():

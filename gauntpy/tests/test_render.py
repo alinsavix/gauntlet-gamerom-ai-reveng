@@ -1050,7 +1050,7 @@ class TestHud:
         state = GameState()
         state.dialog_timer = 30
         state.dialog_message = ["HELLO"]
-        state.dialog_dim_V, state.dialog_dim_H = 3, 5
+        state.dialog_box_height, state.dialog_box_width = 3, 5
 
         fb_dialog = Framebuffer(336, 240)
         draw_hud(fb_dialog, state, HUD_PANEL)
@@ -1098,8 +1098,8 @@ class TestMessageBox:
         draw_message_box(fb, state, PLAYFIELD_VIEWPORT)
 
         vx, vy, vw, vh = PLAYFIELD_VIEWPORT
-        expected_h = state.dialog_dim_V * 8
-        expected_w = (state.dialog_dim_H + 2) * 8
+        expected_h = state.dialog_box_height * 8
+        expected_w = (state.dialog_box_width + 2) * 8
         top = vy + state.dialog_box_row * 8
         left = vx + state.dialog_box_column * 8
         top_word = state.alpha_ram[

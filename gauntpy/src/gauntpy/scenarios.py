@@ -296,10 +296,10 @@ def digest_state(state: GameState) -> dict:
         "creatures": dict(sorted(creature_counts.items())),
         "shots": shots,
         "forcefield": {
-            "step": state.ff_cycle_index,
-            "timer": state.ff_cycle_timer,
+            "step": state.forcefield_step,
+            "timer": state.forcefield_step_timer,
             "color": state.forcefield_color,
-            "segments": list(state.ff_segment_table),
+            "segments": list(state.forcefield_segment_table),
         },
         "dragon": {
             "slot": state.dragon_mob_slot,

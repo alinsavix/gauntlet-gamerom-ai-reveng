@@ -97,7 +97,7 @@ def start_attract_to_game(state: GameState) -> None:
 
     Also clears the transition machinery the ROM resets here: the theme fade and
     session-start sounds (0x4425A/0x4429A), the bonus/treasure hold
-    (``global_ui_delay_timer`` = 0 at 0x44366) and the attract countdown, which
+    (``global_delay_timer`` = 0 at 0x44366) and the attract countdown, which
     is parked on its 0xFFFF disabled sentinel at 0x4436C so ``main_attract``
     stops running until a screen loads a timer again.
     """
@@ -117,7 +117,7 @@ def start_attract_to_game(state: GameState) -> None:
     state.mugger_item_carried = 0       # 0x44286-0x4428E
     state.mugger_item_nextlevel = 0
     sound_play(state, 0x02)             # 0x4429A session-start sting
-    state.global_ui_delay_timer = 0               # 0x44366 global_ui_delay_timer
+    state.global_delay_timer = 0               # 0x44366 global_delay_timer
     state.bonus_amount = 0
     state.treasure_timer = 0
     state.level_treasures = 0
@@ -312,10 +312,10 @@ def _cancel_solo_only_trick(state: GameState) -> None:
     """
     from .exits import _TRICK_MULTIPLAYER_FIRST, _TRICK_MULTIPLAYER_LAST, TRICK_NONE
 
-    if not _TRICK_MULTIPLAYER_FIRST <= state.trick_tasknum <= _TRICK_MULTIPLAYER_LAST:
+    if not _TRICK_MULTIPLAYER_FIRST <= state.secret_trick_id <= _TRICK_MULTIPLAYER_LAST:
         return
     if state.level_players_active == 1:
-        state.trick_tasknum = TRICK_NONE
+        state.secret_trick_id = TRICK_NONE
 
 
 def main_start_game(state: GameState) -> None:
@@ -368,12 +368,12 @@ def main_start_game(state: GameState) -> None:
             main_msgbox_countdown(state)                           # 0x480DC
         return
 
-    # global_ui_delay_timer is decremented here, outside the dialog-gated world
+    # global_delay_timer is decremented here, outside the dialog-gated world
     # band (0x4817C). This keeps level splashes advancing even while a message
     # box freezes gameplay.
-    if state.global_ui_delay_timer > 0:
-        state.global_ui_delay_timer -= 1
-        if state.global_ui_delay_timer == 0:
+    if state.global_delay_timer > 0:
+        state.global_delay_timer -= 1
+        if state.global_delay_timer == 0:
             from .exits import (
                 _exiting_or_here,
                 _finish_level_end,

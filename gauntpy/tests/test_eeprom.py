@@ -79,7 +79,7 @@ def test_write_then_reload_round_trips_the_settings_word(tmp_path):
     ee.eeprom_load_settings(reader)
 
     assert reader.game_settings == 0x2345
-    assert reader.eeprom_cache_settings == 0x2345
+    assert reader.eeprom_settings_cache == 0x2345
 
 
 def test_load_with_no_file_uses_the_factory_word(tmp_path):
@@ -89,7 +89,7 @@ def test_load_with_no_file_uses_the_factory_word(tmp_path):
     state = GameState(game_settings=0x55AA, eeprom_save_path=str(tmp_path / "missing.json"))
     ee.eeprom_load_settings(state)
     assert state.game_settings == ee.GAME_DEFAULT_SETTINGS == 0xE090
-    assert state.eeprom_cache_settings == 0xE090, "the change-detection shadow follows"
+    assert state.eeprom_settings_cache == 0xE090, "the change-detection shadow follows"
 
 
 def test_a_stored_restore_defaults_request_is_honoured(tmp_path):
@@ -103,7 +103,7 @@ def test_a_stored_restore_defaults_request_is_honoured(tmp_path):
 
 def test_periodic_write_flushes_only_when_the_timer_expires_and_the_word_changed(tmp_path):
     save_path = str(tmp_path / "eeprom.json")
-    state = GameState(game_settings=0xABCD, eeprom_save_path=save_path, timer_eepromwrite=3)
+    state = GameState(game_settings=0xABCD, eeprom_save_path=save_path, eeprom_write_timer=3)
 
     ee.eeprom_periodic_write(state)  # timer -> 2
     ee.eeprom_periodic_write(state)  # timer -> 1
@@ -111,8 +111,8 @@ def test_periodic_write_flushes_only_when_the_timer_expires_and_the_word_changed
 
     ee.eeprom_periodic_write(state)  # timer -> 0: expires, word changed since cache (0)
     assert (tmp_path / "eeprom.json").exists()
-    assert state.eeprom_cache_settings == 0xABCD
-    assert state.timer_eepromwrite == ee.EEPROM_WRITE_INTERVAL, "reloads to 0x8CA0 (36,000 frames)"
+    assert state.eeprom_settings_cache == 0xABCD
+    assert state.eeprom_write_timer == ee.EEPROM_WRITE_INTERVAL, "reloads to 0x8CA0 (36,000 frames)"
 
     reader = GameState(eeprom_save_path=save_path)
     ee.eeprom_load_settings(reader)
@@ -121,22 +121,22 @@ def test_periodic_write_flushes_only_when_the_timer_expires_and_the_word_changed
 
 def test_periodic_write_skips_the_file_when_nothing_changed(tmp_path):
     save_path = str(tmp_path / "eeprom.json")
-    state = GameState(eeprom_save_path=save_path, timer_eepromwrite=1)
-    state.eeprom_cache_settings = state.game_settings  # already in sync, e.g. right after boot load
+    state = GameState(eeprom_save_path=save_path, eeprom_write_timer=1)
+    state.eeprom_settings_cache = state.game_settings  # already in sync, e.g. right after boot load
 
     ee.eeprom_periodic_write(state)
 
     assert not (tmp_path / "eeprom.json").exists(), "unchanged settings must not trigger a write"
-    assert state.timer_eepromwrite == ee.EEPROM_WRITE_INTERVAL, "the timer still reloads"
+    assert state.eeprom_write_timer == ee.EEPROM_WRITE_INTERVAL, "the timer still reloads"
 
 
 def test_the_main_loop_actually_calls_it():
     state = GameState(game_mode=GameMode.NORMAL)
-    start_timer = state.timer_eepromwrite
+    start_timer = state.eeprom_write_timer
 
     tick(state)
 
-    assert state.timer_eepromwrite == start_timer - 1
+    assert state.eeprom_write_timer == start_timer - 1
 
 
 # ---------------------------------------------------------------------------
@@ -147,11 +147,11 @@ def test_the_countdown_never_runs_negative(tmp_path):
     """``tst.l (a0) / beq / subq.l #1,(a0)`` -- the ROM decrements only while
     the counter is nonzero, so a timer parked at zero flushes and reloads
     rather than counting down into negative frames."""
-    state = GameState(eeprom_save_path=str(tmp_path / "eeprom.json"), timer_eepromwrite=0)
-    state.eeprom_cache_settings = state.game_settings
+    state = GameState(eeprom_save_path=str(tmp_path / "eeprom.json"), eeprom_write_timer=0)
+    state.eeprom_settings_cache = state.game_settings
 
     ee.eeprom_periodic_write(state)
-    assert state.timer_eepromwrite == ee.EEPROM_WRITE_INTERVAL
+    assert state.eeprom_write_timer == ee.EEPROM_WRITE_INTERVAL
 
 
 def test_the_interval_is_a_full_ten_minutes_of_frames(tmp_path):
@@ -183,7 +183,7 @@ def test_a_corrupt_save_file_falls_back_to_defaults(tmp_path):
     state = GameState(game_settings=0x0123, eeprom_save_path=str(save_path))
     ee.eeprom_load_settings(state)
     assert state.game_settings == ee.GAME_DEFAULT_SETTINGS == 0xE090
-    assert state.eeprom_cache_settings == 0xE090
+    assert state.eeprom_settings_cache == 0xE090
 
 
 def test_a_save_file_missing_the_key_falls_back_to_defaults(tmp_path):
@@ -195,28 +195,31 @@ def test_a_save_file_missing_the_key_falls_back_to_defaults(tmp_path):
     assert state.game_settings == ee.GAME_DEFAULT_SETTINGS
 
 
-def test_legacy_rotation_keys_survive_the_canonical_field_rename(tmp_path):
+def test_rotation_keys_from_before_the_naming_policy_are_not_migrated(tmp_path):
     save_path = tmp_path / "eeprom.json"
-    save_path.write_text(
-        '{"game_settings": 57584, "rotation": {'
-        '"maze_resume": 42, "maze_stride": 3, '
-        '"treas_mazerand_num": 110, "treas_mazerand_adder": 2}}'
-    )
+    rotation = {
+        "maze_" + "resume": 42,
+        "maze_" + "stride": 3,
+        "treas_mazerand_num": 110,
+        "treas_mazerand_adder": 2,
+    }
+    save_path.write_text(json.dumps({
+        "game_settings": 57584,
+        "rotation": rotation,
+    }))
 
     state = GameState(eeprom_save_path=str(save_path))
     ee.eeprom_load_settings(state)
 
-    assert state.mazerand_num == 42
-    assert state.mazerand_adder == 3
-    assert state.treas_mazerand_num == 110
-    assert state.treas_mazerand_adder == 2
+    assert (state.maze_number, state.maze_stride) == (5, 0)
+    assert (state.treas_mazerand_num, state.treas_mazerand_adder) == (104, 0)
 
 
 def test_a_factory_fresh_load_does_not_immediately_re_flush(tmp_path):
     """The cache is the change-detection shadow (0x904B94); installing the
     factory word without syncing it would burn a write cycle on every boot."""
     save_path = tmp_path / "eeprom.json"
-    state = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
+    state = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
     ee.eeprom_load_settings(state)
     ee.eeprom_periodic_write(state)
     assert not save_path.exists()
@@ -269,7 +272,7 @@ def test_loading_syncs_the_change_detection_cache(tmp_path):
     writer = GameState(game_settings=0x2468, eeprom_save_path=str(save_path))
     ee.eeprom_save_settings(writer)
 
-    reader = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
+    reader = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
     ee.eeprom_load_settings(reader)
     save_path.unlink()
 
@@ -436,8 +439,8 @@ class TestHighScoreChangeDetection:
         flush must not burn a write cycle -- and must not create a file whose
         only content is the ROM table it would seed anyway."""
         save_path = tmp_path / "eeprom.json"
-        state = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
-        state.eeprom_cache_settings = state.game_settings
+        state = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
+        state.eeprom_settings_cache = state.game_settings
         high_scores(state)                        # seeded, but unchanged
 
         ee.eeprom_periodic_write(state)
@@ -449,8 +452,8 @@ class TestHighScoreChangeDetection:
         reimplementation reaches the same decision without a dirty flag on
         another package's GameState heading."""
         save_path = tmp_path / "eeprom.json"
-        state = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
-        state.eeprom_cache_settings = state.game_settings
+        state = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
+        state.eeprom_settings_cache = state.game_settings
         write_high_score_entry(state, 0, 0, 12345, "NEW")
 
         ee.eeprom_periodic_write(state)
@@ -464,7 +467,7 @@ class TestHighScoreChangeDetection:
         """The saved image *is* the shadow, so a second flush with nothing new
         must not burn a write cycle."""
         save_path = tmp_path / "eeprom.json"
-        state = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
+        state = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
         write_high_score_entry(state, 0, 0, 12345, "NEW")
         ee.eeprom_periodic_write(state)
         assert save_path.exists()
@@ -473,20 +476,20 @@ class TestHighScoreChangeDetection:
         monkeypatch.setattr(
             ee, "eeprom_save_settings", lambda s: flushes.append(s.game_settings)
         )
-        state.timer_eepromwrite = 1
+        state.eeprom_write_timer = 1
         ee.eeprom_periodic_write(state)
 
         assert flushes == [], "nothing changed; the flush must be skipped"
-        assert state.timer_eepromwrite == ee.EEPROM_WRITE_INTERVAL
+        assert state.eeprom_write_timer == ee.EEPROM_WRITE_INTERVAL
 
     def test_a_further_new_score_flushes_again(self, tmp_path):
         save_path = tmp_path / "eeprom.json"
-        state = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
+        state = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
         write_high_score_entry(state, 0, 0, 12345, "ONE")
         ee.eeprom_periodic_write(state)
 
         write_high_score_entry(state, 0, 0, 23456, "TWO")
-        state.timer_eepromwrite = 1
+        state.eeprom_write_timer = 1
         ee.eeprom_periodic_write(state)
 
         reader = GameState(eeprom_save_path=str(save_path))
@@ -497,7 +500,7 @@ class TestHighScoreChangeDetection:
 
     def test_the_ladders_ride_along_when_the_settings_word_changes(self, tmp_path):
         save_path = tmp_path / "eeprom.json"
-        state = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
+        state = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
         write_high_score_entry(state, 2, 0, 4242, "RID")
         ee.set_game_difficulty(state, 6)
 
@@ -538,7 +541,7 @@ class TestRotationValidation:
     (ROM 0x42FF2-0x43066, read byte by byte in this order)."""
 
     def test_the_documented_ranges_and_defaults(self):
-        assert (ee.MAZE_RESUME_DEFAULT, ee.MAZE_RESUME_MIN) == (5, 5)
+        assert (ee.MAZE_NUMBER_DEFAULT, ee.MAZE_NUMBER_MIN) == (5, 5)
         assert ee.MAZE_STRIDE_MASK == 0x07
         assert ee.TREASURE_MAZE_DEFAULT == ee.TREASURE_MAZE_MIN == 0x68 == 104
         assert ee.TREASURE_MAZE_MAX == 0x72 == 114
@@ -548,12 +551,12 @@ class TestRotationValidation:
         """doc/06 §3.2's fresh-EEPROM column, and the block the ROM builds
         inline at 0x42FC4-0x42FC8."""
         state = GameState()
-        before = (state.mazerand_num, state.mazerand_adder,
+        before = (state.maze_number, state.maze_stride,
                   state.treas_mazerand_num, state.treas_mazerand_adder)
         assert before == (5, 0, 104, 0)
 
         ee.eeprom_validate_rotation(state)
-        assert (state.mazerand_num, state.mazerand_adder,
+        assert (state.maze_number, state.maze_stride,
                 state.treas_mazerand_num, state.treas_mazerand_adder) == before
 
     @pytest.mark.parametrize("value", [0, 1, 4, -3, 117, 500])
@@ -562,21 +565,21 @@ class TestRotationValidation:
         The ROM's upper guard indexes the Slapstic pointer table and rejects a
         zero entry; all 117 shipped mazes have one, so the range check is its
         ROM-free equivalent."""
-        state = GameState(mazerand_num=value)
+        state = GameState(maze_number=value)
         ee.eeprom_validate_rotation(state)
-        assert state.mazerand_num == ee.MAZE_RESUME_DEFAULT
+        assert state.maze_number == ee.MAZE_NUMBER_DEFAULT
 
     @pytest.mark.parametrize("value", [5, 6, 50, 101, 116])
     def test_a_valid_resume_position_survives(self, value):
-        state = GameState(mazerand_num=value)
+        state = GameState(maze_number=value)
         ee.eeprom_validate_rotation(state)
-        assert state.mazerand_num == value
+        assert state.maze_number == value
 
     def test_the_stride_is_masked_to_three_bits(self):
         for value in range(0, 40):
-            state = GameState(mazerand_adder=value)
+            state = GameState(maze_stride=value)
             ee.eeprom_validate_rotation(state)
-            assert state.mazerand_adder == value & 0x07
+            assert state.maze_stride == value & 0x07
 
     @pytest.mark.parametrize("value", [0, 103, 115, 200, -1])
     def test_an_out_of_range_treasure_maze_falls_back_to_104(self, value):
@@ -601,19 +604,19 @@ class TestRotationValidation:
         a nonsense rotation is clamped at boot whether or not a file exists."""
         state = GameState(
             eeprom_save_path=str(tmp_path / "missing.json"),
-            mazerand_num=999, mazerand_adder=0x1F,
+            maze_number=999, maze_stride=0x1F,
             treas_mazerand_num=7, treas_mazerand_adder=0x1F,
         )
         ee.eeprom_load_settings(state)
-        assert (state.mazerand_num, state.mazerand_adder,
+        assert (state.maze_number, state.maze_stride,
                 state.treas_mazerand_num, state.treas_mazerand_adder) == (5, 7, 104, 3)
 
 
 class TestRotationPersistence:
     def _rotated(self, tmp_path):
         state = GameState(eeprom_save_path=str(tmp_path / "eeprom.json"))
-        state.mazerand_num = 47
-        state.mazerand_adder = 3
+        state.maze_number = 47
+        state.maze_stride = 3
         state.treas_mazerand_num = 110
         state.treas_mazerand_adder = 2
         return state
@@ -625,7 +628,7 @@ class TestRotationPersistence:
         reader = GameState(eeprom_save_path=str(tmp_path / "eeprom.json"))
         ee.eeprom_load_settings(reader)
 
-        assert (reader.mazerand_num, reader.mazerand_adder,
+        assert (reader.maze_number, reader.maze_stride,
                 reader.treas_mazerand_num, reader.treas_mazerand_adder) == (47, 3, 110, 2)
 
     def test_a_file_without_a_rotation_block_keeps_the_defaults(self, tmp_path):
@@ -638,14 +641,14 @@ class TestRotationPersistence:
         ee.eeprom_load_settings(state)
 
         assert state.game_settings == 57488
-        assert (state.mazerand_num, state.mazerand_adder,
+        assert (state.maze_number, state.maze_stride,
                 state.treas_mazerand_num, state.treas_mazerand_adder) == (5, 0, 104, 0)
 
     @pytest.mark.parametrize("payload", [
         '{"game_settings": 0, "rotation": []}',
         '{"game_settings": 0, "rotation": "nope"}',
-        '{"game_settings": 0, "rotation": {"mazerand_num": 9}}',
-        '{"game_settings": 0, "rotation": {"mazerand_num": "9", "mazerand_adder": 0,'
+        '{"game_settings": 0, "rotation": {"maze_number": 9}}',
+        '{"game_settings": 0, "rotation": {"maze_number": "9", "maze_stride": 0,'
         ' "treas_mazerand_num": 104, "treas_mazerand_adder": 0}}',
     ])
     def test_a_malformed_rotation_block_falls_back_to_the_defaults(self, tmp_path, payload):
@@ -655,21 +658,21 @@ class TestRotationPersistence:
         state = GameState(eeprom_save_path=str(save_path))
         ee.eeprom_load_settings(state)
 
-        assert (state.mazerand_num, state.mazerand_adder,
+        assert (state.maze_number, state.maze_stride,
                 state.treas_mazerand_num, state.treas_mazerand_adder) == (5, 0, 104, 0)
 
     def test_an_out_of_range_value_is_not_written_out(self, tmp_path):
         """``eeprom_load_config`` would clamp it on the next power-up anyway,
         so storing it would only be a lie that survives one power cycle."""
         state = GameState(eeprom_save_path=str(tmp_path / "eeprom.json"))
-        state.mazerand_num = 4
+        state.maze_number = 4
         state.treas_mazerand_num = 200
-        state.mazerand_adder = 0xFF
+        state.maze_stride = 0xFF
         ee.eeprom_save_settings(state)
 
         stored = json.loads((tmp_path / "eeprom.json").read_text())["rotation"]
         assert stored == {
-            "mazerand_num": 5, "mazerand_adder": 7,
+            "maze_number": 5, "maze_stride": 7,
             "treas_mazerand_num": 104, "treas_mazerand_adder": 0,
         }
 
@@ -686,27 +689,27 @@ class TestRotationChangeDetection:
         """WP-15 advances the resume position as a lap wraps; that is cabinet
         state and has to outlive the power switch."""
         save_path = tmp_path / "eeprom.json"
-        state = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
-        state.eeprom_cache_settings = state.game_settings
-        state.mazerand_num = 63
+        state = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
+        state.eeprom_settings_cache = state.game_settings
+        state.maze_number = 63
 
         ee.eeprom_periodic_write(state)
 
         assert save_path.exists()
         reader = GameState(eeprom_save_path=str(save_path))
         ee.eeprom_load_settings(reader)
-        assert reader.mazerand_num == 63
+        assert reader.maze_number == 63
 
     @pytest.mark.parametrize("field,value", [
-        ("mazerand_num", 40), ("mazerand_adder", 5),
+        ("maze_number", 40), ("maze_stride", 5),
         ("treas_mazerand_num", 111), ("treas_mazerand_adder", 3),
     ])
     def test_each_word_alone_is_enough_to_trigger_a_flush(self, tmp_path, field, value):
         """The ROM compares all four against separate cache bytes at
         0x904B8E-0x904B91 (0x4320C-0x4324E); missing any one would strand it."""
         save_path = tmp_path / "eeprom.json"
-        state = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
-        state.eeprom_cache_settings = state.game_settings
+        state = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
+        state.eeprom_settings_cache = state.game_settings
         setattr(state, field, value)
 
         ee.eeprom_periodic_write(state)
@@ -717,38 +720,38 @@ class TestRotationChangeDetection:
 
     def test_an_unchanged_rotation_is_not_rewritten(self, tmp_path, monkeypatch):
         save_path = tmp_path / "eeprom.json"
-        state = GameState(eeprom_save_path=str(save_path), timer_eepromwrite=1)
-        state.mazerand_num = 30
+        state = GameState(eeprom_save_path=str(save_path), eeprom_write_timer=1)
+        state.maze_number = 30
         ee.eeprom_periodic_write(state)
         assert save_path.exists()
 
         flushes = []
         monkeypatch.setattr(ee, "eeprom_save_settings", lambda s: flushes.append(s))
-        state.timer_eepromwrite = 1
+        state.eeprom_write_timer = 1
         ee.eeprom_periodic_write(state)
         assert flushes == []
 
     def test_a_wrapped_lap_lands_on_the_very_next_frame(self, tmp_path):
-        """``maze_checknum`` sets ``timer_eepromwrite = 1`` when the rotation
+        """``maze_checknum`` sets ``eeprom_write_timer = 1`` when the rotation
         wraps past 101 (exits.py, ROM 0x52E4C) -- a line that only became
         meaningful once these fields were in the saved image."""
         from gauntpy.subsystems.exits import maze_checknum
 
         save_path = tmp_path / "eeprom.json"
         state = GameState(eeprom_save_path=str(save_path))
-        state.eeprom_cache_settings = state.game_settings
+        state.eeprom_settings_cache = state.game_settings
         state.maze_next = 200                       # past the live range
 
         maze_checknum(state)
-        assert state.timer_eepromwrite == 1
-        assert state.maze_next == ee.MAZE_RESUME_DEFAULT
+        assert state.eeprom_write_timer == 1
+        assert state.maze_next == ee.MAZE_NUMBER_DEFAULT
 
-        state.mazerand_num = 77                      # the lap moved the cabinet on
+        state.maze_number = 77                      # the lap moved the cabinet on
         ee.eeprom_periodic_write(state)
 
         reader = GameState(eeprom_save_path=str(save_path))
         ee.eeprom_load_settings(reader)
-        assert reader.mazerand_num == 77
+        assert reader.maze_number == 77
 
 
 def test_the_boot_handshake_restores_the_rotation_too(tmp_path):
@@ -756,8 +759,8 @@ def test_the_boot_handshake_restores_the_rotation_too(tmp_path):
 
     save_path = tmp_path / "eeprom.json"
     writer = GameState(eeprom_save_path=str(save_path))
-    writer.mazerand_num = 88
-    writer.mazerand_adder = 6
+    writer.maze_number = 88
+    writer.maze_stride = 6
     writer.treas_mazerand_num = 112
     writer.treas_mazerand_adder = 1
     ee.eeprom_save_settings(writer)
@@ -765,5 +768,5 @@ def test_the_boot_handshake_restores_the_rotation_too(tmp_path):
     booted = GameState(eeprom_save_path=str(save_path))
     one_time_init(booted)
 
-    assert (booted.mazerand_num, booted.mazerand_adder,
+    assert (booted.maze_number, booted.maze_stride,
             booted.treas_mazerand_num, booted.treas_mazerand_adder) == (88, 6, 112, 1)

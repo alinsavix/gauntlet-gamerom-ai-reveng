@@ -481,7 +481,7 @@ This affects any analysis that assumed these instructions were dereferencing poi
 
 Called once from the main loop before the first VBLANK wait. Performs full game initialization:
 
-1. **Sound system reset** — flushes sound ring buffer, resets speech counter, sends hardware reset command via OS 0x254
+1. **Sound system reset** — flushes the sound ring, loads the recovery holdoff, and sends the hardware reset command via OS 0x254
 2. **Clear game state** — zeros `0x90400C`
 3. **Initialize display** — calls `init_display` (0x43486) with args (0, 0)
 4. **Read hardware config** — calls OS 0x236 (DIP switches → `0x9049E2`), OS 0x1A8 slot 0xC (game settings → `0x904A24`), OS 0x1A8 slot 0xB (game options, sanitizes via OS 0x1C0)

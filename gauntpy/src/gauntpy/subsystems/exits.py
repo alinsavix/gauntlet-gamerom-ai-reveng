@@ -55,13 +55,13 @@ _LFLAG3_EXIT_PICK_MASK = _LFLAG3_EXIT_MOVES | _LFLAG3_EXIT_CHOOSEONE
 _LFLAG4_EXIT_FAKE = 0x40    # bit 6 of level_flags_4 byte
 
 # Moving-exit timer reload = 0x12C (300 frames, 5 s).  Verified by disassembly:
-# the game's exit_timer (0x904A08) is loaded with #0x12C both at level setup
+# the game's exit_move_timer (0x904A08) is loaded with #0x12C both at level setup
 # (0x43B90) and on reload inside main_exit_move (move.w #0x12c,(a0) at 0x52A74).
 # Reference: doc/04_game_subsystems.md §12.2; main_exit_move (0x5287C).
 _EXIT_MOVE_TIMER_RELOAD = 0x12C  # 300 frames
 
-# The open/close stamp animation runs while exit_timer is negative: one step
-# every fourth frame (``exit_timer & 3`` at 0x52A62), settling once the timer
+# The open/close stamp animation runs while exit_move_timer is negative: one step
+# every fourth frame (``exit_move_timer & 3`` at 0x52A62), settling once the timer
 # reaches -0x20 (0x52A6E), where it reloads.  So the real period between moves
 # is 0x12C + 0x20 = 332 frames, not 300.
 _EXIT_ANIM_SETTLE = -0x20        # 0x52A6E cmpi.w #$ffe0
@@ -162,7 +162,7 @@ _CHALLENGE_TIMER_BASE = [
 # added to the base above (0x44E5C-0x44E7E).
 _CHALLENGE_TIMER_RANDOM_MINUTES = [6, 4, 6, 4, 6, 4, 6, 4, 6, 5, 5, 9, 4, 5]
 
-# Qualification thresholds read by secret_bonus_earned (0x4D1A4).
+# Qualification thresholds read by secret_check_winner (0x4D1A4).
 _CHALLENGE_WALLS = (0x52, 0x5B)      # shoot 3 secret walls -> progress > 2
 _CHALLENGE_WHILE_IT = 0x5C           # while you are IT     -> progress > 0
 _CHALLENGE_POTIONS = (0x51, 0x5D)    # collect all potions  -> progress == 6
@@ -277,14 +277,14 @@ def secret_new_level_setup(state: GameState) -> None:
     """
     if in_secret_room(state):                    # 0x43916
         return
-    state.trick_tasknum = TRICK_NONE           # 0x43922
-    state.trick_player = -1                     # 0x43928, 0xFF = nobody
+    state.secret_trick_id = TRICK_NONE           # 0x43922
+    state.secret_player = -1                     # 0x43928, 0xFF = nobody
     if state.secret_possible_counter:            # 0x43930
         return
-    state.trick_tasknum = getattr(state.maze, "secret", TRICK_NONE)   # 0x4393E
-    if (state.trick_tasknum == TRICK_NOGETHIT                          # 0x43944
+    state.secret_trick_id = getattr(state.maze, "secret", TRICK_NONE)   # 0x4393E
+    if (state.secret_trick_id == TRICK_NOGETHIT                          # 0x43944
             and state.levelnum_current < _TRICK_NOGETHIT_MIN_LEVEL):
-        state.trick_tasknum = TRICK_NONE       # 0x43958
+        state.secret_trick_id = TRICK_NONE       # 0x43958
 
 
 def secret_trick_progress(state: GameState, player_index: int, trick_id: int,
@@ -292,12 +292,12 @@ def secret_trick_progress(state: GameState, player_index: int, trick_id: int,
     """The ``addq.b #1,secret_tricks_flags[player]`` hook shape (§10.6).
 
     Every progress site in the ROM is the same two instructions guarded by the
-    level's active objective -- ``cmpi.b #<trick>,trick_tasknum`` then bump the
+    level's active objective -- ``cmpi.b #<trick>,secret_trick_id`` then bump the
     player's byte -- so the whole family reduces to this call. WP-15 owns the
     counter; the hooks that call it live with whatever subsystem notices the
     event (see ``secret_trick_set`` for the two assignment-shaped sites).
     """
-    if state.trick_tasknum != trick_id:
+    if state.secret_trick_id != trick_id:
         return
     flags = state.secret_tricks_flags
     flags[player_index] = (flags[player_index] + amount) & 0xFF
@@ -306,7 +306,7 @@ def secret_trick_progress(state: GameState, player_index: int, trick_id: int,
 def secret_trick_set(state: GameState, player_index: int, trick_id: int,
                      value: int) -> None:
     """The ``move.b #n``/``clr.b`` progress sites (0x518C2, 0x498A4)."""
-    if state.trick_tasknum != trick_id:
+    if state.secret_trick_id != trick_id:
         return
     state.secret_tricks_flags[player_index] = value & 0xFF
 
@@ -315,19 +315,19 @@ def secret_trick_check(state: GameState, player_index: int) -> None:
     """0x52B60-0x52C4E -- did this exiting player satisfy the level's trick?
 
     Each trick reads the player's progress byte, or a counter another subsystem
-    keeps, and a pass writes the player into ``trick_player`` (0x52C46 copies
+    keeps, and a pass writes the player into ``secret_player`` (0x52C46 copies
     ``current_player``, which inside ``player_exit_sequence`` is this player).
     ``TRICK_IT`` is the odd one out: it decides on the spot whether the exiting
     player is IT and then marks every player, so nobody else can claim it.
     """
-    trick = state.trick_tasknum
+    trick = state.secret_trick_id
     flags = state.secret_tricks_flags
 
     if trick == TRICK_IT:                                        # 0x52B60
-        if (state.trick_player < 0                              # 0x52B66
+        if (state.secret_player < 0                              # 0x52B66
                 and state.player_it == player_index              # 0x52B70
                 and flags[player_index] != 1):                   # 0x52B7A
-            state.trick_player = player_index                   # 0x52B82
+            state.secret_player = player_index                   # 0x52B82
         for i in range(NUM_PLAYERS):                             # 0x52B88
             flags[i] = 1
         return
@@ -353,7 +353,7 @@ def secret_trick_check(state: GameState, player_index: int) -> None:
         won = False
 
     if won:
-        state.trick_player = player_index                       # 0x52C46
+        state.secret_player = player_index                       # 0x52C46
 
 
 def secret_check(state: GameState) -> None:
@@ -364,9 +364,9 @@ def secret_check(state: GameState) -> None:
     miss pulls it down by 2 (floored at 4). ``secret_possible_counter`` then
     reloads, and ``advance_level_countdowns`` walks it down one level at a time.
     """
-    if state.trick_tasknum == TRICK_NONE:                      # 0x48708
+    if state.secret_trick_id == TRICK_NONE:                      # 0x48708
         return
-    if 0 <= state.trick_player < NUM_PLAYERS:                   # 0x48710/0x48718
+    if 0 <= state.secret_player < NUM_PLAYERS:                   # 0x48710/0x48718
         state.secret_prev_maze = state.mazenum_current           # 0x48722
         state.secret_possible_start = min(                       # 0x4872C
             state.secret_possible_start + _SECRET_START_WIN_BONUS,
@@ -380,17 +380,17 @@ def secret_check(state: GameState) -> None:
     state.secret_possible_counter = state.secret_possible_start  # 0x4874A
 
 
-def secret_bonus_earned(state: GameState) -> bool:
+def secret_check_winner(state: GameState) -> bool:
     """0x4D1A4 -- was the secret room's challenge task completed?
 
     Reads the winner's progress byte against the task's target. Task 0x53 is the
     exception: it sweeps the MOB table and passes only when no monster or
     generator (object types 0x12-0x2D) is left standing (0x4D26C-0x4D290).
     """
-    player = state.trick_player
+    player = state.secret_player
     if not 0 <= player < NUM_PLAYERS:
         return False
-    task = state.trick_tasknum
+    task = state.secret_trick_id
     progress = state.secret_tricks_flags[player]
 
     if task in _CHALLENGE_WALLS:                                 # 0x4D1C0
@@ -420,19 +420,19 @@ def _enter_secret_room(state: GameState) -> bool:
     """0x44DD6-0x44E8E -- swap the level for the winner's challenge room.
 
     Fires when a player won the level's trick and is standing in the exit. The
-    maze trick is filed in ``trick_last``, a random challenge task takes
+    maze trick is filed in ``secret_trick_last``, a random challenge task takes
     its place, and the room is maze 115 or 116 depending on the task. The time
     limit is the task's base duration plus ``getrandom(minutes) * 60``.
     """
-    winner = state.trick_player
+    winner = state.secret_player
     if not 0 <= winner < NUM_PLAYERS:                            # 0x44DD6/0x44DE0
         return False
     if state.players[winner].status != int(PlayerStatus.ALIVE_NEXT):   # 0x44DFA
         return False
 
-    state.trick_last = state.trick_tasknum              # 0x44E06
+    state.secret_trick_last = state.secret_trick_id              # 0x44E06
     task = CHALLENGE_FIRST + state.getrandom(CHALLENGE_COUNT)    # 0x44E0C
-    state.trick_tasknum = task
+    state.secret_trick_id = task
 
     state.mazenum_current = _SECRET_MAZE_FIRST                   # 0x44E1E
     if task >= _CHALLENGE_MAZE_SPLIT:                            # 0x44E26
@@ -484,7 +484,7 @@ def _write_secret_hint(state: GameState) -> None:
 
 def _write_secret_room_start(state: GameState) -> None:
     """0x44F7E-0x450F8 -- write the complete secret challenge invitation."""
-    winner = state.trick_player
+    winner = state.secret_player
     if not 0 <= winner < NUM_PLAYERS:
         return
 
@@ -503,12 +503,12 @@ def _write_secret_room_start(state: GameState) -> None:
     seconds = state.treasure_timer // 60
     write_alpha_decimal(state, 10, 13, seconds, 2, 0x8000)
     qualifier = romtext.SECRET_CHALLENGE_QUALIFIERS[
-        state.trick_tasknum - CHALLENGE_FIRST
+        state.secret_trick_id - CHALLENGE_FIRST
     ]
     if qualifier is not None:
         text, column, row = qualifier
         write_alpha_text(state, column, row, text, 0x8400)
-        if state.trick_tasknum == _CHALLENGE_WHILE_IT:
+        if state.secret_trick_id == _CHALLENGE_WHILE_IT:
             write_alpha_text(state, 20, row, "IT", 0x8000)
     write_alpha_large_text(state, 34, 2, f"{seconds:>2}", 0x8000)
 
@@ -516,14 +516,14 @@ def _write_secret_room_start(state: GameState) -> None:
 def secret_room_spawn(state: GameState) -> None:
     """0x482BC-0x4834E -- only the winner goes in, and they go in empty-handed.
 
-    ``main_start_game`` spawns just ``trick_player`` when the loaded maze is a
+    ``main_start_game`` spawns just ``secret_player`` when the loaded maze is a
     secret room, stashes their keys, potions and super-shots, and zeroes them,
     so the challenge starts from nothing. ``show_level_end_bonus_screen`` adds
     the stash back on the way out.
     """
     from .players import player_start_inner
 
-    winner = state.trick_player
+    winner = state.secret_player
     if not 0 <= winner < NUM_PLAYERS:
         return
     player = state.players[winner]
@@ -544,12 +544,12 @@ def secret_room_spawn(state: GameState) -> None:
 def _secret_room_payout(state: GameState, completed: bool) -> bool:
     """0x4D720-0x4D8A0 -- pay the winner, hand their inventory back, stand down.
 
-    Only ``trick_player`` is considered; a completed task pays
+    Only ``secret_player`` is considered; a completed task pays
     ``5000 x player_coincount``. Either way the stash is returned, the player is
-    put back in the exiting state, and ``trick_player`` is cleared so the next
+    put back in the exiting state, and ``secret_player`` is cleared so the next
     level does not walk straight back into another secret room.
     """
-    winner = state.trick_player
+    winner = state.secret_player
     state.bonus_amount = 0
     open_name_entry = False
     if 0 <= winner < NUM_PLAYERS:
@@ -573,7 +573,7 @@ def _secret_room_payout(state: GameState, completed: bool) -> bool:
     state.secret_saved_potions = 0
     state.secret_saved_supershot = 0
     if not open_name_entry:
-        state.trick_player = -1                                 # 0x4D866
+        state.secret_player = -1                                 # 0x4D866
     return open_name_entry
 
 
@@ -633,7 +633,7 @@ def main_treasure_timer(state: GameState) -> None:
 
     Four gates, in the ROM's order (0x4D2B2-0x4D2D8):
 
-      * ``global_ui_delay_timer`` (0x904A4E) must be zero -- while a bonus tally
+      * ``global_delay_timer`` (0x904A4E) must be zero -- while a bonus tally
         or level splash is up, ``main_start_game`` runs down that shared timer
         and this routine leaves the treasure countdown frozen;
       * ``treasure_timer`` (0x9049E8) must be nonzero;
@@ -649,7 +649,7 @@ def main_treasure_timer(state: GameState) -> None:
     """
     # main_treasure_timer only tests this shared timer. main_start_game owns its
     # decrement and transition actions at 0x4817C-0x481E8.
-    if state.global_ui_delay_timer > 0:
+    if state.global_delay_timer > 0:
         return
 
     if state.treasure_timer <= 0:              # 0x4D2BC (also guards negatives)
@@ -689,7 +689,7 @@ def exit_scan_level(state: GameState) -> None:
       * when the level carries ExitMoves or Exit1of (``andi.l #0xC000`` at
         0x43B6A), ``maze_pick_one_exit`` (0x43D8C, called with 0 at 0x43B76)
         chooses which of them is real;
-      * the ExitMoves flag then either arms ``exit_timer`` with 0x12C or clears
+      * the ExitMoves flag then either arms ``exit_move_timer`` with 0x12C or clears
         ``exit_open_id`` (0x43B7E-0x43B9A).
 
     WP-3's ``load_level`` does not build the list, so WP-15 recovers it from the
@@ -724,7 +724,7 @@ def exit_scan_level(state: GameState) -> None:
     maze_pick_one_exit(state)                             # 0x43B62-0x43B76
 
     if state.level_flags_3 & _LFLAG3_EXIT_MOVES:
-        state.exit_timer = _EXIT_MOVE_TIMER_RELOAD   # 0x43B90
+        state.exit_move_timer = _EXIT_MOVE_TIMER_RELOAD   # 0x43B90
     else:
         state.exit_open_id = 0                            # 0x43B9A
 
@@ -808,16 +808,16 @@ def main_exit_move(state: GameState) -> None:
     """
     if not state.exit_open_id:                  # 0x52890
         return
-    if state.exit_timer > 0 and not (
+    if state.exit_move_timer > 0 and not (
         state.level_flags_3 & _LFLAG3_EXIT_MOVES and state.level_players_active
     ):
         return                                  # 0x5289A-0x528B6
 
-    state.exit_timer -= 1                  # 0x528BA
-    if state.exit_timer == 0:              # 0x528BC ``bne`` -- swap frame
+    state.exit_move_timer -= 1                  # 0x528BA
+    if state.exit_move_timer == 0:              # 0x528BC ``bne`` -- swap frame
         _exit_relocate(state)
         return
-    if state.exit_timer > 0:
+    if state.exit_move_timer > 0:
         return
 
     _exit_move_animate(state)                   # 0x52A5C
@@ -826,9 +826,9 @@ def main_exit_move(state: GameState) -> None:
 def _exit_move_animate(state: GameState) -> None:
     """0x52A5C-0x52AF8 -- the 32-frame open/close animation, then the reload.
 
-    While ``exit_timer`` is negative the ROM stamps one frame of the closing
+    While ``exit_move_timer`` is negative the ROM stamps one frame of the closing
     script over ``exit_close_id`` and one frame of the opening script over
-    ``exit_open_id`` every fourth frame, indexed by ``(-exit_timer) >> 2``.  The
+    ``exit_open_id`` every fourth frame, indexed by ``(-exit_move_timer) >> 2``.  The
     scripts themselves are playfield stamp descriptors reached through
     ``ptr_exit_openclose_anim`` (0x90489C, set from 0x5B81C + floorpattern*0x40
     at 0x44BAA) and drawn by ``pf_stamp_update`` (0x5E536) -- pixels, owned by
@@ -841,11 +841,11 @@ def _exit_move_animate(state: GameState) -> None:
     ``pf_floor_update`` (0x5E892) -- the MOB there was already cleared when the
     swap happened, so nothing more is owed to the simulation.
     """
-    if state.exit_timer & _EXIT_ANIM_STEP_MASK:      # 0x52A62-0x52A6A
+    if state.exit_move_timer & _EXIT_ANIM_STEP_MASK:      # 0x52A62-0x52A6A
         return
 
-    if state.exit_timer <= _EXIT_ANIM_SETTLE:        # 0x52A6E
-        state.exit_timer = _EXIT_MOVE_TIMER_RELOAD   # 0x52A74
+    if state.exit_move_timer <= _EXIT_ANIM_SETTLE:        # 0x52A6E
+        state.exit_move_timer = _EXIT_MOVE_TIMER_RELOAD   # 0x52A74
         state.exit_anim_frame = 0                         # settled stamp 0x5C8A0
         write_tile_descriptor(state, state.exit_open_id, EXIT_SETTLED_DESC)
         if state.exit_close_id:
@@ -854,7 +854,7 @@ def _exit_move_animate(state: GameState) -> None:
         state.exit_close_id = 0                           # vacated cell repainted
         return
 
-    state.exit_anim_frame = (-state.exit_timer) >> 2  # 0x52AAC-0x52AB4
+    state.exit_anim_frame = (-state.exit_move_timer) >> 2  # 0x52AAC-0x52AB4
     floorpattern = int(getattr(state.maze, "floorpattern", 0) or 0)
     write_tile_descriptor(
         state, state.exit_open_id,
@@ -939,7 +939,7 @@ def _exit_relocate(state: GameState) -> None:
 _MAZE_ROTATION_TOP = 101
 # The catalog hinge: candidate maze 5 is replaced by the resume position
 # (doc/06 §3.2, maze_checknum 0x52ED8).
-_MAZE_RESUME_HINGE = 5
+_MAZE_ROTATION_HINGE = 5
 
 
 def maze_checknum(state: GameState) -> None:
@@ -948,18 +948,18 @@ def maze_checknum(state: GameState) -> None:
     Two rules, in order:
 
       * on entry, candidate 5 is substituted with the cabinet's resume
-        position (``mazerand_num``) -- this is the hinge that makes level 6 land
+        position (``maze_number``) -- this is the hinge that makes level 6 land
         "wherever the rotation stands";
       * any candidate past the live range (> 101) wraps back to 5 and forces an
-        EEPROM save (``timer_eepromwrite`` = 1); since 5 ≤ 101 the loop then
+        EEPROM save (``eeprom_write_timer`` = 1); since 5 ≤ 101 the loop then
         settles. All 117 pointer-table entries are live, so only the > 101 wrap
         ever fires in practice.
     """
-    if state.maze_next == _MAZE_RESUME_HINGE:
-        state.maze_next = state.mazerand_num
+    if state.maze_next == _MAZE_ROTATION_HINGE:
+        state.maze_next = state.maze_number
     while state.maze_next > _MAZE_ROTATION_TOP:
-        state.maze_next = _MAZE_RESUME_HINGE
-        state.timer_eepromwrite = 1        # force a save next tick (0x904012)
+        state.maze_next = _MAZE_ROTATION_HINGE
+        state.eeprom_write_timer = 1        # force a save next tick (0x904012)
 
 
 def compute_next_level(state: GameState, exit_type: int) -> None:
@@ -994,13 +994,13 @@ def compute_next_level(state: GameState, exit_type: int) -> None:
     state.maze_next = state.mazenum_current
     steps = 1
     if state.mazenum_current >= 5:
-        steps += state.mazerand_adder         # coarser strides deeper in a lap
+        steps += state.maze_stride         # coarser strides deeper in a lap
     for _ in range(steps):
         state.maze_next += 1
         maze_checknum(state)
 
-    if state.maze_next == _MAZE_RESUME_HINGE:
-        state.mazerand_adder = (state.mazerand_adder + 1) & 7
+    if state.maze_next == _MAZE_ROTATION_HINGE:
+        state.maze_stride = (state.maze_stride + 1) & 7
 
     state.level_next = level_next
 
@@ -1201,13 +1201,13 @@ def show_level_start_screen(state: GameState) -> None:
     _write_secret_hint(state)
 
     # 0x45228-0x45260: normal/reduced-text/secret-room display holds.
-    state.global_ui_delay_timer = (
+    state.global_delay_timer = (
         0x258 if in_secret_room(state)
         else (0x96 if state.game_settings & 0x400 else 0xB4)
     )
 
 
-# Bonus-screen hold before the next level loads: global_ui_delay_timer = 0x12C
+# Bonus-screen hold before the next level loads: global_delay_timer = 0x12C
 # (300 frames, 5 s) at show_level_end_bonus_screen 0x4D50E.
 _BONUS_DISPLAY_FRAMES = 0x12C
 
@@ -1280,7 +1280,7 @@ def treasure_collected(state: GameState, player_index: int) -> None:
         objective is the *treasure* trick 0x0E (0x519C2), or the challenge task
         0x50 "after collecting 6 treasures" (0x519CE), or 0x5A "after removing
         all treasure" (0x519DA) -- three compares, one shared ``addq.b #1``, and
-        since ``trick_tasknum`` holds exactly one code at a time the calls
+        since ``secret_trick_id`` holds exactly one code at a time the calls
         below likewise bump at most once;
       * ``player_treascount`` (0x904A50) is bumped at 0x519F8 -- the treasure
         factor of the level-end bonus (0x4D57E);
@@ -1321,8 +1321,8 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     Commits the computed ``level_next``/``maze_next`` and pays every player who
     reached the exit their own bonus -- ``100 x player_activecount x
     player_coincount[p] x player_treascount[p]`` (0x4D516-0x4D5AA, doc/04 §16) --
-    then enters the display phase: ``game_mode = TREAS_EXIT`` with ``global_ui_delay_timer``
-    (the ROM's ``global_ui_delay_timer``, 0x904A4E) counting 300 frames down
+    then enters the display phase: ``game_mode = TREAS_EXIT`` with ``global_delay_timer``
+    (the ROM's ``global_delay_timer``, 0x904A4E) counting 300 frames down
     instead of cutting straight to the next level. ``main_treasure_timer`` runs
     the countdown and fires the deferred load (``_finish_level_end``) when it
     expires. This routine writes the settled tally into alpha VRAM before it
@@ -1341,8 +1341,8 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     theme fade, matching the ``mazenum_current >= 115`` split at 0x4D496.
 
     Leaving a **secret** room takes the other tally entirely (0x4D720-0x4D8A0):
-    ``secret_bonus_earned`` decides whether the challenge task was completed,
-    only ``trick_player`` is paid -- ``5000 x player_coincount`` -- and the
+    ``secret_check_winner`` decides whether the challenge task was completed,
+    only ``secret_player`` is paid -- ``5000 x player_coincount`` -- and the
     inventory stashed on the way in is handed back. The position is committed
     last (0x4D8E2/0x4D8EC), so every branch above still sees the maze that was
     just played, and ``secret_check`` (0x4D8DC) adapts how soon the next secret
@@ -1351,9 +1351,9 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     from .players import setup_infopanel
 
     was_secret_room = in_secret_room(state)          # 0x4D496, before the commit
-    secret_player = state.trick_player if was_secret_room else -1
+    secret_player = state.secret_player if was_secret_room else -1
     ordinary_rows: dict[int, tuple[int, int, int, int]] = {}
-    challenge_completed = secret_bonus_earned(state) if was_secret_room else False  # 0x4D4B0
+    challenge_completed = secret_check_winner(state) if was_secret_room else False  # 0x4D4B0
 
     sound_play(state, 0x39)                          # 0x4D48A slow-motion silencer
     if not was_secret_room:
@@ -1367,7 +1367,7 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     # while the tally is up. Entering the next treasure room re-zeroes it.
     state.treasure_announcement_delay = 0xFFFF
     setup_infopanel(state, -1)                       # 0x4D4DE-0x4D4E4
-    state.global_ui_delay_timer = _BONUS_DISPLAY_FRAMES        # 0x4D50E
+    state.global_delay_timer = _BONUS_DISPLAY_FRAMES        # 0x4D50E
     state.game_mode = GameMode.TREAS_EXIT            # display phase (world frozen)
 
     open_name_entry = False
@@ -1425,7 +1425,7 @@ def _finish_level_end(state: GameState) -> None:
         spawn_players=False,
     )
     if not state.level_start_pending:
-        state.global_ui_delay_timer = 0
+        state.global_delay_timer = 0
     state.bonus_amount = 0
     state.game_mode = GameMode.NORMAL
 

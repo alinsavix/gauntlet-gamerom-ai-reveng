@@ -831,7 +831,7 @@ class TestAcidImmunity:
         state = _make_state()
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
         state.players[1].acid_timer = 30
-        state.trick_tasknum = 8
+        state.secret_trick_id = 8
         state.secret_tricks_flags[1] = 3
         _place_player_mob(state, 304, 1)
         _arm_monster_shot(state, 4)
@@ -901,7 +901,7 @@ class TestPlayerVersusPlayer:
 
     def test_trick_0x11_credits_shooting_another_player(self):
         state = _make_state()
-        state.trick_tasknum = 0x11
+        state.secret_trick_id = 0x11
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
         _place_player_mob(state, 315, 1)
         resolve_shot_hit(state, 315, 0)
@@ -1032,7 +1032,7 @@ class TestDispatchLeaves:
         state = _make_state()
         SLOT = 350
         state.players[0].supershot = 1
-        state.trick_tasknum = 0x5A
+        state.secret_trick_id = 0x5A
         _place_typed(state, SLOT, MazeObjIds.TREASURE, palette=1)
         resolve_shot_hit(state, SLOT, 0)
         assert state.secret_tricks_flags[0] == 1
@@ -1102,7 +1102,7 @@ class TestDispatchLeaves:
     def test_trick_five_credits_shooting_the_food(self):
         state = _make_state()
         SLOT = 355
-        state.trick_tasknum = 5
+        state.secret_trick_id = 5
         state.rng = _FixedRandom([1])
         _place_typed(state, SLOT, MazeObjIds.FOOD_DESTRUCTABLE, picture=0x0963)
         resolve_shot_hit(state, SLOT, 0)
@@ -1166,7 +1166,7 @@ class TestSecretWall:
     def test_trick_six_credits_the_shooter(self):
         state = _make_state()
         state.level_players_active = 4
-        state.trick_tasknum = 6
+        state.secret_trick_id = 6
         state.rng = _FixedRandom([0, 0xF, 0])
         SLOT = 361
         _place_typed(state, SLOT, MazeObjIds.WALL_SECRET)
@@ -2006,7 +2006,7 @@ class TestDragonFireChannel:
 
         state = _make_state()
         _arm_dragon_fire(state)
-        state.trick_tasknum = TRICK_NOGETHIT
+        state.secret_trick_id = TRICK_NOGETHIT
         victim = state.players[0]
         victim.character = Character.WARRIOR
         victim.mob_slot = 0x30
@@ -3167,14 +3167,14 @@ class TestSecretWallTrick:
     ])
     def test_all_three_tasks_bump_the_shooter(self, trick):
         state = _make_state()
-        state.trick_tasknum = trick
+        state.secret_trick_id = trick
         self._shoot_secret_wall(state)
         assert state.secret_tricks_flags[0] == 1
         assert state.secret_tricks_flags[1:] == [0, 0, 0]
 
     def test_the_bump_accumulates(self):
         state = _make_state()
-        state.trick_tasknum = _TASK_SHOOT_SECRET_A
+        state.secret_trick_id = _TASK_SHOOT_SECRET_A
         state.secret_tricks_flags[0] = 4
         self._shoot_secret_wall(state)
         assert state.secret_tricks_flags[0] == 5
@@ -3182,21 +3182,21 @@ class TestSecretWallTrick:
     def test_a_negative_byte_restarts_at_one(self):
         """0x4B69A: ``blt`` takes the ``move.b #1`` arm."""
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT2
+        state.secret_trick_id = TRICK_WATCHSHOOT2
         state.secret_tricks_flags[0] = 0x80
         self._shoot_secret_wall(state)
         assert state.secret_tricks_flags[0] == 1
 
     def test_another_task_is_untouched(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT1     # foods, not walls
+        state.secret_trick_id = TRICK_WATCHSHOOT1     # foods, not walls
         self._shoot_secret_wall(state)
         assert state.secret_tricks_flags[0] == 0
 
     def test_a_monster_shot_credits_nobody(self):
         """0x4B66A: the whole tail is behind ``cmpi.w #4,d3``."""
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT2
+        state.secret_trick_id = TRICK_WATCHSHOOT2
         _arm_monster_shot(state, 4)
         self._shoot_secret_wall(state, shooter_id=4)
         assert state.secret_tricks_flags == [0, 0, 0, 0]
@@ -3213,33 +3213,33 @@ class TestSupershotTreasureTrick:
 
     def test_task_5a_counts_treasure(self):
         state = _make_state()
-        state.trick_tasknum = _TASK_SHOOT_TREASURE
+        state.secret_trick_id = _TASK_SHOOT_TREASURE
         self._shoot(state, MazeObjIds.TREASURE)
         assert state.secret_tricks_flags[0] == 1
 
     def test_task_5a_ignores_the_invulnerable_food(self):
         state = _make_state()
-        state.trick_tasknum = _TASK_SHOOT_TREASURE
+        state.secret_trick_id = _TASK_SHOOT_TREASURE
         self._shoot(state, MazeObjIds.FOOD_INVULN)
         assert state.secret_tricks_flags[0] == 0
 
     def test_task_5a_has_no_negative_restart(self):
         """0x4B83A is a bare ``addq.b #1``, unlike the other progress sites."""
         state = _make_state()
-        state.trick_tasknum = _TASK_SHOOT_TREASURE
+        state.secret_trick_id = _TASK_SHOOT_TREASURE
         state.secret_tricks_flags[0] = 0x80
         self._shoot(state, MazeObjIds.TREASURE)
         assert state.secret_tricks_flags[0] == 0x81
 
     def test_watchshoot1_counts_the_invulnerable_food(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT1
+        state.secret_trick_id = TRICK_WATCHSHOOT1
         self._shoot(state, MazeObjIds.FOOD_INVULN)
         assert state.secret_tricks_flags[0] == 1
 
     def test_watchshoot1_restarts_from_a_negative_byte(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT1
+        state.secret_trick_id = TRICK_WATCHSHOOT1
         state.secret_tricks_flags[0] = 0xFF
         self._shoot(state, MazeObjIds.FOOD_INVULN)
         assert state.secret_tricks_flags[0] == 1
@@ -3247,7 +3247,7 @@ class TestSupershotTreasureTrick:
     def test_without_a_supershot_nothing_is_counted(self):
         """0x4B822: the handler leaves before any trick test."""
         state = _make_state()
-        state.trick_tasknum = _TASK_SHOOT_TREASURE
+        state.secret_trick_id = _TASK_SHOOT_TREASURE
         SLOT = (9 << 5) | 9
         _place_typed(state, SLOT, MazeObjIds.TREASURE)
         resolve_shot_hit(state, SLOT, 0)
@@ -3265,13 +3265,13 @@ class TestFoodTrick:
 
     def test_shooting_food_bumps_the_shooter(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT1
+        state.secret_trick_id = TRICK_WATCHSHOOT1
         self._shoot_food(state)
         assert state.secret_tricks_flags[0] == 1
 
     def test_a_negative_byte_restarts_at_one(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT1
+        state.secret_trick_id = TRICK_WATCHSHOOT1
         state.secret_tricks_flags[0] = 0x90
         self._shoot_food(state)
         assert state.secret_tricks_flags[0] == 1
@@ -3279,20 +3279,20 @@ class TestFoodTrick:
     def test_the_slow_motion_food_is_not_counted(self):
         """0x4B8FC branches past the trick test to the poison dialog."""
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT1
+        state.secret_trick_id = TRICK_WATCHSHOOT1
         self._shoot_food(state, picture=shots._PIC_SLOWMO_FOOD)
         assert state.secret_tricks_flags[0] == 0
         assert state.monster_slowmo_timer
 
     def test_another_task_is_untouched(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT2
+        state.secret_trick_id = TRICK_WATCHSHOOT2
         self._shoot_food(state)
         assert state.secret_tricks_flags[0] == 0
 
     def test_a_monster_shot_credits_nobody(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_WATCHSHOOT1
+        state.secret_trick_id = TRICK_WATCHSHOOT1
         _arm_monster_shot(state, 4)
         self._shoot_food(state, shooter_id=4)
         assert state.secret_tricks_flags == [0, 0, 0, 0]
@@ -3310,14 +3310,14 @@ class TestNoHurtFriendsTrick:
     def test_it_is_a_set_not_a_bump(self):
         """0x4B052 is ``move.b #1``: any prior progress is overwritten."""
         state = _make_state()
-        state.trick_tasknum = TRICK_NOHURTFRIENDS
+        state.secret_trick_id = TRICK_NOHURTFRIENDS
         state.secret_tricks_flags[0] = 5
         self._shoot_player(state)
         assert state.secret_tricks_flags[0] == 1
 
     def test_it_marks_the_shooter_not_the_victim(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_NOHURTFRIENDS
+        state.secret_trick_id = TRICK_NOHURTFRIENDS
         self._shoot_player(state)
         assert state.secret_tricks_flags[0] == 1
         assert state.secret_tricks_flags[1] == 0
@@ -3326,21 +3326,21 @@ class TestNoHurtFriendsTrick:
         """0x4B046 sits before every LFLAG4 damage branch."""
         state = _make_state()
         state.level_flags_4 = 0
-        state.trick_tasknum = TRICK_NOHURTFRIENDS
+        state.secret_trick_id = TRICK_NOHURTFRIENDS
         self._shoot_player(state)
         assert state.players[1].health == 500
         assert state.secret_tricks_flags[0] == 1
 
     def test_another_task_is_untouched(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_NOGETHIT
+        state.secret_trick_id = TRICK_NOGETHIT
         self._shoot_player(state)
         assert state.secret_tricks_flags[0] == 0
 
     def test_a_monster_shot_credits_nobody(self):
         """0x4B042 sends channels 4-11 down the monster-shot path instead."""
         state = _make_state()
-        state.trick_tasknum = TRICK_NOHURTFRIENDS
+        state.secret_trick_id = TRICK_NOHURTFRIENDS
         _arm_monster_shot(state, 4)
         self._shoot_player(state, shooter_id=4)
         assert state.secret_tricks_flags == [0, 0, 0, 0]
@@ -3358,13 +3358,13 @@ class TestNoGetHitTrick:
 
     def test_dragon_fire_bumps_the_victim(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_NOGETHIT
+        state.secret_trick_id = TRICK_NOGETHIT
         self._hit_player(state, tier=0x30, shooter_id=8)     # index >= 0x18
         assert state.secret_tricks_flags[1] == 1
 
     def test_it_accumulates(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_NOGETHIT
+        state.secret_trick_id = TRICK_NOGETHIT
         state.secret_tricks_flags[1] = 2
         self._hit_player(state, tier=0x30, shooter_id=8)
         assert state.secret_tricks_flags[1] == 3
@@ -3372,13 +3372,13 @@ class TestNoGetHitTrick:
     def test_an_ordinary_monster_shot_does_not_count(self):
         """0x4B2B4's dialog branches skip the bump entirely."""
         state = _make_state()
-        state.trick_tasknum = TRICK_NOGETHIT
+        state.secret_trick_id = TRICK_NOGETHIT
         self._hit_player(state, tier=0)
         assert state.secret_tricks_flags[1] == 0
 
     def test_another_task_is_untouched(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_NOHURTFRIENDS
+        state.secret_trick_id = TRICK_NOHURTFRIENDS
         self._hit_player(state, tier=0x30, shooter_id=8)
         assert state.secret_tricks_flags[1] == 0
 
@@ -3388,7 +3388,7 @@ class TestNoUseInvulTrick:
 
     def test_the_acid_immune_victim_is_cleared(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_NOUSEINVUL
+        state.secret_trick_id = TRICK_NOUSEINVUL
         state.secret_tricks_flags[1] = 3
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
         state.players[1].acid_timer = 30
@@ -3399,7 +3399,7 @@ class TestNoUseInvulTrick:
 
     def test_another_task_keeps_its_progress(self):
         state = _make_state()
-        state.trick_tasknum = TRICK_NOGETHIT
+        state.secret_trick_id = TRICK_NOGETHIT
         state.secret_tricks_flags[1] = 3
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
         state.players[1].acid_timer = 30

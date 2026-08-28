@@ -29,7 +29,7 @@ CONTRACTS = (
     (0x44A82, "game_playfield_init", "void", "void", "OS invokes this callback through the JMP veneer at game-ROM 0x40030", "Verified", ("jsr 0x4438e.l", "move.w d0, (a0)", "movea.l 0x1dc.l, a1")),
     (0x44DB4, "show_level_start_screen", "void", "void", "calls fixed draw_string service indirectly through A3 = 0x25A", "Verified", ("movea.l 0x25a, a3", "jsr 0x5fc4e.l", "move.w 0x73, 0x904000.l", "cmpi.b 0x57, (a2)", "addq.w 0x1, 0x904000.l", "jsr 0x40d4e.l", "movea.l 0x57360, a0", "movea.l 0x5737c, a0", "movea.l 0x573d4, a0")),
     (0x4800C, "main_start_game", "void", "void", "", "Verified", ("jsr 0x438ae.l", "jsr 0x43486.l", "jsr 0x48b58.l")),
-    (0x4C9A2, "demo_speech_cmd", "uint16 player_index, uint16 message_index", "void", "", "Verified", ("move.w 0xa(a6), d2", "move.w 0xe(a6), d0", "movea.l 0x5815c, a0", "jsr 0x4cb50.l")),
+    (0x4C9A2, "demo_message_show", "uint16 player_index, uint16 message_index", "void", "", "Verified", ("move.w 0xa(a6), d2", "move.w 0xe(a6), d0", "movea.l 0x5815c, a0", "jsr 0x4cb50.l")),
     (0x4CD1C, "load_legend_page", "uint16 page_selector", "void", "", "Verified", ("move.w 0xa(a6), d2", "moveq 0x67, d1", "jsr 0x4cfae.l", "jsr 0x4cfda.l", "jsr 0x4cdb8.l")),
     (0x4CDB8, "draw_legend_monsters_page", "void", "void", "calls fixed draw_string service indirectly through A3 = 0x25A", "Verified", ("movea.l 0x25a, a3", "jsr 0x4d12e.l", "jsr (a3)")),
     (0x4CFAE, "draw_legend_overview_page", "void", "void", "", "Verified", ("pea.l 0x5a99c.l", "jsr 0x142.l", "pea.l 0x5ab0e.l")),

@@ -378,7 +378,7 @@ af+ 0x4c1bc maze_decode
 af+ 0x4c440 dialog_first_encounter
 af+ 0x4c70a dialog_clear_message
 af+ 0x4c72a player_give_item_with_message
-af+ 0x4c9a2 demo_speech_cmd
+af+ 0x4c9a2 demo_message_show
 af+ 0x4cb50 dialog_position_box
 af+ 0x4ccbc main_msgbox_countdown
 af+ 0x4cd1c load_legend_page
@@ -386,7 +386,7 @@ af+ 0x4cdb8 draw_legend_monsters_page
 af+ 0x4cfae draw_legend_overview_page
 af+ 0x4cfda draw_legend_rules_page
 af+ 0x4d12e alpha_clear_rect
-af+ 0x4d1a4 secret_bonus_earned
+af+ 0x4d1a4 secret_check_winner
 af+ 0x4d29e main_treasure_timer
 af+ 0x4d476 show_level_end_bonus_screen
 af+ 0x4d900 player_activecount
@@ -433,7 +433,7 @@ af+ 0x5107a tport_route_write_pair
 af+ 0x510bc tport_route_read_pair
 af+ 0x510fc calc_direction
 af+ 0x511ac player_tile_interact
-af+ 0x51e80 door_record_endpoints
+af+ 0x51e80 door_open_start
 af+ 0x51fae door_scan_vertical_endpoints
 af+ 0x5207c door_scan_horizontal_endpoints
 af+ 0x5214c player_add_score_with_mult
@@ -828,7 +828,7 @@ f maze_decode 1 0x0004c1bc
 f dialog_first_encounter 1 0x0004c440
 f dialog_clear_message 1 0x0004c70a
 f player_give_item_with_message 1 0x0004c72a
-f demo_speech_cmd 1 0x0004c9a2
+f demo_message_show 1 0x0004c9a2
 f dialog_position_box 1 0x0004cb50
 f main_msgbox_countdown 1 0x0004ccbc
 f load_legend_page 1 0x0004cd1c
@@ -836,7 +836,7 @@ f draw_legend_monsters_page 1 0x0004cdb8
 f draw_legend_overview_page 1 0x0004cfae
 f draw_legend_rules_page 1 0x0004cfda
 f alpha_clear_rect 1 0x0004d12e
-f secret_bonus_earned 1 0x0004d1a4
+f secret_check_winner 1 0x0004d1a4
 f main_treasure_timer 1 0x0004d29e
 f show_level_end_bonus_screen 1 0x0004d476
 f player_activecount 1 0x0004d900
@@ -886,7 +886,7 @@ f calc_direction 1 0x000510fc
 f player_tile_lowtype_jumptbl 16 0x00051200
 f player_tile_object_jumptbl 34 0x0005122a
 f player_tile_interact 1 0x000511ac
-f door_record_endpoints 1 0x00051e80
+f door_open_start 1 0x00051e80
 f door_scan_vertical_endpoints 1 0x00051fae
 f door_scan_horizontal_endpoints 1 0x0005207c
 f player_add_score_with_mult 1 0x0005214c
@@ -1322,13 +1322,13 @@ f ram.pf_vscroll_lo 2 0x0090400a
 f ram.timer_countdown 2 0x0090400c
 f ram.sound_data_recv 2 0x0090400e
 f ram.sound_data_flag 2 0x00904010
-# alias ram.timer_eepromwrite at 0x00904012 superseded by the OS-scope flag
+# alias ram.eeprom_write_timer at 0x00904012 superseded by the OS-scope flag
 f ram.game_hook_flag 2 0x00904014
 f ram.treas_mazerand_adder 2 0x00904016
 f ram.treas_mazerand_num 2 0x00904018
-f ram.wallcycle_time 2 0x0090401a
-f ram.wallcycle_type 1 0x0090401c
-f ram.wallcycle_type_pad 1 0x0090401d
+f ram.cyclic_wall_timer 2 0x0090401a
+f ram.cyclic_wall_phase 1 0x0090401c
+f ram.cyclic_wall_phase_pad 1 0x0090401d
 f ram.playfield_colorsave1 2 0x0090401e
 f ram.playfield_colorsave2 2 0x00904020
 f ram.potion_player 2 0x00904022
@@ -1346,18 +1346,18 @@ f ram.ptr_playfield_color2 4 0x0090403a
 # alias ram.ptr_playfield_color3 at 0x0090403e superseded by the OS-scope flag
 f ram.ptr_ff_cycle_delay 4 0x00904042
 f ram.forcefield_color 2 0x00904046
-f ram.ff_cycle_timer 2 0x00904048
-f ram.ff_cycle_index 1 0x00904049
+f ram.forcefield_step_timer 2 0x00904048
+f ram.forcefield_step 1 0x00904049
 f ram.thief_path_direction 1 0x0090404a
-f ram.soundqueue 8 0x0090404b
-f ram.soundqueue_head 1 0x00904053
-f ram.soundqueue_tail 1 0x00904054
+f ram.sound_queue 8 0x0090404b
+f ram.sound_queue_head 1 0x00904053
+f ram.sound_queue_tail 1 0x00904054
 f ram.player_potionsnum 4 0x00904055
 f ram.player_keysnum 4 0x0090405a
 f ram.monster_spawn_probability_bonus 1 0x0090405f
-f ram.trick_player 1 0x00904063
-f ram.trick_last 1 0x00904064
-f ram.trick_tasknum 1 0x00904065
+f ram.secret_player 1 0x00904063
+f ram.secret_trick_last 1 0x00904064
+f ram.secret_trick_id 1 0x00904065
 f ram.mob_state_link 2048 0x00904066
 f ram.maze_decomp_htype1 2 0x00904866
 f ram.maze_decomp_htype2 2 0x00904868
@@ -1384,10 +1384,10 @@ f ram.dragon_state 2 0x00904890
 f ram.dragon_anim_ctr 2 0x00904892
 f ram.dragon_seg_mob_ids 8 0x00904894
 f ram.ptr_exit_openclose_anim 4 0x0090489c
-f ram.randwall_low_watermark 2 0x009048a0
-f ram.randwall_target 2 0x009048a2
-f ram.randwall_current 2 0x009048a4
-f ram.randwall_timer 2 0x009048a6
+f ram.random_wall_low_mark 2 0x009048a0
+f ram.random_wall_target 2 0x009048a2
+f ram.random_wall_current 2 0x009048a4
+f ram.random_wall_timer 2 0x009048a6
 f ram.player_shot_last_wall_pos 8 0x009048a8
 f ram.thief_direction_change_pos 2 0x009048b0
 f ram.monster_slowmo_timer 2 0x009048b2
@@ -1432,14 +1432,14 @@ f ram.two_player_mode 2 0x009049e2
 f ram.dialog_first_encounter_flags 4 0x009049e4
 f ram.treasure_timer 2 0x009049e8
 f ram.last_coin_state 4 0x009049ea
-f ram.speech_counter 2 0x009049ee
+f ram.sound_holdoff 2 0x009049ee
 f ram.sound_queue_state 2 0x009049f0
 f ram.sound_idle_timer 2 0x009049f2
-f ram.sound_cpu_retry_count 2 0x009049f4
+f ram.sound_retry_count 2 0x009049f4
 f ram.player_hurt_palette_offset 8 0x009049f6
 f ram.player_power_palette_offset 8 0x009049fe
 f ram.exit_count 2 0x00904a06
-f ram.exit_timer 2 0x00904a08
+f ram.exit_move_timer 2 0x00904a08
 f ram.exit_open_id 2 0x00904a0a
 f ram.exit_close_id 2 0x00904a0c
 f ram.movement_blocked 2 0x00904a0e
@@ -1457,7 +1457,7 @@ f ram.name_entry_scroll_velocity 8 0x00904a2e
 f ram.name_entry_repeat_delay 4 0x00904a36
 f ram.player_initials_buf 16 0x00904a3a
 f ram.player_highscore_rank 4 0x00904a4a
-f ram.global_ui_delay_timer 2 0x00904a4e
+f ram.global_delay_timer 2 0x00904a4e
 f ram.player_treascount 4 0x00904a50
 f ram.player_stundelay 8 0x00904a54
 f ram.death_hits 2 0x00904a5c
@@ -1470,8 +1470,8 @@ f ram.lobber_shot_v_accum 8 0x00904a6e
 f ram.door_endpoint_pos 16 0x00904a76
 f ram.door_endpoint_dir 16 0x00904a86
 f ram.ptr_dialog_pos 4 0x00904a96
-f ram.dialog_dim_H 2 0x00904a9a
-f ram.dialog_dim_V 2 0x00904a9c
+f ram.dialog_box_width 2 0x00904a9a
+f ram.dialog_box_height 2 0x00904a9c
 f ram.dialog_timer 2 0x00904a9e
 f ram.ptr_dialog_box_x 2 0x00904aa0
 f ram.ptr_dialog_box_y 2 0x00904aa2
@@ -1493,7 +1493,7 @@ f ram.player_coincount 8 0x00904b2a
 f ram.player_onlevel 8 0x00904b32
 f ram.player_death_damage_counter 8 0x00904b3a
 f ram.death_touch_timer 8 0x00904b42
-f ram.ff_hurt_timer 8 0x00904b4a
+f ram.forcefield_hurt_timer 8 0x00904b4a
 f ram.level_next 2 0x00904b52
 f ram.maze_next 2 0x00904b54
 f ram.special_bonus_score 2 0x00904b56
@@ -1518,7 +1518,7 @@ f ram.eeprom_cache_stat2 1 0x00904b8f
 f ram.eeprom_cache_stat3 1 0x00904b90
 f ram.eeprom_cache_stat4 1 0x00904b91
 f ram.eeprom_cache_stats 2 0x00904b92
-f ram.eeprom_cache_settings 2 0x00904b94
+f ram.eeprom_settings_cache 2 0x00904b94
 f ram.thief_victim_pos 2 0x00904b98
 f ram.thief_victim 2 0x00904b9a
 f ram.thief_direction 2 0x00904b9c
@@ -1591,7 +1591,7 @@ f vram.color_pf_shadow 1 0x00910400
 f vram.color_pf 1 0x00910500
 f vram.color_spare 1 0x00910600
 f ram.tport_pos_table 64 0x00910700
-f ram.ff_segment_table 128 0x00910780
+f ram.forcefield_segment_table 128 0x00910780
 f vram.pf_hscroll_reg 1 0x00930000
 f osdata.working_ram_error_text 18 0x00000c86
 f osdata.rom_error_descriptor_pointer_tables 98 0x00000f1c

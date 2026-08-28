@@ -196,7 +196,7 @@ class GameState:
     # Per-player looping-sound timer arrays (§21).
     # Negative = new contact (main_handle_death plays start sound and negates).
     # Positive = countdown; when reaches 0, stop sound plays.
-    ff_hurt_timer: list[int] = field(
+    forcefield_hurt_timer: list[int] = field(
         default_factory=lambda: [0] * NUM_PLAYERS
     )  # 0x904B4A[player*2]
     death_touch_timer: list[int] = field(
@@ -509,9 +509,9 @@ class GameState:
     # 0x904046, live forcefield colour word (0 = blinked off, harmless to main_move_players)
     forcefield_color: int = 0
     # 0x904049, forcefield cycle index 0-7.
-    ff_cycle_index: int = 0
+    forcefield_step: int = 0
     # 0x904048, byte countdown. The ROM predecrements it, so zero wraps to 255.
-    ff_cycle_timer: int = 0
+    forcefield_step_timer: int = 0
     # forcefield_cycle_delay_profiles[0] at ROM 0x571DA (§7.4). Level setup
     # replaces this with profile ``levelnum_current & 3``.
     forcefield_step_durations: list[int] = field(
@@ -522,28 +522,28 @@ class GameState:
         default_factory=lambda: [0xFF00, 0xF0F0, 0x9FFF, 0xF00F]
     )
     # 0x910780, zero-terminated packed forcefield segment words.
-    ff_segment_table: list[int] = field(default_factory=list)
+    forcefield_segment_table: list[int] = field(default_factory=list)
     # Host-side setup latches: ROM level setup builds these before the main
     # loop; gauntpy's lazy bridge performs that same work on its first frame.
     forcefield_segments_ready: bool = False
     # 0x90401A, cyclic-wall timer. Setup clears it; an expired predecrement
     # reloads 0x78 (120 frames).
-    wallcycle_time: int = 0
+    cyclic_wall_timer: int = 0
     # 0x90401C, current cyclic-wall phase (0 initially, then 1, 2, 3).
-    wallcycle_type: int = 0
+    cyclic_wall_phase: int = 0
     # Color RAM Spare 0x910600: one byte per 4-tile group, 2 bits per tile.
-    # phase_bits = (cycle_phase_assignments[slot >> 2] >> ((slot & 3) << 1)) & 3.
+    # phase_bits = (cyclic_wall_assignments[slot >> 2] >> ((slot & 3) << 1)) & 3.
     # Zero = not a cyclic wall; 1-3 = phase assignment. Populated by level setup (WP-3).
-    cycle_phase_assignments: list[int] = field(default_factory=lambda: [0] * 256)
+    cyclic_wall_assignments: list[int] = field(default_factory=lambda: [0] * 256)
     cyclic_wall_setup_ready: bool = False
     # 0x9048A6, random wall timer (negative = disabled, 0 = process, positive = countdown; §19)
-    randwall_timer: int = -1
+    random_wall_timer: int = -1
     # 0x9048A0, random wall low water mark (first WALL_RANDOM slot; set by level setup WP-3)
-    randwall_low_watermark: int = 0
+    random_wall_low_mark: int = 0
     # 0x9048A2, random wall target index
-    randwall_target: int = 0
+    random_wall_target: int = 0
     # 0x9048A4, random wall current index
-    randwall_current: int = 0
+    random_wall_current: int = 0
     random_wall_setup_ready: bool = False
     # Host-side ownership latch for maze_addrandompickups, which the ROM invokes
     # once after the level's party has been placed.
@@ -614,8 +614,8 @@ class GameState:
     dialog_message: list[str] = field(default_factory=list)
     # 0x904A9A / 0x904A9C: the box's width in alpha columns and height in rows,
     # as dialog_first_encounter computed them.
-    dialog_dim_H: int = 0
-    dialog_dim_V: int = 0
+    dialog_box_width: int = 0
+    dialog_box_height: int = 0
     # Which player the box belongs to (-1 = centred/no owner), the argument
     # ``dialog_position_box`` (0x4CB50) takes; also selects its text palette.
     dialog_player: int = -1
@@ -647,15 +647,15 @@ class GameState:
     # =========================================================================
     # 0x9049E8: treasure room countdown in frames (0 = not in treasure room)
     treasure_timer: int = 0
-    # 0x904A08 exit_timer: moving-exit relocation countdown; reloads to 0x12C
+    # 0x904A08 exit_move_timer: moving-exit relocation countdown; reloads to 0x12C
     # (300 frames), verified by disassembly of main_exit_move (0x52A74).
-    exit_timer: int = 0x12C
+    exit_move_timer: int = 0x12C
     # 0x904878: secret room availability counter (counts down once per level)
     secret_possible_counter: int = 20
     # 0x90487A: secret room start value (for counter reload)
     secret_possible_start: int = 20
     # 0x904063: current secret room winner player index (-1 = none)
-    trick_player: int = -1
+    secret_player: int = -1
     # 0x904AA4 dialog/name buffer reused by the secret-room contest flow.
     secret_name_buffer: list[int] = field(
         default_factory=lambda: [ord("A")] + [ord(" ")] * 28
@@ -664,10 +664,10 @@ class GameState:
     # 0x904870: maze number of previous secret room
     secret_prev_maze: int = 0
     # 0x904065: trick/challenge ID active in current level (0 = none)
-    trick_tasknum: int = 0
-    # 0x904064 ``trick_last``: the maze trick a player won, saved when
+    secret_trick_id: int = 0
+    # 0x904064 ``secret_trick_last``: the maze trick a player won, saved when
     # show_level_start_screen replaces it with a challenge code (0x44E06).
-    trick_last: int = 0
+    secret_trick_last: int = 0
     # The winner's inventory, stashed on the way into the secret room and added
     # back on the way out. The ROM parks them in spare array slots --
     # 0x90405F (keys), 0x90405A reused as scratch (potions) and 0x905F6D
@@ -690,10 +690,10 @@ class GameState:
     # clears it in player_start_inner (0x48E86); WP-15 owns the counter and
     # exposes ``exits.treasure_collected()`` as that write site.
     player_treascount: list[int] = field(default_factory=lambda: [0] * NUM_PLAYERS)
-    # 0x904A4E global_ui_delay_timer: holds the bonus tally and then the level
+    # 0x904A4E global_delay_timer: holds the bonus tally and then the level
     # splash before player placement. bonus_amount is the computed award shown
     # on the treasure/secret-room exit screen.
-    global_ui_delay_timer: int = 0
+    global_delay_timer: int = 0
     bonus_amount: int = 0
     # Host-side phase marker for the shared 0x904A4E timer. True after the next
     # maze and its level splash are prepared, while hero placement is deferred.
@@ -724,8 +724,8 @@ class GameState:
     exit_open_id: int = 0
     # 0x904A0C: slot the open exit is moving away from, latched at 0x528C8.
     exit_close_id: int = 0
-    # Open/close animation step, 0-7, while exit_timer is negative. No RAM
-    # address of its own: the ROM keeps it in D4 as ``(-exit_timer) >> 2``
+    # Open/close animation step, 0-7, while exit_move_timer is negative. No RAM
+    # address of its own: the ROM keeps it in D4 as ``(-exit_move_timer) >> 2``
     # (main_exit_move 0x52AAC-0x52AB4) and uses it to index the stamp scripts at
     # ``ptr_exit_openclose_anim`` (0x90489C). Zero means "settled".
     exit_anim_frame: int = 0
@@ -790,16 +790,15 @@ class GameState:
     # Outgoing command ring: 8 physical slots at 0x90404B (write head 0x904053,
     # read head 0x904054), one slot reserved to distinguish full from empty, so
     # usable capacity is 7 -- doc/04_game_subsystems.md §11.1-11.2.
-    soundqueue: list[int] = field(default_factory=list)
+    sound_queue: list[int] = field(default_factory=list)
     # Permanent history of every command accepted by the immediate fast path or
     # by main_update_sound's queue drain. Never cleared automatically -- this is
     # the WP-18 test oracle.
     sound_log: list[int] = field(default_factory=list)
-    # 0x9049EE, sound-board recovery holdoff. Named ``speech_counter`` in the
-    # loader symbols, but corrected in §11.3: the only writer is
+    # 0x9049EE, sound-board recovery holdoff. The only nonzero writer is
     # sound_system_reset, which loads 0xB4 (180 frames). Nonzero blocks both
     # sound_play's immediate-send attempt and main_update_sound's drain.
-    speech_counter: int = 0
+    sound_holdoff: int = 0
     # 0x9049F0, low 3 bits are the sound board's own fault report, delivered as
     # the reply to the diagnostic status query (command 0x07) -- §11.3.
     sound_queue_state: int = 0
@@ -809,7 +808,7 @@ class GameState:
     sound_idle_timer: int = 0xF0
     # 0x9049F4, consecutive failed-status-send retry count; a full reset fires
     # above 0xB4 (180) -- §11.3.
-    sound_cpu_retry_count: int = 0
+    sound_retry_count: int = 0
     # No sound board is emulated, so no reply byte ever arrives from OS 0x178
     # on its own -- the board is the one piece of hardware the port replaces
     # with a command log rather than reimplementing. Tests (and any future
@@ -821,8 +820,8 @@ class GameState:
     # WP-19 · EEPROM and configuration
     # =========================================================================
     game_settings: int = 0            # 0x904A24, EEPROM options word; bit layout in subsystems/eeprom.py
-    timer_eepromwrite: int = 0x8CA0  # 0x904012; 36,000 frames (~10 min at 60 Hz)
-    eeprom_cache_settings: int = 0   # 0x904B94, last-written game_settings
+    eeprom_write_timer: int = 0x8CA0  # 0x904012; 36,000 frames (~10 min at 60 Hz)
+    eeprom_settings_cache: int = 0   # 0x904B94, last-written game_settings
     eeprom_save_path: str = "gauntpy_eeprom.json"  # no ROM address -- local persistence target, see eeprom.py
     # Host boundary: resumed historical states cannot overwrite newer external
     # EEPROM progress. Fresh boot/direct-play states leave persistence enabled.
@@ -884,8 +883,8 @@ class GameState:
     # Cabinet rotation state, EEPROM-backed (doc/06 §3.2). Nominally owned by
     # WP-19's config load; kept here with the rest of the transition machinery
     # that reads and advances it. Fresh-EEPROM defaults per doc/06 §3.2 table.
-    mazerand_num: int = 5           # 0x904010, rotation resume position
-    mazerand_adder: int = 0         # 0x90400E, extra mazes per level (0-7)
+    maze_number: int = 5           # 0x904010, rotation resume position
+    maze_stride: int = 0         # 0x90400E, extra mazes per level (0-7)
     # Treasure-room rotation -- the second EEPROM-backed pair (doc/06 §3.5).
     # eeprom_load_config forces treas_mazerand_num back to 104 when it is outside
     # 104-114 (0x4303E-0x43054) and masks the adder to 0-3 (0x43062); those are

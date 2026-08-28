@@ -518,7 +518,7 @@ cabinet's remarkably candid bookkeeping.
 
 > **Under the hood**
 >
-> - Door endpoints: `door_record_endpoints` (0x51E80) fills
+> - Door endpoints: `door_open_start` (0x51E80) fills
 >   `door_endpoint_pos`/`door_endpoint_dir` (0x904A76/0x904A86); shape classes
 >   by picture range in `pf_isdoor` (class 1 0x9D18–0x9D3B, class 2
 >   0x9D3C–0x9D7B, class 3 0x9D7C–0x9DAC); opening animation
@@ -566,10 +566,10 @@ cabinet's remarkably candid bookkeeping.
 >   progress in `secret_tricks_flags` (0x904872), hooks in `resolve_shot_hit`
 >   (tricks 5/9/0x11) and the dragon/movement paths; pacing counters
 >   0x904878/0x90487A via `secret_check` (0x486FE), §10.6.
-> - Challenges: `show_level_start_screen` (0x44DB4) saves `trick_last`
+> - Challenges: `show_level_start_screen` (0x44DB4) saves `secret_trick_last`
 >   (0x904064), draws challenge 0x50 + getrandom(14) into 0x904065, selects
 >   maze 115 (0x50–0x56) or 116 (0x57–0x5D), time limits 0x57360/0x5737C,
->   qualifier records 0x573D4; bonus predicate `secret_bonus_earned`
+>   qualifier records 0x573D4; bonus predicate `secret_check_winner`
 >   (0x4D1A4); supershot bridge 0x905F6D.
 > - Secret code: `secret_getname` (0x54EC6, gated by settings bit 13),
 >   `secret_name_entry_update` (0x54FE8), `secret_code_build` (0x54BE0);

@@ -553,10 +553,10 @@ class TestStartAttractToGame:
         assert state.attract_timer == 0xFFFF
 
     def test_transition_state_is_cleared(self):
-        """global_ui_delay_timer = 0 at 0x44366; no stale treasure countdown."""
+        """global_delay_timer = 0 at 0x44366; no stale treasure countdown."""
         state = GameState()
         state.game_mode = GameMode.DEMO
-        state.global_ui_delay_timer = 90
+        state.global_delay_timer = 90
         state.bonus_amount = 1234
         state.treasure_timer = 600
         state.welcome_elapsed_frames = 900
@@ -565,7 +565,7 @@ class TestStartAttractToGame:
         state.mugger_item_carried = int(MazeObjIds.FOOD_INVULN)
         state.mugger_item_nextlevel = int(MazeObjIds.FOOD_INVULN)
         start_attract_to_game(state)
-        assert (state.global_ui_delay_timer, state.bonus_amount, state.treasure_timer) == (0, 0, 0)
+        assert (state.global_delay_timer, state.bonus_amount, state.treasure_timer) == (0, 0, 0)
         assert state.welcome_elapsed_frames == 0
         assert (
             state.thief_item_carried,

@@ -75,7 +75,7 @@ def test_pushing_a_movable_wall_into_an_exit_wins_trick_ten():
     wall = (5 << 5) | 5
     exit_slot = wall + 1
     state = GameState()
-    state.trick_tasknum = 10
+    state.secret_trick_id = 10
     state.mobs.create(
         wall,
         tile=0x20F6,
@@ -94,7 +94,7 @@ def test_pushing_a_movable_wall_into_an_exit_wins_trick_ten():
     assert gp._push_movable_wall(
         state, 2, wall, gp._JOY_RIGHT, vertical=False,
     )
-    assert state.trick_player == 2
+    assert state.secret_player == 2
     assert state.mobs.picture[wall] == 0
 
 
@@ -121,7 +121,7 @@ def test_pushing_a_movable_wall_into_a_transporter_dissolves_it():
         state, 0, wall, gp._JOY_RIGHT, vertical=False,
     )
     assert state.mobs.picture[wall] == 0
-    assert state.trick_player == -1
+    assert state.secret_player == -1
 
 
 # ---------------------------------------------------------------------------

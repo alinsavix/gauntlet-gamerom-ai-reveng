@@ -45,18 +45,18 @@ class TestMazeChecknum:
     def test_candidate_5_is_replaced_by_resume(self):
         """The hinge (doc/06 §3.2): candidate maze 5 -> the resume position."""
         state = GameState()
-        state.mazerand_num = 42
+        state.maze_number = 42
         state.maze_next = 5
         ex.maze_checknum(state)
         assert state.maze_next == 42
 
     def test_candidate_above_101_wraps_to_5_and_forces_eeprom_save(self):
         state = GameState()
-        state.mazerand_num = 5
+        state.maze_number = 5
         state.maze_next = 150
         ex.maze_checknum(state)
         assert state.maze_next == 5
-        assert state.timer_eepromwrite == 1   # forced save next tick
+        assert state.eeprom_write_timer == 1   # forced save next tick
 
     def test_in_range_candidate_is_left_alone(self):
         state = GameState()
@@ -76,12 +76,12 @@ class TestComputeNextLevel:
         state = GameState()
         state.levelnum_current = 5
         state.mazenum_current = 4
-        state.mazerand_num = 5
-        state.mazerand_adder = 0
+        state.maze_number = 5
+        state.maze_stride = 0
         ex.compute_next_level(state, int(MazeObjIds.EXIT))
         assert state.level_next == 6
         assert state.maze_next == 5
-        assert state.mazerand_adder == 1
+        assert state.maze_stride == 1
 
     def test_opening_act_maze0_to_maze1(self):
         """Levels 1-5 step one maze at a time (stride not yet in play)."""
@@ -105,12 +105,12 @@ class TestComputeNextLevel:
         state = GameState()
         state.levelnum_current = 1
         state.mazenum_current = 0
-        state.mazerand_num = 37
-        state.mazerand_adder = 3
+        state.maze_number = 37
+        state.maze_stride = 3
         ex.compute_next_level(state, int(MazeObjIds.EXITTO6))
         assert state.level_next == 6
         assert state.maze_next == 37
-        assert state.mazerand_adder == 3          # unchanged
+        assert state.maze_stride == 3          # unchanged
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +251,7 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
         )
         state = GameState(
             game_mode=GameMode.NORMAL,
-            global_ui_delay_timer=2,
+            global_delay_timer=2,
             dialog_timer=30,
             level_start_pending=True,
         )
@@ -260,7 +260,7 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
         sess.main_start_game(state)
         sess.main_start_game(state)
 
-        assert state.global_ui_delay_timer == 0
+        assert state.global_delay_timer == 0
         assert not state.level_start_pending
         assert spawned and spawned[0][1] == [0]
 
@@ -283,13 +283,13 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
         _run_exit_animation(state)
 
         assert state.game_mode == int(GameMode.NORMAL)
-        assert state.global_ui_delay_timer > 0
+        assert state.global_delay_timer > 0
         assert state.level_start_pending
         assert state.levelnum_current == 2 and state.mazenum_current == 1  # committed
         assert state.players[0].status == int(PlayerStatus.ALIVE_NEXT)
 
         # Hold the level splash out; when the timer expires the hero is placed.
-        while state.global_ui_delay_timer > 0:
+        while state.global_delay_timer > 0:
             sess.main_start_game(state)
 
         assert state.game_mode == int(GameMode.NORMAL)
@@ -336,7 +336,7 @@ class TestLevelEndBonus:
         assert state.bonus_amount == 100 * 1 * 1 * 5      # players*coins*treasures
         assert state.players[0].score == 500              # awarded to the exiter
         assert state.game_mode == int(GameMode.TREAS_EXIT)
-        assert state.global_ui_delay_timer == 0x12C                 # 0x4D50E
+        assert state.global_delay_timer == 0x12C                 # 0x4D50E
 
     def test_no_treasures_is_no_bonus(self):
         state = GameState()
@@ -377,7 +377,7 @@ class TestTreasureRoomRoundTrip:
     def _run_out_the_hold(self, state: GameState) -> None:
         """Sit out the current level-start or bonus display hold."""
         _run_exit_animation(state)
-        while state.global_ui_delay_timer > 0:
+        while state.global_delay_timer > 0:
             sess.main_start_game(state)
 
     def test_exit_lands_in_a_treasure_room_then_returns_to_the_rotation(self):
@@ -682,7 +682,7 @@ class TestSecretRoomRoundTrip:
     def _hold(self, state: GameState) -> None:
         """Finish the exit dissolve, then sit out the bonus display."""
         _run_exit_animation(state)
-        while state.global_ui_delay_timer > 0:
+        while state.global_delay_timer > 0:
             sess.main_start_game(state)
 
     @staticmethod
@@ -694,11 +694,11 @@ class TestSecretRoomRoundTrip:
 
     def test_no_treasure_trick_wins_and_opens_a_secret_room(self):
         state = self._level_12(self._GREEDY_MAZE)
-        assert state.trick_tasknum == ex.TRICK_NO_TREASURE == 0x0E
+        assert state.secret_trick_id == ex.TRICK_NO_TREASURE == 0x0E
         p = state.players[0]
 
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
-        assert state.trick_player == 0, "the trick was satisfied at the exit"
+        assert state.secret_player == 0, "the trick was satisfied at the exit"
         _run_exit_animation(state)
         assert state.secret_possible_start == 35, "a win pushes the reload up"
         assert state.level_next == 13
@@ -706,8 +706,8 @@ class TestSecretRoomRoundTrip:
         self._hold(state)
         assert state.mazenum_current in (115, 116)
         assert state.levelnum_current == 13
-        assert ex.CHALLENGE_FIRST <= state.trick_tasknum <= 0x5D
-        assert state.trick_last == ex.TRICK_NO_TREASURE
+        assert ex.CHALLENGE_FIRST <= state.secret_trick_id <= 0x5D
+        assert state.secret_trick_last == ex.TRICK_NO_TREASURE
         assert state.treasure_timer > 0
         # Only the winner is inside, and their inventory is at the door.
         assert p.status == int(PlayerStatus.ALIVE_HERE)
@@ -723,7 +723,7 @@ class TestSecretRoomRoundTrip:
         rotation_maze = state.maze_next
         self._hold(state)
 
-        state.trick_tasknum = 0x54            # an unconditional task
+        state.secret_trick_id = 0x54            # an unconditional task
         ex.player_exit_sequence(
             state, 0, self._secret_exit(state), int(MazeObjIds.EXIT),
         )
@@ -731,13 +731,13 @@ class TestSecretRoomRoundTrip:
         assert state.bonus_amount == ex._SECRET_ROOM_BONUS
         assert p.score == ex._SECRET_ROOM_BONUS
         assert (p.keysnum, p.potionsnum, p.supershot) == (3, 2, 5), "stash returned"
-        assert state.trick_player == -1
+        assert state.secret_player == -1
 
         self._hold(state)
         assert (state.levelnum_current, state.mazenum_current) == (13, rotation_maze)
         assert state.game_mode == int(GameMode.NORMAL)
         assert p.status == int(PlayerStatus.ALIVE_HERE)
-        assert state.trick_tasknum == ex.TRICK_NONE, "the challenge is over"
+        assert state.secret_trick_id == ex.TRICK_NONE, "the challenge is over"
 
     def test_running_the_challenge_clock_out_returns_with_no_bonus(self):
         state = self._level_12(self._GREEDY_MAZE)
@@ -757,19 +757,19 @@ class TestSecretRoomRoundTrip:
 
     def test_a_shooting_trick_wins_the_same_way(self):
         state = self._level_12(self._SHOOT_MAZE)
-        assert state.trick_tasknum == ex.TRICK_WATCHSHOOT1
+        assert state.secret_trick_id == ex.TRICK_WATCHSHOOT1
         p = state.players[0]
 
         ex.secret_trick_progress(state, 0, ex.TRICK_WATCHSHOOT1)
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
-        assert state.trick_player == -1, "one shot is not enough"
+        assert state.secret_player == -1, "one shot is not enough"
 
         state = self._level_12(self._SHOOT_MAZE)
         p = state.players[0]
         for _ in range(2):
             ex.secret_trick_progress(state, 0, ex.TRICK_WATCHSHOOT1)
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
-        assert state.trick_player == 0
+        assert state.secret_player == 0
         self._hold(state)
         assert state.mazenum_current in (115, 116)
 
@@ -778,7 +778,7 @@ class TestSecretRoomRoundTrip:
         p = state.players[0]
         ex.treasure_collected(state, 0)         # greedy!
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
-        assert state.trick_player == -1
+        assert state.secret_player == -1
         _run_exit_animation(state)
         assert state.secret_possible_start == 18, "a miss pulls the reload down"
 
@@ -793,26 +793,26 @@ class TestSecretRoomRoundTrip:
         maze 19's is the treasure code, so eating must not touch that one.
         """
         state = self._level_12(self._DIET_MAZE)
-        assert state.trick_tasknum == ex.TRICK_NO_FOOD == 0x0D
+        assert state.secret_trick_id == ex.TRICK_NO_FOOD == 0x0D
         p = state.players[0]
         ex.treasure_collected(state, 0)
         assert state.secret_tricks_flags[0] == 0
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
-        assert state.trick_player == 0, "taking treasure is not eating"
+        assert state.secret_player == 0, "taking treasure is not eating"
 
         state = self._level_12(self._GREEDY_MAZE)
         p = state.players[0]
         ex.secret_trick_progress(state, 0, ex.TRICK_NO_FOOD)   # WP-6's food hook
         assert state.secret_tricks_flags[0] == 0
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
-        assert state.trick_player == 0, "eating is not taking treasure"
+        assert state.secret_player == 0, "eating is not taking treasure"
 
     def test_a_food_trick_is_lost_by_eating(self):
         state = self._level_12(self._DIET_MAZE)
         p = state.players[0]
         ex.secret_trick_progress(state, 0, ex.TRICK_NO_FOOD)   # 0x51CEE
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
-        assert state.trick_player == -1
+        assert state.secret_player == -1
 
     def test_the_next_level_gets_a_fresh_objective(self):
         """secret_new_level_setup runs on the return maze, so the trick and the
@@ -821,12 +821,12 @@ class TestSecretRoomRoundTrip:
         p = state.players[0]
         ex.player_exit_sequence(state, 0, p.mob_slot, int(MazeObjIds.EXIT))
         self._hold(state)                        # into the secret room
-        state.trick_tasknum = 0x54
+        state.secret_trick_id = 0x54
         ex.player_exit_sequence(
             state, 0, self._secret_exit(state), int(MazeObjIds.EXIT),
         )
         self._hold(state)                        # back to the rotation
 
-        assert state.trick_player == -1
-        assert state.trick_tasknum == ex.TRICK_NONE
+        assert state.secret_player == -1
+        assert state.secret_trick_id == ex.TRICK_NONE
         assert state.secret_tricks_flags[0] == 0

@@ -49,7 +49,7 @@ from gauntpy.coords import (
 from gauntpy.state import GameState
 from gauntpy.subsystems.exits import (
     TRICK_NOUSEINVUL,
-    secret_bonus_earned,
+    secret_check_winner,
     secret_trick_check,
 )
 from gauntpy.subsystems.monsters import (
@@ -1966,7 +1966,7 @@ class TestPlayerHit:
 class TestSecretRoomProgress:
     """0x496AC and 0x49892 -- the only two secret-trick hooks in monster code.
 
-    A ROM-wide search for ``trick_tasknum`` (0x904065) and
+    A ROM-wide search for ``secret_trick_id`` (0x904065) and
     ``secret_tricks_flags`` (0x904872) finds no other reference anywhere in the
     dispatcher, the movement engine or the shooting code.
     """
@@ -1975,7 +1975,7 @@ class TestSecretRoomProgress:
              player=0, it=-1):
         state = GameState()
         state.game_mode = 0
-        state.trick_tasknum = task
+        state.secret_trick_id = task
         state.secret_tricks_flags[player] = progress
         state.player_it = it
         mslot = pack_slot(5, 5)
@@ -2013,14 +2013,14 @@ class TestSecretRoomProgress:
 
     def test_the_counter_satisfies_the_exit_check(self):
         state = self._hit(MazeObjIds.MONST_IT, 8, task=0x5C)
-        state.trick_player = 0
-        assert secret_bonus_earned(state) is True
+        state.secret_player = 0
+        assert secret_check_winner(state) is True
 
     def test_an_untagged_player_fails_the_exit_check(self):
         state = self._hit(MazeObjIds.MONST_IT, 8, task=0x5B, progress=0)
-        state.trick_tasknum = 0x5C
-        state.trick_player = 0
-        assert secret_bonus_earned(state) is False
+        state.secret_trick_id = 0x5C
+        state.secret_player = 0
+        assert secret_check_winner(state) is False
 
     def test_ordinary_contact_never_bumps_the_it_task(self):
         state = self._hit(MazeObjIds.MONST_GRUNT, 4, task=0x5C)
@@ -2074,7 +2074,7 @@ class TestSecretRoomProgress:
         state = self._hit(MazeObjIds.MONST_GRUNT, 4, task=TRICK_NOUSEINVUL,
                           acid_timer=30, progress=1)
         secret_trick_check(state, 0)
-        assert state.trick_player < 0
+        assert state.secret_player < 0
 
 
 # ---------------------------------------------------------------------------

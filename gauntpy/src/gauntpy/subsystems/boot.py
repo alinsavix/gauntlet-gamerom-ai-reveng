@@ -49,10 +49,10 @@ def one_time_init(state: GameState) -> None:
 
 def _sound_system_reset(state: GameState) -> None:
     """Flush the sound ring and arm the recovery holdoff (§5 step 1, §11.3)."""
-    state.soundqueue.clear()
-    state.speech_counter = _SOUND_RESET_HOLDOFF
+    state.sound_queue.clear()
+    state.sound_holdoff = _SOUND_RESET_HOLDOFF
     state.sound_idle_timer = 0xF0
-    state.sound_cpu_retry_count = 0
+    state.sound_retry_count = 0
 
 
 def _clear_game_state(state: GameState) -> None:

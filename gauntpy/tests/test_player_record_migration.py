@@ -563,7 +563,7 @@ class TestForcefieldContactUsesTheRecordCell:
         player = _spawn(state, 0, start)
         state.forcefield_color = 1
         # horizontal, length 4, hub at (5,3) -- doc/04 §7.3.
-        state.ff_segment_table = [0x8000 | (3 << 10) | pack_slot(5, 3)]
+        state.forcefield_segment_table = [0x8000 | (3 << 10) | pack_slot(5, 3)]
         state.forcefield_segments_ready = True
 
         assert gp._check_forcefield_collision(state, 0)

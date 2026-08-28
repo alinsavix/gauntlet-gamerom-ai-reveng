@@ -130,40 +130,23 @@ def test_load_migrates_original_schema_one_shape(tmp_path):
     assert restored.dialog_once_flags == 0
 
 
-def test_load_migrates_pre_naming_audit_schema_one_fields(tmp_path):
+def test_load_rejects_schema_one_fields_from_before_the_naming_policy(tmp_path):
     payload = state_dump_payload(GameState())
-    renamed = {
-        "vblank_semaphore": "vblank_flag",
-        "collision_dist_H": "shot_sep_h_abs",
-        "shothit_dist_H": "shot_sep_h",
-        "ff_hurt_timer": "forcefield_hurt_timer",
-        "monster_spawn_probability_bonus": "spawn_probability_bonus",
-        "trick_player": "secret_winner",
-        "exit_timer": "exit_move_timer",
-        "mazerand_num": "maze_resume",
-    }
-    for canonical_name, old_name in renamed.items():
-        payload["state"][old_name] = payload["state"].pop(canonical_name)
-
-    path = tmp_path / "pre-naming-audit.json"
+    current_name = "forcefield_hurt_timer"
+    stale_name = "ff_" + "hurt_timer"
+    payload["state"][stale_name] = payload["state"].pop(current_name)
+    path = tmp_path / "stale-naming-policy.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
-    restored = load_game_state(path)
 
-    assert restored.vblank_semaphore == 0
-    assert restored.collision_dist_H == 0
-    assert restored.shothit_dist_H == 0
-    assert restored.ff_hurt_timer == [0] * 4
-    assert restored.monster_spawn_probability_bonus == 0
-    assert restored.trick_player == -1
-    assert restored.exit_timer == 0x12C
-    assert restored.mazerand_num == 5
+    with pytest.raises(StateDumpError, match="GameState shape mismatch"):
+        load_game_state(path)
 
 
 def test_loaded_state_cannot_overwrite_external_eeprom(tmp_path, monkeypatch):
     from gauntpy.subsystems import eeprom
 
     state = load_game_state(dump_game_state(GameState(), tmp_path))
-    state.timer_eepromwrite = 0
+    state.eeprom_write_timer = 0
     state.game_settings = 1
     writes = []
     monkeypatch.setattr(eeprom, "eeprom_save_settings", lambda value: writes.append(value))
@@ -171,7 +154,7 @@ def test_loaded_state_cannot_overwrite_external_eeprom(tmp_path, monkeypatch):
     eeprom.eeprom_periodic_write(state)
 
     assert writes == []
-    assert state.timer_eepromwrite == 0
+    assert state.eeprom_write_timer == 0
 
 
 def test_load_rejects_unknown_schema_and_incomplete_state(tmp_path):

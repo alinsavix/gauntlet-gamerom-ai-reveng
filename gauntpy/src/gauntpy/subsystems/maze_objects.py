@@ -125,19 +125,19 @@ def select_forcefield_delay_profile(state: GameState) -> None:
     state.forcefield_step_durations = list(
         _FORCEFIELD_CYCLE_DELAY_PROFILES[state.levelnum_current & 3]
     )
-    state.ff_segment_table.clear()
+    state.forcefield_segment_table.clear()
     state.forcefield_segments_ready = False
     state.cyclic_wall_setup_ready = False
-    state.cycle_phase_assignments = [0] * len(state.cycle_phase_assignments)
-    state.wallcycle_type = 0
-    state.wallcycle_time = 0
+    state.cyclic_wall_assignments = [0] * len(state.cyclic_wall_assignments)
+    state.cyclic_wall_phase = 0
+    state.cyclic_wall_timer = 0
     state.random_wall_setup_ready = False
     state.tport_secret_pad_masks = [0] * len(state.tport_secret_pad_masks)
     state.tport_secret_event_keys = [-1] * len(state.tport_secret_event_keys)
 
 
 def _update_forcefield_color(state: GameState) -> None:
-    if state.ff_cycle_index & 1:
+    if state.forcefield_step & 1:
         state.forcefield_color = 0
     else:
         color_index = (state.frame_counter & 0x0C) >> 2
@@ -351,7 +351,7 @@ def record_transporter_secret_progress(
 
     # 0x5025C / 0x509E4: task 0x56 ORs 1 << tport_find_id(pad), where the
     # ROM ID is one-based.  The setter preserves its active-objective gate.
-    if state.trick_tasknum == 0x56:
+    if state.secret_trick_id == 0x56:
         mask = state.tport_secret_pad_masks[player_index]
         for pad in (source_slot, destination_pad):
             pad_id = tport_find_id(state, pad)
@@ -403,11 +403,11 @@ def main_cycle_tport_and_ffield(state: GameState) -> None:
         elif state.tport_cycle_pos >= 5:
             state.tport_cycle_dir = -1
 
-    state.ff_cycle_timer = (state.ff_cycle_timer - 1) & 0xFF
-    if state.ff_cycle_timer == 0:
-        state.ff_cycle_index = (state.ff_cycle_index + 1) & 7
-        duration = state.forcefield_step_durations[state.ff_cycle_index]
-        state.ff_cycle_timer = (duration + state.getrandom(8)) & 0xFF
+    state.forcefield_step_timer = (state.forcefield_step_timer - 1) & 0xFF
+    if state.forcefield_step_timer == 0:
+        state.forcefield_step = (state.forcefield_step + 1) & 7
+        duration = state.forcefield_step_durations[state.forcefield_step]
+        state.forcefield_step_timer = (duration + state.getrandom(8)) & 0xFF
 
     _update_forcefield_color(state)
 
@@ -557,10 +557,10 @@ def maze_forcefield_setup(state: GameState) -> None:
         assignments[first >> 2] = packed
         has_cycle_marker |= packed != 0
 
-    state.cycle_phase_assignments = assignments
+    state.cyclic_wall_assignments = assignments
     state.cyclic_wall_setup_ready = True
-    state.wallcycle_type = 0
-    state.wallcycle_time = 0
+    state.cyclic_wall_phase = 0
+    state.cyclic_wall_timer = 0
     if not has_cycle_marker:
         state.level_flags_3 &= ~0x08
 
@@ -570,24 +570,24 @@ def main_walls_cyclic_move(state: GameState) -> None:
     if not (state.level_flags_3 & 0x08):
         return
     if not state.cyclic_wall_setup_ready:
-        if any(state.cycle_phase_assignments):
+        if any(state.cyclic_wall_assignments):
             state.cyclic_wall_setup_ready = True
         else:
             maze_forcefield_setup(state)
     if not any(player.mob_slot for player in state.players):
         return
 
-    previous_timer = state.wallcycle_time & 0xFFFF
-    state.wallcycle_time = (previous_timer - 1) & 0xFFFF
+    previous_timer = state.cyclic_wall_timer & 0xFFFF
+    state.cyclic_wall_timer = (previous_timer - 1) & 0xFFFF
     if previous_timer != 0:
         return
 
-    state.wallcycle_time = 0x78
-    old_phase = state.wallcycle_type
+    state.cyclic_wall_timer = 0x78
+    old_phase = state.cyclic_wall_phase
     new_phase = old_phase + 1
     if new_phase > 3:
         new_phase = 1
-    state.wallcycle_type = new_phase
+    state.cyclic_wall_phase = new_phase
 
     if state.mazenum_current < 0x73:
         _sound_play(state, _SOUND_CYCLIC_WALLS)
@@ -599,7 +599,7 @@ def main_walls_cyclic_move(state: GameState) -> None:
             state.vblank_semaphore = 0
 
         assignment = (
-            state.cycle_phase_assignments[tile >> 2] >> ((tile & 3) << 1)
+            state.cyclic_wall_assignments[tile >> 2] >> ((tile & 3) << 1)
         ) & 3
         if assignment == 0:
             continue
@@ -648,25 +648,25 @@ def setup_random_walls(state: GameState) -> None:
         if state.mobs.obj_type(slot) == int(MazeObjIds.WALL_RANDOM)
     ]
     if not slots:
-        state.randwall_timer = -1
-        state.randwall_low_watermark = 0
-        state.randwall_target = 0
-        state.randwall_current = 0
+        state.random_wall_timer = -1
+        state.random_wall_low_mark = 0
+        state.random_wall_target = 0
+        state.random_wall_current = 0
         state.random_wall_setup_ready = True
         return
 
-    state.randwall_low_watermark = slots[0]
-    state.randwall_target = slots[-1]
-    state.randwall_current = slots[0] - 1
-    state.randwall_timer = 0
+    state.random_wall_low_mark = slots[0]
+    state.random_wall_target = slots[-1]
+    state.random_wall_current = slots[0] - 1
+    state.random_wall_timer = 0
     state.random_wall_setup_ready = True
 
 
 def _restart_random_wall_cycle(state: GameState) -> None:
-    state.randwall_timer = (
+    state.random_wall_timer = (
         0x3C if state.game_mode < 0 else 0x78
     )
-    state.randwall_current = state.randwall_low_watermark - 1
+    state.random_wall_current = state.random_wall_low_mark - 1
 
 
 def main_walls_random_move(state: GameState) -> None:
@@ -679,23 +679,23 @@ def main_walls_random_move(state: GameState) -> None:
         setup_random_walls(state)
     if state.game_mode not in (GameMode.NORMAL, GameMode.DEMO):
         return
-    if state.randwall_timer < 0:
+    if state.random_wall_timer < 0:
         return
 
-    if state.randwall_timer > 0:
-        state.randwall_timer -= 1
+    if state.random_wall_timer > 0:
+        state.random_wall_timer -= 1
         if (
-            state.randwall_timer == 0
-            and state.randwall_current == state.randwall_target
+            state.random_wall_timer == 0
+            and state.random_wall_current == state.random_wall_target
         ):
             _restart_random_wall_cycle(state)
             return
 
-    if state.randwall_current == state.randwall_target:
+    if state.random_wall_current == state.random_wall_target:
         return
 
-    start = state.randwall_current + 1
-    target = state.randwall_target
+    start = state.random_wall_current + 1
+    target = state.random_wall_target
     candidate = next(
         (
             slot
@@ -705,8 +705,8 @@ def main_walls_random_move(state: GameState) -> None:
         None,
     )
     if candidate is None:
-        state.randwall_current = target
-        if state.randwall_timer == 0:
+        state.random_wall_current = target
+        if state.random_wall_timer == 0:
             _restart_random_wall_cycle(state)
         return
 
@@ -724,11 +724,11 @@ def main_walls_random_move(state: GameState) -> None:
             clear_cell_descriptor(state, candidate)
 
     if candidate == target:
-        state.randwall_current = target
-        if state.randwall_timer == 0:
+        state.random_wall_current = target
+        if state.random_wall_timer == 0:
             _restart_random_wall_cycle(state)
     else:
-        state.randwall_current = candidate
+        state.random_wall_current = candidate
 
 
 # ---------------------------------------------------------------------------
@@ -787,7 +787,7 @@ def forcefield_segments_setup(state: GameState) -> None:
                     or state.mobs.picture[candidate] in (0x8000, 0x8001)
                 ):
                     break
-    state.ff_segment_table = segments
+    state.forcefield_segment_table = segments
     state.forcefield_segments_ready = True
     from ..playfield_vram import write_tile_descriptor
 
@@ -814,7 +814,7 @@ def check_forcefield_collision(state: GameState, packed_maze_pos: int) -> bool:
     """0x53346/0x5FC5E -- test a packed cell against forcefield beam segments."""
     query = packed_maze_pos & 0x3FF
     query_row, query_col = query >> 5, query & 0x1F
-    for segment in state.ff_segment_table:
+    for segment in state.forcefield_segment_table:
         hub = segment & 0x3FF
         hub_row, hub_col = hub >> 5, hub & 0x1F
         length = ((segment >> 10) & 0x0F) + 1

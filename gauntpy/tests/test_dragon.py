@@ -508,7 +508,7 @@ class TestDamage:
 
     def test_dragon_kill_sets_no_get_hit_progress_to_two(self):
         state, primary = self._exposed_dragon()
-        state.trick_tasknum = TRICK_NOGETHIT
+        state.secret_trick_id = TRICK_NOGETHIT
         state.dragon_hits = 8
 
         dragon_shot_hit(state, 0x400 + primary, 2)
@@ -517,7 +517,7 @@ class TestDamage:
 
     def test_disqualified_no_get_hit_player_stays_disqualified_on_dragon_kill(self):
         state, primary = self._exposed_dragon()
-        state.trick_tasknum = TRICK_NOGETHIT
+        state.secret_trick_id = TRICK_NOGETHIT
         state.secret_tricks_flags[1] = 1
         state.dragon_hits = 8
 

@@ -65,8 +65,8 @@ def test_enable_secret_room_arms_current_maze_through_level_setup():
     assert debug_enable_secret_room(state)
 
     assert state.secret_possible_counter == 0
-    assert state.trick_tasknum == 13
-    assert state.trick_player == -1
+    assert state.secret_trick_id == 13
+    assert state.secret_player == -1
 
 
 def test_enabled_secret_trick_enters_room_only_after_exit_check_passes():
@@ -79,13 +79,13 @@ def test_enabled_secret_trick_enters_room_only_after_exit_check_passes():
     state.maze = _Maze(exits.TRICK_DIET)
 
     assert debug_enable_secret_room(state)
-    assert state.trick_player == -1
+    assert state.secret_player == -1
 
     exits.secret_trick_check(state, 0)
     state.players[0].status = PlayerStatus.ALIVE_NEXT
     exits.show_level_start_screen(state)
 
-    assert state.trick_player == 0
+    assert state.secret_player == 0
     assert state.mazenum_current in (115, 116)
 
 
@@ -96,7 +96,7 @@ def test_enable_secret_room_rejects_maze_without_current_objective():
 
     assert not debug_enable_secret_room(state)
     assert state.secret_possible_counter == 7
-    assert state.trick_tasknum == 0
+    assert state.secret_trick_id == 0
 
 
 def test_enable_secret_room_applies_normal_solo_party_cancellation():
@@ -108,20 +108,20 @@ def test_enable_secret_room_applies_normal_solo_party_cancellation():
 
     assert not debug_enable_secret_room(state)
     assert state.secret_possible_counter == 7
-    assert state.trick_tasknum == 0
+    assert state.secret_trick_id == 0
 
 
 def test_force_secret_room_marks_only_selected_live_player():
     state = _active_state()
     state.levelnum_current = 20
     state.mazenum_current = 40
-    state.trick_tasknum = 13
+    state.secret_trick_id = 13
     before = list(state.secret_tricks_flags)
 
     assert debug_force_secret_room(state, 0)
 
-    assert state.trick_player == 0
-    assert state.trick_tasknum == 0
+    assert state.secret_player == 0
+    assert state.secret_trick_id == 0
     assert state.secret_tricks_flags == before
 
 
@@ -131,13 +131,13 @@ def test_force_secret_room_winner_cannot_be_replaced_by_exit_objective_check():
     state = _active_state()
     state.levelnum_current = 20
     state.mazenum_current = 40
-    state.trick_tasknum = exits.TRICK_DIET
+    state.secret_trick_id = exits.TRICK_DIET
     state.players[1].status = PlayerStatus.ALIVE_HERE
 
     assert debug_force_secret_room(state, 0)
     exits.secret_trick_check(state, 1)
 
-    assert state.trick_player == 0
+    assert state.secret_player == 0
 
 
 def test_forced_secret_winner_enters_through_normal_status_handoff():
@@ -163,7 +163,7 @@ def test_force_secret_room_rejects_before_secret_rooms_are_reachable():
     state.mazenum_current = 4
 
     assert not debug_force_secret_room(state, 0)
-    assert state.trick_player == -1
+    assert state.secret_player == -1
 
 
 def test_secret_room_shortcuts_reject_bonus_rooms_and_inactive_players():
@@ -192,7 +192,7 @@ def test_skip_level_uses_rotation_and_preserves_inventory():
     assert state.players[0].keysnum == 2
     assert state.players[0].potionsnum == 3
     assert state.players[0].mob_slot
-    assert state.global_ui_delay_timer == 0
+    assert state.global_delay_timer == 0
     assert not state.level_start_pending
     assert all(
         state.alpha_ram[row * 64 + column] == 0

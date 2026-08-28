@@ -484,7 +484,7 @@ def write_secret_code_result(state: GameState, player_index: int) -> None:
     write_alpha_large_text(state, 3, 4, "SECRET CODE", 0x8000)
     write_alpha_text(state, 10, row + 2, "TASK", attribute)
     write_alpha_decimal(
-        state, 15, row + 2, state.trick_tasknum - 0x50, 2, attribute,
+        state, 15, row + 2, state.secret_trick_id - 0x50, 2, attribute,
     )
     write_alpha_text(state, 2, row + 3, "SEND CONTEST ENTRY FORM", attribute)
     write_alpha_text(state, 2, row + 4, " TO ATARI GAMES CORP.  ", attribute)
@@ -706,7 +706,7 @@ def _clear_dialog_alpha(state: GameState) -> None:
         return
     fill_alpha_rect(
         state, state.dialog_box_column, state.dialog_box_row,
-        state.dialog_dim_H + 2, state.dialog_dim_V, 0,
+        state.dialog_box_width + 2, state.dialog_box_height, 0,
     )
 
 
@@ -720,7 +720,7 @@ def _write_dialog_alpha(state: GameState) -> None:
     )
     fill_alpha_rect(
         state, state.dialog_box_column, state.dialog_box_row,
-        state.dialog_dim_H + 2, state.dialog_dim_V,
+        state.dialog_box_width + 2, state.dialog_box_height,
         alpha_word(attribute),
     )
     for offset, line in enumerate(state.dialog_message, 1):
@@ -739,8 +739,8 @@ def dialog_clear_message(state: GameState) -> None:
     """
     _clear_dialog_alpha(state)
     state.dialog_message = []
-    state.dialog_dim_H = 0
-    state.dialog_dim_V = 0
+    state.dialog_box_width = 0
+    state.dialog_box_height = 0
     state.dialog_player = -1
     state.dialog_box_column = -1
     state.dialog_box_row = -1
@@ -762,8 +762,8 @@ def dialog_position_box(state: GameState, player_index: int) -> None:
     if row < 15:
         row += 4
     else:
-        row -= state.dialog_dim_V + 1
-    width = state.dialog_dim_H
+        row -= state.dialog_box_height + 1
+    width = state.dialog_box_width
     if (column > (width >> 1)
             and column < 29 - ((width + 1) >> 1)):
         column -= width >> 1
@@ -775,7 +775,7 @@ def dialog_position_box(state: GameState, player_index: int) -> None:
     state.dialog_box_row = row
 
 
-def demo_speech_cmd(state: GameState, player_index: int,
+def demo_message_show(state: GameState, player_index: int,
                       message_index: int) -> None:
     """0x4C9A2 -- display one recorded attract-demo tip."""
     if not 0 <= message_index < len(DEMO_MESSAGES):
@@ -787,8 +787,8 @@ def demo_speech_cmd(state: GameState, player_index: int,
     lines = DEMO_MESSAGES[message_index]
     dialog_clear_message(state)
     state.dialog_message = list(lines)
-    state.dialog_dim_V = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
-    state.dialog_dim_H = len(lines[0])
+    state.dialog_box_height = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
+    state.dialog_box_width = len(lines[0])
     state.dialog_player = player_index if 0 <= player_index < NUM_PLAYERS else -1
     dialog_position_box(state, state.dialog_player)
     _write_dialog_alpha(state)
@@ -882,8 +882,8 @@ def dialog_first_encounter(
 
     dialog_clear_message(state)
     state.dialog_message = [_dialog_line(line, numeric_value) for line in lines]
-    state.dialog_dim_V = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
-    state.dialog_dim_H = max(len(line) for line in lines)
+    state.dialog_box_height = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
+    state.dialog_box_width = max(len(line) for line in lines)
     state.dialog_player = player_index if 0 <= player_index < NUM_PLAYERS else -1
     dialog_position_box(state, state.dialog_player)
     _write_dialog_alpha(state)

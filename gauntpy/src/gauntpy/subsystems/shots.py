@@ -470,7 +470,7 @@ def _trick_bump(state: GameState, player_index: int, trick_id: int) -> None:
     ROM's shape is ``tst.b`` then ``blt`` to ``move.b #1``, otherwise
     ``addq.b #1``, so a byte that has already gone negative restarts at one
     instead of wrapping.  Both halves go through the WP-15 entry points, which
-    carry the ``cmpi.b #<trick>,trick_tasknum`` guard themselves.
+    carry the ``cmpi.b #<trick>,secret_trick_id`` guard themselves.
     """
     from .exits import secret_trick_progress, secret_trick_set
     if state.secret_tricks_flags[player_index] & 0x80:

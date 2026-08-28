@@ -388,7 +388,7 @@ def write_cyclic_wall_descriptor(
 
 def _forcefield_adjacency(state: GameState, slot: int) -> int:
     result = 0
-    for segment in state.ff_segment_table:
+    for segment in state.forcefield_segment_table:
         hub = segment & 0x3FF
         row, col = coords.unpack_slot(hub)
         length = ((segment >> 10) & 0x0F) + 1
@@ -612,7 +612,7 @@ def initialize_playfield_ram(state: GameState, maze: Maze) -> None:
     state.playfield_forcefield_catalog.clear()
     state.playfield_wallpattern = int(maze.wallpattern)
     state.playfield_forcefield_cells = set()
-    for segment in state.ff_segment_table:
+    for segment in state.forcefield_segment_table:
         hub = segment & 0x3FF
         row, col = coords.unpack_slot(hub)
         length = ((segment >> 10) & 0x0F) + 1
@@ -1294,7 +1294,7 @@ def _prepare_secret_challenge(state: GameState) -> None:
     """0x43C20-0x43D10 -- replace secret-maze actors and create its exits."""
     if state.mazenum_current < _SECRET_MAZE_FIRST:
         return
-    task = int(state.trick_tasknum)
+    task = int(state.secret_trick_id)
     if not _CHALLENGE_FIRST <= task <= _CHALLENGE_LAST:
         return
 

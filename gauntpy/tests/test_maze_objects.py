@@ -45,7 +45,7 @@ def _place(state: GameState, slot: int, object_type: int, picture: int = 0x8000)
 class TestTransporterAndForcefieldCycle:
     def test_transporter_bounces_through_all_six_palette_positions(self):
         state = GameState()
-        state.ff_cycle_timer = 0xFF
+        state.forcefield_step_timer = 0xFF
         positions = []
         for _ in range(10):
             for _ in range(4):
@@ -55,7 +55,7 @@ class TestTransporterAndForcefieldCycle:
 
     def test_transporter_and_forcefield_cycles_write_their_color_banks(self):
         state = GameState(frame_counter=8, game_mode=GameMode.NORMAL)
-        state.ff_cycle_timer = 5
+        state.forcefield_step_timer = 5
         state.tport_cycle_divider = 3
         before = list(state.playfield_color_ram)
 
@@ -121,48 +121,48 @@ class TestTransporterAndForcefieldCycle:
 
     def test_forcefield_timer_is_an_unsigned_byte_predecrement(self):
         state = GameState()
-        state.ff_cycle_index = 0
-        state.ff_cycle_timer = 0
+        state.forcefield_step = 0
+        state.forcefield_step_timer = 0
 
         main_cycle_tport_and_ffield(state)
 
-        assert state.ff_cycle_timer == 0xFF
-        assert state.ff_cycle_index == 0
+        assert state.forcefield_step_timer == 0xFF
+        assert state.forcefield_step == 0
         assert state.forcefield_color == 0xFF00
 
     def test_expiring_timer_advances_then_reloads_from_exact_profile(self):
         state = GameState()
-        state.ff_cycle_index = 0
-        state.ff_cycle_timer = 1
+        state.forcefield_step = 0
+        state.forcefield_step_timer = 1
         state.rng = _FixedRNG(3)
 
         main_cycle_tport_and_ffield(state)
 
-        assert state.ff_cycle_index == 1
-        assert state.ff_cycle_timer == 0x23  # profile[1] 0x20 + random(8)
+        assert state.forcefield_step == 1
+        assert state.forcefield_step_timer == 0x23  # profile[1] 0x20 + random(8)
         assert state.forcefield_color == 0
 
     def test_lit_color_tracks_frame_phase_even_while_timer_is_running(self):
         state = GameState()
-        state.ff_cycle_index = 0
-        state.ff_cycle_timer = 5
+        state.forcefield_step = 0
+        state.forcefield_step_timer = 5
         state.frame_counter = 8
 
         main_cycle_tport_and_ffield(state)
 
-        assert state.ff_cycle_timer == 4
+        assert state.forcefield_step_timer == 4
         assert state.forcefield_color == 0x9FFF
 
     def test_level_selected_delay_profiles_are_hex_rom_bytes(self):
         state = GameState(levelnum_current=3)
-        state.cycle_phase_assignments[10] = 0x55
-        state.wallcycle_type = 2
-        state.wallcycle_time = 99
+        state.cyclic_wall_assignments[10] = 0x55
+        state.cyclic_wall_phase = 2
+        state.cyclic_wall_timer = 99
         select_forcefield_delay_profile(state)
         assert state.forcefield_step_durations == [0x10, 0x10, 0x20, 0x20, 0x40, 0x40, 0x08, 0x40]
-        assert not any(state.cycle_phase_assignments)
-        assert state.wallcycle_type == 0
-        assert state.wallcycle_time == 0
+        assert not any(state.cyclic_wall_assignments)
+        assert state.cyclic_wall_phase == 0
+        assert state.cyclic_wall_timer == 0
 
 
 class TestTransporterSecretProgress:
@@ -181,7 +181,7 @@ class TestTransporterSecretProgress:
 
     def test_task_0x56_records_one_based_source_and_destination_pad_bits(self):
         state, source, destination, landing = self._transport_state()
-        state.trick_tasknum = 0x56
+        state.secret_trick_id = 0x56
 
         record_transporter_secret_progress(
             state, 0, source, destination, landing
@@ -191,7 +191,7 @@ class TestTransporterSecretProgress:
 
     def test_cycle_bridge_records_an_armed_transporter_once(self):
         state, _, _, _ = self._transport_state()
-        state.trick_tasknum = 0x56
+        state.secret_trick_id = 0x56
         # main_score_update advances the freshly armed phase 0 to 1 before the
         # next world-frame transporter cycle observes it.
         state.player_tport_phase[0] = 1
@@ -203,7 +203,7 @@ class TestTransporterSecretProgress:
 
     def test_transport_power_skips_the_secret_transporter_hooks(self):
         state, source, destination, landing = self._transport_state()
-        state.trick_tasknum = 0x56
+        state.secret_trick_id = 0x56
         state.players[0].powers = 0x0800
 
         record_transporter_secret_progress(
@@ -214,7 +214,7 @@ class TestTransporterSecretProgress:
 
     def test_ordinary_transport_tricks_are_not_progress_counters(self):
         state, source, destination, landing = self._transport_state()
-        state.trick_tasknum = 3
+        state.secret_trick_id = 3
         state.mobs.set_obj_type(landing, MazeObjIds.EXIT)
 
         record_transporter_secret_progress(
@@ -222,7 +222,7 @@ class TestTransporterSecretProgress:
         )
 
         assert state.secret_tricks_flags[0] == 0
-        assert state.trick_player == -1
+        assert state.secret_player == -1
 
 
 class TestForcefieldSetup:
@@ -239,10 +239,10 @@ class TestForcefieldSetup:
 
         maze_forcefield_setup(state)
 
-        assert state.cycle_phase_assignments[8] == 0b00_11_10_01
+        assert state.cyclic_wall_assignments[8] == 0b00_11_10_01
         assert all(state.mobs.obj_type(slot) == 0 for slot in slots)
-        assert state.wallcycle_type == 0
-        assert state.wallcycle_time == 0
+        assert state.cyclic_wall_phase == 0
+        assert state.cyclic_wall_timer == 0
 
     def test_marker_setup_disables_cyclic_flag_when_no_markers_exist(self):
         state = GameState()
@@ -261,7 +261,7 @@ class TestForcefieldSetup:
 
         forcefield_segments_setup(state)
 
-        assert state.ff_segment_table == [0x8000 | (3 << 10) | left]
+        assert state.forcefield_segment_table == [0x8000 | (3 << 10) | left]
         assert check_forcefield_collision(state, pack_slot(5, 6))
         assert check_forcefield_collision(state, pack_slot(5, 8))
         assert not check_forcefield_collision(state, left)
@@ -280,7 +280,7 @@ class TestForcefieldSetup:
         forcefield_segments_setup(state)
 
         assert state.mobs.picture[left] == 0x8000
-        assert state.ff_segment_table == [0x8000 | (3 << 10) | left]
+        assert state.forcefield_segment_table == [0x8000 | (3 << 10) | left]
         assert check_forcefield_collision(state, pack_slot(5, 7))
 
     def test_wrapped_segment_crosses_the_maze_seam(self):
@@ -292,7 +292,7 @@ class TestForcefieldSetup:
 
         forcefield_segments_setup(state)
 
-        assert state.ff_segment_table == [0xC000 | (3 << 10) | first]
+        assert state.forcefield_segment_table == [0xC000 | (3 << 10) | first]
         assert check_forcefield_collision(state, pack_slot(8, 0))
         assert not check_forcefield_collision(state, pack_slot(8, 2))
 
@@ -305,7 +305,7 @@ class TestForcefieldSetup:
 
         forcefield_segments_setup(state)
 
-        assert state.ff_segment_table == [(3 << 10) | top]
+        assert state.forcefield_segment_table == [(3 << 10) | top]
         assert check_forcefield_collision(state, pack_slot(6, 12))
         assert not check_forcefield_collision(state, pack_slot(6, 11))
 
@@ -319,7 +319,7 @@ class TestForcefieldSetup:
 
         forcefield_segments_setup(state)
 
-        assert state.ff_segment_table == []
+        assert state.forcefield_segment_table == []
 
     def test_first_palette_cycle_lazily_builds_level_forcefield_state(self):
         state = GameState()
@@ -451,24 +451,24 @@ class TestCyclicWalls:
 
     def test_predecrement_delays_transition_until_the_following_frame(self):
         state = self._armed_state()
-        state.wallcycle_time = 1
+        state.cyclic_wall_timer = 1
 
         main_walls_cyclic_move(state)
-        assert state.wallcycle_time == 0
-        assert state.wallcycle_type == 0
+        assert state.cyclic_wall_timer == 0
+        assert state.cyclic_wall_phase == 0
 
         main_walls_cyclic_move(state)
-        assert state.wallcycle_time == 0x78
-        assert state.wallcycle_type == 1
+        assert state.cyclic_wall_timer == 0x78
+        assert state.cyclic_wall_phase == 1
 
     def test_transition_removes_old_phase_and_places_new_phase(self):
         state = self._armed_state()
         old_slot = pack_slot(5, 5)
         new_slot = pack_slot(5, 6)
-        state.wallcycle_type = 1
-        state.wallcycle_time = 0
-        state.cycle_phase_assignments[old_slot >> 2] |= 1 << ((old_slot & 3) * 2)
-        state.cycle_phase_assignments[new_slot >> 2] |= 2 << ((new_slot & 3) * 2)
+        state.cyclic_wall_phase = 1
+        state.cyclic_wall_timer = 0
+        state.cyclic_wall_assignments[old_slot >> 2] |= 1 << ((old_slot & 3) * 2)
+        state.cyclic_wall_assignments[new_slot >> 2] |= 2 << ((new_slot & 3) * 2)
         _place(state, old_slot, MazeObjIds.WALL_TRAPCYC1)
         state.maze = SimpleNamespace(data={
             (5, 5): int(MazeObjIds.WALL_TRAPCYC1),
@@ -487,9 +487,9 @@ class TestCyclicWalls:
     def test_transition_never_places_on_the_thief_cell(self):
         state = self._armed_state()
         tile = pack_slot(5, 6)
-        state.wallcycle_time = 0
+        state.cyclic_wall_timer = 0
         state.thief_current_pos = tile
-        state.cycle_phase_assignments[tile >> 2] |= 1 << ((tile & 3) * 2)
+        state.cyclic_wall_assignments[tile >> 2] |= 1 << ((tile & 3) * 2)
 
         main_walls_cyclic_move(state)
 
@@ -498,7 +498,7 @@ class TestCyclicWalls:
     def test_late_mazes_suppress_the_cyclic_wall_sound(self):
         state = self._armed_state()
         state.mazenum_current = 0x73
-        state.wallcycle_time = 0
+        state.cyclic_wall_timer = 0
 
         main_walls_cyclic_move(state)
 
@@ -516,10 +516,10 @@ class TestRandomWalls:
 
     def test_setup_records_exact_low_target_and_cursor(self):
         state, slots = self._state_with_walls()
-        assert state.randwall_low_watermark == slots[0]
-        assert state.randwall_target == slots[1]
-        assert state.randwall_current == slots[0] - 1
-        assert state.randwall_timer == 0
+        assert state.random_wall_low_mark == slots[0]
+        assert state.random_wall_target == slots[1]
+        assert state.random_wall_current == slots[0] - 1
+        assert state.random_wall_timer == 0
 
     def test_processes_one_wall_per_frame_then_reloads(self):
         state, slots = self._state_with_walls()
@@ -535,25 +535,25 @@ class TestRandomWalls:
         assert state.mobs.picture[slots[1]] == 0x8000
         assert state.maze.data[(4, 3)] == int(MazeObjIds.TILE_FLOOR)
         assert state.maze.data[(8, 3)] == int(MazeObjIds.WALL_RANDOM)
-        assert state.randwall_current == slots[0]
+        assert state.random_wall_current == slots[0]
 
         main_walls_random_move(state)
         assert state.mobs.picture[slots[1]] == 0x8000
-        assert state.randwall_timer == 0x78
-        assert state.randwall_current == slots[0] - 1
+        assert state.random_wall_timer == 0x78
+        assert state.random_wall_current == slots[0] - 1
 
     def test_timer_counts_while_the_incremental_scan_runs(self):
         state, slots = self._state_with_walls()
-        state.randwall_timer = 2
+        state.random_wall_timer = 2
         state.rng = _FixedRNG(16, 0, 16, 0)
 
         main_walls_random_move(state)
-        assert state.randwall_timer == 1
+        assert state.random_wall_timer == 1
         assert state.mobs.picture[slots[0]] == 0
 
         main_walls_random_move(state)
         assert state.mobs.picture[slots[1]] == 0
-        assert state.randwall_timer == 0x78
+        assert state.random_wall_timer == 0x78
 
     def test_title_mode_does_not_advance_the_random_wall_cursor(self):
         state, slots = self._state_with_walls()
@@ -563,4 +563,4 @@ class TestRandomWalls:
         main_walls_random_move(state)
 
         assert state.mobs.picture[slots[0]] == 0x8000
-        assert state.randwall_current == slots[0] - 1
+        assert state.random_wall_current == slots[0] - 1
