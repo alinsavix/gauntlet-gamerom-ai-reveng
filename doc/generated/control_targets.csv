@@ -650,7 +650,7 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x4A466,name_entry_draw_large_char@0x4A44A,call,jsr 0x224.l,0x000224,calc_alpha_address,documented_os_api,Verified
 0x4A4DE,name_entry_draw_large_char@0x4A44A,call,jsr 0x49b44.l,0x049B44,ascii_to_alpha_glyph,documented_game_entry,Verified
 0x4A4EA,name_entry_draw_large_char@0x4A44A,call,jsr 0x20c.l,0x00020C,display_large_char_at,documented_os_api,Verified
-0x4A5A8,main_move_players@0x4A53A,call,jsr 0x4c9a2.l,0x04C9A2,demo_speech_cmd,documented_game_entry,Verified
+0x4A5A8,main_move_players@0x4A53A,call,jsr 0x4c9a2.l,0x04C9A2,demo_message_show,documented_game_entry,Verified
 0x4A5C4,main_move_players@0x4A53A,call,jsr 0x48bb6.l,0x048BB6,player_join,documented_game_entry,Verified
 0x4A61E,main_move_players@0x4A53A,call,jsr 0x54fe8.l,0x054FE8,secret_name_entry_update,documented_game_entry,Verified
 0x4A632,main_move_players@0x4A53A,call,jsr 0x49de6.l,0x049DE6,player_death_sequence,documented_game_entry,Verified
@@ -803,16 +803,16 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x4C940,player_give_item_with_message@0x4C72A,call,jsr 0x4ad4e.l,0x04AD4E,sound_speech_play,documented_game_entry,Verified
 0x4C962,player_give_item_with_message@0x4C72A,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
 0x4C96E,player_give_item_with_message@0x4C72A,call,jsr 0x4ad76.l,0x04AD76,sound_play,documented_game_entry,Verified
-0x4C9DC,demo_speech_cmd@0x4C9A2,call,jsr 0x4ccbc.l,0x04CCBC,main_msgbox_countdown,documented_game_entry,Verified
-0x4CA06,demo_speech_cmd@0x4C9A2,call,jsr 0x45be8.l,0x045BE8,string_length,documented_game_entry,Verified
-0x4CA30,demo_speech_cmd@0x4C9A2,call,jsr 0x4cb50.l,0x04CB50,dialog_position_box,documented_game_entry,Verified
-0x4CA42,demo_speech_cmd@0x4C9A2,call,jsr 0x224.l,0x000224,calc_alpha_address,documented_os_api,Verified
-0x4CA6C,demo_speech_cmd@0x4C9A2,call,jsr 0x4c70a.l,0x04C70A,dialog_clear_message,documented_game_entry,Verified
-0x4CA90,demo_speech_cmd@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
-0x4CAB0,demo_speech_cmd@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
-0x4CAD8,demo_speech_cmd@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
-0x4CB00,demo_speech_cmd@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
-0x4CB1E,demo_speech_cmd@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
+0x4C9DC,demo_message_show@0x4C9A2,call,jsr 0x4ccbc.l,0x04CCBC,main_msgbox_countdown,documented_game_entry,Verified
+0x4CA06,demo_message_show@0x4C9A2,call,jsr 0x45be8.l,0x045BE8,string_length,documented_game_entry,Verified
+0x4CA30,demo_message_show@0x4C9A2,call,jsr 0x4cb50.l,0x04CB50,dialog_position_box,documented_game_entry,Verified
+0x4CA42,demo_message_show@0x4C9A2,call,jsr 0x224.l,0x000224,calc_alpha_address,documented_os_api,Verified
+0x4CA6C,demo_message_show@0x4C9A2,call,jsr 0x4c70a.l,0x04C70A,dialog_clear_message,documented_game_entry,Verified
+0x4CA90,demo_message_show@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
+0x4CAB0,demo_message_show@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
+0x4CAD8,demo_message_show@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
+0x4CB00,demo_message_show@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
+0x4CB1E,demo_message_show@0x4C9A2,call,jsr 0x25a.l,0x00025A,draw_string,documented_os_api,Verified
 0x4CD36,load_legend_page@0x4CD1C,call,jsr 0x40d24.l,0x040D24,maze_select_bank,documented_game_entry,Verified
 0x4CD60,load_legend_page@0x4CD1C,call,jsr 0x438ae.l,0x0438AE,maze_new_level_setup,documented_game_entry,Verified
 0x4CD88,load_legend_page@0x4CD1C,call,jsr 0x43486.l,0x043486,init_display,documented_game_entry,Verified
@@ -859,7 +859,7 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x4D466,main_treasure_timer@0x4D29E,call,jsr 0x4d476.l,0x04D476,show_level_end_bonus_screen,documented_game_entry,Verified
 0x4D490,show_level_end_bonus_screen@0x4D476,call,jsr 0x4ad76.l,0x04AD76,sound_play,documented_game_entry,Verified
 0x4D4A8,show_level_end_bonus_screen@0x4D476,call,jsr 0x4ad76.l,0x04AD76,sound_play,documented_game_entry,Verified
-0x4D4B0,show_level_end_bonus_screen@0x4D476,call,jsr 0x4d1a4.l,0x04D1A4,secret_bonus_earned,documented_game_entry,Verified
+0x4D4B0,show_level_end_bonus_screen@0x4D476,call,jsr 0x4d1a4.l,0x04D1A4,secret_check_winner,documented_game_entry,Verified
 0x4D4C0,show_level_end_bonus_screen@0x4D476,call,jsr 0x4ad76.l,0x04AD76,sound_play,documented_game_entry,Verified
 0x4D4E4,show_level_end_bonus_screen@0x4D476,call,jsr 0x452d0.l,0x0452D0,setup_infopanel,documented_game_entry,Verified
 0x4D516,show_level_end_bonus_screen@0x4D476,call,jsr 0x4d900.l,0x04D900,player_activecount,documented_game_entry,Verified
@@ -1091,18 +1091,18 @@ site,source_entries,kind,opcode,target,target_name,classification,confidence
 0x51D6A,dispatch:player_tile_object_jumptbl[3]/player_tile_object_jumptbl[4]@0x51ADC,call,jsr 0x5fc4e.l,0x05FC4E,getrandom,documented_game_entry,Verified
 0x51D92,dispatch:player_tile_object_jumptbl[3]/player_tile_object_jumptbl[4]@0x51ADC,call,jsr (a2),,,indirect_call,Strong inference
 0x51DC2,dispatch:player_tile_lowtype_jumptbl[4]@0x51D9C,call,jsr 0x45aca.l,0x045ACA,player_inv_update,documented_game_entry,Verified
-0x51DD8,dispatch:player_tile_lowtype_jumptbl[4]@0x51D9C,call,jsr 0x51e80.l,0x051E80,door_record_endpoints,documented_game_entry,Verified
+0x51DD8,dispatch:player_tile_lowtype_jumptbl[4]@0x51D9C,call,jsr 0x51e80.l,0x051E80,door_open_start,documented_game_entry,Verified
 0x51DE4,dispatch:player_tile_lowtype_jumptbl[4]@0x51D9C,call,jsr (a2),,,indirect_call,Strong inference
 0x51E0E,dispatch:player_tile_lowtype_jumptbl[3]@0x51DE8,call,jsr 0x45aca.l,0x045ACA,player_inv_update,documented_game_entry,Verified
-0x51E24,dispatch:player_tile_lowtype_jumptbl[3]@0x51DE8,call,jsr 0x51e80.l,0x051E80,door_record_endpoints,documented_game_entry,Verified
+0x51E24,dispatch:player_tile_lowtype_jumptbl[3]@0x51DE8,call,jsr 0x51e80.l,0x051E80,door_open_start,documented_game_entry,Verified
 0x51E30,dispatch:player_tile_lowtype_jumptbl[3]@0x51DE8,call,jsr (a2),,,indirect_call,Strong inference
 0x51E48,dispatch:player_tile_lowtype_jumptbl[3]@0x51DE8;dispatch:player_tile_lowtype_jumptbl[4]@0x51D9C;dispatch:player_tile_object_jumptbl[0]@0x519C2;dispatch:player_tile_object_jumptbl[10]@0x51844;dispatch:player_tile_object_jumptbl[11]@0x51856;dispatch:player_tile_object_jumptbl[12]@0x5185C;dispatch:player_tile_object_jumptbl[13]@0x51888;dispatch:player_tile_object_jumptbl[15]@0x518D2;dispatch:player_tile_object_jumptbl[2]@0x51998;dispatch:player_tile_object_jumptbl[3]/player_tile_object_jumptbl[4]@0x51ADC;dispatch:player_tile_object_jumptbl[5]/player_tile_object_jumptbl[6]@0x5162E;dispatch:player_tile_object_jumptbl[7]@0x51458;dispatch:player_tile_object_jumptbl[8]@0x517BA;dispatch:player_tile_object_jumptbl[9]@0x517DE,call,jsr 0x549ea.l,0x0549EA,dragon_player_proximity,documented_game_entry,Verified
 0x51E6A,dispatch:player_tile_lowtype_jumptbl[3]@0x51DE8;dispatch:player_tile_lowtype_jumptbl[4]@0x51D9C;dispatch:player_tile_object_jumptbl[0]@0x519C2;dispatch:player_tile_object_jumptbl[10]@0x51844;dispatch:player_tile_object_jumptbl[11]@0x51856;dispatch:player_tile_object_jumptbl[12]@0x5185C;dispatch:player_tile_object_jumptbl[13]@0x51888;dispatch:player_tile_object_jumptbl[15]@0x518D2;dispatch:player_tile_object_jumptbl[2]@0x51998;dispatch:player_tile_object_jumptbl[3]/player_tile_object_jumptbl[4]@0x51ADC;dispatch:player_tile_object_jumptbl[5]/player_tile_object_jumptbl[6]@0x5162E;dispatch:player_tile_object_jumptbl[7]@0x51458;dispatch:player_tile_object_jumptbl[8]@0x517BA;dispatch:player_tile_object_jumptbl[9]@0x517DE,call,jsr 0x5ddda.l,0x05DDDA,moblist_remove_and_clear,documented_game_entry,Verified
-0x51F52,door_record_endpoints@0x51E80,call,jsr 0x51fae.l,0x051FAE,door_scan_vertical_endpoints,documented_game_entry,Verified
-0x51F68,door_record_endpoints@0x51E80,call,jsr 0x5207c.l,0x05207C,door_scan_horizontal_endpoints,documented_game_entry,Verified
-0x51F80,door_record_endpoints@0x51E80,call,jsr 0x5207c.l,0x05207C,door_scan_horizontal_endpoints,documented_game_entry,Verified
-0x51F96,door_record_endpoints@0x51E80,call,jsr 0x51fae.l,0x051FAE,door_scan_vertical_endpoints,documented_game_entry,Verified
-0x51F9E,door_record_endpoints@0x51E80,call,jsr 0x45c00.l,0x045C00,main_open_doors,documented_game_entry,Verified
+0x51F52,door_open_start@0x51E80,call,jsr 0x51fae.l,0x051FAE,door_scan_vertical_endpoints,documented_game_entry,Verified
+0x51F68,door_open_start@0x51E80,call,jsr 0x5207c.l,0x05207C,door_scan_horizontal_endpoints,documented_game_entry,Verified
+0x51F80,door_open_start@0x51E80,call,jsr 0x5207c.l,0x05207C,door_scan_horizontal_endpoints,documented_game_entry,Verified
+0x51F96,door_open_start@0x51E80,call,jsr 0x51fae.l,0x051FAE,door_scan_vertical_endpoints,documented_game_entry,Verified
+0x51F9E,door_open_start@0x51E80,call,jsr 0x45c00.l,0x045C00,main_open_doors,documented_game_entry,Verified
 0x51FE0,door_scan_vertical_endpoints@0x51FAE,call,jsr 0x5f772.l,0x05F772,pf_isdoor_stack,documented_game_entry,Verified
 0x52030,door_scan_vertical_endpoints@0x51FAE,call,jsr 0x5f772.l,0x05F772,pf_isdoor_stack,documented_game_entry,Verified
 0x520AE,door_scan_horizontal_endpoints@0x5207C,call,jsr 0x5f772.l,0x05F772,pf_isdoor_stack,documented_game_entry,Verified

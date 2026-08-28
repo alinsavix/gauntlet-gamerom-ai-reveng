@@ -1391,7 +1391,7 @@ fs *
 fs *
 'f player_give_item_with_message 1 0x0004c72a
 fs *
-'f demo_speech_cmd 1 0x0004c9a2
+'f demo_message_show 1 0x0004c9a2
 fs *
 'f dialog_position_box 1 0x0004cb50
 fs *
@@ -1507,7 +1507,7 @@ fs *
 fs *
 'f player_tile_interact 1 0x000511ac
 fs *
-'f door_record_endpoints 1 0x00051e80
+'f door_open_start 1 0x00051e80
 fs *
 'f door_scan_vertical_endpoints 1 0x00051fae
 fs *
@@ -2379,7 +2379,7 @@ fs *
 fs *
 'f ram.sound_data_flag 2 0x00904010
 fs *
-'f ram.timer_eepromwrite 4 0x00904012
+'f ram.eeprom_write_timer 4 0x00904012
 fs *
 'f ram.game_hook_flag 2 0x00904014
 fs *
@@ -2387,11 +2387,11 @@ fs *
 fs *
 'f ram.treas_mazerand_num 2 0x00904018
 fs *
-'f ram.wallcycle_time 2 0x0090401a
+'f ram.cyclic_wall_timer 2 0x0090401a
 fs *
-'f ram.wallcycle_type 1 0x0090401c
+'f ram.cyclic_wall_phase 1 0x0090401c
 fs *
-'f ram.wallcycle_type_pad 1 0x0090401d
+'f ram.cyclic_wall_phase_pad 1 0x0090401d
 fs *
 'f ram.playfield_colorsave1 2 0x0090401e
 fs *
@@ -2427,17 +2427,17 @@ fs *
 fs *
 'f ram.forcefield_color 2 0x00904046
 fs *
-'f ram.ff_cycle_timer 2 0x00904048
+'f ram.forcefield_step_timer 2 0x00904048
 fs *
-'f ram.ff_cycle_index 1 0x00904049
+'f ram.forcefield_step 1 0x00904049
 fs *
 'f ram.thief_path_direction 1 0x0090404a
 fs *
-'f ram.soundqueue 8 0x0090404b
+'f ram.sound_queue 8 0x0090404b
 fs *
-'f ram.soundqueue_head 1 0x00904053
+'f ram.sound_queue_head 1 0x00904053
 fs *
-'f ram.soundqueue_tail 1 0x00904054
+'f ram.sound_queue_tail 1 0x00904054
 fs *
 'f ram.player_potionsnum 4 0x00904055
 fs *
@@ -2445,11 +2445,11 @@ fs *
 fs *
 'f ram.monster_spawn_probability_bonus 1 0x0090405f
 fs *
-'f ram.trick_player 1 0x00904063
+'f ram.secret_player 1 0x00904063
 fs *
-'f ram.trick_last 1 0x00904064
+'f ram.secret_trick_last 1 0x00904064
 fs *
-'f ram.trick_tasknum 1 0x00904065
+'f ram.secret_trick_id 1 0x00904065
 fs *
 'f ram.mob_state_link 2048 0x00904066
 fs *
@@ -2503,13 +2503,13 @@ fs *
 fs *
 'f ram.ptr_exit_openclose_anim 4 0x0090489c
 fs *
-'f ram.randwall_low_watermark 2 0x009048a0
+'f ram.random_wall_low_mark 2 0x009048a0
 fs *
-'f ram.randwall_target 2 0x009048a2
+'f ram.random_wall_target 2 0x009048a2
 fs *
-'f ram.randwall_current 2 0x009048a4
+'f ram.random_wall_current 2 0x009048a4
 fs *
-'f ram.randwall_timer 2 0x009048a6
+'f ram.random_wall_timer 2 0x009048a6
 fs *
 'f ram.player_shot_last_wall_pos 8 0x009048a8
 fs *
@@ -2599,13 +2599,13 @@ fs *
 fs *
 'f ram.last_coin_state 4 0x009049ea
 fs *
-'f ram.speech_counter 2 0x009049ee
+'f ram.sound_holdoff 2 0x009049ee
 fs *
 'f ram.sound_queue_state 2 0x009049f0
 fs *
 'f ram.sound_idle_timer 2 0x009049f2
 fs *
-'f ram.sound_cpu_retry_count 2 0x009049f4
+'f ram.sound_retry_count 2 0x009049f4
 fs *
 'f ram.player_hurt_palette_offset 8 0x009049f6
 fs *
@@ -2613,7 +2613,7 @@ fs *
 fs *
 'f ram.exit_count 2 0x00904a06
 fs *
-'f ram.exit_timer 2 0x00904a08
+'f ram.exit_move_timer 2 0x00904a08
 fs *
 'f ram.exit_open_id 2 0x00904a0a
 fs *
@@ -2649,7 +2649,7 @@ fs *
 fs *
 'f ram.player_highscore_rank 4 0x00904a4a
 fs *
-'f ram.global_ui_delay_timer 2 0x00904a4e
+'f ram.global_delay_timer 2 0x00904a4e
 fs *
 'f ram.player_treascount 4 0x00904a50
 fs *
@@ -2675,9 +2675,9 @@ fs *
 fs *
 'f ram.ptr_dialog_pos 4 0x00904a96
 fs *
-'f ram.dialog_dim_H 2 0x00904a9a
+'f ram.dialog_box_width 2 0x00904a9a
 fs *
-'f ram.dialog_dim_V 2 0x00904a9c
+'f ram.dialog_box_height 2 0x00904a9c
 fs *
 'f ram.dialog_timer 2 0x00904a9e
 fs *
@@ -2721,7 +2721,7 @@ fs *
 fs *
 'f ram.death_touch_timer 8 0x00904b42
 fs *
-'f ram.ff_hurt_timer 8 0x00904b4a
+'f ram.forcefield_hurt_timer 8 0x00904b4a
 fs *
 'f ram.level_next 2 0x00904b52
 fs *
@@ -2771,7 +2771,7 @@ fs *
 fs *
 'f ram.eeprom_cache_stats 2 0x00904b92
 fs *
-'f ram.eeprom_cache_settings 2 0x00904b94
+'f ram.eeprom_settings_cache 2 0x00904b94
 fs *
 'f ram.thief_victim_pos 2 0x00904b98
 fs *
@@ -2917,7 +2917,7 @@ fs *
 fs *
 'f ram.tport_pos_table 64 0x00910700
 fs *
-'f ram.ff_segment_table 128 0x00910780
+'f ram.forcefield_segment_table 128 0x00910780
 fs *
 'f vram.pf_hscroll_reg 1 0x00930000
 # meta

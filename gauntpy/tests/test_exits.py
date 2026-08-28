@@ -53,7 +53,7 @@ from gauntpy.subsystems.exits import (
     _SECRET_ROOM_BONUS,
     _SECRET_START_MAX,
     _SECRET_START_MIN,
-    _TREASURE_FAKE_COUNTDOWN,
+    _TREASURE_FAKE_COUNTDOWN_SEQUENCES,
     _TREASURE_ROOM_DURATION,
     _TREASURE_SECONDS_SPEECH,
     _TREASURE_TIMEOUT_SPEECH,
@@ -170,12 +170,12 @@ class TestTreasureTimerGates:
     """0x4D2B2-0x4D2D8: four things must be true before the countdown runs."""
 
     def test_bonus_hold_freezes_the_countdown(self):
-        """global_ui_delay_timer (bonus_timer) nonzero -> countdown frozen."""
+        """global_delay_timer (global_delay_timer) nonzero -> countdown frozen."""
         state = _treasure_state(300)
-        state.bonus_timer = 5
+        state.global_delay_timer = 5
         main_treasure_timer(state)
         assert state.treasure_timer == 300
-        assert state.bonus_timer == 5, "main_start_game owns the shared timer"
+        assert state.global_delay_timer == 5, "main_start_game owns the shared timer"
 
     def test_attract_mode_does_not_count_down(self):
         state = _treasure_state(300)
@@ -341,7 +341,7 @@ class TestCountdownSpeech:
             main_treasure_timer(state)
 
         assert state.treasure_voice_set != 0, "the fake countdown must be armed"
-        fake = _TREASURE_FAKE_COUNTDOWN[state.treasure_voice_set - 1]
+        fake = _TREASURE_FAKE_COUNTDOWN_SEQUENCES[state.treasure_voice_set - 1]
         assert fake[4] in state.sound_log          # displayed second 10
         assert _TREASURE_SECONDS_SPEECH[10] not in state.sound_log
 
@@ -806,7 +806,7 @@ class TestExitMoveAnimation:
         assert state.exit_anim_frame == 0
 
     def test_step_advances_only_every_fourth_frame(self):
-        """0x52A62: ``exit_timer & 3`` gates the stamp update."""
+        """0x52A62: ``exit_move_timer & 3`` gates the stamp update."""
         state = _exit_moves_state(timer=1)
         main_exit_move(state)                    # swap, timer 0
         seen = {}
@@ -841,7 +841,7 @@ class TestExitMoveAnimation:
 
     def test_animation_finishes_even_after_the_flag_is_cleared(self):
         """player_exit_sequence drops ExitMoves mid-animation (0x52EB4); the
-        ``exit_timer <= 0`` half of the gate keeps the phase running."""
+        ``exit_move_timer <= 0`` half of the gate keeps the phase running."""
         state = _exit_moves_state(timer=1)
         main_exit_move(state)
         state.level_flags_3 = 0
@@ -920,11 +920,11 @@ class TestExitMoveAnimation:
 class TestLevelEndHold:
 
     def test_hold_is_300_frames(self):
-        """global_ui_delay_timer = 0x12C at 0x4D50E."""
+        """global_delay_timer = 0x12C at 0x4D50E."""
         state = GameState()
         state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
         show_level_end_bonus_screen(state)
-        assert state.bonus_timer == 0x12C
+        assert state.global_delay_timer == 0x12C
         assert state.game_mode == GameMode.TREAS_EXIT
 
     def test_leaving_a_treasure_room_fades_the_treasure_music(self):
@@ -1011,7 +1011,7 @@ class TestLevelEndHold:
         assert state.alpha_ram[9 * 64 + 14] & 0x3FF == 0x16D  # half-width colon
         assert state.alpha_ram[9 * 64 + 15] == 0x8000         # untouched gap
         assert state.alpha_ram[9 * 64 + 20] & 0x3FF == expected_2
-        assert state.bonus_timer == 0xB4
+        assert state.global_delay_timer == 0xB4
 
     def test_secret_hint_uses_the_armed_next_maze_objective(self, monkeypatch):
         from gauntpy.subsystems import exits as exits_module
@@ -1084,7 +1084,7 @@ class TestBonusTally:
     def test_six_treasures_finishes_the_matching_challenge_in_six(self):
         state = GameState()
         state.mazenum_current = _SECRET_MAZE
-        state.secret_winner = 0
+        state.secret_player = 0
         state.secret_trick_id = 0x50                   # after collecting 6
         for i in range(5):
             treasure_collected(state, 0)
@@ -1168,7 +1168,7 @@ def _trick_state(trick: int, *, level: int = 12) -> GameState:
     state.levelnum_current = level
     state.mazenum_current = 40
     state.secret_trick_id = trick
-    state.secret_winner = -1
+    state.secret_player = -1
     for i in range(2):
         state.players[i].status = int(PlayerStatus.ALIVE_HERE)
     return state
@@ -1189,7 +1189,7 @@ class TestSecretNewLevelSetup:
         state.maze = self._Maze(TRICK_NOGREEDY2)
         secret_new_level_setup(state)
         assert state.secret_trick_id == TRICK_NOGREEDY2
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
 
     def test_counter_still_running_means_no_objective(self):
         state = GameState()
@@ -1219,10 +1219,10 @@ class TestSecretNewLevelSetup:
         state = GameState()
         state.mazenum_current = _SECRET_MAZE
         state.secret_trick_id = 0x57
-        state.secret_winner = 2
+        state.secret_player = 2
         secret_new_level_setup(state)
         assert state.secret_trick_id == 0x57
-        assert state.secret_winner == 2
+        assert state.secret_player == 2
 
 
 class TestSecretTrickCheck:
@@ -1232,10 +1232,10 @@ class TestSecretTrickCheck:
         state = _trick_state(TRICK_WATCHSHOOT1)
         secret_trick_progress(state, 0, TRICK_WATCHSHOOT1)
         secret_trick_check(state, 0)
-        assert state.secret_winner == -1, "one is not enough"
+        assert state.secret_player == -1, "one is not enough"
         secret_trick_progress(state, 0, TRICK_WATCHSHOOT1)
         secret_trick_check(state, 0)
-        assert state.secret_winner == 0
+        assert state.secret_player == 0
 
     def test_progress_only_counts_for_the_active_trick(self):
         state = _trick_state(TRICK_WATCHSHOOT2)
@@ -1247,29 +1247,29 @@ class TestSecretTrickCheck:
         state = _trick_state(TRICK_SAVESUPERSHOTS)
         state.players[0].supershot = 10
         secret_trick_check(state, 0)
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
         state.players[0].supershot = 11                      # 0x52BAA
         secret_trick_check(state, 0)
-        assert state.secret_winner == 0
+        assert state.secret_player == 0
 
     def test_dont_use_invulnerability_wants_exactly_one(self):
         state = _trick_state(TRICK_NOUSEINVUL)
         secret_trick_check(state, 0)
-        assert state.secret_winner == -1, "never picked it up"
+        assert state.secret_player == -1, "never picked it up"
         secret_trick_set(state, 0, TRICK_NOUSEINVUL, 1)      # 0x518C2
         secret_trick_check(state, 0)
-        assert state.secret_winner == 0
+        assert state.secret_player == 0
 
     def test_dont_be_greedy_is_won_by_touching_nothing(self):
         state = _trick_state(TRICK_NO_TREASURE)
         secret_trick_check(state, 0)
-        assert state.secret_winner == 0
+        assert state.secret_player == 0
 
     def test_dont_be_greedy_is_lost_by_one_pickup(self):
         state = _trick_state(TRICK_NO_TREASURE)
         treasure_collected(state, 0)
         secret_trick_check(state, 0)
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
 
     def test_the_treasure_trick_is_0x0E_and_the_food_trick_0x0D(self):
         """0x519C2 sits above the player_treascount bump; 0x51C0C/0x51CEE sit
@@ -1283,66 +1283,66 @@ class TestSecretTrickCheck:
         treasure_collected(state, 0)
         assert state.secret_tricks_flags[0] == 0
         secret_trick_check(state, 0)
-        assert state.secret_winner == 0, "eating nothing still wins the diet"
+        assert state.secret_player == 0, "eating nothing still wins the diet"
 
     def test_a_food_objective_is_lost_by_eating(self):
         state = _trick_state(TRICK_NO_FOOD)
         secret_trick_progress(state, 0, TRICK_NO_FOOD)    # WP-6's 0x51CEE hook
         secret_trick_check(state, 0)
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
 
     def test_masked_tricks_use_their_own_width(self):
         """9/0x0D mask with 3, 0x0C/0x0E with 7 (0x52BF8 / 0x52C30)."""
         state = _trick_state(TRICK_NOGREEDY1)
         state.secret_tricks_flags[0] = 8                     # 8 & 7 == 0
         secret_trick_check(state, 0)
-        assert state.secret_winner == 0
+        assert state.secret_player == 0
 
         state = _trick_state(TRICK_NOGETHIT)
         state.secret_tricks_flags[0] = 4                     # 4 & 3 == 0
         secret_trick_check(state, 0)
-        assert state.secret_winner == 0
+        assert state.secret_player == 0
 
     def test_dont_hurt_friends_wants_a_clean_sheet(self):
         state = _trick_state(TRICK_NOHURTFRIENDS)
         secret_trick_progress(state, 0, TRICK_NOHURTFRIENDS)
         secret_trick_check(state, 0)
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
 
     def test_be_pushy_reads_movement_type(self):
         state = _trick_state(TRICK_BEPUSHY)
         state.movement_type = 1
         secret_trick_check(state, 0)
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
         state.movement_type = 0
         secret_trick_check(state, 0)
-        assert state.secret_winner == 0
+        assert state.secret_player == 0
 
     def test_it_is_claimed_by_whoever_is_it(self):
         state = _trick_state(TRICK_IT)
         state.player_it = 1
         secret_trick_check(state, 0)                          # player 0 is not IT
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
         assert state.secret_tricks_flags == [1, 1, 1, 1], "everyone is marked"
 
     def test_it_locks_out_later_exiters(self):
         state = _trick_state(TRICK_IT)
         state.player_it = 1
         secret_trick_check(state, 1)
-        assert state.secret_winner == 1
+        assert state.secret_player == 1
         state.player_it = 0
         secret_trick_check(state, 0)                          # too late, flags are 1
-        assert state.secret_winner == 1
+        assert state.secret_player == 1
 
     def test_transport_tricks_are_not_decided_at_the_exit(self):
         state = _trick_state(TRICK_TRANSPORT1)
         secret_trick_check(state, 0)
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
 
     def test_no_objective_never_produces_a_winner(self):
         state = _trick_state(TRICK_NONE)
         secret_trick_check(state, 0)
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
 
 
 class TestSecretCheck:
@@ -1350,7 +1350,7 @@ class TestSecretCheck:
 
     def test_a_win_pushes_the_reload_up_and_records_the_maze(self):
         state = _trick_state(TRICK_NOGREEDY2)
-        state.secret_winner = 0
+        state.secret_player = 0
         state.secret_possible_start = 20
         secret_check(state)
         assert state.secret_prev_maze == 40
@@ -1359,7 +1359,7 @@ class TestSecretCheck:
 
     def test_a_win_is_capped(self):
         state = _trick_state(TRICK_NOGREEDY2)
-        state.secret_winner = 0
+        state.secret_player = 0
         state.secret_possible_start = _SECRET_START_MAX
         secret_check(state)
         assert state.secret_possible_start == _SECRET_START_MAX
@@ -1386,7 +1386,7 @@ class TestSecretCheckWinner:
     def _room(self, task: int, progress: int) -> GameState:
         state = GameState()
         state.mazenum_current = _SECRET_MAZE
-        state.secret_winner = 0
+        state.secret_player = 0
         state.secret_trick_id = task
         state.secret_tricks_flags[0] = progress
         return state
@@ -1425,7 +1425,7 @@ class TestSecretCheckWinner:
 
     def test_no_winner_is_not_a_completion(self):
         state = self._room(0x54, 0)
-        state.secret_winner = -1
+        state.secret_player = -1
         assert not secret_check_winner(state)
 
 
@@ -1439,7 +1439,7 @@ class TestSecretRoomEntry:
         state.mazenum_current = 41
         state.maze_next, state.level_next = 41, 13
         state.level_next_treasure = 4          # no treasure room is due
-        state.secret_winner = 0
+        state.secret_player = 0
         state.secret_trick_id = TRICK_NOGREEDY2
         state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
         state.rng = GameRandom(seed=seed)
@@ -1506,7 +1506,7 @@ class TestSecretRoomEntry:
 
     def test_no_winner_means_no_secret_room(self):
         state = self._won()
-        state.secret_winner = -1
+        state.secret_player = -1
         show_level_start_screen(state)
         assert state.mazenum_current == 41
 
@@ -1532,7 +1532,7 @@ class TestSecretRoomPayout:
         state.game_mode = GameMode.NORMAL
         state.levelnum_current, state.mazenum_current = 13, _SECRET_MAZE
         state.level_next, state.maze_next = 13, 41
-        state.secret_winner = 0
+        state.secret_player = 0
         state.secret_trick_id = task
         state.secret_saved_keys = 3
         state.secret_saved_potions = 2
@@ -1578,7 +1578,7 @@ class TestSecretRoomPayout:
         """0x4D866 -- otherwise the next level walks straight back in."""
         state = self._in_room()
         show_level_end_bonus_screen(state)
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
 
     def test_pacing_is_not_adapted_on_the_way_out(self):
         """0x4D8CA takes the secret_need_hint arm, not secret_check."""

@@ -309,11 +309,10 @@ images alone.
 > - Recovery: `sound_response` (0x42D0A) and `sound_system_reset` (0x42DC8).
 >   Status query is command 7 with its reply byte at 0x9049F1; idle reload
 >   0xF0 (240 frames) at 0x9049F2; retry counter 0x9049F4 with the reset
->   threshold at 0xB4 (180); holdoff 0x9049EE reloaded with 0xB4 by the reset
->   path. That word still carries the name `speech_counter` in the loader
->   symbols, but the only site storing a nonzero value into it is 0x42DDA
+>   threshold at 0xB4 (180); `sound_holdoff` 0x9049EE is reloaded with 0xB4
+>   by the reset path. The only site storing a nonzero value into it is 0x42DDA
 >   inside `sound_system_reset`, and the 0xFF test at 0x42D30 is the
->   post-reset acknowledgement, so it is a recovery holdoff. A byte-level
+>   post-reset acknowledgement, confirming that it is a recovery holdoff. A byte-level
 >   scan of `row76.bin` for the address finds references only at 0x42D14,
 >   0x42DDA, 0x4AD7E and 0x4AE36: `doc/04_game_subsystems.md` §11.3.
 > - Speech gate: `sound_speech_play` (0x4AD4E) tests bit 11 of `game_settings`

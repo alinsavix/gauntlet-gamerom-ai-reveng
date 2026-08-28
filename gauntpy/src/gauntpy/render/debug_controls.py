@@ -74,7 +74,7 @@ def debug_force_secret_room(state: GameState, player_index: int) -> bool:
 
     if exits.in_bonus_room(state):
         return False
-    # The ROM does not consult trick_player until the destination is past level
+    # The ROM does not consult secret_player until the destination is past level
     # six (show_level_start_screen 0x44DCA).
     if state.levelnum_current < 6:
         return False
@@ -83,7 +83,7 @@ def debug_force_secret_room(state: GameState, player_index: int) -> bool:
     # Disable ordinary objective producers so another player cannot replace the
     # explicitly selected winner before the last exit dissolve completes.
     state.secret_trick_id = exits.TRICK_NONE
-    state.secret_winner = player_index
+    state.secret_player = player_index
     return True
 
 
@@ -118,13 +118,13 @@ def debug_skip_level(state: GameState) -> bool:
             "debug level skip could not load "
             f"level {next_level} / maze {state.mazenum_current}"
         )
-    from ..subsystems.display import maze_show_alpha
+    from ..subsystems.display import maze_show
 
-    maze_show_alpha(state)
+    maze_show(state)
     exits._spawn_level_players(state, survivors)
 
     state.game_mode = int(GameMode.NORMAL)
-    state.bonus_timer = 0
+    state.global_delay_timer = 0
     state.bonus_amount = 0
     state.level_start_pending = False
     from ..subsystems.camera import snap_camera

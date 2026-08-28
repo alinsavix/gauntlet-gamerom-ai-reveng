@@ -28,7 +28,7 @@ next touch them:
     the firing monster's MOB slot (``active_mob_ids``, 0x9048C8), reloads
     ``state.shot_timer_next[ch]``, and for a lobber seeds
     ``lobber_shot_vec_h/v`` plus the two accumulators (0x49216/0x4922A);
-  * ``dragon._dragon_fire_setup`` does the same for its own channels
+  * ``dragon.dragon_fire_setup`` does the same for its own channels
     (ROM 0x5480E/0x548A4) -- note the dragon fires into the *demon* channels
     4-7, not 8-11: ``dragon_find_free_shot_slot`` (0x540E8) scans MOB slots
     8 down to 5;
@@ -435,7 +435,7 @@ def _live_direction(state: GameState, shooter_id: int) -> int:
     return direction
 
 
-def _score_add(state: GameState, player_index: int, damage: int,
+def player_add_score_with_mult(state: GameState, player_index: int, damage: int,
                multiplier: int) -> None:
     """``player_add_score_with_mult`` (0x5214C), inlined.
 
@@ -470,7 +470,7 @@ def _trick_bump(state: GameState, player_index: int, trick_id: int) -> None:
     ROM's shape is ``tst.b`` then ``blt`` to ``move.b #1``, otherwise
     ``addq.b #1``, so a byte that has already gone negative restarts at one
     instead of wrapping.  Both halves go through the WP-15 entry points, which
-    carry the ``cmpi.b #<trick>,trick_tasknum`` guard themselves.
+    carry the ``cmpi.b #<trick>,secret_trick_id`` guard themselves.
     """
     from .exits import secret_trick_progress, secret_trick_set
     if state.secret_tricks_flags[player_index] & 0x80:
@@ -750,7 +750,7 @@ def _handle_player_victim(state: GameState, slot: int, shooter_id: int) -> int:
         _dialog(state, shooter_id, _DIALOG_PLAYER_SHOT)
 
     if hurt:
-        _dragon_proximity(state, slot)
+        dragon_player_proximity(state, slot)
         _sound(state, _SOUND_PLAYER_HIT)
     return _finish(state, slot, shooter_id)
 
@@ -820,8 +820,8 @@ def _score_tail(state: GameState, slot: int, shooter_id: int, damage: int,
     if shooter_id >= 4:
         return _finish(state, slot, shooter_id)
 
-    _dragon_proximity(state, slot)
-    _score_add(state, shooter_id, damage, multiplier)
+    dragon_player_proximity(state, slot)
+    player_add_score_with_mult(state, shooter_id, damage, multiplier)
     if state.idle_timer > 0:
         state.idle_timer = 0
 
@@ -962,7 +962,7 @@ def _handle_secret_wall(state: GameState, slot: int, shooter_id: int) -> int:
     _sound(state, _SOUND_SECRET_WALL)
     # 0x4B53C then 0x4B55A: stamp floor over the tile, spawn the burst at the
     # position that stamp deliberately leaves behind, then free the MOB.
-    _pf_replace(state, slot, int(MazeObjIds.TILE_FLOOR))
+    pf_replace(state, slot, int(MazeObjIds.TILE_FLOOR))
     shot_impact_spawn(state, slot, shooter_id)
     mobs.unlink_and_clear(slot)
 
@@ -1002,7 +1002,7 @@ def _handle_secret_wall(state: GameState, slot: int, shooter_id: int) -> int:
     state.escape_timer = 0
     if state.idle_timer > 0:
         state.idle_timer = 0
-    _dragon_proximity(state, slot)
+    dragon_player_proximity(state, slot)
     return _consume(state, shooter_id)
 
 
@@ -1019,12 +1019,12 @@ def _handle_destructible_wall(state: GameState, raw_target: int, slot: int,
         return _handle_wall_tail(state, shooter_id)
 
     if state.players[shooter_id].supershot:
-        _dragon_proximity(state, slot)
+        dragon_player_proximity(state, slot)
         _kill_bookkeeping(state)
         return SURVIVES
 
     _kill_bookkeeping(state)
-    _dragon_proximity(state, slot)
+    dragon_player_proximity(state, slot)
     return _handle_wall_tail(state, shooter_id)
 
 
@@ -1063,7 +1063,7 @@ def _handle_playerstart(state: GameState, slot: int, shooter_id: int) -> int:
         from .thief import thief_remove_and_drop_loot
         thief_remove_and_drop_loot(state, shooter_id, slot)
 
-    _dragon_proximity(state, slot)
+    dragon_player_proximity(state, slot)
     return _consume(state, shooter_id)
 
 
@@ -1082,7 +1082,7 @@ def _handle_treasure(state: GameState, slot: int, shooter_id: int,
 
     shot_impact_spawn(state, slot, shooter_id)
     state.mobs.unlink_and_clear(slot)
-    _dragon_proximity(state, slot)
+    dragon_player_proximity(state, slot)
     _kill_bookkeeping(state)
     return SURVIVES     # 0x4B746: a supershot always carries on
 
@@ -1112,11 +1112,11 @@ def _handle_food(state: GameState, slot: int, shooter_id: int) -> int:
         spoke = _dialog(state, shooter_id, _DIALOG_FOOD_SHOT)
 
     if state.players[shooter_id].supershot:
-        _dragon_proximity(state, slot)
+        dragon_player_proximity(state, slot)
         _kill_bookkeeping(state)
         return SURVIVES
 
-    _dragon_proximity(state, slot)
+    dragon_player_proximity(state, slot)
     _kill_bookkeeping(state)
 
     if not spoke and state.getrandom(3) == 0:
@@ -1170,11 +1170,11 @@ def _handle_potion(state: GameState, slot: int, shooter_id: int) -> int:
                 _speech(state, 0x9C)
 
     if state.players[shooter_id].supershot:
-        _dragon_proximity(state, slot)
+        dragon_player_proximity(state, slot)
         _kill_bookkeeping(state)
         return SURVIVES
 
-    _dragon_proximity(state, slot)
+    dragon_player_proximity(state, slot)
     _kill_bookkeeping(state)
     return _finish(state, slot, shooter_id)
 
@@ -1186,7 +1186,7 @@ def _handle_dragon(state: GameState, raw_target: int, slot: int,
         shot_impact_spawn(state, slot, shooter_id)
         return _consume(state, shooter_id)
 
-    _dragon_proximity(state, slot)
+    dragon_player_proximity(state, slot)
     from .dragon import dragon_shot_hit
     dragon_shot_hit(state, raw_target, shooter_id)
     return _consume(state, shooter_id)
@@ -1297,7 +1297,7 @@ _DRAGON_BOX_WIDTH = 10           # inclusive offsets -4..+5
 _DRAGON_BOX_HEIGHT = 10          # inclusive offsets -5..+4
 
 
-def _dragon_proximity(
+def dragon_player_proximity(
     state: GameState, cell: int, previous_cell: int = 0,
 ) -> None:
     """``dragon_player_proximity`` (0x549EA) -- react to entry into its box.
@@ -1342,7 +1342,7 @@ def _dragon_proximity(
 # 0x579F2, the second word of each ``score_popup_tbl`` record: the picture the
 # floating score sprite shows.  Entry 0 is the plain "points" burst the shot
 # code raises; 1-9 and 10-14 are the score-value and bonus popups.
-_SCORE_POPUP_PICTURE = (
+_SCORE_POPUP_PICTURE_TABLE = (
     0x1C88, 0x1DB4, 0x1DB7, 0x1DBA, 0x1DBD, 0x1DC0, 0x1DC3, 0x1DC6,
     0x1DC9, 0x1DCC, 0x25F6, 0x25F8, 0x25FA, 0x25FC, 0x25FE,
 )
@@ -1364,8 +1364,8 @@ def playfield_showscore(state: GameState, slot: int, popup: int) -> None:
             continue
         state.score_display_timer[channel] = _SCORE_POPUP_FRAMES
         popup_slot = _SCORE_POPUP_SLOT + channel
-        mobs.picture[popup_slot] = _SCORE_POPUP_PICTURE[
-            popup % len(_SCORE_POPUP_PICTURE)
+        mobs.picture[popup_slot] = _SCORE_POPUP_PICTURE_TABLE[
+            popup % len(_SCORE_POPUP_PICTURE_TABLE)
         ]
         hpos = position_field(mobs.hpos[slot])
         vpos = _u16(position_field(mobs.vpos[slot]) + 0x400)
@@ -1394,7 +1394,7 @@ def _potion_blast(state: GameState, shooter_id: int) -> None:
     state.playfield_color_latch = ALPHA_PALETTE_INIT[shooter_id * 4 + 7]
 
 
-def _pf_replace(state: GameState, slot: int, obj_type: int) -> None:
+def pf_replace(state: GameState, slot: int, obj_type: int) -> None:
     """``pf_replace`` (0x5F31E) -- retile a maze cell in place.
 
     Replacing with floor takes the ROM's three-way branch at 0x5F352: a static
@@ -1507,7 +1507,7 @@ def wall_crumble(state: GameState, slot: int, damage: int) -> int:
 def _wall_destroy(state: GameState, slot: int) -> None:
     """0x530FE -- the crumble ladders' shared "wall is gone" tail."""
     state.destructible_wall_stage.pop(slot, None)
-    _pf_replace(state, slot, int(MazeObjIds.TILE_FLOOR))
+    pf_replace(state, slot, int(MazeObjIds.TILE_FLOOR))
 
 
 def wall_crumble_descriptor(state: GameState, slot: int) -> tuple[int, ...] | None:
@@ -1544,15 +1544,15 @@ def shot_onscreen_check(state: GameState, target: int,
     """
     door = state.mobs.state_link[target]
 
-    if v_limit > state.shot_sep_v_abs:
-        if (door & 0x2000) and _s16(state.shot_sep_h) > -h_limit:
+    if v_limit > state.collision_dist_V:
+        if (door & 0x2000) and _s16(state.shothit_dist_H) > -h_limit:
             return CONSUMED
-        if (door & 0x0800) and h_limit > _s16(state.shot_sep_h):
+        if (door & 0x0800) and h_limit > _s16(state.shothit_dist_H):
             return CONSUMED
-    if h_limit > state.shot_sep_h_abs:
-        if (door & 0x1000) and _s16(state.shot_sep_v) > -v_limit:
+    if h_limit > state.collision_dist_H:
+        if (door & 0x1000) and _s16(state.shothit_dist_V) > -v_limit:
             return CONSUMED
-        if (door & 0x0400) and v_limit > _s16(state.shot_sep_v):
+        if (door & 0x0400) and v_limit > _s16(state.shothit_dist_V):
             return CONSUMED
     return 0
 
@@ -1561,7 +1561,7 @@ def shot_onscreen_check(state: GameState, target: int,
 # shot_mob_collision (0x40906) and its candidate core (0x40A78)
 # =============================================================================
 
-def _candidate_core(state: GameState, index: int, shooter_id: int,
+def shot_collision_candidate_core(state: GameState, index: int, shooter_id: int,
                     width: int, span: int, shot_h: int, shot_v: int,
                     self_index: int, maxtier: bool) -> int | None:
     """0x40A78 -- accept or reject one probed cell.
@@ -1617,17 +1617,17 @@ def _candidate_core(state: GameState, index: int, shooter_id: int,
             position_field(mobs.vpos[slot]) - shot_v
         )
 
-    state.shot_sep_h = sep_h
+    state.shothit_dist_H = sep_h
     folded_h = sep_h ^ POS_FIELD_MASK if sep_h & 0x8000 else sep_h
     if folded_h >= width:
         return None
-    state.shot_sep_h_abs = folded_h
+    state.collision_dist_H = folded_h
 
-    state.shot_sep_v = sep_v
+    state.shothit_dist_V = sep_v
     folded_v = sep_v ^ POS_FIELD_MASK if sep_v & 0x8000 else sep_v
     if folded_v >= width:
         return None
-    state.shot_sep_v_abs = folded_v
+    state.collision_dist_V = folded_v
 
     if span < _u16(folded_v + folded_h):
         return None
@@ -1645,7 +1645,7 @@ def _wrap_allowed(state: GameState, shooter_id: int) -> bool:
     half of row 0 (9 <= screen y <= 240) before a probe may wrap to row 31.
 
     The companion window at 0x40A9A, ``V > 0xF3FF``, guards the row-0 case
-    ``_candidate_core`` refuses outright.
+    ``shot_collision_candidate_core`` refuses outright.
     """
     vpos = state.mobs.vpos[_shot_slot(shooter_id)] & 0xFFFF
     return 0x8000 <= vpos <= 0xF3FF
@@ -1685,7 +1685,7 @@ def shot_mob_collision(state: GameState, cell: int, shooter_id: int) -> int:
         self_index |= 0x8000    # 0x409BA: a reflected shot may hit its owner
 
     index = _u16(cell * 2)
-    hit = _candidate_core(
+    hit = shot_collision_candidate_core(
         state, index, shooter_id, width, span, shot_h, shot_v,
         self_index, maxtier,
     )
@@ -1697,7 +1697,7 @@ def shot_mob_collision(state: GameState, cell: int, shooter_id: int) -> int:
     for h_delta, v_delta in _PROBE_OFFSETS[_live_direction(state, shooter_id) & 7]:
         index = _u16(_u16(index + h_delta) & 0x3E)
         index = _u16(index + v_delta + row_base)
-        hit = _candidate_core(
+        hit = shot_collision_candidate_core(
             state, index, shooter_id, width, span, shot_h, shot_v,
             self_index, maxtier,
         )

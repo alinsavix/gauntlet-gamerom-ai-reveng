@@ -46,7 +46,7 @@ from gauntpy.subsystems.thief import (
     _SPEED_MUGGER,
     _SPEED_THIEF,
     _THIEF_COLLISION_REMOVE_FLAGS,
-    _THIEF_DIRECTION_STEP_FLAGS,
+    _THIEF_DIRECTION_STEP_SIZE,
 )
 from gauntpy.subsystems import score
 from gauntpy.subsystems.players import setup_infopanel
@@ -992,7 +992,7 @@ class TestMoveEngineCollisionAndAnimation:
 
         for _ in range(4):
             thief_move_engine(
-                state, _THIEF_DIRECTION_STEP_FLAGS[3],
+                state, _THIEF_DIRECTION_STEP_SIZE[3],
                 _SPEED_THIEF, _SPEED_THIEF,
             )
 
@@ -1011,7 +1011,7 @@ class TestMoveEngineCollisionAndAnimation:
         state.mobs.picture[destination] = 0x8000
         state.mobs.set_obj_type(destination, MazeObjIds.WALL_REGULAR)
 
-        result = thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF)
+        result = thief_move_engine(state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF)
 
         assert result == 1
         assert state.thief_mob_slot == start
@@ -1037,7 +1037,7 @@ class TestMoveEngineCollisionAndAnimation:
         for _ in range(8):
             thief_move_engine(
                 state,
-                _THIEF_DIRECTION_STEP_FLAGS[2],
+                _THIEF_DIRECTION_STEP_SIZE[2],
                 _SPEED_THIEF,
                 _SPEED_THIEF,
             )
@@ -1064,7 +1064,7 @@ class TestMoveEngineCollisionAndAnimation:
             )
 
         result = thief_move_engine(
-            state, _THIEF_DIRECTION_STEP_FLAGS[4],
+            state, _THIEF_DIRECTION_STEP_SIZE[4],
             state.thief_speed, state.thief_speed,
         )
 
@@ -1081,9 +1081,9 @@ class TestMoveEngineCollisionAndAnimation:
         state.mobs.hpos[start] = encode_hpos(10 * 16 + 12)
         state.mobs.create(destination, 1, encode_hpos(11 * 16), encode_vpos_at_y(10 * 16), MazeObjIds.TREASURE)
 
-        assert thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF) == 1
+        assert thief_move_engine(state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF) == 1
         assert state.mobs.picture[destination] == 0
-        assert thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF) == 0
+        assert thief_move_engine(state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF) == 0
         assert state.thief_mob_slot == destination
 
     def test_nonblocking_occupied_cell_holds_the_axis_and_slot(self):
@@ -1095,7 +1095,7 @@ class TestMoveEngineCollisionAndAnimation:
         state.mobs.hpos[start] = encode_hpos(10 * 16 + 12)
         state.mobs.create(destination, 1, encode_hpos(11 * 16), encode_vpos_at_y(10 * 16), MazeObjIds.TILE_STUN)
 
-        assert thief_move_engine(state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF) == 0
+        assert thief_move_engine(state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF) == 0
         assert state.thief_mob_slot == start
         assert hpos_x(state.mobs.hpos[start]) == 10 * 16 + 12
 
@@ -1114,7 +1114,7 @@ class TestMoveEngineCollisionAndAnimation:
         state.thief_mode = THIEF_PURSUE
 
         thief_move_engine(
-            state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF,
+            state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF,
         )
 
         assert state.players[0].keysnum == 1
@@ -1136,7 +1136,7 @@ class TestMoveEngineCollisionAndAnimation:
         state.thief_mode = THIEF_PURSUE
 
         thief_move_engine(
-            state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF,
+            state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF,
         )
 
         assert state.players[0].keysnum == 2
@@ -1157,7 +1157,7 @@ class TestMoveEngineCollisionAndAnimation:
         state.thief_mode = THIEF_PURSUE
 
         thief_move_engine(
-            state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF,
+            state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF,
         )
 
         assert state.players[0].keysnum == 1
@@ -1193,7 +1193,7 @@ class TestMoveEngineCollisionAndAnimation:
         state.thief_stolen_item = 0x10
 
         thief_move_engine(
-            state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF,
+            state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF,
         )
 
         assert state.players[0].health == 100
@@ -1281,7 +1281,7 @@ class TestCollisionAgainstHighObjectTypes:
 
     def _step(self, state: GameState) -> int:
         return thief_move_engine(
-            state, _THIEF_DIRECTION_STEP_FLAGS[2], _SPEED_THIEF, _SPEED_THIEF
+            state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF
         )
 
     def test_supershot_is_eaten_then_walked_into(self):

@@ -192,9 +192,9 @@ def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
             state, slot, _descriptor_for_cell(state, slot, int(object_type)),
         )
 
-        from .subsystems.maze_objects import refresh_surrounding_door_graphics
+        from .subsystems.maze_objects import pf_door_update_surrounding_xy
 
-        refresh_surrounding_door_graphics(state, slot)
+        pf_door_update_surrounding_xy(state, slot)
 
         # refresh_tile_visual 0x5F66E-0x5F76C visits these cells in this exact
         # order. Only north, north-east, and east have a floor fallback because
@@ -228,7 +228,7 @@ def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
                 (dx, dy) in ((0, -1), (1, 0))
                 or wall_refreshed and (dx, dy) in ((-1, 0), (0, 1))
             ):
-                refresh_surrounding_door_graphics(state, neighbour)
+                pf_door_update_surrounding_xy(state, neighbour)
         return
 
     write_tile_descriptor(
@@ -388,7 +388,7 @@ def write_cyclic_wall_descriptor(
 
 def _forcefield_adjacency(state: GameState, slot: int) -> int:
     result = 0
-    for segment in state.forcefield_segments:
+    for segment in state.forcefield_segment_table:
         hub = segment & 0x3FF
         row, col = coords.unpack_slot(hub)
         length = ((segment >> 10) & 0x0F) + 1
@@ -612,7 +612,7 @@ def initialize_playfield_ram(state: GameState, maze: Maze) -> None:
     state.playfield_forcefield_catalog.clear()
     state.playfield_wallpattern = int(maze.wallpattern)
     state.playfield_forcefield_cells = set()
-    for segment in state.forcefield_segments:
+    for segment in state.forcefield_segment_table:
         hub = segment & 0x3FF
         row, col = coords.unpack_slot(hub)
         length = ((segment >> 10) & 0x0F) + 1
@@ -1110,7 +1110,7 @@ def maze_addrandompickups(
                 pickup_delta += 2
 
         class_bonus = (3, 0, 4, 0)[character_index]
-        spawn_bonus = state.spawn_probability_bonus & 0xFF
+        spawn_bonus = state.monster_spawn_probability_bonus & 0xFF
         if spawn_bonus & 0x80:
             spawn_bonus -= 0x100
         excess = spawn_bonus - class_bonus
@@ -1285,9 +1285,9 @@ def _create_generic(state: GameState, slot: int, object_type: int) -> None:
         link_into_chain=slot != 0,
     )
     if object_type == int(MazeObjIds.MONST_DRAGON):
-        from .subsystems.dragon import setup_dragon_segments
+        from .subsystems.dragon import dragon_setup_segments
 
-        setup_dragon_segments(state, slot)
+        dragon_setup_segments(state, slot)
 
 
 def _prepare_secret_challenge(state: GameState) -> None:
@@ -1644,8 +1644,8 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     if state.level_flags_3 & 0x08:
         maze_forcefield_setup(state)
     initialize_playfield_ram(state, state.maze)
-    from .subsystems.maze_objects import setup_door_graphics
-    setup_door_graphics(state)
+    from .subsystems.maze_objects import maze_doors_setup
+    maze_doors_setup(state)
     postdecode_level_setup(state)                        # 0x439B0-0x43B5A
     # The ROM scans existing exits before its secret-maze transformation, so
     # generated challenge exits are deliberately absent from the position table.

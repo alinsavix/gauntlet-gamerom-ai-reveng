@@ -8,7 +8,7 @@ from gauntpy.constants import GameMode, MazeObjIds
 from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.state import GameState
 from gauntpy.subsystems.maze_objects import (
-    _is_blank_floor,
+    pf_isblankfloor,
     check_forcefield_collision,
     forcefield_segments_setup,
     main_cycle_tport_and_ffield,
@@ -19,7 +19,7 @@ from gauntpy.subsystems.maze_objects import (
     open_timed_doors,
     record_transporter_secret_progress,
     select_forcefield_delay_profile,
-    setup_door_graphics,
+    maze_doors_setup,
     setup_random_walls,
 )
 
@@ -155,12 +155,12 @@ class TestTransporterAndForcefieldCycle:
 
     def test_level_selected_delay_profiles_are_hex_rom_bytes(self):
         state = GameState(levelnum_current=3)
-        state.cyclic_wall_assign[10] = 0x55
+        state.cyclic_wall_assignments[10] = 0x55
         state.cyclic_wall_phase = 2
         state.cyclic_wall_timer = 99
         select_forcefield_delay_profile(state)
         assert state.forcefield_step_durations == [0x10, 0x10, 0x20, 0x20, 0x40, 0x40, 0x08, 0x40]
-        assert not any(state.cyclic_wall_assign)
+        assert not any(state.cyclic_wall_assignments)
         assert state.cyclic_wall_phase == 0
         assert state.cyclic_wall_timer == 0
 
@@ -176,7 +176,7 @@ class TestTransporterSecretProgress:
         state.player_tport_phase[0] = 0
         state.player_tport_route_state[0] = source
         state.player_tport_type[0] = destination
-        state.player_tile_pos[0] = landing
+        state.player_tile_or_tport_dest[0] = landing
         return state, source, destination, landing
 
     def test_task_0x56_records_one_based_source_and_destination_pad_bits(self):
@@ -222,7 +222,7 @@ class TestTransporterSecretProgress:
         )
 
         assert state.secret_tricks_flags[0] == 0
-        assert state.secret_winner == -1
+        assert state.secret_player == -1
 
 
 class TestForcefieldSetup:
@@ -239,7 +239,7 @@ class TestForcefieldSetup:
 
         maze_forcefield_setup(state)
 
-        assert state.cyclic_wall_assign[8] == 0b00_11_10_01
+        assert state.cyclic_wall_assignments[8] == 0b00_11_10_01
         assert all(state.mobs.obj_type(slot) == 0 for slot in slots)
         assert state.cyclic_wall_phase == 0
         assert state.cyclic_wall_timer == 0
@@ -261,7 +261,7 @@ class TestForcefieldSetup:
 
         forcefield_segments_setup(state)
 
-        assert state.forcefield_segments == [0x8000 | (3 << 10) | left]
+        assert state.forcefield_segment_table == [0x8000 | (3 << 10) | left]
         assert check_forcefield_collision(state, pack_slot(5, 6))
         assert check_forcefield_collision(state, pack_slot(5, 8))
         assert not check_forcefield_collision(state, left)
@@ -280,7 +280,7 @@ class TestForcefieldSetup:
         forcefield_segments_setup(state)
 
         assert state.mobs.picture[left] == 0x8000
-        assert state.forcefield_segments == [0x8000 | (3 << 10) | left]
+        assert state.forcefield_segment_table == [0x8000 | (3 << 10) | left]
         assert check_forcefield_collision(state, pack_slot(5, 7))
 
     def test_wrapped_segment_crosses_the_maze_seam(self):
@@ -292,7 +292,7 @@ class TestForcefieldSetup:
 
         forcefield_segments_setup(state)
 
-        assert state.forcefield_segments == [0xC000 | (3 << 10) | first]
+        assert state.forcefield_segment_table == [0xC000 | (3 << 10) | first]
         assert check_forcefield_collision(state, pack_slot(8, 0))
         assert not check_forcefield_collision(state, pack_slot(8, 2))
 
@@ -305,7 +305,7 @@ class TestForcefieldSetup:
 
         forcefield_segments_setup(state)
 
-        assert state.forcefield_segments == [(3 << 10) | top]
+        assert state.forcefield_segment_table == [(3 << 10) | top]
         assert check_forcefield_collision(state, pack_slot(6, 12))
         assert not check_forcefield_collision(state, pack_slot(6, 11))
 
@@ -319,7 +319,7 @@ class TestForcefieldSetup:
 
         forcefield_segments_setup(state)
 
-        assert state.forcefield_segments == []
+        assert state.forcefield_segment_table == []
 
     def test_first_palette_cycle_lazily_builds_level_forcefield_state(self):
         state = GameState()
@@ -341,7 +341,7 @@ class TestDoorOpening:
         _place(state, slot, MazeObjIds.WALL_REGULAR, picture=0x8000)
         state.maze = SimpleNamespace(data={(5, 0): int(MazeObjIds.WALL_REGULAR)})
 
-        assert _is_blank_floor(state, slot)
+        assert pf_isblankfloor(state, slot)
 
     def test_connected_horizontal_door_uses_rom_neighbor_picture(self):
         state = GameState()
@@ -356,7 +356,7 @@ class TestDoorOpening:
             (5, 4): int(MazeObjIds.DOOR_HORIZ),
         })
 
-        setup_door_graphics(state)
+        maze_doors_setup(state)
 
         assert state.mobs.picture[center] == 0x9D38
         assert state.mobs.hpos[center] == 5 << 11
@@ -369,7 +369,7 @@ class TestDoorOpening:
         _place(state, slot, MazeObjIds.DOOR_HORIZ, picture=0x9D3C)
         state.maze = SimpleNamespace(data={(5, 5): int(MazeObjIds.DOOR_HORIZ)})
 
-        setup_door_graphics(state)
+        maze_doors_setup(state)
 
         assert state.mobs.picture[slot] == 0x9D4C
         assert state.mobs.hpos[slot] == ((5 << 11) - 0x0200) & 0xFFFF
@@ -467,8 +467,8 @@ class TestCyclicWalls:
         new_slot = pack_slot(5, 6)
         state.cyclic_wall_phase = 1
         state.cyclic_wall_timer = 0
-        state.cyclic_wall_assign[old_slot >> 2] |= 1 << ((old_slot & 3) * 2)
-        state.cyclic_wall_assign[new_slot >> 2] |= 2 << ((new_slot & 3) * 2)
+        state.cyclic_wall_assignments[old_slot >> 2] |= 1 << ((old_slot & 3) * 2)
+        state.cyclic_wall_assignments[new_slot >> 2] |= 2 << ((new_slot & 3) * 2)
         _place(state, old_slot, MazeObjIds.WALL_TRAPCYC1)
         state.maze = SimpleNamespace(data={
             (5, 5): int(MazeObjIds.WALL_TRAPCYC1),
@@ -489,7 +489,7 @@ class TestCyclicWalls:
         tile = pack_slot(5, 6)
         state.cyclic_wall_timer = 0
         state.thief_current_pos = tile
-        state.cyclic_wall_assign[tile >> 2] |= 1 << ((tile & 3) * 2)
+        state.cyclic_wall_assignments[tile >> 2] |= 1 << ((tile & 3) * 2)
 
         main_walls_cyclic_move(state)
 

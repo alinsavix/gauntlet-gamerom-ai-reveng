@@ -15,6 +15,6 @@ address,name,arguments,return,exceptional_convention,direct_control_sites,confid
 0x48BEC,player_start_inner,uint16 player_index,"D0.l = -1 when placement and MOB initialization succeed, or 0 when no usable spawn position exists",,0x48252;0x482CA;0x48BCA,Verified
 0x49DE6,player_death_sequence,uint16 player_index,void,,0x4A632,Verified
 0x4A2CA,draw_player_initials_entry,uint16 player_index,void,,0x45542,Verified
-0x4D1A4,secret_bonus_earned,void,"D0.l = -1 when the current secret-task/progress state earns the secret-room coin bonus, else 0",,0x4D4B0,Verified
+0x4D1A4,secret_check_winner,void,"D0.l = -1 when the current secret-task/progress state earns the secret-room coin bonus, else 0",,0x4D4B0,Verified
 0x4D476,show_level_end_bonus_screen,void,void,calls fixed draw_string through A3 = 0x25A,0x4A78C;0x4D466,Verified
 0x4D900,player_activecount,void,"D0.l = count (0..4) of player statuses 1, 2, 8, or 0x10",,0x44F1A;0x4837E;0x4D516,Verified

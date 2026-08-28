@@ -50,7 +50,7 @@ def _active_player(state: GameState, index: int, slot: int, px: int, py: int) ->
     # main_move_players maintains these in the real frame; the camera reads
     # them, so the isolated camera tests supply them here.
     state.player_in_maze[index] = 1
-    state.player_tile_pos[index] = slot
+    state.player_tile_or_tport_dest[index] = slot
 
 
 def _gameplay_state() -> GameState:

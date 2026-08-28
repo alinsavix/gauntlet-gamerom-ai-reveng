@@ -434,9 +434,9 @@ class TestEffectPictureIndex:
         assert popups[11] - popups[10] == 2, "the bonus half strides two"
 
     def test_the_popup_table_matches_the_shot_subsystems_transcription(self):
-        from gauntpy.subsystems.shots import _SCORE_POPUP_PICTURE
+        from gauntpy.subsystems.shots import _SCORE_POPUP_PICTURE_TABLE
 
-        assert tuple(EFFECT_TABLES["score_popup"]) == _SCORE_POPUP_PICTURE
+        assert tuple(EFFECT_TABLES["score_popup"]) == _SCORE_POPUP_PICTURE_TABLE
 
     def test_the_fx_tables_match_the_score_subsystems_transcription(self):
         """``score._advance_effect`` steps these same cycles; they are the two
@@ -939,7 +939,7 @@ class TestKindAttributesEveryFrame:
 
     def test_a_kind_is_a_preference_not_a_filter(self):
         """A hero slot does not hold hero artwork every frame -- the death
-        animation (``players._PLAYER_DEATH_PICTURE``) and the bonus-screen icon
+        animation (``players._ANIM_TABLE_IDLE``) and the bonus-screen icon
         both live in the player's own MOB slot. Naming the hero must not stop
         those resolving.
         """

@@ -26,7 +26,7 @@ from gauntpy.subsystems.display import (
     init_player_mob_palette,
     init_playfield_color_ram,
     init_title_logo_colors,
-    maze_show_alpha,
+    maze_show,
     palette_fade_word,
     player_palette_vblank,
     update_title_logo_colors,
@@ -68,7 +68,7 @@ def test_maze_show_clears_everything_except_the_status_panel():
     state = GameState()
     state.alpha_ram[:] = [0xFFFF] * len(state.alpha_ram)
 
-    maze_show_alpha(state)
+    maze_show(state)
 
     for row in range(30):
         assert state.alpha_ram[row * 64:row * 64 + 29] == [0] * 29

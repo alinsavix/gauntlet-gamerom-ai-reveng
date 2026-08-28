@@ -19,7 +19,7 @@ from .players import player_join_finalize, player_start_inner, setup_infopanel
 # ROM table at 0x57862, 32 words.
 # Reference: doc/04_game_subsystems.md §10.1.
 # ---------------------------------------------------------------------------
-_COIN_HEALTH_TABLE: list[int] = [
+_HEALTH_PER_COIN_TABLE: list[int] = [
     100, 125, 150, 175, 200, 225, 250, 300,
     350, 400, 450, 500, 550, 600, 650, 700,
     750, 800, 850, 900, 950, 1000, 1100, 1200,
@@ -27,7 +27,7 @@ _COIN_HEALTH_TABLE: list[int] = [
 ]
 
 # Per-player coin-slot sound, ROM longword table at 0x57002: red/blue/yellow/
-# green (0x22-0x25 in refs/soundcmds.csv).  Played by player_init_for_coin
+# green (0x22-0x25 in refs/soundcmds.csv).  Played by player_coindrop
 # (0x488FE) and by coincheck when an active player re-coins (0x42CB6); both
 # index it by *player slot*, not by character, which is what
 # doc/05_data_reference.md's "character announcement speech IDs" label misses.
@@ -97,7 +97,7 @@ def start_attract_to_game(state: GameState) -> None:
 
     Also clears the transition machinery the ROM resets here: the theme fade and
     session-start sounds (0x4425A/0x4429A), the bonus/treasure hold
-    (``global_ui_delay_timer`` = 0 at 0x44366) and the attract countdown, which
+    (``global_delay_timer`` = 0 at 0x44366) and the attract countdown, which
     is parked on its 0xFFFF disabled sentinel at 0x4436C so ``main_attract``
     stops running until a screen loads a timer again.
     """
@@ -117,7 +117,7 @@ def start_attract_to_game(state: GameState) -> None:
     state.mugger_item_carried = 0       # 0x44286-0x4428E
     state.mugger_item_nextlevel = 0
     sound_play(state, 0x02)             # 0x4429A session-start sting
-    state.bonus_timer = 0               # 0x44366 global_ui_delay_timer
+    state.global_delay_timer = 0               # 0x44366 global_delay_timer
     state.bonus_amount = 0
     state.treasure_timer = 0
     state.level_treasures = 0
@@ -131,9 +131,9 @@ def start_attract_to_game(state: GameState) -> None:
     _write_character_select_alpha(state)      # 0x442BC-0x44346
 
 
-# Free-play / demo starting health, ROM word at 0x578A0 (player_init_for_coin
+# Free-play / demo starting health, ROM word at 0x578A0 (player_coindrop
 # 0x488EC and 0x4891C).  With paid pricing the health comes from
-# _COIN_HEALTH_TABLE instead.
+# _HEALTH_PER_COIN_TABLE instead.
 _FREE_PLAY_START_HEALTH = 0x7D0     # 2000
 
 
@@ -141,10 +141,10 @@ def configured_start_health(state: GameState) -> int:
     """The full health assigned when a player starts or continues."""
     if not state.two_player_mode:
         return _FREE_PLAY_START_HEALTH
-    return _COIN_HEALTH_TABLE[state.game_settings & 0x1F]
+    return _HEALTH_PER_COIN_TABLE[state.game_settings & 0x1F]
 
 
-def player_init_for_coin(state: GameState, player_index: int) -> None:
+def player_coindrop(state: GameState, player_index: int) -> None:
     """0x488CA + ``player_coindrop`` (0x4895C) -- credit a player into select.
 
     Plays that slot's coin-slot sound (0x488FE), sets the starting health --
@@ -230,16 +230,16 @@ def coincheck(state: GameState) -> None:
         if player.health > 0:
             # Active player re-coining: top up health from 0x57862 table.
             table_index = state.game_settings & 0x1F
-            health_add = _COIN_HEALTH_TABLE[table_index]
+            health_add = _HEALTH_PER_COIN_TABLE[table_index]
             player.health = _signed_long(player.health + health_add)  # 0x42C2C
             player.coin_count += 1                       # 0x42C04
             # 0x42C30: a positive monster_spawn_probability_bonus is walked back
             # one step per extra coin, so paying to stay alive also buys a
             # slightly calmer level -- the counterweight to the bonus
             # update_monster_spawn_bonus_from_score_per_coin adds each level.
-            if _signed_byte(state.spawn_probability_bonus) > 0:
-                state.spawn_probability_bonus = (
-                    state.spawn_probability_bonus - 1
+            if _signed_byte(state.monster_spawn_probability_bonus) > 0:
+                state.monster_spawn_probability_bonus = (
+                    state.monster_spawn_probability_bonus - 1
                 ) & 0xFF                                 # 0x42C38
             state.player_lowhealth_spoken[i] = 0         # 0x42C46
             state.player_respawn_speech_timer[i] = -1    # 0x42C54
@@ -252,11 +252,11 @@ def coincheck(state: GameState) -> None:
                 setup_infopanel(state, i)                # 0x42CA4
             sound_play(state, _COIN_SLOT_SOUND[i & 3])   # 0x42CB6
         else:
-            # New player joining: player_init_for_coin (0x488CA) sets the
+            # New player joining: player_coindrop (0x488CA) sets the
             # starting health, credits one coin, and enters character select.
             if state.credits > 0:
                 state.credits -= 1
-            player_init_for_coin(state, i)
+            player_coindrop(state, i)
 
 
 def character_select_input_update(state: GameState) -> None:
@@ -336,7 +336,7 @@ def main_start_game(state: GameState) -> None:
 
     In free play (``two_player_mode == 0``) a Magic press while in attract mode
     starts the session (``start_attract_to_game``, 0x484B8) and credits the
-    pressing player into character select (``player_init_for_coin``, 0x484BE).
+    pressing player into character select (``player_coindrop``, 0x484BE).
     Reference: doc/04_game_subsystems.md §6.4; PLAN.md §6 WP-16.
     """
     state.welcome_elapsed_frames = (
@@ -368,12 +368,12 @@ def main_start_game(state: GameState) -> None:
             main_msgbox_countdown(state)                           # 0x480DC
         return
 
-    # global_ui_delay_timer is decremented here, outside the dialog-gated world
+    # global_delay_timer is decremented here, outside the dialog-gated world
     # band (0x4817C). This keeps level splashes advancing even while a message
     # box freezes gameplay.
-    if state.bonus_timer > 0:
-        state.bonus_timer -= 1
-        if state.bonus_timer == 0:
+    if state.global_delay_timer > 0:
+        state.global_delay_timer -= 1
+        if state.global_delay_timer == 0:
             from .exits import (
                 _exiting_or_here,
                 _finish_level_end,
@@ -381,10 +381,10 @@ def main_start_game(state: GameState) -> None:
             )
 
             if state.level_start_pending:
-                from .display import maze_show_alpha
+                from .display import maze_show
 
                 state.level_start_pending = False
-                maze_show_alpha(state)                       # 0x4526A
+                maze_show(state)                       # 0x4526A
                 _spawn_level_players(state, _exiting_or_here(state))
             elif state.game_mode == int(GameMode.TREAS_EXIT):
                 _finish_level_end(state)
@@ -440,6 +440,6 @@ def main_start_game(state: GameState) -> None:
         elif state.game_mode < 0 and state.two_player_mode == 0:
             # Free-play path: Magic press in attract starts the session and
             # credits the pressing player straight into character select
-            # (0x484B8 start_attract_to_game, then 0x484BE player_init_for_coin).
+            # (0x484B8 start_attract_to_game, then 0x484BE player_coindrop).
             start_attract_to_game(state)
-            player_init_for_coin(state, i)
+            player_coindrop(state, i)

@@ -193,7 +193,7 @@ class TestRandomPickups:
         state = GameState(levelnum_current=1, mazenum_current=0)
         state.level_flags_3 = 1
         state.level_players_active = 3
-        state.spawn_probability_bonus = 8
+        state.monster_spawn_probability_bonus = 8
         state.rng = _FixedRNG(0)
         placed_types = []
         monkeypatch.setattr(

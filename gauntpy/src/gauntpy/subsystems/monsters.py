@@ -107,7 +107,7 @@ _HURT_COOLDOWN = 0x12           # hurt_cooldown reload (0x49788)
 
 # player_hurt_speech_timer, ROM 0x49A98. The four longword sound-ID banks at
 # 0x57AAE are selected by player_character; 0x57B4C gives their exact lengths.
-_HURT_SPEECH_SOUNDS = (
+_CHARACTER_HURT_SOUND_BANKS = (
     (0x83, 0x84, 0x85, 0x86),
     (0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB2, 0xB3, 0xB4),
     (0x6D, 0x6E, 0x70, 0x72, 0x73, 0x74, 0x75, 0x95, 0x96, 0x97),
@@ -132,7 +132,7 @@ _POWER_ARMOR = PlayerPower.ARMOR        # selects the powered half of a table
 # monsters_everything indexes it with ``((game_settings & 0xE0) >> 3) +
 # level_players_active - 1`` (0x40F5C-0x40F7E), which spans 0-31 -- eight
 # difficulty steps x four player counts.
-_SPAWN_PROB_TABLE = [
+_MONSTER_SPAWN_PROBABILITY_TABLE = [
     0x04, 0x0B, 0x0F, 0x12,   # difficulty 0, 1-4 players
     0x06, 0x0D, 0x11, 0x14,   # difficulty 1
     0x08, 0x0F, 0x13, 0x16,   # difficulty 2
@@ -148,7 +148,7 @@ _SPAWN_PROB_TABLE = [
 # Wizard, Elf).  Rows 0-7 are the eight unpowered contact classes; rows 8-15 are
 # the powered-player half (lower damage).  Valkyrie (col 1) always takes the
 # least, Wizard (col 2) the most.  §3.7.
-_MONSTER_CONTACT_DAMAGE_TBL = [
+_MONSTER_CONTACT_DAMAGE_TABLE = [
     8, 7, 10, 9,      # class 0
     16, 14, 20, 18,   # class 1
     24, 21, 30, 27,   # class 2
@@ -170,7 +170,7 @@ _MONSTER_CONTACT_DAMAGE_TBL = [
 # ``mazeobj_hsize_tier_tbl`` (0x5864C) rows for the ten creature types -- the
 # full-strength health nibble each family spawns with.  Read by
 # monster_playerhit at 0x495F4.
-_MAZEOBJ_HSIZE_TIER = {
+_MAZEOBJ_HSIZE_TIER_TBL = {
     int(MazeObjIds.MONST_GHOST): 0x4,
     int(MazeObjIds.MONST_GRUNT): 0x4,
     int(MazeObjIds.MONST_DEMON): 0x8,
@@ -232,7 +232,7 @@ _FIRST_ENCOUNTER_MASK = {
 }
 _IT_ENCOUNTER_MASK = 0x10000000
 
-# Secret-room progress (§10.6).  ``secret_trick_id`` (gex ``trick_tasknum``,
+# Secret-room progress (§10.6).  ``secret_trick_id`` (gex ``secret_trick_id``,
 # 0x904065) holds the maze's trick outside a secret room and the challenge
 # task inside one, and the per-player progress bytes live at 0x904872.  A
 # search of the whole ROM for either address finds exactly two sites inside the
@@ -281,7 +281,7 @@ _ODDANGLE_OVERRIDE = {
 # monster_shoot_axis_thresholds (0x40D8A) -- ten rows of two words, indexed by
 # monster index.  Word 0 feeds the 0x80 odd-angle picker (0x418F2), word 1 the
 # default cardinal/diagonal picker (0x41822).  Both are in 2-pixel units.
-_SHOOT_AXIS_THRESHOLDS = (
+_MONSTER_SHOOT_AXIS_THRESHOLDS = (
     (8, 1),   # 0 ghost
     (4, 2),   # 1 grunt
     (4, 4),   # 2 demon
@@ -299,7 +299,7 @@ _SHOOT_AXIS_THRESHOLDS = (
 # word (0x413FA/0x41460); bytes 0, 2 and 3 are animation-counter deltas added
 # to the state word's high byte by the movement/animation state machine
 # (0x411C4/0x41428/0x4149A).
-_MONSTER_ODDANGLE_TBL = (
+_MONSTER_ODDANGLE_TABLE = (
     (0x0E, 0x06, 0x80, 0x00),   # 0 ghost
     (0x00, 0x06, 0x40, 0x40),   # 1 grunt
     (0x00, 0x06, 0x00, 0x40),   # 2 demon
@@ -354,7 +354,7 @@ _GENERATOR_SPAWN = {
 # Starting health nibble per spawned creature -- the same
 # ``mazeobj_hsize_tier_tbl`` (0x5864C) rows the contact path reads, which is
 # also what WP-7's kill maths uses (ghost/grunt/aux 4, demon 8).
-_SPAWN_HEALTH = _MAZEOBJ_HSIZE_TIER
+_SPAWN_HEALTH = _MAZEOBJ_HSIZE_TIER_TBL
 
 # ``mazeobj_vpos_offset_tbl`` (0x5860C) rows for the creature types, added
 # straight to the new MOB's V word at 0x493B2: bits 5-3 width-1, bits 2-0
@@ -644,12 +644,12 @@ _MONSTER_MOVING_ANIMS = {
 # the generator's own cell, which can never be free.  The direction words are
 # consequently unreachable; ``monster_walk_picture`` masks them to three bits so
 # a hypothetical caller gets a defined answer instead of an exception.
-_GEN_CANDIDATE_COL = (0, 1, 0, -1, 1, 1, -1, -1, 0, 1, 0, -1, -0x20, 0, 0x20)
-_GEN_CANDIDATE_ROW = (-0x20, 0, 0x20, 0, -0x20, 0x20, 0x20, -0x20,
+_GENERATOR_CELL_DX = (0, 1, 0, -1, 1, 1, -1, -1, 0, 1, 0, -1, -0x20, 0, 0x20)
+_GENERATOR_CELL_DY = (-0x20, 0, 0x20, 0, -0x20, 0x20, 0x20, -0x20,
                       -0x20, 0, 0x20, 0, 0, 2, 4)
 #: The ROM-compass code (0=north) written into the spawned creature's state
 #: word.  gauntpy's compass is the ROM's minus two -- see ``_write_direction``.
-_GEN_CANDIDATE_DIR = (0, 2, 4, 6, 1, 3, 5, 7, 0, 2, 4, 6, 0x200, 0x500, 0x600)
+_GENERATOR_SPAWN_DIRECTION = (0, 2, 4, 6, 1, 3, 5, 7, 0, 2, 4, 6, 0x200, 0x500, 0x600)
 #: 0x49312's ``getrandom`` bound, and the eight tries of 0x49434.
 _GEN_START_BOUND = 4
 _GEN_CANDIDATE_COUNT = 8
@@ -673,8 +673,8 @@ _OCCUPANCY_MAX_SLOT = 0x400
 # generator's own offsets the row term is *not* masked (0x48F76-0x48F92 adds it
 # straight onto ``slot & 0x3E0``), so a neighbour that would fall off the top or
 # bottom of the maze fails the range check instead of wrapping.
-_OCCUPANCY_NEIGHBOUR_COL = (-1, 1, 0, 0, 1, 1, -1, -1)
-_OCCUPANCY_NEIGHBOUR_ROW = (0, 0, -0x20, 0x20, -0x20, 0x20, 0x20, -0x20)
+_SPAWN_CANDIDATE_COLUMN_DELTA = (-1, 1, 0, 0, 1, 1, -1, -1)
+_SPAWN_CANDIDATE_ROW_DELTA = (0, 0, -0x20, 0x20, -0x20, 0x20, 0x20, -0x20)
 
 # Direction -> (dx, dy) unit step.  Same 0-7 compass players use
 # (players.py: 0=right, 2=down, 4=left, 6=up, odds are the diagonals).
@@ -710,7 +710,7 @@ def _monster_animation_index(state: GameState, slot: int) -> int:
     return (packed & 0x38) | (((packed & 0x07) + 2) & 0x07)
 
 
-def _refresh_monster_picture(
+def monster_update_anim_tile(
     state: GameState, slot: int, obj_type: int,
 ) -> None:
     """``monster_update_anim_tile`` (0x414A4) and its bank selectors.
@@ -838,27 +838,27 @@ def _oddangle_override(state: GameState, obj_type: int) -> int:
 
 def _update_cull_rect(state: GameState) -> None:
     """0x49052-0x49076 -- re-anchor the culling rectangle on the camera."""
-    state.cull_rect_x = ((state.scroll_x - _CULL_H_BIAS) << POS_SHIFT) & 0xFFFF
-    state.cull_rect_y = ((_CULL_V_BIAS - state.scroll_y) << POS_SHIFT) & 0xFFFF
+    state.monster_cull_h_origin = ((state.scroll_x - _CULL_H_BIAS) << POS_SHIFT) & 0xFFFF
+    state.monster_cull_v_origin = ((_CULL_V_BIAS - state.scroll_y) << POS_SHIFT) & 0xFFFF
 
 
 def _in_cull_rect(state: GameState, slot: int) -> bool:
     """0x40FF6-0x4101A -- whether a creature is processed at all this frame."""
-    if ((state.mobs.hpos[slot] - state.cull_rect_x) & 0xFFFF) >= _CULL_WIDTH:
+    if ((state.mobs.hpos[slot] - state.monster_cull_h_origin) & 0xFFFF) >= _CULL_WIDTH:
         return False
-    return ((state.mobs.vpos[slot] - state.cull_rect_y) & 0xFFFF) < _CULL_HEIGHT
+    return ((state.mobs.vpos[slot] - state.monster_cull_v_origin) & 0xFFFF) < _CULL_HEIGHT
 
 
-def _shooter_in_view(state: GameState, slot: int) -> bool:
+def monster_shooter_in_view(state: GameState, slot: int) -> bool:
     """``monster_shooter_in_view`` (0x41B52) -- the tighter shooting box.
 
     Byte comparisons against the same origins, so the units are 2 pixels and
     the arithmetic wraps once per 512-pixel maze.
     """
-    du = ((state.mobs.hpos[slot] >> 8) - (state.cull_rect_x >> 8)) & 0xFF
+    du = ((state.mobs.hpos[slot] >> 8) - (state.monster_cull_h_origin >> 8)) & 0xFF
     if du <= _VIEW_H_MIN or du >= _VIEW_H_MAX:
         return False
-    dv = ((state.mobs.vpos[slot] >> 8) - (state.cull_rect_y >> 8)) & 0xFF
+    dv = ((state.mobs.vpos[slot] >> 8) - (state.monster_cull_v_origin >> 8)) & 0xFF
     return not (dv <= _VIEW_V_MIN or dv >= _VIEW_V_MAX)
 
 
@@ -981,11 +981,11 @@ def _dispatch_chain_entry(state: GameState, slot: int, frame_word: int) -> None:
     elif obj_type == int(MazeObjIds.MONST_SUPERSORC):
         _supersorc_dispatch(state, slot, frame_word)
         if state.mobs.obj_type(slot) == obj_type:
-            _refresh_monster_picture(state, slot, obj_type)
+            monster_update_anim_tile(state, slot, obj_type)
     else:
         _dispatch_monster(state, slot, obj_type, frame_word)
         if state.mobs.obj_type(slot) == obj_type:
-            _refresh_monster_picture(state, slot, obj_type)
+            monster_update_anim_tile(state, slot, obj_type)
 
 
 # 0x49076/0x490AC -- the walk covers the arc of the chain between two SLIP
@@ -1068,7 +1068,7 @@ def _dispatch_monster(state: GameState, slot: int, obj_type: int,
             return
         if not _anim_advance(state, slot):
             return
-        _anim_add_high(state, slot, _MONSTER_ODDANGLE_TBL[index][3])
+        _anim_add_high(state, slot, _MONSTER_ODDANGLE_TABLE[index][3])
         _monster_move_engine(state, slot, obj_type, index, frame_word)
         return
 
@@ -1078,7 +1078,7 @@ def _dispatch_monster(state: GameState, slot: int, obj_type: int,
         # wind-up animation completes.
         if obj_type == int(MazeObjIds.MONST_IT):                   # 0x413F0
             _anim_finish_attack(state, slot, index,
-                                _MONSTER_ODDANGLE_TBL[index][1], frame_word)
+                                _MONSTER_ODDANGLE_TABLE[index][1], frame_word)
             return
         if obj_type == int(MazeObjIds.MONST_ACID):                 # 0x413E6
             _anim_finish_attack(state, slot, index, _ACID_RATE_MASK, frame_word)
@@ -1116,7 +1116,7 @@ def _anim_finish_attack(state: GameState, slot: int, index: int, mask: int,
     if not _anim_advance(state, slot):
         return
     state.mobs.hpos[slot] &= ~_HPOS_FLAG_ATTACK
-    _anim_add_high(state, slot, _MONSTER_ODDANGLE_TBL[index][2])
+    _anim_add_high(state, slot, _MONSTER_ODDANGLE_TABLE[index][2])
 
 
 def _post_action(state: GameState, slot: int, obj_type: int, index: int,
@@ -1370,7 +1370,7 @@ def _march_hit_player(state: GameState, slot: int, blocker: int) -> None:
     if state.mobs.picture[slot] == 0:
         _iter_ptr_forget(state, slot)          # 0x413C4: it removed itself
         return
-    _face_after_contact(state, slot, blocker)  # 0x413CC
+    apply_direction_from_delta(state, slot, blocker)  # 0x413CC
 
 
 def _cell_player_index(state: GameState, cell: int) -> int | None:
@@ -1389,7 +1389,7 @@ def _cell_player_index(state: GameState, cell: int) -> int | None:
     return None
 
 
-def _face_after_contact(state: GameState, slot: int, victim_cell: int) -> None:
+def apply_direction_from_delta(state: GameState, slot: int, victim_cell: int) -> None:
     """``apply_direction_from_delta`` (0x41B7E) -- turn towards what was hit.
 
     Same picker as the idle aim with the fixed 0x400-position-unit threshold,
@@ -1445,7 +1445,7 @@ def _commit_move(state: GameState, slot: int, index: int, d6: int, h: int,
         state.mobs.vpos[slot] = v
         state.mobs.move_slot(slot, dest)
         _move_tail(state, dest, index, frame_word, moved=True, acted=acted)
-        _refresh_monster_picture(
+        monster_update_anim_tile(
             state, dest, int(MazeObjIds.MONST_GHOST) + index,
         )
         return
@@ -1458,7 +1458,7 @@ def _commit_move(state: GameState, slot: int, index: int, d6: int, h: int,
     if state.mobs.picture[slot] == 0:
         _iter_ptr_forget(state, slot)
         return
-    _face_after_contact(state, slot, dest)
+    apply_direction_from_delta(state, slot, dest)
     if not (state.mobs.hpos[slot] & _HPOS_FLAG_MOVING):
         _move_tail(state, slot, index, frame_word, moved=False, acted=acted)
 
@@ -1473,7 +1473,7 @@ def _move_tail(state: GameState, slot: int, index: int, frame_word: int,
     flag instead.  When the counter wraps, byte 2 either bumps it further or --
     with bit 0 set -- flips the creature into its blink state.
     """
-    row = _MONSTER_ODDANGLE_TBL[index]
+    row = _MONSTER_ODDANGLE_TABLE[index]
     if moved:
         mask = row[1]
     else:
@@ -1530,7 +1530,7 @@ def monster_find_and_shoot(state: GameState, slot: int, obj_type: int) -> None:
     dv = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[slot])
 
     override = _oddangle_override(state, obj_type)
-    thresholds = _SHOOT_AXIS_THRESHOLDS[index]
+    thresholds = _MONSTER_SHOOT_AXIS_THRESHOLDS[index]
     threshold = thresholds[0] if override == 0x80 else thresholds[1]
     direction = _aim_direction(dx, dv, override, threshold)
     repulsive = bool(p.powers & _POWER_REPULSE)
@@ -1560,9 +1560,9 @@ def _lobber_throw(state: GameState, slot: int, direction: int,
         return direction ^ 4            # too close: turn away (0x41876)
     if adx >= _LOBBER_MAX_RANGE or adv >= _LOBBER_MAX_RANGE:
         return direction
-    if not _shooter_in_view(state, slot):
+    if not monster_shooter_in_view(state, slot):
         return direction
-    shot_slot = _find_free_shot_slot(state, SLOT_LOBBER_SHOTS)
+    shot_slot = find_unused_shot(state, SLOT_LOBBER_SHOTS)
     if shot_slot is None:
         return direction
     lead = _lobber_lead(state, slot, direction, target, dx, dv)
@@ -1579,9 +1579,9 @@ def _demon_shoot(state: GameState, slot: int, direction: int,
     deltas within ``_DEMON_DIAG_SKEW`` of each other, so the demon only fires
     down a real 45-degree line.
     """
-    if not _shooter_in_view(state, slot):
+    if not monster_shooter_in_view(state, slot):
         return False
-    shot_slot = _find_free_shot_slot(state, SLOT_DEMON_SHOTS)
+    shot_slot = find_unused_shot(state, SLOT_DEMON_SHOTS)
     if shot_slot is None:
         return False
     if not _demon_muzzle_clear(state, slot, direction):
@@ -1657,7 +1657,7 @@ def _find_target_player(state: GameState, slot: int) -> int:
     return best
 
 
-def _find_free_shot_slot(state: GameState, shot_slots: range) -> int | None:
+def find_unused_shot(state: GameState, shot_slots: range) -> int | None:
     """``find_unused_shot`` (0x41B16) -- a channel is free when its picture is
     clear *and* the word beside it reads zero.
 
@@ -1725,7 +1725,7 @@ _LEAD_COS = (0, 2, 2, 2, 0, -2, -2, -2, 0)  # 0x580D8, index 8 = still
 _LEAD_SIN = (2, 2, 0, -2, -2, -2, 0, 2, 0)  # 0x580EA, index 8 = still
 # ``joystick_nibble_to_direction`` (0x580FC), indexed by the achieved-movement
 # word at 0x9048F0. A neutral 0xF nibble selects 8, the zero-padded table row.
-_WALK_NIBBLE_TO_DIRECTION = (
+_JOYSTICK_NIBBLE_TO_DIRECTION = (
     8, 8, 8, 8, 8, 7, 1, 0, 8, 5, 3, 4, 8, 6, 2, 8,
 )
 _LEAD_DELTA_SCALE = 4                        # 0x419BC/0x419C6
@@ -1854,8 +1854,8 @@ def _lobber_lead(state: GameState, slot: int, direction: int, target: int,
     speed_row = ((p.character & 0x03)
                  + (4 if p.powers & PlayerPower.SPEED else 0))
     speed = _LEAD_PLAYER_SPEED[speed_row]
-    move_nibble = (state.player_walk_dirs[target] >> 4) & 0x0F
-    rom_move = _WALK_NIBBLE_TO_DIRECTION[move_nibble]
+    move_nibble = (state.player_joystick[target] >> 4) & 0x0F
+    rom_move = _JOYSTICK_NIBBLE_TO_DIRECTION[move_nibble]
     vec_h = speed * _LEAD_COS[rom_move]
     vec_v = speed * _LEAD_SIN[rom_move]
 
@@ -1885,7 +1885,7 @@ def _contact_damage(p, row: int) -> int:  # noqa: ANN001
     if not 0 <= row <= 7:
         return 0
     armored = 0x20 if (p.powers & _POWER_ARMOR) else 0
-    return _MONSTER_CONTACT_DAMAGE_TBL[row * 4 + (p.character & 0x03) + armored]
+    return _MONSTER_CONTACT_DAMAGE_TABLE[row * 4 + (p.character & 0x03) + armored]
 
 
 def monster_playerhit(state: GameState, player_index: int,
@@ -1904,7 +1904,7 @@ def monster_playerhit(state: GameState, player_index: int,
         return
 
     tier = state.mobs.hpos[monster_slot] & 0x0F
-    row = tier - _MAZEOBJ_HSIZE_TIER.get(obj_type, 0) + 2
+    row = tier - _MAZEOBJ_HSIZE_TIER_TBL.get(obj_type, 0) + 2
 
     if obj_type == int(MazeObjIds.MONST_IT):
         _it_tag(state, player_index, monster_slot)
@@ -1957,7 +1957,7 @@ def _contact_apply(state: GameState, player_index: int, monster_slot: int,
         index = (_DEATH_DAMAGE_ROW_ARMORED if (p.powers & _POWER_ARMOR)
                  else _DEATH_DAMAGE_ROW)
         death_damage_accumulate(state, player_index, monster_slot,
-                                _MONSTER_CONTACT_DAMAGE_TBL[index])
+                                _MONSTER_CONTACT_DAMAGE_TABLE[index])
 
     if p.acid_timer == 0:                       # 0x497EE: acid grants immunity
         damage = _contact_damage(p, row)
@@ -2018,7 +2018,7 @@ def player_hurt_speech_timer(state: GameState, player_index: int) -> None:
         return
 
     character = int(state.players[player_index].character) & 0x03
-    sounds = _HURT_SPEECH_SOUNDS[character]
+    sounds = _CHARACTER_HURT_SOUND_BANKS[character]
     _sound_play(state, sounds[state.getrandom(len(sounds))])
 
 
@@ -2040,7 +2040,7 @@ def _acid_windup(state: GameState, player_index: int, monster_slot: int,
     if state.game_mode < 0:
         state.mobs.unlink_and_clear(monster_slot)
         if 0 <= row <= 7:
-            damage = _MONSTER_CONTACT_DAMAGE_TBL[row * 4 + (p.character & 0x03)]
+            damage = _MONSTER_CONTACT_DAMAGE_TABLE[row * 4 + (p.character & 0x03)]
             p.health = max(0, p.health - damage)
             state.health_dirty[player_index] = 1
             dialog_first_encounter(
@@ -2124,8 +2124,8 @@ def _spawn_probability(state: GameState) -> int:
     if state.frame_overflow:
         return 0
     idx = ((state.game_settings & 0xE0) >> 3) + state.level_players_active - 1
-    idx = max(0, min(idx, len(_SPAWN_PROB_TABLE) - 1))
-    prob = _SPAWN_PROB_TABLE[idx] + _signed_byte(state.spawn_probability_bonus)
+    idx = max(0, min(idx, len(_MONSTER_SPAWN_PROBABILITY_TABLE) - 1))
+    prob = _MONSTER_SPAWN_PROBABILITY_TABLE[idx] + _signed_byte(state.monster_spawn_probability_bonus)
     level = state.levelnum_current
     if level != 1:
         prob = min(prob, level * 2)
@@ -2175,7 +2175,7 @@ def handle_generate(state: GameState, gen_slot: int, gen_type: int,
         if not tile_occupancy_test(state, dest):
             continue
         _spawn_monster(state, dest, monster_type, gen_type,
-                       _GEN_CANDIDATE_DIR[index])
+                       _GENERATOR_SPAWN_DIRECTION[index])
         return
 
 
@@ -2200,8 +2200,8 @@ def generator_candidate_slot(gen_slot: int, index: int) -> int:
     as its "right" candidate.  The clearance test that follows is what then
     decides whether the wrapped cell is actually usable.
     """
-    row = ((gen_slot & 0x3E0) + _GEN_CANDIDATE_ROW[index]) & 0x3E0
-    col = (gen_slot + _GEN_CANDIDATE_COL[index]) & 0x1F
+    row = ((gen_slot & 0x3E0) + _GENERATOR_CELL_DY[index]) & 0x3E0
+    col = (gen_slot + _GENERATOR_CELL_DX[index]) & 0x1F
     return row + col
 
 
@@ -2245,8 +2245,8 @@ def tile_occupancy_test(state: GameState, slot: int) -> bool:
     candidate_v = (native_v(((slot >> 5) & 0x1F) * 16) << POS_SHIFT) & 0xFFFF
 
     for index in range(8):
-        neighbour = ((slot & 0x3E0) + _OCCUPANCY_NEIGHBOUR_ROW[index]
-                     + ((slot + _OCCUPANCY_NEIGHBOUR_COL[index]) & 0x1F))
+        neighbour = ((slot & 0x3E0) + _SPAWN_CANDIDATE_ROW_DELTA[index]
+                     + ((slot + _SPAWN_CANDIDATE_COLUMN_DELTA[index]) & 0x1F))
         if not _OCCUPANCY_MIN_SLOT < neighbour < _OCCUPANCY_MAX_SLOT:
             continue
         occupant, picture = _rendered_occupant(state, neighbour)
@@ -2302,8 +2302,8 @@ def _spawn_monster(state: GameState, slot: int, monster_type: int,
 # Direction biases and required clear runs behind a player, from the parallel
 # tables ``supersorc_direction_bias`` (0x5FDAC) and ``supersorc_probe_steps``
 # (0x5FDB2) -- {0, -1, +1} and {4, 3, 3} (§3.3).
-_SUPERSORC_BIAS = (0, -1, 1)
-_SUPERSORC_RUN = (4, 3, 3)
+_SUPERSORC_DIRECTION_BIAS = (0, -1, 1)
+_SUPERSORC_PROBE_STEPS = (4, 3, 3)
 # Proximity rejection (0x5FF06/0x5FF1C): a destination is refused when another
 # MOB sits within 0x7C0 *position units* of it on both axes -- a hair under one
 # 16-pixel cell.
@@ -2316,7 +2316,7 @@ _ONSCREEN_H_SPAN = 0x6C00 >> POS_SHIFT
 _ONSCREEN_V_SPAN = 0x7000 >> POS_SHIFT
 
 
-def _tile_on_screen(state: GameState, slot: int) -> bool:
+def tile_on_screen_d4(state: GameState, slot: int) -> bool:
     """``tile_on_screen_d4`` (0x5E57E) -- is this cell inside the viewport?"""
     dx = ((slot & 0x1F) * 16 - state.scroll_x) & 0x1FF
     if dx > _ONSCREEN_H_SPAN:
@@ -2339,12 +2339,12 @@ def _supersorc_dispatch(state: GameState, slot: int, frame_word: int) -> None:
     if moving and attack:                       # 0x41078: blinked out -- jump
         if (((slot * 2) | 2) ^ frame_word) & 0x1E:
             return
-        dest = _supersorc_place(state, slot)
+        dest = supersorc_place(state, slot)
         if dest is None:
             return
         _anim_add_high(state, dest, 0xE0)       # 0x410B8
         state.mobs.hpos[dest] &= ~(_HPOS_FLAG_MOVING | _HPOS_FLAG_ATTACK)
-        _refresh_monster_picture(
+        monster_update_anim_tile(
             state, dest, int(MazeObjIds.MONST_SUPERSORC),
         )
         return
@@ -2376,7 +2376,7 @@ def _supersorc_dispatch(state: GameState, slot: int, frame_word: int) -> None:
 
 def _supersorc_shoot(state: GameState, slot: int) -> None:
     """0x41142 -- the Super Sorcerer borrows a demon channel for its bolt."""
-    shot_slot = _find_free_shot_slot(state, SLOT_DEMON_SHOTS)
+    shot_slot = find_unused_shot(state, SLOT_DEMON_SHOTS)
     if shot_slot is None:
         _anim_add_high(state, slot, 0x80)       # 0x4114C: try again sooner
         return
@@ -2387,7 +2387,7 @@ def _supersorc_shoot(state: GameState, slot: int) -> None:
     state.mobs.hpos[slot] &= ~_HPOS_FLAG_ATTACK
 
 
-def _supersorc_place(state: GameState, slot: int) -> int | None:
+def supersorc_place(state: GameState, slot: int) -> int | None:
     """Relocate the Super Sorcerer behind a player (§3.3, 0x5FDE0).
 
     Tries all four players cyclically from a random start, skipping inactive
@@ -2410,7 +2410,7 @@ def _supersorc_place(state: GameState, slot: int) -> int | None:
         prow, pcol = p.mob_slot >> 5, p.mob_slot & 0x1F
         behind = (p.direction + 4) & 0x07
 
-        for bias, run in zip(_SUPERSORC_BIAS, _SUPERSORC_RUN):
+        for bias, run in zip(_SUPERSORC_DIRECTION_BIAS, _SUPERSORC_PROBE_STEPS):
             direction = (behind + bias) & 0x07
             dest = _supersorc_candidate(state, slot, prow, pcol, direction, run)
             if dest is not None:
@@ -2449,7 +2449,7 @@ def _supersorc_candidate(state: GameState, slot: int, prow: int, pcol: int,
         cell = (r << 5) | c
         if cell != slot and _cell_blocked(state, cell):
             return None
-        if not _tile_on_screen(state, cell):
+        if not tile_on_screen_d4(state, cell):
             return None
     dest = (r << 5) | c
     if _supersorc_too_crowded(state, dest, slot):
@@ -2468,7 +2468,7 @@ def _supersorc_too_crowded(state: GameState, dest: int, self_slot: int) -> bool:
     dest_h = (((dest & 0x1F) * 16 - 4) << POS_SHIFT) & 0xFFFF
     dest_v = native_v((dest >> 5) * 16) << POS_SHIFT
     row_base = dest & 0x3E0
-    for dc, dr in zip(_OCCUPANCY_NEIGHBOUR_COL, _OCCUPANCY_NEIGHBOUR_ROW):
+    for dc, dr in zip(_SPAWN_CANDIDATE_COLUMN_DELTA, _SPAWN_CANDIDATE_ROW_DELTA):
         s = row_base + dr + ((dest + dc) & 0x1F)
         if not 0x20 <= s < 0x400 or s == self_slot:
             continue

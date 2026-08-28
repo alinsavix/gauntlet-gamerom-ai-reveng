@@ -21,13 +21,13 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904008 | 2 B | `pf_hscroll` | Horizontal playfield-scroll shadow. |
 | 0x90400A | 2 B | `pf_vscroll_lo` | Low portion of the playfield vertical-scroll shadow. |
 | 0x90400C | 2 B | `timer_countdown` | OS countdown decremented from VBLANK; game startup also clears it when resetting shared state. |
-| 0x90400E | 2 B | `mazerand_adder` / `sound_data_recv` | **Maze-rotation stride**, 0–7: extra mazes advanced per level once the current maze is ≥ 5 (`player_exit_sequence` 0x52DFE). Bumped `(x+1) & 7` whenever a step sequence ends on maze 5 (0x52E24–0x52E30), i.e. on each lap wrap or a resume value still at its home position. EEPROM-backed via cache byte 0x904B8F, masked to 0–7 on load (0x43026). Fresh-EEPROM default 0. The OS uses the same word as its sound-response receive word during boot; the two names are lifetime views of one word. See `06_maze_catalog.md` §3.2. |
-| 0x904010 | 2 B | `mazerand_num` / `sound_data_flag` | **Maze-rotation resume position**: where this cabinet's rotation through mazes 5–101 currently stands. `maze_checknum` (0x52EDE) substitutes it for a candidate maze of exactly 5, which is how level 6 enters the rotation. Written only by `main_health_countdown` 0x46A0E — when the last player dies (`level_players_active` = 0) on level ≥ 6, it records `mazenum_current`. EEPROM-backed via cache byte 0x904B8E; `eeprom_load_config` forces it to 5 if below 5 or if its pointer-table entry is dead (0x43002–0x4301C). Fresh-EEPROM default 5. The OS uses the same word as its sound-response availability word during boot. See `06_maze_catalog.md` §3.2–§3.3. |
-| 0x904012 | 4 B overlapping view | `timer_eepromwrite` | Game EEPROM-write countdown, decremented as a longword and normally reloaded to 0x8CA0. Its low word at 0x904014 aliases the OS boot-only `game_hook_flag`: the OS initializes/tests that word while validating the game header, then the running game reuses the same storage as the countdown. |
+| 0x90400E | 2 B | `maze_stride` / `sound_data_recv` | **Maze-rotation stride**, 0–7: extra mazes advanced per level once the current maze is ≥ 5 (`player_exit_sequence` 0x52DFE). Bumped `(x+1) & 7` whenever a step sequence ends on maze 5 (0x52E24–0x52E30), i.e. on each lap wrap or a resume value still at its home position. EEPROM-backed via cache byte 0x904B8F, masked to 0–7 on load (0x43026). Fresh-EEPROM default 0. The OS uses the same word as its sound-response receive word during boot; the two names are lifetime views of one word. See `06_maze_catalog.md` §3.2. |
+| 0x904010 | 2 B | `maze_number` / `sound_data_flag` | **Maze-rotation resume position**: where this cabinet's rotation through mazes 5–101 currently stands. `maze_checknum` (0x52EDE) substitutes it for a candidate maze of exactly 5, which is how level 6 enters the rotation. Written only by `main_health_countdown` 0x46A0E — when the last player dies (`level_players_active` = 0) on level ≥ 6, it records `mazenum_current`. EEPROM-backed via cache byte 0x904B8E; `eeprom_load_config` forces it to 5 if below 5 or if its pointer-table entry is dead (0x43002–0x4301C). Fresh-EEPROM default 5. The OS uses the same word as its sound-response availability word during boot. See `06_maze_catalog.md` §3.2–§3.3. |
+| 0x904012 | 4 B overlapping view | `eeprom_write_timer` | Game EEPROM-write countdown, decremented as a longword and normally reloaded to 0x8CA0. Its low word at 0x904014 aliases the OS boot-only `game_hook_flag`: the OS initializes/tests that word while validating the game header, then the running game reuses the same storage as the countdown. |
 | 0x904016 | 2 B | `treas_mazerand_adder` | **Treasure-rotation stride**, 0–3. `show_level_start_screen` advances `treas_mazerand_num` by `this + 1` (0x44ECA–0x44ED2), so the effective step is 1–4, and bumps it `(x+1) & 3` when the rotation lands exactly on maze 104 (0x44F06–0x44F14). EEPROM-backed via cache byte 0x904B91, masked to 0–3 on load (0x43062). Fresh-EEPROM default 0. See `06_maze_catalog.md` §3.5. |
 | 0x904018 | 2 B | `treas_mazerand_num` | **Next treasure maze**, 104–114. Copied into `mazenum_current` when a treasure room is entered (0x44EB2–0x44EB8), then advanced by `treas_mazerand_adder + 1`; values above 114 wrap by subtracting 11 (0x44EE4–0x44EF6). EEPROM-backed via cache byte 0x904B90; `eeprom_load_config` forces it to 104 if outside 104–114 (0x4303E–0x43054). Fresh-EEPROM default 104. See `06_maze_catalog.md` §3.5. |
-| 0x90401A | 2 B | `wallcycle_time` | Cyclic-wall update countdown. Forcefield/maze setup clears it; `main_walls_cyclic_move` performs an update when the predecrement value is zero and reloads 0x78 (120 frames). |
-| 0x90401C | 1 B active + 1 B padding | `wallcycle_type` | Current cyclic-wall phase byte. Setup clears it; each update advances 0→1→2→3→1. The phase is compared with the low two bits of each `vram.color_spare` control byte to decide which wall group disappears and which next group appears. The second byte is not read. |
+| 0x90401A | 2 B | `cyclic_wall_timer` | Cyclic-wall update countdown. Forcefield/maze setup clears it; `main_walls_cyclic_move` performs an update when the predecrement value is zero and reloads 0x78 (120 frames). |
+| 0x90401C | 1 B active + 1 B padding | `cyclic_wall_phase` | Current cyclic-wall phase byte. Setup clears it; each update advances 0→1→2→3→1. The phase is compared with the low two bits of each `vram.color_spare` control byte to decide which wall group disappears and which next group appears. The second byte is not read. |
 | 0x90401E | 2 B | `playfield_color_latch` | Live palette-0 color-8 latch. VBLANK copies it to playfield color RAM 0x910510 at 0x401D4. The main loop restores it from 0x904020 each frame; potion use temporarily replaces it with color 3 of the triggering player-position alpha palette, producing a one-field screen flash. |
 | 0x904020 | 2 B | `playfield_color_base` | Ordinary level floor color restored into 0x90401E at 0x42A8E before the gameplay calls. Initialized alongside 0x90401E from the selected playfield palette at 0x435B0-0x435BA (or fixed palette word 0x5AC6E at 0x4368E-0x4369E). |
 | 0x904022 | 2 B | `potion_player` | Potion owner plus trigger flags: player index in bits 0-1, shot-triggered bit 2; the matrix consumer adds enhanced-magic bit 3 locally. |
@@ -45,12 +45,12 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x90403E | 4 B | `ptr_playfield_color3` | Pointer to 3rd playfield color set |
 | 0x904042 | 4 B | `ptr_ff_cycle_delay` | Pointer to the selected eight-byte forcefield cycle-delay profile in ROM 0x571DA–0x571F9. `game_start` installs profile 0 and maze setup selects `(level & 3)`. |
 | 0x904046 | 2 B | `forcefield_color` | Current forcefield color word |
-| 0x904048 | 2 B | `ff_cycle_timer` | Forcefield color cycle step timer |
-| 0x904049 | 1 B | `ff_cycle_index` | Current step index into forcefield color table (0–7) |
+| 0x904048 | 2 B | `forcefield_step_timer` | Forcefield color cycle step timer |
+| 0x904049 | 1 B | `forcefield_step` | Current step index into forcefield color table (0–7) |
 | 0x90404A | 1 B | `thief_path_direction` | Current route direction byte. `thief_compute_path` preserves this byte when `path_grid_get_direction` returns unset (8), replacing it only with a decoded direction 0–7; reset value zero therefore continues upward if a caller creates a thief without first supplying breadcrumbs. |
-| 0x90404B | 8 B | `soundqueue` | Array of 1-byte sound IDs in the queue |
-| 0x904053 | 1 B | `soundqueue_head` | Head of sound queue |
-| 0x904054 | 1 B | `soundqueue_tail` | Tail of sound queue |
+| 0x90404B | 8 B | `sound_queue` | Array of 1-byte sound IDs in the queue |
+| 0x904053 | 1 B | `sound_queue_head` | Head of sound queue |
+| 0x904054 | 1 B | `sound_queue_tail` | Tail of sound queue |
 | 0x904055 | 4 B | `player_potionsnum` | Array of 1-byte counters: potions per player |
 | 0x90405A | 4 B | `player_keysnum` | Array of 1-byte counters: keys per player |
 | 0x90405F | 1 B | `monster_spawn_probability_bonus` | Signed global modifier added to `monster_spawn_probability_table` before each generator's random spawn gate. `update_monster_spawn_bonus_from_score_per_coin` (0x48B58) adds `(sum(active scores) >> 14) / sum(active players' inserted coins)`; coin insertion decrements it while positive. Several transition paths temporarily save/restore player key/potion adjustments through this byte, so it is not a four-player array. |
@@ -65,9 +65,9 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x904063 | 1 B | `trick_player` | Which player completed the secret trick / is in the secret room (a.k.a. `secret_room_player`; 0–3, 0xFF = none; reset each level by `maze_new_level_setup`) |
-| 0x904064 | 1 B | `trick_last` | Last secret trick completed |
-| 0x904065 | 1 B | `trick_tasknum` | Current secret objective. During an ordinary maze it is the header's trick ID (0x01–0x11; §3.17). After a player wins entry to the secret challenge, `show_level_start_screen` (0x44DB4) saves that ID in `trick_last` and replaces this byte with a random challenge code 0x50–0x5D. Thus comparisons against values such as 0x5A are a second, valid namespace rather than malformed trick IDs. Zero means no active secret objective. |
+| 0x904063 | 1 B | `secret_player` | Which player completed the secret trick / is in the secret room (a.k.a. `secret_room_player`; 0–3, 0xFF = none; reset each level by `maze_new_level_setup`) |
+| 0x904064 | 1 B | `secret_trick_last` | Last secret trick completed |
+| 0x904065 | 1 B | `secret_trick_id` | Current secret objective. During an ordinary maze it is the header's trick ID (0x01–0x11; §3.17). After a player wins entry to the secret challenge, `show_level_start_screen` (0x44DB4) saves that ID in `secret_trick_last` and replaces this byte with a random challenge code 0x50–0x5D. Thus comparisons against values such as 0x5A are a second, valid namespace rather than malformed trick IDs. Zero means no active secret objective. |
 
 ### 1.4 Maze Decompression
 
@@ -107,10 +107,10 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x9048A0 | 2 B | `randwall_low_watermark` | Lower scan bound for random-wall tiles; maze setup initializes it from the first `MAZEOBJ_WALL_RANDOM` (type 6) slot |
-| 0x9048A2 | 2 B | `randwall_target` | Random-wall scan target/bound; initialized from the same first type-6 slot |
-| 0x9048A4 | 2 B | `randwall_current` | Current random-wall scan cursor |
-| 0x9048A6 | 2 B | `randwall_timer` | Negative = disabled, zero = process, positive = countdown; reloads to 0x78 normally or 0x3C in attract mode |
+| 0x9048A0 | 2 B | `random_wall_low_mark` | Lower scan bound for random-wall tiles; maze setup initializes it from the first `MAZEOBJ_WALL_RANDOM` (type 6) slot |
+| 0x9048A2 | 2 B | `random_wall_target` | Random-wall scan target/bound; initialized from the same first type-6 slot |
+| 0x9048A4 | 2 B | `random_wall_current` | Current random-wall scan cursor |
+| 0x9048A6 | 2 B | `random_wall_timer` | Negative = disabled, zero = process, positive = countdown; reloads to 0x78 normally or 0x3C in attract mode |
 
 ### 1.7 Player State Arrays
 
@@ -128,7 +128,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x9048C8 | 2 B × 12 | `active_mob_ids` | Logical actor/projectile channel → hardware MOB slot mapping. Entries 0–3 are the four player MOB IDs; later entries are used for monster/dragon shot channels. Exact range 0x9048C8–0x9048DF. |
 | 0x9048E0 | 2 B × 4 | `player_powers` | Per-player power bits (see Character Powers enum) |
 | 0x9048E8 | 2 B × 4 | `player_character` | Per-player character identity (0=Warrior, 1=Valkyrie, 2=Wizard, 3=Elf) |
-| 0x9048F0 | 2 B × 4 | `player_joystick` | Per-player last joystick direction |
+| 0x9048F0 | 2 B × 4 | `player_joystick` | Per-player active-low direction result achieved by `main_move_players` in the current frame (`0xF0` = stationary). Lobber lead reads this movement result; it is not the raw input word at 0x904920. |
 | 0x9048F8 | 2 B × 4 | `lobber_shot_vec_h` | Horizontal component for lobber shots |
 | 0x904900 | 2 B × 4 | `lobber_shot_vec_v` | Vertical component for lobber shots |
 | 0x904908 | 1 B × 4 | `player_redraw` | Per-player redraw flags (bit 0 = score needs redraw, cleared by `draw_player_score`; bit 1 = health, set on damage, cleared by `draw_player_health`). |
@@ -161,10 +161,10 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x9049E4 | 4 B | `dialog_first_encounter_flags` | Bitmask of which first-encounter dialogs have been shown |
 | 0x9049E8 | 2 B | `treasure_timer` | Time spent in treasure room |
 | 0x9049EA | 4 B | `last_coin_state` | Cached coin counter for edge detection |
-| 0x9049EE | 2 B | `speech_counter` | **Sound-board recovery holdoff, not a speech timer.** The only nonzero store is 0x42DDA in `sound_system_reset`, which loads 0xB4 (180 frames); `sound_response` clears it when the rebooted sound CPU answers 0xFF, decrements it otherwise, and resets again if it reaches zero unanswered. While nonzero, `sound_play` (0x4AD7E) skips the immediate send and queues, and `main_update_sound` (0x4AE36) skips the drain. A byte-level scan of `row76.bin` for the address finds references only at 0x42D14, 0x42DDA, 0x4AD7E and 0x4AE36; nothing in the speech path writes it. The name is retained for continuity with the loader symbols. See `04_game_subsystems.md` §11.3. |
+| 0x9049EE | 2 B | `sound_holdoff` | **Sound-board recovery holdoff, not a speech timer.** The only nonzero store is 0x42DDA in `sound_system_reset`, which loads 0xB4 (180 frames); `sound_response` clears it when the rebooted sound CPU answers 0xFF, decrements it otherwise, and resets again if it reaches zero unanswered. While nonzero, `sound_play` (0x4AD7E) skips the immediate send and queues, and `main_update_sound` (0x4AE36) skips the drain. A byte-level scan of `row76.bin` for the address finds references only at 0x42D14, 0x42DDA, 0x4AD7E and 0x4AE36; nothing in the speech path writes it. See `04_game_subsystems.md` §11.3. |
 | 0x9049F0 | 2 B | `sound_queue_state` | Destination for the one-byte reply to status command 0x07, which `sound_response` directs at its low byte (0x9049F1). Nonzero low three bits are the sound board's own error report and force `sound_system_reset`. |
 | 0x9049F2 | 2 B | `sound_idle_timer` | Countdown between sound-CPU response/ping attempts |
-| 0x9049F4 | 2 B | `sound_cpu_retry_count` | Sound-CPU retry counter; a sustained failure above 180 triggers the full reset path. |
+| 0x9049F4 | 2 B | `sound_retry_count` | Sound-CPU retry counter; a sustained failure above 180 triggers the full reset path. |
 | 0x9049F6 | 2 B × 4 | `player_hurt_palette_offset` | Per-player byte offsets into the four class-specific hurt-palette cycles. Player setup initializes each entry to `character × 0x12`; `game_vblank` adds the selected word to that player's cycle base. |
 | 0x9049FE | 2 B × 4 | `player_power_palette_offset` | Per-player byte offsets into the four class-specific power-palette cycles. Player setup initializes each entry to `character × 0x30`; `game_vblank` adds the selected word to that player's cycle base. |
 
@@ -173,7 +173,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
 | 0x904A06 | 2 B | `exit_count` | Number of exits in maze |
-| 0x904A08 | 2 B | `exit_timer` | Timer until exit moves (ExitMoves flag) |
+| 0x904A08 | 2 B | `exit_move_timer` | Timer until exit moves (ExitMoves flag) |
 | 0x904A0A | 2 B | `exit_open_id` | MOB ID of exit currently opening |
 | 0x904A0C | 2 B | `exit_close_id` | MOB ID of exit currently closing |
 | 0x904A0E | 2 B | `movement_blocked` | Set non-zero by `player_try_move` when movement is blocked; used by `main_move_players` to keep current facing direction |
@@ -211,7 +211,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0–4 | COINHEALTH setting: index 0–31 into `health_per_coin_table` (0x57862), giving 100–2000 in 25/50/100-unit steps |
 | 5–7 | Operator-facing **Game Difficulty** setting (0–7), implemented chiefly as monster-generation tuning: selects the row of `monster_spawn_probability_table` (0x40E46) for each generator's probability out of 32 — `andi.w #0xE0,d3; lsr.w #3,d3; add.w level_players_active,d3; subq.l #1,d3; lea 0x40E46,a0` at 0x40F62–0x40F70. It also scales the solo-play Warrior/Wizard random-pickup reduction in `maze_addrandompickups`. MAME's Game Options screen confirms Atari's label; disassembly establishes the actual effects. |
 | 8–9 | **Coins to Start** in the OS operator editor: values 0–3 display 1–4. MAME's Game Options screen rendered value 0 as “1” from the default word 0xE090. No normal game-code reader masks 0x0300; the meaning is Verified for operator configuration/storage, not as a gameplay consumer. |
-| 10 | **Reduced-text / short-dwell selector**, not a 2-player flag (the two-player config word is `two_player_mode` at 0x9049E2). Eleven read sites mask 0x0400; 0x4523C selects `global_ui_delay_timer` 0xB4 vs 0x96, and §5.6 `first_encounter_alt_message_ptrs` selects the compact message set from the same bit |
+| 10 | **Reduced-text / short-dwell selector**, not a 2-player flag (the two-player config word is `two_player_mode` at 0x9049E2). Eleven read sites mask 0x0400; 0x4523C selects `global_delay_timer` 0xB4 vs 0x96, and §5.6 `first_encounter_alt_message_ptrs` selects the compact message set from the same bit |
 | 11 | Speech disable. Masked at 0x4AD5A gating the `sound_play` at 0x4AD76, and §5.5 `treasure_timeout_speech` forces element 0 from the same bit |
 | 12 | **Restore Factory Default Settings** request in the OS operator editor. MAME rendered the clear default bit as “No.” No normal game-code reader masks 0x1000; the meaning is Verified for the editor/schema. |
 | 13 | Secret-room winner name-entry enable: gates the ENTER-YOUR-NAME flow in `secret_getname` (0x54EC6); when clear, winners get `player_status` = 2 and a short between-level delay (verified — sole reader) |
@@ -222,7 +222,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x904A4E | 2 B | `global_ui_delay_timer` | Shared display/input holdoff timer. Level setup loads 150/180/600 frames and `main_start_game` waits for zero before entering the maze; secret-name entry and related UI code reuse it for cursor/input pacing. While nonzero it also suppresses treasure countdown processing. |
+| 0x904A4E | 2 B | `global_delay_timer` | Shared display/input holdoff timer. Level setup loads 150/180/600 frames and `main_start_game` waits for zero before entering the maze; secret-name entry and related UI code reuse it for cursor/input pacing. While nonzero it also suppresses treasure countdown processing. |
 | 0x904A50 | 1 B × 4 | `player_treascount` | Count of treasures picked up by player |
 | 0x904A54 | 2 B × 4 | `player_stundelay` | Timer for player being stunned |
 | 0x904A5C | 2 B | `death_hits` | Global hit count shared by all players and Death MOBs. Every player shot that hits Death, ordinary or supershot, increments it; `death_potion_score` uses `death_hits & 7` to select the score and popup variant. It is distinct from the four per-player Death-damage accumulators at 0x904B3A and does not control Death's >200 dismissal threshold. |
@@ -231,7 +231,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904A64 | 2 B | `monster_cull_v_origin` | Vertical origin for monster visibility/culling, computed as `(0xF9 - pf_vscroll_lo) << 7` |
 | 0x904A66 | 2 B × 4 | `lobber_shot_h_accum` | Per-lobber-projectile horizontal subpixel accumulator; updated from velocity table 0x9048F8 and converted back into MOB hpos |
 | 0x904A6E | 2 B × 4 | `lobber_shot_v_accum` | Matching vertical subpixel accumulator; updated from velocity table 0x904900 and converted back into MOB vpos |
-| 0x904A76 | 2 B × 4 × 2 | `door_endpoint_pos[4][2]` | Four two-ended door records. Each word is a packed maze position; `door_record_endpoints` (0x51E80) and its vertical/horizontal scanners populate the two endpoints. |
+| 0x904A76 | 2 B × 4 × 2 | `door_endpoint_pos[4][2]` | Four two-ended door records. Each word is a packed maze position; `door_open_start` (0x51E80) and its vertical/horizontal scanners populate the two endpoints. |
 | 0x904A86 | 2 B × 4 × 2 | `door_endpoint_dir[4][2]` | Direction code parallel to `door_endpoint_pos`: vertical scans write 0 for above and 2 for below; horizontal scans write 3 for left and 1 for right. Door pictures ≥0x9D7C directly install 0/2 and pictures ≥0x9D3C directly install 3/1. Consumed by the door-opening/traversal logic. |
 
 ### 1.12 Dialog State
@@ -239,8 +239,8 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
 | 0x904A96 | 4 B | `ptr_dialog_pos` | Pointer to dialog position in alpha RAM |
-| 0x904A9A | 2 B | `dialog_dim_H` | Dialog horizontal dimension |
-| 0x904A9C | 2 B | `dialog_dim_V` | Dialog vertical dimension |
+| 0x904A9A | 2 B | `dialog_box_width` | Dialog horizontal dimension |
+| 0x904A9C | 2 B | `dialog_box_height` | Dialog vertical dimension |
 | 0x904A9E | 2 B | `dialog_timer` | Dialog lifetime countdown. Nonzero means a dialog is active and suppresses conflicting gameplay/display work; `main_msgbox_countdown` decrements it and erases the box when it reaches zero. Values of 1 are also used to force immediate cleanup during screen transitions. |
 | 0x904AA0 | 2 B | `ptr_dialog_box_x` | Dialog X position pointer |
 | 0x904AA2 | 2 B | `ptr_dialog_box_y` | Dialog Y position pointer |
@@ -270,7 +270,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904B2A | 2 B × 4 | `player_coincount` | Per-player number of coins inserted |
 | 0x904B32 | 2 B × 4 | `player_onlevel` | Per-player what level player is on |
 | 0x904B3A | 2 B × 4 | `player_death_damage_counter` | Per-player Death-damage accumulator used by `death_damage_accumulate`. Death contact adds 4 normally or 3 when `player_powers` byte 1 bit 1 is set; a supershot adds 25, while an ordinary shot does not add to this counter. A total strictly greater than 200 clears the counter and dismisses the supplied Death MOB with a transporter-cycle effect. The value can span Death MOBs within one level, but successful `player_start_inner` placement clears it on normal level entry or player join. |
-| 0x904B4A | 2 B × 4 | `ff_hurt_timer` | Per-player forcefield-contact hurt/sound cooldown |
+| 0x904B4A | 2 B × 4 | `forcefield_hurt_timer` | Per-player forcefield-contact hurt/sound cooldown |
 | 0x904B42 | 2 B × 4 | `death_touch_timer` | Per-player cooldown/state for contact with Death |
 
 ### 1.15 Level / Maze State
@@ -357,7 +357,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x905C54 | 256 B (2 B cells, 22 per 0x80-B row) | `tport_route_forward` | Forward transporter/pathfinding connection table, exact range 0x905C54–0x905D53. Cell address is `base + (id / 22) * 0x80 + (id % 22) * 2`, verified at `tport_route_write_pair` 0x51082–0x51092. One-based transporter IDs 1–32 reach only row-0 offsets 0x02–0x2A and row-1 offsets 0x00–0x14. Bits 15–8 hold the linked transporter ID and the low nibble holds direction+1 (0 means no route). MAME observed live route cells coexisting with all portrait words: portrait destinations begin at padding offset 0x36, beyond the route index domain. This is safe simultaneous spatial reuse, not lifetime-separated aliasing. |
 | 0x905D54 | 256 B (2 B cells, 22 per 0x80-B row) | `tport_route_reverse` | Reverse-direction companion to `tport_route_forward`, exact range 0x905D54–0x905E53, with the same padded-row addressing, reachable offsets, and word format. `tport_route_connect` (0x4E684) writes both directions; 0x4E73A only fills an empty route. MAME route-call tracing confirmed that its live cells do not overlap the portrait padding. |
 | 0x910700 | 2 B × 32 | `tport_pos_table` | Maze slot index for each transporter |
-| 0x910780 | 2 B × 64 | `ff_segment_table` | Forcefield segment list, exact range 0x910780–0x9107FF. Setup clears all 64 words, emits at most 62 records, and leaves a zero terminator. Record bits: 9–0 start packed maze cell; 13–10 segment length minus one; bit 14 horizontal-wrap correction; bit 15 set for horizontal segments and clear for vertical. |
+| 0x910780 | 2 B × 64 | `forcefield_segment_table` | Forcefield segment list, exact range 0x910780–0x9107FF. Setup clears all 64 words, emits at most 62 records, and leaves a zero terminator. Record bits: 9–0 start packed maze cell; 13–10 segment length minus one; bit 14 horizontal-wrap correction; bit 15 set for horizontal segments and clear for vertical. |
 
 ---
 
@@ -803,7 +803,7 @@ references to `player_status` (0x9049A0).
 After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) replaces the maze trick ID with `0x50 + getrandom(14)`. These **challenge task codes** occupy 0x50–0x5D and are evaluated against `secret_tricks_flags`; they are distinct from the maze-header enum above. The optional qualifier-display records are at 0x573D4 (14 records × 8 bytes). Verified examples include 0x50 “AFTER COLLECTING 6 TREASURES,” 0x51/0x5D “AFTER COLLECTING ALL POTIONS,” 0x52/0x5B “AFTER SHOOTING 3 SECRET WALLS,” 0x56 “AFTER USING 5 TRANSPORTERS,” 0x5A “AFTER REMOVING ALL TREASURE,” and 0x5C “WHILE YOU ARE IT.” The `resolve_shot_hit` check at 0x4B826 is the 0x5A task hook: a player's supershot hitting ordinary treasure (object type 0x2E) increments that player's progress byte.
 
 Ordinary tricks 1–4 and 10 do not use that progress array as a completion
-counter. Their transport/movable-wall paths write `trick_player` directly at
+counter. Their transport/movable-wall paths write `secret_player` directly at
 the successful event; only later exit/status checks decide whether the winner
 enters the challenge room.
 
@@ -1131,7 +1131,7 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x57012 | 13 × 4B | Random maze flags table (selected by `get_random_maze_flags` via getrandom(0xD)) |
 | 0x57046 | 8 B | `slapstic_bitwise_addr_a` — four word offsets indexed by half the current slapstic command offset |
 | 0x5704E | 8 B | `slapstic_bitwise_addr_b` — four parallel word offsets for the second access in `slapstic_cmd_bitwise` |
-| 0x57056 | 28 B | `challenge_target_object_types` — 14 object-type words indexed by `trick_tasknum - 0x50`: `{0x2C,0x2A,0x2A,0x29,0x2D,0x28,0x2B,0x2D,0x28,0x2C,0x29,0x2A,0x2A,0x2B}`. Secret-challenge setup 0x43C20–0x43D10 converts each matching generator into an exit, clears the other type-0x28–0x2D generators, and replaces object types 0x13–0x18 with hidden potions. |
+| 0x57056 | 28 B | `challenge_target_object_types` — 14 object-type words indexed by `secret_trick_id - 0x50`: `{0x2C,0x2A,0x2A,0x29,0x2D,0x28,0x2B,0x2D,0x28,0x2C,0x29,0x2A,0x2A,0x2B}`. Secret-challenge setup 0x43C20–0x43D10 converts each matching generator into an exit, clears the other type-0x28–0x2D generators, and replaces object types 0x13–0x18 with hidden potions. |
 | 0x57072 | 66 B | `character_select_instruction_chain` — three formatted-text nodes plus inline NUL strings “CHARACTER”, “TO SELECT”, and “USE JOYSTICK”, exact range 0x57072–0x570B3. Nodes use `{row,column,string_ptr,flags[,previous_ptr]}`; the latter two have flag 0x0200 and link backward to form the chain. |
 | 0x57340 | 16 B | `character_hud_text_ptrs` — four longword pointers to character HUD/name strings |
 | 0x57350 | 8 B | `player_text_palette_words` — four player-indexed alpha/text attribute words `{0xD000,0xD400,0xD800,0xDC00}`. Score, health, entry animation, dialog, and information-panel paths pass the selected word as the player's text palette/attribute. |
@@ -1195,9 +1195,9 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x5BA6C | 2 B | `logo_bright_min` |
 | 0x5BA6E | 2 B | `logo_bright_max` |
 | 0x5BA70 | 64 B | `forcefield_gfx_ptrs` — one 16-longword pointer table (not two 8-entry tables) into forcefield/floor tile descriptors at 0x5CAB0–0x5CB20; indexed by the 4-bit forcefield graphic state |
-| 0x5BAB0 | 16 B | `shot_reflect_hdelta` — 8 signed horizontal-position correction words indexed by reflected shot direction |
-| 0x5BAC0 | 16 B | `shot_reflect_vdelta` — 8 signed vertical-position correction words parallel to `shot_reflect_hdelta` |
-| 0x5BAD0 | 16 B | `shot_reflect_sound_tbl` — four longword sound IDs indexed by player character: 0x45, 0x47, 0x46, 0x48 |
+| 0x5BAB0 | 16 B | `shot_reflect_hdelta` — 8 signed horizontal-position correction words indexed by direction. Despite the historical `reflect` name, `player_create_shot` uses these as the initial shot H offsets. |
+| 0x5BAC0 | 16 B | `shot_reflect_vdelta` — 8 signed vertical-position correction words parallel to `shot_reflect_hdelta`; likewise used for initial shot placement. |
+| 0x5BAD0 | 16 B | `shot_reflect_sound_tbl` — four longword sound IDs indexed by player character: 0x45, 0x47, 0x46, 0x48. `player_create_shot` uses this historically named table for the class firing sound. |
 | 0x5BAE0 | 256 B | `floor_desc_base` — 32 contiguous 8-byte floor descriptors, exact range 0x5BAE0–0x5BBDF. `pf_floor_draw` selects the connectivity variant here and offsets each tile code by `floorpattern × 0x30`; it does not select a separate floor block. Wall data begins independently at 0x5BBE0. |
 | 0x5BBE0 | 3264 B | `wall_desc_blocks` — six normal wall-pattern blocks × 68 descriptors × 8 bytes, exact range 0x5BBE0–0x5C89F. Each descriptor contains four picture words written to the tile's 2×2 playfield cells. `wall_pattern_offsets` contains descriptor-index bases `{0x000,0x044,...,0x154}`; `pf_wall_draw` adds the connectivity variant and multiplies by eight. |
 | 0x5C8A0 | 8 B | `floor_type10_desc` — single four-word 2×2 descriptor selected directly for tile type 0x10. The former 520-byte size incorrectly swallowed the unrelated sequential block that follows. |
@@ -1293,7 +1293,7 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x5710C | 108 B | `floor_palette_color_indices` — nine floor-pattern rows × six words. `init_display` selects row `floorpattern × 6`; columns 0–2 are used when `wallpattern >= 11`, columns 3–5 otherwise. Each word is a color index added to `(playfield_palette_index << 4)` before reading three palette words. Exact range 0x5710C–0x57177. |
 | 0x57178 | 96 B | `service_instruction_text_chain` — formatted-text nodes and inline strings “CLEARING STATS”, “TO ABORT”, “WARRIOR BUTTONS”, and “PRESS BOTH”, exact range 0x57178–0x571D7. Nodes use the same 8/12-byte linked descriptor format as the legend chains. |
 | 0x571D8 | 2 B | `forcefield_delay_alignment` — zero alignment word immediately before the live delay profiles; no consumer discovered. |
-| 0x571DA | 32 B | `forcefield_cycle_delay_profiles` — four profiles × eight bytes: `{10,20,10,20,10,20,20,40}`, `{10,20,08,10,10,20,08,40}`, `{08,08,08,20,10,20,08,40}`, and `{10,10,20,20,40,40,08,40}`. `main_cycle_tport_and_ffield` adds `random_word(8)` to the next byte of the selected profile to reload `ff_cycle_timer`. |
+| 0x571DA | 32 B | `forcefield_cycle_delay_profiles` — four profiles × eight bytes: `{10,20,10,20,10,20,20,40}`, `{10,20,08,10,10,20,08,40}`, `{08,08,08,20,10,20,08,40}`, and `{10,10,20,20,40,40,08,40}`. `main_cycle_tport_and_ffield` adds `random_word(8)` to the next byte of the selected profile to reload `forcefield_step_timer`. |
 | 0x57398 | 60 B | `challenge_shared_qualifier_text` — the shared “AFTER COLLECTING ALL POTIONS” and “AFTER SHOOTING 3 SECRET WALLS” strings, ending at 0x573D3 |
 | 0x573D4 | 112 B | `challenge_qualifier_descs` — 14 × 8-byte `text_desc`-style records indexed by challenge code−0x50. Layout: byte row, byte column, longword string pointer, word zero/reserved; a null pointer suppresses the qualifier. |
 | 0x57444 | 104 B | `challenge_unique_qualifier_text` — strings unique to individual challenge codes, ending at 0x574AB |
@@ -1555,21 +1555,21 @@ the complete §1 RAM map and generated operand checks.
 | 0x904A62 | 2 B | `monster_cull_h_origin` | Horizontal monster-culling origin, `(pf_hscroll - 0x17) << 7` |
 | 0x904A64 | 2 B | `monster_cull_v_origin` | Vertical monster-culling origin, `(0xF9 - pf_vscroll_lo) << 7` |
 | 0x904B42 | 2 B × 4 | `death_touch_timer` | Per-player Death touch sound timer (negative = new contact) |
-| 0x904B4A | 2 B × 4 | `ff_hurt_timer` | Per-player forcefield hurt sound timer |
+| 0x904B4A | 2 B × 4 | `forcefield_hurt_timer` | Per-player forcefield hurt sound timer |
 | 0x904B8E | 1 B | `eeprom_cache_stat1` | EEPROM cache for 0x904010 |
 | 0x904B8F | 1 B | `eeprom_cache_stat2` | EEPROM cache for 0x90400E |
 | 0x904B90 | 1 B | `eeprom_cache_stat3` | EEPROM cache for 0x904018 |
 | 0x904B91 | 1 B | `eeprom_cache_stat4` | EEPROM cache for 0x904016 |
 | 0x904B92 | 2 B | `eeprom_cache_stats` | EEPROM cache for 0x904B86 (game stats word) |
-| 0x904B94 | 2 B | `eeprom_cache_settings` | EEPROM cache for 0x904A24 (game settings) |
-| 0x9049EE | 2 B | `speech_counter` | Sound-board recovery holdoff (see §1.9); `sound_play` and `main_update_sound` stand down while nonzero |
+| 0x904B94 | 2 B | `eeprom_settings_cache` | EEPROM cache for 0x904A24 (game settings) |
+| 0x9049EE | 2 B | `sound_holdoff` | Sound-board recovery holdoff (see §1.9); `sound_play` and `main_update_sound` stand down while nonzero |
 | 0x9049F0 | 2 B | `sound_queue_state` | Reply buffer for status command 0x07; low three bits are the board's error report |
 | 0x9049F2 | 2 B | `sound_idle_timer` | Countdown between sound CPU ping attempts |
-| 0x9049F4 | 2 B | `sound_cpu_retry_count` | Sound CPU retry counter (reset > 180 = full reset) |
-| 0x9048A0 | 2 B | `randwall_low_watermark` | Random wall low water mark |
-| 0x9048A2 | 2 B | `randwall_target` | Random wall target index |
-| 0x9048A4 | 2 B | `randwall_current` | Random wall current index |
-| 0x9048A6 | 2 B | `randwall_timer` | Random wall timer (negative=disabled, 0=process, positive=countdown) |
-| 0x910600 | 1 B × (tile_count/4) | `cycle_phase_assignments` | Color RAM Spare: cyclic wall phase assignment, 2 bits per tile |
+| 0x9049F4 | 2 B | `sound_retry_count` | Sound CPU retry counter (reset > 180 = full reset) |
+| 0x9048A0 | 2 B | `random_wall_low_mark` | Random wall low water mark |
+| 0x9048A2 | 2 B | `random_wall_target` | Random wall target index |
+| 0x9048A4 | 2 B | `random_wall_current` | Random wall current index |
+| 0x9048A6 | 2 B | `random_wall_timer` | Random wall timer (negative=disabled, 0=process, positive=countdown) |
+| 0x910600 | 1 B × (tile_count/4) | `cyclic_wall_assignments` | Color RAM Spare: cyclic wall phase assignment, 2 bits per tile |
 | 0x905048 | 3072 B | `hud_mob_table` | HUD tile workspace arranged as 24 rows × 128 bytes (64 words), exact range 0x905048–0x905C47. Player HUD columns use row index `player*5 + field`; for example the IT overlay writes rows `player*5 + 8`. The following 12 bytes through 0x905C53 are padding before `tport_route_forward`. |
 | 0x905054 | overlapping 24 × 128 B view | `path_direction_grid` | Gameplay/pathfinding view spanning exactly 0x905054–0x905C53, immediately before `tport_route_forward`. Cell `id` is `base + (id / 44) * 0x80 + (id % 44)`; each byte packs two direction+1 nibbles (0 means unset). Valid packed maze IDs are 0x000–0x3FF, so the highest reachable byte is 0x905BDF (ID 1023); row tails and the rest of the final padded row are not indexed. The view overlaps `hud_mob_table` and its following 12-byte pad. |

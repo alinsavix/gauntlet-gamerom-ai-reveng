@@ -86,13 +86,13 @@ _FORCEFIELD_DAMAGE_TABLE = [
 # (The previous {1,3,7,15,31,63,127} entries were a plausible-looking guess and
 # did not match the ROM: the real cadence never gets faster than every 32
 # frames, and steps only three times across the whole 0-199 band.)
-_HEALTH_SOUND_MASK_TABLE = [0x001F, 0x003F, 0x003F, 0x007F,
+_HEARTBEAT_MASK_TABLE = [0x001F, 0x003F, 0x003F, 0x007F,
                              0x007F, 0x00FF, 0x00FF]
 
 # Per-player low-health heartbeat sound, ROM 0x57942 (longwords, index =
 # player).  Played by main_health_countdown at 0x46BEE, *not* by
 # player_lowhealth -- that one is the spoken warning below.
-_HEARTBEAT_SOUND = [0x18, 0x19, 0x1A, 0x1B]
+_HEARTBEAT_SOUND_TABLE = [0x18, 0x19, 0x1A, 0x1B]
 
 # character_lowhealth_speech, ROM 0x5797A (four longwords).  Selected by
 # getrandom(3) for entries 0-2; entry 3 ("ALL YOUR POWERS WILL BE LOST!") is
@@ -198,7 +198,7 @@ _DOOR_IDLE_THRESHOLD_NO_KEYS = 0x4B0
 _PORT_DIR_TO_ROM_DIR = [2, 3, 4, 5, 6, 7, 0, 1]
 _POWER_SHOTSPEED = int(PlayerPower.SHOTSPEED)   # bit 3, POWERUP_BIT_MASKS[3]
 # shot_reflect_sound_tbl -- ROM 0x5BAD0, indexed by character.
-_PLAYER_SHOT_SOUND = [0x45, 0x47, 0x46, 0x48]
+_SHOT_REFLECT_SOUND_TBL = [0x45, 0x47, 0x46, 0x48]
 # Character-specific death SFX, refs/soundcmds.csv 0x14-0x17; ROM 0x57932
 # (four longwords), played by the death path of main_health_countdown (0x46B2A).
 _PLAYER_DEATH_SOUND_BASE = 0x14
@@ -208,8 +208,8 @@ _PLAYER_DEATH_SOUND_BASE = 0x14
 # firing player's masked hpos/vpos.  Both are native position words, so they
 # are added to the MOB word as they stand and the vertical column keeps the
 # hardware's upward sense.  Indexed by ROM facing direction.
-_SHOT_SPAWN_DH = [0x0200, 0x0500, 0x0600, 0x0300, 0x0200, -0x0080, -0x0200, -0x0100]
-_SHOT_SPAWN_DV = [0x0700, 0x0300, 0x0180, -0x0080, -0x0100, -0x0280, 0x0180, 0x0380]
+_SHOT_REFLECT_HDELTA = [0x0200, 0x0500, 0x0600, 0x0300, 0x0200, -0x0080, -0x0200, -0x0100]
+_SHOT_REFLECT_VDELTA = [0x0700, 0x0300, 0x0180, -0x0080, -0x0100, -0x0280, 0x0180, 0x0380]
 
 # The shot MOB's palette nibble is 0x0C + player (player_create_shot 0x5371C),
 # which is also what nearby_mob_clearance_test keys off to recognise a player's
@@ -232,11 +232,11 @@ _PLAYER_SHOT_PICTURE = [
     0x1C74, 0x1C78, 0x1C7C, 0x1C80, 0x1C84, 0x1C8B, 0x1C8F, 0x1C93,
 ]
 
-# player_death_picture_tbl -- ROM 0x58A4A (``anim_table_idle``), 4 characters
-# x 8 facing directions, indexed ``character * 8 + frame`` by the first half of
+# anim_table_idle -- ROM 0x58A4A, 4 characters x 8 facing directions, indexed
+# ``character * 8 + frame`` by the first half of
 # the status-0x08 branch at 0x4A696: the hero spins from its facing direction
 # down to 4, one step per four frames.
-_PLAYER_DEATH_PICTURE = [
+_ANIM_TABLE_IDLE = [
     0x0BD8, 0x0BF3, 0x0C12, 0x0C2D, 0x0C3F, 0x0B87, 0x0BA2, 0x0BBD,
     0x11B4, 0x11CF, 0x1112, 0x112D, 0x1148, 0x1163, 0x117E, 0x1199,
     0x1412, 0x142D, 0x1448, 0x1463, 0x13A2, 0x13BD, 0x13D8, 0x13F3,
@@ -264,7 +264,7 @@ def _rom_picture_table(words: str) -> tuple[int, ...]:
 
 
 # anim_table_walking -- ROM 0x58A8A, 4 characters × 8 directions × 4 frames.
-_PLAYER_WALKING_PICTURE = _rom_picture_table("""
+_ANIM_TABLE_WALKING = _rom_picture_table("""
     0BCF 0BD8 0BE1 0BD8 0BEA 0BF3 0C00 0BF3
     0C09 0C12 0C1B 0C12 0C24 0C2D 0C36 0C2D
     0B63 0B6C 0B75 0B6C 0B7E 0B87 0B90 0B87
@@ -284,7 +284,7 @@ _PLAYER_WALKING_PICTURE = _rom_picture_table("""
 """)
 
 # anim_table_fighting -- ROM 0x5884A, 4 characters × 8 directions × 8 frames.
-_PLAYER_FIGHTING_PICTURE = _rom_picture_table("""
+_ANIM_TABLE_FIGHTING = _rom_picture_table("""
     0D5A 0D63 0D6C 0D75 0D75 0D6C 0D63 0D5A
     0D7E 0D87 0D90 0D99 0D99 0D90 0D87 0D7E
     0DA2 0DAB 0DB4 0DBD 0DBD 0DB4 0DAB 0DA2
@@ -320,7 +320,7 @@ _PLAYER_FIGHTING_PICTURE = _rom_picture_table("""
 """)
 
 # anim_table_shooting -- ROM 0x5874A, 4 characters × 8 directions × 4 frames.
-_PLAYER_SHOOTING_PICTURE = _rom_picture_table("""
+_ANIM_TABLE_SHOOTING = _rom_picture_table("""
     0C87 0C90 0C90 0C90 0C99 0CA2 0CA2 0CA2
     0CAB 0CB4 0CB4 0CB4 1087 0CBD 0CBD 0CBD
     0C3F 0C48 0C48 0C48 0C51 0C5A 0C5A 0C5A
@@ -339,9 +339,8 @@ _PLAYER_SHOOTING_PICTURE = _rom_picture_table("""
     155A 1512 1512 1512 1563 151B 151B 151B
 """)
 
-# anim_table_idle -- ROM 0x58A4A.  The death spin uses this same table, retained
-# under its historical name above for the status-8 lifecycle code and tests.
-_PLAYER_IDLE_PICTURE = tuple(_PLAYER_DEATH_PICTURE)
+# Freeze the literal list as the tuple used by both idle and death-spin readers.
+_ANIM_TABLE_IDLE = tuple(_ANIM_TABLE_IDLE)
 
 # fighting_anim_end -- ROM 0x58090.  It controls both the four-frame firing
 # cadence and the input gate that re-arms another shot.
@@ -395,19 +394,19 @@ def update_player_sprite(state: GameState, player_index: int,
     action = _player_animation_action(state, player_index, walking)
     counter = player.anim_counter & 0xFFFF
     if action == "fight":
-        picture = _PLAYER_FIGHTING_PICTURE[
+        picture = _ANIM_TABLE_FIGHTING[
             character * 64 + rom_direction * 8 + ((counter >> 1) & 0x07)
         ]
     elif action == "walk":
-        picture = _PLAYER_WALKING_PICTURE[
+        picture = _ANIM_TABLE_WALKING[
             character * 32 + rom_direction * 4 + ((counter >> 2) & 0x03)
         ]
     elif action == "shoot":
-        picture = _PLAYER_SHOOTING_PICTURE[
+        picture = _ANIM_TABLE_SHOOTING[
             character * 32 + rom_direction * 4 + ((counter >> 2) & 0x03)
         ]
     else:
-        picture = _PLAYER_IDLE_PICTURE[character * 8 + rom_direction]
+        picture = _ANIM_TABLE_IDLE[character * 8 + rom_direction]
 
     # 0x4AC30-0x4AC7A: the invisibility blink is applied after every ordinary
     # action-table lookup.  ``main_move_players`` clears the power as its timer
@@ -514,7 +513,7 @@ _INVIS_TIMER_LOAD = 0x4B0
 #: table at ROM 0x5B72C (0x5181A).  Bit 9 is what 0x4185C tests to make a
 #: monster flee; doc/05 calls both the timer and this table "reflect", which is
 #: a different power (bit 10, type 0x38, read at 0x4B4B0 and with no timer).
-_REPULSE_TIMER_INIT = (0x038C, 0x04B8, 0x0260, 0x038C)
+_CHARACTER_REPULSE_TIMER_INIT = (0x038C, 0x04B8, 0x0260, 0x038C)
 
 #: POWER_SUPERSHOT adds eleven charges (0x51874 ``addi.b #$b``).
 _SUPERSHOT_CHARGES = 0x0B
@@ -536,7 +535,7 @@ def initialize_player_temporary_power(
         state.player_invis_timer[player_index] = _INVIS_TIMER_LOAD
     elif obj_type == int(MazeObjIds.POWER_REPULSE):
         state.player_repulse_timer[player_index] = (
-            _REPULSE_TIMER_INIT[player.character & 0x03]
+            _CHARACTER_REPULSE_TIMER_INIT[player.character & 0x03]
         )
     elif obj_type == int(MazeObjIds.POWER_SUPERSHOT):
         player.supershot = (player.supershot + _SUPERSHOT_CHARGES) & 0xFF
@@ -590,7 +589,7 @@ _FAKE_EXIT_FLAG = 0x0010
 
 # Secret-room objective codes this subsystem reports progress on.  WP-15
 # (``exits.secret_trick_progress``/``secret_trick_set``) owns the counter and
-# the ``trick_tasknum`` guard; these are just the literals the ROM compares.
+# the ``secret_trick_id`` guard; these are just the literals the ROM compares.
 _TRICK_NOGREEDY1 = 12       # 0x0C -- "don't be greedy": keys or potions
 _TRICK_NOUSEINVUL = 8       # 0x08 -- "don't use invulnerability"
 #: 0x50C30/0x50C42 -- the two "try transportability" objectives, decided on the
@@ -629,7 +628,7 @@ _RANDOM_FOOD_HEALTH = (
     200, 75, 25, 50, 100,
 )
 # ``pickup_score_popup_types`` (0x5B774), parallel to the adaptive food table.
-_RANDOM_FOOD_POPUP = (
+_PICKUP_SCORE_POPUP_TYPES = (
     13, 11, 12, 13, 12, 11, 10, 14, 10, 11,
     12, 13, 12, 13, 10, 14, 12, 10, 11, 13,
 )
@@ -731,20 +730,20 @@ def secret_code_build(state: GameState) -> str:
 
 def secret_getname(state: GameState) -> None:
     """Port secret_getname 0x54EC6, including its alpha-RAM setup."""
-    winner = state.secret_winner
+    winner = state.secret_player
     if not 0 <= winner < NUM_PLAYERS:
         return
     player = state.players[winner]
     if not (state.game_settings & 0x2000):
-        state.bonus_timer = 0x0385
+        state.global_delay_timer = 0x0385
         player.status = int(PlayerStatus.ALIVE_NEXT)
-        state.secret_winner = -1
+        state.secret_player = -1
         return
     player.name_entry_repeat_delay = _NAME_ENTRY_VELOCITY_LIMIT
     player.name_entry_velocity = 0
     player.initials_cursor = 0
     player.status = int(PlayerStatus.SECRET_NAME_ENTRY)
-    state.bonus_timer = 0x0A8D
+    state.global_delay_timer = 0x0A8D
     state.secret_name_buffer = [ord("A")] + [ord(" ")] * (_SECRET_NAME_LENGTH - 1)
     from .score import write_secret_name_entry
 
@@ -753,7 +752,7 @@ def secret_getname(state: GameState) -> None:
 
 def secret_name_entry_update(state: GameState) -> None:
     """Port the 29-character secret winner editor at 0x54FE8."""
-    winner = state.secret_winner
+    winner = state.secret_player
     if not 0 <= winner < NUM_PLAYERS:
         return
     player = state.players[winner]
@@ -788,29 +787,29 @@ def secret_name_entry_update(state: GameState) -> None:
     write_secret_name_entry(state, winner)
     if (
         _name_entry_commit_pressed(state, winner)
-        and state.bonus_timer < 0x0A15
+        and state.global_delay_timer < 0x0A15
     ):
         if state.secret_name_buffer[cursor] == _NAME_ENTRY_BACKSPACE:
             state.secret_name_buffer[cursor] = _NAME_ENTRY_SPACE
             cursor = max(0, cursor - 1)
         else:
             cursor += 1
-            state.bonus_timer = 0x0385
+            state.global_delay_timer = 0x0385
         player.initials_cursor = cursor
         if cursor < _SECRET_NAME_LENGTH:
             write_secret_name_entry(state, winner)
 
-    if state.bonus_timer >= 5 and cursor < _SECRET_NAME_LENGTH:
+    if state.global_delay_timer >= 5 and cursor < _SECRET_NAME_LENGTH:
         return
     for index in range(max(0, cursor), _SECRET_NAME_LENGTH):
         state.secret_name_buffer[index] = _NAME_ENTRY_SPACE
     secret_code_build(state)
     write_secret_code_result(state, winner)
     player.status = int(PlayerStatus.ALIVE_NEXT)
-    state.secret_winner = -1
+    state.secret_player = -1
     state.debounce_shift_magic[winner] = 0
     state.debounce_shift_fire[winner] = 0
-    state.bonus_timer = 0x02D1
+    state.global_delay_timer = 0x02D1
 
 
 def show_continue_prompt(state: GameState) -> None:
@@ -871,7 +870,7 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     else:
         return
     if player_selector < 0:
-        score.write_info_panel_backdrop(state)
+        score.maze_hide(state)
         score.write_info_panel_header(state)
     for i in targets:
         score.write_player_panel_background(state, i)
@@ -881,14 +880,14 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
         )
         if initials_entry:
             score.clear_player_panel_content(state, i)
-            score.write_player_initials_entry(state, i)
+            score.draw_player_initials_entry(state, i)
         elif state.players[i].status == int(PlayerStatus.SECRET_NAME_ENTRY):
             score.clear_player_panel_content(state, i)
             score.write_secret_name_entry(state, i)
         elif state.players[i].status != int(PlayerStatus.REMOVED):
             score.write_player_panel_static(state, i)
-            score._draw_player_score(state, i)     # 0x45940
-            score._draw_player_health(state, i)    # 0x459A2
+            score.draw_player_score(state, i)     # 0x45940
+            score.draw_player_health(state, i)    # 0x459A2
             player_inv_update(state, i)            # 0x45522
         else:
             score.clear_player_panel_content(state, i)
@@ -952,7 +951,7 @@ def player_inv_update(state: GameState, player_index: int) -> None:
     from . import score
 
     if 0 <= player_index < NUM_PLAYERS:
-        score._draw_player_health(state, player_index)
+        score.draw_player_health(state, player_index)
         score.write_player_inventory(state, player_index)
 
 
@@ -960,7 +959,7 @@ def _secret_trick_progress(state: GameState, player_index: int,
                            trick_id: int, amount: int = 1) -> None:
     """WP-15's ``exits.secret_trick_progress`` -- the ``addq.b #1`` hook shape.
 
-    Every progress site in the ROM is ``cmpi.b #<trick>,trick_tasknum`` followed
+    Every progress site in the ROM is ``cmpi.b #<trick>,secret_trick_id`` followed
     by a bump of that player's ``secret_tricks_flags`` byte, so the guard lives
     in WP-15's routine and the call sites here stay one line each.
     """
@@ -1056,7 +1055,7 @@ def maze_convert_walls_to_exits(state: GameState) -> int:
         # The ROM releases the VBLANK semaphore every 64 slots (0x5E828) so a
         # full-table scan cannot tear the display.
         if (slot & 0x3F) == 0:
-            state.vblank_flag = 0
+            state.vblank_semaphore = 0
     return converted
 
 
@@ -1096,11 +1095,11 @@ def player_create_shot(state: GameState, player_index: int) -> None:
 
     state.mobs.picture[shot_slot] = _PLAYER_SHOT_PICTURE[character * 8 + rom_dir]
     state.mobs.hpos[shot_slot] = (
-        base_h + _SHOT_SPAWN_DH[rom_dir]
+        base_h + _SHOT_REFLECT_HDELTA[rom_dir]
         + _SHOT_PALETTE_BASE + player_index
     ) & 0xFFFF
     state.mobs.vpos[shot_slot] = (
-        base_v + _SHOT_SPAWN_DV[rom_dir]
+        base_v + _SHOT_REFLECT_VDELTA[rom_dir]
         + (((_SHOT_TILE_WIDTH - 1) & 0x07) << 3)
         + ((_SHOT_TILE_HEIGHT - 1) & 0x07)
     ) & 0xFFFF
@@ -1111,7 +1110,7 @@ def player_create_shot(state: GameState, player_index: int) -> None:
     state.shot_dx[shot_slot] = vx >> POS_SHIFT
     state.shot_dy[shot_slot] = vv >> POS_SHIFT
     state.shot_lifetime[shot_slot] = 0
-    _sound_play(state, _PLAYER_SHOT_SOUND[character])
+    _sound_play(state, _SHOT_REFLECT_SOUND_TBL[character])
     if player.supershot > 0:
         player.supershot = (player.supershot - 1) & 0xFF
 
@@ -1181,7 +1180,7 @@ def _tport_pos_table(state: GameState) -> list[int]:
     ]
 
 
-def _tile_on_screen_test(state: GameState, slot: int) -> bool:
+def tile_on_screen_test(state: GameState, slot: int) -> bool:
     """0x5E584 ``tile_on_screen_test`` -- is a maze slot inside the viewport?
 
     The ROM works in the native <<7 position domain against the two hardware
@@ -1323,7 +1322,7 @@ def player_tport(state: GameState, player_index: int,
       8. otherwise ``handle_tport`` spawns the arrival sparkle, the phase/type
          words are armed, sound 0x28 plays, and the landing cell is stored in
          ``player_tile_or_tport_dest[p]`` (0x904BD8 -- WP-13's
-         ``player_tile_pos``).
+         ``player_tile_or_tport_dest``).
 
     Port note: the ROM hands the motion to the per-frame transition machine and
     so does this port.  ``player_tport`` is purely the producer -- it picks the
@@ -1358,7 +1357,7 @@ def player_tport(state: GameState, player_index: int,
         for candidate in _tport_pos_table(state):
             if candidate == source:                              # 0x502CA
                 continue
-            if not _tile_on_screen_test(state, candidate):       # 0x502D8
+            if not tile_on_screen_test(state, candidate):       # 0x502D8
                 continue
             dcol = abs((candidate & 0x1F) - (source & 0x1F))
             if state.wrap_h and dcol >= 0x10:                    # 0x50302
@@ -1382,11 +1381,11 @@ def player_tport(state: GameState, player_index: int,
         if cell < 0x20 or cell >= 0x400:                         # 0x503E8/0x503F0
             continue
         if any(state.player_tport_type[i] == 0
-               and state.player_tile_pos[i] == cell
+               and state.player_tile_or_tport_dest[i] == cell
                and state.player_tport_phase[i] >= 0
                for i in range(NUM_PLAYERS)):                     # 0x503F8-0x5045C
             continue
-        if not _tile_on_screen_test(state, cell):                # 0x50466
+        if not tile_on_screen_test(state, cell):                # 0x50466
             continue
         if tport_check_dest(state, cell, player_index) != 0:     # 0x50480
             continue
@@ -1422,7 +1421,7 @@ def player_tport(state: GameState, player_index: int,
     # player interacts with all four cells around the destination -- this is
     # why a transporter can drop you straight onto a potion, and how the two
     # transportability objectives are won.
-    tport_arrival_interact(state, destination, player_index)
+    scan_move_path_interactions(state, destination, player_index)
 
     # 0x504F2-0x5052A / 0x50606: arm the transition and hand over.  The hero
     # does not move on this frame -- loop 2 dissolves it, this file's
@@ -1438,7 +1437,7 @@ def _tport_visit_pad(state: GameState, player_index: int, pad_slot: int) -> None
     Trick 0x56 wants a player to have stood on every pad on the level, so its
     progress byte is a *bitmask* of pad indices rather than a count.  That is
     neither of WP-15's two hook shapes, so the OR stays here; the guard is the
-    same ``trick_tasknum`` compare the API applies.
+    same ``secret_trick_id`` compare the API applies.
     """
     if state.secret_trick_id != _TRICK_VISIT_TPORTS:
         return
@@ -1448,7 +1447,7 @@ def _tport_visit_pad(state: GameState, player_index: int, pad_slot: int) -> None
         flags[player_index] |= 1 << (pads.index(pad_slot) + 1)
 
 
-def tport_arrival_interact(state: GameState, dest_slot: int,
+def scan_move_path_interactions(state: GameState, dest_slot: int,
                            player_index: int) -> None:
     """0x50BB8 -- interact with the four cells around a transporter landing.
 
@@ -1486,17 +1485,17 @@ def _tport_landing_trick(state: GameState, player_index: int,
     """0x50C30-0x50C52 -- the two "try transportability" objectives.
 
     Both are decided on the spot rather than accumulated: being dropped next
-    to the right monster writes this player straight into ``secret_winner``
-    (0x50C52 ``move.b d2,secret_winner``), no progress byte involved.  Trick 1
+    to the right monster writes this player straight into ``secret_player``
+    (0x50C52 ``move.b d2,secret_player``), no progress byte involved.  Trick 1
     wants MONST_ACID (0x19) and trick 2 wants MONST_DEATH (0x18) -- the two
     things you could never survive walking into.
     """
     trick = state.secret_trick_id
     obj_type = state.mobs.obj_type(slot)
     if trick == _TRICK_TRANSPORT1 and obj_type == int(MazeObjIds.MONST_ACID):
-        state.secret_winner = player_index
+        state.secret_player = player_index
     elif trick == _TRICK_TRANSPORT2 and obj_type == int(MazeObjIds.MONST_DEATH):
-        state.secret_winner = player_index
+        state.secret_player = player_index
 
 
 # =============================================================================
@@ -1662,7 +1661,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
                 from .shots import playfield_showscore
 
                 playfield_showscore(
-                    state, tile_mob_slot, _RANDOM_FOOD_POPUP[adaptive_index],
+                    state, tile_mob_slot, _PICKUP_SCORE_POPUP_TYPES[adaptive_index],
                 )
             player.health += health_gain
             state.player_dizzy_timer[player_index] = 0  # 0x51CDA
@@ -1930,9 +1929,9 @@ def _tile_contact_progress(state: GameState, player_index: int) -> None:
     state.escape_timer = 0
     if state.idle_timer > 0:
         state.idle_timer = 0
-    from .shots import _dragon_proximity
+    from .shots import dragon_player_proximity
 
-    _dragon_proximity(state, state.players[player_index].mob_slot)
+    dragon_player_proximity(state, state.players[player_index].mob_slot)
 
 
 def _player_give_item(state: GameState, player_index: int, obj_type: int) -> bool:
@@ -2339,9 +2338,9 @@ def _name_entry_edit(state: GameState, player_index: int) -> None:
         delay = ((_NAME_ENTRY_VELOCITY_LIMIT - abs(velocity))
                  >> _NAME_ENTRY_REPEAT_SHIFT) + _NAME_ENTRY_REPEAT_BASE
     player.name_entry_repeat_delay = delay & 0xFF    # 0x49F62
-    from .score import write_player_initials_entry
+    from .score import draw_player_initials_entry
 
-    write_player_initials_entry(state, player_index)
+    draw_player_initials_entry(state, player_index)
 
     if not _name_entry_commit_pressed(state, player_index):
         return
@@ -2354,7 +2353,7 @@ def _name_entry_edit(state: GameState, player_index: int) -> None:
         cursor += 1                                  # 0x4A008
         player.state_timer = _NAME_ENTRY_STEP_TIMEOUT           # 0x4A00E
     player.initials_cursor = max(0, cursor)          # 0x4A066
-    write_player_initials_entry(state, player_index)
+    draw_player_initials_entry(state, player_index)
 
 
 def player_start_inner(state: GameState, player_index: int) -> int:
@@ -2436,7 +2435,7 @@ def player_start_inner(state: GameState, player_index: int) -> int:
             spawn_x, (player_index + 0x0C) & 0x0F,
         )
         spawn_vpos = encode_vpos_at_y(spawn_y, 3, 3)
-        initial_picture = _PLAYER_IDLE_PICTURE[
+        initial_picture = _ANIM_TABLE_IDLE[
             (int(player.character) & 0x03) * 8 + 4
         ]
         if slot in state.mobs.iter_chain():
@@ -2468,7 +2467,7 @@ def player_start_inner(state: GameState, player_index: int) -> int:
         # for it twice by show_level_end_bonus_screen (0x4D57E).
         state.player_treascount[player_index] = 0
         state.player_in_maze[player_index] = 1
-        state.player_tile_pos[player_index] = slot
+        state.player_tile_or_tport_dest[player_index] = slot
         state.level_players_active += 1
         if state.level_players_active == 1:
             # The hardware level-start path has already framed the PLAYERSTART
@@ -2483,11 +2482,11 @@ def player_start_inner(state: GameState, player_index: int) -> int:
         # subsequent joins clear that byte at 0x48F00. It is not bonusmult.
         first_player_spawn_bonus = (3, 0, 4, 0)
         if state.level_players_active == 1:
-            state.spawn_probability_bonus = first_player_spawn_bonus[
+            state.monster_spawn_probability_bonus = first_player_spawn_bonus[
                 player.character & 0x03
             ]
         else:
-            state.spawn_probability_bonus = 0
+            state.monster_spawn_probability_bonus = 0
         return -1
 
     return 0  # no usable spawn position
@@ -2511,9 +2510,9 @@ def player_join_finalize(state: GameState, player_index: int) -> None:
         (not state.two_player_mode or state.game_mode == int(GameMode.DEMO))
         and player.status == int(PlayerStatus.REMOVED)
     ):
-        from .session import player_init_for_coin
+        from .session import player_coindrop
 
-        player_init_for_coin(state, player_index)
+        player_coindrop(state, player_index)
     player.status = PlayerStatus.ALIVE_HERE  # §4.4
     player.anim_counter = 0
     state.player_fighting_dir[player_index] = 0
@@ -2561,7 +2560,7 @@ def player_join(state: GameState, player_index: int) -> None:
 # attract screens or starts a game is exactly the failure that motivated the
 # split below.
 
-_DEMO_RECORD_SPEECH = 0xFF          # 0x4A59E
+_DEMO_RECORD_MESSAGE = 0xFF          # 0x4A59E
 _DEMO_RECORD_JOIN = 0xFE            # 0x4A5A2 falls through to the join branch
 _DEMO_RECORD_MAX_ORDINARY = 0xFD    # 0x4A58E: ``cmpi.b #$fd`` / ``bls``
 _DEMO_JOIN_KICKOFF_TIMER = 1        # 0x4A5CC: the joined slot expires next frame
@@ -2722,7 +2721,7 @@ def _demo_playback(state: GameState) -> None:
                 break
 
             payload = stream[pos + 1] & 0xFF            # 0x4A596
-            if code == _DEMO_RECORD_SPEECH:
+            if code == _DEMO_RECORD_MESSAGE:
                 from .score import demo_message_show
 
                 demo_message_show(state, player_index, payload)
@@ -2905,8 +2904,8 @@ def main_move_players(state: GameState) -> None:
        timeout, so neither runs during the attract DEMO.
     """
     # Secret-name entry runs during the TREAS_EXIT display hold (0x54FE8).
-    if 0 <= state.secret_winner < NUM_PLAYERS and state.players[
-        state.secret_winner
+    if 0 <= state.secret_player < NUM_PLAYERS and state.players[
+        state.secret_player
     ].status == int(PlayerStatus.SECRET_NAME_ENTRY):
         secret_name_entry_update(state)
         return
@@ -2935,7 +2934,7 @@ def main_move_players(state: GameState) -> None:
     keys_held = 0
     for player_index in range(NUM_PLAYERS):
         player = state.players[player_index]
-        state.player_walk_dirs[player_index] = _NO_MOVE
+        state.player_joystick[player_index] = _NO_MOVE
 
         # Status 0x20: secret winner name entry.
         if player.status == int(PlayerStatus.SECRET_NAME_ENTRY):
@@ -2966,7 +2965,7 @@ def main_move_players(state: GameState) -> None:
                 frame = (frame - 1) & 0x07
                 state.player_death_anim_frame[player_index] = frame
                 if player.mob_slot:
-                    state.mobs.picture[player.mob_slot] = _PLAYER_DEATH_PICTURE[
+                    state.mobs.picture[player.mob_slot] = _ANIM_TABLE_IDLE[
                         (player.character & 0x03) * 8 + frame
                     ]
                 continue
@@ -3131,7 +3130,7 @@ def main_move_players(state: GameState) -> None:
                 moved_dirs = player_try_move(
                     state, player_index, dirn, 0, track_thief=False,
                 )
-                state.player_walk_dirs[player_index] = moved_dirs
+                state.player_joystick[player_index] = moved_dirs
                 walking = moved_dirs != _NO_MOVE
                 movement_destination = (
                     _player_record_cell(state, player_index) if walking else None
@@ -3181,13 +3180,13 @@ def main_move_players(state: GameState) -> None:
             # consumed the record follows the hero into the cell it just
             # cleared, on the same frame.
             #
-            # ``player_tile_pos`` still holds last frame's cell, so an
+            # ``player_tile_or_tport_dest`` still holds last frame's cell, so an
             # unchanged cell means "already interacted here"; without that edge
             # gate a non-consumed tile (an acid puddle, another hero's record)
             # would re-trigger every frame.
             current_tile_slot = _player_record_cell(state, player_index)
             if (current_tile_slot != player.mob_slot
-                    and current_tile_slot != state.player_tile_pos[player_index]):
+                    and current_tile_slot != state.player_tile_or_tport_dest[player_index]):
                 handled = player_tile_interact(
                     state, current_tile_slot, player_index,
                 )
@@ -3204,7 +3203,7 @@ def main_move_players(state: GameState) -> None:
                         if player.mob_slot == source:
                             state.mobs.hpos[source] = old_h
                             state.mobs.vpos[source] = old_v
-                            state.player_walk_dirs[player_index] = _NO_MOVE
+                            state.player_joystick[player_index] = _NO_MOVE
                             walking = False
                             movement_destination = source
                 elif movement_origin is not None:
@@ -3212,7 +3211,7 @@ def main_move_players(state: GameState) -> None:
                     if player.mob_slot == source:
                         state.mobs.hpos[source] = old_h
                         state.mobs.vpos[source] = old_v
-                        state.player_walk_dirs[player_index] = _NO_MOVE
+                        state.player_joystick[player_index] = _NO_MOVE
                         walking = False
                         movement_destination = source
             if movement_destination is not None:
@@ -3239,7 +3238,7 @@ def main_move_players(state: GameState) -> None:
                 # would drag the camera back.
                 state.player_in_maze[i] = 1
                 continue
-            state.player_tile_pos[i] = _player_record_cell(state, i)
+            state.player_tile_or_tport_dest[i] = _player_record_cell(state, i)
             state.player_in_maze[i] = 1
         else:
             state.player_in_maze[i] = 0
@@ -3353,9 +3352,9 @@ def main_health_countdown(state: GameState) -> None:
         # Mask table at 0x576A8; index = health >> 5.  The ROM does not clamp,
         # but health here is 1..199 so the index is already 0..6.
         mask_idx = max(0, min(player.health >> 5,
-                              len(_HEALTH_SOUND_MASK_TABLE) - 1))
-        if (player.state_timer & _HEALTH_SOUND_MASK_TABLE[mask_idx]) == 0:
-            _sound_play(state, _HEARTBEAT_SOUND[player_index])     # 0x46BEE
+                              len(_HEARTBEAT_MASK_TABLE) - 1))
+        if (player.state_timer & _HEARTBEAT_MASK_TABLE[mask_idx]) == 0:
+            _sound_play(state, _HEARTBEAT_SOUND_TABLE[player_index])     # 0x46BEE
 
 
 def main_handle_death(state: GameState) -> None:
@@ -3602,11 +3601,11 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool
     player = state.players[player_index]
     source = player.mob_slot
     if slot < FIRST_PLAYABLE_SLOT:
-        state.player_tile_pos[player_index] = source
+        state.player_tile_or_tport_dest[player_index] = source
         return False
 
     if slot != source and tport_check_dest(state, slot, player_index):
-        state.player_tile_pos[player_index] = source
+        state.player_tile_or_tport_dest[player_index] = source
         return False
 
     picture = state.mobs.picture[source]
@@ -3628,7 +3627,7 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool
                 state.secret_trick_id == 3
                 and state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
             ):
-                state.secret_winner = player_index               # 0x50916-0x50922
+                state.secret_player = player_index               # 0x50916-0x50922
             handled = player_tile_interact(state, slot, player_index)
             if (
                 not handled
@@ -3658,7 +3657,7 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool
             old_v, encode_vpos_at_y(y),
         )
 
-    state.player_tile_pos[player_index] = slot
+    state.player_tile_or_tport_dest[player_index] = slot
     state.player_in_maze[player_index] = 1
     _track_thief_victim_move(state, player_index, player.mob_slot)
     return True
@@ -3714,7 +3713,7 @@ def corner_squeeze_geometry(state: GameState, packed_slot: int,
 
     if (
         not state.level_flags_4 & _PLAYER_OFFSCREEN
-        and not _tile_on_screen_test(state, target)
+        and not tile_on_screen_test(state, target)
     ):
         return 0
     if (state.mobs.hpos[target] & 0x0F) > 0x0C:
@@ -3742,7 +3741,7 @@ def tport_transition_arm(state: GameState, player_index: int,
       * ``player_tport_type[p]`` (0x904BE2) -- the destination pad, or zero for
         corner transport;
       * ``player_tile_or_tport_dest[p]`` (0x904BD8, this port's
-        ``player_tile_pos``) -- the *cell the hero lands on*, which
+        ``player_tile_or_tport_dest``) -- the *cell the hero lands on*, which
         ``tport_player_move`` reads and which ``main_scroll_playfield`` pans the
         camera towards while the hero is in flight;
       * ``player_tport_phase[p]`` (0x904BCE) -- 0, which both starts loop 2's
@@ -3757,7 +3756,7 @@ def tport_transition_arm(state: GameState, player_index: int,
     frame, and WP-14's loop 2 drives all four.
     """
     state.player_tport_type[player_index] = destination_pad      # 0x5051A
-    state.player_tile_pos[player_index] = landing_cell           # 0x50606
+    state.player_tile_or_tport_dest[player_index] = landing_cell           # 0x50606
     state.player_tport_phase[player_index] = 0                   # 0x5052A
     handle_tport(state, state.players[player_index].mob_slot, player_index)
 
@@ -3775,7 +3774,7 @@ def tport_player_move(state: GameState, player_index: int) -> None:
     ``player_tile_or_tport_dest`` -- the same word the camera is already
     panning towards.
     """
-    landing = state.player_tile_pos[player_index] & 0x3FF
+    landing = state.player_tile_or_tport_dest[player_index] & 0x3FF
     destination_pad = state.player_tport_type[player_index] & 0x3FF
     corner_transport = (
         destination_pad == 0
@@ -3794,14 +3793,14 @@ def tport_player_move(state: GameState, player_index: int) -> None:
             )
             if candidate < FIRST_PLAYABLE_SLOT:
                 continue
-            if not _tile_on_screen_test(state, candidate):
+            if not tile_on_screen_test(state, candidate):
                 continue
             if tport_check_dest(state, candidate, player_index):
                 continue
             if not nearby_mob_clearance_test(state, candidate, player_index):
                 continue
             landing = candidate
-            state.player_tile_pos[player_index] = candidate
+            state.player_tile_or_tport_dest[player_index] = candidate
             break
     if (
         corner_transport
@@ -3811,14 +3810,14 @@ def tport_player_move(state: GameState, player_index: int) -> None:
         # 0x5078E-0x507E8: corner transport may land on an ordinary software
         # wall marker. pf_replace turns both the logical tile and descriptor
         # VRAM into floor before the normal destination check and player move.
-        from .shots import _pf_replace
+        from .shots import pf_replace
 
         if (
             state.secret_trick_id == 4
             and state.mobs.obj_type(landing) == int(MazeObjIds.WALL_SECRET)
         ):
-            state.secret_winner = player_index                   # 0x507B8-0x507D4
-        _pf_replace(state, landing, int(MazeObjIds.TILE_FLOOR))
+            state.secret_player = player_index                   # 0x507B8-0x507D4
+        pf_replace(state, landing, int(MazeObjIds.TILE_FLOOR))
     if destination_pad:
         _dialog(state, player_index, _DIALOG_TRANSPORTER)  # 0x50840-0x5084C
     if _move_player_to_slot(state, player_index, landing):
@@ -4069,7 +4068,7 @@ def _player_fight_collision(
 
         from .shots import (
             _MAZEOBJ_BASE_PICTURE_TBL,
-            _dragon_proximity,
+            dragon_player_proximity,
             tport_cycle_start,
         )
 
@@ -4095,7 +4094,7 @@ def _player_fight_collision(
             slot, _MAZEOBJ_BASE_PICTURE_TBL[reward],
             hpos, vpos, reward, 0,
         )
-        _dragon_proximity(state, slot)
+        dragon_player_proximity(state, slot)
         return 0
 
     if (obj_type == int(MazeObjIds.PLAYERSTART)
@@ -4196,26 +4195,26 @@ def _player_fight_collision(
             return 0
         from .monsters import (
             _anim_add_high,
-            _refresh_monster_picture,
-            _supersorc_place,
+            monster_update_anim_tile,
+            supersorc_place,
         )
 
         _anim_add_high(state, slot, 0xE0)
         state.mobs.hpos[slot] &= ~0x30
-        destination = _supersorc_place(state, slot)
+        destination = supersorc_place(state, slot)
         current = destination if destination is not None else slot
         if state.mobs.picture[current]:
-            _refresh_monster_picture(
+            monster_update_anim_tile(
                 state, current, int(MazeObjIds.MONST_SUPERSORC),
             )
         return -1 if destination is not None and destination != slot else 0
 
     if (obj_type == int(MazeObjIds.MONST_SORC)
             and state.mobs.hpos[slot] & 0x10):
-        from .monsters import _refresh_monster_picture
+        from .monsters import monster_update_anim_tile
 
         state.mobs.hpos[slot] &= ~0x10
-        _refresh_monster_picture(state, slot, obj_type)
+        monster_update_anim_tile(state, slot, obj_type)
         return 1
 
     if (
@@ -4293,7 +4292,7 @@ def _push_movable_wall(
                 blocker_type == int(MazeObjIds.EXIT)
                 and state.secret_trick_id == 10
             ):
-                state.secret_winner = player_index               # 0x42846-0x42A1A
+                state.secret_player = player_index               # 0x42846-0x42A1A
             from .shots import tport_cycle_start
 
             tport_cycle_start(state, slot, player_index)
@@ -4896,9 +4895,9 @@ def player_try_move(
     migrate_player_record(state, player_index)
     if track_thief:
         _track_thief_victim_move(state, player_index, destination)
-    from .shots import _dragon_proximity
+    from .shots import dragon_player_proximity
 
-    _dragon_proximity(state, destination, cur_slot)
+    dragon_player_proximity(state, destination, cur_slot)
     moved_dirs = _NO_MOVE
     if dx > 0:
         moved_dirs &= ~_JOY_RIGHT

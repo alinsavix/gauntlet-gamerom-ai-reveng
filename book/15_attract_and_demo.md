@@ -379,10 +379,10 @@ last screen of a cycle most players walked past. Chapter 17 comes back to Ed
 Logg for a different reason, involving nine bytes of Morse code.
 
 The demo has now quietly used every subsystem the previous chapters
-described. One thing it kept using without explanation is the voice: the
-captions arrive with speech, the joins announce themselves, and the theme
-song plays over a bouncing logo. All of that is a second computer's work,
-reached one byte at a time. Chapter 16 walks the wire.
+described. One thing it kept using without explanation is the voice: joins
+announce themselves and the theme song plays over a bouncing logo, while the
+captions themselves are game-CPU dialog writes. The audio is a second
+computer's work, reached one byte at a time. Chapter 16 walks the wire.
 
 ---
 
@@ -420,7 +420,7 @@ reached one byte at a time. Chapter 16 walks the wire.
 >   `player_character`, making it a class rather than the direction earlier
 >   revisions of `doc/04_game_subsystems.md` §6.2 recorded; that section now
 >   carries the corrected reading.
-> - Captions: `demo_speech_cmd` (0x4C9A2), record table 0x5815C (12
+> - Captions: `demo_message_show` (0x4C9A2), record table 0x5815C (12
 >   entries), strings 0x5828C–0x584FF; the box sets `dialog_timer`
 >   (0x904A9E) to 0x96 or 0x78 at 0x4CB34/0x4CB3E, which is what freezes
 >   the gameplay block described in `doc/03_game_rom_structure.md` §2.1.
@@ -450,7 +450,7 @@ reached one byte at a time. Chapter 16 walks the wire.
 >   same register `main_handle_potions` reads at 0x47020;
 >   `doc/04_game_subsystems.md` §15 and §6.4;
 >   the free-play arm at 0x484A8–0x484C4 pairs it with
->   `player_init_for_coin` (0x488CA).
+>   `player_coindrop` (0x488CA).
 > - Legend: `load_legend_page` (0x4CD1C) loads maze 103, blanks a 29×30
 >   text block, then dispatches selector 2 to the item page (0x4CFDA),
 >   selector 1 to the monster page (0x4CDB8, which also forces palette

@@ -263,8 +263,8 @@ evidence remains in `../doc/`, generated contracts, and the book.
 59. **Secret eligibility is copied at level setup.** Zeroing
     `secret_possible_counter` during live play does not retroactively arm the
     maze: `maze_new_level_setup` must copy the current header trick into
-    `trick_tasknum`, followed by the normal solo-party cancellation. A forced
-    invitation needs a stable valid `trick_player`; disable the ordinary task so
+    `secret_trick_id`, followed by the normal solo-party cancellation. A forced
+    invitation needs a stable valid `secret_player`; disable the ordinary task so
     later exit checks cannot replace it, then let the ordinary exit status and
     `show_level_start_screen` consume it.
 60. **Secret hint text is many-to-one.** The ROM's invitation hints deliberately
@@ -289,6 +289,13 @@ evidence remains in `../doc/`, generated contracts, and the book.
     `getrandom(3)` result; above level six, non-secret mazes then designate one
     authored food as picture 0x277B. Initialize random-wall cursors in the same
     setup pass, not on their first gameplay call.
+64. **Addressed names are contracts.** A one-to-one Python routine, modeled RAM
+    field, or literal ROM table uses the address-associated name from
+    `doc/07_function_index.md` or `doc/05_data_reference.md` (with normal
+    constant casing). Different names are reserved for explicit representation
+    boundaries: merged/decomposed routines, class-scoped fields whose owner
+    makes a prefix redundant, and polarity-normalized or host-only views. Record
+    those exceptions rather than silently inventing a second name.
 
 ## Investigation workflow
 

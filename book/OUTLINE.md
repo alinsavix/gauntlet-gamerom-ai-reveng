@@ -251,8 +251,8 @@ These are targeted rechecks, not invitations to redo the whole project:
 
 1. **Normal maze order and the maze rotation. Resolved.** Selection is a
    deterministic, cabinet-persistent rotation, not a randomizer, and it never
-   consults `getrandom`. `mazerand_num` (0x904010, the resume position) and
-   `mazerand_adder` (0x90400E, the stride, masked to 0–7) live in EEPROM;
+   consults `getrandom`. `maze_number` (0x904010, the resume position) and
+   `maze_stride` (0x90400E, the stride, masked to 0–7) live in EEPROM;
    `maze_checknum` (0x52ECA) substitutes a candidate of 5 with the resume
    value. Mazes 0–4 are always levels 1–5; level 6 is wherever the rotation
    stands, which is maze 5 only on a fresh EEPROM. There is no repeat

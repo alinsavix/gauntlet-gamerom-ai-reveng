@@ -110,7 +110,7 @@ def test_a_frame_runs():
     state = GameState(game_mode=GameMode.NORMAL)
     tick(state)
     assert state.frame_counter == 1
-    assert state.vblank_flag == 0
+    assert state.vblank_semaphore == 0
 
 
 def test_vblank_advances_the_hurt_palette_timer():
@@ -172,7 +172,7 @@ def test_frame_overflow_sets_then_decays():
     tick(state)
     assert state.frame_overflow == 0, "a frame that fits changes nothing"
 
-    state.vblank_flag = 1          # another field finished while we worked
+    state.vblank_semaphore = 1          # another field finished while we worked
     check_frame_overflow(state)
     assert state.frame_overflow == 8
 

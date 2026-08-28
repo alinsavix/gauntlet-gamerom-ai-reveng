@@ -59,7 +59,7 @@ def _clear_game_state(state: GameState) -> None:
     """Zero the frame/overflow bookkeeping (§5 step 2)."""
     state.frame_counter = 0
     state.frame_overflow = 0
-    state.vblank_flag = 0
+    state.vblank_semaphore = 0
     state.dialog_timer = 0
 
 

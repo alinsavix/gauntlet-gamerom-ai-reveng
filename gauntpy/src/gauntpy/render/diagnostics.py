@@ -174,7 +174,7 @@ def _player_page_rows(
                 f"{state.debounce_shift_fire[player.index]:04X} "
                 f"a{live.anim_counter:04X} f{state.player_fighting_dir[player.index]} "
                 f"s{state.player_shooting[player.index]:04X} "
-                f"w{state.player_walk_dirs[player.index]:02X}",
+                f"w{state.player_joystick[player.index]:02X}",
             ),
             (
                 "  TIMERS",
@@ -232,17 +232,17 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
             f"{state.level_flags_3:02X} {state.level_flags_4:02X}",
         ),
         ("WRAP", f"H={int(state.wrap_h)} V={int(state.wrap_v)}"),
-        ("ROTATION", f"resume={state.maze_resume} stride={state.maze_stride}"),
+        ("ROTATION", f"resume={state.maze_number} stride={state.maze_stride}"),
         ("IDLE/ESCAPE", f"{state.idle_timer} / {state.escape_timer}"),
         ("TREASURE", f"timer={state.treasure_timer} next={state.level_next_treasure}"),
         ("POTION NEXT", str(state.level_next_potion)),
-        ("BONUS", f"timer={state.bonus_timer} amount={state.bonus_amount}"),
+        ("BONUS", f"timer={state.global_delay_timer} amount={state.bonus_amount}"),
         ("EXITS", f"{len(state.exit_slots)} open={state.exit_open_id:03X}"),
         ("EXIT MOVE", f"timer={state.exit_move_timer} frame={state.exit_anim_frame}"),
         ("TRANSPORTERS", str(transporters)),
         ("SECRET TRICK", secret_trick),
         ("SECRET ID", f"{state.secret_trick_id:02X} last={state.secret_trick_last:02X}"),
-        ("SECRET WIN", f"{state.secret_winner} hint={state.secret_need_hint}"),
+        ("SECRET WIN", f"{state.secret_player} hint={state.secret_need_hint}"),
         ("SECRET COUNT", f"{state.secret_possible_counter}/{state.secret_possible_start}"),
         (
             "SECRET FLAGS",
@@ -294,7 +294,7 @@ def _ai_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return (
         ("IT TARGET", "none" if state.player_it == 0xFFFF else f"P{state.player_it + 1}"),
         ("MONSTER ITER", f"{state.monster_iter_ptr:03X}"),
-        ("SPAWN BONUS", str(state.spawn_probability_bonus)),
+        ("SPAWN BONUS", str(state.monster_spawn_probability_bonus)),
         ("GEN RETRY", str(state.monster_generation_retry_timer)),
         ("SLOWMO", str(state.monster_slowmo_timer)),
         ("THIEF MODE", str(state.thief_mode)),
@@ -333,7 +333,7 @@ def _display_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         ("TPORT CYCLE", f"{state.tport_cycle_pos} dir={state.tport_cycle_dir}"),
         ("FORCEFIELD", f"{state.forcefield_color:04X} step={state.forcefield_step}"),
         ("FF TIMER", str(state.forcefield_step_timer)),
-        ("FF SEGMENTS", str(len(state.forcefield_segments))),
+        ("FF SEGMENTS", str(len(state.forcefield_segment_table))),
         ("PALETTE A/B", f"{state.palette_pulse_dir_a}/{state.palette_pulse_dir_b}"),
         ("DISPLAY ENABLE", str(state.score_display_enabled)),
     )

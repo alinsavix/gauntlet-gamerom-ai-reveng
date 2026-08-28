@@ -230,9 +230,9 @@ class TestMagicGate:
         assert state.dragon_state == _ST_WAKING
         assert state.dragon_anim_ctr == 0
 
-        from gauntpy.subsystems.shots import _dragon_proximity
+        from gauntpy.subsystems.shots import dragon_player_proximity
 
-        _dragon_proximity(state, dragon)
+        dragon_player_proximity(state, dragon)
         assert state.dragon_anim_ctr == 0x31
         for _ in range(49):
             main_handle_dragon(state)

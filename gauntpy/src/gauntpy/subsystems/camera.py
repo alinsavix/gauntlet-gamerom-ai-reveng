@@ -122,7 +122,7 @@ def main_scroll_playfield(state: GameState) -> None:
     if state.level_players_active <= 0:
         return
 
-    # ``player_in_maze`` / ``player_tile_pos`` (0x904BCE / 0x904BD8) are
+    # ``player_in_maze`` / ``player_tile_or_tport_dest`` (0x904BCE / 0x904BD8) are
     # maintained by ``main_move_players`` (WP-5/6), which runs earlier in the
     # frame; the camera only reads them here (§17).
     target = _camera_target(state)
@@ -149,7 +149,7 @@ def main_scroll_playfield(state: GameState) -> None:
         state.scroll_y = target_y
 
     # --- Step 4: clamp to legal scroll range ---
-    _scroll_set_position(state)
+    set_scroll_pos(state)
 
 
 def snap_camera(state: GameState) -> None:
@@ -161,7 +161,7 @@ def snap_camera(state: GameState) -> None:
     if target is None:
         return
     state.scroll_x, state.scroll_y = target
-    _scroll_set_position(state)
+    set_scroll_pos(state)
 
 
 def scroll_to_slot(state: GameState, packed_slot: int) -> None:
@@ -170,10 +170,10 @@ def scroll_to_slot(state: GameState, packed_slot: int) -> None:
     row_bits = packed_slot & 0x03E0
     state.scroll_y = 0x01E8 - ((row_bits ^ 0x03E0) >> 1) - 0x6C
     state.scroll_x = ((packed_slot & 0x1F) << 4) - 4 - CAM_X_SHIFT
-    _scroll_set_position(state)
+    set_scroll_pos(state)
 
 
-def _scroll_set_position(state: GameState) -> None:
+def set_scroll_pos(state: GameState) -> None:
     """0x46F56 -- clamp scroll registers to the legal playfield range.
 
     When a wrap flag is clear the axis is bounded.  When set, the scroll

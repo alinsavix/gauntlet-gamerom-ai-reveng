@@ -240,7 +240,7 @@ class TestArguments:
 def test_front_end_character_commit_uses_the_selected_hero_picture():
     """The no-ROM front-end path finalizes a real Wizard MOB with core artwork."""
     from gauntpy.coords import encode_hpos, encode_vpos_at_y, slot_to_pixels
-    from gauntpy.subsystems.players import _PLAYER_IDLE_PICTURE, _PORT_DIR_TO_ROM_DIR
+    from gauntpy.subsystems.players import _ANIM_TABLE_IDLE, _PORT_DIR_TO_ROM_DIR
     from gauntpy.subsystems.session import main_start_game
 
     state = GameState(game_mode=GameMode.NORMAL, maze=object())
@@ -258,7 +258,7 @@ def test_front_end_character_commit_uses_the_selected_hero_picture():
 
     player = state.players[1]
     assert player.active
-    assert state.mobs.picture[player.mob_slot] == _PLAYER_IDLE_PICTURE[
+    assert state.mobs.picture[player.mob_slot] == _ANIM_TABLE_IDLE[
         int(Character.WIZARD) * 8 + _PORT_DIR_TO_ROM_DIR[player.direction]
     ]
 
@@ -323,12 +323,12 @@ class TestBuildState:
     def test_the_spawn_uses_the_core_rom_idle_picture(self):
         state = play.build_state(1, Character.ELF)
         from gauntpy.subsystems.players import (
-            _PLAYER_IDLE_PICTURE,
+            _ANIM_TABLE_IDLE,
             _PORT_DIR_TO_ROM_DIR,
         )
 
         player = state.players[0]
-        assert state.mobs.picture[player.mob_slot] == _PLAYER_IDLE_PICTURE[
+        assert state.mobs.picture[player.mob_slot] == _ANIM_TABLE_IDLE[
             int(Character.ELF) * 8 + _PORT_DIR_TO_ROM_DIR[player.direction]
         ]
 
@@ -411,7 +411,7 @@ class TestBuildState:
             encode_vpos_at_y(176, 3, 3), MazeObjIds.PLAYERSTART, 0,
         )
         player.mob_slot = slot
-        state.player_tile_pos[0] = slot
+        state.player_tile_or_tport_dest[0] = slot
         snap_camera(state)
         state.movement_type = 2
 
@@ -470,7 +470,7 @@ class TestBuildState:
                 encode_vpos_at_y(10, 3, 3), MazeObjIds.PLAYERSTART, 0,
             )
             player.mob_slot = slot
-            state.player_tile_pos[0] = slot
+            state.player_tile_or_tport_dest[0] = slot
             snap_camera(state)
             state.movement_type = 2
 
@@ -486,7 +486,7 @@ class TestBuildState:
         from gauntpy.constants import PlayerPower
         from gauntpy.subsystems.players import (
             _INVIS_TIMER_LOAD,
-            _REPULSE_TIMER_INIT,
+            _CHARACTER_REPULSE_TIMER_INIT,
             _SUPERSHOT_CHARGES,
         )
 
@@ -511,7 +511,7 @@ class TestBuildState:
             | int(PlayerPower.SUPERSHOT)
         )
         assert state.player_invis_timer[0] == _INVIS_TIMER_LOAD
-        assert state.player_repulse_timer[0] == _REPULSE_TIMER_INIT[Character.ELF]
+        assert state.player_repulse_timer[0] == _CHARACTER_REPULSE_TIMER_INIT[Character.ELF]
         assert player.supershot == _SUPERSHOT_CHARGES
 
     def test_a_built_level_survives_a_run_of_real_frames(self):

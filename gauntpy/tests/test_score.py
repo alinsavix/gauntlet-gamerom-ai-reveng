@@ -612,7 +612,7 @@ def test_dialog_sets_the_rom_box_geometry_and_owner() -> None:
     state = _normal_state()
     dialog_first_encounter(state, 2, 1 << 0)
     # 0x4C54C: three rows plus one per extra line; record 0 has three lines.
-    assert state.dialog_box_rows == 5
+    assert state.dialog_box_height == 5
     assert state.dialog_box_width == max(len(s) for s in DIALOG_MESSAGES[0])
     assert state.dialog_player == 2
 
@@ -699,7 +699,7 @@ def test_the_countdown_clears_the_message_at_zero() -> None:
 
     assert state.dialog_timer == 0
     assert state.dialog_message == []
-    assert state.dialog_box_rows == 0
+    assert state.dialog_box_height == 0
 
 
 def test_dialog_clear_message_empties_the_record() -> None:

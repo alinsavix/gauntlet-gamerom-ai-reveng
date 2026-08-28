@@ -78,7 +78,7 @@
 
 ### 2.1 Jump Table Entries
 
-| Address | Target | Function Name | 
+| Address | Target | Function Name |
 |---------|--------|---------------|
 | `0x40000` | `0x4014c` | `game_start` |
 | `0x40000` | `game_start` | JMP to game entry point (must be `0x4EF9` + address) |
@@ -143,7 +143,7 @@
 | 0x49498 | playfield_showscore | takes mob id and amount to score, overlays score for that mob dying (or that food being collected) at that spot |
 | 0x495a6 | monster_playerhit | handles monster hitting a player - removes health, plays sounds, removes monster if needed (e.g. is a host), etc |
 | 0x49a3c | death_damagetrack | tracks damage dealt by a death, removes the death if >= 200 |
-| 0x49a98 | sound_player_hurt | takes the player id (and maybe something else) and if it's been long enough, plays an appropriate 'hurt' sound ("ow" or whatever) | 
+| 0x49a98 | sound_player_hurt | takes the player id (and maybe something else) and if it's been long enough, plays an appropriate 'hurt' sound ("ow" or whatever) |
 | 0x49d0e | | some kind of checking to see if the player got a high score |
 | 0x4a124 | attract_highscores | shows the 4-way-split "high score per coin" attract screen
 | 0x4ad4e | sound_speech_play | takes speech sound id, and plays it, unless speech is disabled in settings |
@@ -244,13 +244,13 @@
 | 0x904008 | 2B | scrollreg_H | Horizontal scroll |
 | 0x90400a | 2B | scrollreg_V | Vertical scroll |
 | 0x90400c | 2B | playfieldbank | Current playfield (maze?) bank |
-| 0x90400e | 2B | mazerand_adder | added (plus 1) to existing maze number to get next maze |
-| 0x904010 | 2B | mazerand_num | next level is this number + mazerand_adder |
-| 0x904012 | 4B | timer_eepromwrite | countdown timer for when to next write eeprom data |
-| 0x904016 | 2B | treas_mazerand_adder | Same as mazerand_adder, but for treasure rooms |
-| 0x904018 | 2B | treas_mazerand_num | Same as mazerand_num, but for treasure rooms |
-| 0x90401a | 2B | wallcycle_time | Related to wall cycling |
-| 0x90401c | 2B | wallcycle_type | Related to wall cycling |
+| 0x90400e | 2B | maze_stride | added (plus 1) to existing maze number to get next maze |
+| 0x904010 | 2B | maze_number | next level is this number + maze_stride |
+| 0x904012 | 4B | eeprom_write_timer | countdown timer for when to next write eeprom data |
+| 0x904016 | 2B | treas_mazerand_adder | Same as maze_stride, but for treasure rooms |
+| 0x904018 | 2B | treas_mazerand_num | Same as maze_number, but for treasure rooms |
+| 0x90401a | 2B | cyclic_wall_timer | Related to wall cycling |
+| 0x90401c | 2B | cyclic_wall_phase | Related to wall cycling |
 | 0x90401e | 2B | playfield_colorsave1 | Temp for saving old playfield color |
 | 0x904020 | 2B | playfield_colorsave2 | Temp for saving old playfield color? |
 | 0x904022 | 2B | potion_player | Which player used a potion |
@@ -269,15 +269,15 @@
 | 0x904042 | 4B | | Pointer to something about color cycling forcefields |
 | 0x904046 | 2B | forcefield_color | Color for forcefield |
 | 0x904048 | 2B | | Something related to forcefields |
-| 0x90404b | 8B | soundqueue | array of 1 byte sound ids in the queue |
-| 0x904053 | 1B | soundqueue_head | Head of sound queue |
-| 0x904054 | 1B | soundqueue_tail | Tail of sound queue |
+| 0x90404b | 8B | sound_queue | array of 1 byte sound ids in the queue |
+| 0x904053 | 1B | sound_queue_head | Head of sound queue |
+| 0x904054 | 1B | sound_queue_tail | Tail of sound queue |
 | 0x904055 | 4B | player_potionsnum | Array of 1 byte counters for how many potions each player has |
 | 0x90405a | 4B | player_keysnum | Array of 1 byte counters for how many keys each player has |
 | 0x90405f | 4B | | Derived from player score per coin, might be difficulty-related? |
-| 0x904063 | 1B | trick_player | Which player completed the secret trick |
-| 0x904064 | 1B | trick_last | Last secret trick completed |
-| 0x904065 | 1B | trick_tasknum | Trick or task number? |
+| 0x904063 | 1B | secret_player | Which player completed the secret trick |
+| 0x904064 | 1B | secret_trick_last | Last secret trick completed |
+| 0x904065 | 1B | secret_trick_id | Trick or task number? |
 | 0x904066 | 2B | | array, I think 512 2B entries, something to do with mobs? D15-D13 are animation count, D12-D10 are direction of travel |
 | 0x904866 | 2B | maze_decomp_htype1 | Maze decompression horizontal special element type 1 |
 | 0x904868 | 2B | maze_decomp_htype2 | Maze decompression horizontal special element type 2 |
@@ -346,7 +346,7 @@
 | 0x9049f2 | 2B | | something related to sounds |
 | 0x9049f4 | 2B | | something related to sounds |
 | 0x904a06 | 2B | exit_count | number of exits in maze (total number of positions, for moving exits) |
-| 0x904a08 | 2B | exit_timer | timer until exit moves, probably |
+| 0x904a08 | 2B | exit_move_timer | timer until exit moves, probably |
 | 0x904a0a | 2B | exit_open_id | possibly mob id of exit currently opening |
 | 0x904a0c | 2B | exit_close_id | possibly mob id of exit currently closing |
 | 0x904a10 | 4B | | something to do with logo colors (color cycling?) |
@@ -374,8 +374,8 @@
 | 0x904a76 | 2B[8] | | something related to doors |
 | 0x904a86 | 2B[8] | | something related to doors |
 | 0x904a96 | 4B | ptr_dialog_pos | pointer to dialog position in alphamem |
-| 0x904a9a | 2B | dialog_dim_H | dialog horizontal dimension |
-| 0x904a9c | 2B | dialog_dim_V | dialog vertical dimension |
+| 0x904a9a | 2B | dialog_box_width | dialog horizontal dimension |
+| 0x904a9c | 2B | dialog_box_height | dialog vertical dimension |
 | 0x904a9e | 2B | dialog_timer | pause timer for dialog display |
 | 0x904aa0 | 2B | | something related to dialogs |
 | 0x904aa2 | 2B | | something related to dialogs |

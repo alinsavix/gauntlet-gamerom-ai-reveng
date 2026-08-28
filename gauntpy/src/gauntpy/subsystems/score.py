@@ -247,7 +247,7 @@ def write_info_panel_header(state: GameState) -> None:
         write_alpha_text(state, 34, 1, romtext.TEXT_TIME, 0x8000)
 
 
-def write_info_panel_backdrop(state: GameState) -> None:
+def maze_hide(state: GameState) -> None:
     """Port maze_hide's opaque 13-column panel fill at 0x4529A-0x452CA."""
     fill_alpha_rect(
         state, PANEL_COLUMN, 0, PANEL_WIDTH, 30, alpha_word(0x8000),
@@ -406,7 +406,7 @@ def high_scores(state: GameState) -> list[list[tuple[int, str]]]:
     return state.high_scores
 
 
-def write_high_score_screen(state: GameState) -> None:
+def attract_highscores(state: GameState) -> None:
     """attract_highscores (0x4A124): populate its complete alpha page."""
     clear_alpha_visible(state)
     opaque_blank = alpha_word(0x8000, ALPHA_SPACE_GLYPH)
@@ -438,7 +438,7 @@ def write_high_score_screen(state: GameState) -> None:
             )
 
 
-def write_player_initials_entry(state: GameState, player_index: int) -> None:
+def draw_player_initials_entry(state: GameState, player_index: int) -> None:
     """Port draw_player_initials_entry 0x4A2CA into alpha RAM."""
     player = state.players[player_index]
     attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
@@ -526,7 +526,7 @@ def write_high_score_entry(
 # and synchronously write the same words to alpha VRAM.
 # ---------------------------------------------------------------------------
 
-def _draw_player_score(state: GameState, player_index: int) -> None:
+def draw_player_score(state: GameState, player_index: int) -> None:
     """``draw_player_score`` (0x45940) -- 7-digit score via OS 0x260.
 
     Column 0x1D, row ``player_index * 5 + 9``, field width 7, padding mode 1,
@@ -566,7 +566,7 @@ def _health_attribute(state: GameState, player_index: int) -> int:
     return attr
 
 
-def _draw_player_health(state: GameState, player_index: int) -> None:
+def draw_player_health(state: GameState, player_index: int) -> None:
     """``draw_player_health`` (0x459A2) -- bonus multiplier + 5-digit health.
 
     The multiplier occupies alpha columns 31-32 of row ``p*5+8`` and is only
@@ -706,7 +706,7 @@ def _clear_dialog_alpha(state: GameState) -> None:
         return
     fill_alpha_rect(
         state, state.dialog_box_column, state.dialog_box_row,
-        state.dialog_box_width + 2, state.dialog_box_rows, 0,
+        state.dialog_box_width + 2, state.dialog_box_height, 0,
     )
 
 
@@ -720,7 +720,7 @@ def _write_dialog_alpha(state: GameState) -> None:
     )
     fill_alpha_rect(
         state, state.dialog_box_column, state.dialog_box_row,
-        state.dialog_box_width + 2, state.dialog_box_rows,
+        state.dialog_box_width + 2, state.dialog_box_height,
         alpha_word(attribute),
     )
     for offset, line in enumerate(state.dialog_message, 1):
@@ -740,13 +740,13 @@ def dialog_clear_message(state: GameState) -> None:
     _clear_dialog_alpha(state)
     state.dialog_message = []
     state.dialog_box_width = 0
-    state.dialog_box_rows = 0
+    state.dialog_box_height = 0
     state.dialog_player = -1
     state.dialog_box_column = -1
     state.dialog_box_row = -1
 
 
-def _position_dialog_box(state: GameState, player_index: int) -> None:
+def dialog_position_box(state: GameState, player_index: int) -> None:
     """0x4CB50 -- choose an alpha-cell origin near the owning player."""
     column, row = 14, 15
     if 0 <= player_index < NUM_PLAYERS:
@@ -762,7 +762,7 @@ def _position_dialog_box(state: GameState, player_index: int) -> None:
     if row < 15:
         row += 4
     else:
-        row -= state.dialog_box_rows + 1
+        row -= state.dialog_box_height + 1
     width = state.dialog_box_width
     if (column > (width >> 1)
             and column < 29 - ((width + 1) >> 1)):
@@ -787,10 +787,10 @@ def demo_message_show(state: GameState, player_index: int,
     lines = DEMO_MESSAGES[message_index]
     dialog_clear_message(state)
     state.dialog_message = list(lines)
-    state.dialog_box_rows = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
+    state.dialog_box_height = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
     state.dialog_box_width = len(lines[0])
     state.dialog_player = player_index if 0 <= player_index < NUM_PLAYERS else -1
-    _position_dialog_box(state, state.dialog_player)
+    dialog_position_box(state, state.dialog_player)
     _write_dialog_alpha(state)
     state.dialog_timer = (
         DIALOG_TIMER_FRAMES_SHORT
@@ -882,10 +882,10 @@ def dialog_first_encounter(
 
     dialog_clear_message(state)
     state.dialog_message = [_dialog_line(line, numeric_value) for line in lines]
-    state.dialog_box_rows = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
+    state.dialog_box_height = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)
     state.dialog_box_width = max(len(line) for line in lines)
     state.dialog_player = player_index if 0 <= player_index < NUM_PLAYERS else -1
-    _position_dialog_box(state, state.dialog_player)
+    dialog_position_box(state, state.dialog_player)
     _write_dialog_alpha(state)
     state.dialog_timer = (
         DIALOG_TIMER_FRAMES_SHORT if reduce_text else DIALOG_TIMER_FRAMES
@@ -1122,7 +1122,7 @@ def main_score_display(state: GameState) -> None:
         or not field.score_drawn
         or field.score != player.score
     ):
-        _draw_player_score(state, player_index)
+        draw_player_score(state, player_index)
         state.score_dirty[player_index] = 0
 
     # Health redraw: update bit 1 OR health below 0xC8 (the warning pulse).
@@ -1133,5 +1133,5 @@ def main_score_display(state: GameState) -> None:
         or field.health != player.health
         or field.bonusmult != player.bonusmult
     ):
-        _draw_player_health(state, player_index)
+        draw_player_health(state, player_index)
         state.health_dirty[player_index] = 0

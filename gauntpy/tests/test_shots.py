@@ -1217,8 +1217,8 @@ class TestDoors:
         SLOT = 380
         _place_typed(state, SLOT, MazeObjIds.DOOR_HORIZ)
         state.mobs.set_state(SLOT, 0x08)          # state bits 0x2000
-        state.shot_sep_h = state.shot_sep_v = 0
-        state.shot_sep_h_abs = state.shot_sep_v_abs = 0x400
+        state.shothit_dist_H = state.shothit_dist_V = 0
+        state.collision_dist_H = state.collision_dist_V = 0x400
         assert resolve_shot_hit(state, SLOT, 0) == 0
 
     def test_door_reacts_to_a_shot_inside_its_box(self):
@@ -1228,10 +1228,10 @@ class TestDoors:
         state.mobs.state_link[SLOT] = (
             state.mobs.state_link[SLOT] & 0x3FF
         ) | 0x2000
-        state.shot_sep_h = 0x0100
-        state.shot_sep_h_abs = 0x0100
-        state.shot_sep_v = 0
-        state.shot_sep_v_abs = 0
+        state.shothit_dist_H = 0x0100
+        state.collision_dist_H = 0x0100
+        state.shothit_dist_V = 0
+        state.collision_dist_V = 0
         state.mobs.picture[1] = 1
         assert resolve_shot_hit(state, SLOT, 0) == -1
         assert state.mobs.picture[1] == 0
@@ -1407,8 +1407,8 @@ class TestShotCollision:
         state.mobs.hpos[cell] = (160 << 7) | 4
         state.mobs.vpos[cell] = native_v(160) << 7
         shot_mob_collision(state, cell, 0)
-        assert state.shot_sep_h == 0x200      # the ROM's +0x200
-        assert state.shot_sep_v == 0
+        assert state.shothit_dist_H == 0x200      # the ROM's +0x200
+        assert state.shothit_dist_V == 0
 
 
 # =============================================================================
@@ -2707,7 +2707,7 @@ class TestDragonProximity:
         state = _make_state()
         head = (10 << 5) | 10
         self._sleeping_dragon(state, head)
-        shots._dragon_proximity(state, (13 << 5) | 15)      # offsets +3, +5
+        shots.dragon_player_proximity(state, (13 << 5) | 15)      # offsets +3, +5
         assert state.dragon_anim_ctr == 0x31
 
     @pytest.mark.parametrize("cell_offset", [(0, 6), (5, 0)])
@@ -2716,7 +2716,7 @@ class TestDragonProximity:
         head = (10 << 5) | 10
         self._sleeping_dragon(state, head)
         drow, dcol = cell_offset
-        shots._dragon_proximity(state, ((10 + drow) << 5) | (10 + dcol))
+        shots.dragon_player_proximity(state, ((10 + drow) << 5) | (10 + dcol))
         assert state.dragon_anim_ctr == 0
 
     def test_the_box_is_ten_by_ten_around_the_primary_segment(self):
@@ -2727,27 +2727,27 @@ class TestDragonProximity:
             (-4, -5, True), (5, 4, True), (-5, 0, False), (0, 5, False),
         ):
             self._sleeping_dragon(state, head)
-            shots._dragon_proximity(state, ((10 + drow) << 5) | (10 + dcol))
+            shots.dragon_player_proximity(state, ((10 + drow) << 5) | (10 + dcol))
             assert (state.dragon_anim_ctr == 0x31) is wakes
 
     def test_no_dragon_means_nothing_happens(self):
         state = _make_state()
         state.dragon_seg_mob_ids[0] = 0
         state.dragon_state = 0x01
-        shots._dragon_proximity(state, (10 << 5) | 10)
+        shots.dragon_player_proximity(state, (10 << 5) | 10)
         assert state.dragon_anim_ctr == 0
 
     def test_a_dragon_already_moving_is_left_alone(self):
         state = _make_state()
         self._sleeping_dragon(state, (10 << 5) | 10)
         state.dragon_anim_ctr = 7
-        shots._dragon_proximity(state, (10 << 5) | 10)
+        shots.dragon_player_proximity(state, (10 << 5) | 10)
         assert state.dragon_anim_ctr == 7
 
     def test_the_box_folds_on_a_wrapping_level(self):
         state = _make_state()
         self._sleeping_dragon(state, (10 << 5) | 1)
-        shots._dragon_proximity(state, (10 << 5) | 30)      # dx 29 -> 3
+        shots.dragon_player_proximity(state, (10 << 5) | 30)      # dx 29 -> 3
         assert state.dragon_anim_ctr == 0x31
 
     def test_stun_clears_when_an_event_enters_the_box(self):
@@ -2756,7 +2756,7 @@ class TestDragonProximity:
         state.dragon_seg_mob_ids[0] = head
         state.dragon_state = 0x02
 
-        shots._dragon_proximity(state, head)
+        shots.dragon_player_proximity(state, head)
 
         assert state.dragon_state == 0
         assert state.sound_log[-1] == 0xD5
@@ -2767,7 +2767,7 @@ class TestDragonProximity:
         state.dragon_seg_mob_ids[0] = head
         state.dragon_state = 0x02
 
-        shots._dragon_proximity(state, head + 1, head)
+        shots.dragon_player_proximity(state, head + 1, head)
 
         assert state.dragon_state == 0x02
 
@@ -2779,7 +2779,7 @@ class TestDragonProximity:
         outside = (10 << 5) | 16
         inside = (10 << 5) | 15
 
-        shots._dragon_proximity(state, inside, outside)
+        shots.dragon_player_proximity(state, inside, outside)
 
         assert state.dragon_state == 0
 
@@ -3013,7 +3013,7 @@ class TestPfReplace:
         state.maze = _FakeMaze(wallpattern=0)
         state.maze.data[(9, 9)] = int(MazeObjIds.WALL_DESTRUCTABLE)
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        shots._pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
+        shots.pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
         assert state.mobs.picture[SLOT] == 0
         assert state.mobs.link[SLOT] == 0
         assert state.mobs.obj_type(SLOT) == int(MazeObjIds.TILE_FLOOR)
@@ -3024,7 +3024,7 @@ class TestPfReplace:
         SLOT = (9 << 5) | 9
         state.maze = _FakeMaze(wallpattern=0)
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        shots._pf_replace(state, SLOT, int(MazeObjIds.WALL_REGULAR))
+        shots.pf_replace(state, SLOT, int(MazeObjIds.WALL_REGULAR))
         assert state.mobs.obj_type(SLOT) == int(MazeObjIds.WALL_REGULAR)
         assert state.mobs.picture[SLOT] != 0
         assert state.maze.data[(9, 9)] == int(MazeObjIds.WALL_REGULAR)
@@ -3035,7 +3035,7 @@ class TestPfReplace:
         SLOT = (9 << 5) | 9
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE,
                      picture=0x8000, x=160, y=160)
-        shots._pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
+        shots.pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
         assert state.mobs.picture[SLOT] == 0
         assert state.mobs.link[SLOT] == 0
         assert state.mobs.hpos[SLOT] == 160 << 7
@@ -3046,7 +3046,7 @@ class TestPfReplace:
         state = _make_state()
         SLOT = (9 << 5) | 9
         state.mobs.hpos[SLOT] = 160 << 7
-        shots._pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
+        shots.pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
         assert state.mobs.hpos[SLOT] == 160 << 7
 
 

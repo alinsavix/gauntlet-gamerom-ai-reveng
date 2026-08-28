@@ -7,7 +7,7 @@ module keeps the ROM's state-machine and projectile decisions independent of it.
 
 The dragon owns no projectile channel of its own: ``dragon_find_free_shot_slot``
 (0x540E8) hands its fire one of the four *monster* shot channels, MOB slots 5-8,
-so everything after ``_dragon_fire_setup`` -- animation, motion, collision box,
+so everything after ``dragon_fire_setup`` -- animation, motion, collision box,
 damage row -- is ``shots.py``'s demon path acting on the H word written here.
 """
 
@@ -53,13 +53,13 @@ _DRAGON_PATH_PROGRAMS = (
 # ``pose + facing*2`` index the fire/segment tables use.  Each (pose, facing)
 # therefore owns *two* adjacent entries, selected by the path byte's fire bit:
 # the head lengthens along the facing when the mouth opens.
-_HEAD_HDELTA = (
+_DRAGON_HEAD_HDELTA = (
     20, 20, 12, 12, 4, 4, -4, -4,       # facing 0 (up): pose ramp
     9, 19, 9, 19, 9, 19, 9, 19,         # facing 2 (right): mouth extends right
     20, 20, 12, 12, 4, 4, -4, -4,       # facing 4 (down): pose ramp
     4, -6, 4, -6, 4, -6, 4, -6,         # facing 6 (left): mouth extends left
 )
-_HEAD_VDELTA = (
+_DRAGON_HEAD_VDELTA = (
     8, 18, 8, 18, 8, 18, 8, 18,         # facing 0: mouth extends up
     20, 20, 12, 12, 4, 4, -4, -4,       # facing 2: pose ramp
     4, -6, 4, -6, 4, -6, 4, -6,         # facing 4: mouth extends down
@@ -70,7 +70,7 @@ _HEAD_VDELTA = (
 # MOBs owns the shot; the two pose tables (0x5D4C8/0x5D4E8) and the two facing
 # tables (0x5D428/0x5D430) are the muzzle offset.  Every entry is a multiple of
 # 0x80 -- a whole pixel -- so the tables are stated in pixels here and shifted
-# back by ``POS_SHIFT`` on use, the same way ``_HEAD_HDELTA`` above is.
+# back by ``POS_SHIFT`` on use, the same way ``_DRAGON_HEAD_HDELTA`` above is.
 # Both axes keep the hardware's sense, so a positive V entry walks *up*.
 _DRAGON_FIRE_SEGMENT_TBL = (
     3, 3, 1, 1, 3, 3, 2, 2,
@@ -129,7 +129,7 @@ _DRAGON_HEAD_PICS = (
 # long-range fireball, both picked by ``shots.shot_picture``.
 
 
-def setup_dragon_segments(state: GameState, primary_slot: int) -> None:
+def dragon_setup_segments(state: GameState, primary_slot: int) -> None:
     """0x5496E -- initialize the four-slot 2×2 dragon footprint."""
     row = primary_slot & 0x3E0
     right = row | ((primary_slot + 1) & 0x1F)
@@ -145,7 +145,7 @@ def setup_dragon_segments(state: GameState, primary_slot: int) -> None:
     state.dragon_facing = 4
     state.dragon_move_state = 0x1044
     state.dragon_hits = 0
-    _update_dragon_pose(state, primary_slot)
+    dragon_head_pose_update(state, primary_slot)
 
 
 def _segments(state: GameState) -> list[int]:
@@ -173,18 +173,18 @@ def _dragon_slot(state: GameState) -> int | None:
         and state.dragon_mob_slot
         and state.mobs.obj_type(state.dragon_mob_slot) == int(MazeObjIds.MONST_DRAGON)
     ):
-        setup_dragon_segments(state, state.dragon_mob_slot)
+        dragon_setup_segments(state, state.dragon_mob_slot)
     segments = _segments(state)
     slot = segments[0] if segments else 0
     if slot and state.mobs.obj_type(slot) == int(MazeObjIds.MONST_DRAGON):
         return slot
     if state.dragon_mob_slot and state.mobs.obj_type(state.dragon_mob_slot) == int(MazeObjIds.MONST_DRAGON):
         if not state.dragon_seg_mob_ids[0]:
-            setup_dragon_segments(state, state.dragon_mob_slot)
+            dragon_setup_segments(state, state.dragon_mob_slot)
         return state.dragon_mob_slot
     for slot in state.mobs.iter_chain():
         if state.mobs.obj_type(slot) == int(MazeObjIds.MONST_DRAGON):
-            setup_dragon_segments(state, slot)
+            dragon_setup_segments(state, slot)
             return slot
     return None
 
@@ -218,7 +218,7 @@ def _head_index(state: GameState) -> int:
     return _current_path_byte(state) + (state.dragon_facing & 0x06) * 4
 
 
-def _update_dragon_pose(state: GameState, head_slot: int) -> None:
+def dragon_head_pose_update(state: GameState, head_slot: int) -> None:
     """0x545FA--0x546A4 -- publish the current head picture and hitbox origin.
 
     The ROM rebuilds both head words as ``(delta + segment word) & 0xFF80``,
@@ -229,11 +229,11 @@ def _update_dragon_pose(state: GameState, head_slot: int) -> None:
     index = _head_index(state)
     state.mobs.picture[head_slot] = _DRAGON_HEAD_PICS[index]
     state.dragon_head_hpos = (
-        state.mobs.hpos[head_slot] + (_HEAD_HDELTA[index] << POS_SHIFT)
+        state.mobs.hpos[head_slot] + (_DRAGON_HEAD_HDELTA[index] << POS_SHIFT)
     )
     state.dragon_head_hpos = position_field(state.dragon_head_hpos)
     state.dragon_head_vpos = (
-        state.mobs.vpos[head_slot] + (_HEAD_VDELTA[index] << POS_SHIFT)
+        state.mobs.vpos[head_slot] + (_DRAGON_HEAD_VDELTA[index] << POS_SHIFT)
     )
     state.dragon_head_vpos = position_field(state.dragon_head_vpos)
 
@@ -245,7 +245,7 @@ def _player_cell(state: GameState, player_index: int) -> tuple[int, int]:
     return y >> 4, x >> 4
 
 
-def _tile_near_screen(state: GameState, slot: int) -> bool:
+def tile_near_screen_test(state: GameState, slot: int) -> bool:
     """tile_near_screen_test 0x5E5D8, including its unsigned edge tests."""
     h_delta = (
         (((slot & 0x1F) << 4) << POS_SHIFT)
@@ -265,7 +265,7 @@ def dragon_any_segment_near_screen(state: GameState) -> bool:
     segments = state.dragon_seg_mob_ids
     if not segments[0]:
         return False
-    return any(_tile_near_screen(state, slot) for slot in segments)
+    return any(tile_near_screen_test(state, slot) for slot in segments)
 
 
 def _select_new_path(state: GameState) -> None:
@@ -417,7 +417,7 @@ def _update_fire_lock(state: GameState, head_slot: int) -> None:
         state.dragon_state &= ~_ST_LOCKED
 
 
-def _dragon_find_free_shot_slot(state: GameState) -> int | None:
+def dragon_find_free_shot_slot(state: GameState) -> int | None:
     """0x540E8 -- scan the demon projectile channels, MOB slot 8 down to 5.
 
     The dragon does not own channels of its own: it borrows the four ordinary
@@ -441,7 +441,7 @@ def _breathing(state: GameState) -> bool:
     return (high >> 8) <= _BREATH_RANGE_CELLS
 
 
-def _dragon_fire_setup(state: GameState, shot_slot: int) -> None:
+def dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     """0x54748 -- arm one demon channel with the dragon's projectile.
 
     Everything is written for the channel, ``shot_slot - 1``, never for the
@@ -536,15 +536,15 @@ def _run_active_path(state: GameState, head_slot: int) -> None:
         _update_fire_lock(state, head_slot)
         return
 
-    _update_dragon_pose(state, head_slot)
+    dragon_head_pose_update(state, head_slot)
     if (
         _current_path_byte(state) & 1
         and state.dragon_fire_cooldown == 0
         and (state.dragon_move_state & 0x0F) < 4
     ):
-        shot_slot = _dragon_find_free_shot_slot(state)
+        shot_slot = dragon_find_free_shot_slot(state)
         if shot_slot is not None:
-            _dragon_fire_setup(state, shot_slot)
+            dragon_fire_setup(state, shot_slot)
     _choose_move_direction(state, head_slot)
     _update_fire_lock(state, head_slot)
 

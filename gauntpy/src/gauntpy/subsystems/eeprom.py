@@ -223,8 +223,8 @@ def _parse_high_score_image(data) -> list | None:
 # range-checks each before it lets the rotation run. Verified at
 # 0x42FF2-0x43066 in row76.bin, in this order:
 #
-#   0x904010 mazerand_num       -> maze_resume         (>= 5, real maze record)
-#   0x90400E mazerand_adder     -> maze_stride         (& 7)
+#   0x904010 maze_number       -> maze_number         (>= 5, real maze record)
+#   0x90400E maze_stride     -> maze_stride         (& 7)
 #   0x904018 treas_mazerand_num -> treas_mazerand_num  (104..114 else 104)
 #   0x904016 treas_mazerand_adder -> treas_mazerand_adder (& 3)
 #
@@ -233,15 +233,15 @@ def _parse_high_score_image(data) -> list | None:
 # so a rotation that has moved on is exactly what makes the cabinet save.
 
 #: Rotation resume position: where this cabinet stands in mazes 5-101.
-MAZE_RESUME_DEFAULT = 5
-MAZE_RESUME_MIN = 5
+MAZE_NUMBER_DEFAULT = 5
+MAZE_NUMBER_MIN = 5
 #: The ROM's upper guard is not a number: it indexes the Slapstic maze-pointer
 #: table with the stored byte and rejects a zero entry (0x4300A-0x4301A), i.e.
 #: "is there a maze record here at all". Every one of the 117 shipped mazes has
 #: one (doc/06 §1; ``gex.constants.MAX_MAZE_NUM``), so a range check is the
 #: ROM-free equivalent -- and this module must stay importable with no ROMs,
 #: because ``boot.one_time_init`` calls it before anything else exists.
-MAZE_RESUME_MAX = 116
+MAZE_NUMBER_MAX = 116
 
 #: Extra mazes advanced per level, masked to three bits (0x43026).
 MAZE_STRIDE_MASK = 0x07
@@ -255,13 +255,13 @@ TREASURE_STRIDE_MASK = 0x03
 
 #: The saved-image keys, in the order ``eeprom_load_config`` reads their bytes.
 _ROTATION_FIELDS = (
-    "maze_resume", "maze_stride", "treas_mazerand_num", "treas_mazerand_adder",
+    "maze_number", "maze_stride", "treas_mazerand_num", "treas_mazerand_adder",
 )
 
 
-def _valid_maze_resume(value: int) -> int:
+def _valid_maze_number(value: int) -> int:
     """0x43002-0x4301C: below 5, or naming no maze record, resets to 5."""
-    return int(value) if MAZE_RESUME_MIN <= value <= MAZE_RESUME_MAX else MAZE_RESUME_DEFAULT
+    return int(value) if MAZE_NUMBER_MIN <= value <= MAZE_NUMBER_MAX else MAZE_NUMBER_DEFAULT
 
 
 def _valid_treasure_maze(value: int) -> int:
@@ -282,7 +282,7 @@ def eeprom_validate_rotation(state: GameState) -> None:
     file, and as the one place that states the ranges WP-15's rotation is
     allowed to walk.
     """
-    state.maze_resume = _valid_maze_resume(state.maze_resume)
+    state.maze_number = _valid_maze_number(state.maze_number)
     state.maze_stride &= MAZE_STRIDE_MASK
     state.treas_mazerand_num = _valid_treasure_maze(state.treas_mazerand_num)
     state.treas_mazerand_adder &= TREASURE_STRIDE_MASK
@@ -297,7 +297,7 @@ def _rotation_image(state: GameState) -> dict:
     power cycle.
     """
     return {
-        "maze_resume": _valid_maze_resume(state.maze_resume),
+        "maze_number": _valid_maze_number(state.maze_number),
         "maze_stride": int(state.maze_stride) & MAZE_STRIDE_MASK,
         "treas_mazerand_num": _valid_treasure_maze(state.treas_mazerand_num),
         "treas_mazerand_adder": int(state.treas_mazerand_adder) & TREASURE_STRIDE_MASK,
@@ -307,7 +307,7 @@ def _rotation_image(state: GameState) -> dict:
 def _factory_rotation() -> dict:
     """A fresh cabinet's config block (ROM 0x42FC4-0x42FC8 builds it inline)."""
     return {
-        "maze_resume": MAZE_RESUME_DEFAULT,
+        "maze_number": MAZE_NUMBER_DEFAULT,
         "maze_stride": 0,
         "treas_mazerand_num": TREASURE_MAZE_DEFAULT,
         "treas_mazerand_adder": 0,

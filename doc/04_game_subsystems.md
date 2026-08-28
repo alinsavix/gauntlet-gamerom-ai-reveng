@@ -397,7 +397,7 @@ Processes all 4 player slots each frame. Four main sections:
 
 1. **Game mode gate:** If `game_mode ≥ 0` (normal gameplay): skip demo section. If `0xFFFD` (DEMO): use demo playback. If TITLE/SCORES/LEGEND: skip entirely.
 
-2. **Demo playback:** Reads 2-byte entries from per-player demo streams. Entry format: `[timer_byte, joystick_byte]`. Special values: `0xFF` = speech command, `0xFE` = player switch/end-of-sequence.
+2. **Demo playback:** Reads 2-byte entries from per-player demo streams. Entry format: `[timer_byte, joystick_byte]`. Special values: `0xFF` = dialog-message command, `0xFE` = player switch/end-of-sequence.
 
 3. **Per-player loop:** For each player, dispatches on `player_status`:
    - Status `0x20` (secret winner name entry): run `secret_name_entry_update`
@@ -1001,7 +1001,7 @@ Demo input streams are stored at ROM 0x5818C+. Format: 2-byte entries.
 | Byte 1 | Byte 2 | Meaning |
 |--------|--------|---------|
 | ≤ 0xFD | — | Normal timer value (countdown between events) |
-| 0xFF | argument | Speech/sound command; argument is the speech ID |
+| 0xFF | argument | Dialog-message command; argument indexes `dialog_tip_ptrs` at 0x5815C |
 | 0xFE | packed | Join command: hi nibble = **character class**, lo nibble = player slot. Writes the class to `player_character` (0x9048E8 + slot × 2), calls `player_join` (0x48BB6) on that slot, sets its timer to 1, and reloads its pointer from the ROM table at 0x58098. |
 
 **Contradicted and corrected:** the 0xFE payload's high nibble was previously
@@ -1575,7 +1575,7 @@ Called every frame. Change-detection pattern: compares `ram.coin_counters` (`0x9
 Per-player logic:
 - If all players have zero health OR `game_mode` is DEMO, AND `game_mode` < 0: call `start_attract_to_game` (0x42BE2). The extra DEMO test at 0x42BD0 exists because the demo's scripted heroes do hold health.
 - If player HAS health (active re-coining): add health from `0x57862` table, set redraw flag
-- If player has NO health (new player joining): call `player_init_for_coin` (0x488CA)
+- If player has NO health (new player joining): call `player_coindrop` (0x488CA)
 
 **Where the coin counters come from (Verified).** `coincheck` only polls
 `0x904FEC`; it never reads a coin port. That word is written exclusively by OS
@@ -1684,7 +1684,7 @@ in that state. Direct-start/resumed hosts must not turn that unreachable residue
 into a visible pre-room screen.
 
 For an ordinary transition, `main_start_game` decrements
-`global_ui_delay_timer` at 0x4817C outside the dialog-gated gameplay band. At
+`global_delay_timer` at 0x4817C outside the dialog-gated gameplay band. At
 zero it resumes the level and calls `maze_show` (0x4526A), which clears alpha
 columns 0–28 and 42–63 on every row while preserving the opaque status-panel
 columns 29–41. Omitting that teardown leaves the level splash covering live play.
@@ -1692,7 +1692,7 @@ The ordinary `LEVEL:` descriptor starts at alpha column 4; its colon uses the
 OS large font's one-cell quad `(0x6D, 0x6D, 0, 0)`, leaving column 15 blank
 before `display_large_decimal_value` begins its three-character field at 16.
 
-`secret_bonus_earned` (0x4D1A4) supplies the secret-room award predicate. It
+`secret_check_winner` (0x4D1A4) supplies the secret-room award predicate. It
 checks the active challenge code and the entrant's progress (and scans the
 playfield for challenge 0x53), returning -1 when the 5,000-per-coin bonus is
 earned and 0 otherwise.
@@ -1715,11 +1715,11 @@ Secret-room availability is paced by a pair of level counters:
 - The same routine's 0x44F7E–0x450F8 display arm writes the complete 600-frame invitation into alpha RAM: `SECRET ROOM`, the winner's color and character, `YOU HAVE PERFORMED` / `A SECRET TRICK`, the small and large countdowns, and the optional qualifier descriptor. This is game-side video state, not renderer-composed text.
 - The winner labels are OS large text, not ordinary alpha strings. At 0x44FB8/0x44FE4 the routine follows pointers to fixed-width ROM records (`" RED  "`, `" BLUE "`, `"YELLOW"`, `"GREEN "` and `"WARRIOR "`, `"VALKYRIE"`, `" WIZARD "`, `"  ELF   "`), then calls API 0x26C at columns 0 and 13 on row 7. Their leading/trailing spaces are positioning data: the large space glyph advances two alpha cells, so stripping the padding or using the small-font writer moves `RED` to the physical left edge. A direct MAME 0.289 call to 0x44DB4 confirms that the arcade intentionally presents the color and class as two widely separated fields; `RED` and `ELF` are not a single adjacent phrase.
 - `secret_need_hint` (0x90486E) is a separate discovery latch, set when a secret wall opens (0x4B6B0) or the dragon drops its hidden reward (0x54414). `level_splash` consumes it at 0x4C04E–0x4C108: it writes `TO ENTER SECRET ROOM:`, then uses the selected upcoming maze header's objective when the availability counter is zero and the level-12 gate for trick 9 passes; otherwise it chooses one of the 17 hint strings randomly. The latch is cleared after the alpha writes.
-- Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872). Ordinary-maze hooks in `resolve_shot_hit` include trick 5 (shoot food), trick 9 (get hit), and trick 17 (hurt another player); the same array is reused for challenge codes 0x50–0x5D. Tricks 1–4 and 10 are different: their successful movement paths write `trick_player` directly—transport beside Acid/Death (0x50C30), transport into an exit (0x50916), corner transport through a secret wall (0x507B8), or push a movable wall into an exit (0x42846–0x42A1A)—without incrementing the progress bytes.
+- Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872). Ordinary-maze hooks in `resolve_shot_hit` include trick 5 (shoot food), trick 9 (get hit), and trick 17 (hurt another player); the same array is reused for challenge codes 0x50–0x5D. Tricks 1–4 and 10 are different: their successful movement paths write `secret_player` directly—transport beside Acid/Death (0x50C30), transport into an exit (0x50916), corner transport through a secret wall (0x507B8), or push a movable wall into an exit (0x42846–0x42A1A)—without incrementing the progress bytes.
 - The seventeen strings at 0x59786 are hints, not unique specifications: tricks 1–4 all say `TRY TRANSPORTABILITY`, 5–6 both say `WATCH WHAT YOU SHOOT`, and 12/14 both say `DON'T BE GREEDY`. Their consumers distinguish them. In particular, trick 1 requires landing beside object type 0x19 (Acid), not a Demon; trick 4 is corner transport through a secret wall; tricks 5/6 require two food/secret-wall shots; and tricks 12/13/14 forbid keys-or-potions, food, and treasure respectively.
 - Two English names are looser than their predicates. Trick 9 accepts when `secret_tricks_flags[player] & 3 == 0` at 0x52BF0–0x52BFC. Dragon fire increments that byte at 0x4B2A2, but the killing shot writes 2 at 0x54420–0x54444 unless the byte is already 1; consequently “kill the dragon without getting hit” is not an accurate specification of the shipped code. Trick 17 writes 1 as soon as a player shot resolves any player at 0x4B046–0x4B052, before the damage/stun gates and before the later shooter/victim comparison; a harmless hit, including a reflected self-hit, still fails it.
-- `secret_bonus_earned` 0x4D1A4 gates the secret-room reward independently of finding the exit. Codes 0x50/0x51/0x5D require exact counts of six treasures/potions, 0x52/0x5B require three secret walls, 0x53 requires no remaining monster or generator, 0x56 requires the five-pad bitmask 0x3E, 0x5A requires all nineteen treasure removals, and 0x5C requires at least one IT event. Codes 0x54/0x55/0x57/0x58/0x59 have no extra progress predicate. The payout at 0x4D720 additionally requires the entrant to have reached exit status 2 or 8; only then does it award 5,000 points per coin and call `secret_getname`. The contest code editor opens only when game-settings bit 13 is enabled.
-- Availability is sampled, not continuously consulted. `maze_new_level_setup` 0x43930–0x43958 tests `secret_possible_counter` and copies the current maze-header byte into `trick_tasknum` once; changing only the counter after setup cannot arm the maze already in progress. At exit, `player_exit_sequence` 0x52B40 checks the live task and may write `trick_player` before status becomes 8. After the dissolve changes that player to status 2, `show_level_start_screen` 0x44DD6–0x44E00 requires exactly that valid player/status pair before substituting maze 115/116.
+- `secret_check_winner` 0x4D1A4 gates the secret-room reward independently of finding the exit. Codes 0x50/0x51/0x5D require exact counts of six treasures/potions, 0x52/0x5B require three secret walls, 0x53 requires no remaining monster or generator, 0x56 requires the five-pad bitmask 0x3E, 0x5A requires all nineteen treasure removals, and 0x5C requires at least one IT event. Codes 0x54/0x55/0x57/0x58/0x59 have no extra progress predicate. The payout at 0x4D720 additionally requires the entrant to have reached exit status 2 or 8; only then does it award 5,000 points per coin and call `secret_getname`. The contest code editor opens only when game-settings bit 13 is enabled.
+- Availability is sampled, not continuously consulted. `maze_new_level_setup` 0x43930–0x43958 tests `secret_possible_counter` and copies the current maze-header byte into `secret_trick_id` once; changing only the counter after setup cannot arm the maze already in progress. At exit, `player_exit_sequence` 0x52B40 checks the live task and may write `secret_player` before status becomes 8. After the dissolve changes that player to status 2, `show_level_start_screen` 0x44DD6–0x44E00 requires exactly that valid player/status pair before substituting maze 115/116.
 
 ---
 
@@ -1730,10 +1730,10 @@ Secret-room availability is paced by a pair of level counters:
 Enqueues an 8-bit sound ID into a circular ring buffer (8 slots at `0x90404B`). Write head at `0x904053`, read head at `0x904054`. Drops silently if queue is full.
 
 **Confidence: Verified.** `sound_play(uint8 sound_id) -> void`. When
-`speech_counter` is zero it first calls OS `try_send_sound_command` (0x242):
+`sound_holdoff` is zero it first calls OS `try_send_sound_command` (0x242):
 an immediately accepted command is not queued; a busy result falls back to
-the ring. While speech traffic is active it skips the immediate attempt and
-queues directly.
+the ring. While sound-board recovery is active it skips the immediate attempt
+and queues directly.
 
 ### 11.2 Sound Dispatch (`main_update_sound`, 0x4AE20)
 
@@ -1766,8 +1766,8 @@ byte-level scan of `row76.bin` for the 32-bit address finds references only at
 0x42D14 (the `lea` in this routine), 0x42DDA, 0x4AD7E (`sound_play`) and
 0x4AE36 (`main_update_sound`); nothing in the speech path touches it. The
 0xFF test at 0x42D30 is therefore the post-reset acknowledgement from a sound
-CPU that has finished booting, not a speech-completion signal. The name
-`speech_counter` is retained for continuity with the loader symbols.
+CPU that has finished booting, not a speech-completion signal. The
+`sound_holdoff` name records that recovery role.
 
 Response handling:
 - A byte arrives while the holdoff is nonzero: 0xFF clears the holdoff (the
@@ -2158,8 +2158,11 @@ Computes the ideal scroll position based on all active players' positions, then 
    leaves a permanent −512 delta and produces endless leftward scrolling.
 
 **RAM used:**
-- `0x904BD8`: per-player tile position
-- `0x904BCE`: per-player "in maze" flag
+- `0x904BD8` `player_tile_or_tport_dest`: per-player tile position outside a
+  transport, destination slot during one
+  transition
+- `0x904BCE` `player_tport_phase`: transport phase; its sign also supplies the
+  camera's in-maze eligibility view
 - `0x9048C8`: per-player MOB slot
 - `0x90491F` bit 5: X-wrap flag; bit 4: Y-wrap flag
 
@@ -2414,14 +2417,16 @@ writes only when that nibble is empty. `calc_direction(from_slot,to_slot)`
 honors the horizontal/vertical wrap flags and returns 0–7, or 8 when the
 positions are equal.
 
-`door_record_endpoints(packed_door_slot, player_index, door_object_type)`
+`door_open_start(packed_door_slot, player_index, door_object_type)`
 populates that player's two words in `door_endpoint_pos`/`door_endpoint_dir`.
 Door pictures at or above 0x9D7C use direction pair 0/2; pictures at or above
 0x9D3C use 3/1. For the remaining door class, object type 0x0E scans vertical
 then horizontal and 0x0D scans horizontal then vertical. The scanners inspect
 only the immediate above/below or left/right cells, append at most two
 endpoints, and return the next endpoint index. Vertical direction codes are
-0/2 and horizontal codes are 3/1.
+0/2 and horizontal codes are 3/1. The common tail then calls
+`main_open_doors`, so this routine starts the opening rather than merely
+recording endpoints.
 
 ### 23.5 `mob_create` Argument Layout (0x5DC58)
 

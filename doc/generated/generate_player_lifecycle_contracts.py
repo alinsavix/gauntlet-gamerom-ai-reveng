@@ -34,7 +34,7 @@ CONTRACTS = (
     (0x48BEC, "player_start_inner", "uint16 player_index", "D0.l = -1 when placement and MOB initialization succeed, or 0 when no usable spawn position exists", "", "Verified", ("move.w 0xa(a6), d2", "move.w 0x4ef9, (a0, d0.w)", "moveq 0x0, d0", "moveq 0xff, d0")),
     (0x49DE6, "player_death_sequence", "uint16 player_index", "void", "", "Verified", ("move.w 0xa(a6), d2", "jsr 0x1b4.l", "jsr 0x452d0.l", "jsr 0x44c7e.l")),
     (0x4A2CA, "draw_player_initials_entry", "uint16 player_index", "void", "", "Verified", ("move.w 0xa(a6), d2", "pea.l 0x58054.l", "pea.l 0x58062.l", "jsr 0x4a44a.l")),
-    (0x4D1A4, "secret_bonus_earned", "void", "D0.l = -1 when the current secret-task/progress state earns the secret-room coin bonus, else 0", "", "Verified", ("moveq 0xff, d0", "clr.w d0", "ext.l d0")),
+    (0x4D1A4, "secret_check_winner", "void", "D0.l = -1 when the current secret-task/progress state earns the secret-room coin bonus, else 0", "", "Verified", ("moveq 0xff, d0", "clr.w d0", "ext.l d0")),
     (0x4D476, "show_level_end_bonus_screen", "void", "void", "calls fixed draw_string through A3 = 0x25A", "Verified", ("movea.l 0x25a, a3", "pea.l 0x5ab1a.l", "pea.l 0x5ab46.l", "jsr 0x4d900.l", "jsr 0x486fe.l")),
     (0x4D900, "player_activecount", "void", "D0.l = count (0..4) of player statuses 1, 2, 8, or 0x10", "", "Verified", ("cmpi.b 0x1, (a1, d1.w)", "cmpi.b 0x10, (a1, d1.w)", "cmpi.b 0x2, (a1, d1.w)", "cmpi.b 0x8, (a1, d1.w)", "ext.l d0")),
 )

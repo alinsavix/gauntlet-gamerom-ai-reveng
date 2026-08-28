@@ -130,6 +130,18 @@ def test_load_migrates_original_schema_one_shape(tmp_path):
     assert restored.dialog_once_flags == 0
 
 
+def test_load_rejects_schema_one_fields_from_before_the_naming_policy(tmp_path):
+    payload = state_dump_payload(GameState())
+    current_name = "forcefield_hurt_timer"
+    stale_name = "ff_" + "hurt_timer"
+    payload["state"][stale_name] = payload["state"].pop(current_name)
+    path = tmp_path / "stale-naming-policy.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(StateDumpError, match="GameState shape mismatch"):
+        load_game_state(path)
+
+
 def test_loaded_state_cannot_overwrite_external_eeprom(tmp_path, monkeypatch):
     from gauntpy.subsystems import eeprom
 

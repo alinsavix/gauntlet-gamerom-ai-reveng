@@ -157,7 +157,7 @@ address,name,catalogs,confidence
 0x4C440,dialog_first_encounter,score_coin_dialog_contracts.csv,Verified
 0x4C70A,dialog_clear_message,score_coin_dialog_contracts.csv,Verified
 0x4C72A,player_give_item_with_message,score_coin_dialog_contracts.csv,Verified
-0x4C9A2,demo_speech_cmd,startup_attract_contracts.csv,Verified
+0x4C9A2,demo_message_show,startup_attract_contracts.csv,Verified
 0x4CB50,dialog_position_box,score_coin_dialog_contracts.csv,Verified
 0x4CCBC,main_msgbox_countdown,main_loop_contracts.csv;score_coin_dialog_contracts.csv,Verified
 0x4CD1C,load_legend_page,startup_attract_contracts.csv,Verified
@@ -165,7 +165,7 @@ address,name,catalogs,confidence
 0x4CFAE,draw_legend_overview_page,startup_attract_contracts.csv,Verified
 0x4CFDA,draw_legend_rules_page,startup_attract_contracts.csv,Verified
 0x4D12E,alpha_clear_rect,orchestration_sound_contracts.csv,Verified
-0x4D1A4,secret_bonus_earned,player_lifecycle_contracts.csv;score_coin_dialog_contracts.csv,Verified
+0x4D1A4,secret_check_winner,player_lifecycle_contracts.csv;score_coin_dialog_contracts.csv,Verified
 0x4D29E,main_treasure_timer,main_loop_contracts.csv,Verified
 0x4D476,show_level_end_bonus_screen,player_lifecycle_contracts.csv,Verified
 0x4D900,player_activecount,player_lifecycle_contracts.csv,Verified
@@ -212,7 +212,7 @@ address,name,catalogs,confidence
 0x510BC,tport_route_read_pair,tport_forcefield_contracts.csv,Verified
 0x510FC,calc_direction,movement_path_contracts.csv,Verified
 0x511AC,player_tile_interact,player_runtime_contracts.csv,Verified
-0x51E80,door_record_endpoints,movement_path_contracts.csv,Verified
+0x51E80,door_open_start,movement_path_contracts.csv,Verified
 0x51FAE,door_scan_vertical_endpoints,movement_path_contracts.csv,Verified
 0x5207C,door_scan_horizontal_endpoints,movement_path_contracts.csv,Verified
 0x5214C,player_add_score_with_mult,score_coin_dialog_contracts.csv,Verified

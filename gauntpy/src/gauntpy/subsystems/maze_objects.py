@@ -12,7 +12,7 @@ from ..coords import encode_hpos, encode_vpos_at_y, slot_to_pixels
 from ..playfield_vram import (
     SPECIAL_COLOR_INDEX_1,
     SPECIAL_COLOR_INDEX_2,
-    TRANSPORTER_COLOR_CYCLE,
+    TPORT_PALETTE_CYCLE_BLOCKS,
     write_playfield_color,
     write_playfield_colors,
 )
@@ -23,7 +23,7 @@ _SOUND_DOORS_OPEN = 0x12
 _SOUND_CYCLIC_WALLS = 0x2B
 
 # ROM 0x571DA, four eight-byte profiles selected by level & 3.
-_FORCEFIELD_DELAY_PROFILES = (
+_FORCEFIELD_CYCLE_DELAY_PROFILES = (
     (0x10, 0x20, 0x10, 0x20, 0x10, 0x20, 0x20, 0x40),
     (0x10, 0x20, 0x08, 0x10, 0x10, 0x20, 0x08, 0x40),
     (0x08, 0x08, 0x08, 0x20, 0x10, 0x20, 0x08, 0x40),
@@ -101,7 +101,7 @@ def _clear_slot(state: GameState, slot: int) -> None:
         state.mobs.link[slot] = 0
         state.mobs.state_link[slot] = 0
     if was_door:
-        setup_door_graphics(state)
+        maze_doors_setup(state)
 
 
 def _remove_door_slot(state: GameState, slot: int) -> None:
@@ -123,12 +123,12 @@ def _remove_door_slot(state: GameState, slot: int) -> None:
 def select_forcefield_delay_profile(state: GameState) -> None:
     """Install the exact ROM delay row selected by ``levelnum_current & 3``."""
     state.forcefield_step_durations = list(
-        _FORCEFIELD_DELAY_PROFILES[state.levelnum_current & 3]
+        _FORCEFIELD_CYCLE_DELAY_PROFILES[state.levelnum_current & 3]
     )
-    state.forcefield_segments.clear()
+    state.forcefield_segment_table.clear()
     state.forcefield_segments_ready = False
     state.cyclic_wall_setup_ready = False
-    state.cyclic_wall_assign = [0] * len(state.cyclic_wall_assign)
+    state.cyclic_wall_assignments = [0] * len(state.cyclic_wall_assignments)
     state.cyclic_wall_phase = 0
     state.cyclic_wall_timer = 0
     state.random_wall_setup_ready = False
@@ -165,7 +165,7 @@ def _write_transporter_colors_vblank(state: GameState) -> None:
     """game_vblank 0x40456-0x40476: palette 4 entries 8-13."""
     write_playfield_colors(
         state, 4 * 16 + 8,
-        TRANSPORTER_COLOR_CYCLE[state.tport_cycle_pos % 6],
+        TPORT_PALETTE_CYCLE_BLOCKS[state.tport_cycle_pos % 6],
     )
 
 
@@ -187,7 +187,7 @@ def _is_door(state: GameState, slot: int) -> bool:
     )
 
 
-def _is_blank_floor(state: GameState, slot: int) -> bool:
+def pf_isblankfloor(state: GameState, slot: int) -> bool:
     """Exact pf_isblankfloor marker/type predicate at 0x5EA2E."""
     if (slot >> 5) == 0:
         return True
@@ -205,23 +205,23 @@ def _door_orientation_index(
     px, py = (-nx, -ny)
     sx, sy = ((0, 1) if vertical else (1, 0))
 
-    if not _is_blank_floor(state, _door_neighbor(slot, px, py)):
+    if not pf_isblankfloor(state, _door_neighbor(slot, px, py)):
         negative = 6
     elif (
-        _is_blank_floor(state, _door_neighbor(slot, 2 * px, 2 * py))
-        and not _is_blank_floor(state, _door_neighbor(slot, px + sx, py + sy))
-        and not _is_blank_floor(state, _door_neighbor(slot, px - sx, py - sy))
+        pf_isblankfloor(state, _door_neighbor(slot, 2 * px, 2 * py))
+        and not pf_isblankfloor(state, _door_neighbor(slot, px + sx, py + sy))
+        and not pf_isblankfloor(state, _door_neighbor(slot, px - sx, py - sy))
     ):
         negative = 3
     else:
         negative = 0
 
-    if _is_blank_floor(state, _door_neighbor(slot, nx, ny)):
+    if pf_isblankfloor(state, _door_neighbor(slot, nx, ny)):
         positive = 2
     elif (
-        _is_blank_floor(state, _door_neighbor(slot, 2 * nx, 2 * ny))
-        and not _is_blank_floor(state, _door_neighbor(slot, nx + sx, ny + sy))
-        and not _is_blank_floor(state, _door_neighbor(slot, nx - sx, ny - sy))
+        pf_isblankfloor(state, _door_neighbor(slot, 2 * nx, 2 * ny))
+        and not pf_isblankfloor(state, _door_neighbor(slot, nx + sx, ny + sy))
+        and not pf_isblankfloor(state, _door_neighbor(slot, nx - sx, ny - sy))
     ):
         positive = 1
     else:
@@ -229,7 +229,7 @@ def _door_orientation_index(
     return negative + positive
 
 
-def _draw_door_graphic(state: GameState, slot: int) -> None:
+def pf_door_draw_xy(state: GameState, slot: int) -> None:
     """pf_door_draw_xy 0x5F876 for one already-classified door."""
     row, col = slot >> 5, slot & 0x1F
     obj_type = state.mobs.obj_type(slot)
@@ -299,22 +299,22 @@ def _draw_door_graphic(state: GameState, slot: int) -> None:
         state.mobs.set_state(slot, 5)
 
 
-def refresh_surrounding_door_graphics(state: GameState, slot: int) -> None:
+def pf_door_update_surrounding_xy(state: GameState, slot: int) -> None:
     """pf_door_update_surrounding_xy 0x5F7F0, including ROM visit order."""
     for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
         neighbour = _door_neighbor(slot, dx, dy)
         if _is_door(state, neighbour):
-            _draw_door_graphic(state, neighbour)
+            pf_door_draw_xy(state, neighbour)
 
 
-def setup_door_graphics(state: GameState) -> None:
+def maze_doors_setup(state: GameState) -> None:
     """maze_doors_setup 0x5F7C0 -- draw the initial complete door set."""
     for slot in range(FIRST_PLAYABLE_SLOT, NUM_MOB_SLOTS):
         if _is_door(state, slot):
-            _draw_door_graphic(state, slot)
+            pf_door_draw_xy(state, slot)
 
 
-def _transporter_id(state: GameState, slot: int) -> int:
+def tport_find_id(state: GameState, slot: int) -> int:
     """0x4E7C0's one-based transporter ID, or zero when ``slot`` is absent."""
     transporter_id = 1
     for candidate in range(FIRST_PLAYABLE_SLOT, NUM_MOB_SLOTS):
@@ -354,7 +354,7 @@ def record_transporter_secret_progress(
     if state.secret_trick_id == 0x56:
         mask = state.tport_secret_pad_masks[player_index]
         for pad in (source_slot, destination_pad):
-            pad_id = _transporter_id(state, pad)
+            pad_id = tport_find_id(state, pad)
             if pad_id:
                 mask |= 1 << pad_id
         state.tport_secret_pad_masks[player_index] = mask
@@ -369,7 +369,7 @@ def _record_inflight_transporter_secret_progress(state: GameState) -> None:
 
         source = state.player_tport_route_state[player_index] & 0x3FF
         destination = state.player_tport_type[player_index] & 0x3FF
-        landing = state.player_tile_pos[player_index] & 0x3FF
+        landing = state.player_tile_or_tport_dest[player_index] & 0x3FF
         event_key = (source << 20) | (destination << 10) | landing
         if state.tport_secret_event_keys[player_index] == event_key:
             continue
@@ -557,7 +557,7 @@ def maze_forcefield_setup(state: GameState) -> None:
         assignments[first >> 2] = packed
         has_cycle_marker |= packed != 0
 
-    state.cyclic_wall_assign = assignments
+    state.cyclic_wall_assignments = assignments
     state.cyclic_wall_setup_ready = True
     state.cyclic_wall_phase = 0
     state.cyclic_wall_timer = 0
@@ -570,7 +570,7 @@ def main_walls_cyclic_move(state: GameState) -> None:
     if not (state.level_flags_3 & 0x08):
         return
     if not state.cyclic_wall_setup_ready:
-        if any(state.cyclic_wall_assign):
+        if any(state.cyclic_wall_assignments):
             state.cyclic_wall_setup_ready = True
         else:
             maze_forcefield_setup(state)
@@ -596,10 +596,10 @@ def main_walls_cyclic_move(state: GameState) -> None:
     placed: list[tuple[int, int]] = []
     for tile in range(FIRST_PLAYABLE_SLOT, NUM_MOB_SLOTS):
         if tile & 0x3F == 0:
-            state.vblank_flag = 0
+            state.vblank_semaphore = 0
 
         assignment = (
-            state.cyclic_wall_assign[tile >> 2] >> ((tile & 3) << 1)
+            state.cyclic_wall_assignments[tile >> 2] >> ((tile & 3) << 1)
         ) & 3
         if assignment == 0:
             continue
@@ -787,7 +787,7 @@ def forcefield_segments_setup(state: GameState) -> None:
                     or state.mobs.picture[candidate] in (0x8000, 0x8001)
                 ):
                     break
-    state.forcefield_segments = segments
+    state.forcefield_segment_table = segments
     state.forcefield_segments_ready = True
     from ..playfield_vram import write_tile_descriptor
 
@@ -814,7 +814,7 @@ def check_forcefield_collision(state: GameState, packed_maze_pos: int) -> bool:
     """0x53346/0x5FC5E -- test a packed cell against forcefield beam segments."""
     query = packed_maze_pos & 0x3FF
     query_row, query_col = query >> 5, query & 0x1F
-    for segment in state.forcefield_segments:
+    for segment in state.forcefield_segment_table:
         hub = segment & 0x3FF
         hub_row, hub_col = hub >> 5, hub & 0x1F
         length = ((segment >> 10) & 0x0F) + 1

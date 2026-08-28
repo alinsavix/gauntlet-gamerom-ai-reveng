@@ -247,7 +247,6 @@ def game_state_from_payload(payload: object) -> GameState:
     serialized = payload.get("state")
     if not isinstance(serialized, dict):
         raise StateDumpError("saved state has no GameState object")
-
     state = GameState()
     expected = {field.name for field in fields(state)}
     missing_fields = expected - set(serialized)

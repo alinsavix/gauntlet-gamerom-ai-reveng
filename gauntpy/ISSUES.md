@@ -63,6 +63,42 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-155 · documentation/Python naming contract had drifted
+
+A whole-codebase comparison now applies the approved semantic naming policy to
+35 one-to-one `GameState` rows: 25 explicit policy names and ten prior
+alignments retained. The same pass checks 36 direct Python routine rows and the
+40 prior literal-table changes. Source, tests, `doc/`, the book, loader symbols,
+generated contracts, and both naming audits now agree.
+
+The two disputed routines were re-audited rather than inherited from prose.
+`door_open_start` 0x51E80 is called after key-gated door interactions, builds
+the two front records, and always calls `main_open_doors` at 0x51F9E.
+`demo_message_show` 0x4C9A2 is called for a 0xFF demo record, draws one to three
+lines through OS `draw_string`, and sets the dialog timer; its body contains no
+sound or speech call. `secret_check_winner` remains the direct name for
+0x4D1A4's objective predicate.
+
+Persisted names are intentionally not compatible. The schema-1 renamed-field
+migration and EEPROM renamed-rotation-key lookup have been removed; malformed
+or stale shapes follow the existing rejection/default paths. The scripted-run
+golden contains no affected field keys.
+
+The audit deliberately retained representation names where there is no
+one-to-one object: `MobTable` methods encapsulate several ROM leaves;
+player-record fields omit a redundant `player_` prefix; `player_in_maze` is a
+polarity-normalized view of `player_tport_phase`; Python lists replace the
+sound-ring head/tail words; and merged/decomposed renderer, maze, probe, palette,
+and dispatch helpers remain explicitly classified in `ROM_FUNCTION_AUDIT.csv`.
+The complete human-readable rename and exception report is
+[`NAMING_AUDIT.md`](NAMING_AUDIT.md).
+Regressions join the crosswalk to `doc/07`, bind direct Python ports to their
+selected symbol/module, bind modeled RAM fields and literal tables to `doc/05`,
+reject stale persisted names, and scan all tracked audit surfaces for stale
+policy identifiers. The exhaustive totals remain 322 callable rows: 272
+complete equivalents, 50 intentional platform/ABI/representation omissions,
+and no partial or missing gameplay rows.
+
 ### S-154 · complete level/maze setup audit closed four residual gaps
 
 The complete `maze_new_level_setup` body (0x438AE–0x43D8A) and every Python
@@ -177,7 +213,7 @@ shooter/victim comparison, so F1 explicitly forbids every player hit, including
 a reflected self-hit.
 
 The adjacent challenge-room audit found no missing completion gate.
-`secret_bonus_earned` 0x4D1A4 implements every 0x50–0x5D predicate, including
+`secret_check_winner` 0x4D1A4 implements every 0x50–0x5D predicate, including
 the exact counts, five-transporter bitmask, empty-monster scan, and five tasks
 with no extra qualifier. The payout additionally requires the winning player
 to have reached exit status 2/8; only a completed challenge awards 5,000 points
@@ -189,9 +225,9 @@ by game-settings bit 13.
 The live objective is not derived continuously from
 `secret_possible_counter`. ROM `maze_new_level_setup` 0x43930–0x43958 samples
 that counter once and copies the current maze-header trick into
-`trick_tasknum`; changing only the counter after the maze has loaded leaves the
+`secret_trick_id`; changing only the counter after the maze has loaded leaves the
 current level unarmed. At the other end, `player_exit_sequence` 0x52B40 checks
-the live task and writes `trick_player` before status 8, while
+the live task and writes `secret_player` before status 8, while
 `show_level_start_screen` 0x44DD6–0x44E00 waits for that winner to reach status
 2 before selecting secret maze 115/116.
 
@@ -199,7 +235,7 @@ F9 now opens the pacing gate, reruns that exact objective setup for the current
 ordinary maze, and applies the normal solo-party cancellation, so entry still
 requires performing its real trick and then exiting. From level 6 onward, F10
 clears the ordinary task so later player exits cannot replace its selected
-`trick_player`, then relies on the same exit animation and transition pipeline
+`secret_player`, then relies on the same exit animation and transition pipeline
 for unconditional entry. Both reject bonus rooms and non-play states. The F1
 LEVEL page names the current ordinary maze-header objective even while it is
 unarmed, and explicitly suppresses bonus-room or stale tally-transition header
@@ -566,7 +602,7 @@ when it is currently eligible (including the level-12 dragon gate), otherwise
 chooses one of the 17 ROM hint strings, then clears the latch. It does not infer
 the hint from the level just left.
 
-The trigger audit also restored three direct `trick_player` writes: ordinary
+The trigger audit also restored three direct `secret_player` writes: ordinary
 transport into an exit (trick 3, 0x50916), corner transport through a secret
 wall (trick 4, 0x507B8), and pushing a movable wall into an exit (trick 10,
 0x42846-0x42A1A). Tricks 1-4 and 10 are completion-only producers and do not
@@ -636,7 +672,7 @@ generator.
 The immediate skip loaded and spawned the next level, then zeroed the shared
 UI timer without running the timer-expiry teardown. The `LEVEL:` alpha words
 therefore had no remaining owner that could clear them. F5 now mirrors the
-normal expiry order: load the maze without players, run `maze_show_alpha`, then
+normal expiry order: load the maze without players, run `maze_show`, then
 spawn the surviving party and clear the host-side pending marker.
 
 ### S-128 · live troubleshooting required replaying whole levels
@@ -1154,7 +1190,7 @@ remembered live slot before resetting the per-player RAM.
   exactly as 0x42542 does, and the record follows the hero in on the same frame
   once the tile is consumed.
 
-  Consumers lost their overlays: `shots._candidate_core` evaluates the probed
+  Consumers lost their overlays: `shots.shot_collision_candidate_core` evaluates the probed
   cell's own occupant, `monsters` resolves contact and rendered occupancy from
   the cell, `render.mobs` walks one geometric band window, `player_tile_pos`
   and the forcefield query read the record's cell, `nearby_mob_clearance_test`
@@ -1664,7 +1700,7 @@ the arrays directly.
 
 ### I-14 · WP-8 · Super Sorcerer placement
 
-Was re-aim only. **Fixed:** `_supersorc_place` now performs the documented
+Was re-aim only. **Fixed:** `supersorc_place` now performs the documented
 relocation — all four players cyclically, three directions behind facing (biases
 {0,−1,+1}, clear runs {4,3,3}), rows 1–31, with an eight-cell proximity
 rejection — relocating the MOB via `move_slot`. Covered by a new test.
@@ -1787,7 +1823,7 @@ extra-speed power (POWER_SPEED_BIT 0) raises everyone to 0x100 (4 px). **Fixed:*
 ### I-10 · WP-15 · Moving-exit timer — resolved by disassembly
 
 Was 0x78 ("approximate"). Disassembly of `main_exit_move` showed the game's
-`exit_timer` (0x904A08) is loaded with **#0x12C (300 frames)** both at level
+`exit_move_timer` (0x904A08) is loaded with **#0x12C (300 frames)** both at level
 setup (0x43B90) and on reload (`move.w #0x12c,(a0)` at 0x52A74). The
 disassembly also confirmed the ExitMoves gate is `level_flags & 0x4000`
 (= `level_flags_3 & 0x40`, as implemented) and the relocation plays sound 0x31.

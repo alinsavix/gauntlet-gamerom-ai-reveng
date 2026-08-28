@@ -583,7 +583,7 @@ ticks a second. Chapter 11 takes the other side of the collision, the horde.
 >   `forcefield_damage_table`, whose sole consumer is the forcefield branch
 >   at 0x4AA96 (Chapter 13), not this routine.
 > - Pickups and doors: `player_tile_interact` (0x511AC), §4.6; key/potion
->   counters 0x90405A/0x904055; `door_record_endpoints` (0x51E80) with
+>   counters 0x90405A/0x904055; `door_open_start` (0x51E80) with
 >   endpoint records 0x904A76/0x904A86; `main_open_doors` (0x45C00);
 >   idle-timer door opening via `idle_timer` (0x90490C). Inventory/icon
 >   rendering: `player_inv_update` (0x45ACA). First-encounter tips:

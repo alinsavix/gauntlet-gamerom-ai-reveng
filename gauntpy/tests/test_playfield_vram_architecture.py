@@ -465,7 +465,7 @@ def test_live_refresh_visits_walls_and_door_routines_in_rom_order(monkeypatch):
         lambda _state, slot, _descriptor, *args: writes.append(slot),
     )
     monkeypatch.setattr(
-        maze_objects, "refresh_surrounding_door_graphics",
+        maze_objects, "pf_door_update_surrounding_xy",
         lambda _state, slot: door_refreshes.append(slot),
     )
 

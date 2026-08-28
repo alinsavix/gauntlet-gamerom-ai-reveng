@@ -51,7 +51,7 @@ __all__ = [
 #: tier 3 and step down one tier per point of damage
 #: (``doc/04_game_subsystems.md`` §26: a monster lives while its nibble stays
 #: in ``[base-2, base]``).
-_TIER_TABLE: dict[int, tuple[int, int]] = {
+_MAZEOBJ_HSIZE_TIER_TBL: dict[int, tuple[int, int]] = {
     int(MazeObjIds.MONST_GHOST):     (0x4, 3),
     int(MazeObjIds.MONST_GRUNT):     (0x4, 3),
     int(MazeObjIds.MONST_AUX_GRUNT): (0x4, 3),
@@ -113,14 +113,14 @@ def strength_tier(state: GameState, slot: int) -> int:
     nibble ... otherwise it survives as a weaker tier"). A hit that drops the
     nibble therefore changes the hardware palette: that *is* how a weakened
     monster visibly changes colour. Mapping the nibble back through
-    ``_TIER_TABLE`` reproduces it, and lands on exactly the palette index the
+    ``_MAZEOBJ_HSIZE_TIER_TBL`` reproduces it, and lands on exactly the palette index the
     hardware would have used (asserted in ``tests/test_render.py``).
 
     Non-creature slots -- items, shots, dragon segments, the player -- keep
     tier 1: their sprites are not tiered and their stamps carry their own
     palette.
     """
-    entry = _TIER_TABLE.get(state.mobs.obj_type(slot))
+    entry = _MAZEOBJ_HSIZE_TIER_TBL.get(state.mobs.obj_type(slot))
     if entry is None:
         return _MIN_TIER
     base, full_tier = entry

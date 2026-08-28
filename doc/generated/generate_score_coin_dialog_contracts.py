@@ -39,7 +39,7 @@ CONTRACTS = (
     (0x4C72A, "player_give_item_with_message", "uint16 player_index, uint16 item_index", "D0.l = 1 when the item is newly granted, else 0", "", "Verified", ("move.w 0xa(a6), d3", "move.w 0xe(a6), d2", "moveq 0x0, d0", "moveq 0x1, d0")),
     (0x4CB50, "dialog_position_box", "int16 player_index_or_minus1", "void", "", "Verified", ("move.w 0xa(a6), d0", "cmpi.w 0xffff, d0", "movea.l 0x904aa0, a1")),
     (0x4CCBC, "main_msgbox_countdown", "void", "void", "", "Verified", ("movea.l 0x904a9e, a0", "subq.w 0x1, (a0)", "clr.w (a1)")),
-    (0x4D1A4, "secret_bonus_earned", "void", "D0.l = -1 when the current secret-task/progress state earns the secret-room coin bonus, else 0", "", "Verified", ("moveq 0xff, d0", "clr.w d0", "ext.l d0")),
+    (0x4D1A4, "secret_check_winner", "void", "D0.l = -1 when the current secret-task/progress state earns the secret-room coin bonus, else 0", "", "Verified", ("moveq 0xff, d0", "clr.w d0", "ext.l d0")),
     (0x4DE76, "score_screen_color_cycle", "void", "void", "", "Verified", ("movea.l 0x910140, a2", "moveq 0xb, d0", "move.w -(a3), -(a2)")),
     (0x5214C, "player_add_score_with_mult", "uint16 player_index, uint16 base_score", "void", "", "Verified", ("move.w 0xa(a6), d3", "move.w 0xe(a6), d4", "mulu.w d4, d0", "add.l d0, (a0, d1.w)")),
 )

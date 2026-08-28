@@ -42,12 +42,12 @@ _TAUNT_THRESHOLD = 0x3B
 _TAUNT_PAIRS = ((0x62, 0x63), (0x64, 0x65))
 
 # 0x5B62E and 0x5B63A.
-_STEALABLE_POWER_MASKS = (0x10, 0x01, 0x08, 0x20, 0x02, 0x04)
+_THIEF_STEALABLE_POWER_MASKS = (0x10, 0x01, 0x08, 0x20, 0x02, 0x04)
 _THIEF_CONTACT_DAMAGE = (6, 5, 10, 8, 4, 4, 7, 5)
 
 # 0x5B70A.  The bits select the horizontal/vertical legs in
 # thief_move_engine; the value is not a scalar speed.
-_THIEF_DIRECTION_STEP_FLAGS = (0x70, 0x60, 0xE0, 0xA0, 0xB0, 0x90, 0xD0, 0x50, 0xF0)
+_THIEF_DIRECTION_STEP_SIZE = (0x70, 0x60, 0xE0, 0xA0, 0xB0, 0x90, 0xD0, 0x50, 0xF0)
 
 # Packed-route direction 0=N, 2=E, 4=S, 6=W.
 _ROUTE_COLUMN_DELTAS = (0, 1, 1, 1, 0, -1, -1, -1, 0)
@@ -553,7 +553,7 @@ def thief_steal_from_player(state: GameState, player_index: int) -> int:
     state.thief_stolen_item = 0
     if player.powers & 0x00FF:
         state.thief_item_carried = int(MazeObjIds.POT_INVULN)
-        for mask in _STEALABLE_POWER_MASKS:
+        for mask in _THIEF_STEALABLE_POWER_MASKS:
             if player.powers & mask:
                 player.powers &= ~mask
                 break
@@ -775,7 +775,7 @@ def _thief_corner_squeeze_geometry(
 
     for player_index in range(len(state.players)):
         if (
-            state.player_tile_pos[player_index] == target
+            state.player_tile_or_tport_dest[player_index] == target
             and state.player_tport_phase[player_index] >= 0
         ):
             return 0
@@ -859,7 +859,7 @@ def thief_enter_tport(state: GameState, transporter_pos: int) -> int:
 
 def _direction_from_move_flags(move_flags: int) -> int:
     try:
-        return _THIEF_DIRECTION_STEP_FLAGS.index(move_flags & 0xFF)
+        return _THIEF_DIRECTION_STEP_SIZE.index(move_flags & 0xFF)
     except ValueError:
         return 8
 
@@ -1186,7 +1186,7 @@ def main_thief_anim(state: GameState) -> None:
     state.thief_tport_active = 0
     movement_result = thief_move_engine(
         state,
-        _THIEF_DIRECTION_STEP_FLAGS[direction],
+        _THIEF_DIRECTION_STEP_SIZE[direction],
         state.thief_speed,
         state.thief_speed,
     )

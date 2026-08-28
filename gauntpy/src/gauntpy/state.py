@@ -137,7 +137,7 @@ class GameState:
         ]
     )
 
-    vblank_flag: int = 0             # 0x904002, the VBLANK semaphore
+    vblank_semaphore: int = 0        # 0x904002
     frame_counter: int = 0           # 0x904006
     frame_overflow: int = 0          # 0x904916, generator spawn throttle
     game_mode: int = GameMode.TITLE  # 0x904918
@@ -182,7 +182,7 @@ class GameState:
     # =========================================================================
     movement_type: int = 0            # 0x904BF2
     # 0x9048F0: active-low directions actually moved this frame; 0xF0 = still.
-    player_walk_dirs: list[int] = field(
+    player_joystick: list[int] = field(
         default_factory=lambda: [0x00F0] * NUM_PLAYERS
     )
 
@@ -192,7 +192,7 @@ class GameState:
     player_it: int = 0xFFFF         # 0x9049DC, 0xFFFF = nobody is IT
     # 0x9049E0: randomly selected PLAYERSTART cell retained after its marker is
     # replaced with floor; first starts and post-death continues spawn here.
-    maze_player_start_slot: int = 0         # 0x9049DC, 0xFFFF = nobody is IT
+    maze_player_start_slot: int = 0
     # Per-player looping-sound timer arrays (§21).
     # Negative = new contact (main_handle_death plays start sound and negates).
     # Positive = countdown; when reaches 0, stop sound plays.
@@ -331,10 +331,10 @@ class GameState:
     # 0x904028 / 0x904024 / 0x90402A / 0x904026: signed and folded-absolute
     # separations recorded by shot_collision_candidate_core (0x40A78) for the
     # candidate it accepted.  shot_onscreen_check (0x4AEA0) reads them back.
-    shot_sep_h: int = 0
-    shot_sep_h_abs: int = 0
-    shot_sep_v: int = 0
-    shot_sep_v_abs: int = 0
+    shothit_dist_H: int = 0
+    collision_dist_H: int = 0
+    shothit_dist_V: int = 0
+    collision_dist_V: int = 0
     # 0x9048C8 ``active_mob_ids`` entries 4-11: the MOB slot that fired each
     # monster/dragon shot channel, so a shot cannot hit its own shooter.
     # Entries 0-3 come from ``Player.mob_slot`` and are refreshed each frame.
@@ -383,7 +383,7 @@ class GameState:
     # on-screen arc of the depth chain, so off-screen creatures are never even
     # visited.  It is not a rotating cursor, despite the name.
     monster_iter_ptr: int = 0
-    spawn_probability_bonus: int = 0  # 0x90405F, signed byte
+    monster_spawn_probability_bonus: int = 0  # 0x90405F, signed byte
     # 0x904B7A ``monster_generation_retry_timer``: the attract/demo replacement
     # for the probability draw.  ``attract_demo_init`` (0x44A76) loads it with 4;
     # ``handle_generate`` counts it down once per generator turn and only forces
@@ -392,8 +392,8 @@ class GameState:
     monster_generation_retry_timer: int = 4
     # Monster culling rectangle (0x904A62/0x904A64): a creature outside it is
     # skipped for the whole frame; shooters need the tighter box as well (§3.3).
-    cull_rect_x: int = 0            # 0x904A62
-    cull_rect_y: int = 0            # 0x904A64
+    monster_cull_h_origin: int = 0            # 0x904A62
+    monster_cull_v_origin: int = 0            # 0x904A64
     # 0x9048F8/0x904900 ``lobber_shot_vec_h/v`` and 0x904A66/0x904A6E
     # ``lobber_shot_h_accum/v_accum``: one entry per lobber channel (MOB slots
     # 9-12).  monster_create_shot seeds all four when a rock is thrown; WP-7's
@@ -508,7 +508,7 @@ class GameState:
     )
     # 0x904046, live forcefield colour word (0 = blinked off, harmless to main_move_players)
     forcefield_color: int = 0
-    # 0x904049, forcefield step counter 0-7.
+    # 0x904049, forcefield cycle index 0-7.
     forcefield_step: int = 0
     # 0x904048, byte countdown. The ROM predecrements it, so zero wraps to 255.
     forcefield_step_timer: int = 0
@@ -522,7 +522,7 @@ class GameState:
         default_factory=lambda: [0xFF00, 0xF0F0, 0x9FFF, 0xF00F]
     )
     # 0x910780, zero-terminated packed forcefield segment words.
-    forcefield_segments: list[int] = field(default_factory=list)
+    forcefield_segment_table: list[int] = field(default_factory=list)
     # Host-side setup latches: ROM level setup builds these before the main
     # loop; gauntpy's lazy bridge performs that same work on its first frame.
     forcefield_segments_ready: bool = False
@@ -532,9 +532,9 @@ class GameState:
     # 0x90401C, current cyclic-wall phase (0 initially, then 1, 2, 3).
     cyclic_wall_phase: int = 0
     # Color RAM Spare 0x910600: one byte per 4-tile group, 2 bits per tile.
-    # phase_bits = (cyclic_wall_assign[slot >> 2] >> ((slot & 3) << 1)) & 3.
+    # phase_bits = (cyclic_wall_assignments[slot >> 2] >> ((slot & 3) << 1)) & 3.
     # Zero = not a cyclic wall; 1-3 = phase assignment. Populated by level setup (WP-3).
-    cyclic_wall_assign: list[int] = field(default_factory=lambda: [0] * 256)
+    cyclic_wall_assignments: list[int] = field(default_factory=lambda: [0] * 256)
     cyclic_wall_setup_ready: bool = False
     # 0x9048A6, random wall timer (negative = disabled, 0 = process, positive = countdown; §19)
     random_wall_timer: int = -1
@@ -572,8 +572,9 @@ class GameState:
     # Each entry is the packed slot (row<<5|col) of that player's cell, which
     # is ``Player.mob_slot`` itself except on the rare frame where an occupied
     # destination held the migrating record back (players.migrate_player_record).
-    player_tile_pos: list[int] = field(default_factory=lambda: [0] * 4)
-    # 0x904BCE: per-player "in maze" flag (nonzero = camera should track this player)
+    player_tile_or_tport_dest: list[int] = field(default_factory=lambda: [0] * 4)
+    # Python polarity-normalized view of player_tport_phase for camera tracking.
+    # It has no separate ROM address: 0x904BCE is player_tport_phase.
     player_in_maze: list[int] = field(default_factory=lambda: [0] * 4)
 
     # =========================================================================
@@ -614,7 +615,7 @@ class GameState:
     # 0x904A9A / 0x904A9C: the box's width in alpha columns and height in rows,
     # as dialog_first_encounter computed them.
     dialog_box_width: int = 0
-    dialog_box_rows: int = 0
+    dialog_box_height: int = 0
     # Which player the box belongs to (-1 = centred/no owner), the argument
     # ``dialog_position_box`` (0x4CB50) takes; also selects its text palette.
     dialog_player: int = -1
@@ -646,7 +647,7 @@ class GameState:
     # =========================================================================
     # 0x9049E8: treasure room countdown in frames (0 = not in treasure room)
     treasure_timer: int = 0
-    # 0x904A08 exit_timer: moving-exit relocation countdown; reloads to 0x12C
+    # 0x904A08 exit_move_timer: moving-exit relocation countdown; reloads to 0x12C
     # (300 frames), verified by disassembly of main_exit_move (0x52A74).
     exit_move_timer: int = 0x12C
     # 0x904878: secret room availability counter (counts down once per level)
@@ -654,7 +655,7 @@ class GameState:
     # 0x90487A: secret room start value (for counter reload)
     secret_possible_start: int = 20
     # 0x904063: current secret room winner player index (-1 = none)
-    secret_winner: int = -1
+    secret_player: int = -1
     # 0x904AA4 dialog/name buffer reused by the secret-room contest flow.
     secret_name_buffer: list[int] = field(
         default_factory=lambda: [ord("A")] + [ord(" ")] * 28
@@ -664,7 +665,7 @@ class GameState:
     secret_prev_maze: int = 0
     # 0x904065: trick/challenge ID active in current level (0 = none)
     secret_trick_id: int = 0
-    # 0x904064 ``trick_last``: the maze trick a player won, saved when
+    # 0x904064 ``secret_trick_last``: the maze trick a player won, saved when
     # show_level_start_screen replaces it with a challenge code (0x44E06).
     secret_trick_last: int = 0
     # The winner's inventory, stashed on the way into the secret room and added
@@ -689,10 +690,10 @@ class GameState:
     # clears it in player_start_inner (0x48E86); WP-15 owns the counter and
     # exposes ``exits.treasure_collected()`` as that write site.
     player_treascount: list[int] = field(default_factory=lambda: [0] * NUM_PLAYERS)
-    # 0x904A4E global_ui_delay_timer: holds the bonus tally and then the level
+    # 0x904A4E global_delay_timer: holds the bonus tally and then the level
     # splash before player placement. bonus_amount is the computed award shown
     # on the treasure/secret-room exit screen.
-    bonus_timer: int = 0
+    global_delay_timer: int = 0
     bonus_amount: int = 0
     # Host-side phase marker for the shared 0x904A4E timer. True after the next
     # maze and its level splash are prepared, while hero placement is deferred.
@@ -724,7 +725,7 @@ class GameState:
     # 0x904A0C: slot the open exit is moving away from, latched at 0x528C8.
     exit_close_id: int = 0
     # Open/close animation step, 0-7, while exit_move_timer is negative. No RAM
-    # address of its own: the ROM keeps it in D4 as ``(-exit_timer) >> 2``
+    # address of its own: the ROM keeps it in D4 as ``(-exit_move_timer) >> 2``
     # (main_exit_move 0x52AAC-0x52AB4) and uses it to index the stamp scripts at
     # ``ptr_exit_openclose_anim`` (0x90489C). Zero means "settled".
     exit_anim_frame: int = 0
@@ -794,8 +795,7 @@ class GameState:
     # by main_update_sound's queue drain. Never cleared automatically -- this is
     # the WP-18 test oracle.
     sound_log: list[int] = field(default_factory=list)
-    # 0x9049EE, sound-board recovery holdoff. Named ``speech_counter`` in the
-    # loader symbols, but corrected in §11.3: the only writer is
+    # 0x9049EE, sound-board recovery holdoff. The only nonzero writer is
     # sound_system_reset, which loads 0xB4 (180 frames). Nonzero blocks both
     # sound_play's immediate-send attempt and main_update_sound's drain.
     sound_holdoff: int = 0
@@ -820,8 +820,8 @@ class GameState:
     # WP-19 · EEPROM and configuration
     # =========================================================================
     game_settings: int = 0            # 0x904A24, EEPROM options word; bit layout in subsystems/eeprom.py
-    eeprom_write_timer: int = 0x8CA0  # 0x904012 target; §20 periodic-write countdown, 36,000 frames (~10 min @ 60Hz)
-    eeprom_settings_cache: int = 0    # 0x904B94, "last written" shadow of game_settings; §20 change detection
+    eeprom_write_timer: int = 0x8CA0  # 0x904012; 36,000 frames (~10 min at 60 Hz)
+    eeprom_settings_cache: int = 0   # 0x904B94, last-written game_settings
     eeprom_save_path: str = "gauntpy_eeprom.json"  # no ROM address -- local persistence target, see eeprom.py
     # Host boundary: resumed historical states cannot overwrite newer external
     # EEPROM progress. Fresh boot/direct-play states leave persistence enabled.
@@ -883,8 +883,8 @@ class GameState:
     # Cabinet rotation state, EEPROM-backed (doc/06 §3.2). Nominally owned by
     # WP-19's config load; kept here with the rest of the transition machinery
     # that reads and advances it. Fresh-EEPROM defaults per doc/06 §3.2 table.
-    maze_resume: int = 5           # 0x904010 mazerand_num, rotation resume position
-    maze_stride: int = 0           # 0x90400E mazerand_adder, extra mazes per level (0-7)
+    maze_number: int = 5           # 0x904010, rotation resume position
+    maze_stride: int = 0         # 0x90400E, extra mazes per level (0-7)
     # Treasure-room rotation -- the second EEPROM-backed pair (doc/06 §3.5).
     # eeprom_load_config forces treas_mazerand_num back to 104 when it is outside
     # 104-114 (0x4303E-0x43054) and masks the adder to 0-3 (0x43062); those are
