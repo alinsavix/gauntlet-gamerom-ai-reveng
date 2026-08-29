@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2443 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2465 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,68 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-158 · contest-code hyphen rendered as a zero
+
+The reported screenshot literally displayed `W1YOGNO`: its fourth apparent
+`O` was the zero-shaped glyph produced when gauntpy sent `'-'` through the
+generic OS large-font ASCII map. That table maps hyphen to index zero, the same
+quad used by digit zero.
+
+ROM `name_entry_draw_large_char` 0x4A44A has dedicated arms before the generic
+mapping call. Hyphen writes the raw alpha-glyph quad
+`0x7C/0xFE/0xFC/0x7E`; backspace similarly writes
+`0x1C/0x1E/0xFC/0x7E`. The secret-code and initials writers now use this
+game-specific routine, while ordinary OS large text retains its literal map.
+Thus the underlying `W1Y-GN0` buffer is now displayed with the required dash;
+the final zero still looks like an O in the arcade font.
+
+### S-157 · verifier incorrectly required separately supplied game state
+
+The first verifier reproduced code generation but asked for maze, trick, and
+challenge as inputs. The contest form did not need those fields. ROM
+`secret_code_build` 0x54C14–0x54C96 interleaves three name-CRC symbols at
+positions 0/2/5 with three directly encoded state symbols at 1/4/6 and writes a
+literal dash at position 3. Atari could recompute the name symbols and decode
+the state symbols from the submitted `XXX-XXX` code itself.
+
+The verifier and batch wrapper now accept only name and code, report whether
+the name symbols match, and decode the previous maze, trick nibble, and
+challenge. The generated buffer always has `-` at position 3 and never contains
+letter O; S-158 records why the gauntpy screenshot nevertheless showed an
+O-shaped glyph there.
+
+### S-156 · direct level/maze selection and secret-code result teardown
+
+`gauntpy-play --level N` treated every depth above five as though it selected
+maze `N-1`. The ROM has no such mapping: levels 1-5 alone select mazes 0-4;
+level 6 enters the EEPROM-backed rotation and later levels advance that
+rotation. Direct play now follows the same rotation. The new independent
+`--maze 0..116` pins a stored layout without changing level-gated behavior, and
+the options may be combined for exact reproductions.
+
+The two supplied stuck-visitor dumps were the same ROM condition, not separate
+AI failures. At frames 13028 and 15637 the mugger/thief occupied maze-3 cell
+`0x38D`, targeted `0x38E`, and found its live type-2 `0x8000` wall marker.
+`thief_move_engine` 0x4EE7A restores the blocked axis; its route consumer has no
+fallback pathfinder. Both captures also had an unset selected route nibble, so
+`thief_compute_path` retained east. The port matches those branches. The
+surprising level-115/maze-3 pairing is now expressible only by explicitly
+combining the two direct-start options.
+
+The reported lower-wall shadow gaps likewise are not missing modeled VRAM. In
+the supplied state the horizontal run is continuous descriptor `0x723A`; the
+visible notches are pixels authored into that ROM tile, with `0x724B` at real
+junctions. No renderer mask was added.
+
+The secret result page did contain a real omission. ROM 0x5528A-0x552DA first
+clears all 29 editor cells before drawing `REMEMBER YOUR SECRET CODE`; gauntpy
+layered the result over the entered name, producing the screenshot's surviving
+`ALINSA` fragment. The game-side writer now clears that alpha-RAM row first.
+The initial joystick pause is original: `secret_getname` loads
+`name_entry_repeat_delay` with 0xA0, after which held input accelerates to one
+step every 8-13 frames. A runnable `python -m gauntpy.secret_code_verifier`
+checks an entered name/code against the saved maze, trick, and challenge.
 
 ### S-155 · documentation/Python naming contract had drifted
 

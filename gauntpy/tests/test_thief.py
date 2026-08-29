@@ -1021,7 +1021,7 @@ class TestMoveEngineCollisionAndAnimation:
     def test_maze_15_wall_beside_reported_player_position_blocks_at_x12(self):
         from gauntpy.play import build_state
 
-        state = build_state(16, Character.ELF)
+        state = build_state(16, Character.ELF, maze_number=15)
         player = state.players[0]
         state.mobs.unlink_and_clear(player.mob_slot)
         player.status = PlayerStatus.REMOVED

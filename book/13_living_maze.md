@@ -406,12 +406,30 @@ name. The prompt says ENTER YOUR, then 'LAST-NAME FIRST-NAME', and hands you a
 30-character buffer primed with an A, edited with the joystick the same way
 high-score initials are.
 
+That includes a conspicuous cabinet-era pause: the editor initializes its
+repeat-delay byte to 160 frames. The first held direction can therefore feel
+unresponsive for about 2.7 seconds; once it starts moving, the accumulated
+velocity shortens repeats to eight through thirteen frames. This is the shipped
+input routine, not host keyboard lag.
+
 When you commit the name, a small routine replaces it, in the same buffer,
 with a six-character code in the form `XXX-XXX`, displayed under REMEMBER YOUR
 SECRET CODE. The screen goes on to explain why you should remember it: "SEND
 CONTEST ENTRY FORM TO ATARI GAMES CORP." and "CONTEST ENDS 12/19/86." In 1986
 Atari ran a contest around these codes, and the code is constructed so that a
 mailed-in entry could be checked.
+
+The replacement is literal on the display too. Before writing the code page,
+the game blanks all twenty-nine cells of the old editor row. A surviving name
+prefix or suffix under `REMEMBER YOUR SECRET CODE` is stale alpha RAM, not
+intentional formatting.
+
+The dash takes one more special path. The game's name-entry character writer
+recognizes it before consulting the OS large-font map and writes a dedicated
+four-glyph bar. Sending the dash through the generic map selects the same
+zero-shaped quad used by `0`; that implementation error makes a buffer such as
+`W1Y-GN0` appear on screen as `W1YOGNO`. The last character is still a zero,
+whose unslashed arcade glyph naturally resembles O.
 
 The construction takes two independent halves and interleaves them.
 
@@ -432,13 +450,13 @@ likely to be misread on a CRT or in handwriting. The six characters are then
 interleaved, name fields in positions one, three, and six of the display, state
 fields in positions two, five, and seven, with the dash in the middle.
 
-An adjudicator holding the entry form could therefore do two different things.
-The state letters *decode*: they recover the maze number, the challenge, and
-the trick outright, no secrets required, which tells Atari where and how the
-code was won. The name letters *verify*: given the name written on the form,
-recompute the hash and check three letters. Fifteen bits of hash is no
-cryptography, but it is plenty to make a guessed code embarrassing at contest
-scale.
+An adjudicator holding only the name and code from the entry form could
+therefore do two different things. The state letters *decode*: they recover the
+maze number, challenge, and low four bits of the trick outright, which tells
+Atari where and how the code was won. The name letters *verify*: recompute the
+name hash and compare positions 1, 3, and 6. No separate maze, trick, or
+challenge fields are required. Fifteen bits of hash is no cryptography, but it
+is plenty to make a guessed code embarrassing at contest scale.
 
 ## Checking the math
 
@@ -487,6 +505,12 @@ that exact name and state in its RAM, computes `8KW-9BS` in the same buffer
 the screen displays. The alphabet string and all 256 CRC table entries in ROM
 also match the independent derivation from the polynomial. If you ever find a
 1986 contest form in a drawer, the adjudication tooling is now public.
+
+The reimplementation exposes the same check directly:
+
+```text
+python -m gauntpy.secret_code_verifier "DARREN STONE" 8KW-9BS
+```
 
 One quirk worth recording: only the low four bits of the trick number survive
 the packing, so tricks 16 and 17 encode identically to 0 and 1. Atari could

@@ -877,6 +877,11 @@ of one or two alpha cells.
 The corresponding standard-display-stride entry with the same arguments and
 one-or-two-cell D0 return.
 
+Game routine `name_entry_draw_large_char` (0x4A44A) is an important exception
+to ASCII mapping. Backspace and hyphen bypass the map and write raw four-cell
+quads. Hyphen is `0x7C,0xFE,0xFC,0x7E`; passing ASCII `0x2D` through the generic
+map instead selects index zero and displays the zero-shaped quad.
+
 `display_large_decimal_value` (0x32DA, API 0x272) takes the same six arguments
 as `display_decimal_value`, renders through the mapped large font, and returns
 the total alpha-cell advance in D0.l.

@@ -80,6 +80,12 @@ lives in the cabinet's EEPROM and survives power-off. The former
 `Level N = Maze N+4` rule and the "unused" label on mazes 0–4 were both
 wrong. **Confidence: Verified.**
 
+Level and maze must therefore remain separate inputs in diagnostic tools:
+choosing level 115 means advancing the cabinet rotation to the layout played at
+that depth; choosing maze 115 means loading the first secret-room record. An
+exact-layout test may pair any level with any maze so that level-gated rules can
+be studied independently.
+
 `show_level_start_screen` (0x44DB4) first selects a random challenge code
 0x50–0x5D. Codes 0x50–0x56 leave maze number 115 in `ram.os_flag`; codes
 0x57–0x5D increment it to 116 before calling `maze_select_bank_special`

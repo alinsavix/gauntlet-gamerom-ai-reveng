@@ -934,6 +934,26 @@ Otherwise: LFLAG1 bits 2–3 (long bits 26–27) are XOR'd with `getrandom(4)` e
 
 **Confidence: Verified** by disassembly (capstone, `row76.bin` @ 0x43774–0x4381A). *Contradicted and corrected:* the former one-line summary gave the treasure rule as unconditional "0xB0 (wraps + offscreen)" and omitted both the level==9999/attract skip guard and the TrapsLocal gate on the mazes-5–101 >103 tier.
 
+### 5.6 Level-number gates
+
+`levelnum_current` is independent of the selected maze after level 5. The
+complete direct level-dependent behavior is:
+
+| Level condition | ROM owner | Effect |
+|---|---|---|
+| level 1 | 0x40F82, 0x44C7E, 0x46B58 | Generator probability is not capped by `2*level`; no continue prompt; all-dead attract dwell is 600 rather than 1501 frames |
+| level ≥3 | 0x43F96–0x441E0 | Two random draws may add either the special potion or poisoned food |
+| level 6 | 0x438E4, 0x44DCA | Seeds the treasure-room interval; secret/treasure substitution still waits for a later transition |
+| level ≥6 | 0x43F68, 0x4E432 | Enables the three-level hidden-potion cadence and thief scheduling; the thief probability is still zero on levels 6-7 |
+| level >6 | 0x43AF0, 0x44DCA | Converts one authored food to adaptive food below maze 115 and allows secret/treasure substitution |
+| level ≥12 | 0x45E6A, 0x4394E | Maze-authored dragons survive placement and trick 9 may arm |
+| level >30 | 0x4D33E | Treasure rooms may select a 1-in-16 fake spoken countdown |
+| every level | 0x40F82, 0x4E568, table 0x571DA | Generator chance is capped at `2*level` except level 1; thief delay scales through level 106; forcefield delay profile uses `level & 3`; ordinary/treasure hazards use the modulo-400/modulo-160 tiers above |
+
+Maze-number gates remain separate: thief setup excludes only mazes 115-116,
+random pickups skip mazes 115+, and treasure/secret branches use their own
+104/115 boundaries.
+
 `get_random_maze_flags` (0x436CC): selects a random entry from a 13-entry ROM table at 0x57012. If LFLAG4 bit 2 (TrapsLocal) is set and the result is 0x80, overrides to 0x2.
 
 #### Random pickup setup (`maze_addrandompickups`, 0x43F68)
@@ -1707,8 +1727,17 @@ Secret-room availability is paced by a pair of level counters:
 - `secret_name_entry_update` (0x54FE8), selected only by status 0x20, edits
   that winner's name using `ram.secret_player`, calls the live character-step
   and small-character draw helpers at 0x55440/0x554B6, and invokes
-  `secret_code_build` when entry completes.
-- After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-character `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
+  `secret_code_build` when entry completes. `secret_getname` initializes the
+  byte repeat delay to 0xA0, so the first held direction waits 160 frames; later
+  repeats accelerate to 8-13 frames exactly like ordinary initials entry.
+- After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-symbol `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. Atari can therefore verify positions 0/2/5 from the submitted name and decode the other three positions without asking the player for those state fields. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
+- Before that result is displayed, 0x5528A-0x552DA writes 29 opaque blank
+  small glyphs across the winner's editor row. The result page replaces the
+  name-entry page; it does not intentionally retain a prefix or trailing text.
+- The seven result characters use game helper `name_entry_draw_large_char`
+  0x4A44A rather than generic OS large ASCII text. Its hyphen arm writes raw
+  glyphs `0x7C/0xFE/0xFC/0x7E`; the OS ASCII map would turn `'-'` into the
+  zero-shaped index-0 quad.
 - After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) saves the maze trick in `0x904064`, replaces `0x904065` with a random task code 0x50–0x5D, selects a time limit from tables at 0x57360/0x5737C, and displays the optional task qualifier from the 14-record table at 0x573D4. It initializes the secret maze number to 115, compares the task against 0x57, and increments the maze number for tasks 0x57–0x5D before calling `maze_select_bank_special`; tasks 0x50–0x56 therefore use maze 115 and tasks 0x57–0x5D use maze 116. Code 0x5A is valid: its qualifier is “AFTER REMOVING ALL TREASURE,” and a supershot hit on ordinary treasure increments the player's progress.
 - Neither stored secret maze contains an exit. During `maze_new_level_setup`, 0x43C20–0x43D10 selects one generator type from the 14-word table at 0x57056, indexed by challenge code minus 0x50. The scan converts every matching type-0x28–0x2D generator into an exit and removes the other generators in that range. It also replaces ordinary object types 0x13–0x18 with hidden potions whose pictures are `0xA728 + 4 * (type - 0x13)`. The generated exit is therefore part of challenge setup, not compressed maze data or a renderer overlay.
 - The ordinary exit/transporter scan occurs before that secret transformation. Generated challenge exits are live collision/playfield markers but are not entered into the cleared ordinary exit-position table; no moving/choose-one logic applies to them.

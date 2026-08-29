@@ -200,7 +200,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904A24 | 2 B | `game_settings` | Game settings from EEPROM. See bit layout below. |
 | 0x904A26 | 2 B × 4 | `player_state_timer` | Reused per-player timer. During live play below 200 health, `main_health_countdown` increments it modulo 0x8000: the low nibble produces the 8-frames-dim/8-frames-normal health-number pulse, and `timer & heartbeat_mask[health >> 5] == 0` schedules the heartbeat sound. During death/high-score handling it is instead a countdown: 0x0A8C = 2700 frames (45 s) for initials entry, 0x0258 = 600 frames (10 s) for the GAME OVER display. `0xFFFF` disables the timer. |
 | 0x904A2E | 2 B × 4 | `name_entry_scroll_velocity` | Signed per-player character-selection velocity/accumulator, clamped to ±0xA0 and fed to `name_entry_step_char` during ordinary or secret name entry |
-| 0x904A36 | 1 B × 4 | `name_entry_repeat_delay` | Per-player byte countdown that delays auto-repeat while the initials joystick remains held; the former 2-byte element size overlapped the buffer at 0x904A3A |
+| 0x904A36 | 1 B × 4 | `name_entry_repeat_delay` | Per-player byte countdown that delays auto-repeat while the initials or secret-name joystick remains held. Both editors initialize it to 0xA0 (160 frames), then reload 8–13 as velocity accelerates; the former 2-byte element size overlapped the buffer at 0x904A3A |
 | 0x904A3A | 4 B × 4 | `player_initials_buf` | Four-byte per-player working record: byte 0 is the selected initials cursor/state and bytes 1–3 hold the three editable characters (initialized to 'A') |
 | 0x904A4A | 1 B × 4 | `player_highscore_rank` | Per-player rank returned by the high-score qualification API; 0–9 qualifies and values outside that range skip initials entry |
 
@@ -244,7 +244,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904A9E | 2 B | `dialog_timer` | Dialog lifetime countdown. Nonzero means a dialog is active and suppresses conflicting gameplay/display work; `main_msgbox_countdown` decrements it and erases the box when it reaches zero. Values of 1 are also used to force immediate cleanup during screen transitions. |
 | 0x904AA0 | 2 B | `ptr_dialog_box_x` | Dialog X position pointer |
 | 0x904AA2 | 2 B | `ptr_dialog_box_y` | Dialog Y position pointer |
-| 0x904AA4 | 30 B | `dialog_msg_buf` | Buffer for dialog/name-entry message string (the buffer itself, not a pointer — `secret_getname` fills it with 'A' + 28 spaces + NUL directly) |
+| 0x904AA4 | 30 B | `dialog_msg_buf` | Buffer for dialog/name-entry message string (the buffer itself, not a pointer — `secret_getname` fills it with 'A' + 28 spaces + NUL directly). On completion the result setup blanks all 29 old alpha cells before replacing this buffer with the contest code. |
 
 ### 1.13 Player Death / Respawn
 
@@ -1124,7 +1124,7 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | Address | Size | Content |
 |---------|------|---------|
 | 0x54BD6 | 10 B | `dragon_head_hitbox_offsets` — five padded words `{0x0400,0,0x0400,0,0x0400}`. `dragon_shot_hitbox_adjust` indexes overlapping H/V pairs with `(dragon_facing & 6)`, giving the cardinal head displacement without a wrap branch. |
-| 0x54CA6 | 32 B | `secret_code_alphabet` — exact 5-bit symbol alphabet `0123456789ABCDEFGHJKMNPQRSTUWXYZ` (I, L, O, and V omitted), used for all six characters of the displayed secret code. |
+| 0x54CA6 | 32 B | `secret_code_alphabet` — exact 5-bit symbol alphabet `0123456789ABCDEFGHJKMNPQRSTUWXYZ` (I, L, O, and V omitted), used for all six symbols of the displayed `XXX-XXX` secret code. Positions 0/2/5 authenticate the submitted name; positions 1/4/6 decode the packed prior maze, trick nibble, and challenge nibble. |
 | 0x54CC6 | 512 B | `secret_code_crc16_table` — 256 big-endian words, the standard CRC-CCITT/0x1021 lookup table. `secret_code_build` uses it to hash the entered name, skipping spaces; exact range 0x54CC6–0x54EC5, immediately before `secret_getname`. |
 | 0x5318C | 442 B | `game_options_descriptor_stream` — game-specific operator-options stream passed by `game_options_display` (0x5317C) to OS API 0x248. It contains tagged prompts and choices for resetting scores/defaults, attract sound, difficulty, health per coin, coins to start, secret codes, speech, and reduced text; exact range 0x5318C–0x53345. |
 | 0x57002 | 4 × 4B | Per-player character announcement speech IDs (ROM pointer table) |

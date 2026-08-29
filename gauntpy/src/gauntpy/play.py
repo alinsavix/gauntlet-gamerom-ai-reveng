@@ -2,6 +2,7 @@
 
     uv run gauntpy-play            # level 1, Elf
     uv run gauntpy-play --level 2 --character elf --scale 3
+    uv run gauntpy-play --level 115 --maze 3
 
 By default it loads a maze and drops a player directly into gameplay; ``--attract``
 boots through the complete cabinet front end. Both paths drive the real
@@ -30,7 +31,7 @@ from .subsystems.players import player_join, update_player_sprite
 from .subsystems.session import configured_start_health
 
 #: Highest maze number the Slapstic image holds (gex's own bound, restated so
-#: ``--level`` can be clamped without importing gex at module import time --
+#: ``--maze`` can be checked without importing gex at module import time --
 #: ``play`` must stay importable with no ROMs configured).
 MAX_MAZE_NUM = 116
 
@@ -56,6 +57,15 @@ def _positive_level(value: str) -> int:
     if level < 1:
         raise argparse.ArgumentTypeError("level must be 1 or greater")
     return level
+
+
+def _maze_number(value: str) -> int:
+    maze_number = int(value)
+    if not 0 <= maze_number <= MAX_MAZE_NUM:
+        raise argparse.ArgumentTypeError(
+            f"maze must be between 0 and {MAX_MAZE_NUM}"
+        )
+    return maze_number
 
 
 def _positive_scale(value: str) -> int:
@@ -141,12 +151,18 @@ def build_state(
     level: int,
     character: int,
     *,
+    maze_number: int | None = None,
     keys: int = 0,
     potions: int = 0,
     powers: tuple[int, ...] = (),
     rng_seed: int = 0,
 ) -> GameState:
-    """Load ``level`` and spawn a hero directly (the mid-level drop)."""
+    """Load ``level`` and spawn a hero directly (the mid-level drop).
+
+    ``level`` owns level-gated behavior.  ``maze_number`` optionally pins the
+    stored maze record; without it, levels 1-5 use mazes 0-4 and level 6+
+    advances the cabinet rotation from its current resume position.
+    """
     from . import maze
 
     from .subsystems.eeprom import GAME_DEFAULT_SETTINGS
@@ -158,13 +174,19 @@ def build_state(
         rng=GameRandom(rng_seed),
     )
     init_alpha_color_ram(state)
-    if level > 5:
-        # Past the opening act there is no fixed level -> maze rule (doc/06
-        # §3.2), so ``load_level`` reads ``mazenum_current``. Seed it with the
-        # cabinet's own opening rotation position rather than leaving it at
-        # maze 0, which would silently replay level 1's maze.
-        state.mazenum_current = min(level - 1, MAX_MAZE_NUM)
-    maze.load_level(state, level)           # places objects with their pictures
+    if maze_number is None and level > 5:
+        from .subsystems.exits import compute_next_level
+
+        state.levelnum_current = 5
+        state.mazenum_current = 4
+        while state.levelnum_current < level:
+            compute_next_level(state, int(MazeObjIds.EXIT))
+            state.levelnum_current = state.level_next
+            state.mazenum_current = state.maze_next
+        maze_number = state.mazenum_current
+    maze.load_level(
+        state, level, maze_number=maze_number,
+    )                                       # places objects with their pictures
     _spawn_player(state, character)
     from .subsystems.exits import update_monster_spawn_bonus_from_score_per_coin
 
@@ -190,7 +212,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         powers: tuple[int, ...] = (),
         load_state_path: str | Path | None = None,
         scenario_path: str | Path | None = None,
-        rng_seed: int = 0) -> None:
+        rng_seed: int = 0, maze_number: int | None = None) -> None:
     """Open a window and run the game loop until the player closes it.
 
     Two entries: the default mid-level drop (``build_state``), or -- with
@@ -228,11 +250,12 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         try:
             state = build_state(
                 level, character, keys=keys, potions=potions, powers=powers,
-                rng_seed=rng_seed,
+                rng_seed=rng_seed, maze_number=maze_number,
             )
         except MazeError as exc:
             raise SystemExit(
-                f"could not load level {level}: {exc}\n"
+                f"could not load level {level}"
+                f"{'' if maze_number is None else f' / maze {maze_number}'}: {exc}\n"
                 "Check that GEX_ROM_DIR points at a complete Gauntlet II ROM "
                 "dump (file list in python-gex/README.md)."
             ) from exc
@@ -280,8 +303,13 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--level", type=_positive_level,
-        help="level number; 1-5 are the fixed opening mazes 0-4, higher levels "
-             "start at the matching rotation maze and advance from there",
+        help="game level number; controls level-gated behavior and, unless "
+             "--maze is given, selects through the cabinet maze rotation",
+    )
+    parser.add_argument(
+        "--maze", type=_maze_number,
+        help="stored maze record 0-116; does not change the game level "
+             "(default level: 1)",
     )
     parser.add_argument(
         "--character", choices=sorted(_CHARACTERS),
@@ -323,23 +351,30 @@ def main(argv: list[str] | None = None) -> None:
         help="start direct play with a temporary power; may be repeated",
     )
     args = parser.parse_args(argv)
+    if args.level is not None and args.level > 999 and args.maze is None:
+        parser.error(
+            "--level above 999 requires --maze; ordinary level progression "
+            "wraps level 1000 to level 6"
+        )
     if args.attract and (args.keys or args.potions or args.power):
         parser.error("--keys, --potions, and --power require direct play (no --attract)")
     if args.load_state and (
-        args.attract or args.level is not None or args.character is not None
+        args.attract or args.level is not None or args.maze is not None
+        or args.character is not None
         or args.keys or args.potions or args.power or args.seed is not None
     ):
         parser.error(
-            "--load-state cannot be combined with --attract, --level, --character, "
+            "--load-state cannot be combined with --attract, --level, --maze, --character, "
             "--keys, --potions, --power, or --seed"
         )
     if args.scenario and (
         args.load_state or args.attract or args.level is not None
+        or args.maze is not None
         or args.character is not None or args.keys or args.potions
         or args.power or args.seed is not None
     ):
         parser.error(
-            "--scenario cannot be combined with --load-state, --attract, --level, "
+            "--scenario cannot be combined with --load-state, --attract, --level, --maze, "
             "--character, --keys, --potions, --power, or --seed"
         )
 
@@ -365,7 +400,7 @@ def main(argv: list[str] | None = None) -> None:
         keys=args.keys, potions=args.potions,
         powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power),
         load_state_path=args.load_state, scenario_path=args.scenario,
-        rng_seed=rng_seed)
+        rng_seed=rng_seed, maze_number=args.maze)
 
 
 

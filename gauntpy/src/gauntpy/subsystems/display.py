@@ -563,11 +563,7 @@ def write_alpha_large_char(
 ) -> int:
     """Write one OS large character and return its one- or two-cell advance."""
     cell_attribute = (attribute & ALPHA_ATTRIBUTE_MASK) | 0x0100
-    glyphs = (
-        (0x1C, 0x1E, 0xFC, 0x7E)
-        if character == "\b"
-        else _LARGE_GLYPH_QUADS[_large_glyph_index(character.upper())]
-    )
+    glyphs = _LARGE_GLYPH_QUADS[_large_glyph_index(character.upper())]
     cells = [(0, 0, glyphs[0]), (0, 1, glyphs[1])]
     width = 1
     if glyphs[2] or glyphs[3]:              # 0x3280 tst.w (a2)
@@ -579,6 +575,29 @@ def write_alpha_large_char(
                 cell_attribute, glyph | 0x0100,
             )
     return width
+
+
+def write_alpha_name_entry_large_char(
+    state: GameState, column: int, row: int, character: str, attribute: int,
+) -> int:
+    """Port name_entry_draw_large_char 0x4A44A, including its two controls."""
+    special = {
+        "\b": (0x1C, 0x1E, 0xFC, 0x7E),
+        "-": (0x7C, 0xFE, 0xFC, 0x7E),
+    }.get(character)
+    if special is None:
+        return write_alpha_large_char(
+            state, column, row, character, attribute,
+        )
+    for dx, dy, glyph in (
+        (0, 0, special[0]), (0, 1, special[1]),
+        (1, 0, special[2]), (1, 1, special[3]),
+    ):
+        if 0 <= column + dx < ALPHA_COLUMNS and 0 <= row + dy < ALPHA_ROWS:
+            state.alpha_ram[alpha_index(column + dx, row + dy)] = alpha_word(
+                attribute, glyph,
+            )
+    return 2
 
 
 def write_alpha_text(
