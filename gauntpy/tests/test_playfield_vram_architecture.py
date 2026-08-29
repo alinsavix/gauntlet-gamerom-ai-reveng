@@ -37,6 +37,59 @@ def test_playfield_ram_is_the_exact_column_first_hardware_table():
     )
 
 
+def test_lflag1_invisible_trap_walls_preserve_floor_descriptors():
+    import gauntpy.maze as maze_module
+
+    state = GameState(level_flags=0x80)
+    slot = (5 << 5) | 5
+    state.maze = SimpleNamespace(data={(5, 5): int(MazeObjIds.WALL_TRAPCYC1)})
+    floor = (1, 2, 3, 4)
+    write_tile_descriptor(state, slot, floor)
+    state.playfield_wall_catalog[0] = (9, 9, 9, 9)
+
+    set_cell_descriptor(state, slot, int(MazeObjIds.WALL_TRAPCYC1))
+
+    assert not maze_module._wall_is_visible(
+        state, int(MazeObjIds.WALL_TRAPCYC1),
+    )
+    assert maze_module._wall_is_visible(
+        state, int(MazeObjIds.WALL_REGULAR),
+    )
+    assert read_tile_descriptor(state, slot) == floor
+
+
+def test_lflag2_invisible_all_walls_preserves_floor_descriptors():
+    import gauntpy.maze as maze_module
+
+    state = GameState(level_flags_2=0x80)
+    slot = (5 << 5) | 5
+    state.maze = SimpleNamespace(data={(5, 5): int(MazeObjIds.WALL_REGULAR)})
+    floor = (1, 2, 3, 4)
+    write_tile_descriptor(state, slot, floor)
+    state.playfield_wall_catalog[0] = (9, 9, 9, 9)
+
+    set_cell_descriptor(state, slot, int(MazeObjIds.WALL_REGULAR))
+
+    assert not maze_module._wall_is_visible(
+        state, int(MazeObjIds.WALL_REGULAR),
+    )
+    assert read_tile_descriptor(state, slot) == floor
+
+
+def test_level_9999_overrides_both_wall_invisibility_flags():
+    import gauntpy.maze as maze_module
+
+    state = GameState(
+        levelnum_current=maze_module.LEVEL_SENTINEL,
+        level_flags=0x80,
+        level_flags_2=0x80,
+    )
+
+    assert maze_module._wall_is_visible(
+        state, int(MazeObjIds.WALL_TRAPCYC1),
+    )
+
+
 def test_runtime_render_api_exposes_only_authoritative_vram_path():
     import gauntpy.render.playfield as playfield
 

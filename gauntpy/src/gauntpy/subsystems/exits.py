@@ -47,6 +47,11 @@ _LFLAG3_EXIT_MOVES = 0x40   # bit 6 of level_flags_3 byte
 # maze_pick_one_exit, so a maze with neither flag keeps every exit it decoded.
 _LFLAG3_EXIT_CHOOSEONE = 0x80
 _LFLAG3_EXIT_PICK_MASK = _LFLAG3_EXIT_MOVES | _LFLAG3_EXIT_CHOOSEONE
+_LFLAG1_INVIS_TRAPWALLS = 0x80
+_LFLAG2_INVIS_ALLWALLS = 0x80
+_LFLAG4_SHOTS_STUN = 0x01
+_LFLAG4_SHOTS_HURT = 0x02
+_LFLAG4_PLAYER_OFFSCREEN = 0x80
 
 # LFLAG4_EXIT_FAKE = 1 << 6 in the 32-bit longword.
 # LFLAG4 is the fourth byte (bits 7-0 of the longword), so bit 6 in the
@@ -480,6 +485,73 @@ def _write_secret_hint(state: GameState) -> None:
     text = romtext.SECRET_OBJECTIVE_HINTS[trick - 1]
     write_alpha_text(state, 14 - len(text) // 2, row, text, 0x8000)
     state.secret_need_hint = 0
+
+
+def _write_level_flag_hint(state: GameState, key: str) -> None:
+    text, column, row, attribute = romtext.LEVEL_FLAG_HINTS[key]
+    write_alpha_text(state, column, row, text, attribute)
+
+
+def _write_level_splash_details(state: GameState) -> None:
+    """0x4BE24-0x4C1B2 -- write flag notices and the lower gameplay hint."""
+    speech_used = False
+    if (
+        state.level_next_potion == 0
+        and state.levelnum_current >= 6
+        and state.mazenum_current < _SECRET_MAZE_FIRST
+    ):
+        _write_level_flag_hint(state, "hidden_potion")
+        if state.getrandom(4) == 0:
+            sound_speech_play(state, 0x9B)
+            speech_used = True
+
+    if state.level_flags_4 & _LFLAG4_SHOTS_STUN:
+        _write_level_flag_hint(state, "shots_stun")
+        if not speech_used:
+            sound_speech_play(state, 0x8C)
+            speech_used = True
+    if state.level_flags_4 & _LFLAG4_SHOTS_HURT:
+        _write_level_flag_hint(state, "shots_hurt")
+        if not speech_used:
+            sound_speech_play(state, 0x99)
+            speech_used = True
+    if state.level_flags_4 & _LFLAG4_PLAYER_OFFSCREEN:
+        _write_level_flag_hint(state, "player_offscreen")
+
+    if state.level_flags_2 & _LFLAG2_INVIS_ALLWALLS:
+        _write_level_flag_hint(state, "all_walls_invisible")
+    elif state.level_flags & _LFLAG1_INVIS_TRAPWALLS:
+        _write_level_flag_hint(state, "trap_walls_invisible")
+        if not speech_used and state.getrandom(4) == 0:
+            sound_speech_play(state, 0xCD)
+            speech_used = True
+
+    if state.level_flags_3 & _LFLAG3_EXIT_MOVES:
+        _write_level_flag_hint(state, "exit_moves")
+        if not speech_used and state.getrandom(4) == 0:
+            sound_speech_play(state, 0xCE)
+
+    row = 4 if state.levelnum_current == 1 else 15
+    if state.levelnum_current == 1:
+        text = romtext.GAMEPLAY_TIPS[-1][0]
+        write_alpha_text(state, (29 - len(text)) // 2, row, text, 0x8000)
+        return
+    if state.secret_need_hint:
+        _write_secret_hint(state)
+        return
+    if in_bonus_room(state) or state.game_settings & 0x0400:
+        return
+
+    first, second = romtext.GAMEPLAY_TIPS[state.getrandom(9)]
+    if first:
+        write_alpha_text(
+            state, (29 - len(first)) // 2, row, first, 0x8000,
+        )
+        row += 1
+    if second:
+        write_alpha_text(
+            state, (29 - len(second)) // 2, row, second, 0x8000,
+        )
 
 
 def _write_secret_room_start(state: GameState) -> None:
@@ -1203,7 +1275,7 @@ def show_level_start_screen(state: GameState) -> None:
         write_alpha_large_text(
             state, 16, 9, f"{state.levelnum_current:>3}", 0x8000,
         )
-    _write_secret_hint(state)
+    _write_level_splash_details(state)
 
     # 0x45228-0x45260: normal/reduced-text/secret-room display holds.
     state.global_delay_timer = (

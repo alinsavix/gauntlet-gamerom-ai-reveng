@@ -95,6 +95,23 @@ from gauntpy.subsystems.exits import (
     update_monster_spawn_bonus_from_score_per_coin,
 )
 
+
+class _SequenceRandom:
+    def __init__(self, *values):
+        self.values = list(values)
+        self.bounds = []
+
+    def getrandom(self, bound):
+        self.bounds.append(bound)
+        return self.values.pop(0)
+
+
+def _alpha_text(state, column, row, length):
+    return "".join(
+        chr(word & 0x3FF) if word & 0x3FF else " "
+        for word in state.alpha_ram[row * 64 + column:row * 64 + column + length]
+    )
+
 _TREASURE_MAZE = 104
 
 
@@ -1014,6 +1031,81 @@ class TestLevelEndHold:
         assert state.alpha_ram[9 * 64 + 15] == 0x8000         # untouched gap
         assert state.alpha_ram[9 * 64 + 20] & 0x3FF == expected_2
         assert state.global_delay_timer == 0xB4
+
+    def test_level_one_draws_its_fixed_gameplay_tip(self):
+        state = GameState(levelnum_current=1, mazenum_current=0)
+
+        show_level_start_screen(state)
+
+        text = romtext.GAMEPLAY_TIPS[-1][0]
+        column = (29 - len(text)) // 2
+        assert _alpha_text(state, column, 4, len(text)) == text
+
+    def test_ordinary_level_draws_the_rng_selected_two_line_tip(self):
+        state = GameState(
+            levelnum_current=2,
+            mazenum_current=1,
+            level_next_treasure=2,
+        )
+        state.rng = _SequenceRandom(3)
+
+        show_level_start_screen(state)
+
+        first, second = romtext.GAMEPLAY_TIPS[3]
+        assert state.rng.bounds == [9]
+        assert _alpha_text(
+            state, (29 - len(first)) // 2, 15, len(first),
+        ) == first
+        assert _alpha_text(
+            state, (29 - len(second)) // 2, 16, len(second),
+        ) == second
+
+    def test_level_flag_notices_share_the_rom_speech_latch(self):
+        state = GameState(
+            levelnum_current=7,
+            mazenum_current=26,
+            level_next_potion=0,
+            level_next_treasure=2,
+            level_flags=0x80,
+            level_flags_2=0x80,
+            level_flags_3=_LFLAG3_EXIT_MOVES,
+            level_flags_4=0x83,
+        )
+        state.rng = _SequenceRandom(1, 0)
+
+        show_level_start_screen(state)
+
+        for key in (
+            "hidden_potion", "shots_stun", "shots_hurt",
+            "player_offscreen", "all_walls_invisible", "exit_moves",
+        ):
+            text, column, row, _attribute = romtext.LEVEL_FLAG_HINTS[key]
+            assert _alpha_text(state, column, row, len(text)) == text
+            assert state.alpha_ram[row * 64 + column] & 0xFC00 == _attribute
+        trap_text, column, row, _attribute = romtext.LEVEL_FLAG_HINTS[
+            "trap_walls_invisible"
+        ]
+        assert _alpha_text(state, column, row, len(trap_text)) != trap_text
+        assert state.sound_log == [0x8C]
+        assert state.rng.bounds == [4, 9]
+
+    def test_trap_wall_notice_has_its_quarter_chance_speech(self):
+        state = GameState(
+            levelnum_current=2,
+            mazenum_current=1,
+            level_next_treasure=2,
+            level_flags=0x80,
+        )
+        state.rng = _SequenceRandom(0, 0)
+
+        show_level_start_screen(state)
+
+        text, column, row, _attribute = romtext.LEVEL_FLAG_HINTS[
+            "trap_walls_invisible"
+        ]
+        assert _alpha_text(state, column, row, len(text)) == text
+        assert state.sound_log == [0xCD]
+        assert state.rng.bounds == [4, 9]
 
     def test_secret_hint_uses_the_armed_next_maze_objective(self, monkeypatch):
         from gauntpy.subsystems import exits as exits_module

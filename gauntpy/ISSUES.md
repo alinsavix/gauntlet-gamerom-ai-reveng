@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2476 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2506 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,31 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-164 · exhaustive LFLAG audit restored level-splash consumers
+
+Every bit in the four-byte level-flags longword was traced from its ROM readers
+to setup, simulation, modeled video RAM, and presentation. The gameplay paths
+were complete after S-163: odd-angle and fast families; the two mirror bits;
+trap/all-wall invisibility and one-hit invisible destructible walls; random
+food; cyclic and one-/two-group setup walls; moving/choose-one/fake exits;
+friendly-fire stun/damage; local/random traps; both wrap axes; and the
+player-offscreen gates. Regressions now exercise every family selector, all
+eight random-food field values, both deletable-wall forms, TrapsLocal culling,
+both invisibility modes and the level-9999 override, wrap direction on both
+axes, and friendly-fire priority.
+
+One real omission remained. `level_splash` 0x4BE24–0x4C1B2 reads six LFLAG
+conditions but gauntpy's merged start-screen implementation wrote only the
+large level field and secret hint. It now writes the exact alpha records for
+ShotStun, ShotHurt, PlayerOffscreen, InvisibleAllWalls,
+InvisibleTrapWalls, and ExitMoves, plus the adjacent hidden-potion notice.
+Their shared one-speech latch and one-in-four draws follow ROM order, so these
+presentation branches also restore the correct global RNG stream. The same
+routine now writes level 1's fixed `FIND EXIT TO NEXT LEVEL` line and the
+ordinary `getrandom(9)` two-line gameplay tip, with the original bonus-room and
+reduced-text gates. Literal strings live in `romtext.py`; rendering remains a
+pure alpha-RAM consumer.
 
 ### S-163 · thief combat, seam monster scheduling, and maze-26 setup
 

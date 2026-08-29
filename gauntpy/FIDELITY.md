@@ -342,6 +342,13 @@ evidence remains in `../doc/`, generated contracts, and the book.
     after exit selection and use `maze_place_object_types`, including the
     LFLAG4 `TrapsLocal` visibility gate, so logical maze state, MOB records, and
     playfield descriptors must change together.
+74. **Level flags have every consumer they reach.** A flag can affect setup,
+    simulation, video RAM, and presentation independently. In particular,
+    `level_splash` writes LFLAG notices and consumes speech/RNG state; LFLAG1
+    bits 2–3 mirror placement even though their historical names mention
+    monster families; and LFLAG2 bit 7 both hides walls and changes
+    destructible-wall damage. An implementation is incomplete until all
+    address-proven consumers of the bit are represented.
 
 ## Investigation workflow
 

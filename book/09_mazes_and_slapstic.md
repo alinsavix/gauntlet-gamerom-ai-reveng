@@ -244,7 +244,7 @@ keeping them apart matters:
 1. **Maze selection** (above) is deterministic rotation with persistent
    state. No dice involved.
 2. **Level-flag randomization** happens after a maze is chosen. The stored
-   flags are a floor, not a ceiling: each level, a couple of trap-flag
+   flags are a floor, not a ceiling: each level, the two whole-maze mirror
    bits are randomly flipped, and deep levels get extra hazards ORed in,
    drawn from a 13-entry table, with wraparound geometry forced past
    certain depths. Late in the game, nearly any maze can arrive fast,
@@ -266,6 +266,26 @@ level six, one authored food in any non-secret maze becomes the `0x277B`
 adaptive food whose healing amount is selected later when eaten. Random-wall
 cursor bounds are also established here, before the first live frame rather
 than lazily after play has begun.
+
+Taken together, the four bytes are a compact ruleset. The first byte chooses
+odd-angle monster families, uses two otherwise-masked bits to mirror the whole
+maze, and can hide trap walls. The second speeds seven monster families and can
+hide every wall (with the extra consequence that destructible walls vanish on
+their first hit). The third carries the zero-to-seven food count, cyclic and
+random setup wall changes, and moving/choose-one exits. The fourth controls
+friendly-fire stun and damage, local/random traps, both wrap axes, fake exits,
+and whether heroes may leave the normal hardware window. Some bits therefore
+have more than one consumer; auditing only movement or only level setup is not
+enough.
+
+The between-level screen is one of those consumers. It writes notices for the
+hidden-potion cadence, both friendly-fire modes, off-screen movement, invisible
+walls, and moving exits directly into alpha RAM. Only one notice may speak:
+ShotStun and ShotHurt have priority, while hidden potions, invisible trap walls,
+and moving exits use one-in-four rolls. Level one adds `FIND EXIT TO NEXT
+LEVEL`; later ordinary levels choose one of nine two-line gameplay tips unless
+the reduced-text operator option suppresses that final tip. These draws advance
+the same global random stream as maze setup and monster generation.
 
 The well itself is one small function, `getrandom`, and one 16-bit seed
 word. Each call advances the seed with a textbook linear congruential

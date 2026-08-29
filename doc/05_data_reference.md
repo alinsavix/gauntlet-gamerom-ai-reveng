@@ -621,6 +621,14 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 | LFLAG1_ODDANGLE_DEATHS | 0x40 |
 | LFLAG1_INVIS_TRAPWALLS | 0x80 |
 
+Bits 0, 1, 4, 5, and 6 install the ROM's per-family odd-angle targeting
+overrides. Bits 2 and 3 are deliberately excluded by the `0x73` consumer mask:
+their live role is horizontal and vertical whole-maze mirroring during decode
+and placement. Bit 7 leaves type-7/8/9 collision markers intact while wall
+initialization and redraw retain floor descriptors; `level_splash` also writes
+`TRAP WALLS ARE INVISIBLE` and has a one-in-four speech chance when no earlier
+splash notice spoke.
+
 **Level Flags 2** (`level_flags[1]`):
 
 | Name | Value |
@@ -634,6 +642,12 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 | LFLAG2_FAST_DEATHS | 0x40 |
 | LFLAG2_INVIS_ALLWALLS | 0x80 |
 
+Bits 0–6 independently select the seven ordinary fast families. The selected
+family receives the doubled step only on the ROM cadence phase. Bit 7 suppresses
+ordinary wall descriptor setup/redraw, makes destructible walls disappear on
+their first hit, and selects the `ALL WALLS ARE INVISIBLE` splash notice. Level
+9999 deliberately bypasses the invisibility drawing gates.
+
 **Level Flags 3** (`level_flags[2]`):
 
 | Name | Value |
@@ -644,6 +658,14 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 | LFLAG3_WALLS_DELETABLE2 | 0x20 — level setup removes a random wall family and the next family cyclically |
 | LFLAG3_EXIT_MOVES | 0x40 |
 | LFLAG3_EXIT_CHOOSEONE | 0x80 |
+
+Bits 0–2 are the authored random-food count before party, class, difficulty,
+and spawn-pressure adjustments. Bit 3 packs type-7/8/9 markers into the
+cyclic-wall table and runs the 120-frame phase machine. Bits 4–5 perform the
+one-/two-group setup removals described in the table. Bit 6 selects, animates,
+and announces a moving exit; bit 7 performs choose-one selection without
+movement. LFLAG4 `EXIT_FAKE` controls whether either selection path's losers
+remain as decoys.
 
 **Level Flags 4** (`level_flags[3]`):
 
@@ -662,6 +684,21 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 draws one value from `getrandom(3)` and adds it modulo three to every live
 type-10/11/12 trap marker, preserving their grouping while rotating which
 trigger controls which wall family.
+
+The complete remaining consumers are:
+
+- `SHOTS_STUN` and `SHOTS_HURT` govern player-shot contact, in that priority
+  order when both are set, and write their separate level-splash notices.
+- `TRAPS_LOCAL` restricts `maze_place_object_types` to its wider near-screen
+  window. It also changes deep-level randomization: a random off-screen-player
+  result becomes `SHOTS_HURT`, and automatic wrap additions are suppressed.
+- `WRAP_V` and `WRAP_H` govern directional distance/probes and maze seams;
+  `WRAP_H` additionally changes the horizontal mirror axis from base 0x20 to
+  0x1F.
+- `EXIT_FAKE` retains choose-one losing exits as visible decoys with hpos bit 4
+  instead of replacing them with floor.
+- `PLAYER_OFFSCREEN` bypasses the player hardware-window and corner-transport
+  visibility gates and writes `PLAYERS CAN GO OFF SCREEN` on the splash.
 
 ### 3.13 Maze Numbers
 

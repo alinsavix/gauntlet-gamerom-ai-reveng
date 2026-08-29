@@ -237,6 +237,34 @@ def _monster_slot(state: GameState, obj_type: int) -> int | None:
 class TestMonsterSpeedPerFamily:
     """Each LFLAG2 fast bit speeds up only its own family (I-15)."""
 
+    @pytest.mark.parametrize(("bit", "family"), (
+        (0x01, MazeObjIds.MONST_GHOST),
+        (0x02, MazeObjIds.MONST_GRUNT),
+        (0x04, MazeObjIds.MONST_DEMON),
+        (0x08, MazeObjIds.MONST_LOBBER),
+        (0x10, MazeObjIds.MONST_SORC),
+        (0x20, MazeObjIds.MONST_AUX_GRUNT),
+        (0x40, MazeObjIds.MONST_DEATH),
+    ))
+    def test_every_fast_bit_selects_exactly_its_family(self, bit, family):
+        state = GameState(level_flags_2=bit)
+
+        for candidate in (
+            MazeObjIds.MONST_GHOST,
+            MazeObjIds.MONST_GRUNT,
+            MazeObjIds.MONST_DEMON,
+            MazeObjIds.MONST_LOBBER,
+            MazeObjIds.MONST_SORC,
+            MazeObjIds.MONST_AUX_GRUNT,
+            MazeObjIds.MONST_DEATH,
+        ):
+            expected = (
+                _MONSTER_SPEED_FAST
+                if candidate == family
+                else _MONSTER_SPEED_BASE
+            )
+            assert _monster_speed(state, int(candidate), 2) == expected
+
     def test_fast_bit_speeds_only_its_family(self):
         state = GameState()
         state.level_flags_2 = 0x01                    # FAST_GHOSTS only
@@ -839,6 +867,19 @@ class TestGenerators:
 # ---------------------------------------------------------------------------
 
 class TestOddAngleOverride:
+    @pytest.mark.parametrize(("bit", "family", "override"), (
+        (0x01, MazeObjIds.MONST_GHOST, 0x80),
+        (0x02, MazeObjIds.MONST_GRUNT, 0xC0),
+        (0x10, MazeObjIds.MONST_SORC, 0xA0),
+        (0x20, MazeObjIds.MONST_AUX_GRUNT, 0xA0),
+        (0x40, MazeObjIds.MONST_DEATH, 0x80),
+    ))
+    def test_every_live_oddangle_bit_selects_its_family(
+        self, bit, family, override,
+    ):
+        state = GameState(level_flags=bit)
+        assert _oddangle_override(state, int(family)) == override
+
     def test_flag_gates_the_override_byte(self):
         state = GameState()
         assert _oddangle_override(state, int(MazeObjIds.MONST_GRUNT)) == 0

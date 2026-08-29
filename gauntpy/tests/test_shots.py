@@ -848,6 +848,18 @@ class TestAcidImmunity:
 
 
 class TestPlayerVersusPlayer:
+    def test_shotstun_takes_priority_when_both_lflag4_bits_are_set(self):
+        state = _make_state()
+        state.level_flags_4 = 0x03
+        state.players[1].status = int(PlayerStatus.ALIVE_HERE)
+        state.players[1].health = 100
+        _place_player_mob(state, 309, 1)
+
+        resolve_shot_hit(state, 309, 0)
+
+        assert state.players[1].stundelay == 0x28
+        assert state.players[1].health == 100
+
     def test_shotstun_flag_stuns_and_clears_the_fighting_dir(self):
         state = _make_state()
         state.level_flags_4 = 0x01           # LFLAG4 bit 0: ShotStun

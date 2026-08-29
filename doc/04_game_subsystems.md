@@ -969,6 +969,20 @@ random pickups skip mazes 115+, and treasure/secret branches use their own
 
 `get_random_maze_flags` (0x436CC): selects a random entry from a 13-entry ROM table at 0x57012. If LFLAG4 bit 2 (TrapsLocal) is set and the result is 0x80, overrides to 0x2.
 
+`level_splash` (0x4BE24–0x4C1B2) is another level-flag consumer, not merely the
+large `LEVEL:` heading. It writes game-side alpha-RAM notices for hidden-potion
+cadence and LFLAG4 ShotStun, ShotHurt, and PlayerOffscreen; LFLAG2
+InvisibleAllWalls; LFLAG1 InvisibleTrapWalls; and LFLAG3 ExitMoves. The
+all-walls notice suppresses the narrower trap-walls notice. One shared local
+allows at most one speech command: hidden potion, invisible trap walls, and
+moving exit each roll one chance in four only while no earlier notice spoke,
+while ShotStun/ShotHurt speak immediately in that order. The routine then
+writes fixed `FIND EXIT TO NEXT LEVEL` text on level 1, otherwise consumes
+`secret_need_hint` or selects one of nine two-line gameplay tips with
+`getrandom(9)` on ordinary mazes. Reduced-text mode suppresses that final
+ordinary tip, not the flag notices. The literal records are at
+0x598B8–0x5999B and the two random-tip pointer tables at 0x59736/0x5975E.
+
 #### Random pickup setup (`maze_addrandompickups`, 0x43F68)
 
 This routine runs after the new level's party is placed. It first consumes

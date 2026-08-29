@@ -370,6 +370,11 @@ class TestVictimRouteTracking:
         state.wrap_h = True
         assert calc_direction(state, pack_slot(5, 31), pack_slot(5, 0)) == 2
 
+        state = GameState()
+        assert calc_direction(state, pack_slot(31, 5), pack_slot(0, 5)) == 0
+        state.wrap_v = True
+        assert calc_direction(state, pack_slot(31, 5), pack_slot(0, 5)) == 4
+
 
 class TestThiefComputePath:
     @staticmethod
