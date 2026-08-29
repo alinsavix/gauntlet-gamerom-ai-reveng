@@ -396,6 +396,15 @@ to contest name entry, and only when the operator enabled the contest option.
 Your saved supershot state survives the detour, the saved maze and level are
 restored, and the rotation resumes.
 
+The inventory handoff is a reminder that spare RAM is part of the design.
+Rather than reserve a neat structure, entry parks keys in the monster-spawn
+bonus byte, potions in red player's key byte, and supershots in one spare byte.
+The normal score-per-coin adjustment then changes the saved-key value before
+the room begins. Red has an additional ordering quirk: clearing the entrant's
+own keys also clears the potion scratch; on payout, restored keys are written
+first and that new key total is then added as potions. It is surprising, but it
+is the exact byte-level program Atari shipped.
+
 For most cabinets that is the end of the story. But if the operator has
 enabled one particular option, winning the challenge leads somewhere stranger.
 

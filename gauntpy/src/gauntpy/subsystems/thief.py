@@ -135,6 +135,20 @@ def _path_grid_offset(grid_index: int) -> int:
     return (grid_index // _PATH_GRID_COLUMNS) * _PATH_GRID_ROW_STRIDE + grid_index % _PATH_GRID_COLUMNS
 
 
+def _write_path_grid_byte(state: GameState, offset: int, value: int) -> None:
+    """Write the route byte and its big-endian hidden-alpha RAM alias."""
+    value &= 0xFF
+    state.path_direction_grid[offset] = value
+    byte_offset = 0x54 + offset
+    word_index, low_byte = divmod(byte_offset, 2)
+    word = state.alpha_ram[word_index]
+    state.alpha_ram[word_index] = (
+        (word & 0xFF00) | value
+        if low_byte
+        else (word & 0x00FF) | (value << 8)
+    )
+
+
 def path_grid_get_direction(state: GameState, grid_index: int) -> int:
     """0x5103E -- return the selected nibble, or eight when it is unset."""
     packed = state.path_direction_grid[_path_grid_offset(grid_index)]
@@ -147,7 +161,10 @@ def path_grid_get_direction(state: GameState, grid_index: int) -> int:
 def path_grid_set_low_direction(state: GameState, grid_index: int, direction: int) -> None:
     """0x50FD2 -- replace the pursuit (low-nibble) route direction."""
     offset = _path_grid_offset(grid_index)
-    state.path_direction_grid[offset] = (state.path_direction_grid[offset] & 0xF0) | ((direction + 1) & 0x0F)
+    _write_path_grid_byte(
+        state, offset,
+        (state.path_direction_grid[offset] & 0xF0) | ((direction + 1) & 0x0F),
+    )
 
 
 def path_grid_set_high_direction_if_empty(state: GameState, grid_index: int, direction: int) -> None:
@@ -156,7 +173,10 @@ def path_grid_set_high_direction_if_empty(state: GameState, grid_index: int, dir
         return
     offset = _path_grid_offset(grid_index)
     if not state.path_direction_grid[offset] & 0xF0:
-        state.path_direction_grid[offset] |= ((direction + 1) & 0x0F) << 4
+        _write_path_grid_byte(
+            state, offset,
+            state.path_direction_grid[offset] | (((direction + 1) & 0x0F) << 4),
+        )
 
 
 def calc_direction(state: GameState, from_slot: int, to_slot: int) -> int:

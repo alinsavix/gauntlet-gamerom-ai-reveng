@@ -75,7 +75,26 @@ def test_maze_show_clears_everything_except_the_status_panel():
         assert state.alpha_ram[row * 64:row * 64 + 29] == [0] * 29
         assert state.alpha_ram[row * 64 + 29:row * 64 + 42] == [0xFFFF] * 13
         assert state.alpha_ram[row * 64 + 42:(row + 1) * 64] == [0] * 22
-    assert state.path_direction_grid == bytearray(len(state.path_direction_grid))
+    assert all(
+        state.path_direction_grid[(slot // 44) * 0x80 + slot % 44] == 0
+        for slot in range(0x400)
+    )
+
+
+def test_full_alpha_initializers_clear_the_route_alias():
+    from gauntpy.subsystems.display import (
+        clear_attract_display_memory,
+        init_alpha_color_ram,
+    )
+
+    for clear in (init_alpha_color_ram, clear_attract_display_memory):
+        state = GameState()
+        state.path_direction_grid[:] = b"\xA5" * len(state.path_direction_grid)
+        clear(state)
+        assert all(
+            state.path_direction_grid[(slot // 44) * 0x80 + slot % 44] == 0
+            for slot in range(0x400)
+        )
 
 
 def test_large_text_uses_rom_variable_width_glyphs():

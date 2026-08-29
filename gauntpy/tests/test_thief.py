@@ -300,6 +300,8 @@ class TestRouteGrid:
 
         assert state.path_direction_grid[0] == 0x75
         assert state.path_direction_grid[0x80] == 0x02
+        assert state.alpha_ram[42] == 0x7500
+        assert state.alpha_ram[64 + 42] == 0x0200
         assert path_grid_get_direction(state, 0) == 4
         assert path_grid_get_direction(state, 44) == 1
 

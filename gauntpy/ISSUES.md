@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2468 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2473 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,40 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-162 · RAM-alias audit found secret-room stash divergence
+
+The exhaustive modeled-RAM overlap audit classified eight live groups. Six were
+already faithful representation/lifetime views: OS/game reuse at 0x904006 and
+0x904012–0x904015; popup timer 3 over reserved `mob_depth_key[0]`; effect
+counters over unused row-zero depth keys 30/31; and the biased
+`priority_bucket_heads_tail` view. Transporter-route cells and portrait padding
+are spatially disjoint in every reachable index. S-160/S-162 complete the two
+simultaneous aliases that required coupled writes.
+
+The additional behavioral miss was secret inventory. Direct M68000 execution
+of ROM 0x482D0–0x48334 confirms that entry writes winner keys to
+`monster_spawn_probability_bonus` (0x90405F), winner potions to player 0's key
+byte (0x90405A), and supershots to 0x905F6D, then clears the winner's indexed
+inventory. The immediately following 0x48B58 call adds score-per-coin pressure
+to the saved-key byte. Payout 0x4D86E–0x4D8A0 reads those same aliases in
+instruction order. For winner zero, clearing their keys destroys the potion
+stash; payout first restores keys, then reads that newly updated key byte as the
+potion addend. For other winners, player 0's key byte holds their potion stash.
+
+Gauntpy's dedicated stash fields had hidden all of those effects. Gameplay now
+uses the canonical aliased fields, so secret-room generator pressure and return
+inventory match the ROM. Tests cover winner zero, a nonzero winner, and mutation
+of the saved-key byte by the post-spawn bonus update.
+
+### S-161 · thief routing state had no live visualization
+
+The F1 panel now includes a host-only ROUTES page. It captures the complete
+route-grid byte view in the immutable post-frame snapshot and draws side-by-side
+32x32 maps for the low pursuit and high escape nibbles. Eight colors identify
+the compass directions; outlined cells mark the current, next, scheduled-start,
+and victim positions. The page never reads mutable state during rendering and
+does not write alpha RAM or the route grid.
 
 ### S-160 · thief route grid survived the alpha-RAM level clear
 

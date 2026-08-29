@@ -320,6 +320,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     `maze_show`/`maze_hide` clear those columns and therefore clear both route
     nibbles. A separate Python representation must receive the same game-side
     write or stale escape paths survive across levels.
+70. **Scratch aliases retain their side effects.** Secret-room entry stores the
+    winner's keys in `monster_spawn_probability_bonus` (0x90405F) and potions
+    in player 0's key byte (0x90405A), then performs indexed inventory clears
+    and the normal spawn-bonus update. Preserve that instruction order and read
+    the same physical bytes on payout; standalone “saved inventory” fields are
+    not behaviorally equivalent.
 
 ## Investigation workflow
 

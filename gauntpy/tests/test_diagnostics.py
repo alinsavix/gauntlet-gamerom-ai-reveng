@@ -267,6 +267,34 @@ def test_level_page_suppresses_stale_bonus_header_during_tally_transition():
     assert rows["SECRET TRICK"] == "n/a during transition"
 
 
+def test_routes_page_snapshots_both_route_nibbles_without_mutating_state():
+    from gauntpy.render import diagnostics
+
+    state = _diagnostic_state()
+    slot = pack_slot(10, 10)
+    offset = (slot // 44) * 0x80 + slot % 44
+    state.path_direction_grid[offset] = 0x73  # low=E(2), high=W(6)
+    state.thief_current_pos = slot
+    state.thief_next_pos = slot + 1
+    before = bytes(state.path_direction_grid)
+
+    snapshot = capture_debug_snapshot(state)
+    state.path_direction_grid[offset] = 0
+
+    assert snapshot.route_grid == before
+    assert diagnostics._route_direction(
+        snapshot.route_grid, slot, escape=False,
+    ) == 2
+    assert diagnostics._route_direction(
+        snapshot.route_grid, slot, escape=True,
+    ) == 6
+    image = render_debug_panel(
+        snapshot, page=DEBUG_PAGES.index("ROUTES"), height=240,
+    )
+    assert image.size == (DEBUG_PANEL_WIDTH, 240)
+    assert image.getpixel((8 + 10 * 4, 78 + 10 * 4)) != (16, 18, 22, 255)
+
+
 def test_event_log_is_derived_from_snapshots_without_game_instrumentation():
     state = _diagnostic_state()
     before = capture_debug_snapshot(state)

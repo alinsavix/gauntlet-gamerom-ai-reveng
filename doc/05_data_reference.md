@@ -53,7 +53,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904054 | 1 B | `sound_queue_tail` | Tail of sound queue |
 | 0x904055 | 4 B | `player_potionsnum` | Array of 1-byte counters: potions per player |
 | 0x90405A | 4 B | `player_keysnum` | Array of 1-byte counters: keys per player |
-| 0x90405F | 1 B | `monster_spawn_probability_bonus` | Signed global modifier added to `monster_spawn_probability_table` before each generator's random spawn gate. `update_monster_spawn_bonus_from_score_per_coin` (0x48B58) adds `(sum(active scores) >> 14) / sum(active players' inserted coins)`; coin insertion decrements it while positive. Several transition paths temporarily save/restore player key/potion adjustments through this byte, so it is not a four-player array. |
+| 0x90405F | 1 B | `monster_spawn_probability_bonus` / secret saved keys | Signed global modifier added to `monster_spawn_probability_table` before each generator's random spawn gate. `update_monster_spawn_bonus_from_score_per_coin` (0x48B58) adds `(sum(active scores) >> 14) / sum(active players' inserted coins)`; coin insertion decrements it while positive. Secret-room entry first overwrites it with the winner's keys, then immediately runs that bonus update; payout adds the resulting byte back as keys. |
 
 ### 1.2 MOB Animation Array
 
@@ -1573,3 +1573,19 @@ the complete §1 RAM map and generated operand checks.
 | 0x910600 | 1 B × (tile_count/4) | `cyclic_wall_assignments` | Color RAM Spare: cyclic wall phase assignment, 2 bits per tile |
 | 0x905048 | 3072 B | `hud_mob_table` | HUD tile workspace arranged as 24 rows × 128 bytes (64 words), exact range 0x905048–0x905C47. Player HUD columns use row index `player*5 + field`; for example the IT overlay writes rows `player*5 + 8`. The following 12 bytes through 0x905C53 are padding before `tport_route_forward`. |
 | 0x905054 | overlapping 24 × 128 B view | `path_direction_grid` | Gameplay/pathfinding view spanning exactly 0x905054–0x905C53, immediately before `tport_route_forward`. Cell `id` is `base + (id / 44) * 0x80 + (id % 44)`; each byte packs two direction+1 nibbles (0 means unset). Valid packed maze IDs are 0x000–0x3FF, so the highest reachable byte is 0x905BDF (ID 1023); row tails and the rest of the final padded row are not indexed. The view overlaps hidden alpha columns 42–63: `maze_show`/`maze_hide` clear their 22 words per row and thereby reset the route grid at level handoff. |
+
+### 9.1 Modeled RAM alias audit
+
+The Python model must couple simultaneous physical views but may separate
+lifetime-only names. The checked set is:
+
+| Physical range | Views | Required treatment |
+|---|---|---|
+| 0x904006 | OS `pf_vscroll_hi` / game `frame_counter` | Lifetime-separated; no game-side simultaneous reader |
+| 0x904012–0x904015 | `eeprom_write_timer` / boot `game_hook_flag` | Lifetime-separated |
+| 0x90405A, 0x90405F | player-0 keys / secret potions; spawn bonus / secret keys | Simultaneous scratch aliases; entry, bonus update, and payout must share bytes |
+| 0x904940 | popup timer 3 / `mob_depth_key[0]` | Safe: depth-key element zero is reserved |
+| 0x90497C–0x90497F | effect counters / depth keys 30–31 | Safe: those row-zero keys are not live managed actors |
+| 0x905054–0x905C53 | hidden alpha bytes / thief route grid | Simultaneous; alpha clears and route nibble writes update both views |
+| 0x905F82–0x905FFF | priority-bucket tail / full head table | One list with a biased base, not independent storage |
+| 0x905C54–0x905E53 | transporter route tables / portrait workspace padding | Reachable route cells and portrait destinations are spatially disjoint |

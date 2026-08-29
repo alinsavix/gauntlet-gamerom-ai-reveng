@@ -1730,6 +1730,14 @@ Secret-room availability is paced by a pair of level counters:
 - `secret_possible_counter` (0x904878) counts down **once per level** (decrement site 0x4A748); both it and `secret_possible_start` (0x90487A) initialize to 20 at game init (0x43312). When the countdown reaches 0, `maze_new_level_setup` may activate a secret room by loading the maze's secret-room config byte into `0x904065` (the ordinary 0x01–0x11 trick ID; see §3.17 in `05_data_reference.md`).
 - `secret_check` (0x486FE) runs at level transitions (from `main_start_game` at 0x480EC when the between-level delay `0x904A4E` expires, and from the `show_level_end_bonus_screen` epilogue at 0x4D8DC). If a secret room was active (`0x904065` ≠ 0): when a valid player (0–3) is in `0x904063`, it records the maze number into `secret_prev_maze` (0x904870) and adds 15 to the start value (clamped at 40) — secret rooms become rarer after a win; when nobody entered, it subtracts 2 (floor 4) — they come sooner. Either way the countdown reloads from the start value.
 - `secret_getname` (0x54EC6) handles the winner: with EEPROM settings bit 13 set it opens the name-entry screen (buffer 0x904AA4 = 'A' + spaces, `player_status` = 0x20, "ENTER YOUR" / "'LAST-NAME FIRST-NAME'" prompts); otherwise `player_status` = 2 and a short between-level delay.
+- Secret-room entry stores inventory through reused bytes, not a private
+  structure: keys replace `monster_spawn_probability_bonus` at 0x90405F,
+  potions replace player 0's key byte at 0x90405A, and supershots use 0x905F6D.
+  The entrant's indexed inventory is then cleared and
+  `update_monster_spawn_bonus_from_score_per_coin` immediately adds into
+  0x90405F. Payout reads those same bytes after adding restored keys first.
+  This produces a shipped winner-zero quirk: its potion scratch is cleared with
+  its keys, and the subsequently restored key total becomes the potion addend.
 - `secret_name_entry_update` (0x54FE8), selected only by status 0x20, edits
   that winner's name using `ram.secret_player`, calls the live character-step
   and small-character draw helpers at 0x55440/0x554B6, and invokes

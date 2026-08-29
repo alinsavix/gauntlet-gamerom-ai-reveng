@@ -529,12 +529,14 @@ def secret_room_spawn(state: GameState) -> None:
     player = state.players[winner]
     player_start_inner(state, winner)                            # 0x482CA
     player.status = int(PlayerStatus.ALIVE_HERE)                 # 0x482D8
-    state.secret_saved_keys = player.keysnum                     # 0x482E6
-    state.secret_saved_potions = player.potionsnum               # 0x482F6
+    state.monster_spawn_probability_bonus = player.keysnum       # 0x482E6
+    state.players[0].keysnum = player.potionsnum                  # 0x482F6
     state.secret_saved_supershot = player.supershot              # 0x48306
     player.keysnum = 0                                           # 0x4831E
     player.potionsnum = 0
     player.supershot = 0
+    state.secret_saved_keys = state.monster_spawn_probability_bonus
+    state.secret_saved_potions = state.players[0].keysnum
     state.secret_tricks_flags[winner] = 0    # player_start_inner 0x48ED6
     from .players import setup_infopanel
 
@@ -563,15 +565,18 @@ def _secret_room_payout(state: GameState, completed: bool) -> bool:
             state.score_dirty[winner] = 1
             state.bonus_amount = bonus
         player.status = int(PlayerStatus.ALIVE_NEXT)             # 0x4D85C
-        player.keysnum = (player.keysnum + state.secret_saved_keys) & 0xFF
-        player.potionsnum = (player.potionsnum + state.secret_saved_potions) & 0xFF
+        player.keysnum = (
+            player.keysnum + state.monster_spawn_probability_bonus
+        ) & 0xFF
+        player.potionsnum = (
+            player.potionsnum + state.players[0].keysnum
+        ) & 0xFF
         player.supershot = (player.supershot + state.secret_saved_supershot) & 0xFF
         from .players import player_inv_update
 
         player_inv_update(state, winner)
-    state.secret_saved_keys = 0
-    state.secret_saved_potions = 0
-    state.secret_saved_supershot = 0
+    state.secret_saved_keys = state.monster_spawn_probability_bonus
+    state.secret_saved_potions = state.players[0].keysnum
     if not open_name_entry:
         state.secret_player = -1                                 # 0x4D866
     return open_name_entry
@@ -1460,6 +1465,8 @@ def update_monster_spawn_bonus_from_score_per_coin(state: GameState) -> None:
     state.monster_spawn_probability_bonus = (
         state.monster_spawn_probability_bonus + delta
     ) & 0xFF                                                   # 0x48BA6
+    if in_secret_room(state):
+        state.secret_saved_keys = state.monster_spawn_probability_bonus
 
 
 def _load_next_level(

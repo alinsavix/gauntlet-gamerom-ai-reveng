@@ -668,12 +668,10 @@ class GameState:
     # 0x904064 ``secret_trick_last``: the maze trick a player won, saved when
     # show_level_start_screen replaces it with a challenge code (0x44E06).
     secret_trick_last: int = 0
-    # The winner's inventory, stashed on the way into the secret room and added
-    # back on the way out. The ROM parks them in spare array slots --
-    # 0x90405F (keys), 0x90405A reused as scratch (potions) and 0x905F6D
-    # ``secret_saved_supershot`` -- at main_start_game 0x482E6-0x48306, and adds
-    # them back at show_level_end_bonus_screen 0x4D86E-0x4D8A0. Named fields
-    # here because the ROM's slot reuse aliases player 0's keys.
+    # Compatibility/debug mirrors for two physical aliases used by the secret
+    # room: saved keys are monster_spawn_probability_bonus (0x90405F), and saved
+    # potions are players[0].keysnum (0x90405A). Gameplay reads those canonical
+    # fields; these mirrors make snapshots readable. Supershot has its own byte.
     secret_saved_keys: int = 0
     secret_saved_potions: int = 0
     secret_saved_supershot: int = 0

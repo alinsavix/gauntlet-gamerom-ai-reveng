@@ -33,6 +33,7 @@ DEBUG_PAGES = (
     "ACTORS",
     "AI",
     "DISPLAY",
+    "ROUTES",
     "AUDIO",
     "SCENARIO",
     "EVENTS",
@@ -126,6 +127,8 @@ class DebugSnapshot:
     demo_timers: tuple[int, ...]
     players: tuple[PlayerDebugSnapshot, ...]
     selected_mob: int
+    route_grid: bytes
+    route_markers: tuple[int, int, int, int]
     page_rows: tuple[tuple[str, tuple[tuple[str, str], ...]], ...]
     paused: bool = False
 
@@ -408,6 +411,14 @@ def _display_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
+def _route_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
+    return (
+        ("GRID", "LOW PURSUIT / HIGH ESCAPE"),
+        ("BOXES", "C=current N=next S=start V=victim"),
+        ("DIRECTIONS", "N NE E SE S SW W NW"),
+    )
+
+
 def _audio_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return (
         ("QUEUE", " ".join(f"{value:02X}" for value in state.sound_queue) or "empty"),
@@ -529,6 +540,13 @@ def capture_debug_snapshot(
         demo_timers=tuple(int(value) for value in state.demo_timers),
         players=player_snapshots,
         selected_mob=selected_mob,
+        route_grid=bytes(state.path_direction_grid),
+        route_markers=(
+            int(state.thief_current_pos),
+            int(state.thief_next_pos),
+            int(state.thief_start_location),
+            int(state.thief_victim_pos),
+        ),
         page_rows=(
             ("PLAYERS", _player_page_rows(state, player_snapshots)),
             ("DEMO", _demo_page_rows(state)),
@@ -536,6 +554,7 @@ def capture_debug_snapshot(
             ("ACTORS", _actor_page_rows(state, selected_mob)),
             ("AI", _ai_page_rows(state)),
             ("DISPLAY", _display_page_rows(state)),
+            ("ROUTES", _route_page_rows(state)),
             ("AUDIO", _audio_page_rows(state)),
             ("SCENARIO", _scenario_page_rows(state)),
         ),
@@ -694,6 +713,95 @@ def _performance_graph_scale(
     return ceiling, (0.0, ceiling / 2.0, ceiling)
 
 
+_ROUTE_COLORS = (
+    (70, 130, 255, 255),   # N
+    (70, 210, 255, 255),   # NE
+    (70, 230, 120, 255),   # E
+    (190, 235, 70, 255),   # SE
+    (255, 205, 70, 255),   # S
+    (255, 135, 70, 255),   # SW
+    (235, 75, 75, 255),    # W
+    (190, 90, 235, 255),   # NW
+)
+_ROUTE_MARKER_COLORS = (
+    (255, 255, 255, 255),
+    (255, 230, 50, 255),
+    (70, 255, 120, 255),
+    (70, 235, 255, 255),
+)
+
+
+def _route_direction(grid: bytes, slot: int, *, escape: bool) -> int:
+    """Read one ROM path nibble through its 44-byte/128-byte-stride view."""
+    if not 0 <= slot <= 0x3FF:
+        return 8
+    offset = (slot // 44) * 0x80 + slot % 44
+    packed = grid[offset] >> (4 if escape else 0)
+    direction = (packed & 0x0F) - 1
+    return direction if 0 <= direction <= 7 else 8
+
+
+def _draw_route_grids(
+    draw: ImageDraw.ImageDraw, snapshot: DebugSnapshot, font: ImageFont.ImageFont,
+) -> None:
+    cell = 4
+    top = 78
+    lefts = (8, 174)
+    marker_x = 8
+    for label, color in zip(
+        ("C", "N", "S", "V"), _ROUTE_MARKER_COLORS, strict=True,
+    ):
+        draw.rectangle(
+            (marker_x, top - 26, marker_x + 6, top - 20), outline=color,
+        )
+        draw.text((marker_x + 9, top - 29), label, font=font, fill=_DIM)
+        marker_x += 34
+    for escape, left in zip((False, True), lefts, strict=True):
+        draw.text(
+            (left, top - 13),
+            "HIGH ESCAPE" if escape else "LOW PURSUIT",
+            font=font,
+            fill=_LABEL,
+        )
+        draw.rectangle(
+            (left - 1, top - 1, left + 32 * cell, top + 32 * cell),
+            outline=_DIVIDER,
+        )
+        for slot in range(0x400):
+            row, column = divmod(slot, 32)
+            direction = _route_direction(
+                snapshot.route_grid, slot, escape=escape,
+            )
+            if direction == 8:
+                continue
+            x = left + column * cell
+            y = top + row * cell
+            draw.rectangle(
+                (x, y, x + cell - 1, y + cell - 1),
+                fill=_ROUTE_COLORS[direction],
+            )
+        for slot, color in zip(
+            snapshot.route_markers, _ROUTE_MARKER_COLORS, strict=True,
+        ):
+            if not 0 <= slot <= 0x3FF:
+                continue
+            row, column = divmod(slot, 32)
+            x = left + column * cell
+            y = top + row * cell
+            draw.rectangle(
+                (x, y, x + cell - 1, y + cell - 1),
+                outline=color,
+            )
+
+    legend_y = top + 32 * cell + 7
+    labels = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    x = 8
+    for label, color in zip(labels, _ROUTE_COLORS, strict=True):
+        draw.rectangle((x, legend_y + 2, x + 5, legend_y + 7), fill=color)
+        draw.text((x + 8, legend_y), label, font=font, fill=_DIM)
+        x += 36
+
+
 def render_debug_panel(
     snapshot: DebugSnapshot,
     *,
@@ -760,4 +868,6 @@ def render_debug_panel(
             (left + 1, budget_y, right - 1, budget_y),
             fill=(120, 80, 80, 255),
         )
+    elif DEBUG_PAGES[page] == "ROUTES":
+        _draw_route_grids(draw, snapshot, font)
     return image
