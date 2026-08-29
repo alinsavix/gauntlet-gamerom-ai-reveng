@@ -171,6 +171,48 @@ def test_level_page_names_the_current_maze_secret_trick():
     assert rows["SECRET TRICK"] == "0D EAT NO FOOD"
 
 
+def test_level_page_lists_active_level_gates():
+    state = _diagnostic_state()
+    state.game_mode = GameMode.NORMAL
+    state.levelnum_current = 12
+    state.mazenum_current = 15
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["GATE MAP"] == "EEPROM ROTATION"
+    assert rows["GATE >=3"] == "SPECIAL PICKUP ON"
+    assert rows["GATE >=6"] == "HIDDEN POT ON; THIEF 1/8"
+    assert rows["GATE >6"] == "ADAPTIVE FOOD + BONUS ON"
+    assert rows["GATE >=12"] == "DRAGON + TRICK 09 ON"
+    assert rows["GATE >30"] == "OFF"
+    assert rows["GENERATOR CAP"] == "24"
+    assert rows["FF PROFILE"] == "0"
+    assert rows["HAZARD DEPTH"] == "BASE"
+
+
+def test_level_page_applies_maze_specific_gate_context():
+    state = _diagnostic_state()
+    state.levelnum_current = 121
+    state.mazenum_current = 104
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["GATE >=6"] == "HIDDEN POT ON; THIEF 8/8"
+    assert rows["GATE >30"] == "FAKE VOICE ELIGIBLE"
+    assert rows["HAZARD DEPTH"] == "WRAP+OFFSCREEN"
+
+    state.mazenum_current = 115
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+    assert rows["GATE >=3"] == "OFF"
+    assert rows["GATE >=6"] == "HIDDEN POT OFF; THIEF OFF (secret maze)"
+
+
 def test_level_page_distinguishes_reused_secret_hint_text():
     expected = (
         "TRANSPORT NEXT TO ACID",

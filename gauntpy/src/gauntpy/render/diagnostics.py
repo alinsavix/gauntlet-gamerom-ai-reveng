@@ -248,6 +248,75 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
             "SECRET FLAGS",
             " ".join(f"{value:02X}" for value in state.secret_tricks_flags),
         ),
+        *_level_gate_rows(state),
+    )
+
+
+def _level_gate_rows(state: GameState) -> tuple[tuple[str, str], ...]:
+    """Project the ROM's direct level-number gates for the current level."""
+    level = int(state.levelnum_current)
+    maze = int(state.mazenum_current)
+    thief_chance = min(max(level >> 3, 0), 8)
+    if level < 6:
+        thief = "OFF (<6)"
+    elif maze >= 115:
+        thief = "OFF (secret maze)"
+    else:
+        thief = f"{thief_chance}/8"
+
+    if 5 <= maze <= 101:
+        depth = level % 400
+        traps_local = bool(state.level_flags_4 & 0x04)
+        if depth > 297:
+            hazard = "RANDOM" if traps_local else "RANDOM+WRAP"
+        elif depth > 200:
+            hazard = "RANDOM"
+        elif depth > 103:
+            hazard = "BASE" if traps_local else "WRAP"
+        else:
+            hazard = "BASE"
+    elif 104 <= maze <= 114:
+        depth = level % 160
+        if depth > 120:
+            hazard = "WRAP+OFFSCREEN"
+        elif depth > 80:
+            hazard = "OFFSCREEN"
+        elif depth > 40:
+            hazard = "WRAP"
+        else:
+            hazard = "BASE"
+    else:
+        hazard = "n/a"
+
+    random_pickups = maze < 115
+    return (
+        ("GATE MAP", "FIXED 0-4" if level <= 5 else "EEPROM ROTATION"),
+        ("GATE >=3", "SPECIAL PICKUP ON" if level >= 3 and random_pickups else "OFF"),
+        (
+            "GATE >=6",
+            f"HIDDEN POT {'ON' if level >= 6 and random_pickups else 'OFF'}; "
+            f"THIEF {thief}",
+        ),
+        (
+            "GATE >6",
+            "ADAPTIVE FOOD + BONUS ON"
+            if level > 6 and random_pickups else "OFF",
+        ),
+        (
+            "GATE >=12",
+            "DRAGON + TRICK 09 ON" if level >= 12 else "OFF",
+        ),
+        (
+            "GATE >30",
+            "FAKE VOICE ELIGIBLE"
+            if level > 30 and 104 <= maze <= 114 else "OFF",
+        ),
+        (
+            "GENERATOR CAP",
+            "NONE (LEVEL 1)" if level == 1 else f"{level * 2}",
+        ),
+        ("FF PROFILE", str(level & 3)),
+        ("HAZARD DEPTH", hazard),
     )
 
 

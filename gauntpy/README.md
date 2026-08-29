@@ -60,7 +60,8 @@ per-player state. It does not use the arcade alpha renderer or write modeled
 video/game memory. Its text remains at native host resolution when the game
 raster is enlarged with `--scale`, using an anti-aliased system monospace font.
 Its pages cover overview, players and raw input, decoded demo records, level
-flags/timers, actor counts and raw MOB words, thief/dragon AI, display memory,
+flags/timers and active level gates, actor counts and raw MOB words,
+thief/dragon AI, display memory,
 audio queues, a rolling event log inferred from snapshots while the panel is
 open, synthetic-scenario event queues/timers, and a 120-sample render-time
 graph. The displayed `RENDER` value is a rolling average of the latest ten

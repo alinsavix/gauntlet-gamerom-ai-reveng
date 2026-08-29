@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2465 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2467 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,16 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-159 · F1 level page did not expose active depth gates
+
+The LEVEL diagnostics page now derives a host-only summary from the immutable
+snapshot: fixed/rotation maze selection, level-3 special pickups, level-6
+hidden-potion/thief scheduling and current thief odds, post-6 adaptive-food and
+bonus-room eligibility, level-12 dragon/trick-9 activation, post-30 treasure
+countdown pranks, the generator cap, forcefield profile, and the current
+modulo-400/modulo-160 hazard tier. Maze-specific exclusions are shown rather
+than presenting every threshold as active in secret or non-treasure layouts.
 
 ### S-158 · contest-code hyphen rendered as a zero
 
