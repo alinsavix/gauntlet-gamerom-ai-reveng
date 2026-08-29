@@ -707,15 +707,17 @@ def _secret_crc16(name: list[int]) -> int:
     return crc
 
 
-def secret_code_build(state: GameState) -> str:
-    """Port secret_code_build 0x54BE0 and return its ``XXX-XXX`` result."""
-    crc = _secret_crc16(state.secret_name_buffer)
+def secret_code_for(
+    name: str, previous_maze: int, previous_trick: int, challenge: int,
+) -> str:
+    """Return secret_code_build 0x54BE0's code for explicit contest fields."""
+    crc = _secret_crc16(list(name.encode("ascii")))
     packed = (
-        ((((state.secret_trick_last & 0x0F) << 4)
-          | (state.secret_trick_id & 0x0F)) << 7)
-        | (state.secret_prev_maze & 0x7F)
+        ((((previous_trick & 0x0F) << 4)
+          | (challenge & 0x0F)) << 7)
+        | (previous_maze & 0x7F)
     )
-    code = (
+    return (
         _SECRET_CODE_ALPHABET[((crc >> 8) >> 2) & 0x1F]
         + _SECRET_CODE_ALPHABET[(packed >> 10) & 0x1F]
         + _SECRET_CODE_ALPHABET[(crc >> 5) & 0x1F]
@@ -723,6 +725,15 @@ def secret_code_build(state: GameState) -> str:
         + _SECRET_CODE_ALPHABET[(packed >> 5) & 0x1F]
         + _SECRET_CODE_ALPHABET[crc & 0x1F]
         + _SECRET_CODE_ALPHABET[packed & 0x1F]
+    )
+
+
+def secret_code_build(state: GameState) -> str:
+    """Port secret_code_build 0x54BE0 and return its ``XXX-XXX`` result."""
+    name = bytes(state.secret_name_buffer).split(b"\0", 1)[0].decode("ascii")
+    code = secret_code_for(
+        name, state.secret_prev_maze, state.secret_trick_last,
+        state.secret_trick_id,
     )
     state.secret_code = code
     return code

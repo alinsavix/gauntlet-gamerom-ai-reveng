@@ -106,6 +106,14 @@ By default the runner drops you straight into a level. Options:
 uv run --all-extras gauntpy-play --level 2 --character elf --scale 3
 ```
 
+`--level` selects the dungeon level and follows the cabinet's maze rotation
+after level 5. `--maze` selects an exact stored maze independently; combine
+them when reproducing a layout at a particular difficulty depth:
+
+```bash
+uv run --all-extras gauntpy-play --level 115 --maze 3
+```
+
 Direct play can seed inventory and temporary powers for testing:
 
 ```bash
@@ -137,7 +145,16 @@ uv run --all-extras gauntpy-play --attract
 ```
 
 Press **5** to insert a coin, steer to pick a class, and press **Enter** to
-start. The title, high-score, legend, and character-select screens render in the
+start.
+
+Verify a secret-room contest code with the saved maze, trick, and challenge:
+
+```bash
+uv run python -m gauntpy.secret_code_verifier "ALINSA" FB9-AD9 \
+  --maze 73 --trick 5 --challenge 0x5A
+```
+
+The title, high-score, legend, and character-select screens render in the
 cabinet's **own alpha-ROM font**, while the native 328x48 title wordmark is
 assembled from the graphics ROMs at runtime, driven by the genuine `coincheck`
 → `character_select` → `main_start_game` path.

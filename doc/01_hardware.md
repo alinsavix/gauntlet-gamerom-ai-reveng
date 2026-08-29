@@ -165,6 +165,13 @@ layers over the scrolled playfield. MOB pixel value 1 is not an ordinary
 sprite color: it selects the half-intensity playfield-shadow palette for the
 underlying playfield pixel.
 
+An apparent dark notch along a wall is not necessarily a failed MOB shadow.
+Wall descriptors can point at ROM tiles whose own indexed pixels contain dark
+notches, and junction cells use distinct descriptors. For example, a continuous
+horizontal boundary can be all `0x723A` while still showing the repeated detail;
+`0x724B` marks a genuine junction variant. Diagnose continuity from playfield
+RAM before changing the shadow compositor.
+
 ```mermaid
 flowchart LR
     scroll["PF H/V scroll registers"] --> pfsample["Sample playfield tile pixel"]

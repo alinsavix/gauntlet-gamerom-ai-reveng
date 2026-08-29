@@ -1547,6 +1547,25 @@ class TestSecretNameEntry:
 
         assert gp.secret_code_build(state) == "FB9-AD9"
 
+    def test_secret_code_result_clears_the_old_name_row(self):
+        state = _active_state()
+        state.secret_player = 0
+        state.game_settings |= 0x2000
+        gp.secret_getname(state)
+        state.secret_name_buffer = list(b"ALINSA" + b" " * 20 + b"TDV")
+        state.secret_code = "FB9-AD9"
+
+        from gauntpy.subsystems.score import write_secret_code_result
+
+        write_secret_code_result(state, 0)
+
+        row = 7
+        assert all(
+            state.alpha_ram[row * 64 + column] & 0x01FF == 0
+            for column in range(29)
+            if not 7 <= column <= 20
+        )
+
     def test_timeout_builds_code_then_hands_the_player_back(self):
         state = _active_state()
         state.secret_player = 1

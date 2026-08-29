@@ -221,6 +221,15 @@ case is pure pacing: the dragon is written out of the maze data entirely
 before level 12 of a normal game, so the deep dungeon keeps something in
 reserve.
 
+That distinction is why a level number is not a maze number. Levels one
+through five select records zero through four; after that, the cabinet's saved
+rotation chooses the record. The level still independently controls depth:
+special pickup draws begin at three, thief and hidden-potion scheduling at six
+(with no actual thief chance until eight), adaptive food after six, dragons at
+twelve, and fake treasure-room countdowns after thirty. Generator pressure,
+thief delay, forcefield timing, and the modulo-based hazard tiers continue to
+scale from the level even when the same stored maze appears at another depth.
+
 The start scan is also destructive. It remembers one randomly chosen
 PLAYERSTART cell, then normally replaces every stored start record with floor.
 Treasure layouts contain up to five such candidates; none survives as a visible

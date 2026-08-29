@@ -480,6 +480,7 @@ def write_secret_code_result(state: GameState, player_index: int) -> None:
     """Write secret_name_entry_update's contest-code result page."""
     row = player_index * 5 + 7
     attribute = 0x8400 + player_index * 0x0400
+    fill_alpha_rect(state, 0, row, 29, 1, alpha_word(0x8000))
     write_alpha_large_text(state, 1, 1, "REMEMBER YOUR", 0x8000)
     write_alpha_large_text(state, 3, 4, "SECRET CODE", 0x8000)
     write_alpha_text(state, 10, row + 2, "TASK", attribute)

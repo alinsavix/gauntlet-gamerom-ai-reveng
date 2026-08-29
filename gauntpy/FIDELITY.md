@@ -296,6 +296,15 @@ evidence remains in `../doc/`, generated contracts, and the book.
     boundaries: merged/decomposed routines, class-scoped fields whose owner
     makes a prefix redundant, and polarity-normalized or host-only views. Record
     those exceptions rather than silently inventing a second name.
+65. **Level and maze are independent state.** `levelnum_current` drives depth
+    gates, probabilities, and modulo difficulty tiers; `mazenum_current` selects
+    a stored layout. Only levels 1-5 have a fixed relationship. Host direct-start
+    controls must not silently turn a requested level into `maze = level - 1`;
+    an exact-maze reproduction carries its level separately.
+66. **Contest result setup erases the editor row.** Before drawing `REMEMBER YOUR
+    SECRET CODE`, `secret_name_entry_update` writes 29 opaque blank glyphs over
+    the winning player's old name row. The result screen must be a fresh
+    alpha-RAM transaction, not text layered over the editor.
 
 ## Investigation workflow
 

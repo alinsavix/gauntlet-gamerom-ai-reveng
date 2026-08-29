@@ -53,6 +53,15 @@ class TestArguments:
                 play._positive_level(bad)
         assert play._positive_level("7") == 7
 
+    def test_maze_number_is_independent_and_bounded(self):
+        import argparse
+
+        assert play._maze_number("0") == 0
+        assert play._maze_number("116") == 116
+        for bad in ("-1", "117"):
+            with pytest.raises(argparse.ArgumentTypeError):
+                play._maze_number(bad)
+
     def test_scale_must_be_at_least_one(self):
         import argparse
 
@@ -72,6 +81,16 @@ class TestArguments:
     def test_bad_level_exits_rather_than_loading_maze_zero(self):
         with pytest.raises(SystemExit):
             play.main(["--level", "0"])
+
+    def test_wrapped_level_requires_an_explicit_maze(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        with pytest.raises(SystemExit):
+            play.main(["--level", "1000"])
+
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+        play.main(["--level", "9999", "--maze", "3"])
+        assert (called["level"], called["maze_number"]) == (9999, 3)
 
     def test_unknown_character_is_rejected(self):
         with pytest.raises(SystemExit):
@@ -129,6 +148,16 @@ class TestArguments:
 
         play.main(["--character", "wizard"])
         assert called["character"] == Character.WIZARD
+
+    def test_level_and_maze_are_forwarded_independently(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+
+        play.main(["--level", "115", "--maze", "3"])
+
+        assert called["level"] == 115
+        assert called["maze_number"] == 3
 
     def test_explicit_seed_is_forwarded_and_random_uses_host_entropy(
         self, monkeypatch,
@@ -192,7 +221,7 @@ class TestArguments:
         assert called["scale"] == 2
 
     @pytest.mark.parametrize("option", [
-        "--load-state", "--attract", "--level", "--character", "--keys",
+        "--load-state", "--attract", "--level", "--maze", "--character", "--keys",
         "--potions", "--power", "--seed",
     ])
     def test_synthetic_scenario_rejects_other_start_modes(
@@ -202,6 +231,7 @@ class TestArguments:
         values = {
             "--load-state": "state.json",
             "--level": "2",
+            "--maze": "3",
             "--character": "wizard",
             "--keys": "1",
             "--potions": "1",
@@ -216,13 +246,14 @@ class TestArguments:
             play.main(argv)
 
     @pytest.mark.parametrize("option", [
-        "--attract", "--level", "--character", "--keys", "--potions", "--power",
+        "--attract", "--level", "--maze", "--character", "--keys", "--potions", "--power",
         "--seed",
     ])
     def test_saved_state_rejects_other_start_modes(self, monkeypatch, option):
         monkeypatch.setenv("GEX_ROM_DIR", "configured")
         values = {
             "--level": "2",
+            "--maze": "3",
             "--character": "wizard",
             "--keys": "1",
             "--potions": "1",
@@ -311,14 +342,22 @@ class TestBuildState:
         or every deep level would load maze 0."""
         state = play.build_state(9, Character.ELF)
         assert state.levelnum_current == 9
-        assert state.mazenum_current == 8
+        assert state.mazenum_current == 11
+        assert state.maze_stride == 1
 
-    def test_a_deep_level_is_clamped_to_a_real_maze_number(self):
+    def test_a_deep_level_advances_the_rotation_instead_of_becoming_a_maze(self):
         from gex.constants import MAX_MAZE_NUM
 
         assert play.MAX_MAZE_NUM == MAX_MAZE_NUM
         state = play.build_state(500, Character.WIZARD)
-        assert state.mazenum_current == MAX_MAZE_NUM
+        assert state.mazenum_current == 68
+        assert state.maze_stride == 6
+
+    def test_an_explicit_maze_does_not_change_the_level_number(self):
+        state = play.build_state(115, Character.WIZARD, maze_number=3)
+
+        assert state.levelnum_current == 115
+        assert state.mazenum_current == 3
 
     def test_the_spawn_uses_the_core_rom_idle_picture(self):
         state = play.build_state(1, Character.ELF)
@@ -333,7 +372,7 @@ class TestBuildState:
         ]
 
     def test_level_19_rom_maze_really_contains_four_it_creatures(self):
-        state = play.build_state(19, Character.ELF)
+        state = play.build_state(19, Character.ELF, maze_number=18)
 
         assert state.mazenum_current == 18
         assert sum(
@@ -342,8 +381,8 @@ class TestBuildState:
         ) == 4
 
     def test_power_on_seed_changes_which_level_16_exit_is_fake(self):
-        first = play.build_state(16, Character.ELF, rng_seed=0)
-        second = play.build_state(16, Character.ELF, rng_seed=10)
+        first = play.build_state(16, Character.ELF, maze_number=15, rng_seed=0)
+        second = play.build_state(16, Character.ELF, maze_number=15, rng_seed=10)
 
         def real_exit_index(state):
             return next(
@@ -361,7 +400,7 @@ class TestBuildState:
         from gauntpy.subsystems.input import JOY_DOWN
         from gauntpy.subsystems.players import player_try_move
 
-        state = play.build_state(20, Character.ELF, keys=1)
+        state = play.build_state(20, Character.ELF, maze_number=19, keys=1)
         player = state.players[0]
         state.level_flags_4 |= 0x80
         for frame in range(60):
@@ -378,7 +417,7 @@ class TestBuildState:
         from gauntpy.subsystems.players import player_try_move
 
         for direction, expected_x in ((JOY_LEFT, 266), (JOY_RIGHT, 270)):
-            state = play.build_state(18, Character.ELF)
+            state = play.build_state(18, Character.ELF, maze_number=17)
             player = state.players[0]
             state.mobs.unlink_and_clear(player.mob_slot)
             slot = mob_cell_of(encode_hpos(268), encode_vpos_at_y(15))
@@ -402,7 +441,7 @@ class TestBuildState:
         from gauntpy.subsystems.input import JOY_DOWN
         from gauntpy.subsystems.players import player_try_move
 
-        state = play.build_state(17, Character.ELF)
+        state = play.build_state(17, Character.ELF, maze_number=16)
         player = state.players[0]
         state.mobs.unlink_and_clear(player.mob_slot)
         slot = mob_cell_of(encode_hpos(396), encode_vpos_at_y(176, 3, 3))
@@ -461,7 +500,7 @@ class TestBuildState:
             (JOY_DOWN, (16, 12)),
         )
         for direction, position in expected:
-            state = play.build_state(18, Character.ELF)
+            state = play.build_state(18, Character.ELF, maze_number=17)
             player = state.players[0]
             state.mobs.unlink_and_clear(player.mob_slot)
             slot = mob_cell_of(encode_hpos(16), encode_vpos_at_y(10))
