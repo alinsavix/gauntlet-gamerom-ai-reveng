@@ -1926,14 +1926,9 @@ def _clear_floor_marker(state: GameState, slot: int) -> None:
 
 def _drop_trap_walls(state: GameState, trap_type: int) -> bool:
     """0x5E7A6 -- replace this trap's remaining triggers and wall group."""
-    wall_type = trap_type - 3
-    removed = False
-    for slot in range(FIRST_PLAYABLE_SLOT, 0x400):
-        if state.mobs.obj_type(slot) not in (wall_type, trap_type):
-            continue
-        _clear_floor_marker(state, slot)
-        removed = True
-    return removed
+    from ..maze import maze_place_object_types
+
+    return maze_place_object_types(state, trap_type)
 
 
 def _tile_contact_progress(state: GameState, player_index: int) -> None:

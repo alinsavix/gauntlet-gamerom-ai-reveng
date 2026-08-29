@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2473 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2476 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,36 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-163 · thief combat, seam monster scheduling, and maze-26 setup
+
+The frame-2676 capture had the thief at slot `0x319` pursuing through a Demon
+at `0x31A`. ROM `thief_handle_tile_collision` 0x4F89A–0x4F8D6 treats every
+object type 18–45 as a fight: first contact stores `direction+1` and clears the
+shared counter; the normal collision-animation arm increments it each frame;
+after it passes 15 the routine spawns an impact, removes the blocking MOB, and
+clears the latch. Gauntpy classified the monster as non-solid but neither
+advanced the counter nor removed it, so the thief stayed in place forever.
+The complete fight transaction and animation-counter increments are restored.
+
+In the frame-21664 capture the camera crossed the vertical seam at
+`scroll_y=492`. The unsigned culling rectangle correctly included the visible
+row-1 monsters, but the separate SLIP-chain endpoint helper clamped its
+`scroll+280` lookup to band 63. ROM `main_move_monsters`
+0x49076–0x490CA masks both endpoints with `0x1F0` and indexes the biased table
+at 0x905F82, making the walk wrap from the bottom of the depth chain through
+row zero. Gauntpy now performs that exact masked lookup; the reported monsters
+above and lower-right of the player resume movement and animation.
+
+Maze 26 also had a genuine setup omission. Its LFLAG3 byte is `0x92`, including
+`WallsDeletable1`. At 0x43BA0–0x43BCC the ROM draws one of the three trap
+groups and calls `maze_place_object_types`; the companion bit-5 arm removes
+the selected group plus its next cyclic neighbor. Gauntpy never ran either
+arm, leaving all nine type-7/8/9 walls and closing the intended route to the
+chosen exit. Level setup now removes the selected wall/trigger records through
+the shared game-side helper and updates logical maze and playfield RAM. With
+seed zero, maze 26 removes all three type-7 walls, retains the other six, and
+the selected exit at slot `0x1A0` is reachable from the saved start at `0x230`.
 
 ### S-162 · RAM-alias audit found secret-room stash divergence
 

@@ -273,6 +273,13 @@ again. A captured mugger aimed down between two walls at X=241 therefore centers
 to X=240 and continues; omitting this special arm leaves it staring at empty
 floor forever even though the shared probe itself is correct.
 
+Monsters are a delay, not a permanent roadblock. On first contact with any
+ordinary monster or generator, the thief latches its facing and begins a
+sixteen-frame fight animation. Once that counter has passed fifteen, the next
+collision produces the ordinary impact sparkle, removes the blocking creature,
+and lets the thief continue along the breadcrumb route. A port that treats the
+occupied cell as merely non-solid can leave him animating in place forever.
+
 Dodging is more pointed. A helper scans the four players for one whose shot
 direction is exactly opposite the thief's own and whose position lies on that
 ray. When it finds one, the thief starts dodging, latching that player and

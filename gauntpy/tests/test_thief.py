@@ -47,6 +47,7 @@ from gauntpy.subsystems.thief import (
     _SPEED_THIEF,
     _THIEF_COLLISION_REMOVE_FLAGS,
     _THIEF_DIRECTION_STEP_SIZE,
+    _set_thief_animation,
 )
 from gauntpy.subsystems import score
 from gauntpy.subsystems.players import setup_infopanel
@@ -1100,6 +1101,29 @@ class TestMoveEngineCollisionAndAnimation:
         assert state.mobs.picture[destination] == 0
         assert thief_move_engine(state, _THIEF_DIRECTION_STEP_SIZE[2], _SPEED_THIEF, _SPEED_THIEF) == 0
         assert state.thief_mob_slot == destination
+
+    def test_collision_fights_through_a_monster_after_sixteen_frames(self):
+        state = GameState()
+        thief_slot = pack_slot(10, 10)
+        monster_slot = pack_slot(10, 11)
+        _thief_at(state, thief_slot, direction=2)
+        state.thief_mode = THIEF_PURSUE
+        state.thief_victim = 0
+        state.mobs.create(
+            monster_slot, 1, encode_hpos(11 * 16),
+            encode_vpos_at_y(10 * 16), MazeObjIds.MONST_DEMON,
+        )
+
+        assert thief_handle_tile_collision(state, monster_slot) == 0
+        assert state.thief_collision_direction_code == 3
+        for _ in range(16):
+            _set_thief_animation(state, 0)
+
+        assert state.thief_stolen_item == 0x10
+        assert thief_handle_tile_collision(state, monster_slot) == -1
+        assert state.mobs.picture[monster_slot] == 0
+        assert state.thief_collision_direction_code == 0
+        assert any(state.mobs.picture[slot] for slot in range(0x0D, 0x11))
 
     def test_nonblocking_occupied_cell_holds_the_axis_and_slot(self):
         state = GameState()

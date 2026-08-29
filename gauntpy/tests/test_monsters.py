@@ -100,6 +100,7 @@ from gauntpy.subsystems.monsters import (
     supersorc_place,
     tile_on_screen_d4,
     _update_cull_rect,
+    _walk_band_head,
     GENERATOR_RETRY_RELOAD,
     generator_candidate_slot,
     handle_generate,
@@ -453,6 +454,30 @@ class TestCullingRectangle:
         before_far = state.mobs.hpos[far]
         main_move_monsters(state)
         assert state.mobs.hpos[far] == before_far, "off-screen band was walked"
+
+    def test_walk_wraps_its_slip_arc_across_the_vertical_seam(self):
+        """0x49076/0x490AC mask both SLIP indices into the 512-pixel maze."""
+        state = GameState(scroll_x=323, scroll_y=492)
+        monster = pack_slot(1, 27)
+        player = pack_slot(6, 27)
+        _place_monster(state, monster, MazeObjIds.MONST_GHOST, direction=4)
+        _place_player(state, 0, player)
+        state.mobs.create(
+            pack_slot(31, 1), 1, encode_hpos(16),
+            encode_vpos_at_y(31 * 16), MazeObjIds.TREASURE,
+        )
+        state.frame_counter = _stagger_frame(monster)
+        before = state.mobs.state_link[monster]
+
+        assert _in_cull_rect(state, monster) is False
+        _update_cull_rect(state)
+        assert _in_cull_rect(state, monster)
+        assert _walk_band_head(state, -0x90) == state.mobs.slip_heads[60]
+        assert _walk_band_head(state, 0x90) == state.mobs.slip_heads[32]
+
+        main_move_monsters(state)
+
+        assert state.mobs.state_link[monster] != before
 
     def test_no_players_freezes_everything(self):
         """0x4904E: with nobody on the level the whole pass returns early."""

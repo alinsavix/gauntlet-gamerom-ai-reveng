@@ -1003,10 +1003,12 @@ _SLIP_BAND_PIXELS = 8
 def _walk_band_head(state: GameState, offset: int) -> int:
     """The chain entry ``offset`` pixels from the camera midpoint."""
     mid_y = state.scroll_y + _CAM_MID_OFFSET
-    band = (mid_y + offset) // _SLIP_BAND_PIXELS
+    # 0x49076/0x490AC mask the scroll-relative coordinate with 0x1F0 before
+    # indexing the word table at 0x905F82.  The mask wraps the scan window at
+    # the vertical maze seam.  MobTable's band indices are already shifted one
+    # entry earlier than the ROM's biased tail view (see mob.py).
+    band = ((mid_y + offset) & 0x1F0) // _SLIP_BAND_PIXELS
     heads = state.mobs.slip_heads
-    if band < 0:
-        return state.mobs.depth_list_head
     if band >= len(heads):
         # Past the last band: the ROM falls back to ``priority_bucket_heads``,
         # so the walk wraps once and stops at the chain head.

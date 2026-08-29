@@ -9,6 +9,8 @@ files and skips cleanly (not errors) when ``GEX_ROM_DIR`` is unset, mirroring
 
 from __future__ import annotations
 
+from collections import deque
+
 import pytest
 
 from gauntpy import maze as gm
@@ -126,6 +128,68 @@ class TestPostDecodeSetup:
         assert state.mobs.picture[slots[1]] == 0x277B
         assert state.mobs.obj_type(slots[1]) == int(MazeObjIds.FOOD_DESTRUCTABLE)
         assert state.maze.data[(6, 5)] == int(MazeObjIds.FOOD_DESTRUCTABLE)
+
+    @requires_roms
+    def test_level_110_maze_26_removes_one_random_trap_wall_group(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+
+        gm.load_level(state, 110, maze_number=26)
+
+        remaining_groups = {
+            object_type
+            for object_type in range(
+                int(MazeObjIds.WALL_TRAPCYC1),
+                int(MazeObjIds.WALL_TRAPCYC3) + 1,
+            )
+            if any(
+                state.mobs.obj_type(slot) == object_type
+                for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+            )
+        }
+        assert state.level_flags_3 & 0x10
+        assert len(remaining_groups) == 2
+        assert sum(
+            state.mobs.obj_type(slot) in remaining_groups
+            for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+        ) == 6
+
+        exit_slot = next(
+            slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+            if state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+        )
+        blocked_types = {
+            int(MazeObjIds.WALL_REGULAR),
+            int(MazeObjIds.WALL_MOVABLE),
+            int(MazeObjIds.WALL_SECRET),
+            int(MazeObjIds.WALL_DESTRUCTABLE),
+            int(MazeObjIds.WALL_RANDOM),
+            int(MazeObjIds.WALL_TRAPCYC1),
+            int(MazeObjIds.WALL_TRAPCYC2),
+            int(MazeObjIds.WALL_TRAPCYC3),
+            int(MazeObjIds.DOOR_HORIZ),
+            int(MazeObjIds.DOOR_VERT),
+            int(MazeObjIds.FORCEFIELDHUB),
+        }
+        reachable = {state.maze_player_start_slot}
+        pending = deque(reachable)
+        while pending:
+            slot = pending.popleft()
+            row, column = divmod(slot, 32)
+            for next_row, next_column in (
+                (row - 1, column), (row + 1, column),
+                (row, column - 1), (row, column + 1),
+            ):
+                if not (1 <= next_row < 32 and 0 <= next_column < 32):
+                    continue
+                candidate = pack_slot(next_row, next_column)
+                if (
+                    candidate in reachable
+                    or state.mobs.obj_type(candidate) in blocked_types
+                ):
+                    continue
+                reachable.add(candidate)
+                pending.append(candidate)
+        assert exit_slot in reachable
 
 
 class TestDeferredThiefPickups:

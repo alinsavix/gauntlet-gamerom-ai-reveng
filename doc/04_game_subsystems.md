@@ -139,6 +139,14 @@ Horizontally the accepted span is 0x7F80 units (255 pixels); vertically it is
 position field has to rescale this modulus with it, or seam-visible monsters
 freeze as soon as the camera register wraps from 0 to 511.
 
+The preceding SLIP-chain window wraps independently. At 0x49076 and 0x490AC
+the ROM computes its stop/start lookups from `(pf_vscroll_lo + 0x118) & 0x1F0`
+and `(pf_vscroll_lo - 8) & 0x1F0`, then indexes the word table through its
+biased `priority_bucket_heads_tail` base at 0x905F82. Both the culling
+predicate and this chain arc must wrap. Clamping either lookup at band 63
+omits the row-zero side of the arc when the camera crosses the vertical seam,
+leaving visible monsters neither moving nor animating.
+
 ### 3.2 Monster Dispatch
 
 `monsters_everything` does NOT use a jump table. Instead, it uses a single shared handler with conditional branches:
@@ -866,7 +874,12 @@ Called when transitioning to a new level:
 10. If LFLAG4 `TrapsRandom` is set, draws `getrandom(3)` once and rotates every type-10/11/12 trap identity by that common offset modulo three.
 11. Scans all `mob_link` slots to repopulate transporter/exit tables and initialize the random-wall low/current/target cursors.
 12. Below maze 115 and above level 6, chooses one authored type-49/50 food uniformly, changes its picture to adaptive food `0x277B`, and normalizes its type to 49.
-13. On secret mazes, runs the challenge-target transformation described in §10.6 after the position-table scan, then clears the reserved low MOB pictures used by ordinary play.
+13. Runs exit selection. LFLAG3 `WallsDeletable1` then draws one trap group and
+    calls `maze_place_object_types` for its type-10/11/12 trigger; `WallsDeletable2`
+    removes the drawn group and the next cyclic group. Each call replaces both
+    that trigger type and its corresponding type-7/8/9 wall family with floor,
+    subject to the LFLAG4 `TrapsLocal` near-screen gate.
+14. On secret mazes, runs the challenge-target transformation described in §10.6 after the position-table scan, then clears the reserved low MOB pictures used by ordinary play.
 
 The Python representation initializes random-wall cursors eagerly during this
 setup. It derives the transporter table as an ordered live-MOB scan because the
@@ -1536,6 +1549,15 @@ The grid is reset by display memory ownership rather than `thief_setup`.
 42-63. The 22 hidden words cleared on each row by `maze_show` 0x4526A and
 `maze_hide` 0x4529A cover all 44 route bytes for each of the grid's 24 rows.
 Thus no pursuit or escape nibble survives a normal level handoff.
+
+`thief_handle_tile_collision` does not merely wait behind another creature.
+For object types 18–45 (ordinary monsters through generators), first contact
+stores `thief_direction + 1` in `thief_collision_direction_code` and clears
+the shared `thief_stolen_item` counter. The collision animation increments
+that counter once per thief frame. Once it is greater than 15, the next
+contact calls `shot_impact_spawn` with the selected victim as effect owner,
+removes the blocking MOB, clears the collision code, and returns blocked for
+that frame. The visitor then resumes its route through the vacated cell.
 
 The ordinary movement engine is anchor-based rather than cell-coarse.
 `thief_move_engine` (0x4EE7A) writes each proposed H or V word, then calls
@@ -2233,7 +2255,7 @@ Post-processing: calls `wall_remove_playfield_update` (0x5E888) or `wall_place_p
 
 Two independent leaf routines follow this function in ROM and must not be treated as cyclic-wall tail blocks:
 
-- `maze_place_object_types` (0x5E7A6) takes one longword stack argument whose low byte is an object type. It scans MOB slots 0x20–0x3FF, accepts `mob_link >> 10` equal to either that type or `type - 3`, optionally rejects off-screen tiles when level-flags byte 4 bit 2 is set, and calls `mob_place_tile(slot, 0)` for each match. **Corrected:** it reports a match only for the `type - 3` arm — it returns 1 when at least one type-3-relative slot was converted, and otherwise 0, so a run that only matched the literal type still returns 0. Maze setup calls it for types 0x0A–0x0D according to level flags; `player_tile_interact` calls it again after replacing the relevant maze object.
+- `maze_place_object_types` (0x5E7A6) takes one longword stack argument whose low byte is an object type. It scans MOB slots 0x20–0x3FF, accepts `mob_link >> 10` equal to either that type or `type - 3`, optionally rejects off-screen tiles when level-flags byte 4 bit 2 is set, and calls `mob_place_tile(slot, 0)` for each match. **Corrected:** it reports a match only for the `type - 3` arm — it returns 1 when at least one type-3-relative slot was converted, and otherwise 0, so a run that only matched the literal type still returns 0. During level setup LFLAG3 bit 4 selects one random type 0x0A–0x0C; bit 5 selects one and then its next cyclic neighbor, removing one or two wall families before play. `player_tile_interact` calls the same routine after replacing a stepped-on trap.
 - `maze_convert_walls_to_exits` (0x5E80C) takes no arguments and scans the same MOB-slot range. It converts picture 0x20F6 and generic wall markers (`mob_picture == 0x8000`) other than forcefields (type 0x3F) by calling `mob_place_tile(slot, 0x10)`. It returns 1 if it converted at least one slot. `main_move_players` calls it when `escape_timer` reaches 0x5208 (21,000 frames), producing the documented all-walls-become-exits escape behavior.
 
 **Confidence: Verified.** The two visibility pairs use exact -1/0

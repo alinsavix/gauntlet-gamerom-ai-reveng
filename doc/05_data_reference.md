@@ -315,7 +315,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904BB4 | 4 B | `thief_item_carried` | Item that the thief is currently carrying |
 | 0x904BB8 | 2 B | `thief_collision_direction_code` | One-based direction/contact code set when the thief first collides with its target player (`thief_direction + 1`). It suppresses repeated damage during the same contact and is folded into `thief_move_engine`'s return adjustment; zero means no active contact code. |
 | 0x904BBA | 2 B | `thief_start_location` | Target player's packed cell when the visitor is scheduled, before the arrival delay. Deployment later creates the thief/mugger at this saved old location while the pursuit grid leads toward the player's newer cells. |
-| 0x904BBC | 2 B | `thief_stolen_item` | Tile type of last item stolen by thief |
+| 0x904BBC | 2 B | `thief_stolen_item` | Shared thief animation/contact counter, despite the historical name. Theft and first monster/player contact clear it; `main_thief_anim` increments it while showing escape, fight, or compact blocked-motion frames. A monster/generator blocker is removed after this word passes 15. The actual carried items live in the adjacent longwords at 0x904BB0/0x904BB4. |
 | 0x904BBE | 2 B | `thief_tport_active` | Thief transporter-transition latch. `thief_start_tport_anim` sets it to one; normal movement clears it, and occupied-cell replacement is suppressed while it is nonzero. |
 
 ### 1.17 Transporter State
@@ -640,8 +640,8 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 |------|-------|
 | LFLAG3_RANDOMFOOD_0–7 | 0–7 (count) |
 | LFLAG3_WALLS_CYCLIC | 0x08 |
-| LFLAG3_WALLS_DELETABLE1 | 0x10 |
-| LFLAG3_WALLS_DELETABLE2 | 0x20 |
+| LFLAG3_WALLS_DELETABLE1 | 0x10 — level setup randomly removes one type-7/8/9 wall family and its matching type-10/11/12 trigger |
+| LFLAG3_WALLS_DELETABLE2 | 0x20 — level setup removes a random wall family and the next family cyclically |
 | LFLAG3_EXIT_MOVES | 0x40 |
 | LFLAG3_EXIT_CHOOSEONE | 0x80 |
 

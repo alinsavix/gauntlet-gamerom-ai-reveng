@@ -326,6 +326,22 @@ evidence remains in `../doc/`, generated contracts, and the book.
     and the normal spawn-bonus update. Preserve that instruction order and read
     the same physical bytes on payout; standalone “saved inventory” fields are
     not behaviorally equivalent.
+71. **Simulation SLIP windows wrap before lookup.** `main_move_monsters` masks
+    both vertical scroll endpoints with `0x1F0` and indexes the biased
+    `priority_bucket_heads_tail` view. A wrapped culling rectangle is
+    insufficient: the depth-chain start/stop arc must also wrap or visible
+    monsters near row zero never receive turns.
+72. **The thief fights through ordinary monsters and generators.** Contact with
+    object types 18–45 latches `thief_direction + 1`, resets the shared
+    animation/contact counter, and advances the fight cycle once per thief
+    frame. After the counter passes 15, the ROM spawns an impact and removes the
+    blocker. Do not treat a non-solid monster cell as inert occupancy.
+73. **Deletable trap walls are level-setup mutations.** LFLAG3 bit 4 removes one
+    randomly selected type-7/8/9 wall group and its type-10/11/12 trigger;
+    bit 5 removes the selected group and the next cyclic group. These draws run
+    after exit selection and use `maze_place_object_types`, including the
+    LFLAG4 `TrapsLocal` visibility gate, so logical maze state, MOB records, and
+    playfield descriptors must change together.
 
 ## Investigation workflow
 

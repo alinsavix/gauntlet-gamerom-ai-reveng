@@ -169,6 +169,12 @@ group is converted to floor at once. On some levels the flags additionally
 make trap walls invisible, or all walls invisible, at which point the maze
 becomes an exercise in memory and faith.
 
+Two setup flags can open those mazes before the player arrives. One removes a
+randomly selected trap-wall family and its matching triggers; the other removes
+that family and the next of the three groups cyclically. The draw occurs after
+exit selection, and the removal is a real maze/MOB/playfield mutation rather
+than hidden rendering. Maze 26 depends on this setup step to open its route.
+
 **Random walls.** A separate wall type toggles on its own schedule. Every two
 seconds the handler walks the level's random-wall span and flips a coin for
 each cell, toggling the wall's existence bit on heads. There is no pattern to
@@ -574,9 +580,11 @@ cabinet's remarkably candid bookkeeping.
 >   `main_handle_death` (0x4664C), §21.
 > - Cyclic walls: `main_walls_cyclic_move` (0x5E62A), 120-frame timer, phases
 >   at 0x90401C, group bytes at 0x910600 (2 bits/cell), sound 0x2B, §18.
->   Trap groups: wall types 7–9 removed by `maze_place_object_types` (0x5E7A6)
->   when a matching trap tile (types 0x0A–0x0C) is stepped on; invisibility
->   via LFLAG1 bit 7 / LFLAG2 bit 7 (`doc/05_data_reference.md` §3.12).
+>   Trap groups: wall types 7–9 removed with matching trap tiles 0x0A–0x0C by
+>   `maze_place_object_types` (0x5E7A6), either when a trap is stepped on or
+>   during level setup under LFLAG3 bits 4–5; LFLAG4 bit 2 limits removal to
+>   near-screen cells. Invisibility uses LFLAG1 bit 7 / LFLAG2 bit 7
+>   (`doc/05_data_reference.md` §3.12).
 > - Random walls: `main_walls_random_move` (0x5E41A), type 6, 50% toggle per
 >   cell per pass, §19. Movable walls: 0x400/hit in the state word, dissolve
 >   at 0x6400 (25 hits); secret-wall prize roll and wall/reflect shot rules in

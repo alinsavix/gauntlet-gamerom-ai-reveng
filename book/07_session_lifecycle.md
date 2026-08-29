@@ -108,8 +108,10 @@ and paced frame-by-frame by `main_start_game`:
 3. **Construct the world.** The maze record is decoded into logical objects
    and playfield tiles, per-level hazard flags are loaded and partly
    randomized, and post-decode scans find the player start, build the
-   transporter and exit tables, and wire up doors and walls. Chapters 8
-   and 9 split this work between them.
+   transporter and exit tables, and wire up doors and walls. Two level flags
+   can also remove one or two randomly selected trap-wall families before play,
+   changing which authored corridors begin open. Chapters 8 and 9 split this
+   work between them.
 4. **Place the players.** Every position whose player survived the last
    level is spawned near the start; positions mid-selection stay in
    selection. The camera centers on the start tile.

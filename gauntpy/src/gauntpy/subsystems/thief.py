@@ -736,6 +736,25 @@ def thief_handle_tile_collision(state: GameState, candidate_mob_slot: int) -> in
     move_result = thief_test_move_tile(state, candidate_mob_slot, obj_type)
     if move_result:
         return -1
+    if (
+        int(MazeObjIds.MONST_GHOST)
+        <= obj_type
+        <= int(MazeObjIds.GEN_AUX_GRUNT3)
+    ):
+        if not state.thief_collision_direction_code:
+            state.thief_collision_direction_code = state.thief_direction + 1
+            state.thief_stolen_item = 0
+            return 0
+        if state.thief_stolen_item <= 0x0F:
+            return 0
+        from .shots import shot_impact_spawn
+
+        shot_impact_spawn(
+            state, candidate_mob_slot, state.thief_victim,
+        )
+        state.mobs.unlink_and_clear(candidate_mob_slot)
+        state.thief_collision_direction_code = 0
+        return -1
     if _THIEF_COLLISION_REMOVE_FLAGS[obj_type]:
         state.mobs.unlink_and_clear(candidate_mob_slot)
         return -1
@@ -1160,11 +1179,15 @@ def _set_thief_animation(state: GameState, movement_result: int) -> None:
     if state.thief_collision_direction_code:
         if not 0 <= direction < 8:
             return
+        counter = state.thief_stolen_item
+        state.thief_stolen_item = (counter + 1) & 0xFFFF
         table = _MUGGER_WALK_ANIM if state.thief_mode & THIEF_IS_MUGGER else _THIEF_WALK_ANIM
-        state.mobs.picture[slot] = table[direction * 8 + ((state.thief_stolen_item >> 2) & 7)]
+        state.mobs.picture[slot] = table[direction * 8 + ((counter >> 2) & 7)]
     elif movement_result and 0 <= direction < 8:
+        counter = state.thief_stolen_item
+        state.thief_stolen_item = (counter + 1) & 0xFFFF
         table = _MUGGER_COMPACT_ANIM if state.thief_mode & THIEF_IS_MUGGER else _THIEF_COMPACT_ANIM
-        state.mobs.picture[slot] = table[direction * 4 + ((state.thief_stolen_item >> 2) & 3)]
+        state.mobs.picture[slot] = table[direction * 4 + ((counter >> 2) & 3)]
     else:
         table = _MUGGER_IDLE_ANIM if state.thief_mode & THIEF_IS_MUGGER else _THIEF_IDLE_ANIM
         state.mobs.picture[slot] = table[min(direction, 8)]
