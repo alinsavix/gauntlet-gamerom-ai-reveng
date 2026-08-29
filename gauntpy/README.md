@@ -154,6 +154,8 @@ uv run python -m gauntpy.secret_code_verifier "ALINSA" FB9-AD9 \
   --maze 73 --trick 5 --challenge 0x5A
 ```
 
+On Windows, `verify-secret-code.bat` wraps that `uv` invocation.
+
 The title, high-score, legend, and character-select screens render in the
 cabinet's **own alpha-ROM font**, while the native 328x48 title wordmark is
 assembled from the graphics ROMs at runtime, driven by the genuine `coincheck`
