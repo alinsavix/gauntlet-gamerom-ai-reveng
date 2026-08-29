@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2506 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2519 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,32 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-165 · tagged wall impacts, incremental playfield cache, and diagnostics clarity
+
+The frame-53450 level-112/maze-32 capture places the Elf at `(92,496)`. A
+down-left shot reaches `(87,505)` and reports tagged playfield target `0x405`.
+Gauntpy stripped the `0x400` tag before calling `shot_impact_spawn`, so the
+effect copied H/V from fixed MOB slot 5, whose stale coordinates were
+`(496,83)`. ROM 0x47E6A-0x47F80 keeps the tag: for any playfield target it
+normalizes the depth key but copies position from shooter MOB `shooter+1`.
+The game-side effect writer now preserves that identity and produces the
+sparkle at `(87,505)` with depth key `0x025`. The same port now includes the
+ROM's ordinary-target H correction and low-slot depth-key reconstruction.
+
+The regular 30 ms render spikes in the frame-14495 capture were host cache
+rebuilds, not scrolling or game timing. Living maze updates changed only a few
+of the 4096 authoritative descriptor words, but any generation change decoded
+the complete 512x512 indexed playfield again. The cache now retains a descriptor
+signature and restamps only changed 8x8 words before recoloring through live
+color RAM. A 300-frame replay of the capture went from 63 frames above 30 ms
+(43.2 ms maximum) to none above 20 ms (16.5 ms maximum) on the same host.
+
+F1 now has a separate FLAGS page showing the four raw bytes and their decoded
+odd-angle/mirror/invisibility, speed, food/wall/exit, shot/trap/wrap/fake-exit
+settings. LEVEL remains focused on timers and depth gates. The ROUTES page moves
+its marker key below the text rows, so its boxes no longer overwrite
+`DIRECTIONS`.
 
 ### S-164 · exhaustive LFLAG audit restored level-splash consumers
 

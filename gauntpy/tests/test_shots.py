@@ -301,6 +301,22 @@ class TestEffectSpawning:
             for slot in range(0x0D, 0x11)
         )
 
+    def test_tagged_playfield_impact_uses_live_shot_position(self):
+        state = _make_state()
+        shot_slot = 1
+        state.mobs.picture[shot_slot] = 0x1C8B
+        state.mobs.hpos[shot_slot] = 87 << 7
+        state.mobs.vpos[shot_slot] = 503 << 7
+        state.mobs.hpos[5] = 496 << 7
+        state.mobs.vpos[5] = 413 << 7
+
+        shot_impact_spawn(state, 0x405, 0)
+
+        assert state.mobs.picture[0x0D] == 0x0EFC
+        assert state.mobs.hpos[0x0D] == (87 << 7) | 1
+        assert state.mobs.vpos[0x0D] == (503 << 7) | 9
+        assert state.mobs.depth_key[0x0D] == 0x25
+
     def test_transporter_dissolve_seeds_rom_position_and_counter(self):
         state = _make_state()
         source = 91

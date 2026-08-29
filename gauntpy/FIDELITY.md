@@ -349,6 +349,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     monster families; and LFLAG2 bit 7 both hides walls and changes
     destructible-wall damage. An implementation is incomplete until all
     address-proven consumers of the bit are represented.
+75. **Tagged playfield hits choose impact geometry.** `shot_impact_spawn` receives
+    either a MOB slot or a `0x400`-tagged playfield collision. Preserve that tag:
+    the tagged arm positions the sparkle from the live projectile and uses the
+    normalized wall cell only as its depth key. Masking it into a MOB identity
+    copies unrelated fixed-channel coordinates.
 
 ## Investigation workflow
 

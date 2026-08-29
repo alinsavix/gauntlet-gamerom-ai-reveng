@@ -42,6 +42,7 @@ class PlayfieldCache:
     vram_generation: int = -1
     color_generation: int = -1
     palette_signature: tuple = ()
+    descriptor_signature: tuple[int, ...] = ()
     indexed_image: object | None = None
     decoded_tiles: dict[int, object] = dataclasses.field(default_factory=dict)
 
@@ -90,6 +91,41 @@ def _build_vram_indices(
     return indexed, decoded_tiles
 
 
+def _update_vram_indices(
+    state, indexed, decoded_tiles: dict[int, object],  # noqa: ANN001
+    previous: tuple[int, ...], current: tuple[int, ...],
+):
+    """Restamp only descriptor words changed since the previous host raster."""
+    from PIL import Image
+    from gex.render import get_parsed_tile
+    from gex.roms import GexError
+
+    updated = indexed.copy()
+    for index, (old_word, word) in enumerate(zip(previous, current, strict=True)):
+        if old_word == word:
+            continue
+        tile_number = word & PF_TILE_MASK
+        tile = decoded_tiles.get(tile_number)
+        if tile is None:
+            try:
+                tile = get_parsed_tile(tile_number)
+            except GexError:
+                tile = [[0] * 8 for _ in range(8)]
+            decoded_tiles[tile_number] = tile
+        palette_base = (word & PF_PALETTE_MASK) >> 8
+        pixels = bytes(
+            palette_base | (int(color) & 0x0F)
+            for tile_line in tile
+            for color in tile_line
+        )
+        column, row = divmod(index, PF_ROWS)
+        updated.paste(
+            Image.frombytes("P", (8, 8), pixels),
+            (column * 8, row * 8),
+        )
+    return updated
+
+
 def _colorize_indexed(indexed, state, *, shadow: bool = False):  # noqa: ANN001
     """Resolve one indexed world through live color RAM without tile decoding."""
     palette = []
@@ -110,6 +146,9 @@ def playfield_cache_for_state(
         tuple(state.playfield_color_ram),
         tuple(state.playfield_shadow_color_ram),
     )
+    descriptor_signature = tuple(
+        int(word) & 0xFFFF for word in state.playfield_ram
+    )
     if (
         cache is not None
         and cache.vram_generation == state.playfield_generation
@@ -120,6 +159,19 @@ def playfield_cache_for_state(
     if cache is not None and cache.vram_generation == state.playfield_generation:
         indexed = cache.indexed_image
         decoded_tiles = cache.decoded_tiles
+    elif (
+        cache is not None
+        and cache.indexed_image is not None
+        and len(cache.descriptor_signature) == len(descriptor_signature)
+    ):
+        decoded_tiles = cache.decoded_tiles
+        indexed = _update_vram_indices(
+            state,
+            cache.indexed_image,
+            decoded_tiles,
+            cache.descriptor_signature,
+            descriptor_signature,
+        )
     else:
         indexed, decoded_tiles = _build_vram_indices(
             state, cache.decoded_tiles if cache is not None else None,
@@ -132,6 +184,7 @@ def playfield_cache_for_state(
         vram_generation=state.playfield_generation,
         color_generation=state.playfield_color_generation,
         palette_signature=palette_signature,
+        descriptor_signature=descriptor_signature,
         indexed_image=indexed,
         decoded_tiles=decoded_tiles,
     )

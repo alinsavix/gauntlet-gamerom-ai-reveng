@@ -30,6 +30,7 @@ DEBUG_PAGES = (
     "PLAYERS",
     "DEMO",
     "LEVEL",
+    "FLAGS",
     "ACTORS",
     "AI",
     "DISPLAY",
@@ -229,11 +230,6 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return (
         ("CURRENT", f"level {state.levelnum_current} maze {state.mazenum_current}"),
         ("NEXT", f"level {state.level_next} maze {state.maze_next}"),
-        (
-            "FLAGS 1-4",
-            f"{state.level_flags:02X} {state.level_flags_2:02X} "
-            f"{state.level_flags_3:02X} {state.level_flags_4:02X}",
-        ),
         ("WRAP", f"H={int(state.wrap_h)} V={int(state.wrap_v)}"),
         ("ROTATION", f"resume={state.maze_number} stride={state.maze_stride}"),
         ("IDLE/ESCAPE", f"{state.idle_timer} / {state.escape_timer}"),
@@ -252,6 +248,41 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
             " ".join(f"{value:02X}" for value in state.secret_tricks_flags),
         ),
         *_level_gate_rows(state),
+    )
+
+
+def _enabled(value: int, entries: tuple[tuple[int, str], ...]) -> str:
+    names = [name for mask, name in entries if value & mask]
+    return " ".join(names) if names else "-"
+
+
+def _flags_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
+    flag1 = int(state.level_flags)
+    flag2 = int(state.level_flags_2)
+    flag3 = int(state.level_flags_3)
+    flag4 = int(state.level_flags_4)
+    return (
+        ("RAW 1-4", f"{flag1:02X} {flag2:02X} {flag3:02X} {flag4:02X}"),
+        ("F1 ODD", _enabled(flag1, (
+            (0x01, "GHO"), (0x02, "GRU"), (0x10, "SOR"),
+            (0x20, "AUX"), (0x40, "DEA"),
+        ))),
+        ("F1 MIRROR", _enabled(flag1, ((0x04, "H"), (0x08, "V")))),
+        ("F1 WALL", _enabled(flag1, ((0x80, "INVIS TRAP"),))),
+        ("F2 FAST", _enabled(flag2, (
+            (0x01, "GHO"), (0x02, "GRU"), (0x04, "DEM"),
+            (0x08, "LOB"), (0x10, "SOR"), (0x20, "AUX"), (0x40, "DEA"),
+        ))),
+        ("F2 WALL", _enabled(flag2, ((0x80, "INVIS ALL"),))),
+        ("F3 FOOD", str(flag3 & 0x07)),
+        ("F3 WALL", _enabled(flag3, (
+            (0x08, "CYCLIC"), (0x10, "DELETE1"), (0x20, "DELETE2"),
+        ))),
+        ("F3 EXIT", _enabled(flag3, ((0x40, "MOVES"), (0x80, "CHOOSE1")))),
+        ("F4 SHOTS", _enabled(flag4, ((0x01, "STUN"), (0x02, "HURT")))),
+        ("F4 TRAPS", _enabled(flag4, ((0x04, "LOCAL"), (0x08, "ROTATE")))),
+        ("F4 WORLD", _enabled(flag4, ((0x10, "WRAP V"), (0x20, "WRAP H")))),
+        ("F4 OTHER", _enabled(flag4, ((0x40, "FAKE EXIT"), (0x80, "OFFSCREEN")))),
     )
 
 
@@ -551,6 +582,7 @@ def capture_debug_snapshot(
             ("PLAYERS", _player_page_rows(state, player_snapshots)),
             ("DEMO", _demo_page_rows(state)),
             ("LEVEL", _level_page_rows(state)),
+            ("FLAGS", _flags_page_rows(state)),
             ("ACTORS", _actor_page_rows(state, selected_mob)),
             ("AI", _ai_page_rows(state)),
             ("DISPLAY", _display_page_rows(state)),
@@ -745,7 +777,7 @@ def _draw_route_grids(
     draw: ImageDraw.ImageDraw, snapshot: DebugSnapshot, font: ImageFont.ImageFont,
 ) -> None:
     cell = 4
-    top = 78
+    top = 90
     lefts = (8, 174)
     marker_x = 8
     for label, color in zip(

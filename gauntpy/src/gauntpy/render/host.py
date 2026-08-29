@@ -369,7 +369,7 @@ class HostShell:
                 surface, (LOGICAL_WIDTH * self.scale, LOGICAL_HEIGHT * self.scale)
             )
         self.window.blit(surface, (0, 0))
-        render_time_ms = (perf_counter() - render_started) * 1000.0
+        render_time_ms = round((perf_counter() - render_started) * 1000.0, 9)
         self._render_times_ms.append(render_time_ms)
         if self.diagnostics_visible:
             recent = tuple(self._render_times_ms)

@@ -241,6 +241,13 @@ literally following your footprints, one cell behind. Each grid byte holds two
 of these direction codes, and the thief switches to the other one the moment it
 turns to escape, which looks very much like retracing the route it came in by.
 
+More precisely, the low nibble is created by the victim: each cell departure
+points toward the victim's next cell. The high nibble is created by the visitor:
+as it reaches each selected next cell during pursuit, it writes the opposite
+direction there if no reverse edge exists yet. That gradually builds a trail
+back toward the saved starting cell. Escape merely selects those high nibbles;
+it does not calculate a fresh route.
+
 There is no emergency search when a footprint is absent. The route reader keeps
 the direction it was already following; from freshly reset state that means
 up. This normally cannot matter because scheduling and the countdown build the

@@ -217,6 +217,41 @@ def test_palette_only_update_recolors_without_decode_or_index_rebuild(monkeypatc
     assert elapsed / 30 < 1 / 60
 
 
+def test_descriptor_change_restamps_only_changed_tiles(monkeypatch):
+    decode_calls = []
+    monkeypatch.setattr(
+        "gex.render.get_parsed_tile",
+        lambda number: (
+            decode_calls.append(number),
+            [[number % 15 + 1] * 8 for _ in range(8)],
+        )[1],
+    )
+    state = _renderable_state()
+    cache = playfield_cache_for_state(state, None)
+    initial_decode_calls = len(decode_calls)
+    slot = (8 << 5) | 8
+    old = read_tile_descriptor(state, slot)
+    write_tile_descriptor(
+        state, slot, tuple((word + 1) & 0x0FFF for word in old),
+    )
+    fresh = playfield_cache_for_state(state, None)
+
+    def unexpected_rebuild(*_args, **_kwargs):
+        raise AssertionError("local descriptor update rebuilt the full raster")
+
+    monkeypatch.setattr(
+        "gauntpy.render.playfield._build_vram_indices", unexpected_rebuild,
+    )
+    updated = playfield_cache_for_state(state, cache)
+
+    assert updated.indexed_image is not cache.indexed_image
+    assert len(decode_calls) > initial_decode_calls
+    assert updated.image.tobytes() != cache.image.tobytes()
+    assert updated.indexed_image.tobytes() == fresh.indexed_image.tobytes()
+    assert updated.image.tobytes() == fresh.image.tobytes()
+    assert updated.shadow_image.tobytes() == fresh.shadow_image.tobytes()
+
+
 def test_descriptor_palette_fields_match_the_hardware_banks():
     state = GameState()
     state.playfield_floor_descriptors[64] = (1, 2, 3, 4)

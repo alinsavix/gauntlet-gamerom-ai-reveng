@@ -1550,6 +1550,15 @@ from player movement and transporter paths. If the player is the current
 position in the low path-grid nibble and updates `thief_victim_pos`. It does
 not erase a MOB or write a blank tile.
 
+The high nibble is built while the visitor follows that low-nibble trail.
+Whenever it reaches its selected next cell, `thief_move_engine` writes the
+opposite of the pursuit direction there, but only if that high nibble is still
+empty and the visitor is not already escaping. The result is a reverse route
+from the victim back toward `thief_start_location`; transporter completion
+writes the same kind of reverse edge at its destination. Switching to escape
+mode therefore changes which nibble `path_grid_get_direction` reads rather than
+running a new path search.
+
 `thief_compute_path` (0x4F912) is a route consumer, not a fallback pathfinder.
 It saves `thief_path_direction`, reads the selected grid nibble at the current
 cell, and replaces the saved direction only when that nibble decodes to 0–7.
@@ -2628,6 +2637,13 @@ placement resets it on normal level entry or player join. This implements the
 **Generators:** tier 1 destroyed by any hit; tiers 2/3 need damage ≥ 2/3, else they degrade: `mob_link -= damage << 10` (becomes the next weaker generator) with a picture update.
 
 **Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls use the ordinary level wall palette until hit, then play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls use pattern 5 with the level's wall color and crumble via `wall_crumble` (0x5303A). The `7-stage` crumble value addresses live playfield color RAM; it is not a wall-theme index, so a static host palette must retain the wall's level color rather than selecting unrelated theme 6 after one hit. Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces. The row-zero branch at 0x40A9A returns `0x400 + cell` for a shot entering the top boundary (rather than indexing the reserved MOB slots 0–31); that tagged playfield hit is what sends the top wall through the same reflection path.
+
+`shot_impact_spawn` (0x47DAE) also distinguishes those tagged playfield hits.
+For a target at or above `0x400`, 0x47E6A-0x47F80 normalizes the tagged cell for
+depth placement but copies H/V from the live projectile MOB at `shooter+1`.
+Ordinary MOB targets copy the target's coordinates, including the ROM's
+four-pixel H adjustment for wider records. Stripping the tag before this call
+can index a reserved shot channel and place the sparkle at unrelated stale H/V.
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 

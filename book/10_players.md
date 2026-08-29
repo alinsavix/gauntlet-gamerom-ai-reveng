@@ -285,6 +285,13 @@ also ends with the shot either *consumed* or still flying: supershots pierce
 most monsters, and the reflect power lets a shot bounce off a wall and keep
 going.
 
+The impact sparkle keeps one subtle distinction from collision. A hit on a MOB
+copies that target's position. A collision reported as a tagged playfield tile
+instead copies the live projectile's position and uses the normalized wall cell
+only to place the sparkle in the depth chain. Treating both values as ordinary
+MOB slots can make a boundary impact jump to stale coordinates in one of the
+fixed shot channels.
+
 ## Potions and the Magic button
 
 Press Magic with a potion in your pocket and the drink dispatches a blast
