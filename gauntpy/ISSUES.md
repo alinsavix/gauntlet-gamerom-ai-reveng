@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2460 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2464 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,20 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-157 · verifier incorrectly required separately supplied game state
+
+The first verifier reproduced code generation but asked for maze, trick, and
+challenge as inputs. The contest form did not need those fields. ROM
+`secret_code_build` 0x54C14–0x54C96 interleaves three name-CRC symbols at
+positions 0/2/5 with three directly encoded state symbols at 1/4/6 and writes a
+literal dash at position 3. Atari could recompute the name symbols and decode
+the state symbols from the submitted `XXX-XXX` code itself.
+
+The verifier and batch wrapper now accept only name and code, report whether
+the name symbols match, and decode the previous maze, trick nibble, and
+challenge. A string such as `W1YOGNO` cannot be a literal output of this ROM:
+position 3 must be `-`, and `O` is absent from the alphabet.
 
 ### S-156 · direct level/maze selection and secret-code result teardown
 

@@ -443,13 +443,13 @@ likely to be misread on a CRT or in handwriting. The six characters are then
 interleaved, name fields in positions one, three, and six of the display, state
 fields in positions two, five, and seven, with the dash in the middle.
 
-An adjudicator holding the entry form could therefore do two different things.
-The state letters *decode*: they recover the maze number, the challenge, and
-the trick outright, no secrets required, which tells Atari where and how the
-code was won. The name letters *verify*: given the name written on the form,
-recompute the hash and check three letters. Fifteen bits of hash is no
-cryptography, but it is plenty to make a guessed code embarrassing at contest
-scale.
+An adjudicator holding only the name and code from the entry form could
+therefore do two different things. The state letters *decode*: they recover the
+maze number, challenge, and low four bits of the trick outright, which tells
+Atari where and how the code was won. The name letters *verify*: recompute the
+name hash and compare positions 1, 3, and 6. No separate maze, trick, or
+challenge fields are required. Fifteen bits of hash is no cryptography, but it
+is plenty to make a guessed code embarrassing at contest scale.
 
 ## Checking the math
 
@@ -502,8 +502,7 @@ also match the independent derivation from the polynomial. If you ever find a
 The reimplementation exposes the same check directly:
 
 ```text
-python -m gauntpy.secret_code_verifier "DARREN STONE" 8KW-9BS \
-  --maze 57 --trick 9 --challenge 0x5A
+python -m gauntpy.secret_code_verifier "DARREN STONE" 8KW-9BS
 ```
 
 One quirk worth recording: only the low four bits of the trick number survive

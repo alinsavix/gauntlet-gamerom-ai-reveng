@@ -305,6 +305,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     SECRET CODE`, `secret_name_entry_update` writes 29 opaque blank glyphs over
     the winning player's old name row. The result screen must be a fresh
     alpha-RAM transaction, not text layered over the editor.
+67. **Contest codes are self-contained adjudication records.** The fixed dash
+    separates six ROM-alphabet symbols. Positions 0/2/5 authenticate the
+    space-insensitive submitted name; positions 1/4/6 encode the prior maze,
+    low trick nibble, and challenge nibble. Verification needs only name plus
+    code, not separately remembered game state.
 
 ## Investigation workflow
 

@@ -1730,7 +1730,7 @@ Secret-room availability is paced by a pair of level counters:
   `secret_code_build` when entry completes. `secret_getname` initializes the
   byte repeat delay to 0xA0, so the first held direction waits 160 frames; later
   repeats accelerate to 8-13 frames exactly like ordinary initials entry.
-- After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-character `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
+- After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-symbol `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. Atari can therefore verify positions 0/2/5 from the submitted name and decode the other three positions without asking the player for those state fields. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
 - Before that result is displayed, 0x5528A-0x552DA writes 29 opaque blank
   small glyphs across the winner's editor row. The result page replaces the
   name-entry page; it does not intentionally retain a prefix or trailing text.

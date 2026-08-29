@@ -147,11 +147,11 @@ uv run --all-extras gauntpy-play --attract
 Press **5** to insert a coin, steer to pick a class, and press **Enter** to
 start.
 
-Verify a secret-room contest code with the saved maze, trick, and challenge:
+Verify and decode a secret-room contest code from the two fields Atari asked
+the player to submit:
 
 ```bash
-uv run python -m gauntpy.secret_code_verifier "ALINSA" FB9-AD9 \
-  --maze 73 --trick 5 --challenge 0x5A
+uv run python -m gauntpy.secret_code_verifier "ALINSA" FB9-AD9
 ```
 
 On Windows, `verify-secret-code.bat` wraps that `uv` invocation.

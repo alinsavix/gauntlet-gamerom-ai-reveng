@@ -1124,7 +1124,7 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | Address | Size | Content |
 |---------|------|---------|
 | 0x54BD6 | 10 B | `dragon_head_hitbox_offsets` — five padded words `{0x0400,0,0x0400,0,0x0400}`. `dragon_shot_hitbox_adjust` indexes overlapping H/V pairs with `(dragon_facing & 6)`, giving the cardinal head displacement without a wrap branch. |
-| 0x54CA6 | 32 B | `secret_code_alphabet` — exact 5-bit symbol alphabet `0123456789ABCDEFGHJKMNPQRSTUWXYZ` (I, L, O, and V omitted), used for all six characters of the displayed secret code. |
+| 0x54CA6 | 32 B | `secret_code_alphabet` — exact 5-bit symbol alphabet `0123456789ABCDEFGHJKMNPQRSTUWXYZ` (I, L, O, and V omitted), used for all six symbols of the displayed `XXX-XXX` secret code. Positions 0/2/5 authenticate the submitted name; positions 1/4/6 decode the packed prior maze, trick nibble, and challenge nibble. |
 | 0x54CC6 | 512 B | `secret_code_crc16_table` — 256 big-endian words, the standard CRC-CCITT/0x1021 lookup table. `secret_code_build` uses it to hash the entered name, skipping spaces; exact range 0x54CC6–0x54EC5, immediately before `secret_getname`. |
 | 0x5318C | 442 B | `game_options_descriptor_stream` — game-specific operator-options stream passed by `game_options_display` (0x5317C) to OS API 0x248. It contains tagged prompts and choices for resetting scores/defaults, attract sound, difficulty, health per coin, coins to start, secret codes, speech, and reduced text; exact range 0x5318C–0x53345. |
 | 0x57002 | 4 × 4B | Per-player character announcement speech IDs (ROM pointer table) |

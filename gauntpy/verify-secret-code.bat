@@ -1,7 +1,7 @@
 @echo off
 rem Verify a Gauntlet II secret-room contest code with uv.
 rem
-rem   verify-secret-code.bat "ALINSA" FB9-AD9 --maze 73 --trick 5 --challenge 0x5A
+rem   verify-secret-code.bat "ALINSA" FB9-AD9
 
 cd /d "%~dp0"
 set "UV_LINK_MODE=copy"
