@@ -322,6 +322,19 @@ class TestRouteGrid:
         state.path_direction_grid[0x80 + 12] = 0x09
         assert path_grid_get_direction(state, 56) == 8
 
+    def test_level_handoff_clears_stale_escape_routes_in_hidden_alpha_ram(self):
+        from gauntpy.subsystems.display import maze_show
+
+        state = GameState()
+        state.thief_mode = THIEF_PURSUE
+        path_grid_set_high_direction_if_empty(state, 0x38D, 2)
+        state.thief_mode = THIEF_ESCAPE
+        assert path_grid_get_direction(state, 0x38D) == 2
+
+        maze_show(state)
+
+        assert path_grid_get_direction(state, 0x38D) == 8
+
 
 class TestVictimRouteTracking:
     def test_target_move_records_low_nibble_and_updates_prior_position(self):

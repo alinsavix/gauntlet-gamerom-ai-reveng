@@ -1531,6 +1531,12 @@ on freshly reset state that direction is zero, upward. Any caller that invents
 a spawn without the scheduling/breadcrumb phase can send the visitor straight
 into the top boundary even though open floor exists elsewhere.
 
+The grid is reset by display memory ownership rather than `thief_setup`.
+`path_direction_grid` starts at 0x905054, the byte view of hidden alpha columns
+42-63. The 22 hidden words cleared on each row by `maze_show` 0x4526A and
+`maze_hide` 0x4529A cover all 44 route bytes for each of the grid's 24 rows.
+Thus no pursuit or escape nibble survives a normal level handoff.
+
 The ordinary movement engine is anchor-based rather than cell-coarse.
 `thief_move_engine` (0x4EE7A) writes each proposed H or V word, then calls
 `thief_probe_axis` (0x4EE0A) with one of the generic `mob_probe_*` callbacks.

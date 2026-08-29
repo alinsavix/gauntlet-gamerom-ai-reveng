@@ -248,6 +248,14 @@ trail before deployment. A test harness that simply drops a thief into an
 arbitrary cell without those breadcrumbs can therefore make it march into the
 top wall and stop, a failure of the setup rather than evidence of different AI.
 
+The footprints are erased between levels by a less obvious owner. Their bytes
+live in the hidden columns of alpha display RAM, beginning at column 42.
+Revealing or hiding a maze clears those columns, so the same writes that remove
+old screen text also wipe every pursuit and escape nibble. Treating the path
+grid as separate memory lets an old maze's escape route survive and point
+through a fixed wall in the new maze—exactly the condition that trapped the
+captured thief and mugger at cell `0x38D`.
+
 Following a cell does not mean collision waits for the thief's picture origin
 to enter it. The thief is twenty-four pixels wide in a sixteen-pixel grid. For
 each axis, the game proposes the new hardware position and probes the three

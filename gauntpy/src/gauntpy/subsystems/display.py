@@ -639,6 +639,9 @@ def maze_show(state: GameState) -> None:
     """Port maze_show 0x4526A: reveal the maze while preserving its info panel."""
     fill_alpha_rect(state, 0, 0, 29, ALPHA_ROWS, 0)
     fill_alpha_rect(state, 42, 0, ALPHA_COLUMNS - 42, ALPHA_ROWS, 0)
+    # 0x905054 is the byte view of hidden alpha columns 42-63 used by the
+    # thief's 24-row route grid. The same ROM writes clear both views.
+    state.path_direction_grid[:] = b"\0" * len(state.path_direction_grid)
 
 
 def _irgb_rgba(word: int) -> tuple[int, int, int, int]:

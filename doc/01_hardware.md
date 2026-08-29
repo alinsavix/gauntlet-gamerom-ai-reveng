@@ -172,6 +172,12 @@ horizontal boundary can be all `0x723A` while still showing the repeated detail;
 `0x724B` marks a genuine junction variant. Diagnose continuity from playfield
 RAM before changing the shadow compositor.
 
+The off-screen alpha columns are also game workspace. Byte address `0x905054`
+is column 42 of row zero and begins the thief's 24-row path grid: each row uses
+the 44 bytes occupied by hidden columns 42-63. Consequently whole-alpha
+operations such as `maze_show` and `maze_hide` erase the route grid as a side
+effect; it is not independent storage merely because it is not displayed.
+
 ```mermaid
 flowchart LR
     scroll["PF H/V scroll registers"] --> pfsample["Sample playfield tile pixel"]

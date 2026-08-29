@@ -67,6 +67,7 @@ def test_rom_free_large_font_uses_the_os_character_index_map():
 def test_maze_show_clears_everything_except_the_status_panel():
     state = GameState()
     state.alpha_ram[:] = [0xFFFF] * len(state.alpha_ram)
+    state.path_direction_grid[:] = b"\xA5" * len(state.path_direction_grid)
 
     maze_show(state)
 
@@ -74,6 +75,7 @@ def test_maze_show_clears_everything_except_the_status_panel():
         assert state.alpha_ram[row * 64:row * 64 + 29] == [0] * 29
         assert state.alpha_ram[row * 64 + 29:row * 64 + 42] == [0xFFFF] * 13
         assert state.alpha_ram[row * 64 + 42:(row + 1) * 64] == [0] * 22
+    assert state.path_direction_grid == bytearray(len(state.path_direction_grid))
 
 
 def test_large_text_uses_rom_variable_width_glyphs():

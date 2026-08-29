@@ -315,6 +315,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     backspace and hyphen. In particular, ASCII `'-'` maps to large-font index
     zero through the generic OS table and looks like `0`; contest-code output
     must use the dedicated `0x7C/0xFE/0xFC/0x7E` control quad.
+69. **Hidden alpha RAM is still shared RAM.** The thief route grid at
+    `0x905054` is the byte view of alpha columns 42-63 for 24 rows.
+    `maze_show`/`maze_hide` clear those columns and therefore clear both route
+    nibbles. A separate Python representation must receive the same game-side
+    write or stale escape paths survive across levels.
 
 ## Investigation workflow
 

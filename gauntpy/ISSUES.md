@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2467 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2468 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -63,6 +63,29 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-160 · thief route grid survived the alpha-RAM level clear
+
+The two supplied stalls shared a deeper cause. In both captures the visitor was
+escaping at cell `0x38D`; its high route nibble explicitly pointed east through
+fixed maze-3 wall `0x38E`. Following the complete high-nibble chain showed that
+this was not a newly computed route ending at an unset cell: it was an old
+reverse path extending through `0x38E` to `0x3FF`.
+
+The ROM cannot carry that path across a level. `ram.path_direction_grid` begins
+at byte address 0x905054, exactly hidden alpha column 42. Its 24 rows each use
+the 44 bytes in hidden columns 42-63. `maze_show` 0x4526A and `maze_hide`
+0x4529A clear all 22 hidden words on every alpha row, implicitly erasing both
+route nibbles. Gauntpy modeled `alpha_ram` and `path_direction_grid` separately
+but applied the clear only to the former. The first visitor wrote routes over
+whatever stale high nibbles happened to be empty; later escape consumed an old
+eastward chain that was geometrically impossible in maze 3 and stopped at its
+real wall.
+
+Both display routines now apply the one physical-memory write to the modeled
+route-grid view too, and `maze_hide` also performs its previously omitted
+non-panel alpha clear. A regression plants the captured `0x38D -> 0x38E`
+escape direction and proves the level handoff removes it.
+
 ### S-159 · F1 level page did not expose active depth gates
 
 The LEVEL diagnostics page now derives a host-only summary from the immutable
@@ -112,14 +135,12 @@ rotation. Direct play now follows the same rotation. The new independent
 `--maze 0..116` pins a stored layout without changing level-gated behavior, and
 the options may be combined for exact reproductions.
 
-The two supplied stuck-visitor dumps were the same ROM condition, not separate
-AI failures. At frames 13028 and 15637 the mugger/thief occupied maze-3 cell
-`0x38D`, targeted `0x38E`, and found its live type-2 `0x8000` wall marker.
-`thief_move_engine` 0x4EE7A restores the blocked axis; its route consumer has no
-fallback pathfinder. Both captures also had an unset selected route nibble, so
-`thief_compute_path` retained east. The port matches those branches. The
-surprising level-115/maze-3 pairing is now expressible only by explicitly
-combining the two direct-start options.
+At frames 13028 and 15637 the mugger/thief occupied maze-3 cell `0x38D`,
+targeted `0x38E`, and found its live type-2 `0x8000` wall marker.
+`thief_move_engine` 0x4EE7A correctly restored the blocked axis. S-160
+supersedes the original frozen-state conclusion: the selected route nibble was
+not unset, but an impossible stale eastward escape route left behind because
+the modeled hidden-alpha clear did not also clear its route-grid alias.
 
 The reported lower-wall shadow gaps likewise are not missing modeled VRAM. In
 the supplied state the horizontal run is continuous descriptor `0x723A`; the
@@ -133,7 +154,7 @@ layered the result over the entered name, producing the screenshot's surviving
 The initial joystick pause is original: `secret_getname` loads
 `name_entry_repeat_delay` with 0xA0, after which held input accelerates to one
 step every 8-13 frames. A runnable `python -m gauntpy.secret_code_verifier`
-checks an entered name/code against the saved maze, trick, and challenge.
+checks an entered name/code and decodes the saved maze, trick, and challenge.
 
 ### S-155 · documentation/Python naming contract had drifted
 
