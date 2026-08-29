@@ -1566,6 +1566,19 @@ class TestSecretNameEntry:
             if not 7 <= column <= 20
         )
 
+    def test_secret_code_dash_uses_name_entry_control_glyphs(self):
+        from gauntpy.subsystems.score import write_secret_code_result
+
+        state = _active_state()
+        state.secret_code = "W1Y-GN0"
+        write_secret_code_result(state, 0)
+
+        row, column, attribute = 7, 13, 0x8400
+        assert state.alpha_ram[row * 64 + column] == attribute + 0x7C
+        assert state.alpha_ram[(row + 1) * 64 + column] == attribute + 0xFE
+        assert state.alpha_ram[row * 64 + column + 1] == attribute + 0xFC
+        assert state.alpha_ram[(row + 1) * 64 + column + 1] == attribute + 0x7E
+
     def test_timeout_builds_code_then_hands_the_player_back(self):
         state = _active_state()
         state.secret_player = 1

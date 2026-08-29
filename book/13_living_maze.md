@@ -424,6 +424,13 @@ the game blanks all twenty-nine cells of the old editor row. A surviving name
 prefix or suffix under `REMEMBER YOUR SECRET CODE` is stale alpha RAM, not
 intentional formatting.
 
+The dash takes one more special path. The game's name-entry character writer
+recognizes it before consulting the OS large-font map and writes a dedicated
+four-glyph bar. Sending the dash through the generic map selects the same
+zero-shaped quad used by `0`; that implementation error makes a buffer such as
+`W1Y-GN0` appear on screen as `W1YOGNO`. The last character is still a zero,
+whose unslashed arcade glyph naturally resembles O.
+
 The construction takes two independent halves and interleaves them.
 
 The first half is a hash of your name. The routine runs the name bytes through

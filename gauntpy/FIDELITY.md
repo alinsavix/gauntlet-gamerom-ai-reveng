@@ -310,6 +310,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     space-insensitive submitted name; positions 1/4/6 encode the prior maze,
     low trick nibble, and challenge nibble. Verification needs only name plus
     code, not separately remembered game state.
+68. **Name-entry controls bypass the OS ASCII map.**
+    `name_entry_draw_large_char` manually writes the four alpha glyph words for
+    backspace and hyphen. In particular, ASCII `'-'` maps to large-font index
+    zero through the generic OS table and looks like `0`; contest-code output
+    must use the dedicated `0x7C/0xFE/0xFC/0x7E` control quad.
 
 ## Investigation workflow
 

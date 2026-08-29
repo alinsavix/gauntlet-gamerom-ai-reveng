@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2464 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2465 passed, 10 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -63,6 +63,21 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-158 · contest-code hyphen rendered as a zero
+
+The reported screenshot literally displayed `W1YOGNO`: its fourth apparent
+`O` was the zero-shaped glyph produced when gauntpy sent `'-'` through the
+generic OS large-font ASCII map. That table maps hyphen to index zero, the same
+quad used by digit zero.
+
+ROM `name_entry_draw_large_char` 0x4A44A has dedicated arms before the generic
+mapping call. Hyphen writes the raw alpha-glyph quad
+`0x7C/0xFE/0xFC/0x7E`; backspace similarly writes
+`0x1C/0x1E/0xFC/0x7E`. The secret-code and initials writers now use this
+game-specific routine, while ordinary OS large text retains its literal map.
+Thus the underlying `W1Y-GN0` buffer is now displayed with the required dash;
+the final zero still looks like an O in the arcade font.
+
 ### S-157 · verifier incorrectly required separately supplied game state
 
 The first verifier reproduced code generation but asked for maze, trick, and
@@ -74,8 +89,9 @@ the state symbols from the submitted `XXX-XXX` code itself.
 
 The verifier and batch wrapper now accept only name and code, report whether
 the name symbols match, and decode the previous maze, trick nibble, and
-challenge. A string such as `W1YOGNO` cannot be a literal output of this ROM:
-position 3 must be `-`, and `O` is absent from the alphabet.
+challenge. The generated buffer always has `-` at position 3 and never contains
+letter O; S-158 records why the gauntpy screenshot nevertheless showed an
+O-shaped glyph there.
 
 ### S-156 · direct level/maze selection and secret-code result teardown
 

@@ -1734,6 +1734,10 @@ Secret-room availability is paced by a pair of level counters:
 - Before that result is displayed, 0x5528A-0x552DA writes 29 opaque blank
   small glyphs across the winner's editor row. The result page replaces the
   name-entry page; it does not intentionally retain a prefix or trailing text.
+- The seven result characters use game helper `name_entry_draw_large_char`
+  0x4A44A rather than generic OS large ASCII text. Its hyphen arm writes raw
+  glyphs `0x7C/0xFE/0xFC/0x7E`; the OS ASCII map would turn `'-'` into the
+  zero-shaped index-0 quad.
 - After a player earns the secret challenge, `show_level_start_screen` (0x44DB4) saves the maze trick in `0x904064`, replaces `0x904065` with a random task code 0x50–0x5D, selects a time limit from tables at 0x57360/0x5737C, and displays the optional task qualifier from the 14-record table at 0x573D4. It initializes the secret maze number to 115, compares the task against 0x57, and increments the maze number for tasks 0x57–0x5D before calling `maze_select_bank_special`; tasks 0x50–0x56 therefore use maze 115 and tasks 0x57–0x5D use maze 116. Code 0x5A is valid: its qualifier is “AFTER REMOVING ALL TREASURE,” and a supershot hit on ordinary treasure increments the player's progress.
 - Neither stored secret maze contains an exit. During `maze_new_level_setup`, 0x43C20–0x43D10 selects one generator type from the 14-word table at 0x57056, indexed by challenge code minus 0x50. The scan converts every matching type-0x28–0x2D generator into an exit and removes the other generators in that range. It also replaces ordinary object types 0x13–0x18 with hidden potions whose pictures are `0xA728 + 4 * (type - 0x13)`. The generated exit is therefore part of challenge setup, not compressed maze data or a renderer overlay.
 - The ordinary exit/transporter scan occurs before that secret transformation. Generated challenge exits are live collision/playfield markers but are not entered into the cleared ordinary exit-position table; no moving/choose-one logic applies to them.
