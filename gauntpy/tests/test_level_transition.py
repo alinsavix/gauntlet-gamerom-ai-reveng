@@ -241,6 +241,54 @@ class TestPlayerExitSequence:
 # show_level_end_bonus_screen (0x4D476) -- the real maze reload (I-12)
 # ---------------------------------------------------------------------------
 
+def test_survivor_spawn_does_not_replay_join_sound_or_welcome(monkeypatch):
+    state = GameState(game_mode=GameMode.NORMAL)
+    state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
+    state.secret_tricks_flags[0] = 0xFF
+    panel_calls = []
+
+    def spawn(inner_state, player_index):
+        inner_state.level_players_active += 1
+        return -1
+
+    monkeypatch.setattr(gp, "player_start_inner", spawn)
+    monkeypatch.setattr(
+        gp, "setup_infopanel",
+        lambda inner_state, player_index: panel_calls.append(player_index),
+    )
+
+    ex._spawn_level_players(state, [0])
+
+    assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
+    assert state.secret_tricks_flags[0] == 0
+    assert state.sound_log == []
+    assert panel_calls == [state.secret_player]
+
+
+def test_failed_survivor_spawn_keeps_next_level_status(monkeypatch):
+    state = GameState(game_mode=GameMode.NORMAL)
+    state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
+    monkeypatch.setattr(gp, "player_start_inner", lambda _state, _player: 0)
+
+    ex._spawn_level_players(state, [0])
+
+    assert state.players[0].status == int(PlayerStatus.ALIVE_NEXT)
+    assert state.players[0].mob_slot == 0
+
+
+def test_secret_level_splash_starts_theme_at_timer_0x14a():
+    state = GameState(
+        game_mode=GameMode.NORMAL,
+        mazenum_current=115,
+        global_delay_timer=0x14B,
+    )
+
+    sess.main_start_game(state)
+
+    assert state.global_delay_timer == 0x14A
+    assert state.sound_log == [0x3B]
+
+
 @requires_roms
 class TestShowLevelEndBonusScreenLoadsNextMaze:
     def test_level_splash_timer_advances_while_a_dialog_gates_the_world(self, monkeypatch):
@@ -287,6 +335,7 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
         assert state.level_start_pending
         assert state.levelnum_current == 2 and state.mazenum_current == 1  # committed
         assert state.players[0].status == int(PlayerStatus.ALIVE_NEXT)
+        assert state.sound_log[-3:] == [0x39, 0xD7, 0x42]
 
         # Hold the level splash out; when the timer expires the hero is placed.
         while state.global_delay_timer > 0:
@@ -401,6 +450,8 @@ class TestTreasureRoomRoundTrip:
         assert state.idle_timer == 0
         assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
         assert state.game_mode == int(GameMode.NORMAL)
+        assert 0x40 in state.sound_log
+        assert any(command in (0x55, 0x56, 0x57) for command in state.sound_log)
 
         # Sit out the whole treasure room; the timeout ends the level.
         while state.treasure_timer > 0:
@@ -448,6 +499,14 @@ class TestPlayerStartInner:
         state = GameState()
         assert state.maze is None
         assert gp.player_start_inner(state, 0) == 0
+
+    def test_loaded_maze_with_no_spawn_candidate_plays_unable_to_join(self):
+        state = GameState()
+        state.maze = object()
+
+        assert gp.player_start_inner(state, 0) == 0
+
+        assert state.sound_log == [0x43]
 
     def test_spawns_at_playerstart_and_sets_camera_arrays(self):
         state = GameState()

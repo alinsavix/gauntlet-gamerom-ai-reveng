@@ -164,6 +164,11 @@ debouncing. This chapter picks up at the clean result, which is one byte per
 player whose high four bits are up/down/left/right and whose low bits include
 **Fire** and **Magic**.
 
+The Python playable wrapper accepts either keyboard or gamepad input, but that
+host convenience stops at the cabinet boundary: both devices clear bits in the
+same modeled active-low raw word. The original debounce and player routines
+still decide what those switches mean.
+
 A sixteen-entry lookup converts those four direction bits into intent, mapping
 every combination of the switches to one of eight compass directions or to "no
 direction." That is how up plus left becomes a clean diagonal, while
@@ -212,6 +217,8 @@ stand in it. Poison is different again: for twenty seconds it rewrites the
 direction nibble through a four-phase ROM table. Holding Up alternates
 Up+Right, Up, Up+Left, Up while Fire and Magic remain intact, producing the
 characteristic drunken wobble without changing the stored joystick sample.
+The poisoned pickup also chooses a grunt from the same character-specific
+voice groups used at death; it is not one of the four death-transition effects.
 
 The all-or-nothing axis proposal matters at two- and three-pixel speeds. The
 cabinet does not keep one clear pixel from a larger move whose endpoint blocks;
@@ -395,12 +402,18 @@ seconds if your score-per-coin ranked for initials entry, 10 seconds of GAME
 OVER display if it did not. One word, two jobs, chosen by whether you are
 alive, which is a very 1986 economy. If you were the last player standing,
 Chapter 7's continue prompt takes over.
+Audio first draws one character grunt, then plays the class transition effect
+0x14-0x17. Those grunts deliberately bypass the operator speech-disable switch;
+the composed low-health sentence above does not.
 
 One footnote runs the other way. A few food and potion sprites are marked
 variants, and shooting one throws the *monsters* into slow motion: ten seconds
 for the food, twenty for the potion, each announced by its own sound. For once
 the machine rewards you for shooting the food, and Chapter 11 has the
 mechanism, which is simply that the monster pass skips every other frame.
+Picking up an ordinary good potion is a different path: it increments inventory
+and sends command 0x26, the shared treasure/potion-taken sound. The nearby
+0x0E command is the red player's exit sound, not a potion cue.
 
 ## Pockets and doors
 
@@ -461,6 +474,13 @@ own that upgrade, the bottle instead becomes an ordinary carried potion when
 there is inventory room; a solo player with a full inventory gets 100 points.
 The six HUD icons are written directly around the name row from the same low
 six bits.
+
+A successful spoken power announcement is assembled rather than stored whole:
+the player's color/class name, `NOW HAS`, then the power name. The operator's
+reduced-text option omits the first two phrases but still names the power; the
+speech-disable option silences all three. Temporary powers additionally carry
+a per-level one-shot marker, so collecting the same expired effect again does
+not repeat the announcement.
 
 **The temporary shelf** holds timed or metered effects:
 

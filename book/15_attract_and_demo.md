@@ -201,8 +201,10 @@ dialog-gated block and finishes, but the `32 D3` input record stops counting
 down. When the box closes, its remaining LEFT frames carry the Elf away from
 the landing wall. This is not presentation-only timing: omit that game-side
 dialog and the same immutable ROM recording gets stuck after the teleporter.
-For the same reason, a host convenience switch that hides first-encounter
-advice during paid play cannot hide it during the demo.
+For the same reason, a host convenience switch must not bypass first-encounter
+advice. The cabinet's Reduce Text option follows its own alternate-record path
+instead: the alternate mostly-null bank is selected only for nonnegative normal
+play. Negative attract modes retain the full records and the demo's pauses.
 
 The twelve messages are worth reading as a set:
 

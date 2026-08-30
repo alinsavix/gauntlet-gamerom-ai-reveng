@@ -452,9 +452,27 @@ class TestPlayerTileInteract:
 
         gp.player_tile_interact(state, slot, 0)
 
-        assert 0x8E in state.sound_log          # powerup_speech_ids[6]
+        assert state.sound_log[:3] == [0xBD, 0x8D, 0x8E]
         assert 0x26 in state.sound_log
         assert 0x37 not in state.sound_log
+
+    def test_reduced_text_speaks_only_the_power_name(self):
+        state = _active_state()
+        state.game_settings = 0x0400
+        _make_player_active(state, 0)
+
+        assert gp._player_give_item_id(state, 0, 6)
+
+        assert state.sound_log == [0x8E]
+
+    def test_speech_disable_suppresses_the_complete_power_announcement(self):
+        state = _active_state()
+        state.game_settings = 1 << 11
+        _make_player_active(state, 0)
+
+        assert gp._player_give_item_id(state, 0, 6)
+
+        assert state.sound_log == []
 
     def test_supershot_pickup_adds_eleven_charges(self):
         """0x51874 ``addi.b #$b`` -- and it accumulates."""
@@ -1166,6 +1184,17 @@ class TestPlayerLowHealth:
         assert state.sound_log == []
         assert state.player_lowhealth_spoken[0] == 0
 
+    def test_operator_speech_disable_keeps_state_but_silences_both_phrases(self):
+        state = _active_state()
+        state.game_settings = 1 << 11
+        _make_player_active(state, 0, health=100)
+
+        gp.player_lowhealth(state, 0)
+
+        assert state.sound_log == []
+        assert state.player_lowhealth_spoken[0] == 1
+        assert state.player_respawn_speech_timer[0] == 0x708
+
     def test_reloads_the_speech_timer(self):
         state = _active_state()
         _make_player_active(state, 0, health=50)
@@ -1272,6 +1301,16 @@ class TestSpeechWelcome:
         gp.speech_welcome(state, 0)
         assert state.welcome_elapsed_frames == 0x258
 
+    def test_operator_speech_disable_silences_welcome(self):
+        state = _active_state()
+        state.game_settings = 1 << 11
+        state.level_players_active = 1
+        state.welcome_elapsed_frames = 0x258
+
+        gp.speech_welcome(state, 0)
+
+        assert state.sound_log == []
+
     def test_join_finalize_greets_and_rearms_the_low_health_warning(self):
         from gauntpy.subsystems.score import info_panel
 
@@ -1290,6 +1329,15 @@ class TestSpeechWelcome:
         field = info_panel(state).players[0]
         assert field.score_drawn and field.health_drawn
         assert field.health == 700
+
+    def test_join_finalize_plays_the_character_join_sound_before_welcome(self):
+        state = _active_state()
+        state.level_players_active = 1
+        state.players[0].character = int(Character.ELF)
+
+        gp.player_join_finalize(state, 0)
+
+        assert state.sound_log[:2] == [0x0C, gp._SPEECH_WELCOME_LEADIN]
 
 
 # =============================================================================
@@ -1412,6 +1460,8 @@ class TestHudHooks:
 
         assert p.potionsnum == 1
         assert self._field(state, 3).health_drawn
+        assert 0x26 in state.sound_log
+        assert 0x0E not in state.sound_log
 
     def test_overfull_player_cannot_pick_up_a_potion(self):
         for obj_type in (MazeObjIds.POT_DESTRUCTABLE, MazeObjIds.POT_INVULN):
@@ -2872,6 +2922,20 @@ class TestPoisonedPickups:
         gp.player_tile_interact(state, _make_food_slot(state, poisoned=True), 0)
         assert p.health == 0
 
+    def test_poison_uses_the_character_random_voice_bank(self):
+        state = _active_state()
+        _make_player_active(state, 0, character=Character.VALKYRIE, health=300)
+        slot = 48
+        state.mobs.create(
+            slot, tile=gp._POISONED_POTION_PICTURE, hpos=0, vpos=0,
+            obj_type=int(MazeObjIds.POT_DESTRUCTABLE),
+        )
+
+        gp.player_tile_interact(state, slot, 0)
+
+        assert 0xB5 in state.sound_log
+        assert not any(command in range(0x14, 0x18) for command in state.sound_log)
+
     def test_wholesome_food_clears_the_dizzy_timer(self):
         state = _active_state()
         _make_player_active(state, 0, health=300)
@@ -4135,6 +4199,12 @@ class TestDeathFlow:
         """0x46B2A, after highscore_check and the panel rebuild."""
         state = self._kill(character=Character.WIZARD)
         assert 0x16 in state.sound_log
+
+    def test_death_voice_precedes_the_character_transition_sound(self):
+        state = self._kill(character=Character.VALKYRIE)
+        voice = state.sound_log.index(0xB5)
+        transition = state.sound_log.index(0x15)
+        assert voice < transition
 
     def test_last_player_death_arms_level_one_attract_timeout(self):
         state = self._kill(level=1)

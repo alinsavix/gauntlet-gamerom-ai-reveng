@@ -7,8 +7,9 @@ reverse-engineering documentation in [`../doc`](../doc/INDEX.md) and
 Not an emulator. The 68010 game code is reimplemented at the logic level while
 keeping the original's structure: the same main-loop call order, the same object
 model, the same tables and thresholds. Graphics data is read from the original
-ROMs through [`gex`](../python-gex/README.md); sound-board commands are captured
-in a deterministic host log.
+ROMs through [`gex`](../python-gex/README.md). Sound-board commands are captured
+in a deterministic host log, and the pygame harness plays command-named static
+WAVs without emulating the separate sound CPU.
 
 **Status.** The simulation core, the main loop, and all 28 per-frame subsystem
 calls are implemented and tested. ROM data tables are transcribed from the ROMs
@@ -31,6 +32,23 @@ cd gauntpy && uv run --all-extras gauntpy-play
 A window opens at **4x scale** on a real Gauntlet II maze with your hero's
 genuine class sprite. Use `--scale` to override it.
 
+Put the locally generated recordings in `sounds/`, named
+`0xNN_description.wav` by sound-board command byte. The directory is ignored
+because the recordings are ROM-derived and are not distributed by this
+repository. `GAUNTPY_SOUND_DIR` may point at another library. If no library is
+present, the runner prints a warning and continues silently.
+
+The host plays effects concurrently, serializes speech through the sound
+board's priority queue rules, loops Death/forcefield/slow-motion beds until
+their matching stop commands, and applies the theme and treasure-music fades.
+All 62 sequence commands also carry their verified physical-channel and
+priority records: equal-priority members replace, higher-priority members
+suppress lower playback, and a lower sequence can resume when the winner ends.
+Because each local WAV is already mixed, partial suppression inside one
+multi-channel recording cannot separate its individual stems.
+This consumes accepted `sound_log` bytes only; it does not alter the game's
+sound ring, timing, or modeled state.
+
 | Key | Action |
 |-----|--------|
 | **arrow keys** | move |
@@ -38,6 +56,11 @@ genuine class sprite. Use `--scale` to override it.
 | **Alt / Enter** | Magic (also start / commit a character) |
 | **5** | insert a coin |
 | **P** | pause / resume |
+| **gamepad D-pad / left stick** | move |
+| **gamepad A / button 1** | fire |
+| **gamepad B / button 2** | Magic (also start / commit a character) |
+| **gamepad Back / button 7** | insert a coin |
+| **gamepad Start / button 8** | pause / resume |
 | **F1** | show / hide the host diagnostics panel |
 | **F2 / F3** | previous / next diagnostics page |
 | **F4** | save a complete modeled-state JSON dump |
@@ -48,6 +71,10 @@ genuine class sprite. Use `--scale` to override it.
 | **F9** | arm this maze's secret trick; perform it and exit |
 | **F10** | force the host player into a secret room on exit |
 | **[ / ]** | select the previous / next occupied MOB |
+
+The first connected gamepad is used, including devices connected after launch.
+Keyboard and gamepad controls may be mixed; both map to the same active-low
+cabinet input word before the original debounce and game routines consume it.
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
 you pick up items and open doors, you fire, and walking into an **exit loads the
@@ -67,7 +94,10 @@ audio queues, a rolling event log inferred from snapshots while the panel is
 open, synthetic-scenario event queues/timers, and a 120-sample render-time
 graph. The displayed `RENDER` value is a rolling average of the latest ten
 frames. The graph labels its dynamic Y axis in milliseconds and marks the
-16.67 ms frame budget.
+16.67 ms frame budget. The AUDIO page shows the twelve most recently accepted
+sound commands chronologically, one per line with hexadecimal command number
+and the description from the local WAV library (or the known control-command
+meaning).
 
 **F4** atomically saves every modeled `GameState` field, including players,
 MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,
@@ -132,12 +162,19 @@ Select another repeatable stream with `--seed 1234`, or request a host-random
 power-on value with `--seed random`. A seed applies to direct and attract starts;
 loaded state dumps retain their saved RNG state and reject `--seed`.
 
-For uninterrupted testing, suppress first-encounter pop-up boxes (speech and
-gameplay effects still occur):
+Use the cabinet ROM's **Reduce Text** operator setting from the command line:
 
 ```bash
-uv run --all-extras gauntpy-play --no-first-encounter-messages
+uv run --all-extras gauntpy-play --reduce-text
 ```
+
+In normal play the ROM selects its alternate short-message bank, where only
+the food entry is populated. Most first-encounter messages—including initial
+damage, potion use, and destructible walls—therefore produce no speech, box,
+chime, or pause. The surviving food box holds for 120 rather than 150 frames.
+Negative attract modes retain the full message bank, so the recorded demo keeps
+its dialog timing. Speech for retained records remains controlled independently
+by the cabinet's Disable Speech setting.
 
 Or boot through the **real front end** — attract → coin → character select →
 start — exactly as the cabinet does:

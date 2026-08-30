@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2519 passed, 1 skipped** (gauntpy) and
+present the suites are clean: **2561 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,151 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-173 · Reduce Text mode polarity was reversed
+
+S-172 correctly replaced the bespoke host switch with game-settings bit 10,
+but its transcription inverted the signed mode branch. At 0x4C4D0 the ROM tests
+0x0400; when set, `tst.w game_mode` / `bge 0x4C4F4` selects the short 0x5A300
+bank for normal nonnegative mode. Negative attract modes fall through to the
+full 0x5A200 bank. MAME confirms that most normal-play first encounters vanish.
+
+The condition now uses `game_mode >= 0`. Because only short-bank record zero is
+populated, first damage (records 8-15), potion use (19), destructible wall (22),
+and nearly every other normal-play encounter hit a null pointer and return
+before the speech table, alpha writes, chime 0x1C, or dialog timer. The encounter
+seen bit is still set. The food record survives with its short text and
+120-frame hold. DEMO retains the full records and its timing-critical
+transporter pause.
+
+### S-172 · bespoke first-encounter suppression duplicated a ROM option
+
+`--no-first-encounter-messages` stored a host-only `GameState` flag and returned
+from `dialog_first_encounter` after its encounter bit and speech write but
+before alpha RAM, chime 0x1C, and the gameplay pause. The cabinet has no such
+mode. Its `Reduce Text?` setting is game-settings bit 10 (0x0400). **Corrected
+by S-173:** the short 0x5A300 bank is selected for nonnegative normal play, not
+negative attract mode. Retained records use the 120-frame timer; speech remains
+independently gated by bit 11.
+
+The bespoke state and branch are removed. `--reduce-text` now sets the genuine
+bit after direct, attract, or loaded-state construction, and `play.bat` uses
+that option. Old schema-1 state dumps may contain the retired host field; the
+loader discards that one known field while continuing to reject other unknown
+shapes. Under `--reduce-text`, normal-play encounter 22 selects a null short
+record and stops after marking it seen; 0xB7, the box, chime, and pause are all
+absent. DEMO uses the full bank and retains its transporter timing pause.
+
+### S-171 · exhaustive game/sound-ROM command audit
+
+All 97 gameplay sound/speech producers plus their three forwarding seams were
+checked against `row76.bin`, direct disassembly, literal command tables, and the
+companion sound-ROM command/channel catalogs. Every previously implemented
+pickup, shot, monster, dragon, thief, door, wall, exit, countdown, dialog,
+coin, attract, and control command uses the correct ID and index after S-170.
+The audit found eight remaining lifecycle families rather than another isolated
+wrong number.
+
+Welcome and low-health sentences used ordinary `sound_play`, as did the spoken
+suffix of the thief escape taunt. They now use `sound_speech_play`, honoring the
+operator speech-disable bit while preserving the thief's ungated laugh.
+Power-up grants now reproduce the ROM's name → `NOW HAS` (0x8D) → power-name
+sequence; reduced text omits the first two phrases, speech-disable gates all
+three, and the high-byte one-shot latch prevents a timed power from repeating
+its announcement later in the same level.
+
+Poisoned food/potions and player death now draw from the literal per-character
+voice groups at 0x5791A through the 0x578DA/0x578EA pointer/count tables.
+Player death plays that voice before transition effect 0x14-0x17. Real joins
+restore character effect 0x09-0x0C, and an exhausted spawn search emits 0x43.
+The level-start lifecycle restores slow-motion stop 0x39, mixer preset 0xD7,
+ordinary level music 0x42, the secret-room theme at delay 0x14A, treasure music
+0x3D-0x40 by active-player count, and the early/later speech tables and gates.
+
+The host audit also replaced the one-off slow-motion rule with all 62 type-7
+command chain records. Each active static recording now tracks its physical
+channels and priorities: equal priority replaces an old member, higher priority
+suppresses lower playback, and a lower sequence can resume when the winner
+ends. For 0x37/0x38 the corrected sound-ROM fact is priority 8 versus 9 on YM
+channel 8—not equal priority as S-170 originally stated. Mixed whole-command
+WAVs cannot isolate stems when only part of a multi-channel sequence is
+suppressed, but the host preserves the verified ownership and complete-command
+audibility decisions. The allocator also models the 30 logical slots
+record-by-record: on exhaustion it can reclaim only the requested physical
+channel's lowest-priority member, and a rejected record abandons its chain
+suffix. Fade commands leave their members in arbitration until the host ramp
+ends, and explicit pygame channels 1-31 keep effects out of speech channel 0.
+
+Fresh-session ordering was rechecked separately. `start_attract_to_game`
+0x4425A-0x442AC emits 0x3C, 0x02, then reaches
+`show_level_start_screen`'s 0xD7; transition-only 0x39/0x42 belong to
+`main_start_game` 0x4812E-0x4814E and are not fabricated on that path.
+
+### S-170 · potion/slow-motion audio and survivor greetings diverged
+
+Three audible reports had separate causes. The ordinary good-potion arm in
+`player_tile_interact` sent 0x0E, the red-player exit command. ROM
+0x5176C-0x51786 increments the potion byte and sends 0x26, the shared
+treasure/potion pickup sound, before refreshing inventory; the port now does
+the same.
+
+The slow-motion producer was already exact: `monsters_everything`
+0x40EB0-0x40EDE decrements the timer, sends 0x38 with 30 frames left, and sends
+0x39 at zero. The host-side mistake was treating every accepted type-7 WAV as
+independent. Sound-ROM command 0x38 has priority 9 on the same physical YM
+channel where loop 0x37 has priority 8, so it suppresses 0x37 immediately;
+command 0x39 is the later explicit stop. Static playback performs that arbitration and
+also replaces an older instance when the same looping command is restarted.
+
+Ordinary level handoff also called `player_join_finalize` after placing each
+survivor. The ROM's 0x4823C-0x4828A survivor loop never reaches that join
+routine: it calls `player_start_inner`, restores status 1, redraws the panel,
+and clears trick progress. Removing the false finalizer stops repeated join
+sounds and `WELCOME <hero>` speech and preserves join-owned counters across
+levels.
+
+The host AUDIO diagnostics page now lists the latest twelve accepted commands
+chronologically, one per line with both hexadecimal ID and description. Names
+come from the local command-named WAV library plus explicit control-command
+semantics, and remain immutable host snapshot data.
+
+### S-169 · playable host emitted sound commands but played no audio
+
+The game-side port already reproduced `sound_play` 0x4AD76, the busy-latch
+fallback ring, the eight-attempt `main_update_sound` drain, recovery holdoff,
+speech option, and every producer. Accepted bytes ended only in the persistent
+`sound_log` oracle, so the pygame harness was silent.
+
+The host now consumes newly accepted bytes and plays local command-named WAVs
+without changing `GameState` or emulating the sound CPU. Ordinary effects can
+overlap; Death, forcefield, and slow-motion recordings loop until the exact
+type-5 stop mappings 0x21→0x20, 0x2F→0x2E, and 0x39→0x37. Commands 0x3C and
+0x41 fade the theme and active treasure music. Speech follows the verified
+TMS5220 admission contract: one current phrase, seven pending entries, lower
+priority rejection, equal-priority append, and higher-priority pending-queue
+flush without interrupting the current phrase. Global filter 0x01/0x02 and
+mixer presets 0xD6-0xD9 affect host channels while the accepted command log
+remains untouched. Loaded state dumps start at the end of their historical log
+rather than replaying old audio.
+
+The WAV library remains local and ignored as ROM-derived data. The runner uses
+`gauntpy/sounds` by default, accepts `GAUNTPY_SOUND_DIR`, and reports when it
+must continue without recordings.
+
+### S-168 · playable host had no gamepad input adapter
+
+The playable wrapper sampled only keyboard state even though pygame already
+exposes connected controllers. `HostShell` now opens the first gamepad at
+startup or hot-plug, maps its left stick and D-pad to the four verified
+active-low direction bits, and maps buttons 0/1 to Fire/Magic. Buttons 6/7 are
+edge-triggered coin/pause controls, matching the existing keyboard host actions.
+
+This remains entirely on the host side. Keyboard and controller state are
+composed into the same `player_input_raw` word, after which the existing
+`input_debounce`, direction table, character-select, shooting, and potion paths
+run unchanged. Regressions cover diagonal stick/D-pad composition, active-low
+button polarity, and controller coin/pause edges without requiring physical
+hardware.
 
 ### S-167 · thief deployment anchor and stunned potion behavior
 
@@ -1086,11 +1231,10 @@ removed; the game compositor remains the original 336x240 raster.
   world band. Without it, the remaining LEFT record expired during the
   dissolve, leaving the Elf at `(92,256)` and preventing the recorded route
   from reaching the exit. The game-side dialog write is restored. A follow-up
-  found that the runner's `--no-first-encounter-messages` option still
-  suppressed this timing-critical DEMO dialog; suppression is now limited to
-  non-DEMO play. The actual `play.bat --attract` configuration now follows the
-  fresh MAME 0.289 command boundaries from the `(92,240)` landing through the
-  exit.
+  found that the runner's former `--no-first-encounter-messages` option could
+  suppress this timing-critical dialog. S-172 removes that non-ROM option
+  entirely. The actual `play.bat --attract` configuration follows the fresh
+  MAME 0.289 command boundaries from the `(92,240)` landing through the exit.
 - **S-113:** the rules legend transposed five of six `alpha_clear_rect`
   arguments, erasing labels and the first status-panel column instead of
   revealing maze-103 item art. It also omitted the centered LEGEND heading,
@@ -1618,8 +1762,8 @@ remembered live slot before resetting the per-player RAM.
 - **S-41 · host pause was missing.** P toggles a host-only pause that keeps the
   event/render loop responsive while freezing the 60 Hz simulation.
 - **S-42 · first-encounter boxes could not be disabled for testing.**
-  `--no-first-encounter-messages` suppresses those alpha boxes and their
-  gameplay gate while preserving encounter flags, speech and gameplay effects.
+  **Superseded by S-172:** the bespoke suppression was removed. The host now
+  exposes the ROM's `Reduce Text?` setting instead.
 - **S-43 · structural audit.** The 28-call main loop, RAM-shaped `GameState`,
   five-array MOB model, depth chain/SLIPs and subsystem boundaries still map
   closely to the original. The reviewed shared `mob_depth_remove` primitive now

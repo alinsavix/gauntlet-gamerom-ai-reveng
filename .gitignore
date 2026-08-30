@@ -4,3 +4,4 @@ __pycache__
 gauntpy/traces/mame/
 gauntpy/traces/scenarios/
 gauntpy/traces/state-dumps/
+gauntpy/sounds/

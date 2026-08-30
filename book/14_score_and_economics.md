@@ -178,8 +178,14 @@ The message boxes that freeze the action, Chapter 6's dialog gate, are fed by
 a first-encounter system. Thirty-two one-shot flags record which pieces of
 advice this session has already delivered: the first locked chest explains
 keys, the first potion explains Magic, the first thief introduces himself.
-Each dialog record couples the text with an optional spoken line, and the
-caller learns whether speech played so it can pace itself. Seen flags reset
+Each dialog record couples the text with an optional spoken line. The
+operator's Reduce Text setting changes this system without bypassing it. During
+normal play the bit selects a separate short-record bank; only its food entry is
+populated. Every other encounter returns after setting its seen flag, before
+speech, text, chime, or pause. The food record's hold shortens from 150 to 120
+frames. Negative attract modes retain the full bank, and speech for retained
+records remains controlled by the independent Disable Speech option. The caller
+learns whether speech played so it can pace itself. Seen flags reset
 with the session, which is why the machine repeats its wisdom for every new
 audience.
 

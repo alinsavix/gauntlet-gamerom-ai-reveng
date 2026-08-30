@@ -269,6 +269,38 @@ the speech data is encoded and how the phrases were recovered, and what the
 own reverse engineering behind it. That material belongs to a future volume
 about the sound ROM, and this book will not pretend to have covered it.
 
+The Python reimplementation keeps the same boundary. Its game model produces
+the accepted command stream through the queue and latch rules described above;
+the playable pygame harness can turn those bytes into local static recordings.
+It does not recreate the 6502 or the three chips. It does preserve the
+command-level behavior that remains audible with recordings: speech waits in
+the sound board's priority queue, Death/forcefield/slow-motion beds stop only
+when their paired commands arrive, and the title and treasure-room fade
+commands target the music already playing. Playback never changes game RAM or
+feeds a completion signal back to the simulation.
+
+Static recordings also cannot simply occupy one unlimited channel each. The
+sound board allocates sequences onto physical channels by priority. Equal
+priority replaces an existing member; higher priority suppresses it while the
+lower sequence continues in the background and may return. The slow-motion
+transition makes this visible: 0x37 starts a priority-8 loop on Yamaha channel
+8, 0x38 arrives with thirty game frames left at priority 9 and suppresses it,
+and 0x39 removes the loop at zero.
+
+The Python host carries those channel/priority records for all sixty-two
+sequence commands. A mixed WAV still has one unavoidable limit: when only some
+channels of a multi-channel command lose arbitration, it cannot separate those
+stems. It nevertheless preserves which command owns each physical channel,
+silences commands that lose every channel, and lets a lower recording resume
+when its winner retires.
+
+It also keeps the allocator's less obvious resource rule. Thirty slots count
+individual chain members, not whole sounds. When full, a new record may evict
+only the lowest-priority member already on the physical channel it requests;
+if it cannot, the rest of that command's linked records are abandoned. A
+fading member still owns its place until the ramp ends rather than exposing a
+lower-priority sound the instant the fade command arrives.
+
 What this volume can say is that the interface between the two halves is
 small, honest, and well defended: one byte out, one byte back, a queue that
 prefers dropping a sound to missing a frame, and a watchdog that will reboot

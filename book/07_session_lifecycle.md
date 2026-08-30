@@ -114,9 +114,19 @@ and paced frame-by-frame by `main_start_game`:
    work between them.
 4. **Place the players.** Every position whose player survived the last
    level is spawned near the start; positions mid-selection stay in
-   selection. The camera centers on the start tile.
+   selection. This survivor arm places the MOB, restores alive status, redraws
+   the panel, and clears level-specific trick progress. It does not run the join
+   finalizer again, so crossing an exit does not replay the join sound or
+   "WELCOME, <hero>" speech. The camera centers on the start tile.
 5. **Release.** A short delay lets the presentation clear, then statuses
    flip to alive and the sixteen-call gameplay band starts doing real work.
+
+The audio follows the same phases rather than one generic level jingle.
+Setup stops slow motion, selects the low-effects mixer preset, and starts the
+ordinary level music. Secret rooms start their theme partway through the long
+curtain. Treasure rooms choose one of four music arrangements by active-player
+count and add an introductory phrase; later ordinary levels occasionally add a
+separate taunt from their own three-entry table.
 
 The thief's schedule and the dragon's encounter flag are also reset here,
 which is why each level feels like a fresh negotiation with both.

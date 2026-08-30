@@ -117,6 +117,9 @@ def start_attract_to_game(state: GameState) -> None:
     state.mugger_item_carried = 0       # 0x44286-0x4428E
     state.mugger_item_nextlevel = 0
     sound_play(state, 0x02)             # 0x4429A session-start sting
+    # The ROM calls show_level_start_screen here; this merged host path writes
+    # character select directly, but retains the screen routine's mixer command.
+    sound_play(state, 0xD7)             # 0x442AC -> 0x44F68-0x44F6E
     state.global_delay_timer = 0               # 0x44366 global_delay_timer
     state.bonus_amount = 0
     state.treasure_timer = 0
@@ -373,6 +376,13 @@ def main_start_game(state: GameState) -> None:
     # box freezes gameplay.
     if state.global_delay_timer > 0:
         state.global_delay_timer -= 1
+        if (
+            state.global_delay_timer == 0x014A
+            and state.mazenum_current >= 0x73
+        ):
+            from .sound import sound_play
+
+            sound_play(state, 0x3B)                         # 0x4817C-0x48190
         if state.global_delay_timer == 0:
             from .exits import (
                 _exiting_or_here,

@@ -906,6 +906,18 @@ class TestDeployAndEscapeGraph:
         assert state.thief_stolen_item == 0x3C
         assert state.sound_log[-2:] == [0x62, 0x63]
 
+    def test_speech_disable_keeps_the_laugh_but_silences_the_taunt_suffix(self):
+        state = GameState(game_settings=1 << 11)
+        slot = pack_slot(10, 10)
+        _thief_at(state, slot)
+        state.rng = _FixedRNG(0)
+        state.thief_mode = THIEF_ESCAPE | THIEF_JUMPJUMP
+        state.thief_stolen_item = 0x3B
+
+        main_thief_anim(state)
+
+        assert state.sound_log == [0x62]
+
 
 class TestShotDodge:
     @staticmethod

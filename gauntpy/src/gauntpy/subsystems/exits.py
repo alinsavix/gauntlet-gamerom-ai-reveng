@@ -1257,6 +1257,7 @@ def show_level_start_screen(state: GameState) -> None:
 
     setup_infopanel(state, -1)                               # 0x44F38-0x44F3E
     fill_alpha_rect(state, 0, 0, 29, 30, alpha_word(0x8000)) # 0x44F44-0x44F66
+    sound_play(state, 0xD7)                                  # 0x44F68-0x44F6E
     if in_secret_room(state):
         _write_secret_room_start(state)
     elif _TREASURE_MAZE_FIRST <= state.mazenum_current <= _TREASURE_MAZE_LAST:
@@ -1496,7 +1497,10 @@ def _finish_level_end(state: GameState) -> None:
     from .display import clear_alpha_visible
 
     clear_alpha_visible(state)
+    sound_play(state, 0x39)                          # 0x4812E-0x48134
     show_level_start_screen(state)                   # 0x4813A
+    if state.mazenum_current < _TREASURE_MAZE_FIRST:
+        sound_play(state, 0x42)                      # 0x48140-0x4814E
     state.level_start_pending = _load_next_level(
         state, state.levelnum_current, _exiting_or_here(state),
         spawn_players=False,
@@ -1573,7 +1577,7 @@ def _load_next_level(
 
 def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     """Run main_start_game's post-splash player placement on the loaded maze."""
-    from .players import player_join_finalize, player_start_inner
+    from .players import player_start_inner, setup_infopanel
 
     if in_secret_room(state):                        # 0x48232
         secret_room_spawn(state)
@@ -1589,10 +1593,14 @@ def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     secret_new_level_setup(state)                    # 0x43916-0x4395C
 
     for i in survivors:
-        state.players[i].status = int(PlayerStatus.ALIVE_HERE)
         if player_start_inner(state, i) == -1:       # world spawn (I-08)
+            # 0x4825E-0x4828A is the survivor arm, not player_join_finalize:
+            # restore status, redraw the panel, and clear this level's progress.
+            # Join sounds, WELCOME speech, and join-time field resets belong only
+            # to the actual join path through 0x48A36.
+            state.players[i].status = int(PlayerStatus.ALIVE_HERE)
+            setup_infopanel(state, state.secret_player)
             state.secret_tricks_flags[i] = 0         # next-level survivor, 0x48280
-            player_join_finalize(state, i)
 
     # 0x4834E: both handoff arms converge here, with the heroes already back to
     # status 1, so the bonus is computed from the party that is about to play.
@@ -1603,3 +1611,14 @@ def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
 
     thief_setup(state)                               # 0x4835E
     state.idle_timer = 0                             # 0x4836A
+    if _TREASURE_MAZE_FIRST <= state.mazenum_current < 0x73:
+        active = min(4, max(1, player_activecount(state)))
+        sound_play(state, (0x40, 0x3F, 0x3E, 0x3D)[active - 1])  # 0x5790A
+        sound_speech_play(
+            state, (0x55, 0x56, 0x57)[state.getrandom(3)],
+        )                                                   # 0x57962
+    elif state.levelnum_current >= 6 and state.mazenum_current < 0x73:
+        if state.getrandom(16) > 13:                        # 0x483CA-0x483DA
+            sound_speech_play(
+                state, (0x55, 0x58, 0x5E)[state.getrandom(3)],
+            )                                               # 0x5796E

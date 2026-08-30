@@ -605,13 +605,13 @@ class TestDemoInit:
         )
 
     @requires_roms
-    def test_runner_message_suppression_does_not_break_the_demo(self, tmp_path):
-        """play.bat disables gameplay hints, but DEMO dialogs are script timing."""
+    def test_rom_reduce_text_setting_preserves_the_demo_dialog_timing(self, tmp_path):
         from gauntpy.mainloop import tick
+        from gauntpy.subsystems.score import GAME_SETTINGS_REDUCE_TEXT
 
         state = GameState()
         state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
-        state.suppress_first_encounter_messages = True
+        state.game_settings |= GAME_SETTINGS_REDUCE_TEXT
         start_attract_screen(state, int(GameMode.DEMO))
         elf = state.players[1]
         reached_exit = False

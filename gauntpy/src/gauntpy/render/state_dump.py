@@ -16,6 +16,7 @@ from ..rng import GameRandom
 from ..state import GameState
 
 STATE_DUMP_SCHEMA = 1
+_SCHEMA_1_RETIRED_FIELDS = {"suppress_first_encounter_messages"}
 DEFAULT_STATE_DUMP_DIR = Path(__file__).resolve().parents[3] / "traces" / "state-dumps"
 _SCHEMA_1_ADDED_FIELDS = {
     "hurt_speech_timer",
@@ -249,6 +250,8 @@ def game_state_from_payload(payload: object) -> GameState:
         raise StateDumpError("saved state has no GameState object")
     state = GameState()
     expected = {field.name for field in fields(state)}
+    for name in _SCHEMA_1_RETIRED_FIELDS:
+        serialized.pop(name, None)
     missing_fields = expected - set(serialized)
     if set(serialized) - expected or missing_fields - _SCHEMA_1_ADDED_FIELDS:
         missing = sorted(missing_fields)

@@ -15,10 +15,11 @@ expects (``wait_for_vblank(state)``, ``present(state)``), so
 PLAN.md §6 WP-2 step 5's "Supplying ``wait_for_vblank``/``present`` lets
 ``g2mainloop`` drive your host directly."
 
-**Input mapping.** Only ``subsystems/input.py``'s ``JOY_*`` bit constants are
-imported here (a constants-only import, explicitly allowed by this
-package's brief even though ``render/`` otherwise never imports
-``subsystems/*``). Raw input words are **active low**
+**Input mapping.** Keyboard and gamepad state are host-only views of the same
+cabinet controls. Only ``subsystems/input.py``'s ``JOY_*`` bit constants are
+imported here (a constants-only import, explicitly allowed by this package's
+brief even though ``render/`` otherwise never imports ``subsystems/*``). Raw
+input words are **active low**
 (``doc/04_game_subsystems.md`` §15; ``subsystems/input.py``'s own docstring)
 -- ``JOY_IDLE`` (all bits set) means nothing pressed, and a held key clears
 its bit. Getting this backwards inverts every control in the game, so it is
@@ -66,6 +67,7 @@ from .debug_controls import (
     debug_force_secret_room,
     debug_skip_level,
 )
+from .audio import StaticSoundPlayer
 from .state_dump import dump_game_state
 
 __all__ = [
@@ -77,6 +79,8 @@ __all__ = [
     "DEFAULT_SKIP_LEVEL_KEY", "DEFAULT_ADD_KEY_KEY", "DEFAULT_ADD_POTION_KEY",
     "DEFAULT_TREASURE_TIMER_PAUSE_KEY",
     "DEFAULT_ENABLE_SECRET_ROOM_KEY", "DEFAULT_FORCE_SECRET_ROOM_KEY",
+    "GAMEPAD_AXIS_DEADZONE", "GAMEPAD_FIRE_BUTTON", "GAMEPAD_MAGIC_BUTTON",
+    "GAMEPAD_COIN_BUTTON", "GAMEPAD_PAUSE_BUTTON",
 ]
 
 
@@ -118,11 +122,16 @@ DEFAULT_ADD_POTION_KEY = "K_F7"
 DEFAULT_TREASURE_TIMER_PAUSE_KEY = "K_F8"
 DEFAULT_ENABLE_SECRET_ROOM_KEY = "K_F9"
 DEFAULT_FORCE_SECRET_ROOM_KEY = "K_F10"
+GAMEPAD_AXIS_DEADZONE = 0.5
+GAMEPAD_FIRE_BUTTON = 0
+GAMEPAD_MAGIC_BUTTON = 1
+GAMEPAD_COIN_BUTTON = 6
+GAMEPAD_PAUSE_BUTTON = 7
 _FIRST_BONUS_MAZE = 104
 
 
 class HostShell:
-    """A pygame window, one player's keyboard mapped to
+    """A pygame window, one player's keyboard/gamepad mapped to
     ``state.player_input_raw``, and a 60Hz pump.
 
     ``assets`` may be supplied up front, or left ``None`` to construct a
@@ -141,6 +150,8 @@ class HostShell:
         title: str = "gauntpy",
         keymap: dict[str, int] | None = None,
         diagnostics: bool = False,
+        sound_dir=None,
+        audio_player=None,
     ) -> None:
         try:
             import pygame
@@ -167,9 +178,22 @@ class HostShell:
         self.last_state_dump_path = None
 
         pygame.init()
+        pygame.joystick.init()
+        if sound_dir is not None and audio_player is not None:
+            raise ValueError("pass sound_dir or audio_player, not both")
+        if sound_dir is not None:
+            if pygame.mixer.get_init() is None:
+                pygame.mixer.init()
+            pygame.mixer.set_num_channels(32)
+            pygame.mixer.set_reserved(1)
+            audio_player = StaticSoundPlayer(pygame.mixer, sound_dir)
+        self._audio_player = audio_player
         self.window = self._set_window_mode()
         pygame.display.set_caption(title)
         self.clock = pygame.time.Clock()
+        self._gamepad = None
+        if pygame.joystick.get_count():
+            self._connect_gamepad(0)
 
         keymap = keymap if keymap is not None else DEFAULT_KEYMAP
         self._keymap = {getattr(pygame, name): bit for name, bit in keymap.items()}
@@ -209,6 +233,25 @@ class HostShell:
             (game_width + panel_width, LOGICAL_HEIGHT * self.scale)
         )
 
+    def _connect_gamepad(self, device_index: int) -> None:
+        if self._gamepad is not None:
+            return
+        gamepad = self._pygame.joystick.Joystick(device_index)
+        gamepad.init()
+        self._gamepad = gamepad
+
+    def _toggle_pause(self) -> None:
+        self.paused = not self.paused
+        self._pygame.display.set_caption(
+            f"{self._title} [PAUSED]" if self.paused else self._title
+        )
+
+    def _event_is_current_gamepad(self, event) -> bool:
+        return (
+            self._gamepad is not None
+            and event.instance_id == self._gamepad.get_instance_id()
+        )
+
     # -- the g2mainloop interface --------------------------------------------
 
     def wait_for_vblank(self, state: GameState) -> None:
@@ -227,14 +270,27 @@ class HostShell:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 raise SystemExit(0)
+            if event.type == pygame.JOYDEVICEADDED:
+                self._connect_gamepad(event.device_index)
+            elif (
+                event.type == pygame.JOYDEVICEREMOVED
+                and self._event_is_current_gamepad(event)
+            ):
+                self._gamepad.quit()
+                self._gamepad = None
+            elif (
+                event.type == pygame.JOYBUTTONDOWN
+                and self._event_is_current_gamepad(event)
+            ):
+                if event.button == GAMEPAD_COIN_BUTTON:
+                    self._insert_coin(state)
+                elif event.button == GAMEPAD_PAUSE_BUTTON:
+                    self._toggle_pause()
             if event.type == pygame.KEYDOWN:
                 if event.key == self._coin_key:
                     self._insert_coin(state)
                 elif event.key == self._pause_key:
-                    self.paused = not self.paused
-                    pygame.display.set_caption(
-                        f"{self._title} [PAUSED]" if self.paused else self._title
-                    )
+                    self._toggle_pause()
                 elif event.key == self._diagnostics_key:
                     self.diagnostics_visible = not self.diagnostics_visible
                     self._diagnostics_previous = None
@@ -353,6 +409,8 @@ class HostShell:
 
     def present(self, state: GameState) -> None:
         """Render the current state and flip it to the window."""
+        if self._audio_player is not None:
+            self._audio_player.consume(state.sound_log)
         render_started = perf_counter()
         if self._assets is None:
             from ..assets import AssetStore
@@ -380,6 +438,9 @@ class HostShell:
                 render_time_ms=sum(recent[-10:]) / min(10, len(recent)),
                 render_time_current_ms=render_time_ms,
                 render_time_history_ms=recent,
+                sound_descriptions=getattr(
+                    self._audio_player, "command_descriptions", {},
+                ),
             )
             self.diagnostics_selected_mob = snapshot.selected_mob
             for event in derive_debug_events(self._diagnostics_previous, snapshot):
@@ -399,21 +460,56 @@ class HostShell:
             self.window.blit(panel_surface, (LOGICAL_WIDTH * self.scale, 0))
         self._pygame.display.flip()
 
+    def skip_existing_audio(self, state: GameState) -> None:
+        """Do not replay the historical sound log in a loaded state dump."""
+        if self._audio_player is not None:
+            self._audio_player.skip_existing(state.sound_log)
+
     # -- input ---------------------------------------------------------------
 
     def _sample_input(self, state: GameState) -> None:
-        """Active-low raw word: start from ``JOY_IDLE`` (all bits set, i.e.
-        nothing pressed) and clear the bit for each held key -- see module
-        docstring.
+        """Compose held keyboard and gamepad controls into one active-low word.
+
+        Both host devices are views of the same cabinet switches, so either
+        source can clear a bit. The game still owns debouncing and interpretation.
         """
         pressed = self._pygame.key.get_pressed()
         raw = JOY_IDLE
         for keycode, bit in self._keymap.items():
             if pressed[keycode]:
                 raw &= ~bit
+        gamepad = self._gamepad
+        if gamepad is not None:
+            horizontal = gamepad.get_axis(0) if gamepad.get_numaxes() >= 1 else 0.0
+            vertical = gamepad.get_axis(1) if gamepad.get_numaxes() >= 2 else 0.0
+            hat_x, hat_y = (
+                gamepad.get_hat(0) if gamepad.get_numhats() else (0, 0)
+            )
+            if horizontal <= -GAMEPAD_AXIS_DEADZONE or hat_x < 0:
+                raw &= ~JOY_LEFT
+            if horizontal >= GAMEPAD_AXIS_DEADZONE or hat_x > 0:
+                raw &= ~JOY_RIGHT
+            if vertical <= -GAMEPAD_AXIS_DEADZONE or hat_y > 0:
+                raw &= ~JOY_UP
+            if vertical >= GAMEPAD_AXIS_DEADZONE or hat_y < 0:
+                raw &= ~JOY_DOWN
+            if (
+                gamepad.get_numbuttons() > GAMEPAD_FIRE_BUTTON
+                and gamepad.get_button(GAMEPAD_FIRE_BUTTON)
+            ):
+                raw &= ~JOY_FIRE_BIT
+            if (
+                gamepad.get_numbuttons() > GAMEPAD_MAGIC_BUTTON
+                and gamepad.get_button(GAMEPAD_MAGIC_BUTTON)
+            ):
+                raw &= ~JOY_MAGIC_BIT
         state.player_input_raw[self.player] = raw & 0xFFFF
 
     # -- lifecycle -------------------------------------------------------------
 
     def close(self) -> None:
+        if self._audio_player is not None:
+            self._audio_player.close()
+        if self._gamepad is not None:
+            self._gamepad.quit()
         self._pygame.quit()

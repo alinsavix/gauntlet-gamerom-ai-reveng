@@ -116,16 +116,16 @@ class TestArguments:
 
         assert os.environ["GEX_ROM_DIR"] == "somewhere-the-user-chose"
 
-    def test_message_suppression_flag_is_forwarded_to_the_runner(self, monkeypatch):
+    def test_reduce_text_flag_is_forwarded_to_the_runner(self, monkeypatch):
         monkeypatch.setenv("GEX_ROM_DIR", "configured")
         called = {}
         monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
 
-        play.main(["--no-first-encounter-messages"])
+        play.main(["--reduce-text"])
 
-        assert called["suppress_first_encounter_messages"] is True
+        assert called["reduce_text"] is True
 
-    def test_message_suppression_defaults_to_no_saved_state_override(
+    def test_reduce_text_defaults_to_no_saved_state_override(
         self, monkeypatch,
     ):
         monkeypatch.setenv("GEX_ROM_DIR", "configured")
@@ -134,7 +134,14 @@ class TestArguments:
 
         play.main(["--load-state", "state.json"])
 
-        assert called["suppress_first_encounter_messages"] is None
+        assert called["reduce_text"] is False
+
+    def test_reduce_text_sets_the_rom_operator_bit(self):
+        state = GameState(game_settings=0)
+
+        play._apply_operator_overrides(state, reduce_text=True)
+
+        assert state.game_settings & 0x0400
 
     def test_direct_play_defaults_to_elf_and_accepts_an_override(self, monkeypatch):
         monkeypatch.setenv("GEX_ROM_DIR", "configured")
