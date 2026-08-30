@@ -381,6 +381,15 @@ evidence remains in `../doc/`, generated contracts, and the book.
     still interprets sound-board control bytes: speech is serial and
     priority-queued; commands 0x21/0x2F/0x39 stop 0x20/0x2E/0x37; 0x3C fades
     0x3B; and 0x41 fades treasure music 0x3D-0x40.
+82. **Sound-board channel replacement survives static playback.** A new type-7
+    command can replace an equal-priority sequence on the same physical channel
+    before a later explicit stop command. In particular, slow-motion end cue
+    0x38 replaces loop 0x37 with 30 frames left; 0x39 then silences the target
+    channel at zero. Do not model every accepted WAV as an independent channel.
+83. **Level survivors are not new joins.** Ordinary level handoff
+    0x4823C-0x4828A calls `player_start_inner`, restores status, redraws the
+    panel, and clears trick progress. It does not call `player_join_finalize`,
+    replay join effects/speech, or reset join-owned player fields.
 
 ## Investigation workflow
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from math import ceil
 from pathlib import Path
+from typing import Mapping
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -450,19 +451,24 @@ def _route_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
-def _audio_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
-    return (
+def _audio_page_rows(
+    state: GameState, descriptions: Mapping[int, str],
+) -> tuple[tuple[str, str], ...]:
+    rows = [
         ("QUEUE", " ".join(f"{value:02X}" for value in state.sound_queue) or "empty"),
-        ("QUEUE SIZE", str(len(state.sound_queue))),
-        ("LAST COMMAND", f"{state.sound_log[-1]:02X}" if state.sound_log else "none"),
-        ("LOG SIZE", str(len(state.sound_log))),
-        ("RECENT", " ".join(f"{value:02X}" for value in state.sound_log[-12:])),
-        ("HOLDOFF", str(state.sound_holdoff)),
-        ("QUEUE STATE", f"{state.sound_queue_state:04X}"),
-        ("IDLE TIMER", str(state.sound_idle_timer)),
-        ("RETRIES", str(state.sound_retry_count)),
+        ("QUEUE / LOG", f"{len(state.sound_queue)} / {len(state.sound_log)}"),
+        ("HOLDOFF / STATE", f"{state.sound_holdoff} / {state.sound_queue_state:04X}"),
+        ("IDLE / RETRIES", f"{state.sound_idle_timer} / {state.sound_retry_count}"),
         ("INCOMING", " ".join(f"{value:02X}" for value in state.sound_incoming) or "empty"),
-    )
+    ]
+    recent = state.sound_log[-12:]
+    if not recent:
+        rows.append(("RECENT", "none"))
+    else:
+        for index, command in enumerate(recent, start=1 - len(recent)):
+            description = descriptions.get(command, "Unknown command")
+            rows.append((f"{index:+03d}", f"{command:02X} {description}"))
+    return tuple(rows)
 
 
 def _scenario_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
@@ -502,6 +508,7 @@ def capture_debug_snapshot(
     render_time_ms: float = 0.0,
     render_time_current_ms: float | None = None,
     render_time_history_ms: tuple[float, ...] = (),
+    sound_descriptions: Mapping[int, str] | None = None,
 ) -> DebugSnapshot:
     """Project live state into immutable host data without mutating the game."""
     players = []
@@ -587,7 +594,7 @@ def capture_debug_snapshot(
             ("AI", _ai_page_rows(state)),
             ("DISPLAY", _display_page_rows(state)),
             ("ROUTES", _route_page_rows(state)),
-            ("AUDIO", _audio_page_rows(state)),
+            ("AUDIO", _audio_page_rows(state, sound_descriptions or {})),
             ("SCENARIO", _scenario_page_rows(state)),
         ),
         paused=paused,

@@ -160,6 +160,29 @@ def test_every_diagnostics_page_has_read_only_rows():
         assert image.size == (DEBUG_PANEL_WIDTH, 960)
 
 
+def test_audio_page_lists_recent_commands_one_per_line_with_descriptions():
+    state = _diagnostic_state()
+    state.sound_log = [0x0E, 0x26, 0x37, 0x38, 0x39]
+    descriptions = {
+        0x0E: "Red Player Exits",
+        0x26: "Treasure / Potion Taken",
+        0x37: "Slow Motion",
+        0x38: "End of Slow Motion",
+        0x39: "Slow Motion Silencer",
+    }
+
+    rows = debug_page_lines(
+        capture_debug_snapshot(state, sound_descriptions=descriptions),
+        DEBUG_PAGES.index("AUDIO"),
+    )
+
+    assert rows[-5:] == (
+        ("-04", "0E Red Player Exits"),
+        ("-03", "26 Treasure / Potion Taken"),
+        ("-02", "37 Slow Motion"),
+        ("-01", "38 End of Slow Motion"),
+        ("+00", "39 Slow Motion Silencer"),
+    )
 def test_level_page_names_the_current_maze_secret_trick():
     state = _diagnostic_state()
     state.maze = type("Maze", (), {"secret": 13})()

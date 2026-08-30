@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2536 passed, 1 skipped** (gauntpy) and
+present the suites are clean: **2541 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,34 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-170 · potion/slow-motion audio and survivor greetings diverged
+
+Three audible reports had separate causes. The ordinary good-potion arm in
+`player_tile_interact` sent 0x0E, the red-player exit command. ROM
+0x5176C-0x51786 increments the potion byte and sends 0x26, the shared
+treasure/potion pickup sound, before refreshing inventory; the port now does
+the same.
+
+The slow-motion producer was already exact: `monsters_everything`
+0x40EB0-0x40EDE decrements the timer, sends 0x38 with 30 frames left, and sends
+0x39 at zero. The host-side mistake was treating every accepted type-7 WAV as
+independent. Sound-ROM command 0x38 has the same priority and physical YM
+channel as loop 0x37, so allocation replaces 0x37 immediately; command 0x39 is
+the later explicit stop. Static playback now performs that replacement and
+also replaces an older instance when the same looping command is restarted.
+
+Ordinary level handoff also called `player_join_finalize` after placing each
+survivor. The ROM's 0x4823C-0x4828A survivor loop never reaches that join
+routine: it calls `player_start_inner`, restores status 1, redraws the panel,
+and clears trick progress. Removing the false finalizer stops repeated join
+sounds and `WELCOME <hero>` speech and preserves join-owned counters across
+levels.
+
+The host AUDIO diagnostics page now lists the latest twelve accepted commands
+chronologically, one per line with both hexadecimal ID and description. Names
+come from the local command-named WAV library plus explicit control-command
+semantics, and remain immutable host snapshot data.
 
 ### S-169 · playable host emitted sound commands but played no audio
 

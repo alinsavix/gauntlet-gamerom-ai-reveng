@@ -89,7 +89,10 @@ audio queues, a rolling event log inferred from snapshots while the panel is
 open, synthetic-scenario event queues/timers, and a 120-sample render-time
 graph. The displayed `RENDER` value is a rolling average of the latest ten
 frames. The graph labels its dynamic Y axis in milliseconds and marks the
-16.67 ms frame budget.
+16.67 ms frame budget. The AUDIO page shows the twelve most recently accepted
+sound commands chronologically, one per line with hexadecimal command number
+and the description from the local WAV library (or the known control-command
+meaning).
 
 **F4** atomically saves every modeled `GameState` field, including players,
 MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,

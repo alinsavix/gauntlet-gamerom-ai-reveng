@@ -1573,7 +1573,7 @@ def _load_next_level(
 
 def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     """Run main_start_game's post-splash player placement on the loaded maze."""
-    from .players import player_join_finalize, player_start_inner
+    from .players import player_start_inner, setup_infopanel
 
     if in_secret_room(state):                        # 0x48232
         secret_room_spawn(state)
@@ -1589,10 +1589,14 @@ def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     secret_new_level_setup(state)                    # 0x43916-0x4395C
 
     for i in survivors:
-        state.players[i].status = int(PlayerStatus.ALIVE_HERE)
         if player_start_inner(state, i) == -1:       # world spawn (I-08)
+            # 0x4825E-0x4828A is the survivor arm, not player_join_finalize:
+            # restore status, redraw the panel, and clear this level's progress.
+            # Join sounds, WELCOME speech, and join-time field resets belong only
+            # to the actual join path through 0x48A36.
+            state.players[i].status = int(PlayerStatus.ALIVE_HERE)
+            setup_infopanel(state, state.secret_player)
             state.secret_tricks_flags[i] = 0         # next-level survivor, 0x48280
-            player_join_finalize(state, i)
 
     # 0x4834E: both handoff arms converge here, with the heroes already back to
     # status 1, so the bonus is computed from the party that is about to play.

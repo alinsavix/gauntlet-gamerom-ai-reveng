@@ -681,6 +681,13 @@ Paid starts and post-death continues take the full starting-health entry selecte
 by `game_settings & 0x1F`; the smaller per-coin increment is only for adding a
 coin to a player who is already active.
 
+The ordinary next-level survivor loop is deliberately not this join wrapper.
+At 0x4823C-0x4828A it calls `player_start_inner` directly, restores player
+status 1, redraws the info panel through `setup_infopanel`, and clears that
+player's trick byte. It never calls `player_join_finalize`, so a surviving
+player does not replay the join sound, `WELCOME`/character speech, or the
+finalizer's join-time field resets at every maze.
+
 The first player uses `maze_player_start_slot`. Later players do not need another
 PLAYERSTART marker: 0x48C1A–0x48C92 tries left, right, up, and down around each
 existing player's current cell, accepting the first empty on-screen candidate.
@@ -751,6 +758,9 @@ Keys and ordinary potions share a 12-item capacity. The key arm at
 record 25. A full player leaves the pickup unhandled while an active player can
 still accept that item. The shot-resistant variants retain their distinct final
 discard arms, but no full player receives another inventory byte.
+On successful ordinary-potion collection, 0x51778 sends command 0x26—the same
+treasure/potion pickup sound used by the related item arms—before
+`player_inv_update`; 0x0E belongs to the red player's exit sequence.
 
 Shot resistance does not make an item permanent after collection: both potion
 types and both food types are removed when picked up. The special score bag
@@ -2003,6 +2013,11 @@ the sound-ROM command semantics needed at that boundary:
   interrupting the current phrase.
 - Filter commands 0x01/0x02 and mixer commands 0xD6-0xD9 change host playback
   levels but never alter the accepted game-side stream.
+- Accepted type-7 commands are not necessarily independent sounds. Allocation
+  is per physical channel and priority; an equal-priority arrival replaces the
+  existing channel member. Commands 0x37 and 0x38 both use priority 8 on YM
+  channel 8, so the end cue at `monster_slowmo_timer == 0x1E` replaces the
+  slow-motion loop before command 0x39 stops its target at zero.
 
 This is a representation boundary, not evidence for sound-ROM synthesis or
 waveform timing. The command types, targets, priorities, and queue behavior are

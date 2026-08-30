@@ -438,6 +438,9 @@ class HostShell:
                 render_time_ms=sum(recent[-10:]) / min(10, len(recent)),
                 render_time_current_ms=render_time_ms,
                 render_time_history_ms=recent,
+                sound_descriptions=getattr(
+                    self._audio_player, "command_descriptions", {},
+                ),
             )
             self.diagnostics_selected_mob = snapshot.selected_mob
             for event in derive_debug_events(self._diagnostics_previous, snapshot):

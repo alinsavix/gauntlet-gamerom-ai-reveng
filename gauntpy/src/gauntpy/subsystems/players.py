@@ -1748,7 +1748,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
                 state.mobs.unlink_and_clear(tile_mob_slot)
                 return -1
             player.potionsnum = (player.potionsnum + 1) & 0xFF
-            _sound_play(state, 0x0E)  # potion pickup sound (§11.5 soundcmds)
+            _sound_play(state, 0x26)                    # 0x51778
             player_inv_update(state, player_index)      # 0x51786
             _dialog(state, player_index, _DIALOG_SAVE_POTIONS)  # 0x51796, rec 5
             # 0x5179C: the good-potion path only -- a *poisoned* potion is

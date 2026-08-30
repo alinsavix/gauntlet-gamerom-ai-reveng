@@ -114,7 +114,10 @@ and paced frame-by-frame by `main_start_game`:
    work between them.
 4. **Place the players.** Every position whose player survived the last
    level is spawned near the start; positions mid-selection stay in
-   selection. The camera centers on the start tile.
+   selection. This survivor arm places the MOB, restores alive status, redraws
+   the panel, and clears level-specific trick progress. It does not run the join
+   finalizer again, so crossing an exit does not replay the join sound or
+   "WELCOME, <hero>" speech. The camera centers on the start tile.
 5. **Release.** A short delay lets the presentation clear, then statuses
    flip to alive and the sixteen-call gameplay band starts doing real work.
 

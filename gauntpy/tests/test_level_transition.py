@@ -241,6 +241,41 @@ class TestPlayerExitSequence:
 # show_level_end_bonus_screen (0x4D476) -- the real maze reload (I-12)
 # ---------------------------------------------------------------------------
 
+def test_survivor_spawn_does_not_replay_join_sound_or_welcome(monkeypatch):
+    state = GameState(game_mode=GameMode.NORMAL)
+    state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
+    state.secret_tricks_flags[0] = 0xFF
+    panel_calls = []
+
+    def spawn(inner_state, player_index):
+        inner_state.level_players_active += 1
+        return -1
+
+    monkeypatch.setattr(gp, "player_start_inner", spawn)
+    monkeypatch.setattr(
+        gp, "setup_infopanel",
+        lambda inner_state, player_index: panel_calls.append(player_index),
+    )
+
+    ex._spawn_level_players(state, [0])
+
+    assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
+    assert state.secret_tricks_flags[0] == 0
+    assert state.sound_log == []
+    assert panel_calls == [state.secret_player]
+
+
+def test_failed_survivor_spawn_keeps_next_level_status(monkeypatch):
+    state = GameState(game_mode=GameMode.NORMAL)
+    state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
+    monkeypatch.setattr(gp, "player_start_inner", lambda _state, _player: 0)
+
+    ex._spawn_level_players(state, [0])
+
+    assert state.players[0].status == int(PlayerStatus.ALIVE_NEXT)
+    assert state.players[0].mob_slot == 0
+
+
 @requires_roms
 class TestShowLevelEndBonusScreenLoadsNextMaze:
     def test_level_splash_timer_advances_while_a_dialog_gates_the_world(self, monkeypatch):

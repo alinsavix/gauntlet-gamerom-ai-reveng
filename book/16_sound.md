@@ -279,6 +279,13 @@ when their paired commands arrive, and the title and treasure-room fade
 commands target the music already playing. Playback never changes game RAM or
 feeds a completion signal back to the simulation.
 
+Static recordings also cannot simply occupy one unlimited channel each. The
+sound board allocates sequences onto physical channels by priority, and an
+equal-priority arrival can replace what that channel was already playing. The
+slow-motion transition makes this visible: 0x37 starts the sustained loop,
+0x38 arrives with thirty game frames left and replaces it on the same Yamaha
+channel, and 0x39 is the final stop command at zero.
+
 What this volume can say is that the interface between the two halves is
 small, honest, and well defended: one byte out, one byte back, a queue that
 prefers dropping a sound to missing a frame, and a watchdog that will reboot

@@ -1412,6 +1412,8 @@ class TestHudHooks:
 
         assert p.potionsnum == 1
         assert self._field(state, 3).health_drawn
+        assert 0x26 in state.sound_log
+        assert 0x0E not in state.sound_log
 
     def test_overfull_player_cannot_pick_up_a_potion(self):
         for obj_type in (MazeObjIds.POT_DESTRUCTABLE, MazeObjIds.POT_INVULN):

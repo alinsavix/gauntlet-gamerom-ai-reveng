@@ -111,6 +111,18 @@ def test_forcefield_slow_motion_and_music_controls_target_the_rom_commands(tmp_p
     assert mixer.channels[4].fades == [1000]
 
 
+def test_end_slow_motion_replaces_the_loop_before_the_final_silencer(tmp_path):
+    mixer = _Mixer()
+    player = StaticSoundPlayer(mixer, _library(tmp_path, 0x37, 0x38))
+    player.consume([0x37])
+    loop = mixer.channels[0]
+
+    player.consume([0x37, 0x38])
+
+    assert loop.stopped == 1
+    assert mixer.channels[1].sound.path.name == "0x38_test.wav"
+
+
 def test_a_reused_mixer_channel_is_detached_from_its_old_stop_target(tmp_path):
     mixer = _ReusingMixer()
     player = StaticSoundPlayer(mixer, _library(tmp_path, 0x20, 0x0D))
@@ -206,3 +218,12 @@ def test_skip_existing_does_not_replay_snapshot_history(tmp_path):
     log.append(0x13)
     player.consume(log)
     assert mixer.channels[0].sound.path.name == "0x13_test.wav"
+
+
+def test_command_descriptions_come_from_wav_names_and_control_semantics(tmp_path):
+    player = StaticSoundPlayer(
+        _Mixer(), _library(tmp_path, 0x26, 0x4A),
+    )
+
+    assert player.command_descriptions[0x26] == "test"
+    assert player.command_descriptions[0x39] == "Slow motion silencer"

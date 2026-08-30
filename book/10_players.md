@@ -406,6 +406,9 @@ variants, and shooting one throws the *monsters* into slow motion: ten seconds
 for the food, twenty for the potion, each announced by its own sound. For once
 the machine rewards you for shooting the food, and Chapter 11 has the
 mechanism, which is simply that the monster pass skips every other frame.
+Picking up an ordinary good potion is a different path: it increments inventory
+and sends command 0x26, the shared treasure/potion-taken sound. The nearby
+0x0E command is the red player's exit sound, not a potion cue.
 
 ## Pockets and doors
 
