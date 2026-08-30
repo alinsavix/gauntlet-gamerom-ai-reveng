@@ -650,6 +650,14 @@ The complete checked contracts and direct control-transfer sites are in
 
 Health drain is handled by `main_health_countdown` (0x466F6). **Confidence: Verified** for the rate: it gates on `frame_counter & 0x3F` at 0x4670C and, for each active player, executes `subq.l #1,(a3,d0.w)` at 0x4675E — a flat **one point per player per 64 frames in every game mode**, with no character, power, or difficulty term. The former claim that the drain reads a per-class table was **Contradicted**; the table at 0x5813C is `forcefield_damage_table` and has a single consumer in §7.4. The routine also runs the low-health warning cadence: below 200 health, it increments `player_state_timer` (`0x904A26[player]`) modulo 0x8000 at 0x46BAC — once per frame, at a constant rate. A seven-word mask table at 0x576A8, selected by `health >> 5`, makes the heartbeat *sound* progressively more frequent as health falls (0x46BC0–0x46BE2); the health-number renderer uses the timer's low nibble for an 8-frames-dim/8-frames-normal pulse, whose cadence therefore does **not** change with health. At 200 health or above, the timer is reset to `0xFFFF` (disabled). The same RAM words are reused as death/name-entry countdowns when the player is no longer active; see §10.3.
 
+Low-health name/warning phrases call `sound_speech_play` and honor the speech
+disable setting. Poisoned food/potions and the death arm deliberately do not:
+both select an ungated character voice through `random_item_group_ptrs`,
+`random_item_group_counts`, and `random_item_group_values`
+(0x578DA/0x578EA/0x5791A). The groups are Warrior `{0xBB,0x87}`, Valkyrie
+`{0xB5}`, Wizard `{0xBA}`, and Elf `{0xB9,0xBC}`. Death then plays the
+character transition effect 0x14-0x17.
+
 **Confidence: Verified.** `player_damage_sample_update(uint16 player_index)`
 (0x50E34), formerly misidentified as a pickup detector, advances a signed
 60-frame window. At expiry it increments the sample count, checks low-health
@@ -687,6 +695,11 @@ status 1, redraws the info panel through `setup_infopanel`, and clears that
 player's trick byte. It never calls `player_join_finalize`, so a surviving
 player does not replay the join sound, `WELCOME`/character speech, or the
 finalizer's join-time field resets at every maze.
+
+An actual finalizer sends `player_coin_sound_ids[character]` (0x57952:
+0x09-0x0C) before the gated welcome sentence. If `player_start_inner` exhausts
+all four directions around all active players, 0x48C94 sends command 0x43
+(`Unable to Join In`) and returns zero without finalizing.
 
 The first player uses `maze_player_start_slot`. Later players do not need another
 PLAYERSTART marker: 0x48C1A–0x48C92 tries left, right, up, and down around each
@@ -780,6 +793,14 @@ shot power, shot speed, fight), and calls `player_give_item_with_message`.
 Only when that bit is already owned does it fall through: it adds a potion when
 keys plus potions are below 12, otherwise awards 100 points in solo play, and
 otherwise leaves the object unhandled.
+
+For a newly granted item whose `powerup_speech_ids` entry is nonzero,
+`player_give_item_with_message` composes a three-command sentence through
+`sound_speech_play`: player color/class name, 0x8D (`NOW HAS`), then the power
+name. Reduced-text bit 0x0400 skips the first two but retains the power name;
+speech-disable bit 0x0800 suppresses every spoken command. High-byte temporary
+powers also use their mask in `dialog_once_flags`, so a power that expires and
+is collected again on the same level does not repeat the dialog/sentence.
 
 The collision machinery identifies the player's logical cell from the
 sprite-center horizontal anchor (`x + 12`) and the ROM vertical handoff. A
@@ -1807,6 +1828,14 @@ The ordinary `LEVEL:` descriptor starts at alpha column 4; its colon uses the
 OS large font's one-cell quad `(0x6D, 0x6D, 0, 0)`, leaving column 15 blank
 before `display_large_decimal_value` begins its three-character field at 16.
 
+The same state machine owns the level audio transaction. Initial setup sends
+0x39 before `show_level_start_screen`, whose curtain setup sends mixer preset
+0xD7; ordinary mazes below 104 then start command 0x42. A secret-room delay
+crossing 0x014A starts theme 0x3B. When placement completes, treasure rooms
+104-114 select music 0x40/0x3F/0x3E/0x3D for one through four active players
+and one of the early phrases at 0x57962. Ordinary levels six and later have the
+ROM's `getrandom(16) > 13` chance to select one phrase from 0x5796E.
+
 `secret_check_winner` (0x4D1A4) supplies the secret-room award predicate. It
 checks the active challenge code and the entrant's progress (and scans the
 playfield for challenge 0x53), returning -1 when the 5,000-per-coin bonus is
@@ -2013,11 +2042,20 @@ the sound-ROM command semantics needed at that boundary:
   interrupting the current phrase.
 - Filter commands 0x01/0x02 and mixer commands 0xD6-0xD9 change host playback
   levels but never alter the accepted game-side stream.
-- Accepted type-7 commands are not necessarily independent sounds. Allocation
-  is per physical channel and priority; an equal-priority arrival replaces the
-  existing channel member. Commands 0x37 and 0x38 both use priority 8 on YM
-  channel 8, so the end cue at `monster_slowmo_timer == 0x1E` replaces the
-  slow-motion loop before command 0x39 stops its target at zero.
+- Accepted type-7 commands are not independent sounds. Allocation is per
+  physical channel and priority across all 62 configured commands. Equal
+  priority replaces the old member; higher priority suppresses lower members,
+  which continue to advance and can resume. Command 0x37 uses priority 8 on YM
+  channel 8, while 0x38 uses priority 9 there, so the end cue at
+  `monster_slowmo_timer == 0x1E` suppresses the loop before command 0x39 removes
+  its target at zero.
+- The pool contains 30 logical members, not 30 whole commands. Multipart chains
+  are admitted in record order. At capacity, allocation examines only the
+  requested physical channel and may reclaim its lowest-priority member when
+  the incoming priority is at least as high; rejection keeps already inserted
+  prefix records and abandons the remaining suffix. Type-9/10 fades mark their
+  logical members and ramp them in place, so they retain priority ownership
+  until the fade completes.
 
 This is a representation boundary, not evidence for sound-ROM synthesis or
 waveform timing. The command types, targets, priorities, and queue behavior are

@@ -937,6 +937,13 @@ class TestExitMoveAnimation:
 # ---------------------------------------------------------------------------
 
 class TestLevelEndHold:
+    def test_level_start_screen_sets_the_low_effects_mixer(self):
+        state = GameState(levelnum_current=2, mazenum_current=1)
+
+        show_level_start_screen(state)
+
+        assert state.sound_log[0] == 0xD7
+
 
     def test_hold_is_300_frames(self):
         """global_delay_timer = 0x12C at 0x4D50E."""
@@ -1086,7 +1093,7 @@ class TestLevelEndHold:
             "trap_walls_invisible"
         ]
         assert _alpha_text(state, column, row, len(trap_text)) != trap_text
-        assert state.sound_log == [0x8C]
+        assert state.sound_log == [0xD7, 0x8C]
         assert state.rng.bounds == [4, 9]
 
     def test_trap_wall_notice_has_its_quarter_chance_speech(self):
@@ -1104,7 +1111,7 @@ class TestLevelEndHold:
             "trap_walls_invisible"
         ]
         assert _alpha_text(state, column, row, len(text)) == text
-        assert state.sound_log == [0xCD]
+        assert state.sound_log == [0xD7, 0xCD]
         assert state.rng.bounds == [4, 9]
 
     def test_secret_hint_uses_the_armed_next_maze_objective(self, monkeypatch):

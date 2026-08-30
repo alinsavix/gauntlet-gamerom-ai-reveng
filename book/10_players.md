@@ -217,6 +217,8 @@ stand in it. Poison is different again: for twenty seconds it rewrites the
 direction nibble through a four-phase ROM table. Holding Up alternates
 Up+Right, Up, Up+Left, Up while Fire and Magic remain intact, producing the
 characteristic drunken wobble without changing the stored joystick sample.
+The poisoned pickup also chooses a grunt from the same character-specific
+voice groups used at death; it is not one of the four death-transition effects.
 
 The all-or-nothing axis proposal matters at two- and three-pixel speeds. The
 cabinet does not keep one clear pixel from a larger move whose endpoint blocks;
@@ -400,6 +402,9 @@ seconds if your score-per-coin ranked for initials entry, 10 seconds of GAME
 OVER display if it did not. One word, two jobs, chosen by whether you are
 alive, which is a very 1986 economy. If you were the last player standing,
 Chapter 7's continue prompt takes over.
+Audio first draws one character grunt, then plays the class transition effect
+0x14-0x17. Those grunts deliberately bypass the operator speech-disable switch;
+the composed low-health sentence above does not.
 
 One footnote runs the other way. A few food and potion sprites are marked
 variants, and shooting one throws the *monsters* into slow motion: ten seconds
@@ -469,6 +474,13 @@ own that upgrade, the bottle instead becomes an ordinary carried potion when
 there is inventory room; a solo player with a full inventory gets 100 points.
 The six HUD icons are written directly around the name row from the same low
 six bits.
+
+A successful spoken power announcement is assembled rather than stored whole:
+the player's color/class name, `NOW HAS`, then the power name. The operator's
+reduced-text option omits the first two phrases but still names the power; the
+speech-disable option silences all three. Temporary powers additionally carry
+a per-level one-shot marker, so collecting the same expired effect again does
+not repeat the announcement.
 
 **The temporary shelf** holds timed or metered effects:
 

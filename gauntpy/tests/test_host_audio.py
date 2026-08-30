@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from gauntpy.render import audio
 from gauntpy.render.audio import SoundLibraryError, StaticSoundPlayer
 
 
@@ -46,17 +47,14 @@ class _Mixer:
         self.stops = 0
 
     def Channel(self, index):
-        assert index == 0
-        return self.speech
+        if index == 0:
+            return self.speech
+        while len(self.channels) < index:
+            self.channels.append(_Channel())
+        return self.channels[index - 1]
 
     def Sound(self, path):
         return _Sound(path)
-
-    def find_channel(self, force):
-        assert force
-        channel = _Channel()
-        self.channels.append(channel)
-        return channel
 
     def stop(self):
         self.stops += 1
@@ -66,8 +64,9 @@ class _Mixer:
 
 
 class _ReusingMixer(_Mixer):
-    def find_channel(self, force):
-        assert force
+    def Channel(self, index):
+        if index == 0:
+            return self.speech
         if not self.channels:
             self.channels.append(_Channel())
         return self.channels[0]
@@ -107,7 +106,7 @@ def test_forcefield_slow_motion_and_music_controls_target_the_rom_commands(tmp_p
     assert mixer.channels[0].stopped == 1
     assert mixer.channels[1].stopped == 1
     assert mixer.channels[2].fades == [1000]
-    assert mixer.channels[3].fades == [1000]
+    assert mixer.channels[3].stopped == 1
     assert mixer.channels[4].fades == [1000]
 
 
@@ -119,8 +118,107 @@ def test_end_slow_motion_replaces_the_loop_before_the_final_silencer(tmp_path):
 
     player.consume([0x37, 0x38])
 
-    assert loop.stopped == 1
+    assert loop.stopped == 0
+    assert loop.volume == 0.0
     assert mixer.channels[1].sound.path.name == "0x38_test.wav"
+
+    player.consume([0x37, 0x38, 0x39])
+    assert loop.stopped == 1
+
+
+def test_higher_priority_sound_suppresses_then_releases_a_lower_channel(tmp_path):
+    mixer = _Mixer()
+    player = StaticSoundPlayer(mixer, _library(tmp_path, 0x45, 0x43))
+    player.consume([0x45, 0x43])
+
+    assert mixer.channels[0].volume == 0.0
+    assert mixer.channels[1].volume == 1.0
+
+    mixer.channels[1].busy = False
+    player.consume([0x45, 0x43])
+
+    assert mixer.channels[0].volume == 1.0
+
+
+def test_equal_priority_replaces_the_old_physical_channel_member(tmp_path):
+    mixer = _Mixer()
+    player = StaticSoundPlayer(mixer, _library(tmp_path, 0x48, 0x49))
+    player.consume([0x48, 0x49])
+
+    assert mixer.channels[0].stopped == 1
+    assert mixer.channels[1].volume == 1.0
+
+
+def test_type7_metadata_covers_every_sound_rom_sequence_command():
+    assert len(audio._TYPE7_CHANNEL_PRIORITIES) == 62
+    assert audio._TYPE7_CHANNEL_PRIORITIES[0x37] == ((8, 8),)
+    assert audio._TYPE7_CHANNEL_PRIORITIES[0x38] == ((8, 9),)
+    assert audio._TYPE7_CHANNEL_PRIORITIES[0x3B] == tuple(
+        (channel, 61) for channel in range(4, 12)
+    )
+
+
+def test_fading_theme_retains_priority_until_the_ramp_finishes(tmp_path):
+    mixer = _Mixer()
+    player = StaticSoundPlayer(mixer, _library(tmp_path, 0x3B, 0x42))
+
+    player.consume([0x3B, 0x3C, 0x42])
+
+    assert mixer.channels[0].fades == [1000]
+    assert mixer.channels[1].volume == 0.0
+
+    mixer.channels[0].busy = False
+    player.consume([0x3B, 0x3C, 0x42])
+
+    assert mixer.channels[1].volume == 1.0
+
+
+def test_effect_allocator_skips_a_busy_lane_when_another_is_free(tmp_path):
+    mixer = _Mixer()
+    player = StaticSoundPlayer(mixer, _library(tmp_path, 0x37, 0x38))
+    player.consume([0x37])
+    player._next_effect_channel = 1
+
+    player.consume([0x37, 0x38])
+
+    assert mixer.channels[0].sound.path.name == "0x37_test.wav"
+    assert mixer.channels[0].stopped == 0
+    assert mixer.channels[1].sound.path.name == "0x38_test.wav"
+
+
+def _fill_type7_pool(player, members):
+    for command, hardware_channel, priority in members:
+        channel = _Channel()
+        channel.busy = True
+        playback = audio._Type7Playback(
+            command, channel, {hardware_channel: priority},
+        )
+        player._type7_playbacks.append(playback)
+        player._playing.setdefault(command, []).append(channel)
+
+
+def test_full_logical_pool_rejects_lower_priority_record_and_chain_suffix(tmp_path):
+    player = StaticSoundPlayer(_Mixer(), _library(tmp_path, 0x05))
+    members = [(0x80 + index, 2 + index % 10, 10 + index) for index in range(28)]
+    members.extend(((0xA0, 0, 7), (0xA1, 1, 9)))
+    _fill_type7_pool(player, members)
+
+    accepted = player._admit_type7_members(0x05)
+
+    assert accepted == {0: 8}
+    assert player._logical_member_count() == 29
+
+
+def test_full_logical_pool_reclaims_requested_channel_lowest_priority(tmp_path):
+    player = StaticSoundPlayer(_Mixer(), _library(tmp_path, 0x43))
+    members = [(0x80 + index, 2 + index % 10, 10 + index) for index in range(29)]
+    members.append((0xA0, 0, 2))
+    _fill_type7_pool(player, members)
+
+    accepted = player._admit_type7_members(0x43)
+
+    assert accepted == {0: 51}
+    assert player._logical_member_count() == 29
 
 
 def test_a_reused_mixer_channel_is_detached_from_its_old_stop_target(tmp_path):
@@ -179,7 +277,7 @@ def test_filter_and_mixer_commands_update_live_host_channels(tmp_path):
 
     player.consume([0x0D, 0x22, 0x3B, 0x3D, 0x4A, 0x01, 0x02, 0xD7])
     assert [channel.volume for channel in mixer.channels] == [
-        1 / 3, 1 / 3, 1.0, 1.0,
+        0.0, 1 / 3, 1.0, 0.0,
     ]
     assert mixer.speech.volume == 1.0
 

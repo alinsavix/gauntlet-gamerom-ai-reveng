@@ -579,8 +579,7 @@ class TestStartAttractToGame:
         state.game_mode = GameMode.TITLE
         state.sound_log.clear()
         start_attract_to_game(state)
-        assert 0x3C in state.sound_log    # 0x4425A theme fade-out
-        assert 0x02 in state.sound_log    # 0x4429A session-start sting
+        assert state.sound_log[:3] == [0x3C, 0x02, 0xD7]
 
     def test_demo_hero_cannot_leak_into_the_session(self):
         state = GameState()

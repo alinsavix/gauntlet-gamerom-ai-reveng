@@ -63,6 +63,7 @@ from ..coords import (
 from ..state import NUM_PLAYERS, GameState
 from .input import direction_bits, fire_held
 from .sound import sound_play as _sound_play
+from .sound import sound_speech_play as _sound_speech_play
 
 
 # =============================================================================
@@ -202,6 +203,17 @@ _SHOT_REFLECT_SOUND_TBL = [0x45, 0x47, 0x46, 0x48]
 # Character-specific death SFX, refs/soundcmds.csv 0x14-0x17; ROM 0x57932
 # (four longwords), played by the death path of main_health_countdown (0x46B2A).
 _PLAYER_DEATH_SOUND_BASE = 0x14
+# player_coin_sound_ids, ROM 0x57952 (four longwords), indexed by character.
+_PLAYER_COIN_SOUND_IDS = (0x09, 0x0A, 0x0B, 0x0C)
+
+# random_item_group_ptrs/counts/values, ROM 0x578DA/0x578EA/0x5791A.
+# Poison pickup and player death both choose one ungated character voice.
+_RANDOM_ITEM_GROUP_VALUES = (
+    (0xBB, 0x87),
+    (0xB5,),
+    (0xBA,),
+    (0xB9, 0xBC),
+)
 
 # Shot spawn offsets, ROM shot_spawn_hpos_tbl (0x5BAB0) and shot_spawn_vpos_tbl
 # (0x5BAC0), read by player_create_shot at 0x536FA/0x53746 and added to the
@@ -639,6 +651,7 @@ _PICKUP_SCORE_POPUP_TYPES = (
 #: 0x4B0 frames (0x51C68/0x5166E).
 _POISON_DAMAGE = 0x32
 _DIZZY_TIMER_LOAD = 0x4B0
+_GAME_SETTINGS_REDUCE_TEXT = 0x0400
 # 0x4A4FA, four frame-counter phase rows by active-low joystick nibble.
 _DIZZY_DIRECTION_REMAP = (
     0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0x70, 0xE0, 0x60,
@@ -675,8 +688,13 @@ def _poisoned(state: GameState, player_index: int) -> None:
     player = state.players[player_index]
     player.health = max(0, player.health - _POISON_DAMAGE)   # 0x51C4A/0x51C5A
     state.player_dizzy_timer[player_index] = _DIZZY_TIMER_LOAD  # 0x51C68
-    _sound_play(state, _PLAYER_DEATH_SOUND_BASE + (player.character & 0x03))
+    _play_random_character_voice(state, player.character)
     _dialog(state, player_index, _DIALOG_POISONED, _POISON_DAMAGE)
+
+
+def _play_random_character_voice(state: GameState, character: int) -> None:
+    group = _RANDOM_ITEM_GROUP_VALUES[character & 0x03]
+    _sound_play(state, group[state.getrandom(len(group))])
 
 
 # =============================================================================
@@ -937,13 +955,13 @@ def speech_welcome(state: GameState, player_index: int) -> None:
     player = state.players[player_index]
 
     if state.level_players_active == 1 or state.welcome_elapsed_frames >= _WELCOME_DELAY:
-        _sound_play(state, _SPEECH_WELCOME_LEADIN)
+        _sound_speech_play(state, _SPEECH_WELCOME_LEADIN)
 
     if state.welcome_elapsed_frames < _WELCOME_DELAY:
         return
 
     index = (player.character & 0x03) + player_index * 4
-    _sound_play(state, _SPEECH_CHARNAME_TBL[index])
+    _sound_speech_play(state, _SPEECH_CHARNAME_TBL[index])
     state.welcome_elapsed_frames = _WELCOME_DELAY
 
 
@@ -1169,8 +1187,10 @@ def player_lowhealth(state: GameState, player_index: int) -> None:
         phrase = state.getrandom(3)                 # 0x4885A
 
     index = (player.character & 0x03) + player_index * 4
-    _sound_play(state, _SPEECH_CHARNAME_TBL[index])         # 0x48884
-    _sound_play(state, _CHARACTER_LOWHEALTH_SPEECH[phrase])  # 0x4889C
+    _sound_speech_play(state, _SPEECH_CHARNAME_TBL[index])         # 0x48884
+    _sound_speech_play(
+        state, _CHARACTER_LOWHEALTH_SPEECH[phrase],
+    )                                                               # 0x4889C
     state.player_lowhealth_spoken[player_index] = 1
     state.player_respawn_speech_timer[player_index] = _LOWHEALTH_SPEECH_TIMEOUT
 
@@ -1972,8 +1992,9 @@ def _player_give_item(state: GameState, player_index: int, obj_type: int) -> boo
     Verified body: the power-up ID indexes ``powerup_bit_masks`` (0x59B64,
     ``constants.POWERUP_BIT_MASKS``); if the player already owns that bit the
     routine returns 0 without touching anything (0x4C762), otherwise it ORs the
-    mask into ``player_powers`` (0x4C77C) and, for the high-byte pickups, speaks
-    ``powerup_speech_ids[id]`` (0x59B7C) and raises a one-shot dialog latch.
+    mask into ``player_powers`` (0x4C77C) and, for the high-byte pickups, raises
+    a one-shot dialog latch. A nonzero ``powerup_speech_ids[id]`` composes the
+    gated name / NOW HAS / item sentence, with the reduced-text shortcut.
 
     Returns True when the bit was newly granted.  The message box and its speech
     are WP-14 alpha work; the bit is the part this file owns.
@@ -1995,9 +2016,17 @@ def _player_give_item_id(
     if player.powers & mask:                 # 0x4C760-0x4C766
         return False
     player.powers |= mask                    # 0x4C77C
+    if mask & 0xFF00:
+        if state.dialog_once_flags & mask:    # 0x4C79C-0x4C7AA
+            return True
+        state.dialog_once_flags |= mask       # 0x4C7AE-0x4C7B6
     speech = _POWERUP_SPEECH_IDS[item_id]
-    if speech:                               # a zero entry suppresses speech
-        _sound_play(state, speech)
+    if speech:
+        if not state.game_settings & _GAME_SETTINGS_REDUCE_TEXT:
+            index = (player.character & 0x03) + player_index * 4
+            _sound_speech_play(state, _SPEECH_CHARNAME_TBL[index])  # 0x4C8AE
+            _sound_speech_play(state, 0x8D)                         # 0x4C8F8
+        _sound_speech_play(state, speech)                           # 0x4C940
     return True
 
 
@@ -2521,6 +2550,7 @@ def player_start_inner(state: GameState, player_index: int) -> int:
             state.monster_spawn_probability_bonus = 0
         return -1
 
+    _sound_play(state, 0x43)                              # 0x48C94-0x48C9A
     return 0  # no usable spawn position
 
 
@@ -2553,6 +2583,9 @@ def player_join_finalize(state: GameState, player_index: int) -> None:
     player.state_timer = _STATE_TIMER_DISABLED             # 0x48972
     state.player_lowhealth_spoken[player_index] = 0        # 0x48980
     state.player_respawn_speech_timer[player_index] = -1    # 0x4898E
+    _sound_play(
+        state, _PLAYER_COIN_SOUND_IDS[player.character & 0x03],
+    )                                                       # 0x48AB2-0x48ABC
     speech_welcome(state, player_index)
     setup_infopanel(state, player_index)
     update_player_sprite(state, player_index)
@@ -3076,6 +3109,7 @@ def main_move_players(state: GameState) -> None:
             # highscore_check alone owns the result: a ranked player enters
             # status 4 for initials; an unranked player remains cleared.
             setup_infopanel(state, player_index)                  # 0x46AD0
+            _play_random_character_voice(state, character)        # 0x46B16
             _sound_play(
                 state, _PLAYER_DEATH_SOUND_BASE + (character & 0x03),
             )                                                     # 0x46B2A

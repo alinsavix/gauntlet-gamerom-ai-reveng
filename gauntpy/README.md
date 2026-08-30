@@ -41,6 +41,11 @@ present, the runner prints a warning and continues silently.
 The host plays effects concurrently, serializes speech through the sound
 board's priority queue rules, loops Death/forcefield/slow-motion beds until
 their matching stop commands, and applies the theme and treasure-music fades.
+All 62 sequence commands also carry their verified physical-channel and
+priority records: equal-priority members replace, higher-priority members
+suppress lower playback, and a lower sequence can resume when the winner ends.
+Because each local WAV is already mixed, partial suppression inside one
+multi-channel recording cannot separate its individual stems.
 This consumes accepted `sound_log` bytes only; it does not alter the game's
 sound ring, timing, or modeled state.
 

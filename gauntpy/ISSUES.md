@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2541 passed, 1 skipped** (gauntpy) and
+present the suites are clean: **2559 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -63,6 +63,51 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-171 · exhaustive game/sound-ROM command audit
+
+All 97 gameplay sound/speech producers plus their three forwarding seams were
+checked against `row76.bin`, direct disassembly, literal command tables, and the
+companion sound-ROM command/channel catalogs. Every previously implemented
+pickup, shot, monster, dragon, thief, door, wall, exit, countdown, dialog,
+coin, attract, and control command uses the correct ID and index after S-170.
+The audit found eight remaining lifecycle families rather than another isolated
+wrong number.
+
+Welcome and low-health sentences used ordinary `sound_play`, as did the spoken
+suffix of the thief escape taunt. They now use `sound_speech_play`, honoring the
+operator speech-disable bit while preserving the thief's ungated laugh.
+Power-up grants now reproduce the ROM's name → `NOW HAS` (0x8D) → power-name
+sequence; reduced text omits the first two phrases, speech-disable gates all
+three, and the high-byte one-shot latch prevents a timed power from repeating
+its announcement later in the same level.
+
+Poisoned food/potions and player death now draw from the literal per-character
+voice groups at 0x5791A through the 0x578DA/0x578EA pointer/count tables.
+Player death plays that voice before transition effect 0x14-0x17. Real joins
+restore character effect 0x09-0x0C, and an exhausted spawn search emits 0x43.
+The level-start lifecycle restores slow-motion stop 0x39, mixer preset 0xD7,
+ordinary level music 0x42, the secret-room theme at delay 0x14A, treasure music
+0x3D-0x40 by active-player count, and the early/later speech tables and gates.
+
+The host audit also replaced the one-off slow-motion rule with all 62 type-7
+command chain records. Each active static recording now tracks its physical
+channels and priorities: equal priority replaces an old member, higher priority
+suppresses lower playback, and a lower sequence can resume when the winner
+ends. For 0x37/0x38 the corrected sound-ROM fact is priority 8 versus 9 on YM
+channel 8—not equal priority as S-170 originally stated. Mixed whole-command
+WAVs cannot isolate stems when only part of a multi-channel sequence is
+suppressed, but the host preserves the verified ownership and complete-command
+audibility decisions. The allocator also models the 30 logical slots
+record-by-record: on exhaustion it can reclaim only the requested physical
+channel's lowest-priority member, and a rejected record abandons its chain
+suffix. Fade commands leave their members in arbitration until the host ramp
+ends, and explicit pygame channels 1-31 keep effects out of speech channel 0.
+
+Fresh-session ordering was rechecked separately. `start_attract_to_game`
+0x4425A-0x442AC emits 0x3C, 0x02, then reaches
+`show_level_start_screen`'s 0xD7; transition-only 0x39/0x42 belong to
+`main_start_game` 0x4812E-0x4814E and are not fabricated on that path.
+
 ### S-170 · potion/slow-motion audio and survivor greetings diverged
 
 Three audible reports had separate causes. The ordinary good-potion arm in
@@ -74,9 +119,9 @@ the same.
 The slow-motion producer was already exact: `monsters_everything`
 0x40EB0-0x40EDE decrements the timer, sends 0x38 with 30 frames left, and sends
 0x39 at zero. The host-side mistake was treating every accepted type-7 WAV as
-independent. Sound-ROM command 0x38 has the same priority and physical YM
-channel as loop 0x37, so allocation replaces 0x37 immediately; command 0x39 is
-the later explicit stop. Static playback now performs that replacement and
+independent. Sound-ROM command 0x38 has priority 9 on the same physical YM
+channel where loop 0x37 has priority 8, so it suppresses 0x37 immediately;
+command 0x39 is the later explicit stop. Static playback performs that arbitration and
 also replaces an older instance when the same looping command is restarted.
 
 Ordinary level handoff also called `player_join_finalize` after placing each

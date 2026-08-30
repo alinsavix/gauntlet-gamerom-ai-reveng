@@ -381,15 +381,32 @@ evidence remains in `../doc/`, generated contracts, and the book.
     still interprets sound-board control bytes: speech is serial and
     priority-queued; commands 0x21/0x2F/0x39 stop 0x20/0x2E/0x37; 0x3C fades
     0x3B; and 0x41 fades treasure music 0x3D-0x40.
-82. **Sound-board channel replacement survives static playback.** A new type-7
-    command can replace an equal-priority sequence on the same physical channel
-    before a later explicit stop command. In particular, slow-motion end cue
-    0x38 replaces loop 0x37 with 30 frames left; 0x39 then silences the target
-    channel at zero. Do not model every accepted WAV as an independent channel.
+82. **Type-7 sounds arbitrate per physical channel.** Preserve every command's
+    channel/priority records. Equal priority replaces the old logical member;
+    higher priority suppresses lower members, which continue and may resume.
+    In particular, slow-motion end cue 0x38 has priority 9 on YM channel 8 and
+    suppresses loop 0x37 at priority 8 with 30 frames left; 0x39 removes the
+    loop at zero. A mixed static WAV can preserve command ownership and complete
+    suppression, but cannot separate a multi-channel recording's stems when
+    only some physical channels lose arbitration.
+    Admission is record-by-record through 30 logical slots: a full pool may
+    reclaim only the lowest-priority member of the requested physical channel,
+    and rejection abandons the remaining chain suffix. Fading members retain
+    channel ownership until their ramp actually finishes.
 83. **Level survivors are not new joins.** Ordinary level handoff
     0x4823C-0x4828A calls `player_start_inner`, restores status, redraws the
     panel, and clears trick progress. It does not call `player_join_finalize`,
     replay join effects/speech, or reset join-owned player fields.
+84. **Speech gating belongs to each ROM call site.** Spoken sentences, welcome,
+    low-health warnings, power announcements, and the thief's taunt suffix call
+    `sound_speech_play` and honor game-settings bit 11. Character grunts used by
+    poison, damage, and death deliberately call ordinary `sound_play`; do not
+    classify a command as gated merely because the asset contains a voice.
+85. **Composite audio phrases keep their producers and order.** A new player
+    gets the character join effect before `WELCOME`/name speech. A power grant
+    speaks name, `NOW HAS`, and power name; reduced text skips the first two,
+    while speech-disable skips all spoken parts. Poison and death draw from the
+    character's random voice group before their dialog/transition effects.
 
 ## Investigation workflow
 

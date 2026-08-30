@@ -18,6 +18,7 @@ from ..coords import (
 )
 from ..state import GameState
 from .sound import sound_play as _sound_play
+from .sound import sound_speech_play as _sound_speech_play
 
 _WORLD_PIXELS = 512
 
@@ -1128,7 +1129,7 @@ def _escape_animation(state: GameState) -> bool:
         state.thief_mode &= ~THIEF_JUMPJUMP
         laugh, speech = _TAUNT_PAIRS[state.getrandom(2)]
         _sound_play(state, laugh)
-        _sound_play(state, speech)
+        _sound_speech_play(state, speech)
     return True
 
 
