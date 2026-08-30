@@ -164,6 +164,11 @@ debouncing. This chapter picks up at the clean result, which is one byte per
 player whose high four bits are up/down/left/right and whose low bits include
 **Fire** and **Magic**.
 
+The Python playable wrapper accepts either keyboard or gamepad input, but that
+host convenience stops at the cabinet boundary: both devices clear bits in the
+same modeled active-low raw word. The original debounce and player routines
+still decide what those switches mean.
+
 A sixteen-entry lookup converts those four direction bits into intent, mapping
 every combination of the switches to one of eight compass directions or to "no
 direction." That is how up plus left becomes a clean diagonal, while

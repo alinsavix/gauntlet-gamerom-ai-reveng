@@ -2219,6 +2219,12 @@ For each of 4 players:
 
 The shift registers accumulate 16 consecutive frames of each input bit. ANDing multiple bits in the shift register requires N frames of consistent input (eliminates switch bounce).
 
+The Python playable host preserves this boundary. Keyboard keys and the first
+connected gamepad's D-pad/left stick and Fire/Magic buttons are composed into
+the same active-low raw word before `input_debounce` runs; controller support
+does not bypass or duplicate the game routine. Gamepad coin and pause controls
+remain host edge actions, just like their keyboard equivalents.
+
 ---
 
 ## 16. Treasure Room System (`main_treasure_timer`, 0x4D29E)

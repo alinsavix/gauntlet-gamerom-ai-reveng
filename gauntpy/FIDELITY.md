@@ -370,6 +370,10 @@ evidence remains in `../doc/`, generated contracts, and the book.
     `slot*0x800 - 0x200 + palette`, the same `cell_x*16 - 4` anchor used after
     thief transport. Preserve that offset through movement and cell handoff;
     centering the sprite on the raw cell origin shifts its visible corridor path.
+80. **Host controls stop at the cabinet input boundary.** Keyboard, gamepad, or
+    another host device may compose the existing active-low
+    `player_input_raw` word, but must not bypass the ROM-shaped debounce,
+    direction lookup, button-edge handling, or gameplay consumers.
 
 ## Investigation workflow
 

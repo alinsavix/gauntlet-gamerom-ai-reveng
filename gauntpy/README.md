@@ -38,6 +38,11 @@ genuine class sprite. Use `--scale` to override it.
 | **Alt / Enter** | Magic (also start / commit a character) |
 | **5** | insert a coin |
 | **P** | pause / resume |
+| **gamepad D-pad / left stick** | move |
+| **gamepad A / button 1** | fire |
+| **gamepad B / button 2** | Magic (also start / commit a character) |
+| **gamepad Back / button 7** | insert a coin |
+| **gamepad Start / button 8** | pause / resume |
 | **F1** | show / hide the host diagnostics panel |
 | **F2 / F3** | previous / next diagnostics page |
 | **F4** | save a complete modeled-state JSON dump |
@@ -48,6 +53,10 @@ genuine class sprite. Use `--scale` to override it.
 | **F9** | arm this maze's secret trick; perform it and exit |
 | **F10** | force the host player into a secret room on exit |
 | **[ / ]** | select the previous / next occupied MOB |
+
+The first connected gamepad is used, including devices connected after launch.
+Keyboard and gamepad controls may be mixed; both map to the same active-low
+cabinet input word before the original debounce and game routines consume it.
 
 Walls collide, the camera follows, the HUD tracks score/health, health drains,
 you pick up items and open doors, you fire, and walking into an **exit loads the

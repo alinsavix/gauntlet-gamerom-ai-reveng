@@ -2164,6 +2164,87 @@ class TestHostShellInput:
         finally:
             shell.close()
 
+    def test_gamepad_maps_stick_dpad_and_buttons_to_cabinet_word(self):
+        from gauntpy.render.host import HostShell
+        from gauntpy.subsystems.input import (
+            JOY_DOWN, JOY_FIRE_BIT, JOY_LEFT, JOY_MAGIC_BIT,
+        )
+
+        class Gamepad:
+            def get_numaxes(self):
+                return 2
+
+            def get_axis(self, axis):
+                return (-0.8, 0.1)[axis]
+
+            def get_numhats(self):
+                return 1
+
+            def get_hat(self, _hat):
+                return (0, -1)
+
+            def get_numbuttons(self):
+                return 2
+
+            def get_button(self, button):
+                return button in (0, 1)
+
+            def quit(self):
+                pass
+
+        shell = HostShell(assets=_FakeAssets())
+        try:
+            shell._gamepad = Gamepad()
+            state = GameState()
+
+            shell._sample_input(state)
+
+            expected = 0xFFFF & ~JOY_LEFT & ~JOY_DOWN & ~JOY_FIRE_BIT & ~JOY_MAGIC_BIT
+            assert state.player_input_raw[0] == expected
+        finally:
+            shell.close()
+
+    def test_gamepad_coin_and_pause_buttons_are_edges(self):
+        from gauntpy.render.host import (
+            GAMEPAD_COIN_BUTTON, GAMEPAD_PAUSE_BUTTON, HostShell,
+        )
+
+        class Gamepad:
+            def get_instance_id(self):
+                return 42
+
+            def get_numaxes(self):
+                return 0
+
+            def get_numhats(self):
+                return 0
+
+            def get_numbuttons(self):
+                return 8
+
+            def get_button(self, _button):
+                return 0
+
+            def quit(self):
+                pass
+
+        shell = HostShell(assets=_FakeAssets())
+        try:
+            pygame = shell._pygame
+            shell._gamepad = Gamepad()
+            state = GameState()
+            for button in (GAMEPAD_COIN_BUTTON, GAMEPAD_PAUSE_BUTTON):
+                pygame.event.post(pygame.event.Event(
+                    pygame.JOYBUTTONDOWN, instance_id=42, button=button,
+                ))
+
+            shell.wait_for_vblank(state)
+
+            assert state.coin_counters == 1
+            assert shell.paused
+        finally:
+            shell.close()
+
     def test_present_and_wait_for_vblank_round_trip(self):
         """Smoke test of the exact g2mainloop interface (wait_for_vblank
         then present), using the fake asset source so it needs no ROMs.

@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2519 passed, 1 skipped** (gauntpy) and
+present the suites are clean: **2526 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,21 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-168 · playable host had no gamepad input adapter
+
+The playable wrapper sampled only keyboard state even though pygame already
+exposes connected controllers. `HostShell` now opens the first gamepad at
+startup or hot-plug, maps its left stick and D-pad to the four verified
+active-low direction bits, and maps buttons 0/1 to Fire/Magic. Buttons 6/7 are
+edge-triggered coin/pause controls, matching the existing keyboard host actions.
+
+This remains entirely on the host side. Keyboard and controller state are
+composed into the same `player_input_raw` word, after which the existing
+`input_debounce`, direction table, character-select, shooting, and potion paths
+run unchanged. Regressions cover diagonal stick/D-pad composition, active-low
+button polarity, and controller coin/pause edges without requiring physical
+hardware.
 
 ### S-167 · thief deployment anchor and stunned potion behavior
 
