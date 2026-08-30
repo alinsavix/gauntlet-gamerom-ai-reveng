@@ -2259,6 +2259,28 @@ class TestHostShellInput:
         finally:
             shell.close()
 
+    def test_present_delivers_the_accepted_sound_stream_to_the_host_player(self):
+        from gauntpy.render.host import HostShell
+
+        class AudioPlayer:
+            def __init__(self):
+                self.commands = None
+                self.closed = False
+
+            def consume(self, commands):
+                self.commands = commands
+
+            def close(self):
+                self.closed = True
+
+        audio = AudioPlayer()
+        shell = HostShell(assets=_FakeAssets(), audio_player=audio)
+        state = GameState(sound_log=[0x0D, 0x13])
+        shell.present(state)
+        assert audio.commands is state.sound_log
+        shell.close()
+        assert audio.closed
+
     def test_p_key_toggles_host_pause(self):
         from gauntpy.render.host import HostShell
 

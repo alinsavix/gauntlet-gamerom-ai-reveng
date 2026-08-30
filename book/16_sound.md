@@ -269,6 +269,16 @@ the speech data is encoded and how the phrases were recovered, and what the
 own reverse engineering behind it. That material belongs to a future volume
 about the sound ROM, and this book will not pretend to have covered it.
 
+The Python reimplementation keeps the same boundary. Its game model produces
+the accepted command stream through the queue and latch rules described above;
+the playable pygame harness can turn those bytes into local static recordings.
+It does not recreate the 6502 or the three chips. It does preserve the
+command-level behavior that remains audible with recordings: speech waits in
+the sound board's priority queue, Death/forcefield/slow-motion beds stop only
+when their paired commands arrive, and the title and treasure-room fade
+commands target the music already playing. Playback never changes game RAM or
+feeds a completion signal back to the simulation.
+
 What this volume can say is that the interface between the two halves is
 small, honest, and well defended: one byte out, one byte back, a queue that
 prefers dropping a sound to missing a frame, and a watchdog that will reboot

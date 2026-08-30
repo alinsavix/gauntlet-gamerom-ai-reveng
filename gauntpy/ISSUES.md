@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2526 passed, 1 skipped** (gauntpy) and
+present the suites are clean: **2536 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,29 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-169 · playable host emitted sound commands but played no audio
+
+The game-side port already reproduced `sound_play` 0x4AD76, the busy-latch
+fallback ring, the eight-attempt `main_update_sound` drain, recovery holdoff,
+speech option, and every producer. Accepted bytes ended only in the persistent
+`sound_log` oracle, so the pygame harness was silent.
+
+The host now consumes newly accepted bytes and plays local command-named WAVs
+without changing `GameState` or emulating the sound CPU. Ordinary effects can
+overlap; Death, forcefield, and slow-motion recordings loop until the exact
+type-5 stop mappings 0x21→0x20, 0x2F→0x2E, and 0x39→0x37. Commands 0x3C and
+0x41 fade the theme and active treasure music. Speech follows the verified
+TMS5220 admission contract: one current phrase, seven pending entries, lower
+priority rejection, equal-priority append, and higher-priority pending-queue
+flush without interrupting the current phrase. Global filter 0x01/0x02 and
+mixer presets 0xD6-0xD9 affect host channels while the accepted command log
+remains untouched. Loaded state dumps start at the end of their historical log
+rather than replaying old audio.
+
+The WAV library remains local and ignored as ROM-derived data. The runner uses
+`gauntpy/sounds` by default, accepts `GAUNTPY_SOUND_DIR`, and reports when it
+must continue without recordings.
 
 ### S-168 · playable host had no gamepad input adapter
 

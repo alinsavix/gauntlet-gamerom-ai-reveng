@@ -7,8 +7,9 @@ reverse-engineering documentation in [`../doc`](../doc/INDEX.md) and
 Not an emulator. The 68010 game code is reimplemented at the logic level while
 keeping the original's structure: the same main-loop call order, the same object
 model, the same tables and thresholds. Graphics data is read from the original
-ROMs through [`gex`](../python-gex/README.md); sound-board commands are captured
-in a deterministic host log.
+ROMs through [`gex`](../python-gex/README.md). Sound-board commands are captured
+in a deterministic host log, and the pygame harness plays command-named static
+WAVs without emulating the separate sound CPU.
 
 **Status.** The simulation core, the main loop, and all 28 per-frame subsystem
 calls are implemented and tested. ROM data tables are transcribed from the ROMs
@@ -30,6 +31,18 @@ cd gauntpy && uv run --all-extras gauntpy-play
 
 A window opens at **4x scale** on a real Gauntlet II maze with your hero's
 genuine class sprite. Use `--scale` to override it.
+
+Put the locally generated recordings in `sounds/`, named
+`0xNN_description.wav` by sound-board command byte. The directory is ignored
+because the recordings are ROM-derived and are not distributed by this
+repository. `GAUNTPY_SOUND_DIR` may point at another library. If no library is
+present, the runner prints a warning and continues silently.
+
+The host plays effects concurrently, serializes speech through the sound
+board's priority queue rules, loops Death/forcefield/slow-motion beds until
+their matching stop commands, and applies the theme and treasure-music fades.
+This consumes accepted `sound_log` bytes only; it does not alter the game's
+sound ring, timing, or modeled state.
 
 | Key | Action |
 |-----|--------|

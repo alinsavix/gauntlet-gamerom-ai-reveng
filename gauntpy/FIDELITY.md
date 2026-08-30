@@ -374,6 +374,13 @@ evidence remains in `../doc/`, generated contracts, and the book.
     another host device may compose the existing active-low
     `player_input_raw` word, but must not bypass the ROM-shaped debounce,
     direction lookup, button-edge handling, or gameplay consumers.
+81. **Host audio starts after the sound latch.** The simulation owns
+    `sound_play`, its busy/holdoff ring, and the ordered accepted-command stream
+    in `sound_log`. A playback harness may consume that stream but must not
+    replace producers or feed completion back into game state. Static playback
+    still interprets sound-board control bytes: speech is serial and
+    priority-queued; commands 0x21/0x2F/0x39 stop 0x20/0x2E/0x37; 0x3C fades
+    0x3B; and 0x41 fades treasure music 0x3D-0x40.
 
 ## Investigation workflow
 

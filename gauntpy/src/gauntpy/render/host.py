@@ -67,6 +67,7 @@ from .debug_controls import (
     debug_force_secret_room,
     debug_skip_level,
 )
+from .audio import StaticSoundPlayer
 from .state_dump import dump_game_state
 
 __all__ = [
@@ -149,6 +150,8 @@ class HostShell:
         title: str = "gauntpy",
         keymap: dict[str, int] | None = None,
         diagnostics: bool = False,
+        sound_dir=None,
+        audio_player=None,
     ) -> None:
         try:
             import pygame
@@ -176,6 +179,15 @@ class HostShell:
 
         pygame.init()
         pygame.joystick.init()
+        if sound_dir is not None and audio_player is not None:
+            raise ValueError("pass sound_dir or audio_player, not both")
+        if sound_dir is not None:
+            if pygame.mixer.get_init() is None:
+                pygame.mixer.init()
+            pygame.mixer.set_num_channels(32)
+            pygame.mixer.set_reserved(1)
+            audio_player = StaticSoundPlayer(pygame.mixer, sound_dir)
+        self._audio_player = audio_player
         self.window = self._set_window_mode()
         pygame.display.set_caption(title)
         self.clock = pygame.time.Clock()
@@ -397,6 +409,8 @@ class HostShell:
 
     def present(self, state: GameState) -> None:
         """Render the current state and flip it to the window."""
+        if self._audio_player is not None:
+            self._audio_player.consume(state.sound_log)
         render_started = perf_counter()
         if self._assets is None:
             from ..assets import AssetStore
@@ -443,6 +457,11 @@ class HostShell:
             self.window.blit(panel_surface, (LOGICAL_WIDTH * self.scale, 0))
         self._pygame.display.flip()
 
+    def skip_existing_audio(self, state: GameState) -> None:
+        """Do not replay the historical sound log in a loaded state dump."""
+        if self._audio_player is not None:
+            self._audio_player.skip_existing(state.sound_log)
+
     # -- input ---------------------------------------------------------------
 
     def _sample_input(self, state: GameState) -> None:
@@ -486,6 +505,8 @@ class HostShell:
     # -- lifecycle -------------------------------------------------------------
 
     def close(self) -> None:
+        if self._audio_player is not None:
+            self._audio_player.close()
         if self._gamepad is not None:
             self._gamepad.quit()
         self._pygame.quit()

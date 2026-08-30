@@ -1981,6 +1981,34 @@ above: **0x12** ("Doors Open") is pushed at 0x47FF4 after a 0x400-slot scan
 for vertical-door objects finds at least one, and **0x2A** ("Treasure Chest
 Opens") at 0x52644.
 
+### 11.6 Static host playback boundary
+
+`gauntpy` preserves the complete game-side transaction through the accepted
+command byte. `sound_play` and `main_update_sound` append each byte accepted by
+the modeled latch to `GameState.sound_log`; the pygame harness consumes only
+new entries from that stream. It does not rewrite a producer, bypass the
+main-CPU ring, or report playback completion into game RAM.
+
+The host does not emulate the 6502 or synthesize YM2151, POKEY, or TMS5220
+output. It maps accepted bytes to local `0xNN_*.wav` recordings while preserving
+the sound-ROM command semantics needed at that boundary:
+
+- Type-5 commands 0x21, 0x2F, and 0x39 stop active recordings for target
+  type-7 commands 0x20, 0x2E, and 0x37.
+- Type-9 command 0x3C fades target command 0x3B. Type-10 command 0x41 fades
+  the status-2 treasure-music family 0x3D-0x40.
+- Type-11 speech uses one current phrase and seven usable pending entries. A
+  full ring rejects every arrival; otherwise lower priority is rejected, equal
+  priority appends, and higher priority flushes pending phrases without
+  interrupting the current phrase.
+- Filter commands 0x01/0x02 and mixer commands 0xD6-0xD9 change host playback
+  levels but never alter the accepted game-side stream.
+
+This is a representation boundary, not evidence for sound-ROM synthesis or
+waveform timing. The command types, targets, priorities, and queue behavior are
+verified in the companion sound-ROM project's `docs/04_subsystems.md`,
+`docs/08_command_reference.md`, and generated command/control catalogs.
+
 ---
 
 ## 12. Exit System

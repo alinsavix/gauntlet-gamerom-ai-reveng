@@ -91,6 +91,13 @@ def _ensure_rom_dir() -> None:
         os.environ["GEX_ROM_DIR"] = str(repo_roms)
 
 
+def _sound_dir() -> Path:
+    configured = os.environ.get("GAUNTPY_SOUND_DIR")
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parents[2] / "sounds"
+
+
 def _seed_value(value: str) -> int | str:
     """Parse an explicit 16-bit seed or the host-random sentinel."""
     if value.lower() == "random":
@@ -266,12 +273,22 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         raise SystemExit(f"could not import the host shell: {exc}")
 
     try:
-        host = HostShell(scale=scale, title="gauntpy")
+        sound_dir = _sound_dir()
+        if not sound_dir.is_dir():
+            print(
+                f"gauntpy sound library not found at {sound_dir}; "
+                "running without audio (set GAUNTPY_SOUND_DIR to override)",
+                file=sys.stderr,
+            )
+            sound_dir = None
+        host = HostShell(scale=scale, title="gauntpy", sound_dir=sound_dir)
     except PygameUnavailable as exc:
         raise SystemExit(
             f"{exc}\n\nRun it with the display extra, e.g.:\n"
             "    uv run --all-extras gauntpy-play"
         )
+    if load_state_path is not None:
+        host.skip_existing_audio(state)
 
     if suppress_first_encounter_messages is not None:
         state.suppress_first_encounter_messages = suppress_first_encounter_messages
