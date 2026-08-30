@@ -300,6 +300,10 @@ them mostly comes out of a table. The screen flashes in the color of the player
 position that used it: the game swaps one live playfield palette word for a
 single video field, then restores the level's floor color on the next pass.
 
+Being stunned does not stop the drink. Potion input is handled earlier in the
+frame than player movement and has no stun check, so a frozen hero may spend a
+potion and clear the room while their movement timer continues unchanged.
+
 ROM holds a **potion-effect matrix** of one 16-byte record per monster or
 generator object type, 28 types in all. Within a record, the entry is selected
 by who is drinking (the four characters) and by how the magic was triggered,

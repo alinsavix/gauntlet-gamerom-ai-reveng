@@ -464,7 +464,7 @@ def _thief_deploy(state: GameState) -> None:
     state.mobs.create(
         slot,
         _spawn_picture(state),
-        encode_hpos(col * 16, palette=palette),
+        encode_hpos(col * 16 - 4, palette=palette),
         encode_vpos_at_y(row * 16, width=3, height=3),
         MazeObjIds.PLAYERSTART,
     )

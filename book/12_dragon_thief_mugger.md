@@ -233,6 +233,11 @@ when scheduling began, pauses for sixty frames, and then has a complete set of
 footprints leading from that old cell toward the player's newer position.
 Its arrival is a transporter-style poof: the game creates the visitor and a
 separate 3x3 effect MOB at the same location before starting that pause.
+The visitor's sprite origin is four pixels left of the route cell's raw
+sixteen-pixel boundary. That is the same anchor used after a transporter and the
+one assumed by its later body-center handoff. In a corridor two cells wide, the
+thief therefore belongs to one lane or the other rather than running down an
+invented centerline between them.
 
 **Getting to you.** Once deployed, the thief has a small set of modes: entering,
 pursuing, dodging, and escaping. Pursuit does not use a general path finder.

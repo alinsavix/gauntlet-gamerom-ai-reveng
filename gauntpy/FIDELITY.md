@@ -366,6 +366,10 @@ evidence remains in `../doc/`, generated contracts, and the book.
     deployment and the return-to-start escape arm call `tport_cycle_start` before
     continuing or clearing the live visitor. The actor and the fixed effect MOB
     are separate game-side records.
+79. **Thief cell anchors are four pixels left.** Deployment computes H as
+    `slot*0x800 - 0x200 + palette`, the same `cell_x*16 - 4` anchor used after
+    thief transport. Preserve that offset through movement and cell handoff;
+    centering the sprite on the raw cell origin shifts its visible corridor path.
 
 ## Investigation workflow
 

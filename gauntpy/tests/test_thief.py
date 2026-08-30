@@ -246,6 +246,7 @@ class TestDeployAndSteal:
         assert state.thief_enter_time == 0x3C
         assert state.mobs.picture[pack_slot(6, 6)] == 0x0DEA
         assert state.mobs.obj_type(pack_slot(6, 6)) == int(MazeObjIds.PLAYERSTART)
+        assert hpos_x(state.mobs.hpos[pack_slot(6, 6)]) == 6 * 16 - 4
         assert any(state.mobs.picture[slot] for slot in range(0x0D, 0x11))
 
     def test_steal_takes_key_first(self):
@@ -536,7 +537,7 @@ def _thief_at(state: GameState, slot: int, direction: int = 8) -> None:
     state.thief_next_pos = slot
     state.thief_direction = direction
     state.thief_enter_time = -1
-    state.mobs.hpos[slot] = encode_hpos(col * 16)
+    state.mobs.hpos[slot] = encode_hpos(col * 16 - 4)
     state.mobs.vpos[slot] = encode_vpos_at_y(row * 16)
     state.mobs.picture[slot] = 1
 
@@ -933,14 +934,14 @@ class TestShotDodge:
         diagonal = GameState()
         _thief_at(diagonal, pack_slot(10, 10), direction=5)
         diagonal.mobs.picture[1] = 1
-        diagonal.mobs.hpos[1] = encode_hpos(9 * 16)
+        diagonal.mobs.hpos[1] = encode_hpos(9 * 16 - 4)
         diagonal.mobs.vpos[1] = encode_vpos_at_y(11 * 16)
         diagonal.shot_direction[0] = 1
         assert thief_find_aligned_shooter(diagonal) == 0
 
         wrapped = self._aligned_state()
-        _thief_at(wrapped, pack_slot(10, 0), direction=6)
-        wrapped.mobs.hpos[1] = encode_hpos(31 * 16)
+        _thief_at(wrapped, pack_slot(10, 1), direction=6)
+        wrapped.mobs.hpos[1] = encode_hpos(31 * 16 - 4)
         assert thief_find_aligned_shooter(wrapped) == -1
         wrapped.wrap_h = True
         assert thief_find_aligned_shooter(wrapped) == 0
@@ -1021,7 +1022,7 @@ class TestMoveEngineCollisionAndAnimation:
 
         destination = pack_slot(11, 11)
         assert state.thief_mob_slot == destination
-        assert hpos_x(state.mobs.hpos[destination]) == 11 * 16
+        assert hpos_x(state.mobs.hpos[destination]) == 11 * 16 - 4
         assert vpos_y(state.mobs.vpos[destination]) == 11 * 16
 
     def test_engine_blocks_solid_tile_without_crossing_the_cell(self):

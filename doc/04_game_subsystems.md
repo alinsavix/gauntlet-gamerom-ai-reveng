@@ -799,6 +799,12 @@ ordinary floor color from 0x904020, so the flash is a game-side, one-field
 palette write rather than a renderer effect. Shot-triggered potions perform the
 same write and store `player + 4`.
 
+`main_handle_potions` runs before `main_move_players` in the gameplay band and
+does not read `player_stundelay`. Its gates at 0x47000-0x4707A are only active
+MOB, Magic input, maze number below 115, and a nonzero potion byte. A stunned
+player may therefore drink a potion; movement remains suppressed later in the
+frame and the stun timer is not cleared.
+
 The handler then calls `dragon_any_segment_near_screen` (0x54AF8), which applies
 `tile_near_screen_test` to all four packed segment cells. An on-screen active
 dragon gains state bit 1 and remains frozen in `main_handle_dragon`. A second
@@ -1502,6 +1508,13 @@ shared 3x3 transporter effect in a fixed effect channel while the visitor begins
 its 0x3C-frame entrance pause. The successful escape-at-start arm similarly
 calls `tport_cycle_start` at 0x4EC20 before `moblist_remove_and_clear`, so both
 arrival and departure use the same poof animation.
+
+The deployment H argument is not the raw cell origin. At 0x4DF54-0x4DF64 the
+ROM computes `slot * 0x800 - 0x200 + palette`, whose 16-bit position field is
+`cell_x * 16 - 4`. This matches the thief transporter destination anchor. The
+common movement handoff's +12-pixel body bias assumes that correction; omitting
+it shifts the visitor four pixels right and makes a two-cell corridor look like
+one centered path instead of two cell-owned lanes.
 
 **Escape taunt. Confidence: Verified** at 0x4E960–0x4E992. When the escape
 animation counter passes 0x3B, `getrandom(2)` selects one of two *pitch*

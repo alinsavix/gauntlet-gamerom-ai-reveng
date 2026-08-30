@@ -63,6 +63,22 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-167 · thief deployment anchor and stunned potion behavior
+
+Thief/mugger deployment placed the 3x3 actor at `cell_x * 16`, four pixels
+right of the ROM. The `mob_create` argument at 0x4DF54-0x4DF64 is
+`slot * 0x800 - 0x200 + palette`, which reduces to `cell_x * 16 - 4` in the
+modeled H word. The transport destination path already used that correction.
+Initial deployment now uses the same anchor, so the visitor follows one side of
+its route cell through a two-cell corridor instead of appearing centered between
+the two lanes.
+
+Potion use while stunned was confirmed as original behavior. The main loop calls
+`main_handle_potions` before `main_move_players`; ROM 0x46FEA checks only the
+active MOB, Magic edge, maze gate, and potion count. It never reads
+`player_stundelay`. A stunned player therefore cannot move but may drink a
+potion, and the stun timer remains intact.
+
 ### S-166 · phantom player records, inventory caps, and thief boundary/effects
 
 Frames 18687 and 43851 contained Python-only dynamic MOB remnants beside the
