@@ -231,6 +231,8 @@ Throughout that wait, every cell the already-selected victim leaves extends the
 trail. When the timer expires, the visitor appears where that player had been
 when scheduling began, pauses for sixty frames, and then has a complete set of
 footprints leading from that old cell toward the player's newer position.
+Its arrival is a transporter-style poof: the game creates the visitor and a
+separate 3x3 effect MOB at the same location before starting that pause.
 
 **Getting to you.** Once deployed, the thief has a small set of modes: entering,
 pursuing, dodging, and escaping. Pursuit does not use a general path finder.
@@ -280,6 +282,11 @@ again. A captured mugger aimed down between two walls at X=241 therefore centers
 to X=240 and continues; omitting this special arm leaves it staring at empty
 floor forever even though the shared probe itself is correct.
 
+That response also works at the vertical seam. The generic down probe does not
+reject row 31 by slot number alone; it tests the proposed signed V word. A
+captured thief at `(508,492)` can therefore nudge down to the final world pixels,
+wrap, and continue right instead of staring into the wall above its route.
+
 Monsters are a delay, not a permanent roadblock. On first contact with any
 ordinary monster or generator, the thief latches its facing and begins a
 sixteen-frame fight animation. Once that counter has passed fifteen, the next
@@ -310,6 +317,7 @@ and it comes back as a pickup on the next level's floor. The departing actor is
 removed at its recorded starting cell; the next level creates a new pickup by
 walking a pseudorandom sequence of empty maze cells. A mugger returns food, and
 a stolen multiplier returns as a bag whose encoded value restores its score.
+The removal is preceded by the same transporter-style poof used on arrival.
 
 Transporters are part of that retracing graph. If the target player has taught
 the route by teleporting, the thief dissolves into the same transition machinery,

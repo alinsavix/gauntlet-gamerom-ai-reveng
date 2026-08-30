@@ -246,6 +246,7 @@ class TestDeployAndSteal:
         assert state.thief_enter_time == 0x3C
         assert state.mobs.picture[pack_slot(6, 6)] == 0x0DEA
         assert state.mobs.obj_type(pack_slot(6, 6)) == int(MazeObjIds.PLAYERSTART)
+        assert any(state.mobs.picture[slot] for slot in range(0x0D, 0x11))
 
     def test_steal_takes_key_first(self):
         state = GameState()
@@ -887,6 +888,7 @@ class TestDeployAndEscapeGraph:
         assert state.thief_current_pos == 0
         assert state.thief_mob_slot == 0
         assert state.thief_item_nextlevel == int(MazeObjIds.KEY)
+        assert any(state.mobs.picture[slot] for slot in range(0x0D, 0x11))
 
     def test_post_theft_pause_uses_escape_animation_then_pitch_pair(self):
         state = GameState()
@@ -1092,6 +1094,32 @@ class TestMoveEngineCollisionAndAnimation:
         assert result == 1
         assert hpos_x(state.mobs.hpos[state.thief_mob_slot]) == 240
         assert vpos_y(state.mobs.vpos[state.thief_mob_slot]) == 127
+
+    def test_captured_bottom_seam_thief_uses_signed_probe_boundary(self):
+        state = GameState(wrap_h=True, wrap_v=True)
+        start = pack_slot(31, 0)
+        _thief_at(state, start, direction=2)
+        state.thief_mode = THIEF_PURSUE
+        state.thief_speed = _SPEED_THIEF
+        state.thief_next_pos = pack_slot(31, 1)
+        state.mobs.hpos[start] = encode_hpos(508)
+        state.mobs.vpos[start] = encode_vpos_at_y(492, 3, 3)
+        for slot in (pack_slot(30, 1), pack_slot(30, 2)):
+            state.mobs.create(
+                slot, 0x8000,
+                encode_hpos((slot & 0x1F) * 16),
+                encode_vpos_at_y((slot >> 5) * 16),
+                MazeObjIds.WALL_REGULAR,
+            )
+
+        result = thief_move_engine(
+            state, _THIEF_DIRECTION_STEP_SIZE[2],
+            state.thief_speed, state.thief_speed,
+        )
+
+        assert result == 1
+        assert hpos_x(state.mobs.hpos[start]) == 508
+        assert vpos_y(state.mobs.vpos[start]) == 493
 
     def test_collision_removes_eligible_pickup_before_retrying_the_move(self):
         state = GameState()

@@ -142,12 +142,11 @@ class TestMobProbeUp:
         )
         assert result == wall_slot
 
-    def test_top_row_returns_vertical_boundary_sentinel(self):
-        """At row 0 the probe returns 0x0400, not -1 and not a slot (§4.2)."""
+    def test_top_row_uses_the_live_v_boundary(self):
         state = GameState()
-        result = mob_probe_up(state, (0 << 5) | 10)  # row 0
+        result = mob_probe_up(state, (0 << 5) | 10, vpos=0xF812)
         assert result == _VERTICAL_BOUNDARY
-        assert result != -1
+        assert mob_probe_up(state, (0 << 5) | 10, vpos=0xF080) == -1
 
     def test_left_flank_wall_is_detected(self):
         """A wall at (row-1, col-1) blocks the probe (three-candidate check)."""
@@ -183,10 +182,11 @@ class TestMobProbeDown:
             state, (5 << 5) | 5, hpos=76 << 7, vpos=native_v(82) << 7,
         ) == wall_slot
 
-    def test_bottom_row_returns_vertical_boundary_sentinel(self):
+    def test_bottom_row_uses_the_live_v_sign(self):
         state = GameState()
-        result = mob_probe_down(state, (31 << 5) | 10)   # row 31 = last row
+        result = mob_probe_down(state, (31 << 5) | 10, vpos=0xFF92)
         assert result == _VERTICAL_BOUNDARY
+        assert mob_probe_down(state, (31 << 5) | 10, vpos=0x0012) == -1
 
     def test_flank_walls_detected(self):
         left_flank = (6 << 5) | 4
@@ -1378,16 +1378,15 @@ class TestPlayerScreenWindow:
 
 class TestVerticalBoundarySentinel:
     def test_probe_up_at_top_row_returns_0x0400(self):
-        """mob_probe_up at row 0 returns the boundary sentinel 0x0400 (§4.2)."""
         state = GameState()
-        result = mob_probe_up(state, (0 << 5) | 15)
+        result = mob_probe_up(state, (0 << 5) | 15, vpos=0xF812)
         assert result == _VERTICAL_BOUNDARY
         assert result != -1       # NOT the "clear" sentinel
         assert result >= 0        # not negative
 
     def test_probe_down_at_bottom_row_returns_0x0400(self):
         state = GameState()
-        result = mob_probe_down(state, (31 << 5) | 15)
+        result = mob_probe_down(state, (31 << 5) | 15, vpos=0xFF92)
         assert result == _VERTICAL_BOUNDARY
 
 

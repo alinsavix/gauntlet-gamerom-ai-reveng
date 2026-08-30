@@ -745,6 +745,13 @@ Large dispatch by tile type (from `mob_link >> 10`). Handles:
 - Acid puddle (0x36 — applies acid slow effect)
 - Slow-motion (0x37)
 
+Keys and ordinary potions share a 12-item capacity. The key arm at
+0x51458-0x514CE and good-potion arm at 0x516E4-0x5176C add only while
+`player_keysnum + player_potionsnum <= 11`; otherwise they show first-encounter
+record 25. A full player leaves the pickup unhandled while an active player can
+still accept that item. The shot-resistant variants retain their distinct final
+discard arms, but no full player receives another inventory byte.
+
 Shot resistance does not make an item permanent after collection: both potion
 types and both food types are removed when picked up. The special score bag
 uses `special_bonus_score` (0x904B56), displays popup index
@@ -1489,6 +1496,13 @@ States (in `ram.thief_mode`, `0x904BA0`):
 
 When overlapping target player: steals an item or health (calls `thief_steal_from_player`, 0x4E1FE). Exit when thief reaches the maze edge calls `thief_exit` (0x4E122).
 
+Deployment is visible state, not an instantaneous sprite write. After
+`mob_create`, 0x4DF7E calls `tport_cycle_start(start, victim)`, placing the
+shared 3x3 transporter effect in a fixed effect channel while the visitor begins
+its 0x3C-frame entrance pause. The successful escape-at-start arm similarly
+calls `tport_cycle_start` at 0x4EC20 before `moblist_remove_and_clear`, so both
+arrival and departure use the same poof animation.
+
 **Escape taunt. Confidence: Verified** at 0x4E960–0x4E992. When the escape
 animation counter passes 0x3B, `getrandom(2)` selects one of two *pitch*
 variants, not a player. Index 0 plays sound 0x62 plus speech 0x63 and index 1
@@ -1602,6 +1616,13 @@ response. Frame 3876 on maze 15 captures the down arm at `(241,127)`: right
 flank `0x130` blocks the full three-pixel mugger step, so 0x4F278-0x4F2C2 moves
 left to X=240. Repeating the requested direction then clears the one-cell lane.
 Stopping after the shared probe leaves the actor permanently compact and idle.
+
+The generic vertical probes keep their ROM boundary tests. `mob_probe_down`
+0x40732 reads the proposed live V word for a row-31 actor and returns clear while
+it is nonnegative, only returning `0x400` after the sign changes.
+`mob_probe_up` 0x406B6 similarly compares the live word with `0xF080` in the
+top two slot rows. These tests allow a flank response at the vertical seam; an
+unconditional row check traps the frame-29864 thief at `(508,492)`.
 
 This ordering is observable in maze 15. With a thief at native screen
 coordinate `(12,304)` in slot `0x261`, moving east toward the wall marker at
@@ -1789,6 +1810,11 @@ Secret-room availability is paced by a pair of level counters:
   `secret_code_build` when entry completes. `secret_getname` initializes the
   byte repeat delay to 0xA0, so the first held direction waits 160 frames; later
   repeats accelerate to 8-13 frames exactly like ordinary initials entry.
+  Fire or Magic commits the current character. Each non-backspace commit advances
+  the cursor and reloads the hidden timer to 0x0385; reaching byte 29 completes
+  immediately, while expiry below five fills the remaining bytes with spaces.
+  The shipped screen draws no countdown, completion instruction, or control
+  legend.
 - After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-symbol `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. Atari can therefore verify positions 0/2/5 from the submitted name and decode the other three positions without asking the player for those state fields. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
 - Before that result is displayed, 0x5528A-0x552DA writes 29 opaque blank
   small glyphs across the winner's editor row. The result page replaces the

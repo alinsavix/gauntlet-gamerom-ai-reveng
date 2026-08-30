@@ -354,6 +354,18 @@ evidence remains in `../doc/`, generated contracts, and the book.
     the tagged arm positions the sparkle from the live projectile and uses the
     normalized wall cell only as its depth key. Masking it into a MOB identity
     copies unrelated fixed-channel coordinates.
+76. **Dynamic picture-only MOBs are invalid state.** For slots 32-1023, a nonzero
+    picture with zero H/V and no object type/state cannot come from a ROM MOB
+    writer. Remove that modeled-RAM remnant before collision; never hide its
+    sprite or ignore it only in rendering.
+77. **Generic vertical boundaries inspect the proposed V word.** `mob_probe_up`
+    and `mob_probe_down` do not reject the top/bottom slot rows unconditionally.
+    Their signed/unsigned V tests permit the last pixels and seam response before
+    returning `0x400`; actor-specific movers must pass the proposed live V word.
+78. **Thief arrivals and successful escapes poof.** Both `main_start_thief`
+    deployment and the return-to-start escape arm call `tport_cycle_start` before
+    continuing or clearing the live visitor. The actor and the fixed effect MOB
+    are separate game-side records.
 
 ## Investigation workflow
 

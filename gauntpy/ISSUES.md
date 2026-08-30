@@ -63,6 +63,42 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-166 · phantom player records, inventory caps, and thief boundary/effects
+
+Frames 18687 and 43851 contained Python-only dynamic MOB remnants beside the
+Elf. The former slot `0x0B1` held hero picture `0x1612` with every other word
+zero; the latter slot `0x3E0` held the same picture and depth links but zero H/V,
+object type, and state. Both violate `move_mob_slot` 0x5DE0A's five-word
+transaction and were treated as occupied collision cells, producing the
+invisible right block and the corrupt left obstacle. `main_move_players` now
+removes this impossible modeled-MOB state before collision. Replaying both dumps
+makes the requested move proceed without a renderer exception.
+
+Frame 29864 exposed a separate thief seam bug. The thief at slot `0x3E0`,
+`(508,492)`, needed the right-move flank response to nudge downward around wall
+`0x3C1`. Python's generic `mob_probe_down` returned the boundary sentinel for
+every row-31 record. ROM 0x40732 instead reads the proposed live V word and
+returns clear while it remains nonnegative. The paired top probe likewise uses
+its literal V comparison. Restoring both tests lets the thief reach Y=496, wrap,
+and continue right into slot `0x3E1`.
+
+ROM 0x4DF7E also calls `tport_cycle_start` when a thief/mugger deploys, and the
+successful escape arm at 0x4EC10 does the same before clearing the visitor.
+Those two missing game-side effect writes now produce the intended appearance
+and disappearance poofs. Ordinary key and potion collection now enforces the
+ROM's combined 12-item capacity at 0x51458/0x516E4, so the overfull frame-27506
+player cannot increase either counter.
+
+The F1 LEVEL labels were clarified rather than changing gameplay:
+`MAZE SOURCE: CABINET ROTATION` says that levels above five select layouts from
+the EEPROM-persisted cabinet rotation, while `TREASURE >30` describes only the
+post-level-30 treasure-room prank voice gate. Thus level 111 / maze 29 correctly
+shows `OFF (NOT TREASURE)`. The contest name editor also matches the ROM: its
+0x0A8D-frame timeout is deliberately invisible, Fire or Magic commits each
+character, reaching 29 characters finishes immediately, and timeout fills the
+rest with spaces. The original screen supplies no explicit control legend or
+countdown.
+
 ### S-165 · tagged wall impacts, incremental playfield cache, and diagnostics clarity
 
 The frame-53450 level-112/maze-32 capture places the Elf at `(92,496)`. A

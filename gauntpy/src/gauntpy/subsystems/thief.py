@@ -478,6 +478,9 @@ def _thief_deploy(state: GameState) -> None:
     state.thief_tport_active = 0
     path_grid_set_high_direction_if_empty(state, slot, 8)
     thief_compute_path(state)
+    from .shots import tport_cycle_start
+
+    tport_cycle_start(state, slot, state.thief_victim)
     _sound_play(state, 0x2D if state.thief_mode & THIEF_IS_MUGGER else 0x29)
 
 
@@ -1142,6 +1145,9 @@ def _finish_escape_at_start(state: GameState) -> bool:
     else:
         state.thief_item_nextlevel = state.thief_item_carried
     if slot:
+        from .shots import tport_cycle_start
+
+        tport_cycle_start(state, slot, state.thief_victim)
         state.mobs.unlink_and_clear(slot)
     state.thief_current_pos = 0
     state.thief_mob_slot = 0

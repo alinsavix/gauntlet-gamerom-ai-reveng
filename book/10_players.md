@@ -405,6 +405,12 @@ the **score multiplier**, and the power-up bits below. The info-panel column
 renders it directly, with rows of key and potion icons and the multiplier
 whenever it exceeds one, so your pockets stay public.
 
+Keys and potions share one twelve-item pocket. Once their combined count reaches
+twelve, walking over another ordinary key or potion shows the full-inventory
+lesson and leaves the item for somebody who can carry it. Host troubleshooting
+controls can deliberately construct larger byte counts, but those overfull
+values do not waive the arcade pickup gate.
+
 ![One player's info-panel column with every field populated](img/ch10_hud_column.png)
 
 *One player position's column with every field populated at once: class name

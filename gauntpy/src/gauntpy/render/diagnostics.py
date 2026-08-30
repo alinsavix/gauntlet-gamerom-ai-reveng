@@ -324,7 +324,7 @@ def _level_gate_rows(state: GameState) -> tuple[tuple[str, str], ...]:
 
     random_pickups = maze < 115
     return (
-        ("GATE MAP", "FIXED 0-4" if level <= 5 else "EEPROM ROTATION"),
+        ("MAZE SOURCE", "FIXED OPENING" if level <= 5 else "CABINET ROTATION"),
         ("GATE >=3", "SPECIAL PICKUP ON" if level >= 3 and random_pickups else "OFF"),
         (
             "GATE >=6",
@@ -341,9 +341,9 @@ def _level_gate_rows(state: GameState) -> tuple[tuple[str, str], ...]:
             "DRAGON + TRICK 09 ON" if level >= 12 else "OFF",
         ),
         (
-            "GATE >30",
-            "FAKE VOICE ELIGIBLE"
-            if level > 30 and 104 <= maze <= 114 else "OFF",
+            "TREASURE >30",
+            "PRANK VOICE ELIGIBLE"
+            if level > 30 and 104 <= maze <= 114 else "OFF (NOT TREASURE)",
         ),
         (
             "GENERATOR CAP",

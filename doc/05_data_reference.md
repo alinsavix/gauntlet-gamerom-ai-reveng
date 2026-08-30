@@ -51,8 +51,8 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x90404B | 8 B | `sound_queue` | Array of 1-byte sound IDs in the queue |
 | 0x904053 | 1 B | `sound_queue_head` | Head of sound queue |
 | 0x904054 | 1 B | `sound_queue_tail` | Tail of sound queue |
-| 0x904055 | 4 B | `player_potionsnum` | Array of 1-byte counters: potions per player |
-| 0x90405A | 4 B | `player_keysnum` | Array of 1-byte counters: keys per player |
+| 0x904055 | 4 B | `player_potionsnum` | Array of 1-byte counters: potions per player. Ordinary collection shares a 12-item cap with keys. |
+| 0x90405A | 4 B | `player_keysnum` | Array of 1-byte counters: keys per player. Ordinary collection shares a 12-item cap with potions. |
 | 0x90405F | 1 B | `monster_spawn_probability_bonus` / secret saved keys | Signed global modifier added to `monster_spawn_probability_table` before each generator's random spawn gate. `update_monster_spawn_bonus_from_score_per_coin` (0x48B58) adds `(sum(active scores) >> 14) / sum(active players' inserted coins)`; coin insertion decrements it while positive. Secret-room entry first overwrites it with the winner's keys, then immediately runs that bonus update; payout adds the resulting byte back as keys. |
 
 ### 1.2 MOB Animation Array
@@ -222,7 +222,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x904A4E | 2 B | `global_delay_timer` | Shared display/input holdoff timer. Level setup loads 150/180/600 frames and `main_start_game` waits for zero before entering the maze; secret-name entry and related UI code reuse it for cursor/input pacing. While nonzero it also suppresses treasure countdown processing. |
+| 0x904A4E | 2 B | `global_delay_timer` | Shared display/input holdoff timer. Level setup loads 150/180/600 frames and `main_start_game` waits for zero before entering the maze; secret name entry loads 0x0A8D, reloads 0x0385 after a committed character, and completes below five without displaying this countdown. While nonzero it also suppresses treasure countdown processing. |
 | 0x904A50 | 1 B × 4 | `player_treascount` | Count of treasures picked up by player |
 | 0x904A54 | 2 B × 4 | `player_stundelay` | Timer for player being stunned |
 | 0x904A5C | 2 B | `death_hits` | Global hit count shared by all players and Death MOBs. Every player shot that hits Death, ordinary or supershot, increments it; `death_potion_score` uses `death_hits & 7` to select the score and popup variant. It is distinct from the four per-player Death-damage accumulators at 0x904B3A and does not control Death's >200 dismissal threshold. |

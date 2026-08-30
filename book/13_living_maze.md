@@ -427,7 +427,15 @@ unresponsive for about 2.7 seconds; once it starts moving, the accumulated
 velocity shortens repeats to eight through thirteen frames. This is the shipped
 input routine, not host keyboard lag.
 
-When you commit the name, a small routine replaces it, in the same buffer,
+There is no visible clock or instruction for finishing. Fire or Magic commits
+the current character and advances to the next of the twenty-nine positions.
+Filling the last position finishes immediately; otherwise an invisible
+0x0A8D-frame timer eventually fills the rest with spaces. Each committed
+character reloads that hidden timer to 0x0385, so entry can continue well beyond
+the initial timeout. The austere screen is the cabinet's own interface, not a
+missing gauntpy overlay.
+
+When entry completes, a small routine replaces the name, in the same buffer,
 with a six-character code in the form `XXX-XXX`, displayed under REMEMBER YOUR
 SECRET CODE. The screen goes on to explain why you should remember it: "SEND
 CONTEST ENTRY FORM TO ATARI GAMES CORP." and "CONTEST ENDS 12/19/86." In 1986

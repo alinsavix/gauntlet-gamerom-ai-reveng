@@ -181,12 +181,12 @@ def test_level_page_lists_active_level_gates():
         capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
     ))
 
-    assert rows["GATE MAP"] == "EEPROM ROTATION"
+    assert rows["MAZE SOURCE"] == "CABINET ROTATION"
     assert rows["GATE >=3"] == "SPECIAL PICKUP ON"
     assert rows["GATE >=6"] == "HIDDEN POT ON; THIEF 1/8"
     assert rows["GATE >6"] == "ADAPTIVE FOOD + BONUS ON"
     assert rows["GATE >=12"] == "DRAGON + TRICK 09 ON"
-    assert rows["GATE >30"] == "OFF"
+    assert rows["TREASURE >30"] == "OFF (NOT TREASURE)"
     assert rows["GENERATOR CAP"] == "24"
     assert rows["FF PROFILE"] == "0"
     assert rows["HAZARD DEPTH"] == "BASE"
@@ -228,7 +228,7 @@ def test_level_page_applies_maze_specific_gate_context():
     ))
 
     assert rows["GATE >=6"] == "HIDDEN POT ON; THIEF 8/8"
-    assert rows["GATE >30"] == "FAKE VOICE ELIGIBLE"
+    assert rows["TREASURE >30"] == "PRANK VOICE ELIGIBLE"
     assert rows["HAZARD DEPTH"] == "WRAP+OFFSCREEN"
 
     state.mazenum_current = 115
