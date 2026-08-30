@@ -355,9 +355,10 @@ evidence remains in `../doc/`, generated contracts, and the book.
     normalized wall cell only as its depth key. Masking it into a MOB identity
     copies unrelated fixed-channel coordinates.
 76. **Dynamic picture-only MOBs are invalid state.** For slots 32-1023, a nonzero
-    picture with zero H/V and no object type/state cannot come from a ROM MOB
-    writer. Remove that modeled-RAM remnant before collision; never hide its
-    sprite or ignore it only in rendering.
+    picture with no object type/state plus an incomplete position or no depth
+    membership cannot come from a ROM MOB writer. Creation and movement publish
+    the complete record transaction. Remove that modeled-RAM remnant before
+    collision; never hide its sprite or ignore it only in rendering.
 77. **Generic vertical boundaries inspect the proposed V word.** `mob_probe_up`
     and `mob_probe_down` do not reject the top/bottom slot rows unconditionally.
     Their signed/unsigned V tests permit the last pixels and seam response before

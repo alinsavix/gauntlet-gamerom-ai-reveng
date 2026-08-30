@@ -1450,7 +1450,7 @@ def player_tport(state: GameState, player_index: int,
     _tport_visit_pad(state, player_index, destination)
 
     # 0x50A18-0x50A66: before handing over to the transition, the arriving
-    # player interacts with all four cells around the destination -- this is
+    # player interacts with all four cells around the destination pad -- this is
     # why a transporter can drop you straight onto a potion, and how the two
     # transportability objectives are won.
     scan_move_path_interactions(state, destination, player_index)
@@ -1481,7 +1481,7 @@ def _tport_visit_pad(state: GameState, player_index: int, pad_slot: int) -> None
 
 def scan_move_path_interactions(state: GameState, dest_slot: int,
                            player_index: int) -> None:
-    """0x50BB8 -- interact with the four cells around a transporter landing.
+    """0x50BB8 -- interact with the four cells around the destination pad.
 
     ``player_tport`` calls this four times (0x50A1E/0x50A36/0x50A4E/0x50A66),
     once per neighbour-fetch callback (0x406B6, 0x40732, 0x4083A, 0x408A0).
@@ -2985,16 +2985,20 @@ def main_move_players(state: GameState) -> None:
         return  # level-end bonus screen: the world is frozen (WP-15/§16)
     # game_mode >= 0 (normal): skip demo section, proceed to per-player loop.
 
-    # A dynamic picture with no position, object type, or object state is not a
-    # record any ROM MOB writer can produce. Clear this Python-only remnant before
-    # the ordinary collision probes can treat it as an invisible obstacle.
+    # A dynamic picture with no object identity and either no complete position
+    # or no depth-list membership is not a record any ROM MOB writer can produce.
+    # Clear this Python-only remnant before collision probes can treat it as an
+    # invisible obstacle.
     for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.picture)):
         if (
             state.mobs.picture[slot]
-            and state.mobs.hpos[slot] == 0
-            and state.mobs.vpos[slot] == 0
             and state.mobs.obj_type(slot) == 0
             and state.mobs.state(slot) == 0
+            and (
+                state.mobs.hpos[slot] == 0
+                or state.mobs.vpos[slot] == 0
+                or not state.mobs.is_linked(slot)
+            )
         ):
             state.mobs.unlink_and_clear(slot)
 

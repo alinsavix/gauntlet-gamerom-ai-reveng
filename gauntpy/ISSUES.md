@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2561 passed, 1 skipped** (gauntpy) and
+present the suites are clean: **2562 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,24 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-174 · partial unlinked thief picture blocked frame 7908
+
+The supplied level-111/maze-29 dump placed the Elf at slot 0x2E3, `(51,368)`.
+The cell immediately right, 0x2E4, contained thief picture 0x0DF3 with H=0,
+V=0xFE00, both link/state words zero, no object type/state, and no depth-list
+membership. It was invisible at that geometry but still looked occupied to the
+player probe, so Right left the hero at `(51,368)`.
+
+No ROM MOB producer can publish that shape: create/move transactions establish
+identity, both axes, and list membership together. The earlier S-166 cleanup
+recognized only the special case where both axes were zero and missed this
+partial thief remnant. It now clears an untyped/stateless dynamic picture when
+either position axis is absent or the record is unlinked. Replaying the dump
+clears 0x2E4 and Right moves the hero to `(53,368)`, migrating the real player
+record into 0x2E4. The snapshot identifies the stale thief-table picture but
+does not retain enough history to identify which earlier Python write sequence
+left the partial record.
 
 ### S-173 · Reduce Text mode polarity was reversed
 

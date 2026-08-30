@@ -58,6 +58,12 @@ horizontal word work for a living, holding a monster's moving/chasing
 state. Nothing here is a struct with room to spare; it is 10 bytes per
 object, every bit assigned.
 
+That completeness is also an integrity rule. A dynamic cell cannot legitimately
+retain only a picture while losing its object identity, position, or chain
+membership: creation and movement publish the five-word record together. Such
+a partial modeled record is not an invisible actor; it is invalid state that
+must be removed before collision rather than hidden by the renderer.
+
 ## Where a thing is
 
 The game locates things in three coordinate systems, each earning its keep:

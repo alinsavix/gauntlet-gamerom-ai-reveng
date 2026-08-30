@@ -124,6 +124,23 @@ class TestCrossingACellMovesTheRecord:
         assert blocker not in list(state.mobs.iter_chain())
         assert player.mob_slot == start
 
+    def test_unlinked_partial_thief_remnant_cannot_block_the_player(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        start = pack_slot(23, 3)
+        blocker = start + 1
+        player = _spawn(state, 0, start)
+        state.level_players_active = 1
+        state.mobs.picture[blocker] = 0x0DF3
+        state.mobs.vpos[blocker] = 0xFE00
+        state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
+        before_x = hpos_x(state.mobs.hpos[start])
+
+        gp.main_move_players(state)
+
+        assert state.mobs.picture[blocker] == 0
+        assert state.mobs.vpos[blocker] == 0
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) > before_x
+
     def test_the_handover_row_is_the_roms_own_bias(self):
         """0x424CA adds 0x400 to V *upward*: the row changes at ``y % 16 == 9``."""
         for offset, expected_row in ((8, 10), (9, 11)):

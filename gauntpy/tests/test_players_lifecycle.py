@@ -4521,9 +4521,14 @@ class TestHeroPictures:
             state, player_index, character=character, health=500, mob_slot=slot,
         )
         player.direction = direction
-        state.mobs.picture[slot] = TestHeroPictures._PLAYERSTART_PICTURE
-        state.mobs.hpos[slot] = (((slot & 0x1F) * 16) + 8) << 7
-        state.mobs.vpos[slot] = native_v(((slot >> 5) * 16) + 8) << 7
+        state.mobs.create(
+            slot,
+            TestHeroPictures._PLAYERSTART_PICTURE,
+            (((slot & 0x1F) * 16) + 8) << 7,
+            native_v(((slot >> 5) * 16) + 8) << 7,
+            MazeObjIds.PLAYERSTART,
+            player_index,
+        )
         return player
 
     def test_literal_animation_tables_match_the_rom_dimensions_and_sentinels(self):

@@ -63,8 +63,14 @@ def _active_player_at(state: GameState, player_index: int, slot: int) -> Player:
     col = slot & 0x1F
     x = col * 16 - 4
     y = row * 16
-    state.mobs.hpos[slot] = x << 7
-    state.mobs.vpos[slot] = native_v(y) << 7
+    state.mobs.create(
+        slot,
+        tile=0x1E0D,
+        hpos=x << 7,
+        vpos=native_v(y) << 7,
+        obj_type=int(MazeObjIds.PLAYERSTART),
+        state=player_index,
+    )
     # Geometry unit tests are about walls rather than the independent
     # player-offscreen flag. Dedicated tests below cover the screen gate.
     state.level_flags_4 |= 0x80
