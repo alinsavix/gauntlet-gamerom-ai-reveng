@@ -142,9 +142,6 @@ class GameState:
     frame_overflow: int = 0          # 0x904916, generator spawn throttle
     game_mode: int = GameMode.TITLE  # 0x904918
     dialog_timer: int = 0            # 0x904A9E, gates the 16-call world band
-    # Host testing option: keep first-encounter flags/speech semantics but do
-    # not create the alpha message box or stall the gameplay band.
-    suppress_first_encounter_messages: bool = False
 
     # =========================================================================
     # WP-3 · maze and level

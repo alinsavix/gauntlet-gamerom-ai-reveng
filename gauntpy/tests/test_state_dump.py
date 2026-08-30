@@ -130,6 +130,17 @@ def test_load_migrates_original_schema_one_shape(tmp_path):
     assert restored.dialog_once_flags == 0
 
 
+def test_load_ignores_retired_host_message_suppression_field(tmp_path):
+    payload = state_dump_payload(GameState())
+    payload["state"]["suppress_first_encounter_messages"] = True
+    path = tmp_path / "retired-host-option.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    restored = load_game_state(path)
+
+    assert not hasattr(restored, "suppress_first_encounter_messages")
+
+
 def test_load_rejects_schema_one_fields_from_before_the_naming_policy(tmp_path):
     payload = state_dump_payload(GameState())
     current_name = "forcefield_hurt_timer"

@@ -1062,20 +1062,6 @@ def test_records_without_the_shared_line_ignore_the_value() -> None:
     assert state.dialog_message == list(DIALOG_MESSAGES[0])
 
 
-def test_first_encounter_message_suppression_preserves_flags_and_speech() -> None:
-    state = _normal_state()
-    state.suppress_first_encounter_messages = True
-    state.dialog_timer = 10
-    state.dialog_message = ["EXISTING"]
-
-    assert dialog_first_encounter(state, 0, 1 << 1) == 1
-
-    assert state.dialog_first_encounter_flags & (1 << 1)
-    assert state.dialog_timer == 10
-    assert state.dialog_message == ["EXISTING"]
-    assert state.sound_log[-1] == DIALOG_SPEECH_IDS[1]
-
-
 def test_a_missing_value_renders_a_blank_field() -> None:
     """Ordinary callers pass only player and mask (§10.4)."""
     state = _normal_state()

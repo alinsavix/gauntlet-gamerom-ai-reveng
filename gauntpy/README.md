@@ -162,12 +162,18 @@ Select another repeatable stream with `--seed 1234`, or request a host-random
 power-on value with `--seed random`. A seed applies to direct and attract starts;
 loaded state dumps retain their saved RNG state and reject `--seed`.
 
-For uninterrupted testing, suppress first-encounter pop-up boxes (speech and
-gameplay effects still occur):
+Use the cabinet ROM's **Reduce Text** operator setting from the command line:
 
 ```bash
-uv run --all-extras gauntpy-play --no-first-encounter-messages
+uv run --all-extras gauntpy-play --reduce-text
 ```
+
+In normal play the full first-encounter text still appears, but its hold is
+shortened from 150 to 120 frames. During attract modes the ROM selects its
+alternate short-message bank, where only the food entry is populated. Speech
+remains controlled independently by the cabinet's Disable Speech setting.
+Because most attract first-encounter records become null, Reduce Text also
+changes the recorded demo's dialog pauses and route timing.
 
 Or boot through the **real front end** — attract → coin → character select →
 start — exactly as the cabinet does:

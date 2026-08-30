@@ -98,6 +98,13 @@ def _sound_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "sounds"
 
 
+def _apply_operator_overrides(state: GameState, *, reduce_text: bool) -> None:
+    if reduce_text:
+        from .subsystems.score import GAME_SETTINGS_REDUCE_TEXT
+
+        state.game_settings |= GAME_SETTINGS_REDUCE_TEXT
+
+
 def _seed_value(value: str) -> int | str:
     """Parse an explicit 16-bit seed or the host-random sentinel."""
     if value.lower() == "random":
@@ -214,7 +221,7 @@ def build_state(
 
 def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         from_attract: bool = False,
-        suppress_first_encounter_messages: bool | None = None,
+        reduce_text: bool = False,
         keys: int = 0, potions: int = 0,
         powers: tuple[int, ...] = (),
         load_state_path: str | Path | None = None,
@@ -290,8 +297,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     if load_state_path is not None:
         host.skip_existing_audio(state)
 
-    if suppress_first_encounter_messages is not None:
-        state.suppress_first_encounter_messages = suppress_first_encounter_messages
+    _apply_operator_overrides(state, reduce_text=reduce_text)
 
     # mainloop.g2mainloop's body: pump input, run a frame, present. The camera
     # (main_scroll_playfield) runs inside tick() and the compositor converts its
@@ -352,8 +358,8 @@ def main(argv: list[str] | None = None) -> None:
         help="load a declarative synthetic 32x32 maze fixture",
     )
     parser.add_argument(
-        "--no-first-encounter-messages", action="store_true", default=None,
-        help="suppress first-encounter pop-up boxes without changing gameplay",
+        "--reduce-text", action="store_true",
+        help="enable the ROM's Reduce Text operator setting",
     )
     parser.add_argument(
         "--keys", type=_inventory_count, default=0,
@@ -413,7 +419,7 @@ def main(argv: list[str] | None = None) -> None:
     run(level=args.level or 1,
         character=_CHARACTERS[args.character or "elf"], scale=args.scale,
         from_attract=args.attract,
-        suppress_first_encounter_messages=args.no_first_encounter_messages,
+        reduce_text=args.reduce_text,
         keys=args.keys, potions=args.potions,
         powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power),
         load_state_path=args.load_state, scenario_path=args.scenario,

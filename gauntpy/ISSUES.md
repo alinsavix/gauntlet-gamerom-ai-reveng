@@ -63,6 +63,27 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-172 · bespoke first-encounter suppression duplicated a ROM option
+
+`--no-first-encounter-messages` stored a host-only `GameState` flag and returned
+from `dialog_first_encounter` after its encounter bit and speech write but
+before alpha RAM, chime 0x1C, and the gameplay pause. The cabinet has no such
+mode. Its `Reduce Text?` setting is game-settings bit 10 (0x0400):
+`dialog_first_encounter` selects the short 0x5A300 pointer bank only when game
+mode is negative, leaves normal-play text full-sized, and changes the timer
+reload from 150 to 120 frames. Speech remains independently gated by bit 11.
+
+The bespoke state and branch are removed. `--reduce-text` now sets the genuine
+bit after direct, attract, or loaded-state construction, and `play.bat` uses
+that option. Old schema-1 state dumps may contain the retired host field; the
+loader discards that one known field while continuing to reject other unknown
+shapes. First contact with a destructible wall therefore follows ROM order
+even under `--reduce-text`: mark encounter 22, speak 0xB7 when speech is
+enabled, draw the full normal-play box, play chime 0x1C, and hold for 120 frames.
+In DEMO, the alternate bank's null transporter record removes a timing pause
+used by the recording, so Reduce Text can change the attract route; the host
+does not repair that ROM-selected outcome.
+
 ### S-171 · exhaustive game/sound-ROM command audit
 
 All 97 gameplay sound/speech producers plus their three forwarding seams were
@@ -1197,11 +1218,10 @@ removed; the game compositor remains the original 336x240 raster.
   world band. Without it, the remaining LEFT record expired during the
   dissolve, leaving the Elf at `(92,256)` and preventing the recorded route
   from reaching the exit. The game-side dialog write is restored. A follow-up
-  found that the runner's `--no-first-encounter-messages` option still
-  suppressed this timing-critical DEMO dialog; suppression is now limited to
-  non-DEMO play. The actual `play.bat --attract` configuration now follows the
-  fresh MAME 0.289 command boundaries from the `(92,240)` landing through the
-  exit.
+  found that the runner's former `--no-first-encounter-messages` option could
+  suppress this timing-critical dialog. S-172 removes that non-ROM option
+  entirely. The actual `play.bat --attract` configuration follows the fresh
+  MAME 0.289 command boundaries from the `(92,240)` landing through the exit.
 - **S-113:** the rules legend transposed five of six `alpha_clear_rect`
   arguments, erasing labels and the first status-panel column instead of
   revealing maze-103 item art. It also omitted the centered LEGEND heading,
@@ -1729,8 +1749,8 @@ remembered live slot before resetting the per-player RAM.
 - **S-41 · host pause was missing.** P toggles a host-only pause that keeps the
   event/render loop responsive while freezing the 60 Hz simulation.
 - **S-42 · first-encounter boxes could not be disabled for testing.**
-  `--no-first-encounter-messages` suppresses those alpha boxes and their
-  gameplay gate while preserving encounter flags, speech and gameplay effects.
+  **Superseded by S-172:** the bespoke suppression was removed. The host now
+  exposes the ROM's `Reduce Text?` setting instead.
 - **S-43 · structural audit.** The 28-call main loop, RAM-shaped `GameState`,
   five-array MOB model, depth chain/SLIPs and subsystem boundaries still map
   closely to the original. The reviewed shared `mob_depth_remove` primitive now

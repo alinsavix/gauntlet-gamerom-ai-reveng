@@ -407,6 +407,13 @@ evidence remains in `../doc/`, generated contracts, and the book.
     speaks name, `NOW HAS`, and power name; reduced text skips the first two,
     while speech-disable skips all spoken parts. Poison and death draw from the
     character's random voice group before their dialog/transition effects.
+86. **Host options use cabinet settings when one exists.** Reduce Text is
+    `game_settings` bit 10. It selects the alternate first-encounter bank only
+    in attract modes and shortens dialog holds from 150 to 120 frames; it does
+    not suppress normal-play boxes or speech. Do not replace it with a host-only
+    early return from `dialog_first_encounter`. Null alternate attract records
+    can remove pauses used by the recorded demo; do not repair that setting-
+    selected timing divergence with host logic.
 
 ## Investigation workflow
 
