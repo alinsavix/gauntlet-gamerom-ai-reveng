@@ -657,7 +657,7 @@ DIALOG_MESSAGES: tuple[tuple[str, ...], ...] = (
 )
 
 #: The parallel bank at ROM 0x5A300 -- the short forms used when the operator's
-#: "Reduce Text" bit is set *and* the game is in an attract mode. Only entry 0
+#: "Reduce Text" bit is set *and* game_mode is nonnegative. Only entry 0
 #: is populated in the ROM; a ``None`` falls back to nothing (the record
 #: pointer is NULL, so the ROM returns without a box).
 DIALOG_MESSAGES_SHORT: tuple[tuple[str, ...] | None, ...] = (
@@ -862,7 +862,7 @@ def dialog_first_encounter(
         return 0
 
     reduce_text = bool(state.game_settings & GAME_SETTINGS_REDUCE_TEXT)
-    if reduce_text and state.game_mode < 0:
+    if reduce_text and state.game_mode >= 0:
         lines = DIALOG_MESSAGES_SHORT[index]
     else:
         lines = DIALOG_MESSAGES[index]

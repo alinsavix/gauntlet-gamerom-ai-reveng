@@ -203,8 +203,8 @@ the landing wall. This is not presentation-only timing: omit that game-side
 dialog and the same immutable ROM recording gets stuck after the teleporter.
 For the same reason, a host convenience switch must not bypass first-encounter
 advice. The cabinet's Reduce Text option follows its own alternate-record path
-instead: most records are null, so selecting it can remove pauses and change
-the recorded route. That is option-driven ROM behavior, not a host timing bug.
+instead: the alternate mostly-null bank is selected only for nonnegative normal
+play. Negative attract modes retain the full records and the demo's pauses.
 
 The twelve messages are worth reading as a set:
 

@@ -168,12 +168,13 @@ Use the cabinet ROM's **Reduce Text** operator setting from the command line:
 uv run --all-extras gauntpy-play --reduce-text
 ```
 
-In normal play the full first-encounter text still appears, but its hold is
-shortened from 150 to 120 frames. During attract modes the ROM selects its
-alternate short-message bank, where only the food entry is populated. Speech
-remains controlled independently by the cabinet's Disable Speech setting.
-Because most attract first-encounter records become null, Reduce Text also
-changes the recorded demo's dialog pauses and route timing.
+In normal play the ROM selects its alternate short-message bank, where only
+the food entry is populated. Most first-encounter messages—including initial
+damage, potion use, and destructible walls—therefore produce no speech, box,
+chime, or pause. The surviving food box holds for 120 rather than 150 frames.
+Negative attract modes retain the full message bank, so the recorded demo keeps
+its dialog timing. Speech for retained records remains controlled independently
+by the cabinet's Disable Speech setting.
 
 Or boot through the **real front end** — attract → coin → character select →
 start — exactly as the cabinet does:

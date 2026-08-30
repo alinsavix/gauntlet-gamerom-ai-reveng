@@ -577,7 +577,7 @@ agree.
 | GSETTING_COINHEALTH | 0x001F, index 0–31 into `health_per_coin_table` (0x57862) = 100–2000 in 25/50/100 steps | `andi #0xFF` at 0x430A8; table read by `coincheck`/`player_coindrop` |
 | GSETTING_DIFFICULTY_MASK | 0x00E0 (224) | OS Game Options field “Game Difficulty”; `andi.w #0xE0` at 0x40F62 selects the `monster_spawn_probability_table` row, so its principal verified gameplay effect is generator spawn probability |
 | GSETTING_COINTOSTART_MASK | 0x0300 (768) | OS Game Options field “Coins to Start,” values 0–3 → 1–4; dynamically verified in MAME, with no normal game-code reader |
-| GSETTING_TEXT_REDUCE | 0x0400 (1024) | 11 read sites, e.g. 0x4523C |
+| GSETTING_TEXT_REDUCE | 0x0400 (1024) | `dialog_first_encounter` 0x4C4D0 selects the mostly-null short bank 0x5A300 only when `game_mode >= 0`; retained dialogs use the 120-frame timer. Negative attract modes retain full bank 0x5A200. Other readers include 0x4523C. |
 | GSETTING_SPEECH_DISABLE | 0x0800 (2048) | 0x4AD5A |
 | GSETTING_RESET_FLAG | 0x1000 (4096) | OS Game Options action “Restore Factory Default Settings”; dynamically verified in MAME, with no normal game-code reader |
 | GSETTING_ALLOW_CONTEST_FLAG | 0x2000 (8192) | sole reader 0x54EE2 in `secret_getname` |

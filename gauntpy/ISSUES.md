@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2559 passed, 1 skipped** (gauntpy) and
+present the suites are clean: **2561 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -63,26 +63,39 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-173 · Reduce Text mode polarity was reversed
+
+S-172 correctly replaced the bespoke host switch with game-settings bit 10,
+but its transcription inverted the signed mode branch. At 0x4C4D0 the ROM tests
+0x0400; when set, `tst.w game_mode` / `bge 0x4C4F4` selects the short 0x5A300
+bank for normal nonnegative mode. Negative attract modes fall through to the
+full 0x5A200 bank. MAME confirms that most normal-play first encounters vanish.
+
+The condition now uses `game_mode >= 0`. Because only short-bank record zero is
+populated, first damage (records 8-15), potion use (19), destructible wall (22),
+and nearly every other normal-play encounter hit a null pointer and return
+before the speech table, alpha writes, chime 0x1C, or dialog timer. The encounter
+seen bit is still set. The food record survives with its short text and
+120-frame hold. DEMO retains the full records and its timing-critical
+transporter pause.
+
 ### S-172 · bespoke first-encounter suppression duplicated a ROM option
 
 `--no-first-encounter-messages` stored a host-only `GameState` flag and returned
 from `dialog_first_encounter` after its encounter bit and speech write but
 before alpha RAM, chime 0x1C, and the gameplay pause. The cabinet has no such
-mode. Its `Reduce Text?` setting is game-settings bit 10 (0x0400):
-`dialog_first_encounter` selects the short 0x5A300 pointer bank only when game
-mode is negative, leaves normal-play text full-sized, and changes the timer
-reload from 150 to 120 frames. Speech remains independently gated by bit 11.
+mode. Its `Reduce Text?` setting is game-settings bit 10 (0x0400). **Corrected
+by S-173:** the short 0x5A300 bank is selected for nonnegative normal play, not
+negative attract mode. Retained records use the 120-frame timer; speech remains
+independently gated by bit 11.
 
 The bespoke state and branch are removed. `--reduce-text` now sets the genuine
 bit after direct, attract, or loaded-state construction, and `play.bat` uses
 that option. Old schema-1 state dumps may contain the retired host field; the
 loader discards that one known field while continuing to reject other unknown
-shapes. First contact with a destructible wall therefore follows ROM order
-even under `--reduce-text`: mark encounter 22, speak 0xB7 when speech is
-enabled, draw the full normal-play box, play chime 0x1C, and hold for 120 frames.
-In DEMO, the alternate bank's null transporter record removes a timing pause
-used by the recording, so Reduce Text can change the attract route; the host
-does not repair that ROM-selected outcome.
+shapes. Under `--reduce-text`, normal-play encounter 22 selects a null short
+record and stops after marking it seen; 0xB7, the box, chime, and pause are all
+absent. DEMO uses the full bank and retains its transporter timing pause.
 
 ### S-171 · exhaustive game/sound-ROM command audit
 

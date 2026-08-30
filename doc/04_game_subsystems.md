@@ -1166,8 +1166,8 @@ dialog-gated world band. A fresh MAME 0.289 trace therefore lands at slot 486
 to reach slot 483 `(44,242)` before the next record. Omitting the dialog consumes
 that input during the dissolve and strands the Elf against the wall below.
 No host option may bypass this game-side timing event. The ROM's Reduce Text
-setting uses its own alternate-pointer and timer paths rather than skipping the
-dialog routine.
+setting keeps the full pointer bank in negative attract modes, so the timing-
+critical transporter record remains present.
 
 When every recorded actor has finished the status-8 exit animation,
 `level_players_active` reaches zero but the normal level transition is not
@@ -1773,6 +1773,14 @@ callers deliberately pass only player and mask. The function returns 1 in
 already-seen/no-record paths. It uses `ram.dialog_first_encounter_flags`
 (`0x9049E4`) as a 32-bit bitmask, chooses message records through the pointer
 tables at 0x5A200/0x5A300, and plays sound 0x1C when it displays the box.
+
+With Reduce Text bit 0x0400 clear, or with negative `game_mode`, the routine
+uses full bank 0x5A200. With the bit set and `game_mode >= 0`, the signed
+`tst.w`/`bge` at 0x4C4E0-0x4C4F4 selects short bank 0x5A300. Only short record
+zero is non-null. Every other normal-play encounter therefore sets its seen
+flag and returns before speech lookup, alpha writes, sound 0x1C, or
+`dialog_timer`; record zero displays its short text for 120 frames. Negative
+DEMO/attract modes retain the full records (also with the 120-frame timer).
 
 ### 10.5 Continue Prompt (`show_continue_prompt`, 0x44C7E)
 

@@ -604,6 +604,30 @@ class TestDemoInit:
             for player in state.players
         )
 
+    @requires_roms
+    def test_rom_reduce_text_setting_preserves_the_demo_dialog_timing(self, tmp_path):
+        from gauntpy.mainloop import tick
+        from gauntpy.subsystems.score import GAME_SETTINGS_REDUCE_TEXT
+
+        state = GameState()
+        state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
+        state.game_settings |= GAME_SETTINGS_REDUCE_TEXT
+        start_attract_screen(state, int(GameMode.DEMO))
+        elf = state.players[1]
+        reached_exit = False
+
+        for _ in range(7200):
+            tick(state)
+            reached_exit |= (
+                bool(elf.exit_pending)
+                or elf.status == int(PlayerStatus.ALIVE_NEXT)
+            )
+
+        assert reached_exit
+        assert state.demo_stream_pos[1] >= 148
+        assert state.dialog_first_encounter_flags & 0x01000000
+
+
 class TestLogoColors:
     def test_cadence_counter_advances(self):
         state = GameState()

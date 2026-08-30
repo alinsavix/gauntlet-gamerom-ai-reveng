@@ -659,31 +659,30 @@ def test_a_second_dialog_retires_the_box_already_on_screen() -> None:
     assert state.dialog_timer == DIALOG_TIMER_FRAMES
 
 
-def test_reduce_text_selects_the_short_bank_only_during_attract() -> None:
-    """0x4C4D6: the 0x5A300 bank needs the operator bit *and* a negative
-    game_mode."""
+def test_reduce_text_selects_the_short_bank_only_during_normal_play() -> None:
+    """0x4C4D6: with the bit set, BGE selects 0x5A300 for game_mode >= 0."""
     playing = GameState(game_mode=GameMode.NORMAL,
                         game_settings=GAME_SETTINGS_REDUCE_TEXT)
     dialog_first_encounter(playing, 0, 1 << 0)
-    assert playing.dialog_message == list(DIALOG_MESSAGES[0])
+    assert playing.dialog_message == list(DIALOG_MESSAGES_SHORT[0])
 
     attract = GameState(game_mode=GameMode.DEMO,
                         game_settings=GAME_SETTINGS_REDUCE_TEXT)
     dialog_first_encounter(attract, 0, 1 << 0)
-    assert attract.dialog_message == list(DIALOG_MESSAGES_SHORT[0])
+    assert attract.dialog_message == list(DIALOG_MESSAGES[0])
 
 
 def test_reduce_text_shortens_the_box_timer() -> None:
     state = GameState(game_mode=GameMode.NORMAL,
                       game_settings=GAME_SETTINGS_REDUCE_TEXT)
-    dialog_first_encounter(state, 0, 1 << 2)
+    dialog_first_encounter(state, 0, 1 << 0)
     assert state.dialog_timer == DIALOG_TIMER_FRAMES_SHORT
 
 
 def test_a_null_short_record_shows_nothing() -> None:
     """Only index 0 of the 0x5A300 bank is populated; a NULL record returns 0
     without a box (0x4C504)."""
-    state = GameState(game_mode=GameMode.DEMO,
+    state = GameState(game_mode=GameMode.NORMAL,
                       game_settings=GAME_SETTINGS_REDUCE_TEXT)
     assert dialog_first_encounter(state, 0, 1 << 3) == 0
     assert state.dialog_message == []
@@ -1060,6 +1059,21 @@ def test_records_without_the_shared_line_ignore_the_value() -> None:
     state = _normal_state()
     dialog_first_encounter(state, 0, 1 << 0, 99)
     assert state.dialog_message == list(DIALOG_MESSAGES[0])
+
+
+def test_reduce_text_removes_normal_play_damage_potion_and_wall_encounters() -> None:
+    for index in (8, 19, 22):
+        state = GameState(
+            game_mode=GameMode.NORMAL,
+            game_settings=GAME_SETTINGS_REDUCE_TEXT,
+        )
+
+        assert dialog_first_encounter(state, 0, 1 << index) == 0
+
+        assert state.dialog_first_encounter_flags & (1 << index)
+        assert state.dialog_message == []
+        assert state.dialog_timer == 0
+        assert state.sound_log == []
 
 
 def test_a_missing_value_renders_a_blank_field() -> None:
