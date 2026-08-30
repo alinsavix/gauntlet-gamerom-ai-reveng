@@ -231,6 +231,13 @@ Throughout that wait, every cell the already-selected victim leaves extends the
 trail. When the timer expires, the visitor appears where that player had been
 when scheduling began, pauses for sixty frames, and then has a complete set of
 footprints leading from that old cell toward the player's newer position.
+Its arrival is a transporter-style poof: the game creates the visitor and a
+separate 3x3 effect MOB at the same location before starting that pause.
+The visitor's sprite origin is four pixels left of the route cell's raw
+sixteen-pixel boundary. That is the same anchor used after a transporter and the
+one assumed by its later body-center handoff. In a corridor two cells wide, the
+thief therefore belongs to one lane or the other rather than running down an
+invented centerline between them.
 
 **Getting to you.** Once deployed, the thief has a small set of modes: entering,
 pursuing, dodging, and escaping. Pursuit does not use a general path finder.
@@ -241,12 +248,27 @@ literally following your footprints, one cell behind. Each grid byte holds two
 of these direction codes, and the thief switches to the other one the moment it
 turns to escape, which looks very much like retracing the route it came in by.
 
+More precisely, the low nibble is created by the victim: each cell departure
+points toward the victim's next cell. The high nibble is created by the visitor:
+as it reaches each selected next cell during pursuit, it writes the opposite
+direction there if no reverse edge exists yet. That gradually builds a trail
+back toward the saved starting cell. Escape merely selects those high nibbles;
+it does not calculate a fresh route.
+
 There is no emergency search when a footprint is absent. The route reader keeps
 the direction it was already following; from freshly reset state that means
 up. This normally cannot matter because scheduling and the countdown build the
 trail before deployment. A test harness that simply drops a thief into an
 arbitrary cell without those breadcrumbs can therefore make it march into the
 top wall and stop, a failure of the setup rather than evidence of different AI.
+
+The footprints are erased between levels by a less obvious owner. Their bytes
+live in the hidden columns of alpha display RAM, beginning at column 42.
+Revealing or hiding a maze clears those columns, so the same writes that remove
+old screen text also wipe every pursuit and escape nibble. Treating the path
+grid as separate memory lets an old maze's escape route survive and point
+through a fixed wall in the new maze—exactly the condition that trapped the
+captured thief and mugger at cell `0x38D`.
 
 Following a cell does not mean collision waits for the thief's picture origin
 to enter it. The thief is twenty-four pixels wide in a sixteen-pixel grid. For
@@ -264,6 +286,18 @@ sideways away from that flank and probe the correction before trying forward
 again. A captured mugger aimed down between two walls at X=241 therefore centers
 to X=240 and continues; omitting this special arm leaves it staring at empty
 floor forever even though the shared probe itself is correct.
+
+That response also works at the vertical seam. The generic down probe does not
+reject row 31 by slot number alone; it tests the proposed signed V word. A
+captured thief at `(508,492)` can therefore nudge down to the final world pixels,
+wrap, and continue right instead of staring into the wall above its route.
+
+Monsters are a delay, not a permanent roadblock. On first contact with any
+ordinary monster or generator, the thief latches its facing and begins a
+sixteen-frame fight animation. Once that counter has passed fifteen, the next
+collision produces the ordinary impact sparkle, removes the blocking creature,
+and lets the thief continue along the breadcrumb route. A port that treats the
+occupied cell as merely non-solid can leave him animating in place forever.
 
 Dodging is more pointed. A helper scans the four players for one whose shot
 direction is exactly opposite the thief's own and whose position lies on that
@@ -288,6 +322,7 @@ and it comes back as a pickup on the next level's floor. The departing actor is
 removed at its recorded starting cell; the next level creates a new pickup by
 walking a pseudorandom sequence of empty maze cells. A mugger returns food, and
 a stolen multiplier returns as a bag whose encoded value restores its score.
+The removal is preceded by the same transporter-style poof used on arrival.
 
 Transporters are part of that retracing graph. If the target player has taught
 the route by teleporting, the thief dissolves into the same transition machinery,

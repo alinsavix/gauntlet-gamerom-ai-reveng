@@ -41,7 +41,7 @@ __all__ = [
     "CONTINUE_PROMPT_LINES",
     "TEXT_SCORE_PER_COIN", "TEXT_SCORE_PER_COIN_POS", "HIGHSCORE_QUADRANTS",
     "BONUS_100_X_COINS", "BONUS_TREASURES_X", "BONUS_EQUALS", "BONUS_NONE",
-    "BONUS_SECRET_5000", "GAMEPLAY_TIPS",
+    "BONUS_SECRET_5000", "LEVEL_FLAG_HINTS", "GAMEPLAY_TIPS",
     "TREASURE_ROOM_TITLE", "TREASURE_ROOM_LINES",
     "SECRET_ROOM_TITLE", "SECRET_ROOM_LINES", "SECRET_CHALLENGE_QUALIFIERS",
     "SECRET_HINT_HEADER", "SECRET_OBJECTIVE_HINTS",
@@ -161,6 +161,19 @@ BONUS_TREASURES_X = "TREASURES x"
 BONUS_EQUALS = "BONUS ="
 BONUS_NONE = "NO BONUS !!"
 BONUS_SECRET_5000 = "5,000 x COINS = "
+
+# ``level_splash`` flag/cadence records, ROM 0x598B8-0x5999B. Each tuple is
+# ``(text, column, row, alpha attribute)``; their speech gates remain in the
+# routine because several records share the one-speech-per-splash latch.
+LEVEL_FLAG_HINTS = {
+    "hidden_potion": ("FIND THE HIDDEN POTION", 3, 21, 0x8400),
+    "shots_stun": ("PLAYER SHOTS STUN OTHERS", 3, 22, 0x8800),
+    "shots_hurt": ("PLAYER SHOTS HURT OTHERS", 3, 23, 0x8C00),
+    "player_offscreen": ("PLAYERS CAN GO OFF SCREEN", 2, 24, 0x9000),
+    "all_walls_invisible": ("ALL WALLS ARE INVISIBLE", 3, 25, 0x8400),
+    "trap_walls_invisible": ("TRAP WALLS ARE INVISIBLE", 2, 25, 0x8400),
+    "exit_moves": ("THE EXIT WILL MOVE", 5, 26, 0x8800),
+}
 
 # show_level_start_screen treasure-room branch, ROM 0x572C6-0x57325.
 TREASURE_ROOM_TITLE = "TREASURE ROOM"

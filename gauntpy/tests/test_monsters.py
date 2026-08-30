@@ -100,6 +100,7 @@ from gauntpy.subsystems.monsters import (
     supersorc_place,
     tile_on_screen_d4,
     _update_cull_rect,
+    _walk_band_head,
     GENERATOR_RETRY_RELOAD,
     generator_candidate_slot,
     handle_generate,
@@ -235,6 +236,34 @@ def _monster_slot(state: GameState, obj_type: int) -> int | None:
 
 class TestMonsterSpeedPerFamily:
     """Each LFLAG2 fast bit speeds up only its own family (I-15)."""
+
+    @pytest.mark.parametrize(("bit", "family"), (
+        (0x01, MazeObjIds.MONST_GHOST),
+        (0x02, MazeObjIds.MONST_GRUNT),
+        (0x04, MazeObjIds.MONST_DEMON),
+        (0x08, MazeObjIds.MONST_LOBBER),
+        (0x10, MazeObjIds.MONST_SORC),
+        (0x20, MazeObjIds.MONST_AUX_GRUNT),
+        (0x40, MazeObjIds.MONST_DEATH),
+    ))
+    def test_every_fast_bit_selects_exactly_its_family(self, bit, family):
+        state = GameState(level_flags_2=bit)
+
+        for candidate in (
+            MazeObjIds.MONST_GHOST,
+            MazeObjIds.MONST_GRUNT,
+            MazeObjIds.MONST_DEMON,
+            MazeObjIds.MONST_LOBBER,
+            MazeObjIds.MONST_SORC,
+            MazeObjIds.MONST_AUX_GRUNT,
+            MazeObjIds.MONST_DEATH,
+        ):
+            expected = (
+                _MONSTER_SPEED_FAST
+                if candidate == family
+                else _MONSTER_SPEED_BASE
+            )
+            assert _monster_speed(state, int(candidate), 2) == expected
 
     def test_fast_bit_speeds_only_its_family(self):
         state = GameState()
@@ -453,6 +482,30 @@ class TestCullingRectangle:
         before_far = state.mobs.hpos[far]
         main_move_monsters(state)
         assert state.mobs.hpos[far] == before_far, "off-screen band was walked"
+
+    def test_walk_wraps_its_slip_arc_across_the_vertical_seam(self):
+        """0x49076/0x490AC mask both SLIP indices into the 512-pixel maze."""
+        state = GameState(scroll_x=323, scroll_y=492)
+        monster = pack_slot(1, 27)
+        player = pack_slot(6, 27)
+        _place_monster(state, monster, MazeObjIds.MONST_GHOST, direction=4)
+        _place_player(state, 0, player)
+        state.mobs.create(
+            pack_slot(31, 1), 1, encode_hpos(16),
+            encode_vpos_at_y(31 * 16), MazeObjIds.TREASURE,
+        )
+        state.frame_counter = _stagger_frame(monster)
+        before = state.mobs.state_link[monster]
+
+        assert _in_cull_rect(state, monster) is False
+        _update_cull_rect(state)
+        assert _in_cull_rect(state, monster)
+        assert _walk_band_head(state, -0x90) == state.mobs.slip_heads[60]
+        assert _walk_band_head(state, 0x90) == state.mobs.slip_heads[32]
+
+        main_move_monsters(state)
+
+        assert state.mobs.state_link[monster] != before
 
     def test_no_players_freezes_everything(self):
         """0x4904E: with nobody on the level the whole pass returns early."""
@@ -814,6 +867,19 @@ class TestGenerators:
 # ---------------------------------------------------------------------------
 
 class TestOddAngleOverride:
+    @pytest.mark.parametrize(("bit", "family", "override"), (
+        (0x01, MazeObjIds.MONST_GHOST, 0x80),
+        (0x02, MazeObjIds.MONST_GRUNT, 0xC0),
+        (0x10, MazeObjIds.MONST_SORC, 0xA0),
+        (0x20, MazeObjIds.MONST_AUX_GRUNT, 0xA0),
+        (0x40, MazeObjIds.MONST_DEATH, 0x80),
+    ))
+    def test_every_live_oddangle_bit_selects_its_family(
+        self, bit, family, override,
+    ):
+        state = GameState(level_flags=bit)
+        assert _oddangle_override(state, int(family)) == override
+
     def test_flag_gates_the_override_byte(self):
         state = GameState()
         assert _oddangle_override(state, int(MazeObjIds.MONST_GRUNT)) == 0

@@ -85,13 +85,32 @@ from gauntpy.subsystems.exits import (
     secret_check,
     secret_check_winner,
     secret_new_level_setup,
+    secret_room_spawn,
     secret_trick_check,
     secret_trick_progress,
     secret_trick_set,
     show_level_end_bonus_screen,
     show_level_start_screen,
     treasure_collected,
+    update_monster_spawn_bonus_from_score_per_coin,
 )
+
+
+class _SequenceRandom:
+    def __init__(self, *values):
+        self.values = list(values)
+        self.bounds = []
+
+    def getrandom(self, bound):
+        self.bounds.append(bound)
+        return self.values.pop(0)
+
+
+def _alpha_text(state, column, row, length):
+    return "".join(
+        chr(word & 0x3FF) if word & 0x3FF else " "
+        for word in state.alpha_ram[row * 64 + column:row * 64 + column + length]
+    )
 
 _TREASURE_MAZE = 104
 
@@ -1013,6 +1032,81 @@ class TestLevelEndHold:
         assert state.alpha_ram[9 * 64 + 20] & 0x3FF == expected_2
         assert state.global_delay_timer == 0xB4
 
+    def test_level_one_draws_its_fixed_gameplay_tip(self):
+        state = GameState(levelnum_current=1, mazenum_current=0)
+
+        show_level_start_screen(state)
+
+        text = romtext.GAMEPLAY_TIPS[-1][0]
+        column = (29 - len(text)) // 2
+        assert _alpha_text(state, column, 4, len(text)) == text
+
+    def test_ordinary_level_draws_the_rng_selected_two_line_tip(self):
+        state = GameState(
+            levelnum_current=2,
+            mazenum_current=1,
+            level_next_treasure=2,
+        )
+        state.rng = _SequenceRandom(3)
+
+        show_level_start_screen(state)
+
+        first, second = romtext.GAMEPLAY_TIPS[3]
+        assert state.rng.bounds == [9]
+        assert _alpha_text(
+            state, (29 - len(first)) // 2, 15, len(first),
+        ) == first
+        assert _alpha_text(
+            state, (29 - len(second)) // 2, 16, len(second),
+        ) == second
+
+    def test_level_flag_notices_share_the_rom_speech_latch(self):
+        state = GameState(
+            levelnum_current=7,
+            mazenum_current=26,
+            level_next_potion=0,
+            level_next_treasure=2,
+            level_flags=0x80,
+            level_flags_2=0x80,
+            level_flags_3=_LFLAG3_EXIT_MOVES,
+            level_flags_4=0x83,
+        )
+        state.rng = _SequenceRandom(1, 0)
+
+        show_level_start_screen(state)
+
+        for key in (
+            "hidden_potion", "shots_stun", "shots_hurt",
+            "player_offscreen", "all_walls_invisible", "exit_moves",
+        ):
+            text, column, row, _attribute = romtext.LEVEL_FLAG_HINTS[key]
+            assert _alpha_text(state, column, row, len(text)) == text
+            assert state.alpha_ram[row * 64 + column] & 0xFC00 == _attribute
+        trap_text, column, row, _attribute = romtext.LEVEL_FLAG_HINTS[
+            "trap_walls_invisible"
+        ]
+        assert _alpha_text(state, column, row, len(trap_text)) != trap_text
+        assert state.sound_log == [0x8C]
+        assert state.rng.bounds == [4, 9]
+
+    def test_trap_wall_notice_has_its_quarter_chance_speech(self):
+        state = GameState(
+            levelnum_current=2,
+            mazenum_current=1,
+            level_next_treasure=2,
+            level_flags=0x80,
+        )
+        state.rng = _SequenceRandom(0, 0)
+
+        show_level_start_screen(state)
+
+        text, column, row, _attribute = romtext.LEVEL_FLAG_HINTS[
+            "trap_walls_invisible"
+        ]
+        assert _alpha_text(state, column, row, len(text)) == text
+        assert state.sound_log == [0xCD]
+        assert state.rng.bounds == [4, 9]
+
     def test_secret_hint_uses_the_armed_next_maze_objective(self, monkeypatch):
         from gauntpy.subsystems import exits as exits_module
 
@@ -1534,8 +1628,8 @@ class TestSecretRoomPayout:
         state.level_next, state.maze_next = 13, 41
         state.secret_player = 0
         state.secret_trick_id = task
-        state.secret_saved_keys = 3
-        state.secret_saved_potions = 2
+        state.monster_spawn_probability_bonus = 3
+        state.players[0].keysnum = 2
         state.secret_saved_supershot = 5
         p = state.players[0]
         p.status = int(PlayerStatus.ALIVE_NEXT)
@@ -1571,8 +1665,21 @@ class TestSecretRoomPayout:
         p = state.players[0]
         p.keysnum, p.potionsnum, p.supershot = 1, 0, 2   # picked up inside
         show_level_end_bonus_screen(state)
-        assert (p.keysnum, p.potionsnum, p.supershot) == (4, 2, 7)
-        assert state.secret_saved_keys == 0
+        assert (p.keysnum, p.potionsnum, p.supershot) == (4, 4, 7)
+        assert state.monster_spawn_probability_bonus == 3
+
+    def test_nonzero_winner_reads_potions_from_player_zero_key_alias(self):
+        state = self._in_room()
+        state.secret_player = 2
+        state.players[0].keysnum = 2
+        player = state.players[2]
+        player.status = int(PlayerStatus.ALIVE_NEXT)
+        player.keysnum, player.potionsnum = 1, 1
+
+        show_level_end_bonus_screen(state)
+
+        assert (player.keysnum, player.potionsnum) == (4, 3)
+
 
     def test_the_winner_slot_is_cleared(self):
         """0x4D866 -- otherwise the next level walks straight back in."""
@@ -1588,3 +1695,34 @@ class TestSecretRoomPayout:
         show_level_end_bonus_screen(state)
         assert state.secret_possible_start == 20
         assert state.secret_need_hint == 0
+
+
+class TestSecretRoomInventoryAliases:
+    def test_spawn_matches_rom_alias_order_for_player_zero(self, monkeypatch):
+        from gauntpy.subsystems import players
+
+        state = GameState(mazenum_current=115, secret_player=0)
+        player = state.players[0]
+        player.keysnum, player.potionsnum, player.supershot = 3, 2, 5
+        monkeypatch.setattr(players, "player_start_inner", lambda *_args: 1)
+
+        secret_room_spawn(state)
+
+        assert state.monster_spawn_probability_bonus == 3
+        assert (player.keysnum, player.potionsnum, player.supershot) == (0, 0, 0)
+        assert state.players[0].keysnum == 0, "winner-zero clear destroys potion stash"
+        assert state.secret_saved_supershot == 5
+
+    def test_spawn_bonus_add_mutates_the_saved_key_byte(self):
+        state = GameState(mazenum_current=115)
+        state.secret_player = 2
+        player = state.players[2]
+        player.status = int(PlayerStatus.ALIVE_HERE)
+        player.coin_count = 2
+        player.score = 0x10000
+        state.monster_spawn_probability_bonus = 3
+
+        update_monster_spawn_bonus_from_score_per_coin(state)
+
+        assert state.monster_spawn_probability_bonus == 5
+        assert state.secret_saved_keys == 5

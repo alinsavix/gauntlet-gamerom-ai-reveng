@@ -139,6 +139,14 @@ Horizontally the accepted span is 0x7F80 units (255 pixels); vertically it is
 position field has to rescale this modulus with it, or seam-visible monsters
 freeze as soon as the camera register wraps from 0 to 511.
 
+The preceding SLIP-chain window wraps independently. At 0x49076 and 0x490AC
+the ROM computes its stop/start lookups from `(pf_vscroll_lo + 0x118) & 0x1F0`
+and `(pf_vscroll_lo - 8) & 0x1F0`, then indexes the word table through its
+biased `priority_bucket_heads_tail` base at 0x905F82. Both the culling
+predicate and this chain arc must wrap. Clamping either lookup at band 63
+omits the row-zero side of the arc when the camera crosses the vertical seam,
+leaving visible monsters neither moving nor animating.
+
 ### 3.2 Monster Dispatch
 
 `monsters_everything` does NOT use a jump table. Instead, it uses a single shared handler with conditional branches:
@@ -737,6 +745,13 @@ Large dispatch by tile type (from `mob_link >> 10`). Handles:
 - Acid puddle (0x36 — applies acid slow effect)
 - Slow-motion (0x37)
 
+Keys and ordinary potions share a 12-item capacity. The key arm at
+0x51458-0x514CE and good-potion arm at 0x516E4-0x5176C add only while
+`player_keysnum + player_potionsnum <= 11`; otherwise they show first-encounter
+record 25. A full player leaves the pickup unhandled while an active player can
+still accept that item. The shot-resistant variants retain their distinct final
+discard arms, but no full player receives another inventory byte.
+
 Shot resistance does not make an item permanent after collection: both potion
 types and both food types are removed when picked up. The special score bag
 uses `special_bonus_score` (0x904B56), displays popup index
@@ -783,6 +798,12 @@ word at playfield color RAM 0x910510. The next main-loop pass restores the
 ordinary floor color from 0x904020, so the flash is a game-side, one-field
 palette write rather than a renderer effect. Shot-triggered potions perform the
 same write and store `player + 4`.
+
+`main_handle_potions` runs before `main_move_players` in the gameplay band and
+does not read `player_stundelay`. Its gates at 0x47000-0x4707A are only active
+MOB, Magic input, maze number below 115, and a nonzero potion byte. A stunned
+player may therefore drink a potion; movement remains suppressed later in the
+frame and the stun timer is not cleared.
 
 The handler then calls `dragon_any_segment_near_screen` (0x54AF8), which applies
 `tile_near_screen_test` to all four packed segment cells. An on-screen active
@@ -866,7 +887,12 @@ Called when transitioning to a new level:
 10. If LFLAG4 `TrapsRandom` is set, draws `getrandom(3)` once and rotates every type-10/11/12 trap identity by that common offset modulo three.
 11. Scans all `mob_link` slots to repopulate transporter/exit tables and initialize the random-wall low/current/target cursors.
 12. Below maze 115 and above level 6, chooses one authored type-49/50 food uniformly, changes its picture to adaptive food `0x277B`, and normalizes its type to 49.
-13. On secret mazes, runs the challenge-target transformation described in §10.6 after the position-table scan, then clears the reserved low MOB pictures used by ordinary play.
+13. Runs exit selection. LFLAG3 `WallsDeletable1` then draws one trap group and
+    calls `maze_place_object_types` for its type-10/11/12 trigger; `WallsDeletable2`
+    removes the drawn group and the next cyclic group. Each call replaces both
+    that trigger type and its corresponding type-7/8/9 wall family with floor,
+    subject to the LFLAG4 `TrapsLocal` near-screen gate.
+14. On secret mazes, runs the challenge-target transformation described in §10.6 after the position-table scan, then clears the reserved low MOB pictures used by ordinary play.
 
 The Python representation initializes random-wall cursors eagerly during this
 setup. It derives the transporter table as an ordered live-MOB scan because the
@@ -955,6 +981,20 @@ random pickups skip mazes 115+, and treasure/secret branches use their own
 104/115 boundaries.
 
 `get_random_maze_flags` (0x436CC): selects a random entry from a 13-entry ROM table at 0x57012. If LFLAG4 bit 2 (TrapsLocal) is set and the result is 0x80, overrides to 0x2.
+
+`level_splash` (0x4BE24–0x4C1B2) is another level-flag consumer, not merely the
+large `LEVEL:` heading. It writes game-side alpha-RAM notices for hidden-potion
+cadence and LFLAG4 ShotStun, ShotHurt, and PlayerOffscreen; LFLAG2
+InvisibleAllWalls; LFLAG1 InvisibleTrapWalls; and LFLAG3 ExitMoves. The
+all-walls notice suppresses the narrower trap-walls notice. One shared local
+allows at most one speech command: hidden potion, invisible trap walls, and
+moving exit each roll one chance in four only while no earlier notice spoke,
+while ShotStun/ShotHurt speak immediately in that order. The routine then
+writes fixed `FIND EXIT TO NEXT LEVEL` text on level 1, otherwise consumes
+`secret_need_hint` or selects one of nine two-line gameplay tips with
+`getrandom(9)` on ordinary mazes. Reduced-text mode suppresses that final
+ordinary tip, not the flag notices. The literal records are at
+0x598B8–0x5999B and the two random-tip pointer tables at 0x59736/0x5975E.
 
 #### Random pickup setup (`maze_addrandompickups`, 0x43F68)
 
@@ -1462,6 +1502,20 @@ States (in `ram.thief_mode`, `0x904BA0`):
 
 When overlapping target player: steals an item or health (calls `thief_steal_from_player`, 0x4E1FE). Exit when thief reaches the maze edge calls `thief_exit` (0x4E122).
 
+Deployment is visible state, not an instantaneous sprite write. After
+`mob_create`, 0x4DF7E calls `tport_cycle_start(start, victim)`, placing the
+shared 3x3 transporter effect in a fixed effect channel while the visitor begins
+its 0x3C-frame entrance pause. The successful escape-at-start arm similarly
+calls `tport_cycle_start` at 0x4EC20 before `moblist_remove_and_clear`, so both
+arrival and departure use the same poof animation.
+
+The deployment H argument is not the raw cell origin. At 0x4DF54-0x4DF64 the
+ROM computes `slot * 0x800 - 0x200 + palette`, whose 16-bit position field is
+`cell_x * 16 - 4`. This matches the thief transporter destination anchor. The
+common movement handoff's +12-pixel body bias assumes that correction; omitting
+it shifts the visitor four pixels right and makes a two-cell corridor look like
+one centered path instead of two cell-owned lanes.
+
 **Escape taunt. Confidence: Verified** at 0x4E960–0x4E992. When the escape
 animation counter passes 0x3B, `getrandom(2)` selects one of two *pitch*
 variants, not a player. Index 0 plays sound 0x62 plus speech 0x63 and index 1
@@ -1523,6 +1577,15 @@ from player movement and transporter paths. If the player is the current
 position in the low path-grid nibble and updates `thief_victim_pos`. It does
 not erase a MOB or write a blank tile.
 
+The high nibble is built while the visitor follows that low-nibble trail.
+Whenever it reaches its selected next cell, `thief_move_engine` writes the
+opposite of the pursuit direction there, but only if that high nibble is still
+empty and the visitor is not already escaping. The result is a reverse route
+from the victim back toward `thief_start_location`; transporter completion
+writes the same kind of reverse edge at its destination. Switching to escape
+mode therefore changes which nibble `path_grid_get_direction` reads rather than
+running a new path search.
+
 `thief_compute_path` (0x4F912) is a route consumer, not a fallback pathfinder.
 It saves `thief_path_direction`, reads the selected grid nibble at the current
 cell, and replaces the saved direction only when that nibble decodes to 0–7.
@@ -1530,6 +1593,21 @@ An unset nibble (decoded value 8) therefore continues the previous direction;
 on freshly reset state that direction is zero, upward. Any caller that invents
 a spawn without the scheduling/breadcrumb phase can send the visitor straight
 into the top boundary even though open floor exists elsewhere.
+
+The grid is reset by display memory ownership rather than `thief_setup`.
+`path_direction_grid` starts at 0x905054, the byte view of hidden alpha columns
+42-63. The 22 hidden words cleared on each row by `maze_show` 0x4526A and
+`maze_hide` 0x4529A cover all 44 route bytes for each of the grid's 24 rows.
+Thus no pursuit or escape nibble survives a normal level handoff.
+
+`thief_handle_tile_collision` does not merely wait behind another creature.
+For object types 18–45 (ordinary monsters through generators), first contact
+stores `thief_direction + 1` in `thief_collision_direction_code` and clears
+the shared `thief_stolen_item` counter. The collision animation increments
+that counter once per thief frame. Once it is greater than 15, the next
+contact calls `shot_impact_spawn` with the selected victim as effect owner,
+removes the blocking MOB, clears the collision code, and returns blocked for
+that frame. The visitor then resumes its route through the vacated cell.
 
 The ordinary movement engine is anchor-based rather than cell-coarse.
 `thief_move_engine` (0x4EE7A) writes each proposed H or V word, then calls
@@ -1551,6 +1629,13 @@ response. Frame 3876 on maze 15 captures the down arm at `(241,127)`: right
 flank `0x130` blocks the full three-pixel mugger step, so 0x4F278-0x4F2C2 moves
 left to X=240. Repeating the requested direction then clears the one-cell lane.
 Stopping after the shared probe leaves the actor permanently compact and idle.
+
+The generic vertical probes keep their ROM boundary tests. `mob_probe_down`
+0x40732 reads the proposed live V word for a row-31 actor and returns clear while
+it is nonnegative, only returning `0x400` after the sign changes.
+`mob_probe_up` 0x406B6 similarly compares the live word with `0xF080` in the
+top two slot rows. These tests allow a flank response at the vertical seam; an
+unconditional row check traps the frame-29864 thief at `(508,492)`.
 
 This ordering is observable in maze 15. With a thief at native screen
 coordinate `(12,304)` in slot `0x261`, moving east toward the wall marker at
@@ -1724,12 +1809,25 @@ Secret-room availability is paced by a pair of level counters:
 - `secret_possible_counter` (0x904878) counts down **once per level** (decrement site 0x4A748); both it and `secret_possible_start` (0x90487A) initialize to 20 at game init (0x43312). When the countdown reaches 0, `maze_new_level_setup` may activate a secret room by loading the maze's secret-room config byte into `0x904065` (the ordinary 0x01–0x11 trick ID; see §3.17 in `05_data_reference.md`).
 - `secret_check` (0x486FE) runs at level transitions (from `main_start_game` at 0x480EC when the between-level delay `0x904A4E` expires, and from the `show_level_end_bonus_screen` epilogue at 0x4D8DC). If a secret room was active (`0x904065` ≠ 0): when a valid player (0–3) is in `0x904063`, it records the maze number into `secret_prev_maze` (0x904870) and adds 15 to the start value (clamped at 40) — secret rooms become rarer after a win; when nobody entered, it subtracts 2 (floor 4) — they come sooner. Either way the countdown reloads from the start value.
 - `secret_getname` (0x54EC6) handles the winner: with EEPROM settings bit 13 set it opens the name-entry screen (buffer 0x904AA4 = 'A' + spaces, `player_status` = 0x20, "ENTER YOUR" / "'LAST-NAME FIRST-NAME'" prompts); otherwise `player_status` = 2 and a short between-level delay.
+- Secret-room entry stores inventory through reused bytes, not a private
+  structure: keys replace `monster_spawn_probability_bonus` at 0x90405F,
+  potions replace player 0's key byte at 0x90405A, and supershots use 0x905F6D.
+  The entrant's indexed inventory is then cleared and
+  `update_monster_spawn_bonus_from_score_per_coin` immediately adds into
+  0x90405F. Payout reads those same bytes after adding restored keys first.
+  This produces a shipped winner-zero quirk: its potion scratch is cleared with
+  its keys, and the subsequently restored key total becomes the potion addend.
 - `secret_name_entry_update` (0x54FE8), selected only by status 0x20, edits
   that winner's name using `ram.secret_player`, calls the live character-step
   and small-character draw helpers at 0x55440/0x554B6, and invokes
   `secret_code_build` when entry completes. `secret_getname` initializes the
   byte repeat delay to 0xA0, so the first held direction waits 160 frames; later
   repeats accelerate to 8-13 frames exactly like ordinary initials entry.
+  Fire or Magic commits the current character. Each non-backspace commit advances
+  the cursor and reloads the hidden timer to 0x0385; reaching byte 29 completes
+  immediately, while expiry below five fills the remaining bytes with spaces.
+  The shipped screen draws no countdown, completion instruction, or control
+  legend.
 - After name entry, `secret_code_build` (0x54BE0) replaces the same buffer with a six-symbol `XXX-XXX` code. It CRC-CCITT-hashes the entered name while ignoring spaces, derives three symbols from that hash, derives three more from the packed previous-maze/trick/challenge state, and interleaves the groups through the 32-character alphabet at 0x54CA6. Atari can therefore verify positions 0/2/5 from the submitted name and decode the other three positions without asking the player for those state fields. The 256-word CRC table occupies exactly 0x54CC6–0x54EC5.
 - Before that result is displayed, 0x5528A-0x552DA writes 29 opaque blank
   small glyphs across the winner's editor row. The result page replaces the
@@ -2219,7 +2317,7 @@ Post-processing: calls `wall_remove_playfield_update` (0x5E888) or `wall_place_p
 
 Two independent leaf routines follow this function in ROM and must not be treated as cyclic-wall tail blocks:
 
-- `maze_place_object_types` (0x5E7A6) takes one longword stack argument whose low byte is an object type. It scans MOB slots 0x20–0x3FF, accepts `mob_link >> 10` equal to either that type or `type - 3`, optionally rejects off-screen tiles when level-flags byte 4 bit 2 is set, and calls `mob_place_tile(slot, 0)` for each match. **Corrected:** it reports a match only for the `type - 3` arm — it returns 1 when at least one type-3-relative slot was converted, and otherwise 0, so a run that only matched the literal type still returns 0. Maze setup calls it for types 0x0A–0x0D according to level flags; `player_tile_interact` calls it again after replacing the relevant maze object.
+- `maze_place_object_types` (0x5E7A6) takes one longword stack argument whose low byte is an object type. It scans MOB slots 0x20–0x3FF, accepts `mob_link >> 10` equal to either that type or `type - 3`, optionally rejects off-screen tiles when level-flags byte 4 bit 2 is set, and calls `mob_place_tile(slot, 0)` for each match. **Corrected:** it reports a match only for the `type - 3` arm — it returns 1 when at least one type-3-relative slot was converted, and otherwise 0, so a run that only matched the literal type still returns 0. During level setup LFLAG3 bit 4 selects one random type 0x0A–0x0C; bit 5 selects one and then its next cyclic neighbor, removing one or two wall families before play. `player_tile_interact` calls the same routine after replacing a stepped-on trap.
 - `maze_convert_walls_to_exits` (0x5E80C) takes no arguments and scans the same MOB-slot range. It converts picture 0x20F6 and generic wall markers (`mob_picture == 0x8000`) other than forcefields (type 0x3F) by calling `mob_place_tile(slot, 0x10)`. It returns 1 if it converted at least one slot. `main_move_players` calls it when `escape_timer` reaches 0x5208 (21,000 frames), producing the documented all-walls-become-exits escape behavior.
 
 **Confidence: Verified.** The two visibility pairs use exact -1/0
@@ -2578,6 +2676,13 @@ placement resets it on normal level entry or player join. This implements the
 **Generators:** tier 1 destroyed by any hit; tiers 2/3 need damage ≥ 2/3, else they degrade: `mob_link -= damage << 10` (becomes the next weaker generator) with a picture update.
 
 **Walls:** movable walls (type 3) accumulate 0x400 per player hit in `0x904066[slot]`; at 0x6400 (25 hits) they dissolve via `tport_cycle_start`. Secret walls use the ordinary level wall palette until hit, then play sound 0x30, are revealed (`pf_replace`) and roll a prize: d6 = getrandom(16), spawned only if d6 < players×2+2 — 0–1 Death(!), 2–3 treasure bag, 4/8 invulnerable potion, 5/7 invulnerable food, else hidden potion (random pic 0xA728+rand(6)*4); spawn pictures come from `mazeobj_base_picture_tbl` at 0x5868C. Destructible walls use pattern 5 with the level's wall color and crumble via `wall_crumble` (0x5303A). The `7-stage` crumble value addresses live playfield color RAM; it is not a wall-theme index, so a static host palette must retain the wall's level color rather than selecting unrelated theme 6 after one hit. Max-tier shots (shot hpos & 0x30 == 0x30) pass through walls. With the reflect power (`player_powers` bit 10), the new direction is computed by `shot_reflect_calc` (0x53818) and the shot bounces. The row-zero branch at 0x40A9A returns `0x400 + cell` for a shot entering the top boundary (rather than indexing the reserved MOB slots 0–31); that tagged playfield hit is what sends the top wall through the same reflection path.
+
+`shot_impact_spawn` (0x47DAE) also distinguishes those tagged playfield hits.
+For a target at or above `0x400`, 0x47E6A-0x47F80 normalizes the tagged cell for
+depth placement but copies H/V from the live projectile MOB at `shooter+1`.
+Ordinary MOB targets copy the target's coordinates, including the ROM's
+four-pixel H adjustment for wider records. Stripping the tag before this call
+can index a reserved shot channel and place the sparkle at unrelated stale H/V.
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 

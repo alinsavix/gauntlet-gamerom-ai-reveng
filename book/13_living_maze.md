@@ -169,6 +169,12 @@ group is converted to floor at once. On some levels the flags additionally
 make trap walls invisible, or all walls invisible, at which point the maze
 becomes an exercise in memory and faith.
 
+Two setup flags can open those mazes before the player arrives. One removes a
+randomly selected trap-wall family and its matching triggers; the other removes
+that family and the next of the three groups cyclically. The draw occurs after
+exit selection, and the removal is a real maze/MOB/playfield mutation rather
+than hidden rendering. Maze 26 depends on this setup step to open its route.
+
 **Random walls.** A separate wall type toggles on its own schedule. Every two
 seconds the handler walks the level's random-wall span and flips a coin for
 each cell, toggling the wall's existence bit on heads. There is no pattern to
@@ -396,6 +402,15 @@ to contest name entry, and only when the operator enabled the contest option.
 Your saved supershot state survives the detour, the saved maze and level are
 restored, and the rotation resumes.
 
+The inventory handoff is a reminder that spare RAM is part of the design.
+Rather than reserve a neat structure, entry parks keys in the monster-spawn
+bonus byte, potions in red player's key byte, and supershots in one spare byte.
+The normal score-per-coin adjustment then changes the saved-key value before
+the room begins. Red has an additional ordering quirk: clearing the entrant's
+own keys also clears the potion scratch; on payout, restored keys are written
+first and that new key total is then added as potions. It is surprising, but it
+is the exact byte-level program Atari shipped.
+
 For most cabinets that is the end of the story. But if the operator has
 enabled one particular option, winning the challenge leads somewhere stranger.
 
@@ -412,7 +427,15 @@ unresponsive for about 2.7 seconds; once it starts moving, the accumulated
 velocity shortens repeats to eight through thirteen frames. This is the shipped
 input routine, not host keyboard lag.
 
-When you commit the name, a small routine replaces it, in the same buffer,
+There is no visible clock or instruction for finishing. Fire or Magic commits
+the current character and advances to the next of the twenty-nine positions.
+Filling the last position finishes immediately; otherwise an invisible
+0x0A8D-frame timer eventually fills the rest with spaces. Each committed
+character reloads that hidden timer to 0x0385, so entry can continue well beyond
+the initial timeout. The austere screen is the cabinet's own interface, not a
+missing gauntpy overlay.
+
+When entry completes, a small routine replaces the name, in the same buffer,
 with a six-character code in the form `XXX-XXX`, displayed under REMEMBER YOUR
 SECRET CODE. The screen goes on to explain why you should remember it: "SEND
 CONTEST ENTRY FORM TO ATARI GAMES CORP." and "CONTEST ENDS 12/19/86." In 1986
@@ -565,9 +588,11 @@ cabinet's remarkably candid bookkeeping.
 >   `main_handle_death` (0x4664C), §21.
 > - Cyclic walls: `main_walls_cyclic_move` (0x5E62A), 120-frame timer, phases
 >   at 0x90401C, group bytes at 0x910600 (2 bits/cell), sound 0x2B, §18.
->   Trap groups: wall types 7–9 removed by `maze_place_object_types` (0x5E7A6)
->   when a matching trap tile (types 0x0A–0x0C) is stepped on; invisibility
->   via LFLAG1 bit 7 / LFLAG2 bit 7 (`doc/05_data_reference.md` §3.12).
+>   Trap groups: wall types 7–9 removed with matching trap tiles 0x0A–0x0C by
+>   `maze_place_object_types` (0x5E7A6), either when a trap is stepped on or
+>   during level setup under LFLAG3 bits 4–5; LFLAG4 bit 2 limits removal to
+>   near-screen cells. Invisibility uses LFLAG1 bit 7 / LFLAG2 bit 7
+>   (`doc/05_data_reference.md` §3.12).
 > - Random walls: `main_walls_random_move` (0x5E41A), type 6, 50% toggle per
 >   cell per pass, §19. Movable walls: 0x400/hit in the state word, dissolve
 >   at 0x6400 (25 hits); secret-wall prize roll and wall/reflect shot rules in

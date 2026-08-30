@@ -51,9 +51,9 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x90404B | 8 B | `sound_queue` | Array of 1-byte sound IDs in the queue |
 | 0x904053 | 1 B | `sound_queue_head` | Head of sound queue |
 | 0x904054 | 1 B | `sound_queue_tail` | Tail of sound queue |
-| 0x904055 | 4 B | `player_potionsnum` | Array of 1-byte counters: potions per player |
-| 0x90405A | 4 B | `player_keysnum` | Array of 1-byte counters: keys per player |
-| 0x90405F | 1 B | `monster_spawn_probability_bonus` | Signed global modifier added to `monster_spawn_probability_table` before each generator's random spawn gate. `update_monster_spawn_bonus_from_score_per_coin` (0x48B58) adds `(sum(active scores) >> 14) / sum(active players' inserted coins)`; coin insertion decrements it while positive. Several transition paths temporarily save/restore player key/potion adjustments through this byte, so it is not a four-player array. |
+| 0x904055 | 4 B | `player_potionsnum` | Array of 1-byte counters: potions per player. Ordinary collection shares a 12-item cap with keys. |
+| 0x90405A | 4 B | `player_keysnum` | Array of 1-byte counters: keys per player. Ordinary collection shares a 12-item cap with potions. |
+| 0x90405F | 1 B | `monster_spawn_probability_bonus` / secret saved keys | Signed global modifier added to `monster_spawn_probability_table` before each generator's random spawn gate. `update_monster_spawn_bonus_from_score_per_coin` (0x48B58) adds `(sum(active scores) >> 14) / sum(active players' inserted coins)`; coin insertion decrements it while positive. Secret-room entry first overwrites it with the winner's keys, then immediately runs that bonus update; payout adds the resulting byte back as keys. |
 
 ### 1.2 MOB Animation Array
 
@@ -222,7 +222,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| 0x904A4E | 2 B | `global_delay_timer` | Shared display/input holdoff timer. Level setup loads 150/180/600 frames and `main_start_game` waits for zero before entering the maze; secret-name entry and related UI code reuse it for cursor/input pacing. While nonzero it also suppresses treasure countdown processing. |
+| 0x904A4E | 2 B | `global_delay_timer` | Shared display/input holdoff timer. Level setup loads 150/180/600 frames and `main_start_game` waits for zero before entering the maze; secret name entry loads 0x0A8D, reloads 0x0385 after a committed character, and completes below five without displaying this countdown. While nonzero it also suppresses treasure countdown processing. |
 | 0x904A50 | 1 B × 4 | `player_treascount` | Count of treasures picked up by player |
 | 0x904A54 | 2 B × 4 | `player_stundelay` | Timer for player being stunned |
 | 0x904A5C | 2 B | `death_hits` | Global hit count shared by all players and Death MOBs. Every player shot that hits Death, ordinary or supershot, increments it; `death_potion_score` uses `death_hits & 7` to select the score and popup variant. It is distinct from the four per-player Death-damage accumulators at 0x904B3A and does not control Death's >200 dismissal threshold. |
@@ -315,7 +315,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904BB4 | 4 B | `thief_item_carried` | Item that the thief is currently carrying |
 | 0x904BB8 | 2 B | `thief_collision_direction_code` | One-based direction/contact code set when the thief first collides with its target player (`thief_direction + 1`). It suppresses repeated damage during the same contact and is folded into `thief_move_engine`'s return adjustment; zero means no active contact code. |
 | 0x904BBA | 2 B | `thief_start_location` | Target player's packed cell when the visitor is scheduled, before the arrival delay. Deployment later creates the thief/mugger at this saved old location while the pursuit grid leads toward the player's newer cells. |
-| 0x904BBC | 2 B | `thief_stolen_item` | Tile type of last item stolen by thief |
+| 0x904BBC | 2 B | `thief_stolen_item` | Shared thief animation/contact counter, despite the historical name. Theft and first monster/player contact clear it; `main_thief_anim` increments it while showing escape, fight, or compact blocked-motion frames. A monster/generator blocker is removed after this word passes 15. The actual carried items live in the adjacent longwords at 0x904BB0/0x904BB4. |
 | 0x904BBE | 2 B | `thief_tport_active` | Thief transporter-transition latch. `thief_start_tport_anim` sets it to one; normal movement clears it, and occupied-cell replacement is suppressed while it is nonzero. |
 
 ### 1.17 Transporter State
@@ -621,6 +621,14 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 | LFLAG1_ODDANGLE_DEATHS | 0x40 |
 | LFLAG1_INVIS_TRAPWALLS | 0x80 |
 
+Bits 0, 1, 4, 5, and 6 install the ROM's per-family odd-angle targeting
+overrides. Bits 2 and 3 are deliberately excluded by the `0x73` consumer mask:
+their live role is horizontal and vertical whole-maze mirroring during decode
+and placement. Bit 7 leaves type-7/8/9 collision markers intact while wall
+initialization and redraw retain floor descriptors; `level_splash` also writes
+`TRAP WALLS ARE INVISIBLE` and has a one-in-four speech chance when no earlier
+splash notice spoke.
+
 **Level Flags 2** (`level_flags[1]`):
 
 | Name | Value |
@@ -634,16 +642,30 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 | LFLAG2_FAST_DEATHS | 0x40 |
 | LFLAG2_INVIS_ALLWALLS | 0x80 |
 
+Bits 0–6 independently select the seven ordinary fast families. The selected
+family receives the doubled step only on the ROM cadence phase. Bit 7 suppresses
+ordinary wall descriptor setup/redraw, makes destructible walls disappear on
+their first hit, and selects the `ALL WALLS ARE INVISIBLE` splash notice. Level
+9999 deliberately bypasses the invisibility drawing gates.
+
 **Level Flags 3** (`level_flags[2]`):
 
 | Name | Value |
 |------|-------|
 | LFLAG3_RANDOMFOOD_0–7 | 0–7 (count) |
 | LFLAG3_WALLS_CYCLIC | 0x08 |
-| LFLAG3_WALLS_DELETABLE1 | 0x10 |
-| LFLAG3_WALLS_DELETABLE2 | 0x20 |
+| LFLAG3_WALLS_DELETABLE1 | 0x10 — level setup randomly removes one type-7/8/9 wall family and its matching type-10/11/12 trigger |
+| LFLAG3_WALLS_DELETABLE2 | 0x20 — level setup removes a random wall family and the next family cyclically |
 | LFLAG3_EXIT_MOVES | 0x40 |
 | LFLAG3_EXIT_CHOOSEONE | 0x80 |
+
+Bits 0–2 are the authored random-food count before party, class, difficulty,
+and spawn-pressure adjustments. Bit 3 packs type-7/8/9 markers into the
+cyclic-wall table and runs the 120-frame phase machine. Bits 4–5 perform the
+one-/two-group setup removals described in the table. Bit 6 selects, animates,
+and announces a moving exit; bit 7 performs choose-one selection without
+movement. LFLAG4 `EXIT_FAKE` controls whether either selection path's losers
+remain as decoys.
 
 **Level Flags 4** (`level_flags[3]`):
 
@@ -662,6 +684,21 @@ JOY_SPARE2_BIT (3): no consumer tests either bit.
 draws one value from `getrandom(3)` and adds it modulo three to every live
 type-10/11/12 trap marker, preserving their grouping while rotating which
 trigger controls which wall family.
+
+The complete remaining consumers are:
+
+- `SHOTS_STUN` and `SHOTS_HURT` govern player-shot contact, in that priority
+  order when both are set, and write their separate level-splash notices.
+- `TRAPS_LOCAL` restricts `maze_place_object_types` to its wider near-screen
+  window. It also changes deep-level randomization: a random off-screen-player
+  result becomes `SHOTS_HURT`, and automatic wrap additions are suppressed.
+- `WRAP_V` and `WRAP_H` govern directional distance/probes and maze seams;
+  `WRAP_H` additionally changes the horizontal mirror axis from base 0x20 to
+  0x1F.
+- `EXIT_FAKE` retains choose-one losing exits as visible decoys with hpos bit 4
+  instead of replacing them with floor.
+- `PLAYER_OFFSCREEN` bypasses the player hardware-window and corner-transport
+  visibility gates and writes `PLAYERS CAN GO OFF SCREEN` on the splash.
 
 ### 3.13 Maze Numbers
 
@@ -1572,4 +1609,20 @@ the complete §1 RAM map and generated operand checks.
 | 0x9048A6 | 2 B | `random_wall_timer` | Random wall timer (negative=disabled, 0=process, positive=countdown) |
 | 0x910600 | 1 B × (tile_count/4) | `cyclic_wall_assignments` | Color RAM Spare: cyclic wall phase assignment, 2 bits per tile |
 | 0x905048 | 3072 B | `hud_mob_table` | HUD tile workspace arranged as 24 rows × 128 bytes (64 words), exact range 0x905048–0x905C47. Player HUD columns use row index `player*5 + field`; for example the IT overlay writes rows `player*5 + 8`. The following 12 bytes through 0x905C53 are padding before `tport_route_forward`. |
-| 0x905054 | overlapping 24 × 128 B view | `path_direction_grid` | Gameplay/pathfinding view spanning exactly 0x905054–0x905C53, immediately before `tport_route_forward`. Cell `id` is `base + (id / 44) * 0x80 + (id % 44)`; each byte packs two direction+1 nibbles (0 means unset). Valid packed maze IDs are 0x000–0x3FF, so the highest reachable byte is 0x905BDF (ID 1023); row tails and the rest of the final padded row are not indexed. The view overlaps `hud_mob_table` and its following 12-byte pad. |
+| 0x905054 | overlapping 24 × 128 B view | `path_direction_grid` | Gameplay/pathfinding view spanning exactly 0x905054–0x905C53, immediately before `tport_route_forward`. Cell `id` is `base + (id / 44) * 0x80 + (id % 44)`; each byte packs two direction+1 nibbles (0 means unset). Valid packed maze IDs are 0x000–0x3FF, so the highest reachable byte is 0x905BDF (ID 1023); row tails and the rest of the final padded row are not indexed. The view overlaps hidden alpha columns 42–63: `maze_show`/`maze_hide` clear their 22 words per row and thereby reset the route grid at level handoff. |
+
+### 9.1 Modeled RAM alias audit
+
+The Python model must couple simultaneous physical views but may separate
+lifetime-only names. The checked set is:
+
+| Physical range | Views | Required treatment |
+|---|---|---|
+| 0x904006 | OS `pf_vscroll_hi` / game `frame_counter` | Lifetime-separated; no game-side simultaneous reader |
+| 0x904012–0x904015 | `eeprom_write_timer` / boot `game_hook_flag` | Lifetime-separated |
+| 0x90405A, 0x90405F | player-0 keys / secret potions; spawn bonus / secret keys | Simultaneous scratch aliases; entry, bonus update, and payout must share bytes |
+| 0x904940 | popup timer 3 / `mob_depth_key[0]` | Safe: depth-key element zero is reserved |
+| 0x90497C–0x90497F | effect counters / depth keys 30–31 | Safe: those row-zero keys are not live managed actors |
+| 0x905054–0x905C53 | hidden alpha bytes / thief route grid | Simultaneous; alpha clears and route nibble writes update both views |
+| 0x905F82–0x905FFF | priority-bucket tail / full head table | One list with a biased base, not independent storage |
+| 0x905C54–0x905E53 | transporter route tables / portrait workspace padding | Reachable route cells and portrait destinations are spatially disjoint |

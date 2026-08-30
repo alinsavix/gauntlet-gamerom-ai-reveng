@@ -218,7 +218,7 @@ def init_alpha_color_ram(
     0x434EE, so that caller leaves the cleared MOB color RAM for
     ``title_logo_init`` to populate.
     """
-    state.alpha_ram[:] = [0] * (ALPHA_COLUMNS * ALPHA_ROWS)
+    fill_alpha_rect(state, 0, 0, ALPHA_COLUMNS, ALPHA_ROWS, 0)
     restore_alpha_color_ram(state)
     if initialize_mobs:
         init_mob_color_ram(state)
@@ -244,7 +244,7 @@ def clear_attract_display_memory(state: GameState) -> None:
     state.playfield_color_ram[:] = [0] * 128
     state.playfield_shadow_color_ram[:] = [0] * 128
     state.playfield_color_generation += 1
-    state.alpha_ram[:] = [0] * (ALPHA_COLUMNS * ALPHA_ROWS)
+    fill_alpha_rect(state, 0, 0, ALPHA_COLUMNS, ALPHA_ROWS, 0)
     state.playfield_ram[:] = [0] * len(state.playfield_ram)
     state.playfield_generation += 1
     state.mobs = MobTable()
@@ -629,6 +629,13 @@ def fill_alpha_rect(
     for y in range(top, bottom):
         start = alpha_index(left, y)
         state.alpha_ram[start:start + len(values)] = values
+        hidden_left = max(42, left)
+        hidden_right = min(64, right)
+        if y < 24 and hidden_left < hidden_right:
+            for hidden_column in range(hidden_left, hidden_right):
+                route_offset = y * 0x80 + (hidden_column - 42) * 2
+                state.path_direction_grid[route_offset] = (word >> 8) & 0xFF
+                state.path_direction_grid[route_offset + 1] = word & 0xFF
 
 
 def clear_alpha_visible(state: GameState) -> None:

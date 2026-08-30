@@ -126,6 +126,13 @@ camera crosses the left seam, creatures that are plainly visible at columns
 then fail the same screen-window test. Both the monster rectangle and projectile
 window must wrap at the maze boundary.
 
+The depth-chain window has to wrap too. The main caller masks both vertical
+scroll endpoints into the 512-pixel maze before looking up its start and stop
+SLIP entries. If a reimplementation wraps the coordinate cull but clamps those
+two band indices, the camera can show monsters above the row-zero seam while
+the chain walk never reaches them; they remain visible but neither move nor
+animate.
+
 **The per-frame configuration.** Before the walk begins,
 `monsters_everything` builds a small seven-entry table on its own stack, one
 entry per monster family, and fills it with a default speed. It then consults

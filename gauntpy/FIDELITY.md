@@ -315,6 +315,61 @@ evidence remains in `../doc/`, generated contracts, and the book.
     backspace and hyphen. In particular, ASCII `'-'` maps to large-font index
     zero through the generic OS table and looks like `0`; contest-code output
     must use the dedicated `0x7C/0xFE/0xFC/0x7E` control quad.
+69. **Hidden alpha RAM is still shared RAM.** The thief route grid at
+    `0x905054` is the byte view of alpha columns 42-63 for 24 rows.
+    `maze_show`/`maze_hide` clear those columns and therefore clear both route
+    nibbles. A separate Python representation must receive the same game-side
+    write or stale escape paths survive across levels.
+70. **Scratch aliases retain their side effects.** Secret-room entry stores the
+    winner's keys in `monster_spawn_probability_bonus` (0x90405F) and potions
+    in player 0's key byte (0x90405A), then performs indexed inventory clears
+    and the normal spawn-bonus update. Preserve that instruction order and read
+    the same physical bytes on payout; standalone “saved inventory” fields are
+    not behaviorally equivalent.
+71. **Simulation SLIP windows wrap before lookup.** `main_move_monsters` masks
+    both vertical scroll endpoints with `0x1F0` and indexes the biased
+    `priority_bucket_heads_tail` view. A wrapped culling rectangle is
+    insufficient: the depth-chain start/stop arc must also wrap or visible
+    monsters near row zero never receive turns.
+72. **The thief fights through ordinary monsters and generators.** Contact with
+    object types 18–45 latches `thief_direction + 1`, resets the shared
+    animation/contact counter, and advances the fight cycle once per thief
+    frame. After the counter passes 15, the ROM spawns an impact and removes the
+    blocker. Do not treat a non-solid monster cell as inert occupancy.
+73. **Deletable trap walls are level-setup mutations.** LFLAG3 bit 4 removes one
+    randomly selected type-7/8/9 wall group and its type-10/11/12 trigger;
+    bit 5 removes the selected group and the next cyclic group. These draws run
+    after exit selection and use `maze_place_object_types`, including the
+    LFLAG4 `TrapsLocal` visibility gate, so logical maze state, MOB records, and
+    playfield descriptors must change together.
+74. **Level flags have every consumer they reach.** A flag can affect setup,
+    simulation, video RAM, and presentation independently. In particular,
+    `level_splash` writes LFLAG notices and consumes speech/RNG state; LFLAG1
+    bits 2–3 mirror placement even though their historical names mention
+    monster families; and LFLAG2 bit 7 both hides walls and changes
+    destructible-wall damage. An implementation is incomplete until all
+    address-proven consumers of the bit are represented.
+75. **Tagged playfield hits choose impact geometry.** `shot_impact_spawn` receives
+    either a MOB slot or a `0x400`-tagged playfield collision. Preserve that tag:
+    the tagged arm positions the sparkle from the live projectile and uses the
+    normalized wall cell only as its depth key. Masking it into a MOB identity
+    copies unrelated fixed-channel coordinates.
+76. **Dynamic picture-only MOBs are invalid state.** For slots 32-1023, a nonzero
+    picture with zero H/V and no object type/state cannot come from a ROM MOB
+    writer. Remove that modeled-RAM remnant before collision; never hide its
+    sprite or ignore it only in rendering.
+77. **Generic vertical boundaries inspect the proposed V word.** `mob_probe_up`
+    and `mob_probe_down` do not reject the top/bottom slot rows unconditionally.
+    Their signed/unsigned V tests permit the last pixels and seam response before
+    returning `0x400`; actor-specific movers must pass the proposed live V word.
+78. **Thief arrivals and successful escapes poof.** Both `main_start_thief`
+    deployment and the return-to-start escape arm call `tport_cycle_start` before
+    continuing or clearing the live visitor. The actor and the fixed effect MOB
+    are separate game-side records.
+79. **Thief cell anchors are four pixels left.** Deployment computes H as
+    `slot*0x800 - 0x200 + palette`, the same `cell_x*16 - 4` anchor used after
+    thief transport. Preserve that offset through movement and cell handoff;
+    centering the sprite on the raw cell origin shifts its visible corridor path.
 
 ## Investigation workflow
 

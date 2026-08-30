@@ -108,6 +108,22 @@ class TestCrossingACellMovesTheRecord:
         assert state.mobs.state_link[start] == 0
         assert not state.mobs.is_occupied(start)
 
+    def test_picture_only_dynamic_remnant_cannot_block_the_player(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        start = pack_slot(5, 16)
+        blocker = start + 1
+        player = _spawn(state, 0, start)
+        state.level_players_active = 1
+        state.mobs.picture[blocker] = _HERO_PICTURE
+        state.mobs.insert(blocker)
+        state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
+
+        gp.main_move_players(state)
+
+        assert not state.mobs.is_occupied(blocker)
+        assert blocker not in list(state.mobs.iter_chain())
+        assert player.mob_slot == start
+
     def test_the_handover_row_is_the_roms_own_bias(self):
         """0x424CA adds 0x400 to V *upward*: the row changes at ``y % 16 == 9``."""
         for offset, expected_row in ((8, 10), (9, 11)):

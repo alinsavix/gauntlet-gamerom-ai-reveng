@@ -713,7 +713,7 @@ class TestSecretRoomRoundTrip:
         assert p.status == int(PlayerStatus.ALIVE_HERE)
         assert (p.keysnum, p.potionsnum, p.supershot) == (0, 0, 0)
         assert (state.secret_saved_keys, state.secret_saved_potions,
-                state.secret_saved_supershot) == (3, 2, 5)
+                state.secret_saved_supershot) == (3, 0, 5)
         assert state.level_players_active == 1
 
     def test_completing_the_challenge_pays_and_returns_to_the_rotation(self):
@@ -730,7 +730,7 @@ class TestSecretRoomRoundTrip:
         _run_exit_animation(state)
         assert state.bonus_amount == ex._SECRET_ROOM_BONUS
         assert p.score == ex._SECRET_ROOM_BONUS
-        assert (p.keysnum, p.potionsnum, p.supershot) == (3, 2, 5), "stash returned"
+        assert (p.keysnum, p.potionsnum, p.supershot) == (3, 3, 5)
         assert state.secret_player == -1
 
         self._hold(state)
@@ -753,7 +753,7 @@ class TestSecretRoomRoundTrip:
 
         self._hold(state)
         assert (state.levelnum_current, state.mazenum_current) == (13, rotation_maze)
-        assert (p.keysnum, p.potionsnum, p.supershot) == (3, 2, 5)
+        assert (p.keysnum, p.potionsnum, p.supershot) == (3, 3, 5)
 
     def test_a_shooting_trick_wins_the_same_way(self):
         state = self._level_12(self._SHOOT_MAZE)

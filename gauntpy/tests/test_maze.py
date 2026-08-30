@@ -9,6 +9,8 @@ files and skips cleanly (not errors) when ``GEX_ROM_DIR`` is unset, mirroring
 
 from __future__ import annotations
 
+from collections import deque
+
 import pytest
 
 from gauntpy import maze as gm
@@ -84,6 +86,22 @@ class _FixedRNG:
 
 
 class TestPostDecodeSetup:
+    @staticmethod
+    def _trap_group_state() -> GameState:
+        from types import SimpleNamespace
+
+        state = GameState()
+        state.maze = SimpleNamespace(data={})
+        for group in range(3):
+            for row, object_type in (
+                (5, int(MazeObjIds.WALL_TRAPCYC1) + group),
+                (6, int(MazeObjIds.TILE_TRAP1) + group),
+            ):
+                slot = pack_slot(row, 5 + group)
+                gm._place_one(state, slot, object_type)
+                state.maze.data[(5 + group, row)] = object_type
+        return state
+
     def test_random_trap_flag_rotates_all_three_trap_identities_together(self):
         state = GameState()
         state.level_flags_4 = 0x08
@@ -127,6 +145,107 @@ class TestPostDecodeSetup:
         assert state.mobs.obj_type(slots[1]) == int(MazeObjIds.FOOD_DESTRUCTABLE)
         assert state.maze.data[(6, 5)] == int(MazeObjIds.FOOD_DESTRUCTABLE)
 
+    def test_deletable2_removes_two_adjacent_trap_wall_groups(self):
+        state = self._trap_group_state()
+        state.level_flags_3 = 0x20
+        state.rng = _FixedRNG(1, 0, 0, 0, 0)
+
+        gm._remove_deletable_trap_walls(state)
+
+        assert state.mobs.obj_type(pack_slot(5, 5)) == int(
+            MazeObjIds.WALL_TRAPCYC1
+        )
+        assert state.mobs.obj_type(pack_slot(6, 5)) == int(
+            MazeObjIds.TILE_TRAP1
+        )
+        for column in (6, 7):
+            assert not state.mobs.is_occupied(pack_slot(5, column))
+            assert not state.mobs.is_occupied(pack_slot(6, column))
+
+    def test_trapslocal_limits_setup_removal_to_near_screen_cells(
+        self, monkeypatch,
+    ):
+        from gauntpy.subsystems import dragon
+
+        state = self._trap_group_state()
+        state.level_flags_3 = 0x10
+        state.level_flags_4 = 0x04
+        state.rng = _FixedRNG(0, 0)
+        near_wall = pack_slot(5, 5)
+        monkeypatch.setattr(
+            dragon, "tile_near_screen_test",
+            lambda _state, slot: slot == near_wall,
+        )
+
+        gm._remove_deletable_trap_walls(state)
+
+        assert not state.mobs.is_occupied(near_wall)
+        assert state.mobs.obj_type(pack_slot(6, 5)) == int(
+            MazeObjIds.TILE_TRAP1
+        )
+
+    @requires_roms
+    def test_level_110_maze_26_removes_one_random_trap_wall_group(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+
+        gm.load_level(state, 110, maze_number=26)
+
+        remaining_groups = {
+            object_type
+            for object_type in range(
+                int(MazeObjIds.WALL_TRAPCYC1),
+                int(MazeObjIds.WALL_TRAPCYC3) + 1,
+            )
+            if any(
+                state.mobs.obj_type(slot) == object_type
+                for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+            )
+        }
+        assert state.level_flags_3 & 0x10
+        assert len(remaining_groups) == 2
+        assert sum(
+            state.mobs.obj_type(slot) in remaining_groups
+            for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+        ) == 6
+
+        exit_slot = next(
+            slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+            if state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+        )
+        blocked_types = {
+            int(MazeObjIds.WALL_REGULAR),
+            int(MazeObjIds.WALL_MOVABLE),
+            int(MazeObjIds.WALL_SECRET),
+            int(MazeObjIds.WALL_DESTRUCTABLE),
+            int(MazeObjIds.WALL_RANDOM),
+            int(MazeObjIds.WALL_TRAPCYC1),
+            int(MazeObjIds.WALL_TRAPCYC2),
+            int(MazeObjIds.WALL_TRAPCYC3),
+            int(MazeObjIds.DOOR_HORIZ),
+            int(MazeObjIds.DOOR_VERT),
+            int(MazeObjIds.FORCEFIELDHUB),
+        }
+        reachable = {state.maze_player_start_slot}
+        pending = deque(reachable)
+        while pending:
+            slot = pending.popleft()
+            row, column = divmod(slot, 32)
+            for next_row, next_column in (
+                (row - 1, column), (row + 1, column),
+                (row, column - 1), (row, column + 1),
+            ):
+                if not (1 <= next_row < 32 and 0 <= next_column < 32):
+                    continue
+                candidate = pack_slot(next_row, next_column)
+                if (
+                    candidate in reachable
+                    or state.mobs.obj_type(candidate) in blocked_types
+                ):
+                    continue
+                reachable.add(candidate)
+                pending.append(candidate)
+        assert exit_slot in reachable
+
 
 class TestDeferredThiefPickups:
     def test_mugger_food_and_encoded_thief_loot_return_on_the_next_level(self):
@@ -154,6 +273,25 @@ class TestDeferredThiefPickups:
 
 
 class TestRandomPickups:
+    @pytest.mark.parametrize("authored_count", range(8))
+    def test_randomfood_field_is_the_zero_through_seven_base_count(
+        self, authored_count, monkeypatch,
+    ):
+        state = GameState(levelnum_current=1, mazenum_current=0)
+        state.level_flags_3 = authored_count
+        placed = []
+        monkeypatch.setattr(
+            gm, "maze_randomplace",
+            lambda _state, object_type: (
+                placed.append(int(object_type))
+                or FIRST_PLAYABLE_SLOT + len(placed) - 1
+            ),
+        )
+
+        gm.maze_addrandompickups(state, False)
+
+        assert placed == [int(MazeObjIds.FOOD_DESTRUCTABLE)] * authored_count
+
     def test_level_six_places_and_reloads_guaranteed_hidden_potion(
         self, monkeypatch,
     ):

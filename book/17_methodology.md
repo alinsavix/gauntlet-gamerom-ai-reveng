@@ -44,6 +44,11 @@ progress, so resuming cannot silently substitute a changed file. A scheduled
 thief is armed when the synthetic countdown begins, allowing ordinary player
 movement to write the same breadcrumb state the real scheduler would; that is a
 test-harness contract, still not evidence that Atari shipped the invented room.
+For live investigation, the host-only F1 ROUTES page snapshots both nibbles of
+all 1,024 route cells and draws pursuit and escape maps side by side, with the
+visitor's current, next, start, and victim cells marked. Because it renders an
+immutable snapshot outside arcade RAM, opening the page cannot alter the route
+being diagnosed.
 
 Above that sits **disassembly**. radare2 turns bytes into instructions, and
 this project keeps a checked-in loader script that reconstructs the whole

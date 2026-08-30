@@ -285,6 +285,13 @@ also ends with the shot either *consumed* or still flying: supershots pierce
 most monsters, and the reflect power lets a shot bounce off a wall and keep
 going.
 
+The impact sparkle keeps one subtle distinction from collision. A hit on a MOB
+copies that target's position. A collision reported as a tagged playfield tile
+instead copies the live projectile's position and uses the normalized wall cell
+only to place the sparkle in the depth chain. Treating both values as ordinary
+MOB slots can make a boundary impact jump to stale coordinates in one of the
+fixed shot channels.
+
 ## Potions and the Magic button
 
 Press Magic with a potion in your pocket and the drink dispatches a blast
@@ -292,6 +299,10 @@ against every eligible monster and generator around. What happens to each of
 them mostly comes out of a table. The screen flashes in the color of the player
 position that used it: the game swaps one live playfield palette word for a
 single video field, then restores the level's floor color on the next pass.
+
+Being stunned does not stop the drink. Potion input is handled earlier in the
+frame than player movement and has no stun check, so a frozen hero may spend a
+potion and clear the room while their movement timer continues unchanged.
 
 ROM holds a **potion-effect matrix** of one 16-byte record per monster or
 generator object type, 28 types in all. Within a record, the entry is selected
@@ -397,6 +408,12 @@ A hero's inventory is spartan: a count of **keys**, a count of **potions**,
 the **score multiplier**, and the power-up bits below. The info-panel column
 renders it directly, with rows of key and potion icons and the multiplier
 whenever it exceeds one, so your pockets stay public.
+
+Keys and potions share one twelve-item pocket. Once their combined count reaches
+twelve, walking over another ordinary key or potion shows the full-inventory
+lesson and leaves the item for somebody who can carry it. Host troubleshooting
+controls can deliberately construct larger byte counts, but those overfull
+values do not waive the arcade pickup gate.
 
 ![One player's info-panel column with every field populated](img/ch10_hud_column.png)
 

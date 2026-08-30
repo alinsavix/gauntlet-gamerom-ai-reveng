@@ -43,7 +43,7 @@ from __future__ import annotations
 from ..constants import MazeObjIds
 from ..coords import (
     POS_FIELD_MASK, POS_SHIFT,
-    hpos_x, position_field, replace_position, vpos_y,
+    hpos_x, mob_words_to_slot, position_field, replace_position, vpos_y,
 )
 from ..state import GameState
 
@@ -554,25 +554,55 @@ def _claim_effect_slot(state: GameState, fallback_channel: int,
 
 
 def _place_effect(state: GameState, effect_slot: int, source_slot: int,
-                  picture: int, vpos_add: int, counter: int) -> None:
+                  picture: int, vpos_add: int, counter: int, *,
+                  hpos_add: int = 0, depth_key: int | None = None) -> None:
     """Install a temporary effect MOB at a tile-aligned source position."""
     state.mobs.picture[effect_slot] = picture
     state.mobs.hpos[effect_slot] = (
-        position_field(state.mobs.hpos[source_slot]) + 1
+        position_field(state.mobs.hpos[source_slot]) + hpos_add + 1
     ) & 0xFFFF
     state.mobs.vpos[effect_slot] = (
         position_field(state.mobs.vpos[source_slot]) + vpos_add
     ) & 0xFFFF
-    state.mobs.insert(effect_slot, depth_key=source_slot)
+    if depth_key is None:
+        depth_key = source_slot
+    state.mobs.insert(effect_slot, depth_key=depth_key)
     state.mob_effect_anim_counter[effect_slot - 0x0D] = counter & 0xFF
 
 
+def _impact_geometry(
+    state: GameState, target: int, shooter: int,
+) -> tuple[int, int, int]:
+    """Return ``(source_slot, hpos_add, depth_key)`` from 0x47E6A-0x47F7E."""
+    if target >= 0x400:
+        depth_key = target - 0x400
+        if depth_key < 0x20:
+            depth_key += 0x20
+        elif depth_key > 0x400:
+            depth_key -= 0x20
+        return _shot_slot(shooter), 0, depth_key
+
+    if target & 0x1F or state.level_flags_4 & 0x20:
+        hpos_add = 0 if state.mobs.hpos[target] & 0x38 <= 8 else 0x200
+        source_slot = target
+    else:
+        hpos_add = 0
+        source_slot = _shot_slot(shooter)
+
+    if target < 0x20:
+        hpos = position_field(state.mobs.hpos[source_slot]) + hpos_add + 1
+        vpos = position_field(state.mobs.vpos[source_slot]) + 9
+        target = mob_words_to_slot(hpos, vpos, x_bias=8)
+    return source_slot, hpos_add, target
+
+
 def shot_impact_spawn(state: GameState, target: int, shooter: int) -> None:
-    """0x47DAE -- spawn a sparkle explosion at the target.
+    """0x47DAE -- spawn a sparkle explosion for a MOB or tagged tile hit.
 
     The first free slot in 0x0D-0x10 wins. With a full pool, the shooter selects
     a fallback channel, but an active transporter dissolve in that channel is
-    preserved rather than overwritten.
+    preserved rather than overwritten. Tagged playfield hits position the effect
+    from the live projectile; their normalized cell is only the depth-list key.
     """
     effect_slot = _claim_effect_slot(
         state, shooter, preserve_tport=True,
@@ -582,7 +612,11 @@ def shot_impact_spawn(state: GameState, target: int, shooter: int) -> None:
     picture = (
         _PLAYER_IMPACT_PICTURE if shooter < 8 else _MONSTER_IMPACT_PICTURE
     )
-    _place_effect(state, effect_slot, target, picture, 9, 0)
+    source_slot, hpos_add, depth_key = _impact_geometry(state, target, shooter)
+    _place_effect(
+        state, effect_slot, source_slot, picture, 9, 0,
+        hpos_add=hpos_add, depth_key=depth_key,
+    )
 
 
 def tport_cycle_start(state: GameState, slot: int,
@@ -950,7 +984,7 @@ def _handle_generic_wall(state: GameState, raw_target: int,
         if state.reflect_count[shooter_id] != 0:
             return SURVIVES
 
-    shot_impact_spawn(state, raw_target & 0x3FF, shooter_id)
+    shot_impact_spawn(state, raw_target, shooter_id)
     if _is_maxtier(state, shooter_id):
         return SURVIVES     # 0x4B51E: max-tier shots bore through walls
     return _consume(state, shooter_id)

@@ -1413,6 +1413,34 @@ class TestHudHooks:
         assert p.potionsnum == 1
         assert self._field(state, 3).health_drawn
 
+    def test_overfull_player_cannot_pick_up_a_potion(self):
+        for obj_type in (MazeObjIds.POT_DESTRUCTABLE, MazeObjIds.POT_INVULN):
+            state = _active_state()
+            player = _make_player_active(state, 0, health=175)
+            player.keysnum = 5
+            player.potionsnum = 11
+            slot = 44
+            state.mobs.create(
+                slot, tile=0x1234, hpos=0, vpos=0, obj_type=int(obj_type),
+            )
+
+            assert gp.player_tile_interact(state, slot, 0) == 0
+
+            assert (player.keysnum, player.potionsnum) == (5, 11)
+            assert state.mobs.obj_type(slot) == int(obj_type)
+
+    def test_overfull_player_cannot_pick_up_a_key(self):
+        state = _active_state()
+        player = _make_player_active(state, 0, health=175)
+        player.keysnum = 5
+        player.potionsnum = 11
+        slot = _make_key_slot(state)
+
+        assert gp.player_tile_interact(state, slot, 0) == 0
+
+        assert (player.keysnum, player.potionsnum) == (5, 11)
+        assert state.mobs.obj_type(slot) == int(MazeObjIds.KEY)
+
     def test_power_up_pickup_refreshes_the_panel(self):
         state = _active_state()
         _make_player_active(state, 0, health=175)

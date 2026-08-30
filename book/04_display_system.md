@@ -107,6 +107,13 @@ Adjacent walls even get revisited after a change so their artwork stays
 seamlessly joined, a detail Chapter 13 returns to when walls start moving on
 their own.
 
+The Python renderer keeps an indexed 512x512 image as a host-side cache, but
+that image never becomes game state. When a cyclic wall, random wall, or moving
+exit changes a handful of descriptor words, the cache restamps only those 8x8
+tiles and then applies the live normal and shadow palettes. Rebuilding all 4096
+tiles for each such write produces regular frame-time spikes even though
+scrolling itself is only a crop of the same world raster.
+
 ## Motion objects
 
 Anything that moves, and plenty that merely stands ready to move, is drawn

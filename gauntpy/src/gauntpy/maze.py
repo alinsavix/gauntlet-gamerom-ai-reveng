@@ -921,6 +921,8 @@ _CHALLENGE_GENERATOR_FIRST = 0x28
 _CHALLENGE_GENERATOR_LAST = 0x2D
 _CHALLENGE_HIDDEN_POTION_BASE = 0xA728
 _LFLAG4_TRAPS_RANDOM = 0x08
+_LFLAG3_WALLS_DELETABLE1 = 0x10
+_LFLAG3_WALLS_DELETABLE2 = 0x20
 _TRAP_TYPE_FIRST = int(MazeObjIds.TILE_TRAP1)
 _TRAP_TYPE_COUNT = 3
 _ADAPTIVE_FOOD_PICTURE = 0x277B
@@ -1369,6 +1371,39 @@ def _mark_adaptive_food(state: GameState) -> None:
         data[(col, row)] = int(MazeObjIds.FOOD_DESTRUCTABLE)
 
 
+def maze_place_object_types(state: GameState, trap_type: int) -> bool:
+    """0x5E7A6 -- replace one trap trigger and its matching wall group."""
+    wall_type = trap_type - 3
+    removed_wall = False
+    for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link)):
+        object_type = state.mobs.obj_type(slot)
+        if object_type not in (wall_type, trap_type):
+            continue
+        if state.level_flags_4 & LFLAG4_TRAPS_LOCAL:
+            from .subsystems.dragon import tile_near_screen_test
+
+            if not tile_near_screen_test(state, slot):
+                continue
+        clear_cell_descriptor(state, slot)
+        state.mobs.unlink_and_clear(slot)
+        removed_wall |= object_type == wall_type
+    return removed_wall
+
+
+def _remove_deletable_trap_walls(state: GameState) -> None:
+    """0x43BA0-0x43C1A -- remove one or two randomly selected trap-wall groups."""
+    if state.level_flags_3 & _LFLAG3_WALLS_DELETABLE1:
+        maze_place_object_types(
+            state, _TRAP_TYPE_FIRST + state.getrandom(_TRAP_TYPE_COUNT),
+        )
+    if state.level_flags_3 & _LFLAG3_WALLS_DELETABLE2:
+        group = state.getrandom(_TRAP_TYPE_COUNT)
+        maze_place_object_types(state, _TRAP_TYPE_FIRST + group)
+        maze_place_object_types(
+            state, _TRAP_TYPE_FIRST + ((group + 1) % _TRAP_TYPE_COUNT),
+        )
+
+
 def postdecode_level_setup(state: GameState) -> None:
     """Apply the shared post-playfield portion of maze_new_level_setup."""
     _randomize_trap_types(state)
@@ -1652,6 +1687,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     # Player collision still sees their live marker records.
     from .subsystems.exits import exit_scan_level
     exit_scan_level(state)
+    _remove_deletable_trap_walls(state)                 # 0x43BA0-0x43C1A
     _prepare_secret_challenge(state)
 
     # maze_new_level_setup step 10: rebuild the exit table from the MOBs just

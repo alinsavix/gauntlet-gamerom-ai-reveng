@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2465 passed, 10 skipped** (gauntpy) and
+present the suites are clean: **2519 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -63,6 +63,206 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-167 · thief deployment anchor and stunned potion behavior
+
+Thief/mugger deployment placed the 3x3 actor at `cell_x * 16`, four pixels
+right of the ROM. The `mob_create` argument at 0x4DF54-0x4DF64 is
+`slot * 0x800 - 0x200 + palette`, which reduces to `cell_x * 16 - 4` in the
+modeled H word. The transport destination path already used that correction.
+Initial deployment now uses the same anchor, so the visitor follows one side of
+its route cell through a two-cell corridor instead of appearing centered between
+the two lanes.
+
+Potion use while stunned was confirmed as original behavior. The main loop calls
+`main_handle_potions` before `main_move_players`; ROM 0x46FEA checks only the
+active MOB, Magic edge, maze gate, and potion count. It never reads
+`player_stundelay`. A stunned player therefore cannot move but may drink a
+potion, and the stun timer remains intact.
+
+### S-166 · phantom player records, inventory caps, and thief boundary/effects
+
+Frames 18687 and 43851 contained Python-only dynamic MOB remnants beside the
+Elf. The former slot `0x0B1` held hero picture `0x1612` with every other word
+zero; the latter slot `0x3E0` held the same picture and depth links but zero H/V,
+object type, and state. Both violate `move_mob_slot` 0x5DE0A's five-word
+transaction and were treated as occupied collision cells, producing the
+invisible right block and the corrupt left obstacle. `main_move_players` now
+removes this impossible modeled-MOB state before collision. Replaying both dumps
+makes the requested move proceed without a renderer exception.
+
+Frame 29864 exposed a separate thief seam bug. The thief at slot `0x3E0`,
+`(508,492)`, needed the right-move flank response to nudge downward around wall
+`0x3C1`. Python's generic `mob_probe_down` returned the boundary sentinel for
+every row-31 record. ROM 0x40732 instead reads the proposed live V word and
+returns clear while it remains nonnegative. The paired top probe likewise uses
+its literal V comparison. Restoring both tests lets the thief reach Y=496, wrap,
+and continue right into slot `0x3E1`.
+
+ROM 0x4DF7E also calls `tport_cycle_start` when a thief/mugger deploys, and the
+successful escape arm at 0x4EC10 does the same before clearing the visitor.
+Those two missing game-side effect writes now produce the intended appearance
+and disappearance poofs. Ordinary key and potion collection now enforces the
+ROM's combined 12-item capacity at 0x51458/0x516E4, so the overfull frame-27506
+player cannot increase either counter.
+
+The F1 LEVEL labels were clarified rather than changing gameplay:
+`MAZE SOURCE: CABINET ROTATION` says that levels above five select layouts from
+the EEPROM-persisted cabinet rotation, while `TREASURE >30` describes only the
+post-level-30 treasure-room prank voice gate. Thus level 111 / maze 29 correctly
+shows `OFF (NOT TREASURE)`. The contest name editor also matches the ROM: its
+0x0A8D-frame timeout is deliberately invisible, Fire or Magic commits each
+character, reaching 29 characters finishes immediately, and timeout fills the
+rest with spaces. The original screen supplies no explicit control legend or
+countdown.
+
+### S-165 · tagged wall impacts, incremental playfield cache, and diagnostics clarity
+
+The frame-53450 level-112/maze-32 capture places the Elf at `(92,496)`. A
+down-left shot reaches `(87,505)` and reports tagged playfield target `0x405`.
+Gauntpy stripped the `0x400` tag before calling `shot_impact_spawn`, so the
+effect copied H/V from fixed MOB slot 5, whose stale coordinates were
+`(496,83)`. ROM 0x47E6A-0x47F80 keeps the tag: for any playfield target it
+normalizes the depth key but copies position from shooter MOB `shooter+1`.
+The game-side effect writer now preserves that identity and produces the
+sparkle at `(87,505)` with depth key `0x025`. The same port now includes the
+ROM's ordinary-target H correction and low-slot depth-key reconstruction.
+
+The regular 30 ms render spikes in the frame-14495 capture were host cache
+rebuilds, not scrolling or game timing. Living maze updates changed only a few
+of the 4096 authoritative descriptor words, but any generation change decoded
+the complete 512x512 indexed playfield again. The cache now retains a descriptor
+signature and restamps only changed 8x8 words before recoloring through live
+color RAM. A 300-frame replay of the capture went from 63 frames above 30 ms
+(43.2 ms maximum) to none above 20 ms (16.5 ms maximum) on the same host.
+
+F1 now has a separate FLAGS page showing the four raw bytes and their decoded
+odd-angle/mirror/invisibility, speed, food/wall/exit, shot/trap/wrap/fake-exit
+settings. LEVEL remains focused on timers and depth gates. The ROUTES page moves
+its marker key below the text rows, so its boxes no longer overwrite
+`DIRECTIONS`.
+
+### S-164 · exhaustive LFLAG audit restored level-splash consumers
+
+Every bit in the four-byte level-flags longword was traced from its ROM readers
+to setup, simulation, modeled video RAM, and presentation. The gameplay paths
+were complete after S-163: odd-angle and fast families; the two mirror bits;
+trap/all-wall invisibility and one-hit invisible destructible walls; random
+food; cyclic and one-/two-group setup walls; moving/choose-one/fake exits;
+friendly-fire stun/damage; local/random traps; both wrap axes; and the
+player-offscreen gates. Regressions now exercise every family selector, all
+eight random-food field values, both deletable-wall forms, TrapsLocal culling,
+both invisibility modes and the level-9999 override, wrap direction on both
+axes, and friendly-fire priority.
+
+One real omission remained. `level_splash` 0x4BE24–0x4C1B2 reads six LFLAG
+conditions but gauntpy's merged start-screen implementation wrote only the
+large level field and secret hint. It now writes the exact alpha records for
+ShotStun, ShotHurt, PlayerOffscreen, InvisibleAllWalls,
+InvisibleTrapWalls, and ExitMoves, plus the adjacent hidden-potion notice.
+Their shared one-speech latch and one-in-four draws follow ROM order, so these
+presentation branches also restore the correct global RNG stream. The same
+routine now writes level 1's fixed `FIND EXIT TO NEXT LEVEL` line and the
+ordinary `getrandom(9)` two-line gameplay tip, with the original bonus-room and
+reduced-text gates. Literal strings live in `romtext.py`; rendering remains a
+pure alpha-RAM consumer.
+
+### S-163 · thief combat, seam monster scheduling, and maze-26 setup
+
+The frame-2676 capture had the thief at slot `0x319` pursuing through a Demon
+at `0x31A`. ROM `thief_handle_tile_collision` 0x4F89A–0x4F8D6 treats every
+object type 18–45 as a fight: first contact stores `direction+1` and clears the
+shared counter; the normal collision-animation arm increments it each frame;
+after it passes 15 the routine spawns an impact, removes the blocking MOB, and
+clears the latch. Gauntpy classified the monster as non-solid but neither
+advanced the counter nor removed it, so the thief stayed in place forever.
+The complete fight transaction and animation-counter increments are restored.
+
+In the frame-21664 capture the camera crossed the vertical seam at
+`scroll_y=492`. The unsigned culling rectangle correctly included the visible
+row-1 monsters, but the separate SLIP-chain endpoint helper clamped its
+`scroll+280` lookup to band 63. ROM `main_move_monsters`
+0x49076–0x490CA masks both endpoints with `0x1F0` and indexes the biased table
+at 0x905F82, making the walk wrap from the bottom of the depth chain through
+row zero. Gauntpy now performs that exact masked lookup; the reported monsters
+above and lower-right of the player resume movement and animation.
+
+Maze 26 also had a genuine setup omission. Its LFLAG3 byte is `0x92`, including
+`WallsDeletable1`. At 0x43BA0–0x43BCC the ROM draws one of the three trap
+groups and calls `maze_place_object_types`; the companion bit-5 arm removes
+the selected group plus its next cyclic neighbor. Gauntpy never ran either
+arm, leaving all nine type-7/8/9 walls and closing the intended route to the
+chosen exit. Level setup now removes the selected wall/trigger records through
+the shared game-side helper and updates logical maze and playfield RAM. With
+seed zero, maze 26 removes all three type-7 walls, retains the other six, and
+the selected exit at slot `0x1A0` is reachable from the saved start at `0x230`.
+
+### S-162 · RAM-alias audit found secret-room stash divergence
+
+The exhaustive modeled-RAM overlap audit classified eight live groups. Six were
+already faithful representation/lifetime views: OS/game reuse at 0x904006 and
+0x904012–0x904015; popup timer 3 over reserved `mob_depth_key[0]`; effect
+counters over unused row-zero depth keys 30/31; and the biased
+`priority_bucket_heads_tail` view. Transporter-route cells and portrait padding
+are spatially disjoint in every reachable index. S-160/S-162 complete the two
+simultaneous aliases that required coupled writes.
+
+The additional behavioral miss was secret inventory. Direct M68000 execution
+of ROM 0x482D0–0x48334 confirms that entry writes winner keys to
+`monster_spawn_probability_bonus` (0x90405F), winner potions to player 0's key
+byte (0x90405A), and supershots to 0x905F6D, then clears the winner's indexed
+inventory. The immediately following 0x48B58 call adds score-per-coin pressure
+to the saved-key byte. Payout 0x4D86E–0x4D8A0 reads those same aliases in
+instruction order. For winner zero, clearing their keys destroys the potion
+stash; payout first restores keys, then reads that newly updated key byte as the
+potion addend. For other winners, player 0's key byte holds their potion stash.
+
+Gauntpy's dedicated stash fields had hidden all of those effects. Gameplay now
+uses the canonical aliased fields, so secret-room generator pressure and return
+inventory match the ROM. Tests cover winner zero, a nonzero winner, and mutation
+of the saved-key byte by the post-spawn bonus update.
+
+### S-161 · thief routing state had no live visualization
+
+The F1 panel now includes a host-only ROUTES page. It captures the complete
+route-grid byte view in the immutable post-frame snapshot and draws side-by-side
+32x32 maps for the low pursuit and high escape nibbles. Eight colors identify
+the compass directions; outlined cells mark the current, next, scheduled-start,
+and victim positions. The page never reads mutable state during rendering and
+does not write alpha RAM or the route grid.
+
+### S-160 · thief route grid survived the alpha-RAM level clear
+
+The two supplied stalls shared a deeper cause. In both captures the visitor was
+escaping at cell `0x38D`; its high route nibble explicitly pointed east through
+fixed maze-3 wall `0x38E`. Following the complete high-nibble chain showed that
+this was not a newly computed route ending at an unset cell: it was an old
+reverse path extending through `0x38E` to `0x3FF`.
+
+The ROM cannot carry that path across a level. `ram.path_direction_grid` begins
+at byte address 0x905054, exactly hidden alpha column 42. Its 24 rows each use
+the 44 bytes in hidden columns 42-63. `maze_show` 0x4526A and `maze_hide`
+0x4529A clear all 22 hidden words on every alpha row, implicitly erasing both
+route nibbles. Gauntpy modeled `alpha_ram` and `path_direction_grid` separately
+but applied the clear only to the former. The first visitor wrote routes over
+whatever stale high nibbles happened to be empty; later escape consumed an old
+eastward chain that was geometrically impossible in maze 3 and stopped at its
+real wall.
+
+Both display routines now apply the one physical-memory write to the modeled
+route-grid view too, and `maze_hide` also performs its previously omitted
+non-panel alpha clear. A regression plants the captured `0x38D -> 0x38E`
+escape direction and proves the level handoff removes it.
+
+### S-159 · F1 level page did not expose active depth gates
+
+The LEVEL diagnostics page now derives a host-only summary from the immutable
+snapshot: fixed/rotation maze selection, level-3 special pickups, level-6
+hidden-potion/thief scheduling and current thief odds, post-6 adaptive-food and
+bonus-room eligibility, level-12 dragon/trick-9 activation, post-30 treasure
+countdown pranks, the generator cap, forcefield profile, and the current
+modulo-400/modulo-160 hazard tier. Maze-specific exclusions are shown rather
+than presenting every threshold as active in secret or non-treasure layouts.
+
 ### S-158 · contest-code hyphen rendered as a zero
 
 The reported screenshot literally displayed `W1YOGNO`: its fourth apparent
@@ -102,14 +302,12 @@ rotation. Direct play now follows the same rotation. The new independent
 `--maze 0..116` pins a stored layout without changing level-gated behavior, and
 the options may be combined for exact reproductions.
 
-The two supplied stuck-visitor dumps were the same ROM condition, not separate
-AI failures. At frames 13028 and 15637 the mugger/thief occupied maze-3 cell
-`0x38D`, targeted `0x38E`, and found its live type-2 `0x8000` wall marker.
-`thief_move_engine` 0x4EE7A restores the blocked axis; its route consumer has no
-fallback pathfinder. Both captures also had an unset selected route nibble, so
-`thief_compute_path` retained east. The port matches those branches. The
-surprising level-115/maze-3 pairing is now expressible only by explicitly
-combining the two direct-start options.
+At frames 13028 and 15637 the mugger/thief occupied maze-3 cell `0x38D`,
+targeted `0x38E`, and found its live type-2 `0x8000` wall marker.
+`thief_move_engine` 0x4EE7A correctly restored the blocked axis. S-160
+supersedes the original frozen-state conclusion: the selected route nibble was
+not unset, but an impossible stale eastward escape route left behind because
+the modeled hidden-alpha clear did not also clear its route-grid alias.
 
 The reported lower-wall shadow gaps likewise are not missing modeled VRAM. In
 the supplied state the horizontal run is continuous descriptor `0x723A`; the
@@ -123,7 +321,7 @@ layered the result over the entered name, producing the screenshot's surviving
 The initial joystick pause is original: `secret_getname` loads
 `name_entry_repeat_delay` with 0xA0, after which held input accelerates to one
 step every 8-13 frames. A runnable `python -m gauntpy.secret_code_verifier`
-checks an entered name/code against the saved maze, trick, and challenge.
+checks an entered name/code and decodes the saved maze, trick, and challenge.
 
 ### S-155 · documentation/Python naming contract had drifted
 

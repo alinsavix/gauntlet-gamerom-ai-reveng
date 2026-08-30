@@ -30,9 +30,11 @@ DEBUG_PAGES = (
     "PLAYERS",
     "DEMO",
     "LEVEL",
+    "FLAGS",
     "ACTORS",
     "AI",
     "DISPLAY",
+    "ROUTES",
     "AUDIO",
     "SCENARIO",
     "EVENTS",
@@ -126,6 +128,8 @@ class DebugSnapshot:
     demo_timers: tuple[int, ...]
     players: tuple[PlayerDebugSnapshot, ...]
     selected_mob: int
+    route_grid: bytes
+    route_markers: tuple[int, int, int, int]
     page_rows: tuple[tuple[str, tuple[tuple[str, str], ...]], ...]
     paused: bool = False
 
@@ -226,11 +230,6 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return (
         ("CURRENT", f"level {state.levelnum_current} maze {state.mazenum_current}"),
         ("NEXT", f"level {state.level_next} maze {state.maze_next}"),
-        (
-            "FLAGS 1-4",
-            f"{state.level_flags:02X} {state.level_flags_2:02X} "
-            f"{state.level_flags_3:02X} {state.level_flags_4:02X}",
-        ),
         ("WRAP", f"H={int(state.wrap_h)} V={int(state.wrap_v)}"),
         ("ROTATION", f"resume={state.maze_number} stride={state.maze_stride}"),
         ("IDLE/ESCAPE", f"{state.idle_timer} / {state.escape_timer}"),
@@ -248,6 +247,110 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
             "SECRET FLAGS",
             " ".join(f"{value:02X}" for value in state.secret_tricks_flags),
         ),
+        *_level_gate_rows(state),
+    )
+
+
+def _enabled(value: int, entries: tuple[tuple[int, str], ...]) -> str:
+    names = [name for mask, name in entries if value & mask]
+    return " ".join(names) if names else "-"
+
+
+def _flags_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
+    flag1 = int(state.level_flags)
+    flag2 = int(state.level_flags_2)
+    flag3 = int(state.level_flags_3)
+    flag4 = int(state.level_flags_4)
+    return (
+        ("RAW 1-4", f"{flag1:02X} {flag2:02X} {flag3:02X} {flag4:02X}"),
+        ("F1 ODD", _enabled(flag1, (
+            (0x01, "GHO"), (0x02, "GRU"), (0x10, "SOR"),
+            (0x20, "AUX"), (0x40, "DEA"),
+        ))),
+        ("F1 MIRROR", _enabled(flag1, ((0x04, "H"), (0x08, "V")))),
+        ("F1 WALL", _enabled(flag1, ((0x80, "INVIS TRAP"),))),
+        ("F2 FAST", _enabled(flag2, (
+            (0x01, "GHO"), (0x02, "GRU"), (0x04, "DEM"),
+            (0x08, "LOB"), (0x10, "SOR"), (0x20, "AUX"), (0x40, "DEA"),
+        ))),
+        ("F2 WALL", _enabled(flag2, ((0x80, "INVIS ALL"),))),
+        ("F3 FOOD", str(flag3 & 0x07)),
+        ("F3 WALL", _enabled(flag3, (
+            (0x08, "CYCLIC"), (0x10, "DELETE1"), (0x20, "DELETE2"),
+        ))),
+        ("F3 EXIT", _enabled(flag3, ((0x40, "MOVES"), (0x80, "CHOOSE1")))),
+        ("F4 SHOTS", _enabled(flag4, ((0x01, "STUN"), (0x02, "HURT")))),
+        ("F4 TRAPS", _enabled(flag4, ((0x04, "LOCAL"), (0x08, "ROTATE")))),
+        ("F4 WORLD", _enabled(flag4, ((0x10, "WRAP V"), (0x20, "WRAP H")))),
+        ("F4 OTHER", _enabled(flag4, ((0x40, "FAKE EXIT"), (0x80, "OFFSCREEN")))),
+    )
+
+
+def _level_gate_rows(state: GameState) -> tuple[tuple[str, str], ...]:
+    """Project the ROM's direct level-number gates for the current level."""
+    level = int(state.levelnum_current)
+    maze = int(state.mazenum_current)
+    thief_chance = min(max(level >> 3, 0), 8)
+    if level < 6:
+        thief = "OFF (<6)"
+    elif maze >= 115:
+        thief = "OFF (secret maze)"
+    else:
+        thief = f"{thief_chance}/8"
+
+    if 5 <= maze <= 101:
+        depth = level % 400
+        traps_local = bool(state.level_flags_4 & 0x04)
+        if depth > 297:
+            hazard = "RANDOM" if traps_local else "RANDOM+WRAP"
+        elif depth > 200:
+            hazard = "RANDOM"
+        elif depth > 103:
+            hazard = "BASE" if traps_local else "WRAP"
+        else:
+            hazard = "BASE"
+    elif 104 <= maze <= 114:
+        depth = level % 160
+        if depth > 120:
+            hazard = "WRAP+OFFSCREEN"
+        elif depth > 80:
+            hazard = "OFFSCREEN"
+        elif depth > 40:
+            hazard = "WRAP"
+        else:
+            hazard = "BASE"
+    else:
+        hazard = "n/a"
+
+    random_pickups = maze < 115
+    return (
+        ("MAZE SOURCE", "FIXED OPENING" if level <= 5 else "CABINET ROTATION"),
+        ("GATE >=3", "SPECIAL PICKUP ON" if level >= 3 and random_pickups else "OFF"),
+        (
+            "GATE >=6",
+            f"HIDDEN POT {'ON' if level >= 6 and random_pickups else 'OFF'}; "
+            f"THIEF {thief}",
+        ),
+        (
+            "GATE >6",
+            "ADAPTIVE FOOD + BONUS ON"
+            if level > 6 and random_pickups else "OFF",
+        ),
+        (
+            "GATE >=12",
+            "DRAGON + TRICK 09 ON" if level >= 12 else "OFF",
+        ),
+        (
+            "TREASURE >30",
+            "PRANK VOICE ELIGIBLE"
+            if level > 30 and 104 <= maze <= 114 else "OFF (NOT TREASURE)",
+        ),
+        (
+            "GENERATOR CAP",
+            "NONE (LEVEL 1)" if level == 1 else f"{level * 2}",
+        ),
+        ("FF PROFILE", str(level & 3)),
+        ("HAZARD DEPTH", hazard),
     )
 
 
@@ -336,6 +439,14 @@ def _display_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         ("FF SEGMENTS", str(len(state.forcefield_segment_table))),
         ("PALETTE A/B", f"{state.palette_pulse_dir_a}/{state.palette_pulse_dir_b}"),
         ("DISPLAY ENABLE", str(state.score_display_enabled)),
+    )
+
+
+def _route_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
+    return (
+        ("GRID", "LOW PURSUIT / HIGH ESCAPE"),
+        ("BOXES", "C=current N=next S=start V=victim"),
+        ("DIRECTIONS", "N NE E SE S SW W NW"),
     )
 
 
@@ -460,13 +571,22 @@ def capture_debug_snapshot(
         demo_timers=tuple(int(value) for value in state.demo_timers),
         players=player_snapshots,
         selected_mob=selected_mob,
+        route_grid=bytes(state.path_direction_grid),
+        route_markers=(
+            int(state.thief_current_pos),
+            int(state.thief_next_pos),
+            int(state.thief_start_location),
+            int(state.thief_victim_pos),
+        ),
         page_rows=(
             ("PLAYERS", _player_page_rows(state, player_snapshots)),
             ("DEMO", _demo_page_rows(state)),
             ("LEVEL", _level_page_rows(state)),
+            ("FLAGS", _flags_page_rows(state)),
             ("ACTORS", _actor_page_rows(state, selected_mob)),
             ("AI", _ai_page_rows(state)),
             ("DISPLAY", _display_page_rows(state)),
+            ("ROUTES", _route_page_rows(state)),
             ("AUDIO", _audio_page_rows(state)),
             ("SCENARIO", _scenario_page_rows(state)),
         ),
@@ -625,6 +745,95 @@ def _performance_graph_scale(
     return ceiling, (0.0, ceiling / 2.0, ceiling)
 
 
+_ROUTE_COLORS = (
+    (70, 130, 255, 255),   # N
+    (70, 210, 255, 255),   # NE
+    (70, 230, 120, 255),   # E
+    (190, 235, 70, 255),   # SE
+    (255, 205, 70, 255),   # S
+    (255, 135, 70, 255),   # SW
+    (235, 75, 75, 255),    # W
+    (190, 90, 235, 255),   # NW
+)
+_ROUTE_MARKER_COLORS = (
+    (255, 255, 255, 255),
+    (255, 230, 50, 255),
+    (70, 255, 120, 255),
+    (70, 235, 255, 255),
+)
+
+
+def _route_direction(grid: bytes, slot: int, *, escape: bool) -> int:
+    """Read one ROM path nibble through its 44-byte/128-byte-stride view."""
+    if not 0 <= slot <= 0x3FF:
+        return 8
+    offset = (slot // 44) * 0x80 + slot % 44
+    packed = grid[offset] >> (4 if escape else 0)
+    direction = (packed & 0x0F) - 1
+    return direction if 0 <= direction <= 7 else 8
+
+
+def _draw_route_grids(
+    draw: ImageDraw.ImageDraw, snapshot: DebugSnapshot, font: ImageFont.ImageFont,
+) -> None:
+    cell = 4
+    top = 90
+    lefts = (8, 174)
+    marker_x = 8
+    for label, color in zip(
+        ("C", "N", "S", "V"), _ROUTE_MARKER_COLORS, strict=True,
+    ):
+        draw.rectangle(
+            (marker_x, top - 26, marker_x + 6, top - 20), outline=color,
+        )
+        draw.text((marker_x + 9, top - 29), label, font=font, fill=_DIM)
+        marker_x += 34
+    for escape, left in zip((False, True), lefts, strict=True):
+        draw.text(
+            (left, top - 13),
+            "HIGH ESCAPE" if escape else "LOW PURSUIT",
+            font=font,
+            fill=_LABEL,
+        )
+        draw.rectangle(
+            (left - 1, top - 1, left + 32 * cell, top + 32 * cell),
+            outline=_DIVIDER,
+        )
+        for slot in range(0x400):
+            row, column = divmod(slot, 32)
+            direction = _route_direction(
+                snapshot.route_grid, slot, escape=escape,
+            )
+            if direction == 8:
+                continue
+            x = left + column * cell
+            y = top + row * cell
+            draw.rectangle(
+                (x, y, x + cell - 1, y + cell - 1),
+                fill=_ROUTE_COLORS[direction],
+            )
+        for slot, color in zip(
+            snapshot.route_markers, _ROUTE_MARKER_COLORS, strict=True,
+        ):
+            if not 0 <= slot <= 0x3FF:
+                continue
+            row, column = divmod(slot, 32)
+            x = left + column * cell
+            y = top + row * cell
+            draw.rectangle(
+                (x, y, x + cell - 1, y + cell - 1),
+                outline=color,
+            )
+
+    legend_y = top + 32 * cell + 7
+    labels = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    x = 8
+    for label, color in zip(labels, _ROUTE_COLORS, strict=True):
+        draw.rectangle((x, legend_y + 2, x + 5, legend_y + 7), fill=color)
+        draw.text((x + 8, legend_y), label, font=font, fill=_DIM)
+        x += 36
+
+
 def render_debug_panel(
     snapshot: DebugSnapshot,
     *,
@@ -691,4 +900,6 @@ def render_debug_panel(
             (left + 1, budget_y, right - 1, budget_y),
             fill=(120, 80, 80, 255),
         )
+    elif DEBUG_PAGES[page] == "ROUTES":
+        _draw_route_grids(draw, snapshot, font)
     return image

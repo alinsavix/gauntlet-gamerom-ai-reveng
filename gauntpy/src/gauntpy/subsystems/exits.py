@@ -47,6 +47,11 @@ _LFLAG3_EXIT_MOVES = 0x40   # bit 6 of level_flags_3 byte
 # maze_pick_one_exit, so a maze with neither flag keeps every exit it decoded.
 _LFLAG3_EXIT_CHOOSEONE = 0x80
 _LFLAG3_EXIT_PICK_MASK = _LFLAG3_EXIT_MOVES | _LFLAG3_EXIT_CHOOSEONE
+_LFLAG1_INVIS_TRAPWALLS = 0x80
+_LFLAG2_INVIS_ALLWALLS = 0x80
+_LFLAG4_SHOTS_STUN = 0x01
+_LFLAG4_SHOTS_HURT = 0x02
+_LFLAG4_PLAYER_OFFSCREEN = 0x80
 
 # LFLAG4_EXIT_FAKE = 1 << 6 in the 32-bit longword.
 # LFLAG4 is the fourth byte (bits 7-0 of the longword), so bit 6 in the
@@ -482,6 +487,73 @@ def _write_secret_hint(state: GameState) -> None:
     state.secret_need_hint = 0
 
 
+def _write_level_flag_hint(state: GameState, key: str) -> None:
+    text, column, row, attribute = romtext.LEVEL_FLAG_HINTS[key]
+    write_alpha_text(state, column, row, text, attribute)
+
+
+def _write_level_splash_details(state: GameState) -> None:
+    """0x4BE24-0x4C1B2 -- write flag notices and the lower gameplay hint."""
+    speech_used = False
+    if (
+        state.level_next_potion == 0
+        and state.levelnum_current >= 6
+        and state.mazenum_current < _SECRET_MAZE_FIRST
+    ):
+        _write_level_flag_hint(state, "hidden_potion")
+        if state.getrandom(4) == 0:
+            sound_speech_play(state, 0x9B)
+            speech_used = True
+
+    if state.level_flags_4 & _LFLAG4_SHOTS_STUN:
+        _write_level_flag_hint(state, "shots_stun")
+        if not speech_used:
+            sound_speech_play(state, 0x8C)
+            speech_used = True
+    if state.level_flags_4 & _LFLAG4_SHOTS_HURT:
+        _write_level_flag_hint(state, "shots_hurt")
+        if not speech_used:
+            sound_speech_play(state, 0x99)
+            speech_used = True
+    if state.level_flags_4 & _LFLAG4_PLAYER_OFFSCREEN:
+        _write_level_flag_hint(state, "player_offscreen")
+
+    if state.level_flags_2 & _LFLAG2_INVIS_ALLWALLS:
+        _write_level_flag_hint(state, "all_walls_invisible")
+    elif state.level_flags & _LFLAG1_INVIS_TRAPWALLS:
+        _write_level_flag_hint(state, "trap_walls_invisible")
+        if not speech_used and state.getrandom(4) == 0:
+            sound_speech_play(state, 0xCD)
+            speech_used = True
+
+    if state.level_flags_3 & _LFLAG3_EXIT_MOVES:
+        _write_level_flag_hint(state, "exit_moves")
+        if not speech_used and state.getrandom(4) == 0:
+            sound_speech_play(state, 0xCE)
+
+    row = 4 if state.levelnum_current == 1 else 15
+    if state.levelnum_current == 1:
+        text = romtext.GAMEPLAY_TIPS[-1][0]
+        write_alpha_text(state, (29 - len(text)) // 2, row, text, 0x8000)
+        return
+    if state.secret_need_hint:
+        _write_secret_hint(state)
+        return
+    if in_bonus_room(state) or state.game_settings & 0x0400:
+        return
+
+    first, second = romtext.GAMEPLAY_TIPS[state.getrandom(9)]
+    if first:
+        write_alpha_text(
+            state, (29 - len(first)) // 2, row, first, 0x8000,
+        )
+        row += 1
+    if second:
+        write_alpha_text(
+            state, (29 - len(second)) // 2, row, second, 0x8000,
+        )
+
+
 def _write_secret_room_start(state: GameState) -> None:
     """0x44F7E-0x450F8 -- write the complete secret challenge invitation."""
     winner = state.secret_player
@@ -529,12 +601,14 @@ def secret_room_spawn(state: GameState) -> None:
     player = state.players[winner]
     player_start_inner(state, winner)                            # 0x482CA
     player.status = int(PlayerStatus.ALIVE_HERE)                 # 0x482D8
-    state.secret_saved_keys = player.keysnum                     # 0x482E6
-    state.secret_saved_potions = player.potionsnum               # 0x482F6
+    state.monster_spawn_probability_bonus = player.keysnum       # 0x482E6
+    state.players[0].keysnum = player.potionsnum                  # 0x482F6
     state.secret_saved_supershot = player.supershot              # 0x48306
     player.keysnum = 0                                           # 0x4831E
     player.potionsnum = 0
     player.supershot = 0
+    state.secret_saved_keys = state.monster_spawn_probability_bonus
+    state.secret_saved_potions = state.players[0].keysnum
     state.secret_tricks_flags[winner] = 0    # player_start_inner 0x48ED6
     from .players import setup_infopanel
 
@@ -563,15 +637,18 @@ def _secret_room_payout(state: GameState, completed: bool) -> bool:
             state.score_dirty[winner] = 1
             state.bonus_amount = bonus
         player.status = int(PlayerStatus.ALIVE_NEXT)             # 0x4D85C
-        player.keysnum = (player.keysnum + state.secret_saved_keys) & 0xFF
-        player.potionsnum = (player.potionsnum + state.secret_saved_potions) & 0xFF
+        player.keysnum = (
+            player.keysnum + state.monster_spawn_probability_bonus
+        ) & 0xFF
+        player.potionsnum = (
+            player.potionsnum + state.players[0].keysnum
+        ) & 0xFF
         player.supershot = (player.supershot + state.secret_saved_supershot) & 0xFF
         from .players import player_inv_update
 
         player_inv_update(state, winner)
-    state.secret_saved_keys = 0
-    state.secret_saved_potions = 0
-    state.secret_saved_supershot = 0
+    state.secret_saved_keys = state.monster_spawn_probability_bonus
+    state.secret_saved_potions = state.players[0].keysnum
     if not open_name_entry:
         state.secret_player = -1                                 # 0x4D866
     return open_name_entry
@@ -1198,7 +1275,7 @@ def show_level_start_screen(state: GameState) -> None:
         write_alpha_large_text(
             state, 16, 9, f"{state.levelnum_current:>3}", 0x8000,
         )
-    _write_secret_hint(state)
+    _write_level_splash_details(state)
 
     # 0x45228-0x45260: normal/reduced-text/secret-room display holds.
     state.global_delay_timer = (
@@ -1460,6 +1537,8 @@ def update_monster_spawn_bonus_from_score_per_coin(state: GameState) -> None:
     state.monster_spawn_probability_bonus = (
         state.monster_spawn_probability_bonus + delta
     ) & 0xFF                                                   # 0x48BA6
+    if in_secret_room(state):
+        state.secret_saved_keys = state.monster_spawn_probability_bonus
 
 
 def _load_next_level(

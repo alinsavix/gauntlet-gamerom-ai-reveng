@@ -41,6 +41,7 @@ from .display import (
     alpha_word,
     clear_alpha_visible,
     fill_alpha_rect,
+    maze_show as _clear_alpha_outside_panel,
     write_alpha_large_char,
     write_alpha_name_entry_large_char,
     write_alpha_large_text,
@@ -249,7 +250,8 @@ def write_info_panel_header(state: GameState) -> None:
 
 
 def maze_hide(state: GameState) -> None:
-    """Port maze_hide's opaque 13-column panel fill at 0x4529A-0x452CA."""
+    """Port maze_hide's complete alpha-RAM rewrite at 0x4529A-0x452CA."""
+    _clear_alpha_outside_panel(state)
     fill_alpha_rect(
         state, PANEL_COLUMN, 0, PANEL_WIDTH, 30, alpha_word(0x8000),
     )

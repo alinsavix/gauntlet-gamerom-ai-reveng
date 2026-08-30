@@ -576,6 +576,7 @@ _DIALOG_LOW_HEALTH = 0x00000004     # record 2, 0x4677E / 0x50EB0
 _DIALOG_KEYS = 0x00000008           # record 3, 0x51620
 _DIALOG_SAVE_POTIONS = 0x00000020   # record 5, 0x51796
 _DIALOG_POISONED = 0x00002000       # record 13, 0x516BE / 0x51CAA
+_DIALOG_INVENTORY_FULL = 0x02000000  # record 25, 0x5147C / 0x5170A
 _DIALOG_TRAP = 0x00800000           # record 23, 0x51278
 _DIALOG_TRANSPORTER = 0x01000000    # record 24, 0x50840
 _DIALOG_STUN_FLOOR = 0x04000000     # record 26, 0x51388
@@ -1697,7 +1698,18 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
 
     # ── Key ───────────────────────────────────────────────────────────────────
     if obj_type == int(MazeObjIds.KEY):
-        # §4.6: keys (sound 0x13).
+        if player.keysnum + player.potionsnum >= 12:
+            _dialog(state, player_index, _DIALOG_INVENTORY_FULL)
+            if any(
+                candidate.status == int(PlayerStatus.ALIVE_HERE)
+                and candidate.health >= 0
+                and candidate.keysnum < 12
+                for candidate in state.players
+            ):
+                return 0
+            state.escape_timer = 0
+            state.mobs.unlink_and_clear(tile_mob_slot)
+            return -1
         player.keysnum = (player.keysnum + 1) & 0xFF
         state.mobs.unlink_and_clear(tile_mob_slot)
         player_inv_update(state, player_index)          # 0x51610
@@ -1721,6 +1733,20 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             _poisoned(state, player_index)              # 0x51644-0x516C8
             state.health_dirty[player_index] = 1
         else:
+            if player.keysnum + player.potionsnum >= 12:
+                _dialog(state, player_index, _DIALOG_INVENTORY_FULL)
+                if (
+                    obj_type != int(MazeObjIds.POT_INVULN)
+                    or any(
+                        candidate.status == int(PlayerStatus.ALIVE_HERE)
+                        and candidate.health >= 0
+                        and candidate.keysnum < 12
+                        for candidate in state.players
+                    )
+                ):
+                    return 0
+                state.mobs.unlink_and_clear(tile_mob_slot)
+                return -1
             player.potionsnum = (player.potionsnum + 1) & 0xFF
             _sound_play(state, 0x0E)  # potion pickup sound (§11.5 soundcmds)
             player_inv_update(state, player_index)      # 0x51786
@@ -1926,14 +1952,9 @@ def _clear_floor_marker(state: GameState, slot: int) -> None:
 
 def _drop_trap_walls(state: GameState, trap_type: int) -> bool:
     """0x5E7A6 -- replace this trap's remaining triggers and wall group."""
-    wall_type = trap_type - 3
-    removed = False
-    for slot in range(FIRST_PLAYABLE_SLOT, 0x400):
-        if state.mobs.obj_type(slot) not in (wall_type, trap_type):
-            continue
-        _clear_floor_marker(state, slot)
-        removed = True
-    return removed
+    from ..maze import maze_place_object_types
+
+    return maze_place_object_types(state, trap_type)
 
 
 def _tile_contact_progress(state: GameState, player_index: int) -> None:
@@ -2930,6 +2951,19 @@ def main_move_players(state: GameState) -> None:
     elif state.game_mode == int(GameMode.TREAS_EXIT):
         return  # level-end bonus screen: the world is frozen (WP-15/§16)
     # game_mode >= 0 (normal): skip demo section, proceed to per-player loop.
+
+    # A dynamic picture with no position, object type, or object state is not a
+    # record any ROM MOB writer can produce. Clear this Python-only remnant before
+    # the ordinary collision probes can treat it as an invisible obstacle.
+    for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.picture)):
+        if (
+            state.mobs.picture[slot]
+            and state.mobs.hpos[slot] == 0
+            and state.mobs.vpos[slot] == 0
+            and state.mobs.obj_type(slot) == 0
+            and state.mobs.state(slot) == 0
+        ):
+            state.mobs.unlink_and_clear(slot)
 
     # ── Section 2: demo playback ──────────────────────────────────────────────
     if state.game_mode == int(GameMode.DEMO):
@@ -4338,14 +4372,17 @@ def mob_probe_up(
 ) -> int:
     """0x406B6 -- probe the cell above for a blocking wall (§4.2).
 
-    Returns the first blocking slot, -1 when clear, or 0x0400 (the vertical
-    boundary sentinel) when the player is already in the top row.
+    Returns the first blocking slot, -1 when clear, or 0x0400 when the proposed
+    live V word crosses the top boundary in the top two slot rows.
     Callers must not treat every non-negative return as a valid slot.
     """
     row = mob_slot >> 5
     col = mob_slot & 0x1F
-    if row == 0:
-        return _VERTICAL_BOUNDARY     # vertical boundary sentinel (§4.2)
+    if row <= 1:
+        live_vpos = state.mobs.vpos[mob_slot] if vpos is None else vpos
+        if (live_vpos & 0xFFFF) > _TOP_PLAYER_BOUNDARY_V:
+            return _VERTICAL_BOUNDARY
+        return -1
     target_row = row - 1
     for dc in (0, -1, 1):            # centre, left flank, right flank (§4.2)
         c = col + dc
@@ -4369,12 +4406,14 @@ def mob_probe_down(
 ) -> int:
     """0x40732 -- probe the cell below for a blocking wall (§4.2).
 
-    Returns first blocking slot, -1 when clear, or 0x0400 at the bottom boundary.
+    Returns first blocking slot, -1 when clear, or 0x0400 when a row-31
+    proposed live V word becomes negative.
     """
     row = mob_slot >> 5
     col = mob_slot & 0x1F
     if row >= _MAZE_ROWS - 1:
-        return _VERTICAL_BOUNDARY
+        live_vpos = state.mobs.vpos[mob_slot] if vpos is None else vpos
+        return _VERTICAL_BOUNDARY if live_vpos & 0x8000 else -1
     target_row = row + 1
     for dc in (0, -1, 1):
         c = col + dc

@@ -301,6 +301,22 @@ class TestEffectSpawning:
             for slot in range(0x0D, 0x11)
         )
 
+    def test_tagged_playfield_impact_uses_live_shot_position(self):
+        state = _make_state()
+        shot_slot = 1
+        state.mobs.picture[shot_slot] = 0x1C8B
+        state.mobs.hpos[shot_slot] = 87 << 7
+        state.mobs.vpos[shot_slot] = 503 << 7
+        state.mobs.hpos[5] = 496 << 7
+        state.mobs.vpos[5] = 413 << 7
+
+        shot_impact_spawn(state, 0x405, 0)
+
+        assert state.mobs.picture[0x0D] == 0x0EFC
+        assert state.mobs.hpos[0x0D] == (87 << 7) | 1
+        assert state.mobs.vpos[0x0D] == (503 << 7) | 9
+        assert state.mobs.depth_key[0x0D] == 0x25
+
     def test_transporter_dissolve_seeds_rom_position_and_counter(self):
         state = _make_state()
         source = 91
@@ -848,6 +864,18 @@ class TestAcidImmunity:
 
 
 class TestPlayerVersusPlayer:
+    def test_shotstun_takes_priority_when_both_lflag4_bits_are_set(self):
+        state = _make_state()
+        state.level_flags_4 = 0x03
+        state.players[1].status = int(PlayerStatus.ALIVE_HERE)
+        state.players[1].health = 100
+        _place_player_mob(state, 309, 1)
+
+        resolve_shot_hit(state, 309, 0)
+
+        assert state.players[1].stundelay == 0x28
+        assert state.players[1].health == 100
+
     def test_shotstun_flag_stuns_and_clears_the_fighting_dir(self):
         state = _make_state()
         state.level_flags_4 = 0x01           # LFLAG4 bit 0: ShotStun

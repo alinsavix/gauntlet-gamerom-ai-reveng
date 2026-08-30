@@ -171,6 +171,74 @@ def test_level_page_names_the_current_maze_secret_trick():
     assert rows["SECRET TRICK"] == "0D EAT NO FOOD"
 
 
+def test_level_page_lists_active_level_gates():
+    state = _diagnostic_state()
+    state.game_mode = GameMode.NORMAL
+    state.levelnum_current = 12
+    state.mazenum_current = 15
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["MAZE SOURCE"] == "CABINET ROTATION"
+    assert rows["GATE >=3"] == "SPECIAL PICKUP ON"
+    assert rows["GATE >=6"] == "HIDDEN POT ON; THIEF 1/8"
+    assert rows["GATE >6"] == "ADAPTIVE FOOD + BONUS ON"
+    assert rows["GATE >=12"] == "DRAGON + TRICK 09 ON"
+    assert rows["TREASURE >30"] == "OFF (NOT TREASURE)"
+    assert rows["GENERATOR CAP"] == "24"
+    assert rows["FF PROFILE"] == "0"
+    assert rows["HAZARD DEPTH"] == "BASE"
+
+
+def test_flags_page_decodes_all_four_raw_level_flag_bytes():
+    state = _diagnostic_state()
+    state.level_flags = 0x8D
+    state.level_flags_2 = 0x89
+    state.level_flags_3 = 0xDB
+    state.level_flags_4 = 0xF7
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("FLAGS"),
+    ))
+
+    assert rows["RAW 1-4"] == "8D 89 DB F7"
+    assert rows["F1 ODD"] == "GHO"
+    assert rows["F1 MIRROR"] == "H V"
+    assert rows["F1 WALL"] == "INVIS TRAP"
+    assert rows["F2 FAST"] == "GHO LOB"
+    assert rows["F2 WALL"] == "INVIS ALL"
+    assert rows["F3 FOOD"] == "3"
+    assert rows["F3 WALL"] == "CYCLIC DELETE1"
+    assert rows["F3 EXIT"] == "MOVES CHOOSE1"
+    assert rows["F4 SHOTS"] == "STUN HURT"
+    assert rows["F4 TRAPS"] == "LOCAL"
+    assert rows["F4 WORLD"] == "WRAP V WRAP H"
+    assert rows["F4 OTHER"] == "FAKE EXIT OFFSCREEN"
+
+
+def test_level_page_applies_maze_specific_gate_context():
+    state = _diagnostic_state()
+    state.levelnum_current = 121
+    state.mazenum_current = 104
+
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+
+    assert rows["GATE >=6"] == "HIDDEN POT ON; THIEF 8/8"
+    assert rows["TREASURE >30"] == "PRANK VOICE ELIGIBLE"
+    assert rows["HAZARD DEPTH"] == "WRAP+OFFSCREEN"
+
+    state.mazenum_current = 115
+    rows = dict(debug_page_lines(
+        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
+    ))
+    assert rows["GATE >=3"] == "OFF"
+    assert rows["GATE >=6"] == "HIDDEN POT OFF; THIEF OFF (secret maze)"
+
+
 def test_level_page_distinguishes_reused_secret_hint_text():
     expected = (
         "TRANSPORT NEXT TO ACID",
@@ -223,6 +291,48 @@ def test_level_page_suppresses_stale_bonus_header_during_tally_transition():
     ))
 
     assert rows["SECRET TRICK"] == "n/a during transition"
+
+
+def test_routes_page_snapshots_both_route_nibbles_without_mutating_state():
+    from gauntpy.render import diagnostics
+
+    state = _diagnostic_state()
+    slot = pack_slot(10, 10)
+    offset = (slot // 44) * 0x80 + slot % 44
+    state.path_direction_grid[offset] = 0x73  # low=E(2), high=W(6)
+    state.thief_current_pos = slot
+    state.thief_next_pos = slot + 1
+    before = bytes(state.path_direction_grid)
+
+    snapshot = capture_debug_snapshot(state)
+    state.path_direction_grid[offset] = 0
+
+    assert snapshot.route_grid == before
+    assert diagnostics._route_direction(
+        snapshot.route_grid, slot, escape=False,
+    ) == 2
+    assert diagnostics._route_direction(
+        snapshot.route_grid, slot, escape=True,
+    ) == 6
+    image = render_debug_panel(
+        snapshot, page=DEBUG_PAGES.index("ROUTES"), height=240,
+    )
+    assert image.size == (DEBUG_PANEL_WIDTH, 240)
+    assert image.getpixel((8 + 10 * 4, 90 + 10 * 4)) != (16, 18, 22, 255)
+
+
+def test_routes_marker_boxes_do_not_overwrite_directions_text():
+    snapshot = capture_debug_snapshot(_diagnostic_state())
+    image = render_debug_panel(
+        snapshot, page=DEBUG_PAGES.index("ROUTES"), height=240,
+    )
+
+    marker_outline = (255, 255, 255, 255)
+    assert marker_outline not in {
+        image.getpixel((x, y))
+        for x in range(8, 15)
+        for y in range(49, 61)
+    }
 
 
 def test_event_log_is_derived_from_snapshots_without_game_instrumentation():

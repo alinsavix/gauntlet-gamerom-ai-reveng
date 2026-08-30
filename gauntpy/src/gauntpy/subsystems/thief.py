@@ -135,6 +135,20 @@ def _path_grid_offset(grid_index: int) -> int:
     return (grid_index // _PATH_GRID_COLUMNS) * _PATH_GRID_ROW_STRIDE + grid_index % _PATH_GRID_COLUMNS
 
 
+def _write_path_grid_byte(state: GameState, offset: int, value: int) -> None:
+    """Write the route byte and its big-endian hidden-alpha RAM alias."""
+    value &= 0xFF
+    state.path_direction_grid[offset] = value
+    byte_offset = 0x54 + offset
+    word_index, low_byte = divmod(byte_offset, 2)
+    word = state.alpha_ram[word_index]
+    state.alpha_ram[word_index] = (
+        (word & 0xFF00) | value
+        if low_byte
+        else (word & 0x00FF) | (value << 8)
+    )
+
+
 def path_grid_get_direction(state: GameState, grid_index: int) -> int:
     """0x5103E -- return the selected nibble, or eight when it is unset."""
     packed = state.path_direction_grid[_path_grid_offset(grid_index)]
@@ -147,7 +161,10 @@ def path_grid_get_direction(state: GameState, grid_index: int) -> int:
 def path_grid_set_low_direction(state: GameState, grid_index: int, direction: int) -> None:
     """0x50FD2 -- replace the pursuit (low-nibble) route direction."""
     offset = _path_grid_offset(grid_index)
-    state.path_direction_grid[offset] = (state.path_direction_grid[offset] & 0xF0) | ((direction + 1) & 0x0F)
+    _write_path_grid_byte(
+        state, offset,
+        (state.path_direction_grid[offset] & 0xF0) | ((direction + 1) & 0x0F),
+    )
 
 
 def path_grid_set_high_direction_if_empty(state: GameState, grid_index: int, direction: int) -> None:
@@ -156,7 +173,10 @@ def path_grid_set_high_direction_if_empty(state: GameState, grid_index: int, dir
         return
     offset = _path_grid_offset(grid_index)
     if not state.path_direction_grid[offset] & 0xF0:
-        state.path_direction_grid[offset] |= ((direction + 1) & 0x0F) << 4
+        _write_path_grid_byte(
+            state, offset,
+            state.path_direction_grid[offset] | (((direction + 1) & 0x0F) << 4),
+        )
 
 
 def calc_direction(state: GameState, from_slot: int, to_slot: int) -> int:
@@ -444,7 +464,7 @@ def _thief_deploy(state: GameState) -> None:
     state.mobs.create(
         slot,
         _spawn_picture(state),
-        encode_hpos(col * 16, palette=palette),
+        encode_hpos(col * 16 - 4, palette=palette),
         encode_vpos_at_y(row * 16, width=3, height=3),
         MazeObjIds.PLAYERSTART,
     )
@@ -458,6 +478,9 @@ def _thief_deploy(state: GameState) -> None:
     state.thief_tport_active = 0
     path_grid_set_high_direction_if_empty(state, slot, 8)
     thief_compute_path(state)
+    from .shots import tport_cycle_start
+
+    tport_cycle_start(state, slot, state.thief_victim)
     _sound_play(state, 0x2D if state.thief_mode & THIEF_IS_MUGGER else 0x29)
 
 
@@ -715,6 +738,25 @@ def thief_handle_tile_collision(state: GameState, candidate_mob_slot: int) -> in
     obj_type = state.mobs.obj_type(candidate_mob_slot)
     move_result = thief_test_move_tile(state, candidate_mob_slot, obj_type)
     if move_result:
+        return -1
+    if (
+        int(MazeObjIds.MONST_GHOST)
+        <= obj_type
+        <= int(MazeObjIds.GEN_AUX_GRUNT3)
+    ):
+        if not state.thief_collision_direction_code:
+            state.thief_collision_direction_code = state.thief_direction + 1
+            state.thief_stolen_item = 0
+            return 0
+        if state.thief_stolen_item <= 0x0F:
+            return 0
+        from .shots import shot_impact_spawn
+
+        shot_impact_spawn(
+            state, candidate_mob_slot, state.thief_victim,
+        )
+        state.mobs.unlink_and_clear(candidate_mob_slot)
+        state.thief_collision_direction_code = 0
         return -1
     if _THIEF_COLLISION_REMOVE_FLAGS[obj_type]:
         state.mobs.unlink_and_clear(candidate_mob_slot)
@@ -1103,6 +1145,9 @@ def _finish_escape_at_start(state: GameState) -> bool:
     else:
         state.thief_item_nextlevel = state.thief_item_carried
     if slot:
+        from .shots import tport_cycle_start
+
+        tport_cycle_start(state, slot, state.thief_victim)
         state.mobs.unlink_and_clear(slot)
     state.thief_current_pos = 0
     state.thief_mob_slot = 0
@@ -1140,11 +1185,15 @@ def _set_thief_animation(state: GameState, movement_result: int) -> None:
     if state.thief_collision_direction_code:
         if not 0 <= direction < 8:
             return
+        counter = state.thief_stolen_item
+        state.thief_stolen_item = (counter + 1) & 0xFFFF
         table = _MUGGER_WALK_ANIM if state.thief_mode & THIEF_IS_MUGGER else _THIEF_WALK_ANIM
-        state.mobs.picture[slot] = table[direction * 8 + ((state.thief_stolen_item >> 2) & 7)]
+        state.mobs.picture[slot] = table[direction * 8 + ((counter >> 2) & 7)]
     elif movement_result and 0 <= direction < 8:
+        counter = state.thief_stolen_item
+        state.thief_stolen_item = (counter + 1) & 0xFFFF
         table = _MUGGER_COMPACT_ANIM if state.thief_mode & THIEF_IS_MUGGER else _THIEF_COMPACT_ANIM
-        state.mobs.picture[slot] = table[direction * 4 + ((state.thief_stolen_item >> 2) & 3)]
+        state.mobs.picture[slot] = table[direction * 4 + ((counter >> 2) & 3)]
     else:
         table = _MUGGER_IDLE_ANIM if state.thief_mode & THIEF_IS_MUGGER else _THIEF_IDLE_ANIM
         state.mobs.picture[slot] = table[min(direction, 8)]
