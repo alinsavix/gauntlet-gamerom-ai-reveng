@@ -308,7 +308,15 @@ Finds the nearest player within range. Sets monster facing direction. Calls `fin
 - **Velocity store (0x419E4–0x41A10).** After `monster_create_shot`, the per-direction seed `lobber_shot_spawn_h_offset`/`_v_offset` (0x57BB8/0x57BC8) is scaled and subtracted from the aim to yield the launch velocity, written to `lobber_shot_vec_h`/`_v` (0x9048F8/0x904900) for the chosen shot slot. A lobber-throw sound (0x49) is played at 0x41A14.
 - **Flight (0x479C2–0x47A58).** A lobber channel is the one projectile class that never reads `shot_velocity_x/y`. `monster_create_shot` seeds `lobber_shot_h_accum`/`_v_accum` (0x904A66/0x904A6E, indexed by `shot_slot - 9`) with the masked spawn position at 0x49216/0x4922A, and every frame `main_handle_shots` does `accum += vec`, then rebuilds the MOB word as `(accum & 0xFF80) + (word & 0x7F)` — position field from the accumulator, palette/flags (H) and packed sprite size (V) left exactly as they were. The seven bits under the position field are the sub-pixel remainder, which is what lets a lead of, say, 0xC0 per frame advance 1.5 pixels a frame instead of rounding to 1 or 2.
 
-The demon branch (0x41A2E) uses `monster_shooter_in_view` and a maze-cell line-of-fire walk but no character/facing lead; it fires along `d3`'s compass direction.
+The demon branch (0x41A2E) uses `monster_shooter_in_view` but no full
+line-of-fire walk or character/facing lead; it fires along `d3`'s compass
+direction. Before the range test, 0x41A42–0x41AAE inspects only the immediately
+adjacent muzzle cell. Empty cells pass, as do packed types 1, 10–12, 16, 25,
+53–57, and 62. Destructible/invulnerable potions (types 51/52) do not, so a
+potion directly beside the demon prevents creation of the shot. A potion two
+or more cells away is not consulted by this gate: the demon creates its
+fireball. Ordinary projectile collision later destroys a destructible potion;
+an invulnerable potion survives the hit.
 
 **Shot spawn geometry (`monster_create_shot`, 0x49192–0x49270).** The projectile inherits only the shooter's *position*: 0x49192/0x491A2 mask `mob_hpos`/`mob_vpos` with 0xFF80 before anything else, so the shooter's palette (which for a monster is its health nibble) and its 3×3 packed sprite size are discarded. The per-direction muzzle offset is added on top, and then three small constants land **under** the position field, replacing the low byte:
 
@@ -2097,6 +2105,9 @@ the sound-ROM command semantics needed at that boundary:
   priority 2 on all channels 4–11 and equal-priority insertion removes every
   treasure member. The resulting music stop is original sound-ROM behavior,
   and the later 0x39 can stop 0x37 but cannot recreate the removed music.
+  Drinking any inventory potion also sends 0x1D directly at
+  `main_handle_potions` 0x470A8, so it removes treasure music immediately even
+  though no slow-motion command is involved.
 - The pool contains 30 logical members, not 30 whole commands. Multipart chains
   are admitted in record order. At capacity, allocation examines only the
   requested physical channel and may reclaim its lowest-priority member when

@@ -64,7 +64,7 @@ sound ring, timing, or modeled state.
 | **F1** | show / hide the host diagnostics panel |
 | **F2 / F3** | previous / next diagnostics page |
 | **F4** | save a complete modeled-state JSON dump |
-| **F5** | immediately load the next level |
+| **F5** | show the next level's normal `LEVEL n` splash |
 | **F6** | give the host player one key |
 | **F7** | give the host player one potion |
 | **F8** | pause / resume the current treasure or secret-room timer |
@@ -125,8 +125,9 @@ its SHA-256 and source filename, plus event progress, so resume never depends on
 the original file remaining present or unchanged.
 
 F5–F10 are host troubleshooting controls, not original cabinet inputs. The
-level skip uses the live cabinet maze rotation and respawns active players
-without the bonus/splash delay. Inventory grants update the selected host
+level skip uses the live cabinet maze rotation, enters the normal `LEVEL n`
+splash, and respawns the surviving party when its presentation timer expires.
+Inventory grants update the selected host
 player's game-side counters and alpha-RAM inventory display. F8 gates only
 `main_treasure_timer`, so actors, input, combat, and every other frame routine
 continue while the room clock is held; it clears automatically when that room

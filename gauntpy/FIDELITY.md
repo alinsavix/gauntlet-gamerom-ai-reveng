@@ -434,6 +434,11 @@ evidence remains in `../doc/`, generated contracts, and the book.
     arrival removes the old member. Thus slow-motion 0x37 alone leaves seven
     treasure-music members, while poison-potion break 0x1D replaces all eight and
     command 0x39 cannot restore them.
+91. **Host shortcuts enter the requested lifecycle stage.** A level skip that is
+    meant to show `LEVEL n` must commit the next rotation position, park survivors
+    in between-level status, load the maze behind the alpha curtain, and leave the
+    normal presentation timer to reveal and spawn them. Calling the expiry tail
+    immediately is a different shortcut.
 
 ## Investigation workflow
 

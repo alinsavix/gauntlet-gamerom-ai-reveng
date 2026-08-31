@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.constants import Character, GameMode, PlayerStatus
+from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.render.debug_controls import (
     debug_add_key,
     debug_add_potion,
@@ -188,17 +188,26 @@ def test_skip_level_uses_rotation_and_preserves_inventory():
     assert debug_skip_level(state)
 
     assert (state.levelnum_current, state.mazenum_current) == (2, 1)
-    assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
+    assert state.players[0].status == int(PlayerStatus.ALIVE_NEXT)
     assert state.players[0].keysnum == 2
     assert state.players[0].potionsnum == 3
     assert state.players[0].mob_slot
+    assert state.global_delay_timer == 0xB4
+    assert state.level_start_pending
+    assert any(
+        state.alpha_ram[row * 64 + column]
+        for row in range(30)
+        for column in range(29)
+    )
+
+    from gauntpy.subsystems.session import main_start_game
+
+    for _ in range(0xB4):
+        main_start_game(state)
+    assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
+    assert state.players[0].mob_slot
     assert state.global_delay_timer == 0
     assert not state.level_start_pending
-    assert all(
-        state.alpha_ram[row * 64 + column] == 0
-        for row in range(30)
-        for column in (*range(29), *range(42, 64))
-    )
 
 
 def test_skip_level_rejects_non_gameplay_modes():
@@ -206,3 +215,100 @@ def test_skip_level_rejects_non_gameplay_modes():
     state.game_mode = GameMode.TITLE
 
     assert not debug_skip_level(state)
+
+
+@requires_roms
+def test_skip_level_advances_treasure_countdown_before_start_screen():
+    from gauntpy.play import build_state
+
+    state = build_state(7, Character.ELF)
+    state.level_next_treasure = 1
+    state.treas_mazerand_num = 104
+
+    assert debug_skip_level(state)
+
+    assert state.level_next_treasure in (3, 4, 5)
+    assert state.mazenum_current == 104
+    assert state.level_start_pending
+
+
+@requires_roms
+def test_skip_level_neutralizes_an_in_flight_exit():
+    from gauntpy.play import build_state
+    from gauntpy.subsystems import exits
+
+    state = build_state(7, Character.ELF)
+    state.level_next_treasure = 2
+    exits.compute_next_level(state, int(MazeObjIds.EXIT))
+    expected = (state.level_next, state.maze_next, state.maze_stride)
+    player = state.players[0]
+    player.status = PlayerStatus.EXITING
+    player.exit_pending = 1
+
+    assert debug_skip_level(state)
+
+    assert (
+        state.levelnum_current, state.mazenum_current, state.maze_stride,
+    ) == expected
+    assert player.status == PlayerStatus.ALIVE_NEXT
+    assert player.exit_pending == 0
+    assert state.level_start_pending
+
+
+def test_skip_secret_room_restores_stashed_inventory(monkeypatch):
+    from gauntpy.subsystems import exits
+
+    state = GameState(game_mode=GameMode.NORMAL)
+    state.levelnum_current, state.mazenum_current = 20, 115
+    state.level_next, state.maze_next = 20, 41
+    state.secret_player = 1
+    state.secret_trick_id = 0x54
+    state.monster_spawn_probability_bonus = 3
+    player = state.players[1]
+    player.status = PlayerStatus.ALIVE_HERE
+    player.keysnum = 2
+    player.potionsnum = 1
+    player.supershot = 2
+    state.level_players_active = 1
+    # Secret-room RAM aliases hold saved potions in player zero's key byte.
+    state.secret_saved_supershot = 5
+    state.players[0].keysnum = 4
+    state.secret_possible_counter = 5
+    monkeypatch.setattr(
+        exits, "_finish_level_end",
+        lambda current: setattr(current, "level_start_pending", True),
+    )
+
+    assert debug_skip_level(state)
+    assert state.secret_player == -1
+    assert player.status == PlayerStatus.ALIVE_NEXT
+    assert (player.keysnum, player.potionsnum, player.supershot) == (5, 5, 7)
+    assert (state.levelnum_current, state.mazenum_current) == (20, 41)
+    assert state.secret_possible_counter == 4
+
+
+def test_skip_secret_room_splash_does_not_duplicate_unstashed_inventory(
+    monkeypatch,
+):
+    from gauntpy.subsystems import exits
+
+    state = _active_state()
+    state.levelnum_current, state.mazenum_current = 20, 115
+    state.level_next, state.maze_next = 20, 41
+    state.secret_player = 0
+    state.secret_trick_id = 0x54
+    state.level_start_pending = True
+    player = state.players[0]
+    player.keysnum, player.potionsnum, player.supershot = 2, 3, 4
+    state.monster_spawn_probability_bonus = 7
+    state.secret_saved_supershot = 9
+    monkeypatch.setattr(
+        exits, "_finish_level_end",
+        lambda current: setattr(current, "level_start_pending", True),
+    )
+
+    assert debug_skip_level(state)
+
+    assert state.secret_player == -1
+    assert (player.keysnum, player.potionsnum, player.supershot) == (2, 3, 4)
+    assert (state.levelnum_current, state.mazenum_current) == (20, 41)

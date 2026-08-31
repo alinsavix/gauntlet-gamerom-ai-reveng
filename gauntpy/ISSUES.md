@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2558 passed, 13 skipped** (gauntpy) and
+present the suites are clean: **2566 passed, 13 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,33 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-176 · F5 bypassed the level splash; potion audio and demon muzzle clarified
+
+F5 computed and loaded the correct rotation maze but then immediately called
+`maze_show` and spawned the survivors, explicitly zeroing the splash timer. It
+now enters the same post-tally transition stage as the game: survivors move to
+status 2, `show_level_start_screen` writes the `LEVEL n` alpha curtain, the maze
+loads without players, and `main_start_game` reveals it and places the party
+only after the normal 150/180-frame hold. The shortcut runs the ordinary
+level-end countdown bookkeeping first, neutralizes any exit dissolve already in
+flight, settles treasure-room rewards, and treats a skipped secret challenge as
+a timeout so its stashed inventory is restored before loading the next maze.
+
+Using a potion in a treasure room stopping the music is original behavior.
+`main_handle_potions` 0x470A8 sends command 0x1D for every successful inventory
+potion use. Like the poison-potion break path, that sound has equal priority on
+all eight channels occupied by treasure music 0x3D–0x40 and replaces them
+immediately; no slow-motion expiry is involved.
+
+The reported demon/potion line is conditional rather than a missing line-of-
+sight path. ROM 0x41A42–0x41AAE checks only the demon's adjacent muzzle cell.
+Potion types 51/52 block shot creation there. With one clear cell after the
+demon, a potion farther downrange does not suppress firing and the resulting
+fireball destroys it through ordinary shot collision only when it is the
+destructible potion type; an invulnerable potion survives. Regressions preserve
+both muzzle geometries; a farther-than-adjacent live failure requires an F4
+state dump because potion occupancy alone cannot produce it.
 
 ### S-175 · thief transition cleanup, damage commentary, and diagnostic semantics
 
@@ -1130,12 +1157,15 @@ UI timer without running the timer-expiry teardown. The `LEVEL:` alpha words
 therefore had no remaining owner that could clear them. F5 now mirrors the
 normal expiry order: load the maze without players, run `maze_show`, then
 spawn the surviving party and clear the host-side pending marker.
+**Superseded by S-176:** F5 now leaves the normal splash timer running and
+reaches that expiry order only after the visible hold.
 
 ### S-128 · live troubleshooting required replaying whole levels
 
 The host now provides three explicit non-arcade shortcuts. F5 computes the next
-level/maze through the cabinet rotation, reloads it immediately, respawns the
-active party, and snaps the camera while preserving inventory. F6 and F7 add
+level/maze through the cabinet rotation and preserves inventory. **Superseded
+by S-176:** it now loads behind the ordinary `LEVEL n` curtain and respawns the
+active party when the normal hold expires. F6 and F7 add
 one key or potion to the selected host player and call `player_inv_update`, so
 the authoritative counters and modeled alpha-RAM display remain synchronized.
 Inactive players and non-gameplay level skips are rejected with a terminal

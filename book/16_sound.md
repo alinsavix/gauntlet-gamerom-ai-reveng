@@ -294,6 +294,9 @@ members remain. Shooting poison potion then sends break sound 0x1D, also
 priority 2 on all eight channels. Equal priority removes the older member, so
 the entire treasure command disappears and 0x39 cannot bring it back. The
 abrupt stop is the sound ROM's behavior, not a rendering approximation.
+Drinking an inventory potion reaches the same result more directly: its use
+routine sends 0x1D immediately, so treasure music stops at the button press
+without starting or waiting for slow motion.
 
 The Python host carries those channel/priority records for all sixty-two
 sequence commands. A mixed WAV still has one unavoidable limit: when only some

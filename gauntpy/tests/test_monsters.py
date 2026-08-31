@@ -1115,6 +1115,65 @@ class TestSpecialCases:
         assert all(state.mobs.picture[s] == 0 for s in range(5, 9)), \
             "a blocked muzzle cell cancels the shot"
 
+    def test_demon_shoots_when_a_potion_is_beyond_the_muzzle_cell(self):
+        state = GameState()
+        slot = pack_slot(5, 5)
+        potion = pack_slot(5, 7)
+        _arena(state, slot)
+        _place_monster(state, slot, MazeObjIds.MONST_DEMON, direction=0)
+        _place_player(state, 0, pack_slot(5, 10))
+        state.mobs.create(
+            potion, tile=0x20FC, hpos=7 * 16 << 7,
+            vpos=native_v(5 * 16) << 7,
+            obj_type=int(MazeObjIds.POT_DESTRUCTABLE),
+        )
+
+        monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_DEMON))
+
+        assert any(state.mobs.picture[s] != 0 for s in range(5, 9))
+        for _ in range(20):
+            main_handle_shots(state)
+            if state.mobs.picture[potion] == 0:
+                break
+        assert state.mobs.picture[potion] == 0
+
+    def test_downrange_invulnerable_potion_does_not_block_or_break(self):
+        state = GameState()
+        slot = pack_slot(5, 5)
+        potion = pack_slot(5, 7)
+        _arena(state, slot)
+        _place_monster(state, slot, MazeObjIds.MONST_DEMON, direction=0)
+        _place_player(state, 0, pack_slot(5, 10))
+        state.mobs.create(
+            potion, tile=0x20FC, hpos=7 * 16 << 7,
+            vpos=native_v(5 * 16) << 7,
+            obj_type=int(MazeObjIds.POT_INVULN),
+        )
+
+        monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_DEMON))
+
+        assert any(state.mobs.picture[s] != 0 for s in range(5, 9))
+        for _ in range(20):
+            main_handle_shots(state)
+        assert state.mobs.picture[potion] != 0
+
+    def test_adjacent_potion_blocks_the_demon_muzzle_like_the_rom(self):
+        state = GameState()
+        slot = pack_slot(5, 5)
+        potion = pack_slot(5, 6)
+        _arena(state, slot)
+        _place_monster(state, slot, MazeObjIds.MONST_DEMON, direction=0)
+        _place_player(state, 0, pack_slot(5, 10))
+        state.mobs.create(
+            potion, tile=0x20FC, hpos=6 * 16 << 7,
+            vpos=native_v(5 * 16) << 7,
+            obj_type=int(MazeObjIds.POT_DESTRUCTABLE),
+        )
+
+        monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_DEMON))
+
+        assert all(state.mobs.picture[s] == 0 for s in range(5, 9))
+
     def test_lobber_throws_in_its_band(self):
         state = GameState()
         slot = pack_slot(10, 4)

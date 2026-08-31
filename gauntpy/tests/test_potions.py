@@ -95,6 +95,17 @@ class TestMagicGate:
         # Wizard column (0x12 col 2) is 0 -> Ghost destroyed.
         assert state.mobs.obj_type(pack_slot(8, 8)) == 0, "ghost destroyed"
 
+    def test_using_a_potion_in_a_treasure_room_emits_music_replacing_0x1d(self):
+        state = GameState(game_mode=GameMode.NORMAL)
+        state.mazenum_current = 104
+        _active(state, 0, pack_slot(5, 5), character=Character.WIZARD)
+        state.players[0].potionsnum = 1
+        state.debounce_shift_magic[0] = 0x1C
+
+        main_handle_potions(state)
+
+        assert state.sound_log[0] == 0x1D
+
     def test_stun_does_not_block_potion_use(self):
         state = GameState(game_mode=GameMode.NORMAL)
         _active(state, 0, pack_slot(5, 5), character=Character.WIZARD)
