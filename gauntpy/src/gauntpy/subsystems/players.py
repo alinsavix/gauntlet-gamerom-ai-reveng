@@ -121,6 +121,7 @@ _LOWHEALTH_SPEECH_TIMEOUT = 0x708
 
 # Health threshold below which the warning cadence activates (§4.3).
 _LOW_HEALTH_THRESHOLD = 200
+_DAMAGE_COMMENT_SPEECH_IDS = (0x60, 0x5F)  # ROM 0x5B724
 
 # state_timer sentinel meaning "disabled".  Written by player_resetcounters
 # (0x433B4), coincheck (0x42C64) and the food branch of player_tile_interact
@@ -2084,32 +2085,47 @@ def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
 
 
 def player_damage_sample_update(state: GameState, player_index: int) -> None:
-    """0x50E34 -- advance the signed 60-frame damage window (§4.3).
-
-    Formerly misidentified as a pickup detector; it advances the damage window
-    (Contradicted and corrected, §4.3 TRAP 3).  At window expiry: accumulates
-    pending_damage above the 20-point threshold (saturation 0x7D00), checks
-    low-health thresholds, plays damage speech, reloads timer to 60.
-    """
+    """0x50E34 -- advance the signed damage sample/commentary window."""
     player = state.players[player_index]
 
-    player.damage_sample_timer -= 1
-    if player.damage_sample_timer > 0:
+    if player.damage_sample_timer <= 0:
+        player.damage_sample_timer += 1
+        if player.damage_sample_timer:
+            return
+        player.damage_sample_count = 0
+    else:
+        player.damage_sample_timer -= 1
+        if player.damage_sample_timer:
+            return
+        player.damage_sample_count = (player.damage_sample_count + 1) & 0xFFFF
+
+        if (
+            player.health < 500
+            and player.pending_damage * 4 > player.health
+        ):
+            _dialog(state, player_index, _DIALOG_LOW_HEALTH)       # 0x50EB0
+            player_lowhealth(state, player_index)
+
+        if player.pending_damage > 20:
+            player.cumulative_damage = min(
+                player.cumulative_damage + player.pending_damage, 0x7D00
+            )
+        else:
+            average = (
+                player.cumulative_damage // player.damage_sample_count
+                if player.damage_sample_count else 0
+            )
+            if average > 80 and player.damage_sample_count > 3:
+                speech = _DAMAGE_COMMENT_SPEECH_IDS[state.getrandom(2)]
+                _sound_speech_play(state, speech)                  # 0x50F58
+                player.damage_sample_timer = -600
+                player.cumulative_damage = 0
+            elif average < 60:
+                player.damage_sample_count = 0
+                player.cumulative_damage = 0
+
+    if player.damage_sample_timer:
         return
-
-    # Accumulate pending damage above threshold, saturating at 0x7D00 (§4.3).
-    if player.pending_damage > 20:
-        player.cumulative_damage = min(
-            player.cumulative_damage + player.pending_damage, 0x7D00
-        )
-
-    # Low-health damage speech (§4.3 / 0x50EB0-0x50EC6).  player_lowhealth
-    # applies its own latch and spacing-timer gates, so this call site only
-    # supplies the health threshold the ROM checks before it -- and the same
-    # "insert coins for more health" box the drain path shows.
-    if player.health < _LOW_HEALTH_THRESHOLD:
-        _dialog(state, player_index, _DIALOG_LOW_HEALTH)   # 0x50EB0
-        player_lowhealth(state, player_index)
 
     player.damage_sample_timer = 60
     player.pending_damage = 0
@@ -2518,6 +2534,7 @@ def player_start_inner(state: GameState, player_index: int) -> int:
         player.death_damage_counter = 0
         player.pending_damage = 0
         player.cumulative_damage = 0
+        player.damage_sample_count = 0
         player.damage_sample_timer = 60
         player.hurt_cooldown = 0
         state.forcefield_hurt_timer[player_index] = 0

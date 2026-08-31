@@ -416,6 +416,25 @@ evidence remains in `../doc/`, generated contracts, and the book.
     frames. Follow the signed branch at 0x4C4E0-0x4C4F4; do not infer mode
     polarity from the word “attract.”
 
+87. **Transition cancellation tears down every owned record.** Killing a thief
+    during its private transporter transition removes the destination placeholder,
+    unlinks the fixed slot-29 sparkle MOB, and parks the shared counter before
+    starting the independent death poof. Clearing only the actor or timer leaves
+    impossible video-list state behind.
+88. **Signed timers can encode a cooldown phase.** `player_damage_sample_update`
+    counts positive values down to a sample and negative values up toward zero.
+    Damage commentary sets -600; only its later zero crossing resets the sample
+    count and resumes 60-frame windows.
+89. **A maze-header trick is not necessarily the live objective.** Setup copies
+    the header only when the pacing counter is zero, and the common start tail
+    then cancels trick IDs 0x0F-0x11 for a solo party. Diagnostics must distinguish
+    header metadata from the armed `secret_trick_id`.
+90. **Equal-priority type-7 sound insertion is destructive per channel.** A
+    higher-priority member merely suppresses a lower one, but an equal-priority
+    arrival removes the old member. Thus slow-motion 0x37 alone leaves seven
+    treasure-music members, while poison-potion break 0x1D replaces all eight and
+    command 0x39 cannot restore them.
+
 ## Investigation workflow
 
 1. Reproduce the reported behavior with the smallest deterministic scenario.

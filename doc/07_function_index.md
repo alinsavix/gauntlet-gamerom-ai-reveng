@@ -308,7 +308,7 @@ runtime, movement, collision, and path contracts.
 | 0x5DED4 | `moblist_unlink_regs` | Register-state unlink entry used by `moblist_remove`: repair forward/back links and list heads, then preserve the removed slot's upper object-state bits rather than clearing its five array words |
 | 0x49DE6 | `player_death_sequence` | Per-frame death/name-entry handler; decrements the reused `player_state_timer` countdown |
 | 0x54FE8 | `secret_name_entry_update` | Per-frame secret-winner name editor selected by `ram.secret_player`; builds and displays the completed secret code |
-| 0x50E34 | `player_damage_sample_update` | Advance one player's 60-frame damage sample, low-health dialog/voice, and pending/average damage bookkeeping |
+| 0x50E34 | `player_damage_sample_update` | Advance one player's signed damage-sample timer: positive 60-frame samples accumulate values above 20; a quiet sample with average >80 and count >3 draws speech 0x60/0x5F and starts a -600 cooldown; average <60 resets the window |
 | 0x47FAC | `open_timed_doors` | Remove every active type-0x0D/0x0E door object and play sound 0x12 (`Doors Open`) on the caller's idle-timer expiry; the body itself scans unconditionally |
 
 ### 4.1 EEPROM/configuration and player-lifecycle callable contracts
@@ -597,7 +597,7 @@ collision, route, and transport contracts.
 | 0x510BC | `tport_route_read_pair` | Frameless leaf: each nonzero ID is split by `divu.w #0x16` into a 128-byte row and a word column, indexing the forward table 0x905C54 into `D0` bits 31–16 and the reverse table 0x905D54 into bits 15–0. A zero forward ID leaves `D0` entirely zero, but a zero reverse ID leaves `(forward_id / 22) << 7` residue in the low half; the only caller masks it with 0xFF00 |
 | 0x4E7FC | `thief_test_move_tile` | Validate the thief's next tile, including transporter entry, blocked-direction tests, and corner-squeeze handling |
 | 0x4EE0A | `thief_probe_axis` | Invoke a generic directional MOB-probe callback against the thief's proposed live H/V word, pass the candidate through `thief_handle_tile_collision`, and apply the supplied intermediate coordinate correction consumed by the enclosing directional arm |
-| 0x4F5C8 | `thief_remove_and_drop_loot` | Remove the thief/effect MOBs, award 500 points when appropriate, restore route state, and respawn carried loot at the departure tile |
+| 0x4F5C8 | `thief_remove_and_drop_loot` | Remove the thief, award 500 points when appropriate, cancel any in-flight private transition by clearing its destination placeholder and fixed slot-29 sparkle, respawn carried loot at the departure tile, and reschedule an eligible variant |
 | 0x4F742 | `thief_handle_tile_collision` | Handle thief contact with players, shots, obstacles, transporter tiles, and object types 18–45; monster/generator contact latches a fight direction, advances the shared contact counter in the caller, then spawns an impact and removes the blocker after counter 15 |
 | 0x4FAD4 | `thief_enter_tport` | Select the linked transporter destination and route direction for the thief, then start the transporter transition when the destination is usable |
 | 0x4FBFC | `thief_start_tport_anim` | Hide/remove the thief at a transporter, create its transition MOB, record source/destination state, and start the teleport sound/animation |

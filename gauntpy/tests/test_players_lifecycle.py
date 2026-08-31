@@ -1025,7 +1025,7 @@ class TestPlayerDamageSampleUpdate:
         assert p.cumulative_damage == 50
 
     def test_pending_damage_at_or_below_20_not_accumulated(self):
-        """pending_damage ≤ 20 is ignored (below threshold, §4.3)."""
+        """A quiet sample evaluates the running average instead of adding damage."""
         state = _active_state()
         p = _make_player_active(state, 0, health=500)
         p.damage_sample_timer = 1
@@ -1033,6 +1033,7 @@ class TestPlayerDamageSampleUpdate:
         p.cumulative_damage = 0
         gp.player_damage_sample_update(state, 0)
         assert p.cumulative_damage == 0
+        assert p.damage_sample_count == 0
 
     def test_cumulative_damage_saturates_at_0x7D00(self):
         """cumulative_damage saturates at 0x7D00 (§4.3)."""
@@ -1051,6 +1052,53 @@ class TestPlayerDamageSampleUpdate:
         p.damage_sample_timer = 1
         p.pending_damage = 100
         gp.player_damage_sample_update(state, 0)
+        assert p.pending_damage == 0
+
+    def test_bravery_comment_requires_high_average_after_four_samples(self, monkeypatch):
+        state = _active_state()
+        p = _make_player_active(state, 0, health=1000)
+        monkeypatch.setattr(state, "getrandom", lambda bound: 1)
+        for damage in (110, 110, 110):
+            p.damage_sample_timer = 1
+            p.pending_damage = damage
+            gp.player_damage_sample_update(state, 0)
+
+        p.damage_sample_timer = 1
+        p.pending_damage = 20
+        gp.player_damage_sample_update(state, 0)
+
+        assert state.sound_log[-1] == 0x5F
+        assert p.damage_sample_timer == -600
+        assert p.damage_sample_count == 4
+        assert p.cumulative_damage == 0
+        assert p.pending_damage == 20
+
+    def test_bravery_average_and_count_thresholds_are_strict(self):
+        state = _active_state()
+        p = _make_player_active(state, 0, health=1000)
+        p.damage_sample_timer = 1
+        p.damage_sample_count = 3
+        p.cumulative_damage = 320
+        p.pending_damage = 20
+
+        gp.player_damage_sample_update(state, 0)
+
+        assert 0x5F not in state.sound_log
+        assert 0x60 not in state.sound_log
+        assert p.damage_sample_count == 4
+        assert p.cumulative_damage == 320
+
+    def test_damage_comment_cooldown_counts_up_and_resets_window(self):
+        state = _active_state()
+        p = _make_player_active(state, 0, health=1000)
+        p.damage_sample_timer = -1
+        p.damage_sample_count = 4
+        p.pending_damage = 20
+
+        gp.player_damage_sample_update(state, 0)
+
+        assert p.damage_sample_timer == 60
+        assert p.damage_sample_count == 0
         assert p.pending_damage == 0
 
 
@@ -2880,6 +2928,7 @@ class TestPickupDialogs:
         state = _active_state()
         p = _make_player_active(state, 0, health=150)
         p.damage_sample_timer = 1
+        p.pending_damage = 50
         gp.player_damage_sample_update(state, 0)          # 0x50EB0
         assert state.dialog_message == self._lines(2)
 

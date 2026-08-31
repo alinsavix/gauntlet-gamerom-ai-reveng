@@ -375,6 +375,12 @@ through the armor table, while hazards and special monsters take their own
 paths to the same number. Damage also gets *sampled*: a 60-frame window
 accumulates what you have taken and maintains a running average, which the
 game consults when deciding whether your situation deserves spoken commentary.
+Only samples above twenty add to the cumulative total. A quiet sample then
+tests the average; after at least four samples, strictly more than eighty damage
+per sample draws between “THAT WAS A HEROIC EFFORT!” and “I'VE NOT SEEN SUCH
+BRAVERY!” The line therefore praises sustained incoming damage followed by a
+quiet sample, not kills or survival time. It starts a ten-second signed
+cooldown before the averaging window resets.
 
 Monster contact has a second speech gate of its own. A per-player cooldown is
 predecremented; when it becomes negative, one draw reloads it from a range that

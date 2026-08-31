@@ -660,12 +660,19 @@ character transition effect 0x14-0x17.
 
 **Confidence: Verified.** `player_damage_sample_update(uint16 player_index)`
 (0x50E34), formerly misidentified as a pickup detector, advances a signed
-60-frame window. At expiry it increments the sample count, checks low-health
-damage thresholds and the one-shot low-health dialog/voice, accumulates pending
-damage above 20 with saturation at 0x7D00, and uses the cumulative average for
-contextual damage speech. It then reloads the timer to 60 and clears pending
-damage. Tile pickup handling instead occurs through the movement/collision
-dispatch in §4.6.
+60-frame window. At expiry it increments the sample count. Health below 500 plus
+`pending_damage * 4 > health` calls the low-health dialog/voice path. Pending
+damage above 20 is added to the cumulative word and saturated at 0x7D00; that
+sample does not test commentary. A sample of 20 or less divides cumulative
+damage by the sample count. An average strictly above 80 after strictly more
+than three samples draws `getrandom(2)` from ROM table 0x5B724: index 0 sends
+0x60, “THAT WAS A HEROIC EFFORT!”, and index 1 sends 0x5F, “I'VE NOT SEEN SUCH
+BRAVERY!” It clears cumulative damage and writes -600 to the signed timer.
+Negative values count upward; when the cooldown reaches zero it clears the
+sample count and resumes 60-frame sampling. An average below 60 clears the
+window, while 60–80 retains it. There is no level, maze, or kill-count gate.
+Tile pickup handling instead occurs through the movement/collision dispatch in
+§4.6.
 
 When coins are inserted for an active player (`coincheck`): adds health from table at 0x57862 indexed by `(game_settings & 0x1F)`.
 
@@ -1574,6 +1581,12 @@ mugger; if that roll fails, bit 4 (thief already used) forces a mugger anyway.
 are the same per-frame movement units as the player speed table (Elf 0x100,
 others 0x80).
 
+The two bit-4/bit-5 latches count successful theft variants, not deployments.
+Once both are set, `thief_timer_set` refuses another schedule. Therefore at
+most one ordinary thief and one mugger can successfully steal on a level, but
+there is no fixed deployment limit: killing a visitor before it steals leaves
+its variant latch clear, and the removal tail schedules again.
+
 **Escape cleanup and returned loot. Confidence: Verified** at
 0x4EB9A-0x4EC50 and 0x44166-0x441A6. On the escape route's first return to the
 recorded start cell (with a different predecessor), the live thief/mugger MOB
@@ -1625,6 +1638,13 @@ from the victim back toward `thief_start_location`; transporter completion
 writes the same kind of reverse edge at its destination. Switching to escape
 mode therefore changes which nibble `path_grid_get_direction` reads rather than
 running a new path search.
+
+Killing the visitor during that transition has an explicit cancellation tail at
+0x4F662–0x4F6A0. It removes a distinct destination placeholder when present,
+removes physical animation slot 29 from the depth list and clears its picture,
+then writes -1 to `tport_frame_counter`. The earlier 0x4F650 call has already
+started the separate death poof in the ordinary effect pool, so cancellation
+must not erase that replacement effect.
 
 `thief_compute_path` (0x4F912) is a route consumer, not a fallback pathfinder.
 It saves `thief_path_direction`, reads the selected grid nibble at the current
@@ -1903,6 +1923,10 @@ Secret-room availability is paced by a pair of level counters:
 - Two English names are looser than their predicates. Trick 9 accepts when `secret_tricks_flags[player] & 3 == 0` at 0x52BF0–0x52BFC. Dragon fire increments that byte at 0x4B2A2, but the killing shot writes 2 at 0x54420–0x54444 unless the byte is already 1; consequently “kill the dragon without getting hit” is not an accurate specification of the shipped code. Trick 17 writes 1 as soon as a player shot resolves any player at 0x4B046–0x4B052, before the damage/stun gates and before the later shooter/victim comparison; a harmless hit, including a reflected self-hit, still fails it.
 - `secret_check_winner` 0x4D1A4 gates the secret-room reward independently of finding the exit. Codes 0x50/0x51/0x5D require exact counts of six treasures/potions, 0x52/0x5B require three secret walls, 0x53 requires no remaining monster or generator, 0x56 requires the five-pad bitmask 0x3E, 0x5A requires all nineteen treasure removals, and 0x5C requires at least one IT event. Codes 0x54/0x55/0x57/0x58/0x59 have no extra progress predicate. The payout at 0x4D720 additionally requires the entrant to have reached exit status 2 or 8; only then does it award 5,000 points per coin and call `secret_getname`. The contest code editor opens only when game-settings bit 13 is enabled.
 - Availability is sampled, not continuously consulted. `maze_new_level_setup` 0x43930–0x43958 tests `secret_possible_counter` and copies the current maze-header byte into `secret_trick_id` once; changing only the counter after setup cannot arm the maze already in progress. At exit, `player_exit_sequence` 0x52B40 checks the live task and may write `secret_player` before status becomes 8. After the dissolve changes that player to status 2, `show_level_start_screen` 0x44DD6–0x44E00 requires exactly that valid player/status pair before substituting maze 115/116.
+- The common player-start tail at 0x48294–0x482B2 then cancels header trick
+  0x0F, 0x10, or 0x11 when `level_players_active == 1`. Maze 53's header is
+  0x11 (“Don't Hurt Friends”), so level 119 / maze 53 correctly has no live
+  objective in solo play even when the pacing counter reaches zero.
 
 ---
 
@@ -2066,6 +2090,13 @@ the sound-ROM command semantics needed at that boundary:
   channel 8, while 0x38 uses priority 9 there, so the end cue at
   `monster_slowmo_timer == 0x1E` suppresses the loop before command 0x39 removes
   its target at zero.
+- Treasure music 0x3D–0x40 owns priority-2 members on channels 4–11. Slow-motion
+  0x37 adds a priority-8 member only on channel 8, so it suppresses one stem but
+  leaves the music logically audible. Shooting poison food emits only 0x37.
+  Shooting poison potion emits 0x37 and then potion-break 0x1D; 0x1D has
+  priority 2 on all channels 4–11 and equal-priority insertion removes every
+  treasure member. The resulting music stop is original sound-ROM behavior,
+  and the later 0x39 can stop 0x37 but cannot recreate the removed music.
 - The pool contains 30 logical members, not 30 whole commands. Multipart chains
   are admitted in record order. At capacity, allocation examines only the
   requested physical channel and may reclaim its lowest-priority member when

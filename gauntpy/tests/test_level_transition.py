@@ -112,6 +112,21 @@ class TestComputeNextLevel:
         assert state.maze_next == 37
         assert state.maze_stride == 3          # unchanged
 
+    def test_fresh_rotation_reaches_maze_53_on_level_119(self):
+        state = GameState()
+        state.levelnum_current = 5
+        state.mazenum_current = 4
+        state.maze_number = 5
+        state.maze_stride = 0
+
+        while state.levelnum_current < 119:
+            ex.compute_next_level(state, int(MazeObjIds.EXIT))
+            state.levelnum_current = state.level_next
+            state.mazenum_current = state.maze_next
+
+        assert state.mazenum_current == 53
+        assert state.maze_stride == 2
+
 
 # ---------------------------------------------------------------------------
 # player_exit_sequence (0x52B40)

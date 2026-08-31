@@ -280,6 +280,13 @@ def game_state_from_payload(payload: object) -> GameState:
         serialized["eeprom_persistence_enabled"] = True
     if "dialog_once_flags" not in serialized:
         serialized["dialog_once_flags"] = 0
+    players = serialized.get("players")
+    if isinstance(players, list):
+        for player in players:
+            if isinstance(player, dict):
+                if "damage_sample_count" not in player:
+                    player["damage_sample_count"] = 0
+                    player["cumulative_damage"] = 0
 
     for field in fields(state):
         name = field.name

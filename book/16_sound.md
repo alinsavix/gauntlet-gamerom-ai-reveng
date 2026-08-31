@@ -287,6 +287,14 @@ transition makes this visible: 0x37 starts a priority-8 loop on Yamaha channel
 8, 0x38 arrives with thirty game frames left at priority 9 and suppresses it,
 and 0x39 removes the loop at zero.
 
+Treasure-room music reveals the difference between suppression and replacement.
+Its command owns eight priority-2 members on channels 4 through 11. Shooting
+poison food sends only 0x37, so channel 8 loses to slow motion but seven music
+members remain. Shooting poison potion then sends break sound 0x1D, also
+priority 2 on all eight channels. Equal priority removes the older member, so
+the entire treasure command disappears and 0x39 cannot bring it back. The
+abrupt stop is the sound ROM's behavior, not a rendering approximation.
+
 The Python host carries those channel/priority records for all sixty-two
 sequence commands. A mixed WAV still has one unavoidable limit: when only some
 channels of a multi-channel command lose arbitration, it cannot separate those

@@ -331,6 +331,10 @@ reverse breadcrumb, and recomputes its next path cell. The level-start setup
 resets the thief scheduler before a new route is considered. While the dissolve
 timer is active, the ordinary thief movement loop is gated off; the transition
 machine alone owns the source and destination records.
+If the visitor is killed mid-transition, its removal routine explicitly clears
+the destination placeholder and fixed transition sparkle before starting the
+separate death poof. Those are distinct MOB records; leaving the old fixed
+channel linked is not an authentic lingering effect.
 
 Killing the thief before it leaves is worth five hundred points times your
 treasure multiplier, and the loot is respawned on the tile it was standing on.
@@ -350,6 +354,11 @@ a successful theft, so a thief you chase off empty-handed does not use up its
 slot and will be back. If the mugger latch is still clear, a random number
 decides evenly. If that roll comes up thief while the thief latch is already
 set, the visitor becomes a mugger anyway.
+
+So “how many times?” has two answers. At most one thief and one mugger can
+complete a theft on one level. Deployments themselves are unbounded by a fixed
+counter: kill either visitor before it steals and its latch remains clear, so
+the removal tail may schedule that variant again.
 
 Four things change with that bit:
 

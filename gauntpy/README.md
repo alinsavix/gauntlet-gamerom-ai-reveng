@@ -98,6 +98,12 @@ frames. The graph labels its dynamic Y axis in milliseconds and marks the
 sound commands chronologically, one per line with hexadecimal command number
 and the description from the local WAV library (or the known control-command
 meaning).
+The LEVEL page labels the stored `HEADER TRICK` separately from the live
+`SECRET ID` and marks it active, unarmed, or disabled for solo play. `GEN PROB
+CEILING` is the level-derived ceiling on a generator's probability out of 32,
+not a monster count; `FF DELAY ROW` is `level & 3` selecting one of four
+forcefield timing tables; and `DEPTH FLAG ADD` summarizes only the
+level-modulo flags added to the maze header.
 
 **F4** atomically saves every modeled `GameState` field, including players,
 MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,

@@ -334,6 +334,10 @@ the maze header's objective into the live task byte; making the counter zero
 later would not arm that same maze by itself. The exit path checks the copied
 task, records the winning player, and only after that player's dissolve reaches
 the between-level status can the next-level curtain substitute a secret room.
+The common start tail also clears objectives 0x0F–0x11 when exactly one player
+is active because they require another hero. Maze 53 demonstrates the
+difference between catalog metadata and live state: its header lists “Don't
+Hurt Friends,” but a solo level 119 correctly runs with no armed trick.
 
 Progress and violations are tracked per player, and the hooks are scattered
 through every system the objectives touch: the shot resolver notices when you

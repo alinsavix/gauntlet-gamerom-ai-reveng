@@ -117,6 +117,9 @@ def test_load_migrates_original_schema_one_shape(tmp_path):
         "dialog_once_flags",
     ):
         del payload["state"][name]
+    for player in payload["state"]["players"]:
+        del player["damage_sample_count"]
+        player["cumulative_damage"] = 1234
     payload["state"]["playfield_color_ram"][8] = 0x2468
     path = tmp_path / "original-schema-one.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -128,6 +131,8 @@ def test_load_migrates_original_schema_one_shape(tmp_path):
     assert restored.playfield_color_latch == 0x2468
     assert restored.eeprom_persistence_enabled is False
     assert restored.dialog_once_flags == 0
+    assert all(player.damage_sample_count == 0 for player in restored.players)
+    assert all(player.cumulative_damage == 0 for player in restored.players)
 
 
 def test_load_ignores_retired_host_message_suppression_field(tmp_path):

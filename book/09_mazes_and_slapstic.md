@@ -101,6 +101,11 @@ variety between games at the price of two EEPROM bytes. The level counter
 itself has one last joke: it caps at 999, and the level after 999 is
 labeled level 6.
 
+On a factory-fresh rotation, the stride first rises to one at level 6, the
+catalog wrap returns to maze 5 at level 103 and raises it to two, and level 119
+lands on maze 53. That example is a trace through cabinet state, not a formula
+that permanently equates those two numbers; a saved resume point changes it.
+
 The opening act also advertises its own fire escape. Maze 0 — level 1,
 the first room of every game — contains an EXIT TO 6 tile alongside its
 ordinary exit, and it is the only maze in all 117 that has one. Stepping on
