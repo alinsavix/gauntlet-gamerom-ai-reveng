@@ -191,7 +191,7 @@ def test_level_page_names_the_current_maze_secret_trick():
         capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
     ))
 
-    assert rows["HEADER TRICK"] == "0D EAT NO FOOD (UNARMED)"
+    assert rows["SECRET TRICK"] == "0D EAT NO FOOD"
 
 
 def test_level_page_lists_active_level_gates():
@@ -210,9 +210,9 @@ def test_level_page_lists_active_level_gates():
     assert rows["GATE >6"] == "ADAPTIVE FOOD + BONUS ON"
     assert rows["GATE >=12"] == "DRAGON + TRICK 09 ON"
     assert rows["TREASURE >30"] == "OFF (NOT TREASURE)"
-    assert rows["GEN PROB CEILING"] == "24/32"
-    assert rows["FF DELAY ROW"] == "0"
-    assert rows["DEPTH FLAG ADD"] == "BASE"
+    assert rows["GENERATOR CAP"] == "24"
+    assert rows["FF PROFILE"] == "0"
+    assert rows["HAZARD DEPTH"] == "BASE"
 
 
 def test_flags_page_decodes_all_four_raw_level_flag_bytes():
@@ -252,7 +252,7 @@ def test_level_page_applies_maze_specific_gate_context():
 
     assert rows["GATE >=6"] == "HIDDEN POT ON; THIEF 8/8"
     assert rows["TREASURE >30"] == "PRANK VOICE ELIGIBLE"
-    assert rows["DEPTH FLAG ADD"] == "WRAP+OFFSCREEN"
+    assert rows["HAZARD DEPTH"] == "WRAP+OFFSCREEN"
 
     state.mazenum_current = 115
     rows = dict(debug_page_lines(
@@ -288,24 +288,7 @@ def test_level_page_distinguishes_reused_secret_hint_text():
     for trick, detail in enumerate(expected, start=1):
         state.maze = type("Maze", (), {"secret": trick})()
         rows = dict(debug_page_lines(capture_debug_snapshot(state), page))
-        suffix = "(OFF: SOLO)" if trick >= 0x0F else "(UNARMED)"
-        assert rows["HEADER TRICK"] == f"{trick:02X} {detail} {suffix}"
-
-
-def test_level_page_explains_maze_53_solo_secret_cancellation():
-    state = _diagnostic_state()
-    state.levelnum_current = 119
-    state.mazenum_current = 53
-    state.level_players_active = 1
-    state.maze = type("Maze", (), {"secret": 0x11})()
-    state.secret_possible_counter = 0
-    state.secret_trick_id = 0
-
-    rows = dict(debug_page_lines(
-        capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
-    ))
-
-    assert rows["HEADER TRICK"] == "11 SHOOT NO PLAYER (SELF TOO) (OFF: SOLO)"
+        assert rows["SECRET TRICK"] == f"{trick:02X} {detail}"
 
 
 def test_level_page_does_not_present_bonus_header_byte_as_entry_trick():
@@ -317,7 +300,7 @@ def test_level_page_does_not_present_bonus_header_byte_as_entry_trick():
         capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
     ))
 
-    assert rows["HEADER TRICK"] == "n/a in bonus room"
+    assert rows["SECRET TRICK"] == "n/a in bonus room"
 
 
 def test_level_page_suppresses_stale_bonus_header_during_tally_transition():
@@ -330,7 +313,7 @@ def test_level_page_suppresses_stale_bonus_header_during_tally_transition():
         capture_debug_snapshot(state), DEBUG_PAGES.index("LEVEL"),
     ))
 
-    assert rows["HEADER TRICK"] == "n/a during transition"
+    assert rows["SECRET TRICK"] == "n/a during transition"
 
 
 def test_routes_page_snapshots_both_route_nibbles_without_mutating_state():

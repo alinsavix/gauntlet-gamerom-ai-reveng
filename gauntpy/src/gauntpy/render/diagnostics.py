@@ -223,13 +223,9 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     elif state.mazenum_current >= 104:
         secret_trick = "n/a in bonus room"
     elif 1 <= maze_trick <= len(_SECRET_OBJECTIVE_DETAILS):
-        detail = f"{maze_trick:02X} {_SECRET_OBJECTIVE_DETAILS[maze_trick - 1]}"
-        if state.secret_trick_id == maze_trick:
-            secret_trick = f"{detail} (ACTIVE)"
-        elif 0x0F <= maze_trick <= 0x11 and state.level_players_active == 1:
-            secret_trick = f"{detail} (OFF: SOLO)"
-        else:
-            secret_trick = f"{detail} (UNARMED)"
+        secret_trick = (
+            f"{maze_trick:02X} {_SECRET_OBJECTIVE_DETAILS[maze_trick - 1]}"
+        )
     else:
         secret_trick = "none"
     return (
@@ -244,7 +240,7 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         ("EXITS", f"{len(state.exit_slots)} open={state.exit_open_id:03X}"),
         ("EXIT MOVE", f"timer={state.exit_move_timer} frame={state.exit_anim_frame}"),
         ("TRANSPORTERS", str(transporters)),
-        ("HEADER TRICK", secret_trick),
+        ("SECRET TRICK", secret_trick),
         ("SECRET ID", f"{state.secret_trick_id:02X} last={state.secret_trick_last:02X}"),
         ("SECRET WIN", f"{state.secret_player} hint={state.secret_need_hint}"),
         ("SECRET COUNT", f"{state.secret_possible_counter}/{state.secret_possible_start}"),
@@ -351,11 +347,11 @@ def _level_gate_rows(state: GameState) -> tuple[tuple[str, str], ...]:
             if level > 30 and 104 <= maze <= 114 else "OFF (NOT TREASURE)",
         ),
         (
-            "GEN PROB CEILING",
-            "NONE (LEVEL 1)" if level == 1 else f"{level * 2}/32",
+            "GENERATOR CAP",
+            "NONE (LEVEL 1)" if level == 1 else f"{level * 2}",
         ),
-        ("FF DELAY ROW", str(level & 3)),
-        ("DEPTH FLAG ADD", hazard),
+        ("FF PROFILE", str(level & 3)),
+        ("HAZARD DEPTH", hazard),
     )
 
 
