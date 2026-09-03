@@ -450,7 +450,8 @@ evidence remains in `../doc/`, generated contracts, and the book.
     thief/mugger record (or level setup has supplied a fresh table). A scheduled
     state with zero current/MOB ids cannot retain a visitor-shaped `PLAYERSTART`
     record at a route identity. Kill cleanup must retire both the tracked slot and
-    a divergent collision slot before creating optional carried loot.
+    a divergent collision slot before creating optional carried loot; do not add
+    runtime sanitizers solely to make a captured broken dump self-heal.
 
 ## Investigation workflow
 

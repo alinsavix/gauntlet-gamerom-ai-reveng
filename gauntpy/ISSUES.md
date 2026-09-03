@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2572 passed, 13 skipped** (gauntpy) and
+present the suites are clean: **2570 passed, 13 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -84,9 +84,8 @@ rescheduling. Python could instead receive a collision slot different from its
 tracked thief slot; with an empty-handed mugger, it cleared the tracked slot and
 created no pickup at the collision slot, leaving that second visitor-shaped
 record behind. Removal now retires a differing hit record before rescheduling.
-The scheduling boundary also clears visitor pictures at its retired route
-identities, allowing this historical dump to repair on its next game frame
-without renderer filtering.
+The captured dump remains unchanged debugging evidence; loading it does not
+invoke any special repair path.
 
 ### S-177 · host audio and frame limiting had no explicit runtime policy
 
