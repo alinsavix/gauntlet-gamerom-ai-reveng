@@ -2186,6 +2186,50 @@ class TestPygameFramebuffer:
             == reference.image.tobytes()
         )
 
+    def test_indexed_tile_batch_preserves_exact_shadows_and_clipping(self):
+        from PIL import Image
+
+        class Shadow:
+            def __init__(self):
+                self.image = Image.new("RGBA", (16, 8))
+                pixels = self.image.load()
+                for y in range(8):
+                    for x in range(16):
+                        pixels[x, y] = (x * 7, y * 11, 99, 255)
+
+            def source_xy(self, x, y):
+                return x % 16, y % 8
+
+            def at(self, x, y):
+                source_x, source_y = self.source_xy(x, y)
+                return self.image.getpixel((source_x, source_y))
+
+        first = [[(column + row) % 4 for column in range(8)] for row in range(8)]
+        second = [[(column * 2 + row) % 5 for column in range(8)] for row in range(8)]
+        palette = [
+            (index * 10, index * 7, index * 3, 255)
+            for index in range(16)
+        ]
+        shadow = Shadow()
+        reference = Framebuffer(16, 8, (150, 120, 90, 255))
+        accelerated = self._surface_framebuffer(16, 8)
+        accelerated.clear((150, 120, 90, 255))
+
+        for framebuffer in (reference, accelerated):
+            framebuffer._blit_disjoint_indexed_tiles(
+                ((first, 0, 0), (second, 8, 0)),
+                palette,
+                trans0=True,
+                shadow_index=1,
+                shadow_src=shadow,
+                clip=(1, 0, 15, 8),
+            )
+
+        assert (
+            accelerated.to_pil_image().tobytes()
+            == reference.image.tobytes()
+        )
+
     def test_render_frame_matches_the_reference_compositor(self):
         import pygame
 
@@ -2226,6 +2270,31 @@ class TestPygameFramebuffer:
             framebuffer.blit_alpha_glyph(
                 0, 0, ord("!"), palette, opaque=False,
                 renderer=text.draw_alpha_glyph,
+            )
+
+        assert (
+            accelerated.to_pil_image().tobytes()
+            == reference.image.tobytes()
+        )
+
+    def test_rom_free_alpha_batch_matches_reference_blending(self, monkeypatch):
+        from gauntpy.render import text
+
+        monkeypatch.setattr(text, "_glyph_checked", True)
+        monkeypatch.setattr(text, "_glyph_fn", None)
+        monkeypatch.setattr(text, "_raw_glyph_fn", None)
+        palette = ((0, 0, 0, 255),) * 3 + ((200, 150, 100, 255),)
+        glyphs = (
+            (0, 0, ord("!"), palette, False),
+            (8, 0, ord("?"), palette, False),
+        )
+        reference = Framebuffer(16, 8, (11, 12, 13, 255))
+        accelerated = self._surface_framebuffer(16, 8)
+        accelerated.clear((11, 12, 13, 255))
+
+        for framebuffer in (reference, accelerated):
+            framebuffer.blit_alpha_glyphs(
+                glyphs, renderer=text.draw_alpha_glyph,
             )
 
         assert (

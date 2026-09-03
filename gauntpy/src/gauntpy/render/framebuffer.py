@@ -104,6 +104,12 @@ class Framebuffer:
     ) -> None:
         renderer(self.image, x, y, code, palette, opaque=opaque)
 
+    def blit_alpha_glyphs(self, glyphs, *, renderer) -> None:
+        for x, y, code, palette, opaque in glyphs:
+            self.blit_alpha_glyph(
+                x, y, code, palette, opaque=opaque, renderer=renderer,
+            )
+
     def draw_pause_indicator(
         self, panel: tuple[int, int, int, int], text: str,
     ) -> None:
@@ -210,6 +216,28 @@ class Framebuffer:
                     continue
                 px[pxx, py] = palette_rgba[idx]
 
+    def _blit_disjoint_indexed_tiles(
+        self,
+        tiles,
+        palette_rgba,
+        *,
+        trans0: bool = True,
+        shadow_index: int | None = None,
+        shadow_ratio: tuple[int, int] = SHADOW_RATIO,
+        shadow_src=None,
+        clip: tuple[int, int, int, int] | None = None,
+    ) -> None:
+        """Draw one stamp's non-overlapping 8x8 tiles in tile order."""
+        for tile, x, y in tiles:
+            self.blit_indexed_tile(
+                tile, palette_rgba, x, y,
+                trans0=trans0,
+                shadow_index=shadow_index,
+                shadow_ratio=shadow_ratio,
+                shadow_src=shadow_src,
+                clip=clip,
+            )
+
 
 class PygameFramebuffer:
     """SDL-backed framebuffer used only by the optional interactive host."""
@@ -302,6 +330,14 @@ class PygameFramebuffer:
             self.surface.blit(self._surface_from_pil(tile), area.topleft)
             return
 
+        surface = self._alpha_glyph_surface(
+            code, palette, opaque=opaque, renderer=renderer,
+        )
+        self.surface.blit(surface, (x, y))
+
+    def _alpha_glyph_surface(
+        self, code: int, palette, *, opaque: bool, renderer,
+    ):
         key = (code, tuple(palette), opaque)
         surface = self._alpha_cache.get(key)
         if surface is None:
@@ -310,7 +346,29 @@ class PygameFramebuffer:
             renderer(tile, 0, 0, code, palette, opaque=opaque)
             surface = self._surface_from_pil(tile)
             self._alpha_cache[key] = surface
-        self.surface.blit(surface, (x, y))
+        return surface
+
+    def blit_alpha_glyphs(self, glyphs, *, renderer) -> None:
+        from .text import rom_font_available
+
+        pending = []
+        for x, y, code, palette, opaque in glyphs:
+            if not opaque and not rom_font_available():
+                if pending:
+                    self.surface.blits(pending, doreturn=0)
+                    pending.clear()
+                self.blit_alpha_glyph(
+                    x, y, code, palette, opaque=opaque, renderer=renderer,
+                )
+                continue
+            pending.append((
+                self._alpha_glyph_surface(
+                    code, palette, opaque=opaque, renderer=renderer,
+                ),
+                (x, y),
+            ))
+        if pending:
+            self.surface.blits(pending, doreturn=0)
 
     def draw_pause_indicator(
         self, panel: tuple[int, int, int, int], text: str,
@@ -406,41 +464,81 @@ class PygameFramebuffer:
         shadow_src=None,
         clip: tuple[int, int, int, int] | None = None,
     ) -> None:
-        sprite, shadow_mask, shadows = self._sprite_tile(
-            tile, palette_rgba, trans0, shadow_index,
+        self._blit_disjoint_indexed_tiles(
+            ((tile, x, y),), palette_rgba,
+            trans0=trans0,
+            shadow_index=shadow_index,
+            shadow_ratio=shadow_ratio,
+            shadow_src=shadow_src,
+            clip=clip,
         )
-        previous_clip = self.surface.get_clip()
-        if clip is not None:
-            self.surface.set_clip(self._pygame.Rect(
-                clip[0], clip[1], clip[2] - clip[0], clip[3] - clip[1],
-            ))
-        self.surface.blit(sprite, (x, y))
 
-        if (
-            shadows
-            and shadow_src is not None
-            and hasattr(shadow_src, "image")
-            and hasattr(shadow_src, "source_xy")
-        ):
-            shadow = self._exact_shadow_tile(shadow_src, shadow_mask, x, y)
-            self.surface.blit(shadow, (x, y))
-            self.surface.set_clip(previous_clip)
+    def _blit_disjoint_indexed_tiles(
+        self,
+        tiles,
+        palette_rgba,
+        *,
+        trans0: bool = True,
+        shadow_index: int | None = None,
+        shadow_ratio: tuple[int, int] = SHADOW_RATIO,
+        shadow_src=None,
+        clip: tuple[int, int, int, int] | None = None,
+    ) -> None:
+        """Batch one stamp's non-overlapping 8x8 tiles, then apply its shadows."""
+        prepared = [
+            (
+                *self._sprite_tile(
+                    tile, palette_rgba, trans0, shadow_index,
+                ),
+                x,
+                y,
+            )
+            for tile, x, y in tiles
+        ]
+        if not prepared:
             return
+        previous_clip = self.surface.get_clip()
+        try:
+            if clip is not None:
+                self.surface.set_clip(self._pygame.Rect(
+                    clip[0], clip[1], clip[2] - clip[0], clip[3] - clip[1],
+                ))
+            self.surface.blits(
+                [(sprite, (x, y)) for sprite, _mask, _shadows, x, y in prepared],
+                doreturn=0,
+            )
 
-        shadow_num, shadow_den = shadow_ratio
-        active_clip = self.surface.get_clip()
-        for dx, dy in shadows:
-            px, py = x + dx, y + dy
-            if not active_clip.collidepoint(px, py):
-                continue
-            exact = shadow_src.at(px, py) if shadow_src is not None else None
-            if exact is None:
-                under = self.surface.get_at((px, py))
-                exact = (
-                    under.r * shadow_num // shadow_den,
-                    under.g * shadow_num // shadow_den,
-                    under.b * shadow_num // shadow_den,
-                    under.a,
-                )
-            self.surface.set_at((px, py), exact)
-        self.surface.set_clip(previous_clip)
+            shadow_num, shadow_den = shadow_ratio
+            active_clip = self.surface.get_clip()
+            for _sprite, shadow_mask, shadows, x, y in prepared:
+                if (
+                    shadows
+                    and shadow_src is not None
+                    and hasattr(shadow_src, "image")
+                    and hasattr(shadow_src, "source_xy")
+                ):
+                    shadow = self._exact_shadow_tile(
+                        shadow_src, shadow_mask, x, y,
+                    )
+                    self.surface.blit(shadow, (x, y))
+                    continue
+
+                for dx, dy in shadows:
+                    px, py = x + dx, y + dy
+                    if not active_clip.collidepoint(px, py):
+                        continue
+                    exact = (
+                        shadow_src.at(px, py)
+                        if shadow_src is not None else None
+                    )
+                    if exact is None:
+                        under = self.surface.get_at((px, py))
+                        exact = (
+                            under.r * shadow_num // shadow_den,
+                            under.g * shadow_num // shadow_den,
+                            under.b * shadow_num // shadow_den,
+                            under.a,
+                        )
+                    self.surface.set_at((px, py), exact)
+        finally:
+            self.surface.set_clip(previous_clip)

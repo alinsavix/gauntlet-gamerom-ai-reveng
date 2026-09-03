@@ -376,20 +376,18 @@ def draw_mob_layer(
         screen_x = dest_x + (info.x - scroll_x)
         screen_y = dest_y + (info.y - scroll_y)
         max_cols, max_rows = info.size_tiles
+        tiles = []
         for idx, tile in enumerate(stamp.data):
             row, col = divmod(idx, stamp.width)
             if row >= max_rows or col >= max_cols:
                 continue
-            # Pixel special cases (doc/01_hardware.md §4/§6, Confidence:
-            # Verified): 0 = transparent (trans0=True), 1 = shadow. A shadow
-            # pixel shows the underlying playfield through the half-intensity
-            # shadow palette (built by playfield.irgb_to_shadow, ROM 0x5FD80).
-            # ``shadow_src`` (the compositor's ShadowSource over the cached
-            # shadow raster) supplies that exact color; without it the blit
-            # falls back to darkening in place. Verified by disassembly
-            # (capstone, row76.bin) -- see playfield.irgb_to_shadow.
-            fb.blit_indexed_tile(
-                tile, palette_rgba,
+            tiles.append((
+                tile,
                 screen_x + col * 8, screen_y + row * 8,
-                trans0=True, shadow_index=1, shadow_src=shadow_src, clip=clip,
-            )
+            ))
+        # Tiles within one stamp are disjoint, so their ordinary pixels can be
+        # submitted together without changing chain order or shadow priority.
+        fb._blit_disjoint_indexed_tiles(
+            tiles, palette_rgba,
+            trans0=True, shadow_index=1, shadow_src=shadow_src, clip=clip,
+        )

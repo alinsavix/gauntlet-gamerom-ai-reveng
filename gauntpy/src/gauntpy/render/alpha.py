@@ -27,6 +27,7 @@ def draw_alpha_layer(
     clip_x, clip_y, clip_w, clip_h = clip
     clip_right, clip_bottom = clip_x + clip_w, clip_y + clip_h
     palettes: dict[int, tuple[tuple[int, int, int, int], ...]] = {}
+    glyphs = []
 
     for row in range(min(ALPHA_ROWS, fb.height // GLYPH_H)):
         y = row * GLYPH_H
@@ -47,7 +48,5 @@ def draw_alpha_layer(
             if palette is None:
                 palette = alpha_palette_rgba(state, attribute)
                 palettes[attribute] = palette
-            fb.blit_alpha_glyph(
-                x, y, code, palette, opaque=opaque,
-                renderer=draw_alpha_glyph,
-            )
+            glyphs.append((x, y, code, palette, opaque))
+    fb.blit_alpha_glyphs(glyphs, renderer=draw_alpha_glyph)
