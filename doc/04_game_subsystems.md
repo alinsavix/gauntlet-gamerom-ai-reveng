@@ -1609,11 +1609,14 @@ The ordering establishes a useful state invariant. At 0x4EC2C the escape path
 calls `moblist_remove_and_clear` on `thief_current_pos`, then 0x4EC50 calls
 `thief_timer_set`, whose first action clears that identity again. The kill path
 through `thief_remove_and_drop_loot` has the same remove-before-reschedule
-contract. Therefore a nonnegative arrival timer with both current visitor ids
-zero cannot coexist with a linked type-15 MOB carrying thief/mugger animation
-art. In the Python representation, a collision-slot/tracked-slot divergence
-must retire both records before optional loot recreation; otherwise an
-empty-handed mugger has no pickup write to overwrite the duplicate.
+contract. Level replacement has a separate earlier owner:
+`maze_new_level_setup` clears `monster_slowmo_timer` at 0x438C2, stores 0xFFFF
+in `thief_enter_time` and `thief_victim` at 0x438CA/0x438D0, and clears
+`thief_current_pos` at 0x438D6 before `maze_setupnew`. A port that postpones
+those writes until `thief_setup` can let a stale zero timer deploy at the old
+start location in the new MOB table, then clear its identity while leaving the
+record behind. The reset must precede maze construction; kill cleanup still
+uses the ROM's single canonical current record.
 
 ### 9.2 Thief Targeting (`thief_target_calc`, 0x4DFF6)
 

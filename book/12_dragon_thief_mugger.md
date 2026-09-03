@@ -330,7 +330,10 @@ a stolen multiplier returns as a bag whose encoded value restores its score.
 The removal is preceded by the same transporter-style poof used on arrival.
 Removal and rescheduling are one transaction: by the time the next arrival
 timer exists, no thief- or mugger-shaped MOB from the previous visit remains in
-the maze.
+the maze. Level replacement prevents a different kind of carry-over even
+earlier: before constructing the new maze, it cancels the old arrival timer and
+victim and clears the current visitor identity. The next level cannot spend a
+stale zero timer at the previous level's deployment point.
 
 Transporters are part of that retracing graph. If the target player has taught
 the route by teleporting, the thief dissolves into the same transition machinery,

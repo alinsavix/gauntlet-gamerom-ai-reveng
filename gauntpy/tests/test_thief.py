@@ -159,6 +159,32 @@ class TestScheduling:
         assert state.thief_start_location == pack_slot(8, 9)
         assert state.thief_victim_pos == pack_slot(8, 9)
 
+    @requires_roms
+    def test_level_load_clears_stale_arrival_before_it_can_deploy(self):
+        from gauntpy import maze
+
+        state = GameState()
+        _active(state, 0, pack_slot(15, 15))
+        state.monster_slowmo_timer = 99
+        state.thief_victim = 0
+        state.thief_start_location = pack_slot(16, 21)
+        state.thief_mode = THIEF_PURSUE | THIEF_IS_MUGGER
+        state.thief_enter_time = 0
+        state.thief_current_pos = 0
+        state.thief_mob_slot = 0
+
+        maze.load_level(state, 114, maze_number=38)
+
+        assert state.monster_slowmo_timer == 0
+        assert state.thief_enter_time == -1
+        assert state.thief_victim == -1
+        assert state.thief_current_pos == 0
+        assert state.thief_mob_slot == 0
+
+        main_start_thief(state)
+        assert state.mobs.picture[pack_slot(16, 21)] == 0
+
+
 class TestMuggerSelection:
     def test_low_roll_selects_mugger(self):
         state = GameState()
@@ -726,32 +752,6 @@ class TestRemoveAndDropLoot:
 
         assert state.thief_current_pos == 0
         assert state.mobs.picture[thief_slot] == 0
-
-    def test_kill_retires_a_mismatched_hit_record_before_rescheduling(self):
-        state = GameState()
-        tracked = pack_slot(15, 15)
-        hit = pack_slot(16, 21)
-        _thief_at(state, tracked)
-        state.thief_mode = THIEF_PURSUE | THIEF_IS_MUGGER
-        state.thief_victim = -1
-        state.mugger_item_carried = 0
-        state.thief_previous_pos = hit
-        state.mobs.create(
-            hit,
-            0x24C6,
-            encode_hpos(332, palette=1),
-            encode_vpos_at_y(253, width=3, height=3),
-            MazeObjIds.PLAYERSTART,
-        )
-
-        thief_remove_and_drop_loot(state, 0, hit)
-
-        assert state.mobs.picture[tracked] == 0
-        assert state.mobs.picture[hit] == 0
-        assert not state.mobs.is_linked(hit)
-        assert state.thief_current_pos == 0
-        assert state.thief_mob_slot == 0
-
 
 class TestDeployAndEscapeGraph:
     def test_unset_route_corner_starts_thief_squeeze_transition(

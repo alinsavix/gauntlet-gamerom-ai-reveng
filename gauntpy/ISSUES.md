@@ -80,12 +80,21 @@ sound log does not timestamp an arrival on the current maze.
 
 ROM escape completion removes the current MOB at 0x4EC2C before calling
 `thief_timer_set` at 0x4EC50, and the kill path likewise owns removal before
-rescheduling. Python could instead receive a collision slot different from its
-tracked thief slot; with an empty-handed mugger, it cleared the tracked slot and
-created no pickup at the collision slot, leaving that second visitor-shaped
-record behind. Removal now retires a differing hit record before rescheduling.
-The captured dump remains unchanged debugging evidence; loading it does not
-invoke any special repair path.
+rescheduling. The divergence began earlier instead: ROM
+`maze_new_level_setup` clears `monster_slowmo_timer` at 0x438C2, then writes
+-1 to `thief_enter_time` and `thief_victim` and zero to `thief_current_pos` at
+0x438CA-0x438D6 before maze setup. Python's consolidated `maze.load_level`
+omitted those writes.
+
+That omission gives a stale zero arrival timer and prior victim one frame in
+the new maze. It can deploy a mugger at the old `thief_start_location`, run its
+60-frame entrance pause, and then reach the port's lazy `thief_setup`, which
+clears the two tracked ids without removing the already-created MOB. A
+deterministic maze-38 reproduction produces the captured 0x215/type-15/0x24C6
+shape through that sequence. Level loading now performs the literal ROM
+prologue and clears the Python `thief_mob_slot` alias with the canonical current
+word. The differing-collision-slot removal workaround has been removed. The
+captured dump remains unchanged debugging evidence and receives no repair path.
 
 ### S-177 · host audio and frame limiting had no explicit runtime policy
 

@@ -445,13 +445,13 @@ evidence remains in `../doc/`, generated contracts, and the book.
     presentation per loop; it accelerates frame-denominated arcade time relative
     to wall time rather than changing any game timer or cadence constant.
     Uncapped execution disables host playback while preserving sound production.
-93. **Visitor rescheduling implies no live visitor MOB.** `thief_timer_set` clears
-    the current identity only after its runtime callers have removed the old
-    thief/mugger record (or level setup has supplied a fresh table). A scheduled
-    state with zero current/MOB ids cannot retain a visitor-shaped `PLAYERSTART`
-    record at a route identity. Kill cleanup must retire both the tracked slot and
-    a divergent collision slot before creating optional carried loot; do not add
-    runtime sanitizers solely to make a captured broken dump self-heal.
+93. **Level setup resets visitor scheduling before maze construction.**
+    `maze_new_level_setup` clears slow motion, writes -1 to
+    `thief_enter_time`/`thief_victim`, and clears `thief_current_pos` before
+    decoding or placing the next maze. A stale zero timer must never deploy at an
+    old start location in the new MOB table. Reset Python's `thief_mob_slot`
+    representation alias with the canonical word; do not compensate later with
+    divergent-slot cleanup or dump self-healing.
 
 ## Investigation workflow
 
