@@ -125,6 +125,53 @@ class TestArguments:
 
         assert called["reduce_text"] is True
 
+    def test_host_runtime_flags_default_off_and_can_be_enabled(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        calls = []
+        monkeypatch.setattr(play, "run", lambda **kwargs: calls.append(kwargs))
+
+        play.main([])
+        play.main(["--sound"])
+        play.main(["--sound", "--uncapped"])
+
+        assert calls[0]["sound_enabled"] is False
+        assert calls[0]["uncapped"] is False
+        assert calls[1]["sound_enabled"] is True
+        assert calls[1]["uncapped"] is False
+        assert calls[2]["sound_enabled"] is False
+        assert calls[2]["uncapped"] is True
+
+    def test_muted_default_does_not_probe_the_sound_library(self, monkeypatch):
+        monkeypatch.setattr(
+            play, "_sound_dir",
+            lambda: pytest.fail("muted runs must not inspect the sound library"),
+        )
+
+        assert play._enabled_sound_dir(False) is None
+
+    def test_sound_flag_resolves_the_configured_library(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("GAUNTPY_SOUND_DIR", str(tmp_path))
+
+        assert play._enabled_sound_dir(True) == tmp_path
+
+    def test_host_frame_limit_policy_does_not_require_pygame(self):
+        from gauntpy.constants import FRAMES_PER_SECOND
+        from gauntpy.render.host import HostShell
+
+        class Clock:
+            def __init__(self):
+                self.calls = []
+
+            def tick(self, limit):
+                self.calls.append(limit)
+
+        for uncapped, expected in ((False, [FRAMES_PER_SECOND]), (True, [])):
+            shell = object.__new__(HostShell)
+            shell.clock = Clock()
+            shell.uncapped = uncapped
+            shell._limit_frame_rate()
+            assert shell.clock.calls == expected
+
     def test_reduce_text_defaults_to_no_saved_state_override(
         self, monkeypatch,
     ):

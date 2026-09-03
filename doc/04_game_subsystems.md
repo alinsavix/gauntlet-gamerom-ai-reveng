@@ -2077,6 +2077,13 @@ the modeled latch to `GameState.sound_log`; the pygame harness consumes only
 new entries from that stream. It does not rewrite a producer, bypass the
 main-CPU ring, or report playback completion into game RAM.
 
+Static playback is an opt-in host policy. `gauntpy-play --sound` constructs the
+WAV consumer; the default muted runner still produces the same latch traffic,
+queue state, and `sound_log` bytes and does not inspect the local recording
+directory. The accelerated `--uncapped` host mode also forces playback off
+because recorded audio is wall-time media, while modeled command production
+continues once per game frame.
+
 The host does not emulate the 6502 or synthesize YM2151, POKEY, or TMS5220
 output. It maps accepted bytes to local `0xNN_*.wav` recordings while preserving
 the sound-ROM command semantics needed at that boundary:

@@ -8,8 +8,8 @@ Not an emulator. The 68010 game code is reimplemented at the logic level while
 keeping the original's structure: the same main-loop call order, the same object
 model, the same tables and thresholds. Graphics data is read from the original
 ROMs through [`gex`](../python-gex/README.md). Sound-board commands are captured
-in a deterministic host log, and the pygame harness plays command-named static
-WAVs without emulating the separate sound CPU.
+in a deterministic host log. With `--sound`, the pygame harness plays
+command-named static WAVs without emulating the separate sound CPU.
 
 **Status.** The simulation core, the main loop, and all 28 per-frame subsystem
 calls are implemented and tested. ROM data tables are transcribed from the ROMs
@@ -30,13 +30,18 @@ cd gauntpy && uv run --all-extras gauntpy-play
 ```
 
 A window opens at **4x scale** on a real Gauntlet II maze with your hero's
-genuine class sprite. Use `--scale` to override it.
+genuine class sprite. Use `--scale` to override it. Audio is off by default;
+pass `--sound` to enable playback from the local recording library. The host
+normally limits simulation to 60 frames per second; `--uncapped` removes that
+wait and disables sound for accelerated testing while retaining one complete
+game update per rendered frame.
 
 Put the locally generated recordings in `sounds/`, named
 `0xNN_description.wav` by sound-board command byte. The directory is ignored
 because the recordings are ROM-derived and are not distributed by this
-repository. `GAUNTPY_SOUND_DIR` may point at another library. If no library is
-present, the runner prints a warning and continues silently.
+repository. `GAUNTPY_SOUND_DIR` may point at another library. The directory is
+examined only with `--sound`; if requested playback has no library, the runner
+prints a warning and continues silently.
 
 The host plays effects concurrently, serializes speech through the sound
 board's priority queue rules, loops Death/forcefield/slow-motion beds until
@@ -135,7 +140,7 @@ run.
 By default the runner drops you straight into a level. Options:
 
 ```bash
-uv run --all-extras gauntpy-play --level 2 --character elf --scale 3
+uv run --all-extras gauntpy-play --sound --level 2 --character elf --scale 3
 ```
 
 `--level` selects the dungeon level and follows the cabinet's maze rotation

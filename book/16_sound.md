@@ -271,7 +271,12 @@ about the sound ROM, and this book will not pretend to have covered it.
 
 The Python reimplementation keeps the same boundary. Its game model produces
 the accepted command stream through the queue and latch rules described above;
-the playable pygame harness can turn those bytes into local static recordings.
+the playable pygame harness can turn those bytes into local static recordings
+when launched with `--sound`. Playback is muted by default, but muting only
+omits the host consumer: the modeled command producers, latch, queue, and
+accepted stream continue unchanged. The accelerated uncapped runner likewise
+forces playback off rather than attempting to synchronize real-time recordings
+to a simulation that is deliberately advancing faster than wall time.
 It does not recreate the 6502 or the three chips. It does preserve the
 command-level behavior that remains audible with recordings: speech waits in
 the sound board's priority queue, Death/forcefield/slow-motion beds stop only

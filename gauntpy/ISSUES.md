@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2565 passed, 13 skipped** (gauntpy) and
+present the suites are clean: **2569 passed, 13 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,17 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-177 · host audio and frame limiting had no explicit runtime policy
+
+The pygame runner previously enabled static-WAV playback whenever its sound
+directory existed and always called `pygame.time.Clock.tick(60)`. Playback is
+now muted by default and requires `gauntpy-play --sound`; muted launches do not
+inspect or initialize the local sound library. `--uncapped` skips only the host
+clock wait and forces playback off, so each loop still samples input, executes
+one complete game frame, and presents once, but can advance modeled frame-based
+time faster than wall time. Neither option changes `GameState.sound_log`,
+sound-latch behavior, gameplay timer values, or modeled video RAM.
 
 ### S-176 · F5 bypassed the level splash; potion audio and demon muzzle clarified
 

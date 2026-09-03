@@ -217,6 +217,15 @@ SKIP_GAMEPLAY (0x42b14):
 
 The game's VBLANK handler implementation is at **`0x4017E`**, reached via the jump table entry at `0x40006`. The VBLANK semaphore is at `0x904002` (word). The OS VBLANK handler sets it each field. The main loop spins on it, clears it after processing, and detects frame drops via `0x904916` (set to 8 if a second VBLANK occurred before processing finished).
 
+The synchronous Python host normally substitutes one `Clock.tick(60)` wait at
+this boundary. Its host-only `--uncapped` mode omits that wait but does not alter
+the loop body: input sampling, one complete game update, and one presentation
+still occur in order. Consequently all arcade counters retain their literal
+frame units while advancing faster than wall time. This is an accelerated
+runner mode and forces host sound playback off; modeled sound commands remain
+unchanged. It is not a claim that the cabinet free-runs or a model of additional
+VBLANK interrupts.
+
 **Confidence: Verified.** The reset veneer at 0x40000 reaches `game_start`
 (0x4014C). That entry installs three initial playfield-color pointers at
 0x904036/3A/3E, installs forcefield delay profile 0 (ROM 0x571DA) at

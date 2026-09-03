@@ -132,7 +132,7 @@ _FIRST_BONUS_MAZE = 104
 
 class HostShell:
     """A pygame window, one player's keyboard/gamepad mapped to
-    ``state.player_input_raw``, and a 60Hz pump.
+    ``state.player_input_raw``, and a 60 Hz pump by default.
 
     ``assets`` may be supplied up front, or left ``None`` to construct a
     real ``AssetStore`` (which requires ROMs) lazily on first ``present()``
@@ -152,6 +152,7 @@ class HostShell:
         diagnostics: bool = False,
         sound_dir=None,
         audio_player=None,
+        uncapped: bool = False,
     ) -> None:
         try:
             import pygame
@@ -167,6 +168,7 @@ class HostShell:
         self._assets = assets
         self._cache = RenderCache()
         self._title = title
+        self.uncapped = uncapped
         self.paused = False
         self.treasure_timer_paused = False
         self.diagnostics_visible = diagnostics
@@ -379,7 +381,12 @@ class HostShell:
                     self._step_diagnostics_mob(state, 1)
 
         self._sample_input(state)
-        self.clock.tick(FRAMES_PER_SECOND)
+        self._limit_frame_rate()
+
+    def _limit_frame_rate(self) -> None:
+        """Wait for 60 Hz unless the host-only uncapped mode was requested."""
+        if not self.uncapped:
+            self.clock.tick(FRAMES_PER_SECOND)
 
     def _insert_coin(self, state: GameState) -> None:
         """Bump this host player's 2-bit coin counter (0x904FEC layout).

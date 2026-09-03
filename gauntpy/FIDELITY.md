@@ -439,6 +439,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     in between-level status, load the maze behind the alpha curtain, and leave the
     normal presentation timer to reveal and spawn them. Calling the expiry tail
     immediately is a different shortcut.
+92. **Host playback and pacing are outside modeled time.** Muting static WAVs must
+    not suppress sound producers or accepted `sound_log` bytes. Removing the host
+    60 Hz wait must still execute exactly one complete game update and one
+    presentation per loop; it accelerates frame-denominated arcade time relative
+    to wall time rather than changing any game timer or cadence constant.
+    Uncapped execution disables host playback while preserving sound production.
 
 ## Investigation workflow
 
