@@ -88,12 +88,21 @@ def debug_force_secret_room(state: GameState, player_index: int) -> bool:
 
 
 def debug_skip_level(state: GameState) -> bool:
-    """Load the next rotation level immediately, preserving live-player state."""
+    """Enter the next rotation level's ordinary splash, preserving survivors."""
     if state.game_mode != int(GameMode.NORMAL):
         return False
     survivors = [
         index for index, player in enumerate(state.players)
-        if player.status == int(PlayerStatus.ALIVE_HERE)
+        if (
+            player.status in (
+                int(PlayerStatus.ALIVE_HERE),
+                int(PlayerStatus.ALIVE_NEXT),
+            )
+            or (
+                player.status == int(PlayerStatus.EXITING)
+                and player.exit_pending
+            )
+        )
     ]
     if not survivors:
         return False
@@ -101,33 +110,50 @@ def debug_skip_level(state: GameState) -> bool:
     from ..subsystems import exits
 
     old_level = state.levelnum_current
-    if not exits.in_bonus_room(state):
+    was_bonus_room = exits.in_bonus_room(state)
+    was_secret_room = exits.in_secret_room(state)
+    transition_in_flight = any(
+        state.players[index].exit_pending for index in survivors
+    )
+    if not was_bonus_room and not transition_in_flight:
         exits.compute_next_level(state, int(MazeObjIds.EXIT))
-    next_level = state.level_next or old_level + 1
-    next_maze = state.maze_next
-    state.levelnum_current = next_level
-    state.mazenum_current = next_maze
-    from ..subsystems.display import clear_alpha_visible
 
-    clear_alpha_visible(state)
-    exits.show_level_start_screen(state)
-    if not exits._load_next_level(
-        state, next_level, survivors, spawn_players=False,
-    ):
+    for index in survivors:
+        player = state.players[index]
+        player.status = int(PlayerStatus.ALIVE_NEXT)
+        player.exit_pending = 0
+
+    exits.advance_level_countdowns(state)
+    if was_bonus_room:
+        if was_secret_room:
+            if state.level_start_pending:
+                # The challenge has not spawned yet, so its inventory has not
+                # been stashed. Cancel the winner without running the payout.
+                state.secret_player = -1
+            else:
+                # A skipped active challenge is a timeout: forfeit its award,
+                # but return the inventory stashed on entry.
+                exits._secret_room_payout(state, False)
+            state.secret_need_hint = 0
+            state.treasure_timer = 0
+            state.treasure_voice_set = 0
+            state.treasure_announcement_delay = 0xFFFF
+            state.levelnum_current = state.level_next or old_level + 1
+            if state.maze_next:
+                state.mazenum_current = state.maze_next
+        else:
+            # Settle collected treasure and commit the queued ordinary position,
+            # but skip the host-unhelpful bonus tally hold.
+            exits.show_level_end_bonus_screen(state)
+    else:
+        exits.secret_check(state)
+        state.levelnum_current = state.level_next or old_level + 1
+        state.mazenum_current = state.maze_next
+
+    exits._finish_level_end(state)
+    if not state.level_start_pending:
         raise RuntimeError(
             "debug level skip could not load "
-            f"level {next_level} / maze {state.mazenum_current}"
+            f"level {state.levelnum_current} / maze {state.mazenum_current}"
         )
-    from ..subsystems.display import maze_show
-
-    maze_show(state)
-    exits._spawn_level_players(state, survivors)
-
-    state.game_mode = int(GameMode.NORMAL)
-    state.global_delay_timer = 0
-    state.bonus_amount = 0
-    state.level_start_pending = False
-    from ..subsystems.camera import snap_camera
-
-    snap_camera(state)
     return True

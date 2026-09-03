@@ -355,9 +355,10 @@ evidence remains in `../doc/`, generated contracts, and the book.
     normalized wall cell only as its depth key. Masking it into a MOB identity
     copies unrelated fixed-channel coordinates.
 76. **Dynamic picture-only MOBs are invalid state.** For slots 32-1023, a nonzero
-    picture with zero H/V and no object type/state cannot come from a ROM MOB
-    writer. Remove that modeled-RAM remnant before collision; never hide its
-    sprite or ignore it only in rendering.
+    picture with no object type/state plus an incomplete position or no depth
+    membership cannot come from a ROM MOB writer. Creation and movement publish
+    the complete record transaction. Remove that modeled-RAM remnant before
+    collision; never hide its sprite or ignore it only in rendering.
 77. **Generic vertical boundaries inspect the proposed V word.** `mob_probe_up`
     and `mob_probe_down` do not reject the top/bottom slot rows unconditionally.
     Their signed/unsigned V tests permit the last pixels and seam response before
@@ -414,6 +415,43 @@ evidence remains in `../doc/`, generated contracts, and the book.
     modes retain the full bank. Any retained dialog hold is 120 rather than 150
     frames. Follow the signed branch at 0x4C4E0-0x4C4F4; do not infer mode
     polarity from the word “attract.”
+
+87. **Transition cancellation tears down every owned record.** Killing a thief
+    during its private transporter transition removes the destination placeholder,
+    unlinks the fixed slot-29 sparkle MOB, and parks the shared counter before
+    starting the independent death poof. Clearing only the actor or timer leaves
+    impossible video-list state behind.
+88. **Signed timers can encode a cooldown phase.** `player_damage_sample_update`
+    counts positive values down to a sample and negative values up toward zero.
+    Damage commentary sets -600; only its later zero crossing resets the sample
+    count and resumes 60-frame windows.
+89. **A maze-header trick is not necessarily the live objective.** Setup copies
+    the header only when the pacing counter is zero, and the common start tail
+    then cancels trick IDs 0x0F-0x11 for a solo party. Diagnostics must distinguish
+    header metadata from the armed `secret_trick_id`.
+90. **Equal-priority type-7 sound insertion is destructive per channel.** A
+    higher-priority member merely suppresses a lower one, but an equal-priority
+    arrival removes the old member. Thus slow-motion 0x37 alone leaves seven
+    treasure-music members, while poison-potion break 0x1D replaces all eight and
+    command 0x39 cannot restore them.
+91. **Host shortcuts enter the requested lifecycle stage.** A level skip that is
+    meant to show `LEVEL n` must commit the next rotation position, park survivors
+    in between-level status, load the maze behind the alpha curtain, and leave the
+    normal presentation timer to reveal and spawn them. Calling the expiry tail
+    immediately is a different shortcut.
+92. **Host playback and pacing are outside modeled time.** Muting static WAVs must
+    not suppress sound producers or accepted `sound_log` bytes. Removing the host
+    60 Hz wait must still execute exactly one complete game update and one
+    presentation per loop; it accelerates frame-denominated arcade time relative
+    to wall time rather than changing any game timer or cadence constant.
+    Uncapped execution disables host playback while preserving sound production.
+93. **Level setup resets visitor scheduling before maze construction.**
+    `maze_new_level_setup` clears slow motion, writes -1 to
+    `thief_enter_time`/`thief_victim`, and clears `thief_current_pos` before
+    decoding or placing the next maze. A stale zero timer must never deploy at an
+    old start location in the new MOB table. Reset Python's `thief_mob_slot`
+    representation alias with the canonical word; do not compensate later with
+    divergent-slot cleanup or dump self-healing.
 
 ## Investigation workflow
 

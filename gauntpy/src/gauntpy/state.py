@@ -43,9 +43,10 @@ class Player:
     acid_timer: int = 0
     supershot: int = 0                          # 0x905F68
     death_damage_counter: int = 0               # 0x904B3A
-    damage_sample_timer: int = 60               # 60-frame window, §4.3
-    pending_damage: int = 0
-    cumulative_damage: int = 0                  # saturation accumulator, §4.3
+    damage_sample_timer: int = 60               # 0x904AE6, signed word
+    pending_damage: int = 0                     # 0x904AD6, word
+    cumulative_damage: int = 0                  # 0x904ADE, saturates at 0x7D00
+    damage_sample_count: int = 0                # 0x904AEE, word
     coin_count: int = 0                         # 0x904B2A, player_coincount
 
     # --- death / high-score name entry (§10.3, 0x49D0E and 0x49DE6) ----------

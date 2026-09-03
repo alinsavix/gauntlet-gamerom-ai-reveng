@@ -67,6 +67,15 @@ without calling the one-time initializer or level setup. Reinitializing even
 one of those systems would create a new session that merely resembled the
 saved frame rather than continuing it.
 
+For ordinary interactive use, that host waits for a 60 Hz clock between loop
+iterations. Its optional uncapped testing mode removes only this wall-time
+wait. It does not change a 30-frame delay into another value or execute a
+partial update: every iteration remains one full game frame followed by one
+presentation, so the entire cabinet timeline simply runs faster than real time.
+The mode also mutes host playback to keep accelerated execution independent of
+real-time recordings; sound commands are still produced. The arcade itself
+remains VBLANK-locked as described above.
+
 ## One frame, twenty-nine calls
 
 The loop body is a straight line of twenty-nine direct calls. One of them,

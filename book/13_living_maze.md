@@ -334,6 +334,10 @@ the maze header's objective into the live task byte; making the counter zero
 later would not arm that same maze by itself. The exit path checks the copied
 task, records the winning player, and only after that player's dissolve reaches
 the between-level status can the next-level curtain substitute a secret room.
+The common start tail also clears objectives 0x0F–0x11 when exactly one player
+is active because they require another hero. Maze 53 demonstrates the
+difference between catalog metadata and live state: its header lists “Don't
+Hurt Friends,” but a solo level 119 correctly runs with no armed trick.
 
 Progress and violations are tracked per player, and the hooks are scattered
 through every system the objectives touch: the shot resolver notices when you
@@ -615,6 +619,10 @@ cabinet's remarkably candid bookkeeping.
 >   progress in `secret_tricks_flags` (0x904872), hooks in `resolve_shot_hit`
 >   (tricks 5/9/0x11) and the dragon/movement paths; pacing counters
 >   0x904878/0x90487A via `secret_check` (0x486FE), §10.6.
+>   Trick 2 is immediate rather than counted: before relocation, the four
+>   cardinal neighbors of the destination transporter pad are scanned and a
+>   live type-0x18 Death writes that player directly to `secret_player` at
+>   0x50C52. The eventual landing cell is a separate selection.
 > - Challenges: `show_level_start_screen` (0x44DB4) saves `secret_trick_last`
 >   (0x904064), draws challenge 0x50 + getrandom(14) into 0x904065, selects
 >   maze 115 (0x50–0x56) or 116 (0x57–0x5D), time limits 0x57360/0x5737C,

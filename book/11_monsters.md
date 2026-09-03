@@ -385,6 +385,11 @@ introduces them.
 >   against `getrandom(32)` at 0x49300–0x4930E, so the value is a spawn
 >   probability rather than a live population cap; neighbor scan tables
 >   0x57B50/0x57B68/0x57B80.
+> - Demon firing checks only the adjacent muzzle cell at 0x41A42–0x41AAE,
+>   not every cell between demon and target. Potions are not accepted in that
+>   adjacent cell, but a fireball launched through a clear muzzle later collides
+>   with a potion farther downrange, destroying it only if that potion is the
+>   destructible type.
 > - Ghost contact and the per-type contact dispatch: `monster_playerhit`
 >   (0x495A6) with `monster_playerhit_jumptbl` (0x49620); the ghost arm at
 >   0x49760 removes the ghost and awards `(tier+1) × 10` through

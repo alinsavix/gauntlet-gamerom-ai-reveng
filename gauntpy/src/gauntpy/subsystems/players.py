@@ -121,6 +121,7 @@ _LOWHEALTH_SPEECH_TIMEOUT = 0x708
 
 # Health threshold below which the warning cadence activates (§4.3).
 _LOW_HEALTH_THRESHOLD = 200
+_DAMAGE_COMMENT_SPEECH_IDS = (0x60, 0x5F)  # ROM 0x5B724
 
 # state_timer sentinel meaning "disabled".  Written by player_resetcounters
 # (0x433B4), coincheck (0x42C64) and the food branch of player_tile_interact
@@ -1450,7 +1451,7 @@ def player_tport(state: GameState, player_index: int,
     _tport_visit_pad(state, player_index, destination)
 
     # 0x50A18-0x50A66: before handing over to the transition, the arriving
-    # player interacts with all four cells around the destination -- this is
+    # player interacts with all four cells around the destination pad -- this is
     # why a transporter can drop you straight onto a potion, and how the two
     # transportability objectives are won.
     scan_move_path_interactions(state, destination, player_index)
@@ -1481,7 +1482,7 @@ def _tport_visit_pad(state: GameState, player_index: int, pad_slot: int) -> None
 
 def scan_move_path_interactions(state: GameState, dest_slot: int,
                            player_index: int) -> None:
-    """0x50BB8 -- interact with the four cells around a transporter landing.
+    """0x50BB8 -- interact with the four cells around the destination pad.
 
     ``player_tport`` calls this four times (0x50A1E/0x50A36/0x50A4E/0x50A66),
     once per neighbour-fetch callback (0x406B6, 0x40732, 0x4083A, 0x408A0).
@@ -2084,32 +2085,47 @@ def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
 
 
 def player_damage_sample_update(state: GameState, player_index: int) -> None:
-    """0x50E34 -- advance the signed 60-frame damage window (§4.3).
-
-    Formerly misidentified as a pickup detector; it advances the damage window
-    (Contradicted and corrected, §4.3 TRAP 3).  At window expiry: accumulates
-    pending_damage above the 20-point threshold (saturation 0x7D00), checks
-    low-health thresholds, plays damage speech, reloads timer to 60.
-    """
+    """0x50E34 -- advance the signed damage sample/commentary window."""
     player = state.players[player_index]
 
-    player.damage_sample_timer -= 1
-    if player.damage_sample_timer > 0:
+    if player.damage_sample_timer <= 0:
+        player.damage_sample_timer += 1
+        if player.damage_sample_timer:
+            return
+        player.damage_sample_count = 0
+    else:
+        player.damage_sample_timer -= 1
+        if player.damage_sample_timer:
+            return
+        player.damage_sample_count = (player.damage_sample_count + 1) & 0xFFFF
+
+        if (
+            player.health < 500
+            and player.pending_damage * 4 > player.health
+        ):
+            _dialog(state, player_index, _DIALOG_LOW_HEALTH)       # 0x50EB0
+            player_lowhealth(state, player_index)
+
+        if player.pending_damage > 20:
+            player.cumulative_damage = min(
+                player.cumulative_damage + player.pending_damage, 0x7D00
+            )
+        else:
+            average = (
+                player.cumulative_damage // player.damage_sample_count
+                if player.damage_sample_count else 0
+            )
+            if average > 80 and player.damage_sample_count > 3:
+                speech = _DAMAGE_COMMENT_SPEECH_IDS[state.getrandom(2)]
+                _sound_speech_play(state, speech)                  # 0x50F58
+                player.damage_sample_timer = -600
+                player.cumulative_damage = 0
+            elif average < 60:
+                player.damage_sample_count = 0
+                player.cumulative_damage = 0
+
+    if player.damage_sample_timer:
         return
-
-    # Accumulate pending damage above threshold, saturating at 0x7D00 (§4.3).
-    if player.pending_damage > 20:
-        player.cumulative_damage = min(
-            player.cumulative_damage + player.pending_damage, 0x7D00
-        )
-
-    # Low-health damage speech (§4.3 / 0x50EB0-0x50EC6).  player_lowhealth
-    # applies its own latch and spacing-timer gates, so this call site only
-    # supplies the health threshold the ROM checks before it -- and the same
-    # "insert coins for more health" box the drain path shows.
-    if player.health < _LOW_HEALTH_THRESHOLD:
-        _dialog(state, player_index, _DIALOG_LOW_HEALTH)   # 0x50EB0
-        player_lowhealth(state, player_index)
 
     player.damage_sample_timer = 60
     player.pending_damage = 0
@@ -2518,6 +2534,7 @@ def player_start_inner(state: GameState, player_index: int) -> int:
         player.death_damage_counter = 0
         player.pending_damage = 0
         player.cumulative_damage = 0
+        player.damage_sample_count = 0
         player.damage_sample_timer = 60
         player.hurt_cooldown = 0
         state.forcefield_hurt_timer[player_index] = 0
@@ -2985,16 +3002,20 @@ def main_move_players(state: GameState) -> None:
         return  # level-end bonus screen: the world is frozen (WP-15/§16)
     # game_mode >= 0 (normal): skip demo section, proceed to per-player loop.
 
-    # A dynamic picture with no position, object type, or object state is not a
-    # record any ROM MOB writer can produce. Clear this Python-only remnant before
-    # the ordinary collision probes can treat it as an invisible obstacle.
+    # A dynamic picture with no object identity and either no complete position
+    # or no depth-list membership is not a record any ROM MOB writer can produce.
+    # Clear this Python-only remnant before collision probes can treat it as an
+    # invisible obstacle.
     for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.picture)):
         if (
             state.mobs.picture[slot]
-            and state.mobs.hpos[slot] == 0
-            and state.mobs.vpos[slot] == 0
             and state.mobs.obj_type(slot) == 0
             and state.mobs.state(slot) == 0
+            and (
+                state.mobs.hpos[slot] == 0
+                or state.mobs.vpos[slot] == 0
+                or not state.mobs.is_linked(slot)
+            )
         ):
             state.mobs.unlink_and_clear(slot)
 

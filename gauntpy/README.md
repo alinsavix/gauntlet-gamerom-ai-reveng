@@ -8,8 +8,8 @@ Not an emulator. The 68010 game code is reimplemented at the logic level while
 keeping the original's structure: the same main-loop call order, the same object
 model, the same tables and thresholds. Graphics data is read from the original
 ROMs through [`gex`](../python-gex/README.md). Sound-board commands are captured
-in a deterministic host log, and the pygame harness plays command-named static
-WAVs without emulating the separate sound CPU.
+in a deterministic host log. With `--sound`, the pygame harness plays
+command-named static WAVs without emulating the separate sound CPU.
 
 **Status.** The simulation core, the main loop, and all 28 per-frame subsystem
 calls are implemented and tested. ROM data tables are transcribed from the ROMs
@@ -30,13 +30,18 @@ cd gauntpy && uv run --all-extras gauntpy-play
 ```
 
 A window opens at **4x scale** on a real Gauntlet II maze with your hero's
-genuine class sprite. Use `--scale` to override it.
+genuine class sprite. Use `--scale` to override it. Audio is off by default;
+pass `--sound` to enable playback from the local recording library. The host
+normally limits simulation to 60 frames per second; `--uncapped` removes that
+wait and disables sound for accelerated testing while retaining one complete
+game update per rendered frame.
 
 Put the locally generated recordings in `sounds/`, named
 `0xNN_description.wav` by sound-board command byte. The directory is ignored
 because the recordings are ROM-derived and are not distributed by this
-repository. `GAUNTPY_SOUND_DIR` may point at another library. If no library is
-present, the runner prints a warning and continues silently.
+repository. `GAUNTPY_SOUND_DIR` may point at another library. The directory is
+examined only with `--sound`; if requested playback has no library, the runner
+prints a warning and continues silently.
 
 The host plays effects concurrently, serializes speech through the sound
 board's priority queue rules, loops Death/forcefield/slow-motion beds until
@@ -64,7 +69,7 @@ sound ring, timing, or modeled state.
 | **F1** | show / hide the host diagnostics panel |
 | **F2 / F3** | previous / next diagnostics page |
 | **F4** | save a complete modeled-state JSON dump |
-| **F5** | immediately load the next level |
+| **F5** | show the next level's normal `LEVEL n` splash |
 | **F6** | give the host player one key |
 | **F7** | give the host player one potion |
 | **F8** | pause / resume the current treasure or secret-room timer |
@@ -98,7 +103,6 @@ frames. The graph labels its dynamic Y axis in milliseconds and marks the
 sound commands chronologically, one per line with hexadecimal command number
 and the description from the local WAV library (or the known control-command
 meaning).
-
 **F4** atomically saves every modeled `GameState` field, including players,
 MOB tables and links, logical maze data, playfield/alpha/color RAM, path grids,
 timers, inputs, and the RNG seed. Files are written under
@@ -119,8 +123,9 @@ its SHA-256 and source filename, plus event progress, so resume never depends on
 the original file remaining present or unchanged.
 
 F5–F10 are host troubleshooting controls, not original cabinet inputs. The
-level skip uses the live cabinet maze rotation and respawns active players
-without the bonus/splash delay. Inventory grants update the selected host
+level skip uses the live cabinet maze rotation, enters the normal `LEVEL n`
+splash, and respawns the surviving party when its presentation timer expires.
+Inventory grants update the selected host
 player's game-side counters and alpha-RAM inventory display. F8 gates only
 `main_treasure_timer`, so actors, input, combat, and every other frame routine
 continue while the room clock is held; it clears automatically when that room
@@ -135,7 +140,7 @@ run.
 By default the runner drops you straight into a level. Options:
 
 ```bash
-uv run --all-extras gauntpy-play --level 2 --character elf --scale 3
+uv run --all-extras gauntpy-play --sound --level 2 --character elf --scale 3
 ```
 
 `--level` selects the dungeon level and follows the cabinet's maze rotation

@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2561 passed, 1 skipped** (gauntpy) and
+present the suites are clean: **2570 passed, 13 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,125 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-178 · an untracked mugger record survived into level 114
+
+The frame-11998 level-114/maze-38 dump contains a linked dynamic MOB at slot
+0x215, `(332,253)`, with object type 15 (`PLAYERSTART`) and mugger animation
+picture 0x24C6. Maze 38 authors only one player start, at 0x1EF, and the dump's
+live visitor identity is already retired: both `thief_current_pos` and
+`thief_mob_slot` are zero while `thief_enter_time = 607` schedules the next
+visitor. Replaying a frame previously left 0x215 intact.
+
+This was not a legitimate early arrival. Only 713 active frames had elapsed on
+the level, while the captured player score/coin ratio gives `W = 0`; ROM
+`thief_timer_set` 0x4E568–0x4E620 therefore cannot choose less than 1,200
+frames on an ordinary level. The historical 0x2D command in the persistent
+sound log does not timestamp an arrival on the current maze.
+
+ROM escape completion removes the current MOB at 0x4EC2C before calling
+`thief_timer_set` at 0x4EC50, and the kill path likewise owns removal before
+rescheduling. The divergence began earlier instead: ROM
+`maze_new_level_setup` clears `monster_slowmo_timer` at 0x438C2, then writes
+-1 to `thief_enter_time` and `thief_victim` and zero to `thief_current_pos` at
+0x438CA-0x438D6 before maze setup. Python's consolidated `maze.load_level`
+omitted those writes.
+
+That omission gives a stale zero arrival timer and prior victim one frame in
+the new maze. It can deploy a mugger at the old `thief_start_location`, run its
+60-frame entrance pause, and then reach the port's lazy `thief_setup`, which
+clears the two tracked ids without removing the already-created MOB. A
+deterministic maze-38 reproduction produces the captured 0x215/type-15/0x24C6
+shape through that sequence. Level loading now performs the literal ROM
+prologue and clears the Python `thief_mob_slot` alias with the canonical current
+word. The differing-collision-slot removal workaround has been removed. The
+captured dump remains unchanged debugging evidence and receives no repair path.
+
+### S-177 · host audio and frame limiting had no explicit runtime policy
+
+The pygame runner previously enabled static-WAV playback whenever its sound
+directory existed and always called `pygame.time.Clock.tick(60)`. Playback is
+now muted by default and requires `gauntpy-play --sound`; muted launches do not
+inspect or initialize the local sound library. `--uncapped` skips only the host
+clock wait and forces playback off, so each loop still samples input, executes
+one complete game frame, and presents once, but can advance modeled frame-based
+time faster than wall time. Neither option changes `GameState.sound_log`,
+sound-latch behavior, gameplay timer values, or modeled video RAM.
+
+### S-176 · F5 bypassed the level splash; potion audio and demon muzzle clarified
+
+F5 computed and loaded the correct rotation maze but then immediately called
+`maze_show` and spawned the survivors, explicitly zeroing the splash timer. It
+now enters the same post-tally transition stage as the game: survivors move to
+status 2, `show_level_start_screen` writes the `LEVEL n` alpha curtain, the maze
+loads without players, and `main_start_game` reveals it and places the party
+only after the normal 150/180-frame hold. The shortcut runs the ordinary
+level-end countdown bookkeeping first, neutralizes any exit dissolve already in
+flight, settles treasure-room rewards, and treats a skipped secret challenge as
+a timeout so its stashed inventory is restored before loading the next maze.
+
+Using a potion in a treasure room stopping the music is original behavior.
+`main_handle_potions` 0x470A8 sends command 0x1D for every successful inventory
+potion use. Like the poison-potion break path, that sound has equal priority on
+all eight channels occupied by treasure music 0x3D–0x40 and replaces them
+immediately; no slow-motion expiry is involved.
+
+The reported demon/potion line is conditional rather than a missing line-of-
+sight path. ROM 0x41A42–0x41AAE checks only the demon's adjacent muzzle cell.
+Potion types 51/52 block shot creation there. With one clear cell after the
+demon, a potion farther downrange does not suppress firing and the resulting
+fireball destroys it through ordinary shot collision only when it is the
+destructible potion type; an invulnerable potion survives. Regressions preserve
+both muzzle geometries; a farther-than-adjacent live failure requires an F4
+state dump because potion occupancy alone cannot produce it.
+
+### S-175 · thief transition cleanup, damage commentary, and diagnostic semantics
+
+The two supplied level-112/maze-32 snapshots both had no live thief MOB but
+retained `thief_tport_active = 1`, destination 0x079, and a linked fixed
+transition MOB at slot 29. ROM `thief_remove_and_drop_loot`
+0x4F662–0x4F6A0 explicitly removes a distinct destination placeholder, removes
+slot 29 from the depth list, clears its picture, and parks the transition
+counter before continuing with the new death poof. The port stopped at the
+counter. It now performs the complete game-side teardown; killing a visitor
+during a second quick teleport cannot leave the old sparkles behind.
+
+The same audit completed `player_damage_sample_update` 0x50E34–0x50FD0.
+High-damage samples (>20) accumulate; a later quiet sample divides cumulative
+damage by the sample count. Strict average >80 after strict count >3 draws ROM
+table 0x5B724: 0x60 “THAT WAS A HEROIC EFFORT!” or 0x5F “I'VE NOT SEEN SUCH
+BRAVERY!”, then starts a signed -600-frame cooldown. There are no maze, level,
+kill, or survival gates. The modeled sample count, cooldown phase, low-health
+predicate, state-dump migration, RNG draw, and both voice outcomes are restored.
+
+Level 119 reaches maze 53 on the fresh-cabinet stride-2 rotation. Its header
+does contain trick 0x11, but the live task is first gated by the pacing counter
+and then cancelled in solo play by 0x48294–0x482B2, which clears tricks
+0x0F–0x11 for one active player.
+
+Finally, shooting poison potion in a treasure room was confirmed as original
+sound-ROM behavior, not fixed away. Slow-motion 0x37 suppresses only channel 8
+of the eight-member music command, but potion break 0x1D has equal priority on
+channels 4–11 and replaces every treasure-music member. Poison food emits no
+0x1D and leaves seven members audible. Regressions preserve both cases.
+
+### S-174 · partial unlinked thief picture blocked frame 7908
+
+The supplied level-111/maze-29 dump placed the Elf at slot 0x2E3, `(51,368)`.
+The cell immediately right, 0x2E4, contained thief picture 0x0DF3 with H=0,
+V=0xFE00, both link/state words zero, no object type/state, and no depth-list
+membership. It was invisible at that geometry but still looked occupied to the
+player probe, so Right left the hero at `(51,368)`.
+
+No ROM MOB producer can publish that shape: create/move transactions establish
+identity, both axes, and list membership together. The earlier S-166 cleanup
+recognized only the special case where both axes were zero and missed this
+partial thief remnant. It now clears an untyped/stateless dynamic picture when
+either position axis is absent or the record is unlinked. Replaying the dump
+clears 0x2E4 and Right moves the hero to `(53,368)`, migrating the real player
+record into 0x2E4. The snapshot identifies the stale thief-table picture but
+does not retain enough history to identify which earlier Python write sequence
+left the partial record.
 
 ### S-173 · Reduce Text mode polarity was reversed
 
@@ -1079,12 +1198,15 @@ UI timer without running the timer-expiry teardown. The `LEVEL:` alpha words
 therefore had no remaining owner that could clear them. F5 now mirrors the
 normal expiry order: load the maze without players, run `maze_show`, then
 spawn the surviving party and clear the host-side pending marker.
+**Superseded by S-176:** F5 now leaves the normal splash timer running and
+reaches that expiry order only after the visible hold.
 
 ### S-128 · live troubleshooting required replaying whole levels
 
 The host now provides three explicit non-arcade shortcuts. F5 computes the next
-level/maze through the cabinet rotation, reloads it immediately, respawns the
-active party, and snaps the camera while preserving inventory. F6 and F7 add
+level/maze through the cabinet rotation and preserves inventory. **Superseded
+by S-176:** it now loads behind the ordinary `LEVEL n` curtain and respawns the
+active party when the normal hold expires. F6 and F7 add
 one key or potion to the selected host player and call `player_inv_update`, so
 the authoritative counters and modeled alpha-RAM display remain synchronized.
 Inactive players and non-gameplay level skips are rejected with a terminal

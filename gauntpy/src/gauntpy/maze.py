@@ -1633,6 +1633,11 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     already the stored table value.
     """
     state.levelnum_current = level_number
+    state.monster_slowmo_timer = 0                         # 0x438C2
+    state.thief_enter_time = -1                            # 0x438CA
+    state.thief_victim = -1                                # 0x438D0
+    state.thief_current_pos = 0                            # 0x438D6
+    state.thief_mob_slot = 0       # Python alias of the deployed visitor identity
     state.dialog_once_flags &= ~1                       # 0x438DC
     state.thief_level_setup_done = False
     from .subsystems.maze_objects import select_forcefield_delay_profile

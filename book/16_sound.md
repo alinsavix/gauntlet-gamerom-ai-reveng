@@ -271,7 +271,12 @@ about the sound ROM, and this book will not pretend to have covered it.
 
 The Python reimplementation keeps the same boundary. Its game model produces
 the accepted command stream through the queue and latch rules described above;
-the playable pygame harness can turn those bytes into local static recordings.
+the playable pygame harness can turn those bytes into local static recordings
+when launched with `--sound`. Playback is muted by default, but muting only
+omits the host consumer: the modeled command producers, latch, queue, and
+accepted stream continue unchanged. The accelerated uncapped runner likewise
+forces playback off rather than attempting to synchronize real-time recordings
+to a simulation that is deliberately advancing faster than wall time.
 It does not recreate the 6502 or the three chips. It does preserve the
 command-level behavior that remains audible with recordings: speech waits in
 the sound board's priority queue, Death/forcefield/slow-motion beds stop only
@@ -286,6 +291,17 @@ lower sequence continues in the background and may return. The slow-motion
 transition makes this visible: 0x37 starts a priority-8 loop on Yamaha channel
 8, 0x38 arrives with thirty game frames left at priority 9 and suppresses it,
 and 0x39 removes the loop at zero.
+
+Treasure-room music reveals the difference between suppression and replacement.
+Its command owns eight priority-2 members on channels 4 through 11. Shooting
+poison food sends only 0x37, so channel 8 loses to slow motion but seven music
+members remain. Shooting poison potion then sends break sound 0x1D, also
+priority 2 on all eight channels. Equal priority removes the older member, so
+the entire treasure command disappears and 0x39 cannot bring it back. The
+abrupt stop is the sound ROM's behavior, not a rendering approximation.
+Drinking an inventory potion reaches the same result more directly: its use
+routine sends 0x1D immediately, so treasure music stops at the button press
+without starting or waiting for slow motion.
 
 The Python host carries those channel/priority records for all sixty-two
 sequence commands. A mixed WAV still has one unavoidable limit: when only some

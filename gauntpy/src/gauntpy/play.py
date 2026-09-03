@@ -1,12 +1,15 @@
 """A minimum playable runner: walk a hero around a real Gauntlet II maze.
 
-    uv run gauntpy-play            # level 1, Elf
-    uv run gauntpy-play --level 2 --character elf --scale 3
+    uv run gauntpy-play            # level 1, Elf; muted, 60 Hz
+    uv run gauntpy-play --sound --level 2 --character elf --scale 3
+    uv run gauntpy-play --uncapped # no host frame limiter
     uv run gauntpy-play --level 115 --maze 3
 
 By default it loads a maze and drops a player directly into gameplay; ``--attract``
 boots through the complete cabinet front end. Both paths drive the real
-``game_frame`` at 60 Hz with a pygame window and keyboard input.
+``game_frame`` in a pygame window with keyboard input. The host defaults to a
+60 Hz limit and muted playback; command-line switches can remove the limit or
+play the accepted command stream without changing modeled game state.
 
 Requires the ROM-graphics and display extras::
 
@@ -96,6 +99,21 @@ def _sound_dir() -> Path:
     if configured:
         return Path(configured)
     return Path(__file__).resolve().parents[2] / "sounds"
+
+
+def _enabled_sound_dir(enabled: bool) -> Path | None:
+    """Resolve the local recording library only when playback was requested."""
+    if not enabled:
+        return None
+    sound_dir = _sound_dir()
+    if sound_dir.is_dir():
+        return sound_dir
+    print(
+        f"gauntpy sound library not found at {sound_dir}; "
+        "running without audio (set GAUNTPY_SOUND_DIR to override)",
+        file=sys.stderr,
+    )
+    return None
 
 
 def _apply_operator_overrides(state: GameState, *, reduce_text: bool) -> None:
@@ -222,6 +240,8 @@ def build_state(
 def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         from_attract: bool = False,
         reduce_text: bool = False,
+        sound_enabled: bool = False,
+        uncapped: bool = False,
         keys: int = 0, potions: int = 0,
         powers: tuple[int, ...] = (),
         load_state_path: str | Path | None = None,
@@ -280,15 +300,12 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         raise SystemExit(f"could not import the host shell: {exc}")
 
     try:
-        sound_dir = _sound_dir()
-        if not sound_dir.is_dir():
-            print(
-                f"gauntpy sound library not found at {sound_dir}; "
-                "running without audio (set GAUNTPY_SOUND_DIR to override)",
-                file=sys.stderr,
-            )
-            sound_dir = None
-        host = HostShell(scale=scale, title="gauntpy", sound_dir=sound_dir)
+        host = HostShell(
+            scale=scale,
+            title="gauntpy",
+            sound_dir=_enabled_sound_dir(sound_enabled and not uncapped),
+            uncapped=uncapped,
+        )
     except PygameUnavailable as exc:
         raise SystemExit(
             f"{exc}\n\nRun it with the display extra, e.g.:\n"
@@ -362,6 +379,14 @@ def main(argv: list[str] | None = None) -> None:
         help="enable the ROM's Reduce Text operator setting",
     )
     parser.add_argument(
+        "--sound", action="store_true",
+        help="play local command-named WAV recordings (default: off)",
+    )
+    parser.add_argument(
+        "--uncapped", action="store_true",
+        help="run without the host's 60 Hz frame-rate limit; disables sound",
+    )
+    parser.add_argument(
         "--keys", type=_inventory_count, default=0,
         help="start direct play with this many keys (0-255)",
     )
@@ -420,6 +445,8 @@ def main(argv: list[str] | None = None) -> None:
         character=_CHARACTERS[args.character or "elf"], scale=args.scale,
         from_attract=args.attract,
         reduce_text=args.reduce_text,
+        sound_enabled=args.sound and not args.uncapped,
+        uncapped=args.uncapped,
         keys=args.keys, potions=args.potions,
         powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power),
         load_state_path=args.load_state, scenario_path=args.scenario,

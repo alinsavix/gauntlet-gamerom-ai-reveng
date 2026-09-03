@@ -126,6 +126,36 @@ def test_end_slow_motion_replaces_the_loop_before_the_final_silencer(tmp_path):
     assert loop.stopped == 1
 
 
+def test_slow_motion_alone_leaves_treasure_music_audible(tmp_path):
+    mixer = _Mixer()
+    player = StaticSoundPlayer(mixer, _library(tmp_path, 0x40, 0x37))
+    player.consume([0x40, 0x37])
+
+    treasure = next(
+        playback for playback in player._type7_playbacks
+        if playback.command == 0x40
+    )
+    assert player._type7_playback_is_audible(treasure)
+    assert treasure.channel.volume == 1.0
+
+
+def test_potion_break_replaces_treasure_music_and_silencer_cannot_restore_it(tmp_path):
+    mixer = _Mixer()
+    player = StaticSoundPlayer(
+        mixer, _library(tmp_path, 0x40, 0x37, 0x1D),
+    )
+    player.consume([0x40, 0x37, 0x1D])
+
+    assert all(
+        playback.command != 0x40 for playback in player._type7_playbacks
+    )
+
+    player.consume([0x40, 0x37, 0x1D, 0x39])
+    assert all(
+        playback.command != 0x40 for playback in player._type7_playbacks
+    )
+
+
 def test_higher_priority_sound_suppresses_then_releases_a_lower_channel(tmp_path):
     mixer = _Mixer()
     player = StaticSoundPlayer(mixer, _library(tmp_path, 0x45, 0x43))

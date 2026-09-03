@@ -239,6 +239,11 @@ one assumed by its later body-center handoff. In a corridor two cells wide, the
 thief therefore belongs to one lane or the other rather than running down an
 invented centerline between them.
 
+The formula also sets a hard lower bound. With the score-per-coin term at zero,
+an ordinary level waits at least twenty seconds even after the depth adjustment
+has removed all extra delay. A visitor-shaped figure seen earlier is not an
+early random roll.
+
 **Getting to you.** Once deployed, the thief has a small set of modes: entering,
 pursuing, dodging, and escaping. Pursuit does not use a general path finder.
 Every time the victim moves, a hook in the player movement code writes the
@@ -323,6 +328,12 @@ removed at its recorded starting cell; the next level creates a new pickup by
 walking a pseudorandom sequence of empty maze cells. A mugger returns food, and
 a stolen multiplier returns as a bag whose encoded value restores its score.
 The removal is preceded by the same transporter-style poof used on arrival.
+Removal and rescheduling are one transaction: by the time the next arrival
+timer exists, no thief- or mugger-shaped MOB from the previous visit remains in
+the maze. Level replacement prevents a different kind of carry-over even
+earlier: before constructing the new maze, it cancels the old arrival timer and
+victim and clears the current visitor identity. The next level cannot spend a
+stale zero timer at the previous level's deployment point.
 
 Transporters are part of that retracing graph. If the target player has taught
 the route by teleporting, the thief dissolves into the same transition machinery,
@@ -331,6 +342,10 @@ reverse breadcrumb, and recomputes its next path cell. The level-start setup
 resets the thief scheduler before a new route is considered. While the dissolve
 timer is active, the ordinary thief movement loop is gated off; the transition
 machine alone owns the source and destination records.
+If the visitor is killed mid-transition, its removal routine explicitly clears
+the destination placeholder and fixed transition sparkle before starting the
+separate death poof. Those are distinct MOB records; leaving the old fixed
+channel linked is not an authentic lingering effect.
 
 Killing the thief before it leaves is worth five hundred points times your
 treasure multiplier, and the loot is respawned on the tile it was standing on.
@@ -350,6 +365,11 @@ a successful theft, so a thief you chase off empty-handed does not use up its
 slot and will be back. If the mugger latch is still clear, a random number
 decides evenly. If that roll comes up thief while the thief latch is already
 set, the visitor becomes a mugger anyway.
+
+So “how many times?” has two answers. At most one thief and one mugger can
+complete a theft on one level. Deployments themselves are unbounded by a fixed
+counter: kill either visitor before it steals and its latch remains clear, so
+the removal tail may schedule that variant again.
 
 Four things change with that bit:
 

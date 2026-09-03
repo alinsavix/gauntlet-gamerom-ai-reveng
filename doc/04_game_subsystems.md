@@ -308,7 +308,15 @@ Finds the nearest player within range. Sets monster facing direction. Calls `fin
 - **Velocity store (0x419E4–0x41A10).** After `monster_create_shot`, the per-direction seed `lobber_shot_spawn_h_offset`/`_v_offset` (0x57BB8/0x57BC8) is scaled and subtracted from the aim to yield the launch velocity, written to `lobber_shot_vec_h`/`_v` (0x9048F8/0x904900) for the chosen shot slot. A lobber-throw sound (0x49) is played at 0x41A14.
 - **Flight (0x479C2–0x47A58).** A lobber channel is the one projectile class that never reads `shot_velocity_x/y`. `monster_create_shot` seeds `lobber_shot_h_accum`/`_v_accum` (0x904A66/0x904A6E, indexed by `shot_slot - 9`) with the masked spawn position at 0x49216/0x4922A, and every frame `main_handle_shots` does `accum += vec`, then rebuilds the MOB word as `(accum & 0xFF80) + (word & 0x7F)` — position field from the accumulator, palette/flags (H) and packed sprite size (V) left exactly as they were. The seven bits under the position field are the sub-pixel remainder, which is what lets a lead of, say, 0xC0 per frame advance 1.5 pixels a frame instead of rounding to 1 or 2.
 
-The demon branch (0x41A2E) uses `monster_shooter_in_view` and a maze-cell line-of-fire walk but no character/facing lead; it fires along `d3`'s compass direction.
+The demon branch (0x41A2E) uses `monster_shooter_in_view` but no full
+line-of-fire walk or character/facing lead; it fires along `d3`'s compass
+direction. Before the range test, 0x41A42–0x41AAE inspects only the immediately
+adjacent muzzle cell. Empty cells pass, as do packed types 1, 10–12, 16, 25,
+53–57, and 62. Destructible/invulnerable potions (types 51/52) do not, so a
+potion directly beside the demon prevents creation of the shot. A potion two
+or more cells away is not consulted by this gate: the demon creates its
+fireball. Ordinary projectile collision later destroys a destructible potion;
+an invulnerable potion survives the hit.
 
 **Shot spawn geometry (`monster_create_shot`, 0x49192–0x49270).** The projectile inherits only the shooter's *position*: 0x49192/0x491A2 mask `mob_hpos`/`mob_vpos` with 0xFF80 before anything else, so the shooter's palette (which for a monster is its health nibble) and its 3×3 packed sprite size are discarded. The per-direction muzzle offset is added on top, and then three small constants land **under** the position field, replacing the low byte:
 
@@ -660,12 +668,19 @@ character transition effect 0x14-0x17.
 
 **Confidence: Verified.** `player_damage_sample_update(uint16 player_index)`
 (0x50E34), formerly misidentified as a pickup detector, advances a signed
-60-frame window. At expiry it increments the sample count, checks low-health
-damage thresholds and the one-shot low-health dialog/voice, accumulates pending
-damage above 20 with saturation at 0x7D00, and uses the cumulative average for
-contextual damage speech. It then reloads the timer to 60 and clears pending
-damage. Tile pickup handling instead occurs through the movement/collision
-dispatch in §4.6.
+60-frame window. At expiry it increments the sample count. Health below 500 plus
+`pending_damage * 4 > health` calls the low-health dialog/voice path. Pending
+damage above 20 is added to the cumulative word and saturated at 0x7D00; that
+sample does not test commentary. A sample of 20 or less divides cumulative
+damage by the sample count. An average strictly above 80 after strictly more
+than three samples draws `getrandom(2)` from ROM table 0x5B724: index 0 sends
+0x60, “THAT WAS A HEROIC EFFORT!”, and index 1 sends 0x5F, “I'VE NOT SEEN SUCH
+BRAVERY!” It clears cumulative damage and writes -600 to the signed timer.
+Negative values count upward; when the cooldown reaches zero it clears the
+sample count and resumes 60-frame sampling. An average below 60 clears the
+window, while 60–80 retains it. There is no level, maze, or kill-count gate.
+Tile pickup handling instead occurs through the movement/collision dispatch in
+§4.6.
 
 When coins are inserted for an active player (`coincheck`): adds health from table at 0x57862 indexed by `(game_settings & 0x1F)`.
 
@@ -930,6 +945,14 @@ setup. It derives the transporter table as an ordered live-MOB scan because the
 stored values are the packed slots themselves. Reachable level loads replace
 the complete `MobTable`, which is equivalent to the secret path's explicit
 reserved-picture clear.
+
+Dynamic slots 32-1023 cannot contain a standalone picture. ROM MOB creation and
+`move_mob_slot` publish picture, H/V, object identity/state, and depth links as
+one transaction. A modeled record with a picture but no type/state plus a
+missing axis or no depth membership is a Python-only remnant and must be cleared
+on the game side before collision. This includes the captured slot 0x2E4 shape
+`picture=0x0DF3, H=0, V=0xFE00, link=state=0`; rendering must not hide it while
+leaving its collision occupancy live.
 
 ### 5.3 Maze Decode (`maze_decode`, 0x4C1BC)
 
@@ -1566,6 +1589,12 @@ mugger; if that roll fails, bit 4 (thief already used) forces a mugger anyway.
 are the same per-frame movement units as the player speed table (Elf 0x100,
 others 0x80).
 
+The two bit-4/bit-5 latches count successful theft variants, not deployments.
+Once both are set, `thief_timer_set` refuses another schedule. Therefore at
+most one ordinary thief and one mugger can successfully steal on a level, but
+there is no fixed deployment limit: killing a visitor before it steals leaves
+its variant latch clear, and the removal tail schedules again.
+
 **Escape cleanup and returned loot. Confidence: Verified** at
 0x4EB9A-0x4EC50 and 0x44166-0x441A6. On the escape route's first return to the
 recorded start cell (with a different predecessor), the live thief/mugger MOB
@@ -1575,6 +1604,19 @@ and thief loot with `maze_randomplace`'s `getrandom(0x3E0)+0x20`, then `+0x51`
 modulo 0x400 until it finds an empty non-reserved cell. An encoded multiplier
 bag restores `special_bonus_score` from the longword shifted right six. The
 routine's opening `mazenum_current < 0x73` gate excludes secret rooms.
+
+The ordering establishes a useful state invariant. At 0x4EC2C the escape path
+calls `moblist_remove_and_clear` on `thief_current_pos`, then 0x4EC50 calls
+`thief_timer_set`, whose first action clears that identity again. The kill path
+through `thief_remove_and_drop_loot` has the same remove-before-reschedule
+contract. Level replacement has a separate earlier owner:
+`maze_new_level_setup` clears `monster_slowmo_timer` at 0x438C2, stores 0xFFFF
+in `thief_enter_time` and `thief_victim` at 0x438CA/0x438D0, and clears
+`thief_current_pos` at 0x438D6 before `maze_setupnew`. A port that postpones
+those writes until `thief_setup` can let a stale zero timer deploy at the old
+start location in the new MOB table, then clear its identity while leaving the
+record behind. The reset must precede maze construction; kill cleanup still
+uses the ROM's single canonical current record.
 
 ### 9.2 Thief Targeting (`thief_target_calc`, 0x4DFF6)
 
@@ -1617,6 +1659,13 @@ from the victim back toward `thief_start_location`; transporter completion
 writes the same kind of reverse edge at its destination. Switching to escape
 mode therefore changes which nibble `path_grid_get_direction` reads rather than
 running a new path search.
+
+Killing the visitor during that transition has an explicit cancellation tail at
+0x4F662–0x4F6A0. It removes a distinct destination placeholder when present,
+removes physical animation slot 29 from the depth list and clears its picture,
+then writes -1 to `tport_frame_counter`. The earlier 0x4F650 call has already
+started the separate death poof in the ordinary effect pool, so cancellation
+must not erase that replacement effect.
 
 `thief_compute_path` (0x4F912) is a route consumer, not a fallback pathfinder.
 It saves `thief_path_direction`, reads the selected grid nibble at the current
@@ -1687,6 +1736,8 @@ level 106. On an ordinary maze, with `W` clamped to 15, the delay is
 `asl.l #2` / `asl.l #4` / `sub.l` sequence at 0x4E618–0x4E61E. Treasure rooms
 (`mazenum_current >= 0x68`) take the tighter branch at 0x4E5D4: `W` clamped to
 5, `D = 3 − (min(level − 6, 100) >> 5)`, and a base of 10 instead of 20.
+Thus an ordinary level with `W = 0` cannot deploy a visitor before 1,200 frames
+(20 seconds), even at depths where the setup probability itself is certain.
 
 ### 9.4 Thief Scheduling (`thief_setup`, 0x4E432)
 
@@ -1890,11 +1941,15 @@ Secret-room availability is paced by a pair of level counters:
 - The same routine's 0x44F7E–0x450F8 display arm writes the complete 600-frame invitation into alpha RAM: `SECRET ROOM`, the winner's color and character, `YOU HAVE PERFORMED` / `A SECRET TRICK`, the small and large countdowns, and the optional qualifier descriptor. This is game-side video state, not renderer-composed text.
 - The winner labels are OS large text, not ordinary alpha strings. At 0x44FB8/0x44FE4 the routine follows pointers to fixed-width ROM records (`" RED  "`, `" BLUE "`, `"YELLOW"`, `"GREEN "` and `"WARRIOR "`, `"VALKYRIE"`, `" WIZARD "`, `"  ELF   "`), then calls API 0x26C at columns 0 and 13 on row 7. Their leading/trailing spaces are positioning data: the large space glyph advances two alpha cells, so stripping the padding or using the small-font writer moves `RED` to the physical left edge. A direct MAME 0.289 call to 0x44DB4 confirms that the arcade intentionally presents the color and class as two widely separated fields; `RED` and `ELF` are not a single adjacent phrase.
 - `secret_need_hint` (0x90486E) is a separate discovery latch, set when a secret wall opens (0x4B6B0) or the dragon drops its hidden reward (0x54414). `level_splash` consumes it at 0x4C04E–0x4C108: it writes `TO ENTER SECRET ROOM:`, then uses the selected upcoming maze header's objective when the availability counter is zero and the level-12 gate for trick 9 passes; otherwise it chooses one of the 17 hint strings randomly. The latch is cleared after the alpha writes.
-- Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872). Ordinary-maze hooks in `resolve_shot_hit` include trick 5 (shoot food), trick 9 (get hit), and trick 17 (hurt another player); the same array is reused for challenge codes 0x50–0x5D. Tricks 1–4 and 10 are different: their successful movement paths write `secret_player` directly—transport beside Acid/Death (0x50C30), transport into an exit (0x50916), corner transport through a secret wall (0x507B8), or push a movable wall into an exit (0x42846–0x42A1A)—without incrementing the progress bytes.
+- Trick progress/violations are recorded per player in `secret_tricks_flags` (0x904872). Ordinary-maze hooks in `resolve_shot_hit` include trick 5 (shoot food), trick 9 (get hit), and trick 17 (hurt another player); the same array is reused for challenge codes 0x50–0x5D. Tricks 1–4 and 10 are different: their successful movement paths write `secret_player` directly—transport beside Acid/Death (0x50C30), transport into an exit (0x50916), corner transport through a secret wall (0x507B8), or push a movable wall into an exit (0x42846–0x42A1A)—without incrementing the progress bytes. For trick 2 specifically, before the asynchronous move begins, `scan_move_path_interactions` checks the four cardinal neighbors of the destination transporter pad. After rejecting an absent MOB, an H-low nibble at least 0x0C, and placeholder pictures 0x8000/0x8001, object type 0x18 (Death) makes 0x50C52 store that player directly in `secret_player`; the eventual landing cell is selected separately and no progress byte is consulted.
 - The seventeen strings at 0x59786 are hints, not unique specifications: tricks 1–4 all say `TRY TRANSPORTABILITY`, 5–6 both say `WATCH WHAT YOU SHOOT`, and 12/14 both say `DON'T BE GREEDY`. Their consumers distinguish them. In particular, trick 1 requires landing beside object type 0x19 (Acid), not a Demon; trick 4 is corner transport through a secret wall; tricks 5/6 require two food/secret-wall shots; and tricks 12/13/14 forbid keys-or-potions, food, and treasure respectively.
 - Two English names are looser than their predicates. Trick 9 accepts when `secret_tricks_flags[player] & 3 == 0` at 0x52BF0–0x52BFC. Dragon fire increments that byte at 0x4B2A2, but the killing shot writes 2 at 0x54420–0x54444 unless the byte is already 1; consequently “kill the dragon without getting hit” is not an accurate specification of the shipped code. Trick 17 writes 1 as soon as a player shot resolves any player at 0x4B046–0x4B052, before the damage/stun gates and before the later shooter/victim comparison; a harmless hit, including a reflected self-hit, still fails it.
 - `secret_check_winner` 0x4D1A4 gates the secret-room reward independently of finding the exit. Codes 0x50/0x51/0x5D require exact counts of six treasures/potions, 0x52/0x5B require three secret walls, 0x53 requires no remaining monster or generator, 0x56 requires the five-pad bitmask 0x3E, 0x5A requires all nineteen treasure removals, and 0x5C requires at least one IT event. Codes 0x54/0x55/0x57/0x58/0x59 have no extra progress predicate. The payout at 0x4D720 additionally requires the entrant to have reached exit status 2 or 8; only then does it award 5,000 points per coin and call `secret_getname`. The contest code editor opens only when game-settings bit 13 is enabled.
 - Availability is sampled, not continuously consulted. `maze_new_level_setup` 0x43930–0x43958 tests `secret_possible_counter` and copies the current maze-header byte into `secret_trick_id` once; changing only the counter after setup cannot arm the maze already in progress. At exit, `player_exit_sequence` 0x52B40 checks the live task and may write `secret_player` before status becomes 8. After the dissolve changes that player to status 2, `show_level_start_screen` 0x44DD6–0x44E00 requires exactly that valid player/status pair before substituting maze 115/116.
+- The common player-start tail at 0x48294–0x482B2 then cancels header trick
+  0x0F, 0x10, or 0x11 when `level_players_active == 1`. Maze 53's header is
+  0x11 (“Don't Hurt Friends”), so level 119 / maze 53 correctly has no live
+  objective in solo play even when the pacing counter reaches zero.
 
 ---
 
@@ -2037,6 +2092,13 @@ the modeled latch to `GameState.sound_log`; the pygame harness consumes only
 new entries from that stream. It does not rewrite a producer, bypass the
 main-CPU ring, or report playback completion into game RAM.
 
+Static playback is an opt-in host policy. `gauntpy-play --sound` constructs the
+WAV consumer; the default muted runner still produces the same latch traffic,
+queue state, and `sound_log` bytes and does not inspect the local recording
+directory. The accelerated `--uncapped` host mode also forces playback off
+because recorded audio is wall-time media, while modeled command production
+continues once per game frame.
+
 The host does not emulate the 6502 or synthesize YM2151, POKEY, or TMS5220
 output. It maps accepted bytes to local `0xNN_*.wav` recordings while preserving
 the sound-ROM command semantics needed at that boundary:
@@ -2058,6 +2120,16 @@ the sound-ROM command semantics needed at that boundary:
   channel 8, while 0x38 uses priority 9 there, so the end cue at
   `monster_slowmo_timer == 0x1E` suppresses the loop before command 0x39 removes
   its target at zero.
+- Treasure music 0x3D–0x40 owns priority-2 members on channels 4–11. Slow-motion
+  0x37 adds a priority-8 member only on channel 8, so it suppresses one stem but
+  leaves the music logically audible. Shooting poison food emits only 0x37.
+  Shooting poison potion emits 0x37 and then potion-break 0x1D; 0x1D has
+  priority 2 on all channels 4–11 and equal-priority insertion removes every
+  treasure member. The resulting music stop is original sound-ROM behavior,
+  and the later 0x39 can stop 0x37 but cannot recreate the removed music.
+  Drinking any inventory potion also sends 0x1D directly at
+  `main_handle_potions` 0x470A8, so it removes treasure music immediately even
+  though no slow-motion command is involved.
 - The pool contains 30 logical members, not 30 whole commands. Multipart chains
   are admitted in record order. At capacity, allocation examines only the
   requested physical channel and may reclaim its lowest-priority member when

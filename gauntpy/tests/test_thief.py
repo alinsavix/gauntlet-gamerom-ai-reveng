@@ -159,6 +159,31 @@ class TestScheduling:
         assert state.thief_start_location == pack_slot(8, 9)
         assert state.thief_victim_pos == pack_slot(8, 9)
 
+    @requires_roms
+    def test_level_load_clears_stale_arrival_before_it_can_deploy(self):
+        from gauntpy import maze
+
+        state = GameState()
+        _active(state, 0, pack_slot(15, 15))
+        state.monster_slowmo_timer = 99
+        state.thief_victim = 0
+        state.thief_start_location = pack_slot(16, 21)
+        state.thief_mode = THIEF_PURSUE | THIEF_IS_MUGGER
+        state.thief_enter_time = 0
+        state.thief_current_pos = 0
+        state.thief_mob_slot = 0
+
+        maze.load_level(state, 114, maze_number=38)
+
+        assert state.monster_slowmo_timer == 0
+        assert state.thief_enter_time == -1
+        assert state.thief_victim == -1
+        assert state.thief_current_pos == 0
+        assert state.thief_mob_slot == 0
+
+        main_start_thief(state)
+        assert state.mobs.picture[pack_slot(16, 21)] == 0
+
 
 class TestMuggerSelection:
     def test_low_roll_selects_mugger(self):
@@ -727,7 +752,6 @@ class TestRemoveAndDropLoot:
 
         assert state.thief_current_pos == 0
         assert state.mobs.picture[thief_slot] == 0
-
 
 class TestDeployAndEscapeGraph:
     def test_unset_route_corner_starts_thief_squeeze_transition(

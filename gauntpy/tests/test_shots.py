@@ -1112,19 +1112,22 @@ class TestDispatchLeaves:
 
     def test_shooting_slow_motion_food_starts_the_timer(self):
         state = _make_state()
+        state.mazenum_current = 104
         SLOT = 353
         _place_typed(state, SLOT, MazeObjIds.FOOD_DESTRUCTABLE, picture=0x25ED)
         resolve_shot_hit(state, SLOT, 0)
         assert state.monster_slowmo_timer == 0x258
         assert 0x37 in state.sound_log
+        assert 0x1D not in state.sound_log
 
     def test_shooting_slow_motion_potion_starts_the_longer_timer(self):
         state = _make_state()
+        state.mazenum_current = 104
         SLOT = 354
         _place_typed(state, SLOT, MazeObjIds.POT_DESTRUCTABLE, picture=0x20FC)
         resolve_shot_hit(state, SLOT, 0)
         assert state.monster_slowmo_timer == 0x4B0
-        assert 0x37 in state.sound_log
+        assert state.sound_log[:2] == [0x37, 0x1D]
         assert state.mobs.picture[SLOT] == 0
 
     def test_trick_five_credits_shooting_the_food(self):
@@ -2970,6 +2973,30 @@ class TestThiefShotDead:
         assert any(state.mobs.picture[s] for s in range(0x0D, 0x11))
         assert state.thief_current_pos == 0
         assert state.thief_mob_slot == 0
+
+    def test_kill_during_thief_transport_retires_the_old_sparkles(self):
+        """0x4F662-0x4F6A0 tears down the in-flight transition channel."""
+        state = _make_state()
+        source = (9 << 5) | 9
+        destination = (9 << 5) | 12
+        self._deploy_thief(state, source)
+        state.thief_tport_active = 1
+        state.thief_tport_timer = 8
+        state.thief_tport_dest = destination
+        state.mobs.create(
+            destination, 0x1709, 0x3000, 0x3000,
+            MazeObjIds.PLAYERSTART,
+        )
+        state.mobs.create(0x1D, 0x1E00, 0x3000, 0x3000, 0)
+
+        resolve_shot_hit(state, source, 0)
+
+        assert state.thief_tport_timer == -1
+        assert state.thief_tport_active == 0
+        assert state.mobs.picture[0x1D] == 0
+        assert state.mobs.link[0x1D] == 0
+        assert state.mobs.picture[destination] == 0
+        assert any(state.mobs.picture[s] for s in range(0x0D, 0x11))
 
     def test_no_thief_on_the_level_dissolves_nothing(self):
         """0x4F64A only runs the dissolve for a deployed thief."""

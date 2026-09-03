@@ -39,6 +39,7 @@ _SPEED_THIEF = 0x200
 _THIEF_MAZE_LIMIT = 0x73
 _THIEF_MIN_LEVEL = 6
 _THIEF_CARRIED_EMPTY = 0x7D30
+_THIEF_TPORT_ANIM_SLOT = 0x1D
 _TAUNT_THRESHOLD = 0x3B
 _TAUNT_PAIRS = ((0x62, 0x63), (0x64, 0x65))
 
@@ -128,8 +129,6 @@ _MUGGER_COMPACT_ANIM = (
     0x2400, 0x2409, 0x2412, 0x2409, 0x2436, 0x243F, 0x2448, 0x243F,
     0x2490, 0x2499, 0x24A2, 0x2499, 0x24C6, 0x24CF, 0x24D8, 0x24CF,
 )
-
-
 def _path_grid_offset(grid_index: int) -> int:
     if not 0 <= grid_index <= _PATH_GRID_MAX_CELL:
         raise ValueError(f"path-grid cell out of range: {grid_index:#x}")
@@ -655,7 +654,11 @@ def thief_remove_and_drop_loot(
         transition_slot = getattr(state, "thief_tport_dest", 0)
         if transition_slot and transition_slot != current_slot:
             state.mobs.unlink_and_clear(transition_slot)
+        if state.mobs.picture[_THIEF_TPORT_ANIM_SLOT]:
+            state.mobs.depth_remove(_THIEF_TPORT_ANIM_SLOT - 1)
+            state.mobs.picture[_THIEF_TPORT_ANIM_SLOT] = 0
         state.thief_tport_timer = -1
+        state.thief_tport_active = 0
 
     state.thief_current_pos = 0
     state.thief_mob_slot = 0

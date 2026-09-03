@@ -163,6 +163,11 @@ A factory-fresh cabinet therefore plays mazes 0, 1, 2, 3, 4, 5 as levels
 1–6. Landing on 5 raises the stride to 1, so that first session continues
 7, 9, 11, … **Confidence: Verified.**
 
+Continuing that fresh-cabinet sequence, the first wrap reaches maze 5 again at
+level 103 and raises the stride to 2; level 119 then selects maze 53. This is
+not a permanent level-to-maze mapping: a saved resume position or stride changes
+the sequence.
+
 ### 3.3 When the resume position is recorded
 
 `main_health_countdown` (0x466F6) updates the persistent state in its
@@ -292,6 +297,9 @@ The flags listed in the table below are the **base flags** stored in each maze's
 
 Every rotation maze (5–101) has exactly one secret trick. Mazes 0–4 — the
 fixed opening levels 1–5 — store trick ID 0 and have no secret objective.
+That header byte is metadata, not proof that a live task was armed: the pacing
+counter must be zero, and the player-start tail cancels tricks 0x0F–0x11 for a
+solo party. In particular maze 53 stores trick 0x11 but offers no solo secret.
 
 The **Level** column is the level number a maze is played as. It is fixed
 only for mazes 0–4. Mazes 5–101 are reached from level 6 onward through the
