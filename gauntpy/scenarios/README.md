@@ -60,9 +60,43 @@ x = MONST_SUPERSORC
 ```
 
 `input` accepts `live`, `idle`, the four cardinal directions, and hyphenated
-diagonals. It defaults to `live`, which leaves player-one input under the
-interactive host; use `idle` for an explicitly scripted stationary player.
-Input events persist until another input event changes them.
+diagonals. Add `fire` and/or `magic` with `+`, for example `right+fire`,
+`up-left+fire+magic`, or `idle+magic`; the action names may also be used without
+a direction. `live` must stand alone. Input defaults to `live`, which leaves
+player-one input under the interactive host; use `idle` for an explicitly
+scripted stationary player. Input events persist until another input event
+changes them.
+
+An event can target another player with `input p1..p4 controls`, for example
+`120 input p3 down-left+fire`. Omitting the player token retains the original
+player-one syntax. Per-player scripted inputs and fired-event progress are
+preserved in state dumps.
+
+The `benchmark-*.gsc` fixtures back the named graphical benchmark/stress
+workloads. They deliberately isolate open-arena input, generators, a dense
+monster-family mix, random walls, and cyclic walls. Their high health and
+scripted controls keep runs repeatable. The workload identifier is always the
+fixture's filename stem. Generator and monster fixtures use 81 generators and
+196 ordinary monsters respectively, while keeping dense representative subsets
+inside the camera's initial view. Like every file in this directory, they are
+synthetic engineering workloads rather than fidelity evidence.
+
+The `pathological-*.gsc` fixtures deliberately violate ordinary maze design.
+They cover ten dragons sharing singleton state, near-total linked-MOB
+saturation, all fixed shot channels, four-player concurrent controls, boxed
+generators, overlapping special footprints, interacting wall systems, crowded
+wrap seams, and the 16-bit frame boundary. Some need host workload setup after
+declarative placement: extra players are joined through `player_join`, shots
+through the normal player/monster creation routines, and the counter-wrap
+fixture begins at frame `0xFFF0`. They are failure-oriented engineering inputs,
+not supported encounters or fidelity evidence.
+
+Except for workloads specifically testing maze wrap seams or whole-maze slot
+saturation, each pathological fixture places its focal actors and structures in
+the initial viewport. The ten dragon anchors surround the player, all projectile
+sources and boxed generators begin on screen, and the four-player script uses
+separate movement, Fire, and settled Magic-press phases so each behavior is
+visually distinguishable.
 
 `activate_thief row column [thief|mugger]` deploys the selected visitor from an
 empty live packed-maze cell through the normal game-side thief deployment
@@ -96,6 +130,6 @@ current scripted input, and fired-event indices. They never depend on the
 original `.gsc` file still existing or remaining unchanged.
 
 While a fixture is loaded, the F1 `SCENARIO` page shows its name, source,
-content hash, current scripted/live input mode, and every event. Pending events
+content hash, current scripted/live input modes, and every event. Pending events
 include their absolute target frame and `T-` frames remaining; completed events
 remain visible as `FIRED`.

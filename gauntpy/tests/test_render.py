@@ -2148,6 +2148,174 @@ def _headless_pygame(monkeypatch):
 
 
 @requires_pygame
+class TestPygameFramebuffer:
+    @staticmethod
+    def _surface_framebuffer(width=8, height=8):
+        import pygame
+        from gauntpy.render.framebuffer import PygameFramebuffer
+
+        pygame.init()
+        pygame.display.set_mode((1, 1))
+        return PygameFramebuffer(pygame, width, height)
+
+    def test_indexed_tile_matches_the_reference_framebuffer(self):
+        class Shadow:
+            def at(self, x, y):
+                return (7, 8, 9, 255) if (x + y) % 2 else None
+
+        tile = [
+            [(column + row) % 6 for column in range(8)]
+            for row in range(8)
+        ]
+        palette = [
+            (index * 10, index * 7, index * 3, 255)
+            for index in range(16)
+        ]
+        reference = Framebuffer(8, 8, (150, 120, 90, 255))
+        accelerated = self._surface_framebuffer()
+        accelerated.clear((150, 120, 90, 255))
+
+        for framebuffer in (reference, accelerated):
+            framebuffer.blit_indexed_tile(
+                tile, palette, 0, 0, trans0=True, shadow_index=1,
+                shadow_src=Shadow(), clip=(1, 1, 6, 6),
+            )
+
+        assert (
+            accelerated.to_pil_image().tobytes()
+            == reference.image.tobytes()
+        )
+
+    def test_indexed_tile_batch_preserves_exact_shadows_and_clipping(self):
+        from PIL import Image
+
+        class Shadow:
+            def __init__(self):
+                self.image = Image.new("RGBA", (16, 8))
+                pixels = self.image.load()
+                for y in range(8):
+                    for x in range(16):
+                        pixels[x, y] = (x * 7, y * 11, 99, 255)
+
+            def source_xy(self, x, y):
+                return x % 16, y % 8
+
+            def at(self, x, y):
+                source_x, source_y = self.source_xy(x, y)
+                return self.image.getpixel((source_x, source_y))
+
+        first = [[(column + row) % 4 for column in range(8)] for row in range(8)]
+        second = [[(column * 2 + row) % 5 for column in range(8)] for row in range(8)]
+        palette = [
+            (index * 10, index * 7, index * 3, 255)
+            for index in range(16)
+        ]
+        shadow = Shadow()
+        reference = Framebuffer(16, 8, (150, 120, 90, 255))
+        accelerated = self._surface_framebuffer(16, 8)
+        accelerated.clear((150, 120, 90, 255))
+
+        for framebuffer in (reference, accelerated):
+            framebuffer._blit_disjoint_indexed_tiles(
+                ((first, 0, 0), (second, 8, 0)),
+                palette,
+                trans0=True,
+                shadow_index=1,
+                shadow_src=shadow,
+                clip=(1, 0, 15, 8),
+            )
+
+        assert (
+            accelerated.to_pil_image().tobytes()
+            == reference.image.tobytes()
+        )
+
+    def test_render_frame_matches_the_reference_compositor(self):
+        import pygame
+
+        from gauntpy.render.compositor import RenderCache
+        from gauntpy.render.framebuffer import PygameFramebuffer
+
+        state = GameState()
+        init_alpha_color_ram(state)
+        state.alpha_ram[0] = 0x8C41
+        _place(state.mobs, row=8, col=8, picture=5)
+        assets = _FakeAssets()
+        reference, _ = render_frame(state, assets)
+        accelerated = PygameFramebuffer(pygame, 336, 240)
+
+        actual, _ = render_frame(
+            state, assets, cache=RenderCache(), framebuffer=accelerated,
+        )
+
+        assert (
+            actual.to_pil_image().tobytes()
+            == reference.image.tobytes()
+        )
+
+    def test_rom_free_transparent_glyph_matches_reference_blending(
+        self, monkeypatch,
+    ):
+        from gauntpy.render import text
+
+        monkeypatch.setattr(text, "_glyph_checked", True)
+        monkeypatch.setattr(text, "_glyph_fn", None)
+        monkeypatch.setattr(text, "_raw_glyph_fn", None)
+        palette = ((0, 0, 0, 255),) * 3 + ((200, 150, 100, 255),)
+        reference = Framebuffer(8, 8, (11, 12, 13, 255))
+        accelerated = self._surface_framebuffer()
+        accelerated.clear((11, 12, 13, 255))
+
+        for framebuffer in (reference, accelerated):
+            framebuffer.blit_alpha_glyph(
+                0, 0, ord("!"), palette, opaque=False,
+                renderer=text.draw_alpha_glyph,
+            )
+
+        assert (
+            accelerated.to_pil_image().tobytes()
+            == reference.image.tobytes()
+        )
+
+    def test_rom_free_alpha_batch_matches_reference_blending(self, monkeypatch):
+        from gauntpy.render import text
+
+        monkeypatch.setattr(text, "_glyph_checked", True)
+        monkeypatch.setattr(text, "_glyph_fn", None)
+        monkeypatch.setattr(text, "_raw_glyph_fn", None)
+        palette = ((0, 0, 0, 255),) * 3 + ((200, 150, 100, 255),)
+        glyphs = (
+            (0, 0, ord("!"), palette, False),
+            (8, 0, ord("?"), palette, False),
+        )
+        reference = Framebuffer(16, 8, (11, 12, 13, 255))
+        accelerated = self._surface_framebuffer(16, 8)
+        accelerated.clear((11, 12, 13, 255))
+
+        for framebuffer in (reference, accelerated):
+            framebuffer.blit_alpha_glyphs(
+                glyphs, renderer=text.draw_alpha_glyph,
+            )
+
+        assert (
+            accelerated.to_pil_image().tobytes()
+            == reference.image.tobytes()
+        )
+
+    def test_pause_indicator_matches_reference_position(self):
+        reference = Framebuffer(104, 240)
+        accelerated = self._surface_framebuffer(104, 240)
+
+        for framebuffer in (reference, accelerated):
+            framebuffer.draw_pause_indicator((0, 0, 104, 240), "PAUSED")
+
+        assert (
+            accelerated.to_pil_image().tobytes()
+            == reference.image.tobytes()
+        )
+
+
+@requires_pygame
 class TestHostShellInput:
     def test_input_polarity_is_active_low(self):
         """doc/04_game_subsystems.md §15 / subsystems/input.py: 'nothing
@@ -2307,7 +2475,7 @@ class TestHostShellInput:
         from gauntpy.render import host
         from gauntpy.render.host import HostShell
 
-        times = iter((10.0, 10.0125))
+        times = iter((10.0, 10.0125, 20.0, 20.0005))
         monkeypatch.setattr(host, "perf_counter", lambda: next(times))
         shell = HostShell(assets=_FakeAssets(), scale=1)
         try:
@@ -2327,6 +2495,8 @@ class TestHostShellInput:
             shell.present(state)
             assert shell._diagnostics_previous.render_time_ms == pytest.approx(12.5)
             assert shell._diagnostics_previous.render_time_history_ms == (12.5,)
+            assert shell.last_render_time_ms == pytest.approx(12.5)
+            assert shell.last_display_flip_time_ms == pytest.approx(0.5)
 
             pygame.event.post(
                 pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F1)

@@ -1054,14 +1054,12 @@ def maze_convert_walls_to_exits(state: GameState) -> int:
         object type is not 0x3F (FORCEFIELDHUB, excluded at 0x5E844),
 
     by calling ``mob_place_tile(slot, 0x10)``, i.e. replacing the record with
-    an EXIT.  Returns 1 when at least one slot was converted, else 0 (§08
-    known-issues: this routine returns an ordinary 1, not -1).
-
-    Placement here mirrors WP-3's ``maze_place_object``: EXIT is a
-    ``PICTURE_MARKER`` type, so it is created with picture 0 and draws through
-    its own animated MOB.  The wall record is cleared first because a wall may
-    already be linked into the depth chain and a slot can only be linked once.
+    an unlinked EXIT marker whose picture is 0x8001.  Returns 1 when at least
+    one slot was converted, else 0 (§08 known-issues: this routine returns an
+    ordinary 1, not -1).
     """
+    from ..maze import _place_one, set_cell_descriptor
+
     converted = 0
     for slot in range(FIRST_PLAYABLE_SLOT, 0x400):
         picture = state.mobs.picture[slot]
@@ -1071,15 +1069,7 @@ def maze_convert_walls_to_exits(state: GameState) -> int:
         elif picture != _MOVABLE_WALL_PICTURE:
             continue
 
-        state.mobs.unlink_and_clear(slot)
-        x = (slot & 0x1F) << 4
-        y = (slot >> 5) << 4
-        state.mobs.create(
-            slot, tile=0, hpos=encode_hpos(x), vpos=encode_vpos_at_y(y),
-            obj_type=int(MazeObjIds.EXIT),
-        )
-        from ..maze import set_cell_descriptor
-
+        _place_one(state, slot, int(MazeObjIds.EXIT))
         set_cell_descriptor(state, slot, int(MazeObjIds.EXIT))
         converted = 1
 

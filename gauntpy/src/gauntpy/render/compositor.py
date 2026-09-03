@@ -84,6 +84,7 @@ def render_frame(
     width: int = LOGICAL_WIDTH,
     height: int = LOGICAL_HEIGHT,
     paused: bool = False,
+    framebuffer=None,
 ) -> tuple[Framebuffer, RenderCache]:
     """Composite one frame: playfield, then MOBs, then HUD.
 
@@ -97,7 +98,9 @@ def render_frame(
     and pass it back on the next call.
     """
     cache = cache or RenderCache()
-    fb = Framebuffer(width, height)
+    fb = framebuffer or Framebuffer(width, height)
+    if framebuffer is not None:
+        fb.clear()
 
     # The camera stores the ROM's hardware scroll registers; the renderer wants
     # a plain viewport top-left. Convert once, here (I-23), so every layer sees

@@ -452,6 +452,20 @@ evidence remains in `../doc/`, generated contracts, and the book.
     old start location in the new MOB table. Reset Python's `thief_mob_slot`
     representation alias with the canonical word; do not compensate later with
     divergent-slot cleanup or dump self-healing.
+94. **Benchmarks name nested host boundaries and do not perturb the cabinet.**
+    A performance batch may time input/event sampling, one complete `tick`,
+    game-raster composition/blit, presentation through display flip, and the
+    enclosing host iteration, but must state that raster is inside presentation
+    and presentation is inside the loop. Run without the wall-time limiter,
+    playback, or external EEPROM writes while preserving modeled sound
+    production, literal frame counters, and one complete game update per sample.
+    Stress phases enter through normal game-side level/display setup; they do
+    not manufacture renderer-only content.
+95. **Marker placement is not picture-zero MOB creation.** `mob_place_tile`
+    handles EXIT and other floor-level marker types by writing picture `0x8001`
+    directly, with no depth-chain membership. Preserve that producer distinction:
+    a picture-zero `mob_create` call both links a record that the ROM leaves
+    unlinked and makes an occupied marker look free to movement callers.
 
 ## Investigation workflow
 

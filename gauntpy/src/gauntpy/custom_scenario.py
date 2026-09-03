@@ -17,8 +17,10 @@ from .rng import GameRandom
 from .state import GameState
 from .subsystems.input import (
     JOY_DOWN,
+    JOY_FIRE_BIT,
     JOY_IDLE,
     JOY_LEFT,
+    JOY_MAGIC_BIT,
     JOY_RIGHT,
     JOY_UP,
 )
@@ -69,6 +71,10 @@ _DIRECTIONS = {
     "down-left": JOY_IDLE & ~(JOY_DOWN | JOY_LEFT),
     "down-right": JOY_IDLE & ~(JOY_DOWN | JOY_RIGHT),
 }
+_BUTTON_BITS = {
+    "fire": JOY_FIRE_BIT,
+    "magic": JOY_MAGIC_BIT,
+}
 
 
 class SyntheticScenarioError(ValueError):
@@ -111,6 +117,9 @@ class SyntheticScenarioRuntime:
     scenario: SyntheticScenario
     fired_events: set[int] = field(default_factory=set)
     current_input: int | None = None
+    additional_inputs: list[int | None] = field(
+        default_factory=lambda: [None, None, None]
+    )
 
     def __post_init__(self) -> None:
         if self.current_input is None:
@@ -137,15 +146,46 @@ def _object_type(value: str) -> int:
 
 
 def _input_word(value: str) -> int | None:
-    normalized = value.lower()
-    if normalized == "live":
+    controls = value.lower().split("+")
+    if "live" in controls:
+        if controls != ["live"]:
+            raise SyntheticScenarioError("'live' cannot be combined with controls")
         return None
-    try:
-        return _DIRECTIONS[normalized]
-    except KeyError as exc:
+    if (
+        not controls
+        or any(not control for control in controls)
+        or len(controls) != len(set(controls))
+    ):
         raise SyntheticScenarioError(
-            f"unknown input direction {value!r}"
-        ) from exc
+            "input controls must be unique names joined with '+'"
+        )
+
+    directions = [control for control in controls if control in _DIRECTIONS]
+    unknown = set(controls) - _DIRECTIONS.keys() - _BUTTON_BITS.keys()
+    if unknown:
+        raise SyntheticScenarioError(
+            f"unknown input control {sorted(unknown)[0]!r}"
+        )
+    if len(directions) > 1:
+        raise SyntheticScenarioError("input may contain at most one direction")
+
+    word = _DIRECTIONS[directions[0]] if directions else JOY_IDLE
+    for button, bit in _BUTTON_BITS.items():
+        if button in controls:
+            word &= ~bit
+    return word
+
+
+def _input_event_target(args: tuple[str, ...]) -> tuple[int, str]:
+    """Decode ``input controls`` or ``input p1..p4 controls``."""
+    if len(args) == 1:
+        return 0, args[0]
+    if len(args) != 2:
+        raise SyntheticScenarioError("input event needs [p1..p4] controls")
+    player_token = args[0].lower()
+    if player_token not in {"p1", "p2", "p3", "p4"}:
+        raise SyntheticScenarioError("input event player must be p1, p2, p3, or p4")
+    return int(player_token[1]) - 1, args[1]
 
 
 def parse_synthetic_scenario(
@@ -225,9 +265,8 @@ def parse_synthetic_scenario(
     initial_input = _input_word(headers.get("input", "live"))
     for index, event in enumerate(events):
         if event.action == "input":
-            if len(event.args) != 1:
-                raise SyntheticScenarioError("input event needs one direction")
-            _input_word(event.args[0])
+            _player_index, controls = _input_event_target(event.args)
+            _input_word(controls)
         elif event.action == "activate_thief":
             if len(event.args) not in (2, 3):
                 raise SyntheticScenarioError(
@@ -281,6 +320,26 @@ def load_synthetic_scenario(path: str | Path) -> SyntheticScenario:
             f"could not read synthetic scenario {source}: {exc}"
         ) from exc
     return parse_synthetic_scenario(text, source_name=source.name)
+
+
+def override_synthetic_seed(
+    scenario: SyntheticScenario, seed: int,
+) -> SyntheticScenario:
+    """Return the same fixture with a canonical, provenance-safe seed override."""
+    lines = scenario.canonical_content.splitlines(keepends=True)
+    section_start = next(
+        (index for index, line in enumerate(lines) if line.lstrip().startswith("[")),
+        len(lines),
+    )
+    for index, line in enumerate(lines[:section_start]):
+        if "=" in line and line.split("=", 1)[0].strip().lower() == "seed":
+            lines[index] = f"seed = {seed}\n"
+            break
+    else:
+        lines.insert(section_start, f"seed = {seed}\n")
+    return parse_synthetic_scenario(
+        "".join(lines), source_name=scenario.source_name,
+    )
 
 
 def attach_synthetic_runtime(
@@ -464,7 +523,12 @@ def apply_synthetic_events(state: GameState) -> None:
         if index in runtime.fired_events or event.frame != state.frame_counter:
             continue
         if event.action == "input":
-            runtime.current_input = _input_word(event.args[0])
+            player_index, controls = _input_event_target(event.args)
+            input_word = _input_word(controls)
+            if player_index == 0:
+                runtime.current_input = input_word
+            else:
+                runtime.additional_inputs[player_index - 1] = input_word
         elif event.action == "activate_thief":
             # The victim and countdown were armed at scenario construction so
             # ordinary player movement could extend the pursuit breadcrumbs.
@@ -472,6 +536,9 @@ def apply_synthetic_events(state: GameState) -> None:
         runtime.fired_events.add(index)
     if runtime.current_input is not None:
         state.player_input_raw[0] = runtime.current_input
+    for player_index, input_word in enumerate(runtime.additional_inputs, 1):
+        if input_word is not None:
+            state.player_input_raw[player_index] = input_word
 
 
 def synthetic_runtime_payload(state: GameState) -> dict[str, object] | None:
@@ -487,6 +554,7 @@ def synthetic_runtime_payload(state: GameState) -> dict[str, object] | None:
         "content": scenario.canonical_content,
         "fired_events": sorted(runtime.fired_events),
         "current_input": runtime.current_input,
+        "additional_inputs": runtime.additional_inputs,
     }
 
 
@@ -516,6 +584,17 @@ def restore_synthetic_runtime(
     current_input = payload.get("current_input")
     if current_input is not None and not isinstance(current_input, int):
         raise SyntheticScenarioError("invalid synthetic current input")
+    additional_inputs = payload.get("additional_inputs", [None, None, None])
+    if (
+        not isinstance(additional_inputs, list)
+        or len(additional_inputs) != 3
+        or any(
+            value is not None and not isinstance(value, int)
+            for value in additional_inputs
+        )
+    ):
+        raise SyntheticScenarioError("invalid synthetic additional inputs")
     runtime = SyntheticScenarioRuntime(scenario, fired_events=set(fired))
     runtime.current_input = current_input
+    runtime.additional_inputs = additional_inputs
     attach_synthetic_runtime(state, runtime)

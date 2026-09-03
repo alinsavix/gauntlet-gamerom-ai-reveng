@@ -54,6 +54,73 @@ multi-channel recording cannot separate its individual stems.
 This consumes accepted `sound_log` bytes only; it does not alter the game's
 sound ring, timing, or modeled state.
 
+For repeatable performance work, run a fixed number of measured frames:
+
+```bash
+uv run --all-extras gauntpy-play --benchmark
+uv run --all-extras gauntpy-play --benchmark 2000 --scale 1
+uv run --all-extras gauntpy-play --benchmark 600 --workload benchmark-generators
+uv run --all-extras gauntpy-play --benchmark 600 --workload all
+```
+
+`--benchmark [FRAMES]` defaults to 600 measured frames after up to 30 warm-up
+frames. It disables the limiter, sound playback, and external EEPROM writes,
+then reports mean, median, nearest-rank p95, minimum, and maximum durations for
+host input/event sampling, the complete game update, game-raster composition
+through window blitting, display-flip synchronization alone, and the complete
+host loop. The first four rows are independent timing boundaries; the complete
+loop is cumulative and includes them plus harness overhead.
+`--workload NAME` builds a repeatable named workload before measuring it;
+`--workload all` runs and reports every workload separately, with the requested
+measured-frame count applied to each one.
+
+Use the timed graphical stress workload to exercise different display and
+simulation shapes continuously:
+
+```bash
+uv run --all-extras gauntpy-play --stresstest 60
+uv run --all-extras gauntpy-play --stresstest 60 --workload benchmark-mobs
+uv run --all-extras gauntpy-play --list-workloads
+```
+
+`--stresstest SECONDS` runs uncapped and silent, cycling through the ROM-backed
+TITLE, DEMO, dragon level, moving/fake-exit level, SCORES, and LEGEND setup
+paths plus synthetic open-arena, generator, monster-family, random-wall, and
+cyclic-wall fixtures, followed by the pathological suite below. Select one
+workload with `--workload`; the default and `--workload all` rotate through the
+complete catalog. The synthetic fixtures play deterministic
+direction/Fire/Magic scripts, while the ROM-backed phases continue to use the
+normal game-side screen or level setup routines.
+
+Scenario-backed workload names are exactly their `.gsc` filename stems, so the
+name printed in the console can be pasted directly after `--workload`. The
+generator and monster benchmarks contain 81 generators and 196 ordinary
+monsters respectively, with dense subsets inside the initial camera view.
+
+Benchmark and stress modes check the MOB depth chain, reciprocal links, and
+SLIP bookmarks after every game update and stop at the first inconsistent
+frame. This check is read-only host instrumentation; it does not repair state
+or alter game logic. Synthetic workloads are engineering fixtures for load,
+regression, and profiling coverage, not evidence of original-game behavior.
+
+| Pathological workload | Edge under test |
+|---|---|
+| `pathological-ten-dragons` | ten 2x2 bodies contending for one dragon state machine |
+| `pathological-slot-saturation` | 899 linked records with almost no free maze cells |
+| `pathological-projectile-channels` | all 12 fixed player/demon/lobber channels seeded around the initial view |
+| `pathological-four-players` | four visible heroes alternate movement, Fire, and Magic phases |
+| `pathological-boxed-generators` | generators repeatedly finding no legal spawn |
+| `pathological-overlapping-specials` | exits/transporters overwriting dragon segments |
+| `pathological-wall-intersection` | moving, random, cyclic, and forcefield systems together |
+| `pathological-wrap-seams` | actors and projectiles crowded against both wrap seams |
+| `pathological-counter-wrap` | events before and after frame `0xFFFF -> 0x0000` |
+
+The four-player and projectile fixtures use setup hooks in the host workload
+module to join the extra heroes and seed the fixed shot channels through normal
+game-side creation routines. The counter fixture starts its modeled frame word
+at `0xFFF0`. These hooks prepare state only; no stress-only branches run inside
+the simulation.
+
 | Key | Action |
 |-----|--------|
 | **arrow keys** | move |

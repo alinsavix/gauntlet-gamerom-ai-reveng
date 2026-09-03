@@ -490,6 +490,13 @@ def _scenario_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         ("INPUT", input_mode),
         ("EVENTS", f"{len(runtime.fired_events)}/{len(scenario.events)} fired"),
     ]
+    for player_index, input_word in enumerate(runtime.additional_inputs, 2):
+        if input_word is None:
+            continue
+        rows.append((
+            f"INPUT P{player_index}",
+            _pressed_input_names(input_word).upper(),
+        ))
     current = int(state.frame_counter) & 0xFFFF
     for index, event in enumerate(scenario.events):
         action = " ".join((event.action, *event.args))

@@ -15,11 +15,19 @@ from gauntpy.custom_scenario import (
     attach_synthetic_runtime,
     build_synthetic_state,
     load_synthetic_scenario,
+    override_synthetic_seed,
     parse_synthetic_scenario,
     synthetic_runtime_for,
+    _input_word,
 )
 from gauntpy.coords import hpos_x, vpos_y
+from gauntpy.constants import GENERATOR_TYPES, MONSTER_TYPES, MazeObjIds
 from gauntpy.mainloop import tick
+from gauntpy.performance_workloads import (
+    WORKLOAD_BY_NAME,
+    prepare_workload_state,
+    validate_runtime_invariants,
+)
 from gauntpy.render.state_dump import (
     StateDumpError,
     game_state_from_payload,
@@ -33,12 +41,22 @@ from gauntpy.render.diagnostics import (
 from gauntpy.state import GameState
 from gauntpy.subsystems.thief import THIEF_IS_MUGGER
 from gauntpy.subsystems.thief import path_grid_get_direction
-from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
+from gauntpy.subsystems.input import JOY_FIRE_BIT, JOY_IDLE, JOY_MAGIC_BIT, JOY_RIGHT
+from gauntpy.subsystems.monsters import tile_on_screen_d4
 
 from gex.roms import SLAPSTIC_ROMS, TILE_ROMS, _rom_dir
 
 
 _EXAMPLE = Path(__file__).parents[1] / "scenarios" / "narrow-lane-thief.gsc"
+_BENCHMARK_FIXTURES = sorted(
+    (Path(__file__).parents[1] / "scenarios").glob("benchmark-*.gsc")
+)
+_PATHOLOGICAL_FIXTURES = sorted(
+    (Path(__file__).parents[1] / "scenarios").glob("pathological-*.gsc")
+)
+_TEN_DRAGONS = (
+    Path(__file__).parents[1] / "scenarios" / "pathological-ten-dragons.gsc"
+)
 _ROM_PATH = _rom_dir()
 requires_roms = pytest.mark.skipif(
     not (
@@ -48,6 +66,14 @@ requires_roms = pytest.mark.skipif(
     ),
     reason=f"ROM files not available at {_ROM_PATH}",
 )
+
+
+def _prepared_workload(name: str) -> GameState:
+    workload = WORKLOAD_BY_NAME[name]
+    fixture = Path(__file__).parents[1] / "scenarios" / workload.scenario_filename
+    state = build_synthetic_state(load_synthetic_scenario(fixture))
+    prepare_workload_state(state, workload)
+    return state
 
 
 def test_example_is_an_exact_versioned_32_by_32_fixture():
@@ -61,6 +87,219 @@ def test_example_is_an_exact_versioned_32_by_32_fixture():
     assert scenario.events[0].frame == 1200
     assert scenario.events[0].action == "activate_thief"
     assert scenario.initial_input is None
+
+
+@pytest.mark.parametrize("fixture", _BENCHMARK_FIXTURES, ids=lambda path: path.stem)
+def test_benchmark_fixtures_are_exact_versioned_32_by_32_scenarios(fixture):
+    scenario = load_synthetic_scenario(fixture)
+
+    assert len(scenario.grid) == 32
+    assert {len(row) for row in scenario.grid} == {32}
+    assert scenario.initial_input == JOY_IDLE
+    assert scenario.events
+
+
+@pytest.mark.parametrize(
+    "fixture", _PATHOLOGICAL_FIXTURES, ids=lambda path: path.stem,
+)
+def test_pathological_fixtures_are_exact_versioned_32_by_32_scenarios(fixture):
+    scenario = load_synthetic_scenario(fixture)
+
+    assert len(scenario.grid) == 32
+    assert {len(row) for row in scenario.grid} == {32}
+    assert scenario.initial_input == JOY_IDLE
+
+
+def test_seed_override_updates_scenario_content_and_provenance():
+    scenario = load_synthetic_scenario(_BENCHMARK_FIXTURES[0])
+
+    overridden = override_synthetic_seed(scenario, 0x1234)
+
+    assert overridden.seed == 0x1234
+    assert "\nseed = 4660\n" in overridden.canonical_content
+    assert overridden.sha256 != scenario.sha256
+    assert overridden.source_name == scenario.source_name
+
+
+@requires_roms
+def test_pathological_ten_dragons_preserves_the_singleton_contention():
+    state = build_synthetic_state(load_synthetic_scenario(_TEN_DRAGONS))
+    dragon_slots = [
+        slot for slot in range(len(state.mobs.link))
+        if state.mobs.obj_type(slot) == int(MazeObjIds.MONST_DRAGON)
+    ]
+    linked_anchors = [slot for slot in dragon_slots if state.mobs.is_linked(slot)]
+
+    assert len(dragon_slots) == 40
+    assert len(linked_anchors) == 10
+    assert state.dragon_mob_slot == linked_anchors[-1]
+    assert state.dragon_seg_mob_ids == [
+        state.dragon_mob_slot,
+        state.dragon_mob_slot - 0x20,
+        state.dragon_mob_slot + 1,
+        state.dragon_mob_slot - 0x1F,
+    ]
+
+
+@requires_roms
+def test_projectile_contention_starts_with_four_players_and_all_twelve_channels():
+    state = _prepared_workload("pathological-projectile-channels")
+
+    assert all(player.active for player in state.players)
+    assert all(
+        state.mobs.picture[slot] not in (0, 0x8000)
+        for slot in range(1, 13)
+    )
+    for _ in range(20):
+        apply_synthetic_events(state)
+        tick(state)
+        assert sum(
+            state.mobs.picture[slot] not in (0, 0x8000)
+            for slot in range(1, 13)
+        ) >= 11
+
+
+@requires_roms
+def test_dense_and_pathological_workloads_start_with_their_focus_on_screen():
+    cases = (
+        ("benchmark-generators", GENERATOR_TYPES, 81, 20),
+        ("benchmark-mobs", MONSTER_TYPES, 196, 42),
+        ("pathological-ten-dragons", (int(MazeObjIds.MONST_DRAGON),), 10, 10),
+        ("pathological-projectile-channels", MONSTER_TYPES, 8, 8),
+        ("pathological-boxed-generators", GENERATOR_TYPES, 6, 6),
+    )
+
+    for name, object_types, expected_count, expected_visible in cases:
+        state = _prepared_workload(name)
+        slots = [
+            slot for slot in state.mobs.iter_chain()
+            if state.mobs.obj_type(slot) in object_types
+        ]
+        assert len(slots) == expected_count
+        assert sum(tile_on_screen_d4(state, slot) for slot in slots) >= expected_visible
+
+
+@requires_roms
+def test_four_player_workload_moves_fires_and_casts_with_every_hero():
+    state = _prepared_workload("pathological-four-players")
+    starts = [
+        (state.mobs.hpos[player.mob_slot], state.mobs.vpos[player.mob_slot])
+        for player in state.players
+    ]
+    moved = [False] * 4
+    fired = [False] * 4
+
+    for _ in range(510):
+        apply_synthetic_events(state)
+        tick(state)
+        for index, player in enumerate(state.players):
+            moved[index] |= (
+                state.mobs.hpos[player.mob_slot],
+                state.mobs.vpos[player.mob_slot],
+            ) != starts[index]
+            fired[index] |= state.mobs.picture[index + 1] not in (0, 0x8000)
+
+    assert all(moved)
+    assert all(fired)
+    assert [player.potionsnum for player in state.players] == [17] * 4
+
+
+@requires_roms
+def test_pathological_setup_shapes_match_their_claimed_edge_cases():
+    saturated = _prepared_workload("pathological-slot-saturation")
+    assert len(list(saturated.mobs.iter_chain())) == 899
+
+    four_players = _prepared_workload("pathological-four-players")
+    assert all(player.active and player.potionsnum == 20 for player in four_players.players)
+
+    boxed = _prepared_workload("pathological-boxed-generators")
+    generators = [
+        slot for slot in boxed.mobs.iter_chain()
+        if boxed.mobs.obj_type(slot) in GENERATOR_TYPES
+    ]
+    assert len(generators) == 6
+    assert all(
+        boxed.mobs.picture[neighbor] == 0x8000
+        for slot in generators
+        for neighbor in (slot - 0x21, slot - 0x20, slot - 0x1F, slot - 1,
+                         slot + 1, slot + 0x1F, slot + 0x20, slot + 0x21)
+    )
+
+    overlap = _prepared_workload("pathological-overlapping-specials")
+    dragon_slots = [
+        slot for slot in range(len(overlap.mobs.link))
+        if overlap.mobs.obj_type(slot) == int(MazeObjIds.MONST_DRAGON)
+    ]
+    assert len(dragon_slots) == 6
+    assert sum(overlap.mobs.is_linked(slot) for slot in dragon_slots) == 2
+
+    walls = _prepared_workload("pathological-wall-intersection")
+    assert walls.cyclic_wall_setup_ready
+    assert walls.random_wall_setup_ready
+    assert walls.forcefield_segment_table
+
+    wrapped = _prepared_workload("pathological-wrap-seams")
+    assert wrapped.wrap_h and wrapped.wrap_v
+
+    counter = _prepared_workload("pathological-counter-wrap")
+    assert counter.frame_counter == 0xFFF0
+
+
+@requires_roms
+@pytest.mark.parametrize(
+    "fixture", _PATHOLOGICAL_FIXTURES, ids=lambda path: path.stem,
+)
+def test_pathological_workloads_complete_their_scripted_duration(fixture):
+    workload = WORKLOAD_BY_NAME[fixture.stem]
+    scenario = load_synthetic_scenario(fixture)
+    state = build_synthetic_state(scenario)
+    prepare_workload_state(state, workload)
+
+    for _ in range(scenario.default_frames):
+        apply_synthetic_events(state)
+        tick(state)
+        validate_runtime_invariants(
+            state, workload=workload.name, frame=state.frame_counter,
+        )
+
+
+@pytest.mark.parametrize(
+    ("controls", "expected"),
+    [
+        ("fire", JOY_IDLE & ~JOY_FIRE_BIT),
+        ("right+fire", JOY_IDLE & ~JOY_RIGHT & ~JOY_FIRE_BIT),
+        ("up-left+magic", 0xFFFF & ~0x80 & ~0x20 & ~JOY_MAGIC_BIT),
+        ("fire+magic", JOY_IDLE & ~JOY_FIRE_BIT & ~JOY_MAGIC_BIT),
+        ("live", None),
+    ],
+)
+def test_scripted_input_supports_directions_and_action_buttons(controls, expected):
+    assert _input_word(controls) == expected
+
+
+def test_scripted_input_can_drive_all_four_players_independently():
+    scenario = load_synthetic_scenario(
+        next(
+            fixture for fixture in _PATHOLOGICAL_FIXTURES
+            if fixture.stem == "pathological-four-players"
+        )
+    )
+    state = GameState()
+    attach_synthetic_runtime(state, SyntheticScenarioRuntime(scenario))
+
+    apply_synthetic_events(state)
+
+    assert state.player_input_raw == [0xFFBF, 0xFFDF, 0xFFEF, 0xFF7F]
+    page = DEBUG_PAGES.index("SCENARIO")
+    rows = dict(debug_page_lines(capture_debug_snapshot(state), page))
+    assert rows["INPUT"] == "D"
+    assert rows["INPUT P4"] == "U"
+
+
+@pytest.mark.parametrize("controls", ["left+right", "idle+up", "fire+fire", "live+fire"])
+def test_scripted_input_rejects_ambiguous_combinations(controls):
+    with pytest.raises(SyntheticScenarioError):
+        _input_word(controls)
 
 
 def test_live_scenario_input_does_not_overwrite_host_controls():
@@ -229,6 +468,7 @@ def test_state_dump_embeds_self_contained_synthetic_provenance_and_runtime():
     state = GameState()
     runtime = SyntheticScenarioRuntime(scenario, fired_events={0})
     runtime.current_input = None
+    runtime.additional_inputs = [0xFFED, None, 0xFF7D]
     attach_synthetic_runtime(state, runtime)
 
     payload = state_dump_payload(state)
@@ -244,6 +484,7 @@ def test_state_dump_embeds_self_contained_synthetic_provenance_and_runtime():
     assert restored_runtime.scenario.sha256 == scenario.sha256
     assert restored_runtime.fired_events == {0}
     assert restored_runtime.current_input is None
+    assert restored_runtime.additional_inputs == [0xFFED, None, 0xFF7D]
 
 
 def test_state_dump_rejects_tampered_synthetic_content():

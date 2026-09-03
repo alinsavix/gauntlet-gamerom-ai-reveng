@@ -38,17 +38,4 @@ def draw_pause_indicator(
     """Draw the host pause marker without entering modeled alpha RAM."""
     if not paused:
         return
-    from PIL import ImageDraw, ImageFont
-
-    px, py, pw, ph = panel
-    draw = ImageDraw.Draw(fb.image)
-    font = ImageFont.load_default()
-    pause_text = "PAUSED"
-    left, top, right, bottom = draw.textbbox(
-        (0, 0), pause_text, font=font,
-    )
-    pause_width, height = right - left, bottom - top
-    draw.text(
-        (px + pw - pause_width - 2, py + ph - height - 2),
-        pause_text, fill=(255, 80, 80, 255), font=font,
-    )
+    fb.draw_pause_indicator(panel, "PAUSED")

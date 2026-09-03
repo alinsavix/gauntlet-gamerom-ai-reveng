@@ -23,10 +23,19 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from time import perf_counter
 
 from .constants import Character, GameMode, MazeObjIds, PlayerStatus
 from .coords import encode_hpos, encode_vpos_at_y, pack_slot, slot_to_pixels
 from .mainloop import tick
+from .performance_workloads import (
+    WORKLOADS,
+    PerformanceWorkload,
+    scenario_path as workload_scenario_path,
+    selected_workloads,
+    prepare_workload_state,
+    validate_runtime_invariants,
+)
 from .rng import GameRandom
 from .state import GameState
 from .subsystems.camera import snap_camera
@@ -83,6 +92,20 @@ def _inventory_count(value: str) -> int:
     if not 0 <= count <= 255:
         raise argparse.ArgumentTypeError("inventory count must be between 0 and 255")
     return count
+
+
+def _positive_frame_count(value: str) -> int:
+    count = int(value)
+    if count < 1:
+        raise argparse.ArgumentTypeError("frame count must be 1 or greater")
+    return count
+
+
+def _positive_seconds(value: str) -> float:
+    seconds = float(value)
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError("seconds must be greater than zero")
+    return seconds
 
 
 def _ensure_rom_dir() -> None:
@@ -237,6 +260,55 @@ def build_state(
     return state
 
 
+_STRESS_PHASES = WORKLOADS
+
+
+def _build_workload_state(
+    workload: PerformanceWorkload, rng_seed: int,
+) -> GameState:
+    """Construct one harness workload without adding behavior to the game."""
+    if workload.scenario_filename is not None:
+        from .custom_scenario import (
+            build_synthetic_state,
+            load_synthetic_scenario,
+            override_synthetic_seed,
+        )
+
+        scenario = load_synthetic_scenario(workload_scenario_path(workload))
+        state = build_synthetic_state(override_synthetic_seed(scenario, rng_seed))
+        prepare_workload_state(state, workload)
+        return state
+    if workload.attract_mode is not None:
+        from .subsystems.attract import start_attract_screen
+        from .subsystems.eeprom import GAME_DEFAULT_SETTINGS
+
+        state = GameState(
+            game_settings=GAME_DEFAULT_SETTINGS,
+            rng=GameRandom(rng_seed),
+            eeprom_persistence_enabled=False,
+        )
+        start_attract_screen(state, workload.attract_mode)
+        return state
+
+    if workload.level_maze is None:
+        raise ValueError(f"workload {workload.name!r} has no state recipe")
+    level, maze_number = workload.level_maze
+    state = build_state(
+        level, workload.character, maze_number=maze_number, rng_seed=rng_seed,
+    )
+    state.eeprom_persistence_enabled = False
+    return state
+
+
+def _build_stress_state(phase_index: int, rng_seed: int) -> GameState:
+    """Construct one named workload through its ordinary setup routine."""
+    workload = _STRESS_PHASES[phase_index]
+    state = _build_workload_state(workload, rng_seed)
+    state.eeprom_persistence_enabled = False
+    print(f"gauntpy stress workload: {workload.name} ({workload.description})")
+    return state
+
+
 def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         from_attract: bool = False,
         reduce_text: bool = False,
@@ -246,7 +318,10 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         powers: tuple[int, ...] = (),
         load_state_path: str | Path | None = None,
         scenario_path: str | Path | None = None,
-        rng_seed: int = 0, maze_number: int | None = None) -> None:
+        rng_seed: int = 0, maze_number: int | None = None,
+        benchmark_frames: int | None = None,
+        stress_seconds: float | None = None,
+        workload_name: str | None = None) -> None:
     """Open a window and run the game loop until the player closes it.
 
     Two entries: the default mid-level drop (``build_state``), or -- with
@@ -259,7 +334,23 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     """
     _ensure_rom_dir()
 
-    if load_state_path is not None:
+    benchmark_workloads = (
+        selected_workloads(workload_name)
+        if benchmark_frames is not None and workload_name is not None
+        else ()
+    )
+    stress_workloads = (
+        selected_workloads(workload_name) if stress_seconds is not None else ()
+    )
+    stress_phase_indices = tuple(
+        WORKLOADS.index(workload) for workload in stress_workloads
+    )
+
+    if stress_seconds is not None:
+        state = _build_stress_state(stress_phase_indices[0], rng_seed)
+    elif benchmark_workloads:
+        state = _build_workload_state(benchmark_workloads[0], rng_seed)
+    elif load_state_path is not None:
         from .render.state_dump import StateDumpError, load_game_state
         try:
             state = load_game_state(load_state_path)
@@ -294,6 +385,9 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                 "dump (file list in python-gex/README.md)."
             ) from exc
 
+    if benchmark_frames is not None or stress_seconds is not None:
+        state.eeprom_persistence_enabled = False
+
     try:
         from .render.host import HostShell, PygameUnavailable
     except Exception as exc:  # pragma: no cover - import guard
@@ -303,8 +397,13 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         host = HostShell(
             scale=scale,
             title="gauntpy",
-            sound_dir=_enabled_sound_dir(sound_enabled and not uncapped),
-            uncapped=uncapped,
+            sound_dir=_enabled_sound_dir(
+                sound_enabled
+                and not uncapped
+                and benchmark_frames is None
+                and stress_seconds is None
+            ),
+            uncapped=uncapped or benchmark_frames is not None or stress_seconds is not None,
         )
     except PygameUnavailable as exc:
         raise SystemExit(
@@ -319,25 +418,119 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     # mainloop.g2mainloop's body: pump input, run a frame, present. The camera
     # (main_scroll_playfield) runs inside tick() and the compositor converts its
     # scroll to the viewport (I-23), so no runner-side camera fix-up is needed.
+    benchmark = None
+    warmup_remaining = 0
+    benchmark_workload_index = 0
+    benchmark_label = (
+        benchmark_workloads[0].name if benchmark_workloads else "selected-state"
+    )
+    if benchmark_frames is not None:
+        from .performance import BenchmarkRecorder
+
+        benchmark = BenchmarkRecorder()
+        warmup_remaining = min(30, benchmark_frames)
+
+    stress_started = perf_counter() if stress_seconds is not None else None
+    stress_phase = 0
+    stress_phase_seconds = (
+        min(2.0, stress_seconds / len(stress_workloads))
+        if stress_seconds is not None else None
+    )
+    next_stress_phase_at = stress_phase_seconds
+    stress_frames = 0
     try:
         while True:
+            loop_started = perf_counter()
+            if stress_started is not None:
+                elapsed = loop_started - stress_started
+                if elapsed >= stress_seconds:
+                    print(
+                        f"gauntpy stress test complete: {stress_frames} frames "
+                        f"in {elapsed:.3f} seconds"
+                    )
+                    break
+                if elapsed >= next_stress_phase_at:
+                    stress_phase = (stress_phase + 1) % len(stress_workloads)
+                    next_stress_phase_at += stress_phase_seconds
+                    state = _build_stress_state(
+                        stress_phase_indices[stress_phase], rng_seed,
+                    )
+                    _apply_operator_overrides(state, reduce_text=reduce_text)
+
+            input_started = perf_counter()
             host.wait_for_vblank(state)     # pump events + sample keyboard + coins
+            input_finished = perf_counter()
+            frame_updated = not host.paused
+            invariant_seconds = 0.0
             if not host.paused:
                 from .custom_scenario import apply_synthetic_events
 
+                update_started = perf_counter()
                 apply_synthetic_events(state)
                 tick(
                     state,
                     treasure_timer_paused=host.treasure_timer_paused,
                 )                           # one full 60 Hz game frame
+                update_finished = perf_counter()
+                if benchmark is not None or stress_started is not None:
+                    invariant_workload = (
+                        stress_workloads[stress_phase].name
+                        if stress_started is not None
+                        else benchmark_label
+                    )
+                    invariant_started = perf_counter()
+                    validate_runtime_invariants(
+                        state,
+                        workload=invariant_workload,
+                        frame=state.frame_counter,
+                    )
+                    invariant_seconds = perf_counter() - invariant_started
+            else:
+                update_started = update_finished = perf_counter()
             host.present(state)             # composite + flip
+            loop_finished = perf_counter()
+            stress_frames += stress_started is not None
+
+            if benchmark is not None:
+                if not frame_updated:
+                    continue
+                if warmup_remaining:
+                    warmup_remaining -= 1
+                    continue
+                benchmark.add(
+                    host_input_ms=(input_finished - input_started) * 1000.0,
+                    game_update_ms=(update_finished - update_started) * 1000.0,
+                    game_raster_ms=host.last_render_time_ms,
+                    display_flip_ms=host.last_display_flip_time_ms,
+                    complete_loop_ms=(
+                        loop_finished - loop_started - invariant_seconds
+                    ) * 1000.0,
+                )
+                if benchmark.frames >= benchmark_frames:
+                    from .performance import format_benchmark_report
+
+                    print(format_benchmark_report(
+                        benchmark,
+                        scale=scale,
+                        workload=benchmark_label if benchmark_workloads else None,
+                    ))
+                    if benchmark_workload_index + 1 >= len(benchmark_workloads):
+                        break
+                    benchmark_workload_index += 1
+                    workload = benchmark_workloads[benchmark_workload_index]
+                    benchmark_label = workload.name
+                    state = _build_workload_state(workload, rng_seed)
+                    state.eeprom_persistence_enabled = False
+                    _apply_operator_overrides(state, reduce_text=reduce_text)
+                    benchmark = BenchmarkRecorder()
+                    warmup_remaining = min(30, benchmark_frames)
     except SystemExit:
         pass
     finally:
         host.close()
 
 
-def main(argv: list[str] | None = None) -> None:
+def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="gauntpy-play", description="Walk a hero around a Gauntlet II maze."
     )
@@ -375,6 +568,14 @@ def main(argv: list[str] | None = None) -> None:
         help="load a declarative synthetic 32x32 maze fixture",
     )
     parser.add_argument(
+        "--workload", choices=("all", *(workload.name for workload in WORKLOADS)),
+        help="named benchmark/stress workload; 'all' runs the complete suite",
+    )
+    parser.add_argument(
+        "--list-workloads", action="store_true",
+        help="list deterministic benchmark/stress workloads and exit",
+    )
+    parser.add_argument(
         "--reduce-text", action="store_true",
         help="enable the ROM's Reduce Text operator setting",
     )
@@ -385,6 +586,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--uncapped", action="store_true",
         help="run without the host's 60 Hz frame-rate limit; disables sound",
+    )
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
+        "--benchmark", nargs="?", const=600, type=_positive_frame_count,
+        metavar="FRAMES",
+        help="benchmark host input, game update, raster, display flip, and the "
+             "complete uncapped loop (default: 600 measured frames)",
+    )
+    modes.add_argument(
+        "--stresstest", type=_positive_seconds, metavar="SECONDS",
+        help="run an uncapped timed workload cycling ROM-backed and synthetic "
+             "scenarios",
     )
     parser.add_argument(
         "--keys", type=_inventory_count, default=0,
@@ -399,6 +612,13 @@ def main(argv: list[str] | None = None) -> None:
         help="start direct play with a temporary power; may be repeated",
     )
     args = parser.parse_args(argv)
+    if args.list_workloads:
+        from .performance_workloads import format_workload_catalog
+
+        print(format_workload_catalog())
+        return
+    if args.workload and args.benchmark is None and args.stresstest is None:
+        parser.error("--workload requires --benchmark or --stresstest")
     if args.level is not None and args.level > 999 and args.maze is None:
         parser.error(
             "--level above 999 requires --maze; ordinary level progression "
@@ -425,6 +645,28 @@ def main(argv: list[str] | None = None) -> None:
             "--scenario cannot be combined with --load-state, --attract, --level, --maze, "
             "--character, --keys, --potions, --power, or --seed"
         )
+    if args.stresstest is not None and (
+        args.load_state or args.scenario or args.attract or args.level is not None
+        or args.maze is not None or args.character is not None
+        or args.keys or args.potions or args.power
+    ):
+        parser.error(
+            "--stresstest controls its own screens and cannot be combined with "
+            "--load-state, --scenario, --attract, --level, --maze, --character, --keys, "
+            "--potions, or --power"
+        )
+    if args.benchmark is not None and args.workload and (
+        args.load_state or args.scenario or args.attract or args.level is not None
+        or args.maze is not None or args.character is not None
+        or args.keys or args.potions or args.power
+    ):
+        parser.error(
+            "--benchmark with --workload controls its own state and cannot be "
+            "combined with --load-state, --scenario, --attract, --level, --maze, "
+            "--character, --keys, --potions, or --power"
+        )
+    if (args.benchmark is not None or args.stresstest is not None) and args.sound:
+        parser.error("--benchmark and --stresstest disable host sound playback")
 
     _ensure_rom_dir()
     if not os.environ.get("GEX_ROM_DIR"):
@@ -450,7 +692,18 @@ def main(argv: list[str] | None = None) -> None:
         keys=args.keys, potions=args.potions,
         powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power),
         load_state_path=args.load_state, scenario_path=args.scenario,
-        rng_seed=rng_seed, maze_number=args.maze)
+        rng_seed=rng_seed, maze_number=args.maze,
+        benchmark_frames=args.benchmark, stress_seconds=args.stresstest,
+        workload_name=args.workload)
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Run the graphical CLI, translating Ctrl-C into a quiet shell exit."""
+    try:
+        _main(argv)
+    except KeyboardInterrupt:
+        print("\ngauntpy interrupted", file=sys.stderr)
+        raise SystemExit(130) from None
 
 
 

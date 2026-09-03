@@ -169,6 +169,12 @@ the limiter's 16/17 ms cadence. A separate performance page graphs the latest
 120 render samples against the 16.67 ms budget line. Its Y axis is labeled in
 milliseconds at zero, midpoint, and a ceiling rounded to the next ten
 milliseconds.
+For fixed comparisons, the host's `--benchmark [FRAMES]` mode reports that same
+game-raster boundary beside the complete `tick`, total presentation through
+display flip, input/event work, and the enclosing uncapped iteration. Raster is
+nested inside presentation rather than added to it. The batch suppresses
+playback and EEPROM file writes, not game-side sound production or modeled
+time.
 Maze numbers and player coordinates likewise live on that host panel, never in
 modeled alpha RAM.
 

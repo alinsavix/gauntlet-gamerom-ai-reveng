@@ -41,10 +41,10 @@ class PlayfieldCache:
     shadow_image: object
     vram_generation: int = -1
     color_generation: int = -1
-    palette_signature: tuple = ()
     descriptor_signature: tuple[int, ...] = ()
     indexed_image: object | None = None
     decoded_tiles: dict[int, object] = dataclasses.field(default_factory=dict)
+    state: object | None = None
 
 
 def _vram_palette(state, number: int, *, shadow: bool = False):  # noqa: ANN001
@@ -142,40 +142,42 @@ def playfield_cache_for_state(
     state, cache: PlayfieldCache | None,  # noqa: ANN001
 ) -> PlayfieldCache:
     """Return a cache derived exclusively from descriptor and color RAM."""
-    palette_signature = (
-        tuple(state.playfield_color_ram),
-        tuple(state.playfield_shadow_color_ram),
+    same_state = cache is not None and cache.state is state
+    vram_unchanged = (
+        same_state and cache.vram_generation == state.playfield_generation
     )
-    descriptor_signature = tuple(
-        int(word) & 0xFFFF for word in state.playfield_ram
-    )
-    if (
-        cache is not None
-        and cache.vram_generation == state.playfield_generation
+    color_unchanged = (
+        same_state
         and cache.color_generation == state.playfield_color_generation
-        and cache.palette_signature == palette_signature
-    ):
+    )
+    if vram_unchanged and color_unchanged:
         return cache
-    if cache is not None and cache.vram_generation == state.playfield_generation:
+
+    if vram_unchanged:
+        descriptor_signature = cache.descriptor_signature
         indexed = cache.indexed_image
         decoded_tiles = cache.decoded_tiles
-    elif (
-        cache is not None
-        and cache.indexed_image is not None
-        and len(cache.descriptor_signature) == len(descriptor_signature)
-    ):
-        decoded_tiles = cache.decoded_tiles
-        indexed = _update_vram_indices(
-            state,
-            cache.indexed_image,
-            decoded_tiles,
-            cache.descriptor_signature,
-            descriptor_signature,
-        )
     else:
-        indexed, decoded_tiles = _build_vram_indices(
-            state, cache.decoded_tiles if cache is not None else None,
+        descriptor_signature = tuple(
+            int(word) & 0xFFFF for word in state.playfield_ram
         )
+        if (
+            cache is not None
+            and cache.indexed_image is not None
+            and len(cache.descriptor_signature) == len(descriptor_signature)
+        ):
+            decoded_tiles = cache.decoded_tiles
+            indexed = _update_vram_indices(
+                state,
+                cache.indexed_image,
+                decoded_tiles,
+                cache.descriptor_signature,
+                descriptor_signature,
+            )
+        else:
+            indexed, decoded_tiles = _build_vram_indices(
+                state, cache.decoded_tiles if cache is not None else None,
+            )
     normal = _colorize_indexed(indexed, state)
     shadow = _colorize_indexed(indexed, state, shadow=True)
     return PlayfieldCache(
@@ -183,31 +185,34 @@ def playfield_cache_for_state(
         shadow_image=shadow,
         vram_generation=state.playfield_generation,
         color_generation=state.playfield_color_generation,
-        palette_signature=palette_signature,
         descriptor_signature=descriptor_signature,
         indexed_image=indexed,
         decoded_tiles=decoded_tiles,
+        state=state,
     )
 
 
 class ShadowSource:
     """Sample the cached shadow raster by framebuffer coordinate."""
 
-    __slots__ = ("_px", "_w", "_h", "_ox", "_oy")
+    __slots__ = ("image", "_px", "_w", "_h", "_ox", "_oy")
 
     def __init__(
         self, shadow_image, scroll_x: int, scroll_y: int,
         dest_x: int, dest_y: int,
     ) -> None:
+        self.image = shadow_image
         self._px = shadow_image.load()
         self._w, self._h = shadow_image.size
         self._ox = scroll_x - dest_x
         self._oy = scroll_y - dest_y
 
     def at(self, fx: int, fy: int):
-        wx = (fx + self._ox) % self._w
-        wy = (fy + self._oy) % self._h
+        wx, wy = self.source_xy(fx, fy)
         return self._px[wx, wy]
+
+    def source_xy(self, fx: int, fy: int) -> tuple[int, int]:
+        return (fx + self._ox) % self._w, (fy + self._oy) % self._h
 
 
 def shadow_source_for(

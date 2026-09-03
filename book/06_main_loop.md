@@ -76,6 +76,22 @@ The mode also mutes host playback to keep accelerated execution independent of
 real-time recordings; sound commands are still produced. The arcade itself
 remains VBLANK-locked as described above.
 
+The same host boundary supports repeatable performance work. Benchmark mode
+runs a fixed number of uncapped frames after warming the caches and separately
+times event/input sampling, the complete game update, construction and blitting
+of the game raster, presentation through the display flip, and the enclosing
+host iteration. Those measurements nest rather than add: raster work is inside
+presentation, and presentation is inside the whole iteration. Sound playback
+and external EEPROM writes are disabled during the batch, but the game still
+produces sound commands and advances every frame counter normally.
+
+A timed stress mode changes the shape of the work without changing the loop.
+It repeatedly enters the ordinary TITLE, DEMO, dragon-level, moving-exit-level,
+SCORES, and LEGEND setup paths. Each displayed phase is therefore real modeled
+playfield, MOB, alpha, and color RAM produced by its usual owner, followed by
+the same complete update-and-presentation pair as interactive play. The stress
+cycler is a host test workload, not a seventh `game_mode`.
+
 ## One frame, twenty-nine calls
 
 The loop body is a straight line of twenty-nine direct calls. One of them,

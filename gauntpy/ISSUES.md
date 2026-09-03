@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2570 passed, 13 skipped** (gauntpy) and
+present the suites are clean: **2595 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,77 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-181 · unchanged display state repeated host raster work
+
+Profiling the raster/presentation boundary showed that alpha rendering dominated
+host CPU time: every visible nonblank cell rebuilt and colored the same 8x8 ROM
+glyph pixel by pixel on every frame. The alpha renderer now caches immutable
+glyph rasters by glyph, live four-color palette, and opacity, while continuing
+to read alpha/color RAM every frame. Animated palette writes naturally select a
+different cache entry, so this changes no modeled memory or display semantics.
+On the same headless macOS/Python 3.14 run, the 300-frame scale-4
+`benchmark-mobs` mean raster interval fell from 6.121 ms to 4.456 ms (27%);
+`rom-title` fell from 2.816 ms to 2.702 ms (4%).
+
+The playfield cache also rebuilt 4,096-word descriptor and 256-word palette
+signatures before discovering that both generation counters were unchanged.
+It now keys the fast path by the `GameState` object's identity and those
+generation counters, preserving safe cache replacement between benchmark
+workloads while computing a descriptor signature only when descriptor RAM
+actually changes.
+
+The interactive host now also supplies a persistent pygame-backed framebuffer.
+MOB tiles and alpha glyphs are cached as SDL surfaces and composited with
+whole-surface blits; only special shadow pixels retain the exact per-pixel
+playfield-shadow lookup. The PIL framebuffer remains the ROM-free reference
+backend. Across 120 evolving `benchmark-mobs` frames, both backends produced
+byte-identical RGBA output. On the same 600-frame scale-4 workload, the pygame
+backend reduced mean raster time from 4.338 ms to 2.779 ms (36%).
+
+### S-180 · escape-timeout exits corrupted the MOB depth chain
+
+The exact default `gauntpy-play --scale 4 --reduce-text` state (level 1, maze
+0, Elf, seed 0) failed at frame 21,008. The first divergent write was eight
+frames earlier: when `escape_timer` reached 0x5208, Python
+`maze_convert_walls_to_exits` unlinked each eligible wall and called
+`mob_create` with picture zero. That inserted 128 converted exits into the MOB
+depth chain. At frame 21,008 monster slot 298 moved toward converted slot 297;
+the zero picture made `moblist_insert` treat that already-linked destination as
+linkable, splicing slot 297 into the chain a second time and creating the
+reported cycle.
+
+ROM 0x5E80C instead calls `mob_place_tile(slot, 0x10)` at 0x5E852. The
+type-0x10 arm at 0x5F45E-0x5F4AE writes the `0x8001` floor/exit marker directly
+and never calls `mob_create`; a prior live movable-wall MOB is removed first.
+The `0x8001` marker remains outside the depth chain and is visibly occupied to
+movement. Python now uses that existing marker-placement path. Unit coverage
+pins both solid and movable-wall replacement, and a ROM-backed regression runs
+the exact idle state through frame 21,008.
+
+### S-179 · performance work had no stable benchmark or varied stress workload
+
+The F1 panel exposed only a rolling render sample from interactive play. It
+could not run a fixed measurement batch, separate simulation from host work,
+or exercise several representative display states without manual input.
+
+`gauntpy-play --benchmark [FRAMES]` now runs uncapped after up to 30 warm-up
+frames and reports mean, median, nearest-rank p95, minimum, and maximum for five
+explicit boundaries: host event/input sampling, one complete `tick`, the
+existing game-raster interval inside `HostShell.present`, display-flip
+synchronization alone, and the complete host iteration. The flip boundary is
+measured directly around `pygame.display.flip()` rather than as the cumulative
+`HostShell.present` duration, so it no longer includes game raster work. Host
+sound and external EEPROM writes are disabled so wall-time media and
+persistence I/O cannot contaminate the batch; modeled sound production and every
+game-frame call remain intact.
+
+`--stresstest SECONDS` adds a timed graphical workload that cycles through six
+normal ROM-backed setup paths: TITLE, DEMO, level 12 / maze 11 (dragon),
+level 16 / maze 15 (moving/fake exits), SCORES, and LEGEND. It advances one
+ordinary game update and presentation per uncapped iteration and rebuilds each
+phase through `start_attract_screen` or `build_state`, rather than injecting
+renderer-only stress art or changing modeled timer units.
 
 ### S-178 · an untracked mugger record survived into level 114
 

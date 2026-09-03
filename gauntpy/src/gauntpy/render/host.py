@@ -60,6 +60,7 @@ from .diagnostics import (
     derive_debug_events,
     render_debug_panel,
 )
+from .framebuffer import PygameFramebuffer
 from .debug_controls import (
     debug_add_key,
     debug_add_potion,
@@ -177,6 +178,8 @@ class HostShell:
         self._diagnostics_previous = None
         self._diagnostics_events: deque[str] = deque(maxlen=64)
         self._render_times_ms: deque[float] = deque(maxlen=120)
+        self.last_render_time_ms = 0.0
+        self.last_display_flip_time_ms = 0.0
         self.last_state_dump_path = None
 
         pygame.init()
@@ -191,6 +194,9 @@ class HostShell:
             audio_player = StaticSoundPlayer(pygame.mixer, sound_dir)
         self._audio_player = audio_player
         self.window = self._set_window_mode()
+        self._framebuffer = PygameFramebuffer(
+            pygame, LOGICAL_WIDTH, LOGICAL_HEIGHT,
+        )
         pygame.display.set_caption(title)
         self.clock = pygame.time.Clock()
         self._gamepad = None
@@ -426,15 +432,16 @@ class HostShell:
 
         fb, self._cache = render_frame(
             state, self._assets, cache=self._cache, paused=self.paused,
+            framebuffer=self._framebuffer,
         )
-        image = fb.image
-        surface = self._pygame.image.frombuffer(image.tobytes(), image.size, image.mode).convert_alpha()
+        surface = fb.surface
         if self.scale != 1:
             surface = self._pygame.transform.scale(
                 surface, (LOGICAL_WIDTH * self.scale, LOGICAL_HEIGHT * self.scale)
             )
         self.window.blit(surface, (0, 0))
         render_time_ms = round((perf_counter() - render_started) * 1000.0, 9)
+        self.last_render_time_ms = render_time_ms
         self._render_times_ms.append(render_time_ms)
         if self.diagnostics_visible:
             recent = tuple(self._render_times_ms)
@@ -465,7 +472,11 @@ class HostShell:
                 panel.tobytes(), panel.size, panel.mode,
             ).convert_alpha()
             self.window.blit(panel_surface, (LOGICAL_WIDTH * self.scale, 0))
+        flip_started = perf_counter()
         self._pygame.display.flip()
+        self.last_display_flip_time_ms = round(
+            (perf_counter() - flip_started) * 1000.0, 9,
+        )
 
     def skip_existing_audio(self, state: GameState) -> None:
         """Do not replay the historical sound log in a loaded state dump."""

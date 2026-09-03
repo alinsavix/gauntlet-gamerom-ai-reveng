@@ -2486,7 +2486,7 @@ Post-processing: calls `wall_remove_playfield_update` (0x5E888) or `wall_place_p
 Two independent leaf routines follow this function in ROM and must not be treated as cyclic-wall tail blocks:
 
 - `maze_place_object_types` (0x5E7A6) takes one longword stack argument whose low byte is an object type. It scans MOB slots 0x20–0x3FF, accepts `mob_link >> 10` equal to either that type or `type - 3`, optionally rejects off-screen tiles when level-flags byte 4 bit 2 is set, and calls `mob_place_tile(slot, 0)` for each match. **Corrected:** it reports a match only for the `type - 3` arm — it returns 1 when at least one type-3-relative slot was converted, and otherwise 0, so a run that only matched the literal type still returns 0. During level setup LFLAG3 bit 4 selects one random type 0x0A–0x0C; bit 5 selects one and then its next cyclic neighbor, removing one or two wall families before play. `player_tile_interact` calls the same routine after replacing a stepped-on trap.
-- `maze_convert_walls_to_exits` (0x5E80C) takes no arguments and scans the same MOB-slot range. It converts picture 0x20F6 and generic wall markers (`mob_picture == 0x8000`) other than forcefields (type 0x3F) by calling `mob_place_tile(slot, 0x10)`. It returns 1 if it converted at least one slot. `main_move_players` calls it when `escape_timer` reaches 0x5208 (21,000 frames), producing the documented all-walls-become-exits escape behavior.
+- `maze_convert_walls_to_exits` (0x5E80C) takes no arguments and scans the same MOB-slot range. It converts picture 0x20F6 and generic wall markers (`mob_picture == 0x8000`) other than forcefields (type 0x3F) by calling `mob_place_tile(slot, 0x10)`. Type 0x10 takes `mob_place_tile`'s marker arm at 0x5F45E-0x5F4AE: it removes a prior live movable-wall record when necessary, then writes picture 0x8001, cell H/V, and the EXIT type directly, without `mob_create` or depth-chain insertion. That nonzero unlinked marker remains occupied to movement probes. It returns 1 if it converted at least one slot. `main_move_players` calls it when `escape_timer` reaches 0x5208 (21,000 frames), producing the documented all-walls-become-exits escape behavior.
 
 **Confidence: Verified.** The two visibility pairs use exact -1/0
 predicates. `tile_on_screen_d4` and stack wrapper `tile_on_screen_test` return
@@ -2791,6 +2791,13 @@ The removal APIs intentionally differ:
   depth-placed effects. It adds one to the argument, removes that physical
   slot, and clears only its depth key and link/state words; picture/H/V remain
   for the caller to clear or replace.
+
+`moblist_insert`'s picture guard is not a general membership test. It admits
+only picture 0 or 0x8000 because its two callers run before publishing a normal
+MOB over an empty cell or wall marker. Floor-level markers such as EXIT use
+picture 0x8001 and stay outside the chain. Replacing that marker producer with
+picture-zero `mob_create` creates a linked record that later movement mistakes
+for an empty destination and can insert a second time.
 
 ---
 
