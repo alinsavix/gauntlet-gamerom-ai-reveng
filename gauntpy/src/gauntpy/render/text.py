@@ -133,22 +133,20 @@ def draw_glyph_run(
 def draw_alpha_glyph(image, x: int, y: int, code: int, palette, *,
                      opaque: bool) -> None:
     """Draw one hardware alpha cell, with a PIL-only ROM-free fallback."""
-    if opaque:
-        from PIL import ImageDraw
-
-        ImageDraw.Draw(image).rectangle(
-            [x, y, x + GLYPH_W - 1, y + GLYPH_H - 1], fill=palette[0],
-        )
     if code == 0:
+        if opaque:
+            image.paste(palette[0], (x, y, x + GLYPH_W, y + GLYPH_H))
         return
 
     if _rom_glyphs() is not None:
-        _blit_glyph(
-            image, _raw_glyph_fn(code & 0x3FF), x, y, palette[3], 1,
-            palette=palette, opaque=opaque,
+        tile = _alpha_rom_tile(code & 0x3FF, tuple(palette), opaque)
+        image.paste(
+            tile, (x, y), None if opaque else tile,
         )
         return
 
+    if opaque:
+        image.paste(palette[0], (x, y, x + GLYPH_W, y + GLYPH_H))
     large_tile = _large_fallback_tiles().get(code)
     if large_tile is not None:
         image.paste(
@@ -163,6 +161,23 @@ def draw_alpha_glyph(image, x: int, y: int, code: int, palette, *,
         code, "·",
     )
     _draw_text_pil(image, x, y, fallback, palette[3], 1)
+
+
+@lru_cache(maxsize=4096)
+def _alpha_rom_tile(code: int, palette: tuple, opaque: bool):
+    """Colorize one ROM alpha cell once, then reuse its immutable raster."""
+    from PIL import Image
+
+    glyph = _raw_glyph_fn(code)
+    transparent = (0, 0, 0, 0)
+    pixels = [
+        palette[value] if value else palette[0] if opaque else transparent
+        for row in glyph
+        for value in row
+    ]
+    tile = Image.new("RGBA", (GLYPH_W, GLYPH_H))
+    tile.putdata(pixels)
+    return tile
 
 
 @lru_cache(maxsize=1)

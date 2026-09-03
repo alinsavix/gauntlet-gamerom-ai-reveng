@@ -186,6 +186,20 @@ def test_color_ram_write_rebuilds_pixels_without_descriptor_change(monkeypatch):
     assert second.image.getpixel((0, 0)) != first.image.getpixel((0, 0))
 
 
+def test_cache_replacement_with_matching_generations_reads_the_new_state(monkeypatch):
+    _fake_tile_decode(monkeypatch)
+    first_state = _renderable_state()
+    first = playfield_cache_for_state(first_state, None)
+    second_state = _renderable_state()
+    second_state.playfield_ram[0] = 14
+
+    second = playfield_cache_for_state(second_state, first)
+
+    assert second is not first
+    assert second.state is second_state
+    assert second.image.getpixel((0, 0)) != first.image.getpixel((0, 0))
+
+
 def test_palette_only_update_recolors_without_decode_or_index_rebuild(monkeypatch):
     decode_calls = []
     monkeypatch.setattr(

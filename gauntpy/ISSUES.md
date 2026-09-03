@@ -63,6 +63,25 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-181 · unchanged display state repeated host raster work
+
+Profiling the raster/presentation boundary showed that alpha rendering dominated
+host CPU time: every visible nonblank cell rebuilt and colored the same 8x8 ROM
+glyph pixel by pixel on every frame. The alpha renderer now caches immutable
+glyph rasters by glyph, live four-color palette, and opacity, while continuing
+to read alpha/color RAM every frame. Animated palette writes naturally select a
+different cache entry, so this changes no modeled memory or display semantics.
+On the same headless macOS/Python 3.14 run, the 300-frame scale-4
+`benchmark-mobs` mean raster interval fell from 6.121 ms to 4.456 ms (27%);
+`rom-title` fell from 2.816 ms to 2.702 ms (4%).
+
+The playfield cache also rebuilt 4,096-word descriptor and 256-word palette
+signatures before discovering that both generation counters were unchanged.
+It now keys the fast path by the `GameState` object's identity and those
+generation counters, preserving safe cache replacement between benchmark
+workloads while computing a descriptor signature only when descriptor RAM
+actually changes.
+
 ### S-180 · escape-timeout exits corrupted the MOB depth chain
 
 The exact default `gauntpy-play --scale 4 --reduce-text` state (level 1, maze
