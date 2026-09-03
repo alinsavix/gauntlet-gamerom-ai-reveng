@@ -235,7 +235,9 @@ does not imply the same exit will be real.
 There is also a mercy rule. A timer counts frames since anyone took damage or
 anything died. If it reaches 21,000 frames, close to six minutes of genuine
 stalemate, the game converts every ordinary wall on the level into an exit.
-The maze gives up before you do.
+These exits are floor-level `0x8001` markers rather than active sprites: they
+remain outside the depth chain while their nonzero marker tells movement that
+the cell holds something to interact with. The maze gives up before you do.
 
 ## Traps and special floors
 

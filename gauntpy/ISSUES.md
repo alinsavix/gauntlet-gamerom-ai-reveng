@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2582 passed, 13 skipped** (gauntpy) and
+present the suites are clean: **2595 passed, 1 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,26 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-180 · escape-timeout exits corrupted the MOB depth chain
+
+The exact default `gauntpy-play --scale 4 --reduce-text` state (level 1, maze
+0, Elf, seed 0) failed at frame 21,008. The first divergent write was eight
+frames earlier: when `escape_timer` reached 0x5208, Python
+`maze_convert_walls_to_exits` unlinked each eligible wall and called
+`mob_create` with picture zero. That inserted 128 converted exits into the MOB
+depth chain. At frame 21,008 monster slot 298 moved toward converted slot 297;
+the zero picture made `moblist_insert` treat that already-linked destination as
+linkable, splicing slot 297 into the chain a second time and creating the
+reported cycle.
+
+ROM 0x5E80C instead calls `mob_place_tile(slot, 0x10)` at 0x5E852. The
+type-0x10 arm at 0x5F45E-0x5F4AE writes the `0x8001` floor/exit marker directly
+and never calls `mob_create`; a prior live movable-wall MOB is removed first.
+The `0x8001` marker remains outside the depth chain and is visibly occupied to
+movement. Python now uses that existing marker-placement path. Unit coverage
+pins both solid and movable-wall replacement, and a ROM-backed regression runs
+the exact idle state through frame 21,008.
 
 ### S-179 · performance work had no stable benchmark or varied stress workload
 

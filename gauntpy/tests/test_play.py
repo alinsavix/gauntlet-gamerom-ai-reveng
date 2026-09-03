@@ -755,6 +755,37 @@ class TestBuildState:
         assert state.frame_counter == 120
         assert state.players[0].active
 
+    def test_seed_zero_level_one_survives_the_idle_escape_conversion(self):
+        """The default Elf/reduced-text run stays valid past frame 21,008.
+
+        Frame 21,000 converts every eligible wall through ``mob_place_tile``.
+        The former picture-zero ``mob_create`` approximation put those exits in
+        the depth chain, and a monster moving at frame 21,008 linked one twice.
+        """
+        from gauntpy.mainloop import tick
+        from gauntpy.maze import TILE_MARKER_PICTURE
+        from gauntpy.subsystems.players import _ESCAPE_TIMER_LIMIT
+
+        state = play.build_state(1, Character.ELF, rng_seed=0)
+        play._apply_operator_overrides(state, reduce_text=True)
+
+        for _ in range(_ESCAPE_TIMER_LIMIT + 8):
+            tick(state)
+
+        chain = list(state.mobs.iter_chain())
+        converted_exits = [
+            slot for slot in range(32, 1024)
+            if state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+        ]
+        assert state.frame_counter == _ESCAPE_TIMER_LIMIT + 8
+        assert len(chain) == len(set(chain))
+        assert converted_exits
+        assert all(
+            state.mobs.picture[slot] == TILE_MARKER_PICTURE
+            for slot in converted_exits
+        )
+        assert not set(converted_exits) & set(chain)
+
     def test_f4_state_can_resume_deterministically(self, tmp_path):
         from gauntpy.coords import hpos_x
         from gauntpy.mainloop import tick

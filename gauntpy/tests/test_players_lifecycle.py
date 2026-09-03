@@ -27,6 +27,7 @@ checked against ``row76.bin`` rather than the prose docs:
 
 from __future__ import annotations
 
+from gauntpy import maze as gm
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.coords import hpos_x, native_v, vpos_y
 from gauntpy.coords import decode_hpos, decode_vpos_at_y, slot_to_pixels
@@ -1737,21 +1738,25 @@ class TestMazeConvertWallsToExits:
 
     @staticmethod
     def _wall(state: GameState, slot: int, obj_type: int) -> None:
-        state.mobs.create(slot, tile=0x8000, hpos=0, vpos=0, obj_type=obj_type)
+        gm.maze_place_object(state, slot, obj_type, 1)
 
     def test_converts_solid_walls_to_exits(self):
         state = _active_state()
         self._wall(state, 100, int(MazeObjIds.WALL_REGULAR))
         assert gp.maze_convert_walls_to_exits(state) == 1
         assert state.mobs.obj_type(100) == int(MazeObjIds.EXIT)
-        assert state.mobs.picture[100] == 0
+        assert state.mobs.picture[100] == gm.TILE_MARKER_PICTURE
+        assert not state.mobs.is_linked(100)
 
     def test_converts_movable_walls_by_their_base_picture(self):
         state = _active_state()
         state.mobs.create(101, tile=0x20F6, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.WALL_MOVABLE))
+        assert state.mobs.is_linked(101)
         assert gp.maze_convert_walls_to_exits(state) == 1
         assert state.mobs.obj_type(101) == int(MazeObjIds.EXIT)
+        assert state.mobs.picture[101] == gm.TILE_MARKER_PICTURE
+        assert not state.mobs.is_linked(101)
 
     def test_conversion_updates_the_rendered_descriptor(self):
         from types import SimpleNamespace
