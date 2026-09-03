@@ -177,6 +177,7 @@ class HostShell:
         self._diagnostics_previous = None
         self._diagnostics_events: deque[str] = deque(maxlen=64)
         self._render_times_ms: deque[float] = deque(maxlen=120)
+        self.last_render_time_ms = 0.0
         self.last_state_dump_path = None
 
         pygame.init()
@@ -435,6 +436,7 @@ class HostShell:
             )
         self.window.blit(surface, (0, 0))
         render_time_ms = round((perf_counter() - render_started) * 1000.0, 9)
+        self.last_render_time_ms = render_time_ms
         self._render_times_ms.append(render_time_ms)
         if self.diagnostics_visible:
             recent = tuple(self._render_times_ms)

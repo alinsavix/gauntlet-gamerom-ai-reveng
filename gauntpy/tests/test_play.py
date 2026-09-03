@@ -78,6 +78,19 @@ class TestArguments:
             with pytest.raises(argparse.ArgumentTypeError):
                 play._inventory_count(bad)
 
+    def test_performance_durations_must_be_positive(self):
+        import argparse
+
+        assert play._positive_frame_count("600") == 600
+        assert play._positive_seconds("1.5") == 1.5
+        for parser, bad in (
+            (play._positive_frame_count, "0"),
+            (play._positive_seconds, "0"),
+            (play._positive_seconds, "-1"),
+        ):
+            with pytest.raises(argparse.ArgumentTypeError):
+                parser(bad)
+
     def test_bad_level_exits_rather_than_loading_maze_zero(self):
         with pytest.raises(SystemExit):
             play.main(["--level", "0"])
@@ -140,6 +153,129 @@ class TestArguments:
         assert calls[1]["uncapped"] is False
         assert calls[2]["sound_enabled"] is False
         assert calls[2]["uncapped"] is True
+
+    def test_performance_modes_are_forwarded_to_the_runner(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        calls = []
+        monkeypatch.setattr(play, "run", lambda **kwargs: calls.append(kwargs))
+
+        play.main(["--benchmark"])
+        play.main(["--benchmark", "25"])
+        play.main(["--stresstest", "3.5"])
+
+        assert calls[0]["benchmark_frames"] == 600
+        assert calls[1]["benchmark_frames"] == 25
+        assert calls[2]["stress_seconds"] == 3.5
+
+    @pytest.mark.parametrize("mode", ["--benchmark", "--stresstest"])
+    def test_performance_modes_reject_sound(self, monkeypatch, mode):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        argv = [mode, "2", "--sound"]
+
+        with pytest.raises(SystemExit):
+            play.main(argv)
+
+    def test_stress_mode_owns_its_screen_selection(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+
+        for options in (["--level", "12"], ["--scenario", "fixture.gsc"]):
+            with pytest.raises(SystemExit):
+                play.main(["--stresstest", "2", *options])
+
+    def test_benchmark_loop_excludes_warmup_and_uses_host_raster_timing(
+        self, monkeypatch, capsys,
+    ):
+        from gauntpy.render import host as host_module
+
+        state = GameState()
+        calls = {"wait": 0, "present": 0, "tick": 0}
+
+        class FakeHost:
+            paused = False
+            treasure_timer_paused = False
+            last_render_time_ms = 3.25
+
+            def __init__(self, **kwargs):
+                assert kwargs["uncapped"] is True
+
+            def wait_for_vblank(self, current):
+                assert current is state
+                calls["wait"] += 1
+
+            def present(self, current):
+                assert current is state
+                calls["present"] += 1
+
+            def close(self):
+                pass
+
+        clock_value = 0.0
+
+        def clock():
+            nonlocal clock_value
+            clock_value += 0.001
+            return clock_value
+
+        monkeypatch.setattr(play, "build_state", lambda *_args, **_kwargs: state)
+        monkeypatch.setattr(play, "tick", lambda *_args, **_kwargs: calls.__setitem__(
+            "tick", calls["tick"] + 1,
+        ))
+        monkeypatch.setattr(play, "perf_counter", clock)
+        monkeypatch.setattr(host_module, "HostShell", FakeHost)
+
+        play.run(benchmark_frames=2, scale=1)
+
+        assert calls == {"wait": 4, "present": 4, "tick": 4}
+        assert state.eeprom_persistence_enabled is False
+        output = capsys.readouterr().out
+        assert "gauntpy benchmark: 2 frames at scale 1" in output
+        assert "   3.250" in output
+
+    def test_stress_loop_advances_each_phase_in_order(
+        self, monkeypatch, capsys,
+    ):
+        from gauntpy.render import host as host_module
+
+        built_phases = []
+
+        class FakeHost:
+            paused = False
+            treasure_timer_paused = False
+
+            def __init__(self, **kwargs):
+                assert kwargs["uncapped"] is True
+
+            def wait_for_vblank(self, _state):
+                pass
+
+            def present(self, _state):
+                pass
+
+            def close(self):
+                pass
+
+        clock_value = 0.0
+
+        def clock():
+            nonlocal clock_value
+            clock_value += 0.01
+            return clock_value
+
+        def build_phase(index, _seed):
+            built_phases.append(index)
+            return GameState(eeprom_persistence_enabled=False)
+
+        monkeypatch.setattr(play, "_build_stress_state", build_phase)
+        monkeypatch.setattr(play, "tick", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(play, "perf_counter", clock)
+        monkeypatch.setattr(host_module, "HostShell", FakeHost)
+
+        play.run(stress_seconds=1.0, scale=1)
+
+        assert built_phases[:len(play._STRESS_PHASES)] == list(
+            range(len(play._STRESS_PHASES))
+        )
+        assert "stress test complete" in capsys.readouterr().out
 
     def test_muted_default_does_not_probe_the_sound_library(self, monkeypatch):
         monkeypatch.setattr(

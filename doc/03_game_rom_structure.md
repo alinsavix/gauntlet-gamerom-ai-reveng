@@ -226,6 +226,24 @@ runner mode and forces host sound playback off; modeled sound commands remain
 unchanged. It is not a claim that the cabinet free-runs or a model of additional
 VBLANK interrupts.
 
+For host performance comparisons, `gauntpy-play --benchmark [FRAMES]` removes
+that wait and measures five named boundaries after a short warm-up: host
+event/input sampling, one complete `tick`, game-raster composition/conversion/
+scale/blit, total presentation through display flip, and the enclosing host
+iteration. These intervals are nested: raster is part of presentation, which is
+part of the complete loop. The harness therefore reports them independently
+rather than summing them. It also disables static playback and external EEPROM
+writes while retaining modeled sound commands and the literal one-update-per-
+iteration game timeline.
+
+`--stresstest SECONDS` uses the same uncapped boundary but changes complete
+modeled states through their ordinary setup owners. Its cycle covers TITLE,
+DEMO, level 12 / maze 11, level 16 / maze 15, SCORES, and LEGEND, exercising
+the title MOB program, full demo simulation, dragon and living-exit gameplay,
+and the maze-103 alpha/playfield attract pages. This is a host workload, not a
+new cabinet mode: each phase still executes one full ROM-shaped frame body
+before one presentation.
+
 **Confidence: Verified.** The reset veneer at 0x40000 reaches `game_start`
 (0x4014C). That entry installs three initial playfield-color pointers at
 0x904036/3A/3E, installs forcefield delay profile 0 (ROM 0x571DA) at

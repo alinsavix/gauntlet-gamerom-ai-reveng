@@ -23,6 +23,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from time import perf_counter
 
 from .constants import Character, GameMode, MazeObjIds, PlayerStatus
 from .coords import encode_hpos, encode_vpos_at_y, pack_slot, slot_to_pixels
@@ -83,6 +84,20 @@ def _inventory_count(value: str) -> int:
     if not 0 <= count <= 255:
         raise argparse.ArgumentTypeError("inventory count must be between 0 and 255")
     return count
+
+
+def _positive_frame_count(value: str) -> int:
+    count = int(value)
+    if count < 1:
+        raise argparse.ArgumentTypeError("frame count must be 1 or greater")
+    return count
+
+
+def _positive_seconds(value: str) -> float:
+    seconds = float(value)
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError("seconds must be greater than zero")
+    return seconds
 
 
 def _ensure_rom_dir() -> None:
@@ -237,6 +252,39 @@ def build_state(
     return state
 
 
+_STRESS_PHASES = (
+    ("TITLE attract", int(GameMode.TITLE), None),
+    ("DEMO gameplay", int(GameMode.DEMO), None),
+    ("level 12 dragon maze", None, (12, 11)),
+    ("level 16 moving/fake exits", None, (16, 15)),
+    ("SCORES over maze 103", int(GameMode.SCORES), None),
+    ("LEGEND over maze 103", int(GameMode.LEGEND), None),
+)
+
+
+def _build_stress_state(phase_index: int, rng_seed: int) -> GameState:
+    """Construct one ROM-backed workload through its normal setup routine."""
+    name, attract_mode, level_maze = _STRESS_PHASES[phase_index]
+    if attract_mode is not None:
+        from .subsystems.attract import start_attract_screen
+        from .subsystems.eeprom import GAME_DEFAULT_SETTINGS
+
+        state = GameState(
+            game_settings=GAME_DEFAULT_SETTINGS,
+            rng=GameRandom(rng_seed),
+            eeprom_persistence_enabled=False,
+        )
+        start_attract_screen(state, attract_mode)
+    else:
+        level, maze_number = level_maze
+        state = build_state(
+            level, int(Character.ELF), maze_number=maze_number, rng_seed=rng_seed,
+        )
+        state.eeprom_persistence_enabled = False
+    print(f"gauntpy stress phase: {name}")
+    return state
+
+
 def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         from_attract: bool = False,
         reduce_text: bool = False,
@@ -246,7 +294,9 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         powers: tuple[int, ...] = (),
         load_state_path: str | Path | None = None,
         scenario_path: str | Path | None = None,
-        rng_seed: int = 0, maze_number: int | None = None) -> None:
+        rng_seed: int = 0, maze_number: int | None = None,
+        benchmark_frames: int | None = None,
+        stress_seconds: float | None = None) -> None:
     """Open a window and run the game loop until the player closes it.
 
     Two entries: the default mid-level drop (``build_state``), or -- with
@@ -259,7 +309,9 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     """
     _ensure_rom_dir()
 
-    if load_state_path is not None:
+    if stress_seconds is not None:
+        state = _build_stress_state(0, rng_seed)
+    elif load_state_path is not None:
         from .render.state_dump import StateDumpError, load_game_state
         try:
             state = load_game_state(load_state_path)
@@ -294,6 +346,9 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                 "dump (file list in python-gex/README.md)."
             ) from exc
 
+    if benchmark_frames is not None:
+        state.eeprom_persistence_enabled = False
+
     try:
         from .render.host import HostShell, PygameUnavailable
     except Exception as exc:  # pragma: no cover - import guard
@@ -303,8 +358,13 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         host = HostShell(
             scale=scale,
             title="gauntpy",
-            sound_dir=_enabled_sound_dir(sound_enabled and not uncapped),
-            uncapped=uncapped,
+            sound_dir=_enabled_sound_dir(
+                sound_enabled
+                and not uncapped
+                and benchmark_frames is None
+                and stress_seconds is None
+            ),
+            uncapped=uncapped or benchmark_frames is not None or stress_seconds is not None,
         )
     except PygameUnavailable as exc:
         raise SystemExit(
@@ -319,18 +379,77 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     # mainloop.g2mainloop's body: pump input, run a frame, present. The camera
     # (main_scroll_playfield) runs inside tick() and the compositor converts its
     # scroll to the viewport (I-23), so no runner-side camera fix-up is needed.
+    benchmark = None
+    warmup_remaining = 0
+    if benchmark_frames is not None:
+        from .performance import BenchmarkRecorder
+
+        benchmark = BenchmarkRecorder()
+        warmup_remaining = min(30, benchmark_frames)
+
+    stress_started = perf_counter() if stress_seconds is not None else None
+    stress_phase = 0
+    stress_phase_seconds = (
+        min(2.0, stress_seconds / len(_STRESS_PHASES))
+        if stress_seconds is not None else None
+    )
+    next_stress_phase_at = stress_phase_seconds
+    stress_frames = 0
     try:
         while True:
+            loop_started = perf_counter()
+            if stress_started is not None:
+                elapsed = loop_started - stress_started
+                if elapsed >= stress_seconds:
+                    print(
+                        f"gauntpy stress test complete: {stress_frames} frames "
+                        f"in {elapsed:.3f} seconds"
+                    )
+                    break
+                if elapsed >= next_stress_phase_at:
+                    stress_phase = (stress_phase + 1) % len(_STRESS_PHASES)
+                    next_stress_phase_at += stress_phase_seconds
+                    state = _build_stress_state(stress_phase, rng_seed)
+
+            input_started = perf_counter()
             host.wait_for_vblank(state)     # pump events + sample keyboard + coins
+            input_finished = perf_counter()
+            frame_updated = not host.paused
             if not host.paused:
                 from .custom_scenario import apply_synthetic_events
 
+                update_started = perf_counter()
                 apply_synthetic_events(state)
                 tick(
                     state,
                     treasure_timer_paused=host.treasure_timer_paused,
                 )                           # one full 60 Hz game frame
+                update_finished = perf_counter()
+            else:
+                update_started = update_finished = perf_counter()
+            present_started = perf_counter()
             host.present(state)             # composite + flip
+            loop_finished = perf_counter()
+            stress_frames += stress_started is not None
+
+            if benchmark is not None:
+                if not frame_updated:
+                    continue
+                if warmup_remaining:
+                    warmup_remaining -= 1
+                    continue
+                benchmark.add(
+                    host_input_ms=(input_finished - input_started) * 1000.0,
+                    game_update_ms=(update_finished - update_started) * 1000.0,
+                    game_raster_ms=host.last_render_time_ms,
+                    presentation_ms=(loop_finished - present_started) * 1000.0,
+                    complete_loop_ms=(loop_finished - loop_started) * 1000.0,
+                )
+                if benchmark.frames >= benchmark_frames:
+                    from .performance import format_benchmark_report
+
+                    print(format_benchmark_report(benchmark, scale=scale))
+                    break
     except SystemExit:
         pass
     finally:
@@ -386,6 +505,18 @@ def main(argv: list[str] | None = None) -> None:
         "--uncapped", action="store_true",
         help="run without the host's 60 Hz frame-rate limit; disables sound",
     )
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
+        "--benchmark", nargs="?", const=600, type=_positive_frame_count,
+        metavar="FRAMES",
+        help="benchmark host input, game update, raster, presentation, and the "
+             "complete uncapped loop (default: 600 measured frames)",
+    )
+    modes.add_argument(
+        "--stresstest", type=_positive_seconds, metavar="SECONDS",
+        help="run an uncapped timed workload cycling ROM-backed gameplay and "
+             "attract screens",
+    )
     parser.add_argument(
         "--keys", type=_inventory_count, default=0,
         help="start direct play with this many keys (0-255)",
@@ -425,6 +556,18 @@ def main(argv: list[str] | None = None) -> None:
             "--scenario cannot be combined with --load-state, --attract, --level, --maze, "
             "--character, --keys, --potions, --power, or --seed"
         )
+    if args.stresstest is not None and (
+        args.load_state or args.scenario or args.attract or args.level is not None
+        or args.maze is not None or args.character is not None
+        or args.keys or args.potions or args.power
+    ):
+        parser.error(
+            "--stresstest controls its own screens and cannot be combined with "
+            "--load-state, --scenario, --attract, --level, --maze, --character, --keys, "
+            "--potions, or --power"
+        )
+    if (args.benchmark is not None or args.stresstest is not None) and args.sound:
+        parser.error("--benchmark and --stresstest disable host sound playback")
 
     _ensure_rom_dir()
     if not os.environ.get("GEX_ROM_DIR"):
@@ -450,7 +593,8 @@ def main(argv: list[str] | None = None) -> None:
         keys=args.keys, potions=args.potions,
         powers=tuple(int(_TEMPORARY_POWERS[name]) for name in args.power),
         load_state_path=args.load_state, scenario_path=args.scenario,
-        rng_seed=rng_seed, maze_number=args.maze)
+        rng_seed=rng_seed, maze_number=args.maze,
+        benchmark_frames=args.benchmark, stress_seconds=args.stresstest)
 
 
 

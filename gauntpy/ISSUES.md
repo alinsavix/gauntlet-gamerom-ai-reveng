@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2570 passed, 13 skipped** (gauntpy) and
+present the suites are clean: **2582 passed, 13 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,28 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-179 · performance work had no stable benchmark or varied stress workload
+
+The F1 panel exposed only a rolling render sample from interactive play. It
+could not run a fixed measurement batch, separate simulation from host work,
+or exercise several representative display states without manual input.
+
+`gauntpy-play --benchmark [FRAMES]` now runs uncapped after up to 30 warm-up
+frames and reports mean, median, nearest-rank p95, minimum, and maximum for five
+explicit boundaries: host event/input sampling, one complete `tick`, the
+existing game-raster interval inside `HostShell.present`, total presentation
+through display flip, and the complete host iteration. Host sound and external
+EEPROM writes are disabled so wall-time media and persistence I/O cannot
+contaminate the batch; modeled sound production and every game-frame call
+remain intact.
+
+`--stresstest SECONDS` adds a timed graphical workload that cycles through six
+normal ROM-backed setup paths: TITLE, DEMO, level 12 / maze 11 (dragon),
+level 16 / maze 15 (moving/fake exits), SCORES, and LEGEND. It advances one
+ordinary game update and presentation per uncapped iteration and rebuilds each
+phase through `start_attract_screen` or `build_state`, rather than injecting
+renderer-only stress art or changing modeled timer units.
 
 ### S-178 · an untracked mugger record survived into level 114
 

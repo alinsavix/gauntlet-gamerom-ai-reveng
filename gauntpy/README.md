@@ -54,6 +54,34 @@ multi-channel recording cannot separate its individual stems.
 This consumes accepted `sound_log` bytes only; it does not alter the game's
 sound ring, timing, or modeled state.
 
+For repeatable performance work, run a fixed number of measured frames:
+
+```bash
+uv run --all-extras gauntpy-play --benchmark
+uv run --all-extras gauntpy-play --benchmark 2000 --scale 1
+```
+
+`--benchmark [FRAMES]` defaults to 600 measured frames after up to 30 warm-up
+frames. It disables the limiter, sound playback, and external EEPROM writes,
+then reports mean, median, nearest-rank p95, minimum, and maximum durations for
+host input/event sampling, the complete game update, game-raster composition
+through window blitting, total presentation through display flip, and the
+complete host loop. The raster interval is nested inside presentation, and
+both are nested inside the complete loop; they are not additive columns.
+
+Use the timed graphical stress workload to exercise different display and
+simulation shapes continuously:
+
+```bash
+uv run --all-extras gauntpy-play --stresstest 60
+```
+
+`--stresstest SECONDS` runs uncapped and silent, cycling through the ROM-backed
+TITLE, DEMO, dragon level, moving/fake-exit level, SCORES, and LEGEND setup
+paths. Every phase is built by the same game-side screen or level routine used
+by normal play. The harness changes whole modeled states only at phase
+boundaries; it does not add stress-only content to video RAM or rendering.
+
 | Key | Action |
 |-----|--------|
 | **arrow keys** | move |
