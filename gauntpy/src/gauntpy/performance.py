@@ -63,7 +63,9 @@ class BenchmarkRecorder:
         return len(self.complete_loop_ms)
 
 
-def format_benchmark_report(recorder: BenchmarkRecorder, *, scale: int) -> str:
+def format_benchmark_report(
+    recorder: BenchmarkRecorder, *, scale: int, workload: str | None = None,
+) -> str:
     """Return a stable, terminal-friendly report for performance comparisons."""
     rows = (
         ("host input", summarize_timings(recorder.host_input_ms)),
@@ -72,8 +74,10 @@ def format_benchmark_report(recorder: BenchmarkRecorder, *, scale: int) -> str:
         ("presentation", summarize_timings(recorder.presentation_ms)),
         ("complete loop", summarize_timings(recorder.complete_loop_ms)),
     )
+    workload_suffix = f", workload {workload}" if workload else ""
     lines = [
-        f"gauntpy benchmark: {recorder.frames} frames at scale {scale}",
+        f"gauntpy benchmark: {recorder.frames} frames at scale {scale}"
+        f"{workload_suffix}",
         "interval          mean ms  median ms   p95 ms   min ms   max ms",
     ]
     for name, summary in rows:

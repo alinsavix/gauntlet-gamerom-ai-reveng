@@ -162,10 +162,44 @@ class TestArguments:
         play.main(["--benchmark"])
         play.main(["--benchmark", "25"])
         play.main(["--stresstest", "3.5"])
+        play.main(["--benchmark", "25", "--workload", "benchmark-mobs"])
 
         assert calls[0]["benchmark_frames"] == 600
         assert calls[1]["benchmark_frames"] == 25
         assert calls[2]["stress_seconds"] == 3.5
+        assert calls[3]["workload_name"] == "benchmark-mobs"
+
+    def test_workload_catalog_does_not_require_roms(self, monkeypatch, capsys):
+        monkeypatch.delenv("GEX_ROM_DIR", raising=False)
+        monkeypatch.setattr(
+            play, "run", lambda **_kwargs: pytest.fail("listing must not run the game"),
+        )
+
+        play.main(["--list-workloads"])
+
+        output = capsys.readouterr().out
+        assert "rom-title" in output
+        assert "benchmark-generators" in output
+
+    def test_workload_requires_a_performance_mode(self, monkeypatch):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+
+        with pytest.raises(SystemExit):
+            play.main(["--workload", "benchmark-empty"])
+
+    def test_ctrl_c_exits_130_without_a_traceback(self, monkeypatch, capsys):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+
+        def interrupt(**_kwargs):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(play, "run", interrupt)
+
+        with pytest.raises(SystemExit) as excinfo:
+            play.main([])
+
+        assert excinfo.value.code == 130
+        assert capsys.readouterr().err == "\ngauntpy interrupted\n"
 
     @pytest.mark.parametrize("mode", ["--benchmark", "--stresstest"])
     def test_performance_modes_reject_sound(self, monkeypatch, mode):
@@ -231,6 +265,51 @@ class TestArguments:
         assert "gauntpy benchmark: 2 frames at scale 1" in output
         assert "   3.250" in output
 
+    def test_benchmark_all_runs_each_named_workload(self, monkeypatch, capsys):
+        from gauntpy.render import host as host_module
+
+        built = []
+
+        class FakeHost:
+            paused = False
+            treasure_timer_paused = False
+            last_render_time_ms = 1.0
+
+            def __init__(self, **_kwargs):
+                pass
+
+            def wait_for_vblank(self, _state):
+                pass
+
+            def present(self, _state):
+                pass
+
+            def close(self):
+                pass
+
+        def build_workload(workload, _seed):
+            built.append(workload.name)
+            return GameState()
+
+        clock_value = 0.0
+
+        def clock():
+            nonlocal clock_value
+            clock_value += 0.001
+            return clock_value
+
+        monkeypatch.setattr(play, "_build_workload_state", build_workload)
+        monkeypatch.setattr(play, "tick", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(play, "perf_counter", clock)
+        monkeypatch.setattr(host_module, "HostShell", FakeHost)
+
+        play.run(benchmark_frames=1, workload_name="all", scale=1)
+
+        assert built == [workload.name for workload in play.WORKLOADS]
+        output = capsys.readouterr().out
+        assert output.count("gauntpy benchmark:") == len(play.WORKLOADS)
+        assert "workload benchmark-cyclic-walls" in output
+
     def test_stress_loop_advances_each_phase_in_order(
         self, monkeypatch, capsys,
     ):
@@ -258,7 +337,7 @@ class TestArguments:
 
         def clock():
             nonlocal clock_value
-            clock_value += 0.01
+            clock_value += 0.001
             return clock_value
 
         def build_phase(index, _seed):
