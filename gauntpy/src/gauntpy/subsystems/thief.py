@@ -129,6 +129,25 @@ _MUGGER_COMPACT_ANIM = (
     0x2400, 0x2409, 0x2412, 0x2409, 0x2436, 0x243F, 0x2448, 0x243F,
     0x2490, 0x2499, 0x24A2, 0x2499, 0x24C6, 0x24CF, 0x24D8, 0x24CF,
 )
+_VISITOR_PICTURES = frozenset((
+    0x0DEA,
+    0x2400,
+    *_THIEF_ESCAPE_ANIM,
+    *_THIEF_WALK_ANIM,
+    *_THIEF_IDLE_ANIM,
+    *_THIEF_COMPACT_ANIM,
+    *_MUGGER_WALK_ANIM,
+    *_MUGGER_IDLE_ANIM,
+    *_MUGGER_COMPACT_ANIM,
+))
+
+
+def _is_visitor_record(state: GameState, slot: int) -> bool:
+    return (
+        FIRST_PLAYABLE_SLOT <= slot < len(state.mobs.picture)
+        and state.mobs.obj_type(slot) == int(MazeObjIds.PLAYERSTART)
+        and state.mobs.picture[slot] in _VISITOR_PICTURES
+    )
 
 
 def _path_grid_offset(grid_index: int) -> int:
@@ -370,6 +389,25 @@ def thief_target_calc(state: GameState) -> None:
             best_wealth = wealth
 
 
+def _clear_untracked_visitor_records(state: GameState) -> None:
+    """Remove visitor-shaped records after the live thief identity is retired."""
+    if state.thief_current_pos or state.thief_mob_slot:
+        return
+    player_slots = {player.mob_slot for player in state.players if player.mob_slot}
+    candidates = {
+        state.thief_previous_pos,
+        state.thief_next_pos,
+        state.thief_start_location,
+        state.thief_tport_dest,
+    }
+    for slot in candidates:
+        if (
+            slot not in player_slots
+            and _is_visitor_record(state, slot)
+        ):
+            state.mobs.unlink_and_clear(slot)
+
+
 def thief_setup(state: GameState) -> None:
     """0x4E432 -- reset this level's thief state and roll its appearance."""
     state.thief_level_setup_done = True
@@ -423,6 +461,9 @@ def thief_timer_set(state: GameState) -> None:
     state.thief_current_pos = 0
     state.thief_mob_slot = 0
     state.thief_enter_time = -1
+    # All three ROM callers remove the old visitor before scheduling another.
+    # Enforce the same postcondition on the modeled MOB table.
+    _clear_untracked_visitor_records(state)
     if state.thief_victim < 0 or not _player_is_targetable(state, state.thief_victim):
         return
     if state.thief_mode & (THIEF_ENTER_OK | THIEF_ENTER_OK_MUGGER) == (
@@ -661,6 +702,12 @@ def thief_remove_and_drop_loot(
             state.mobs.picture[_THIEF_TPORT_ANIM_SLOT] = 0
         state.thief_tport_timer = -1
         state.thief_tport_active = 0
+
+    # The ROM collision slot and thief_current_pos name the same record. If a
+    # Python identity divergence produced two visitor records, retire the hit
+    # record as well even when this mugger carried no replacement item.
+    if drop_slot != current_slot and _is_visitor_record(state, drop_slot):
+        state.mobs.unlink_and_clear(drop_slot)
 
     state.thief_current_pos = 0
     state.thief_mob_slot = 0
@@ -1207,7 +1254,10 @@ def _set_thief_animation(state: GameState, movement_result: int) -> None:
 
 def main_thief_anim(state: GameState) -> None:
     """0x4E8DC -- thief state graph, dodge latches, movement and animation."""
-    if not state.thief_current_pos or state.thief_enter_time >= 0:
+    if not state.thief_current_pos:
+        _clear_untracked_visitor_records(state)
+        return
+    if state.thief_enter_time >= 0:
         return
     if state.thief_tport_timer >= 0:                 # 0x4E900-0x4E908
         return

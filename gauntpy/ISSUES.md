@@ -8,7 +8,7 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2569 passed, 13 skipped** (gauntpy) and
+present the suites are clean: **2572 passed, 13 skipped** (gauntpy) and
 **700 passed** (gex). The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -62,6 +62,31 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-178 · an untracked mugger record survived into level 114
+
+The frame-11998 level-114/maze-38 dump contains a linked dynamic MOB at slot
+0x215, `(332,253)`, with object type 15 (`PLAYERSTART`) and mugger animation
+picture 0x24C6. Maze 38 authors only one player start, at 0x1EF, and the dump's
+live visitor identity is already retired: both `thief_current_pos` and
+`thief_mob_slot` are zero while `thief_enter_time = 607` schedules the next
+visitor. Replaying a frame previously left 0x215 intact.
+
+This was not a legitimate early arrival. Only 713 active frames had elapsed on
+the level, while the captured player score/coin ratio gives `W = 0`; ROM
+`thief_timer_set` 0x4E568–0x4E620 therefore cannot choose less than 1,200
+frames on an ordinary level. The historical 0x2D command in the persistent
+sound log does not timestamp an arrival on the current maze.
+
+ROM escape completion removes the current MOB at 0x4EC2C before calling
+`thief_timer_set` at 0x4EC50, and the kill path likewise owns removal before
+rescheduling. Python could instead receive a collision slot different from its
+tracked thief slot; with an empty-handed mugger, it cleared the tracked slot and
+created no pickup at the collision slot, leaving that second visitor-shaped
+record behind. Removal now retires a differing hit record before rescheduling.
+The scheduling boundary also clears visitor pictures at its retired route
+identities, allowing this historical dump to repair on its next game frame
+without renderer filtering.
 
 ### S-177 · host audio and frame limiting had no explicit runtime policy
 

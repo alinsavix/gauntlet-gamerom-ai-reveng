@@ -445,6 +445,12 @@ evidence remains in `../doc/`, generated contracts, and the book.
     presentation per loop; it accelerates frame-denominated arcade time relative
     to wall time rather than changing any game timer or cadence constant.
     Uncapped execution disables host playback while preserving sound production.
+93. **Visitor rescheduling implies no live visitor MOB.** `thief_timer_set` clears
+    the current identity only after its runtime callers have removed the old
+    thief/mugger record (or level setup has supplied a fresh table). A scheduled
+    state with zero current/MOB ids cannot retain a visitor-shaped `PLAYERSTART`
+    record at a route identity. Kill cleanup must retire both the tracked slot and
+    a divergent collision slot before creating optional carried loot.
 
 ## Investigation workflow
 

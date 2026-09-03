@@ -1605,6 +1605,16 @@ modulo 0x400 until it finds an empty non-reserved cell. An encoded multiplier
 bag restores `special_bonus_score` from the longword shifted right six. The
 routine's opening `mazenum_current < 0x73` gate excludes secret rooms.
 
+The ordering establishes a useful state invariant. At 0x4EC2C the escape path
+calls `moblist_remove_and_clear` on `thief_current_pos`, then 0x4EC50 calls
+`thief_timer_set`, whose first action clears that identity again. The kill path
+through `thief_remove_and_drop_loot` has the same remove-before-reschedule
+contract. Therefore a nonnegative arrival timer with both current visitor ids
+zero cannot coexist with a linked type-15 MOB carrying thief/mugger animation
+art. In the Python representation, a collision-slot/tracked-slot divergence
+must retire both records before optional loot recreation; otherwise an
+empty-handed mugger has no pickup write to overwrite the duplicate.
+
 ### 9.2 Thief Targeting (`thief_target_calc`, 0x4DFF6)
 
 Calculates player "wealth" using weighted sum of: shot power, extra speed/shot speed/magic power/armor/fight power, potions, bonus multiplier, keys. Selects wealthiest active player as target. Stores in `ram.thief_victim` (`0x904B9A`).
@@ -1723,6 +1733,8 @@ level 106. On an ordinary maze, with `W` clamped to 15, the delay is
 `asl.l #2` / `asl.l #4` / `sub.l` sequence at 0x4E618–0x4E61E. Treasure rooms
 (`mazenum_current >= 0x68`) take the tighter branch at 0x4E5D4: `W` clamped to
 5, `D = 3 − (min(level − 6, 100) >> 5)`, and a base of 10 instead of 20.
+Thus an ordinary level with `W = 0` cannot deploy a visitor before 1,200 frames
+(20 seconds), even at depths where the setup probability itself is certain.
 
 ### 9.4 Thief Scheduling (`thief_setup`, 0x4E432)
 

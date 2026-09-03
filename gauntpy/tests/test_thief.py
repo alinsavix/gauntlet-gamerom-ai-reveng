@@ -159,6 +159,53 @@ class TestScheduling:
         assert state.thief_start_location == pack_slot(8, 9)
         assert state.thief_victim_pos == pack_slot(8, 9)
 
+    def test_scheduling_removes_an_untracked_mugger_record(self):
+        state = GameState()
+        player_slot = pack_slot(15, 17)
+        orphan_slot = pack_slot(16, 21)
+        _active(state, 0, player_slot)
+        state.mobs.create(
+            player_slot,
+            0x1612,
+            encode_hpos(270, palette=12),
+            encode_vpos_at_y(240, width=3, height=3),
+            MazeObjIds.PLAYERSTART,
+        )
+        state.thief_victim = 0
+        state.thief_previous_pos = orphan_slot
+        state.mobs.create(
+            orphan_slot,
+            0x24C6,
+            encode_hpos(332, palette=1),
+            encode_vpos_at_y(253, width=3, height=3),
+            MazeObjIds.PLAYERSTART,
+        )
+
+        thief_timer_set(state)
+
+        assert state.mobs.picture[orphan_slot] == 0
+        assert not state.mobs.is_linked(orphan_slot)
+        assert state.mobs.picture[player_slot] != 0
+
+    def test_scheduled_state_repairs_the_captured_orphan_on_next_frame(self):
+        state = GameState()
+        orphan_slot = pack_slot(16, 21)
+        state.thief_previous_pos = orphan_slot
+        state.thief_enter_time = 607
+        state.mobs.create(
+            orphan_slot,
+            0x24C6,
+            encode_hpos(332, palette=1),
+            encode_vpos_at_y(253, width=3, height=3),
+            MazeObjIds.PLAYERSTART,
+        )
+
+        main_thief_anim(state)
+
+        assert state.thief_enter_time == 607
+        assert state.mobs.picture[orphan_slot] == 0
+        assert not state.mobs.is_linked(orphan_slot)
+
 
 class TestMuggerSelection:
     def test_low_roll_selects_mugger(self):
@@ -727,6 +774,31 @@ class TestRemoveAndDropLoot:
 
         assert state.thief_current_pos == 0
         assert state.mobs.picture[thief_slot] == 0
+
+    def test_kill_retires_a_mismatched_hit_record_before_rescheduling(self):
+        state = GameState()
+        tracked = pack_slot(15, 15)
+        hit = pack_slot(16, 21)
+        _thief_at(state, tracked)
+        state.thief_mode = THIEF_PURSUE | THIEF_IS_MUGGER
+        state.thief_victim = -1
+        state.mugger_item_carried = 0
+        state.thief_previous_pos = hit
+        state.mobs.create(
+            hit,
+            0x24C6,
+            encode_hpos(332, palette=1),
+            encode_vpos_at_y(253, width=3, height=3),
+            MazeObjIds.PLAYERSTART,
+        )
+
+        thief_remove_and_drop_loot(state, 0, hit)
+
+        assert state.mobs.picture[tracked] == 0
+        assert state.mobs.picture[hit] == 0
+        assert not state.mobs.is_linked(hit)
+        assert state.thief_current_pos == 0
+        assert state.thief_mob_slot == 0
 
 
 class TestDeployAndEscapeGraph:

@@ -239,6 +239,11 @@ one assumed by its later body-center handoff. In a corridor two cells wide, the
 thief therefore belongs to one lane or the other rather than running down an
 invented centerline between them.
 
+The formula also sets a hard lower bound. With the score-per-coin term at zero,
+an ordinary level waits at least twenty seconds even after the depth adjustment
+has removed all extra delay. A visitor-shaped figure seen earlier is not an
+early random roll.
+
 **Getting to you.** Once deployed, the thief has a small set of modes: entering,
 pursuing, dodging, and escaping. Pursuit does not use a general path finder.
 Every time the victim moves, a hook in the player movement code writes the
@@ -323,6 +328,9 @@ removed at its recorded starting cell; the next level creates a new pickup by
 walking a pseudorandom sequence of empty maze cells. A mugger returns food, and
 a stolen multiplier returns as a bag whose encoded value restores its score.
 The removal is preceded by the same transporter-style poof used on arrival.
+Removal and rescheduling are one transaction: by the time the next arrival
+timer exists, no thief- or mugger-shaped MOB from the previous visit remains in
+the maze.
 
 Transporters are part of that retracing graph. If the target player has taught
 the route by teleporting, the thief dissolves into the same transition machinery,
