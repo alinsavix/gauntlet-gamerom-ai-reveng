@@ -60,6 +60,7 @@ from .diagnostics import (
     derive_debug_events,
     render_debug_panel,
 )
+from .framebuffer import PygameFramebuffer
 from .debug_controls import (
     debug_add_key,
     debug_add_potion,
@@ -192,6 +193,9 @@ class HostShell:
             audio_player = StaticSoundPlayer(pygame.mixer, sound_dir)
         self._audio_player = audio_player
         self.window = self._set_window_mode()
+        self._framebuffer = PygameFramebuffer(
+            pygame, LOGICAL_WIDTH, LOGICAL_HEIGHT,
+        )
         pygame.display.set_caption(title)
         self.clock = pygame.time.Clock()
         self._gamepad = None
@@ -427,9 +431,9 @@ class HostShell:
 
         fb, self._cache = render_frame(
             state, self._assets, cache=self._cache, paused=self.paused,
+            framebuffer=self._framebuffer,
         )
-        image = fb.image
-        surface = self._pygame.image.frombuffer(image.tobytes(), image.size, image.mode).convert_alpha()
+        surface = fb.surface
         if self.scale != 1:
             surface = self._pygame.transform.scale(
                 surface, (LOGICAL_WIDTH * self.scale, LOGICAL_HEIGHT * self.scale)

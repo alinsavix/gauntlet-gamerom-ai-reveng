@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from PIL import Image
 
-__all__ = ["Framebuffer", "SHADOW_RATIO"]
+__all__ = ["Framebuffer", "PygameFramebuffer", "SHADOW_RATIO"]
 
 #: The shadow fallback's scale, as an exact integer ratio rather than a round
 #: number -- and it is the hardware's own, not a guess.
@@ -97,6 +97,26 @@ class Framebuffer:
     def clear(self, rgba: tuple[int, int, int, int] = (0, 0, 0, 255)) -> None:
         self.image.paste(rgba, (0, 0, self.width, self.height))
         self._pixels = self.image.load()
+
+    def blit_alpha_glyph(
+        self, x: int, y: int, code: int, palette, *, opaque: bool,
+        renderer,
+    ) -> None:
+        renderer(self.image, x, y, code, palette, opaque=opaque)
+
+    def draw_pause_indicator(
+        self, panel: tuple[int, int, int, int], text: str,
+    ) -> None:
+        from PIL import ImageDraw, ImageFont
+
+        px, py, pw, ph = panel
+        draw = ImageDraw.Draw(self.image)
+        font = ImageFont.load_default()
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        draw.text(
+            (px + pw - (right - left) - 2, py + ph - (bottom - top) - 2),
+            text, fill=(255, 80, 80, 255), font=font,
+        )
 
     # -- blit primitives ---------------------------------------------------
 
@@ -189,3 +209,238 @@ class Framebuffer:
                         )
                     continue
                 px[pxx, py] = palette_rgba[idx]
+
+
+class PygameFramebuffer:
+    """SDL-backed framebuffer used only by the optional interactive host."""
+
+    __slots__ = (
+        "width", "height", "surface", "_pygame", "_alpha_cache",
+        "_sprite_cache", "_source_image", "_source_surface",
+        "_shadow_image", "_shadow_surface", "_shadow_tile",
+    )
+
+    def __init__(
+        self, pygame, width: int, height: int,
+        background: tuple[int, int, int, int] = (0, 0, 0, 255),
+    ) -> None:
+        self.width = width
+        self.height = height
+        self._pygame = pygame
+        self.surface = pygame.Surface(
+            (width, height), flags=pygame.SRCALPHA, depth=32,
+        ).convert_alpha()
+        self._alpha_cache: dict[tuple, object] = {}
+        self._sprite_cache: dict[tuple, tuple[object, object, tuple]] = {}
+        self._source_image = None
+        self._source_surface = None
+        self._shadow_image = None
+        self._shadow_surface = None
+        self._shadow_tile = pygame.Surface(
+            (8, 8), flags=pygame.SRCALPHA, depth=32,
+        ).convert_alpha()
+        self.clear(background)
+
+    def get_pixel(self, x: int, y: int) -> tuple[int, int, int, int] | None:
+        if not 0 <= x < self.width or not 0 <= y < self.height:
+            return None
+        return tuple(self.surface.get_at((x, y)))
+
+    def set_pixel(self, x: int, y: int, rgba: tuple[int, int, int, int]) -> None:
+        if 0 <= x < self.width and 0 <= y < self.height:
+            self.surface.set_at((x, y), rgba)
+
+    def to_pil_image(self):
+        from PIL import Image
+
+        return Image.frombytes(
+            "RGBA", (self.width, self.height),
+            self._pygame.image.tobytes(self.surface, "RGBA"),
+        )
+
+    def save_png(self, path: str) -> None:
+        self.to_pil_image().save(path, "PNG")
+
+    def clear(
+        self, rgba: tuple[int, int, int, int] = (0, 0, 0, 255),
+    ) -> None:
+        self.surface.fill(rgba)
+
+    def _surface_from_pil(self, image):
+        return self._pygame.image.frombytes(
+            image.tobytes(), image.size, image.mode,
+        ).convert_alpha()
+
+    def paste_region(self, source, box: tuple[int, int, int, int], dest_xy) -> None:
+        if source is not self._source_image:
+            self._source_image = source
+            self._source_surface = self._surface_from_pil(source)
+        self.surface.blit(
+            self._source_surface, dest_xy,
+            self._pygame.Rect(
+                box[0], box[1], box[2] - box[0], box[3] - box[1],
+            ),
+        )
+
+    def blit_alpha_glyph(
+        self, x: int, y: int, code: int, palette, *, opaque: bool,
+        renderer,
+    ) -> None:
+        from .text import rom_font_available
+
+        if not opaque and not rom_font_available():
+            from PIL import Image
+
+            area = self._pygame.Rect(x, y, 8, 8)
+            tile = Image.frombytes(
+                "RGBA", (8, 8),
+                self._pygame.image.tobytes(
+                    self.surface.subsurface(area), "RGBA",
+                ),
+            )
+            renderer(tile, 0, 0, code, palette, opaque=False)
+            self.surface.blit(self._surface_from_pil(tile), area.topleft)
+            return
+
+        key = (code, tuple(palette), opaque)
+        surface = self._alpha_cache.get(key)
+        if surface is None:
+            from PIL import Image
+            tile = Image.new("RGBA", (8, 8))
+            renderer(tile, 0, 0, code, palette, opaque=opaque)
+            surface = self._surface_from_pil(tile)
+            self._alpha_cache[key] = surface
+        self.surface.blit(surface, (x, y))
+
+    def draw_pause_indicator(
+        self, panel: tuple[int, int, int, int], text: str,
+    ) -> None:
+        from PIL import ImageDraw, ImageFont
+
+        image = self.to_pil_image()
+        font = ImageFont.load_default()
+        draw = ImageDraw.Draw(image)
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        width, height = right - left, bottom - top
+        px, py, pw, ph = panel
+        draw.text(
+            (px + pw - width - 2, py + ph - height - 2),
+            text, fill=(255, 80, 80, 255), font=font,
+        )
+        self.surface.blit(self._surface_from_pil(image), (0, 0))
+
+    def _sprite_tile(self, tile, palette_rgba, trans0, shadow_index):
+        key = (id(tile), tuple(palette_rgba), trans0, shadow_index)
+        cached = self._sprite_cache.get(key)
+        if cached is not None and cached[0] is tile:
+            return cached[1], cached[2], cached[3]
+
+        transparent = (0, 0, 0, 0)
+        pixels = []
+        shadow_mask = []
+        shadows = []
+        for row, tile_row in enumerate(tile):
+            for column, index in enumerate(tile_row):
+                if shadow_index is not None and index == shadow_index:
+                    pixels.append(transparent)
+                    shadow_mask.append((255, 255, 255, 255))
+                    shadows.append((column, row))
+                elif trans0 and index == 0:
+                    pixels.append(transparent)
+                    shadow_mask.append(transparent)
+                else:
+                    pixels.append(palette_rgba[index])
+                    shadow_mask.append(transparent)
+        surface = self._pygame.image.frombuffer(
+            bytes(channel for pixel in pixels for channel in pixel),
+            (8, 8), "RGBA",
+        ).convert_alpha()
+        mask = self._pygame.image.frombuffer(
+            bytes(channel for pixel in shadow_mask for channel in pixel),
+            (8, 8), "RGBA",
+        ).convert_alpha()
+        result = (surface, mask, tuple(shadows))
+        self._sprite_cache[key] = (tile, *result)
+        return result
+
+    def _exact_shadow_tile(self, shadow_src, mask, x: int, y: int):
+        if shadow_src.image is not self._shadow_image:
+            self._shadow_image = shadow_src.image
+            self._shadow_surface = self._surface_from_pil(shadow_src.image)
+
+        tile = self._shadow_tile
+        world = self._shadow_surface
+        source_x, source_y = shadow_src.source_xy(x, y)
+        remaining_h = 8
+        out_y = 0
+        while remaining_h:
+            chunk_h = min(remaining_h, world.get_height() - source_y)
+            remaining_w = 8
+            sx = source_x
+            out_x = 0
+            while remaining_w:
+                chunk_w = min(remaining_w, world.get_width() - sx)
+                tile.blit(
+                    world, (out_x, out_y),
+                    self._pygame.Rect(sx, source_y, chunk_w, chunk_h),
+                )
+                remaining_w -= chunk_w
+                out_x += chunk_w
+                sx = 0
+            remaining_h -= chunk_h
+            out_y += chunk_h
+            source_y = 0
+        tile.blit(mask, (0, 0), special_flags=self._pygame.BLEND_RGBA_MULT)
+        return tile
+
+    def blit_indexed_tile(
+        self,
+        tile,
+        palette_rgba,
+        x: int,
+        y: int,
+        *,
+        trans0: bool = True,
+        shadow_index: int | None = None,
+        shadow_ratio: tuple[int, int] = SHADOW_RATIO,
+        shadow_src=None,
+        clip: tuple[int, int, int, int] | None = None,
+    ) -> None:
+        sprite, shadow_mask, shadows = self._sprite_tile(
+            tile, palette_rgba, trans0, shadow_index,
+        )
+        previous_clip = self.surface.get_clip()
+        if clip is not None:
+            self.surface.set_clip(self._pygame.Rect(
+                clip[0], clip[1], clip[2] - clip[0], clip[3] - clip[1],
+            ))
+        self.surface.blit(sprite, (x, y))
+
+        if (
+            shadows
+            and shadow_src is not None
+            and hasattr(shadow_src, "image")
+            and hasattr(shadow_src, "source_xy")
+        ):
+            shadow = self._exact_shadow_tile(shadow_src, shadow_mask, x, y)
+            self.surface.blit(shadow, (x, y))
+            self.surface.set_clip(previous_clip)
+            return
+
+        shadow_num, shadow_den = shadow_ratio
+        active_clip = self.surface.get_clip()
+        for dx, dy in shadows:
+            px, py = x + dx, y + dy
+            if not active_clip.collidepoint(px, py):
+                continue
+            exact = shadow_src.at(px, py) if shadow_src is not None else None
+            if exact is None:
+                under = self.surface.get_at((px, py))
+                exact = (
+                    under.r * shadow_num // shadow_den,
+                    under.g * shadow_num // shadow_den,
+                    under.b * shadow_num // shadow_den,
+                    under.a,
+                )
+            self.surface.set_at((px, py), exact)
+        self.surface.set_clip(previous_clip)

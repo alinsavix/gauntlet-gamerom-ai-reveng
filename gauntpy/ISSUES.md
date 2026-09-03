@@ -82,6 +82,14 @@ generation counters, preserving safe cache replacement between benchmark
 workloads while computing a descriptor signature only when descriptor RAM
 actually changes.
 
+The interactive host now also supplies a persistent pygame-backed framebuffer.
+MOB tiles and alpha glyphs are cached as SDL surfaces and composited with
+whole-surface blits; only special shadow pixels retain the exact per-pixel
+playfield-shadow lookup. The PIL framebuffer remains the ROM-free reference
+backend. Across 120 evolving `benchmark-mobs` frames, both backends produced
+byte-identical RGBA output. On the same 600-frame scale-4 workload, the pygame
+backend reduced mean raster time from 4.338 ms to 2.779 ms (36%).
+
 ### S-180 · escape-timeout exits corrupted the MOB depth chain
 
 The exact default `gauntpy-play --scale 4 --reduce-text` state (level 1, maze

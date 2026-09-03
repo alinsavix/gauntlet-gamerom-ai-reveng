@@ -195,21 +195,24 @@ def playfield_cache_for_state(
 class ShadowSource:
     """Sample the cached shadow raster by framebuffer coordinate."""
 
-    __slots__ = ("_px", "_w", "_h", "_ox", "_oy")
+    __slots__ = ("image", "_px", "_w", "_h", "_ox", "_oy")
 
     def __init__(
         self, shadow_image, scroll_x: int, scroll_y: int,
         dest_x: int, dest_y: int,
     ) -> None:
+        self.image = shadow_image
         self._px = shadow_image.load()
         self._w, self._h = shadow_image.size
         self._ox = scroll_x - dest_x
         self._oy = scroll_y - dest_y
 
     def at(self, fx: int, fy: int):
-        wx = (fx + self._ox) % self._w
-        wy = (fy + self._oy) % self._h
+        wx, wy = self.source_xy(fx, fy)
         return self._px[wx, wy]
+
+    def source_xy(self, fx: int, fy: int) -> tuple[int, int]:
+        return (fx + self._ox) % self._w, (fy + self._oy) % self._h
 
 
 def shadow_source_for(
