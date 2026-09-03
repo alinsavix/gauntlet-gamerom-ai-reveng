@@ -179,6 +179,7 @@ class HostShell:
         self._diagnostics_events: deque[str] = deque(maxlen=64)
         self._render_times_ms: deque[float] = deque(maxlen=120)
         self.last_render_time_ms = 0.0
+        self.last_display_flip_time_ms = 0.0
         self.last_state_dump_path = None
 
         pygame.init()
@@ -471,7 +472,11 @@ class HostShell:
                 panel.tobytes(), panel.size, panel.mode,
             ).convert_alpha()
             self.window.blit(panel_surface, (LOGICAL_WIDTH * self.scale, 0))
+        flip_started = perf_counter()
         self._pygame.display.flip()
+        self.last_display_flip_time_ms = round(
+            (perf_counter() - flip_started) * 1000.0, 9,
+        )
 
     def skip_existing_audio(self, state: GameState) -> None:
         """Do not replay the historical sound log in a loaded state dump."""

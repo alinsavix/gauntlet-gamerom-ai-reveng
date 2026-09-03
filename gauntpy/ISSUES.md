@@ -119,11 +119,13 @@ or exercise several representative display states without manual input.
 `gauntpy-play --benchmark [FRAMES]` now runs uncapped after up to 30 warm-up
 frames and reports mean, median, nearest-rank p95, minimum, and maximum for five
 explicit boundaries: host event/input sampling, one complete `tick`, the
-existing game-raster interval inside `HostShell.present`, total presentation
-through display flip, and the complete host iteration. Host sound and external
-EEPROM writes are disabled so wall-time media and persistence I/O cannot
-contaminate the batch; modeled sound production and every game-frame call
-remain intact.
+existing game-raster interval inside `HostShell.present`, display-flip
+synchronization alone, and the complete host iteration. The flip boundary is
+measured directly around `pygame.display.flip()` rather than as the cumulative
+`HostShell.present` duration, so it no longer includes game raster work. Host
+sound and external EEPROM writes are disabled so wall-time media and
+persistence I/O cannot contaminate the batch; modeled sound production and every
+game-frame call remain intact.
 
 `--stresstest SECONDS` adds a timed graphical workload that cycles through six
 normal ROM-backed setup paths: TITLE, DEMO, level 12 / maze 11 (dragon),

@@ -39,14 +39,14 @@ def test_benchmark_report_names_each_measured_boundary():
         host_input_ms=1.0,
         game_update_ms=2.0,
         game_raster_ms=3.0,
-        presentation_ms=4.0,
+        display_flip_ms=4.0,
         complete_loop_ms=7.0,
     )
 
     report = format_benchmark_report(recorder, scale=4)
 
     for label in (
-        "host input", "game update", "game raster", "presentation",
+        "host input", "game update", "game raster", "display flip",
         "complete loop", "throughput",
     ):
         assert label in report
@@ -59,7 +59,7 @@ def test_benchmark_report_identifies_named_workload():
         host_input_ms=1.0,
         game_update_ms=2.0,
         game_raster_ms=3.0,
-        presentation_ms=4.0,
+        display_flip_ms=4.0,
         complete_loop_ms=7.0,
     )
 

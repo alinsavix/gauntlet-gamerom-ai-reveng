@@ -2475,7 +2475,7 @@ class TestHostShellInput:
         from gauntpy.render import host
         from gauntpy.render.host import HostShell
 
-        times = iter((10.0, 10.0125))
+        times = iter((10.0, 10.0125, 20.0, 20.0005))
         monkeypatch.setattr(host, "perf_counter", lambda: next(times))
         shell = HostShell(assets=_FakeAssets(), scale=1)
         try:
@@ -2496,6 +2496,7 @@ class TestHostShellInput:
             assert shell._diagnostics_previous.render_time_ms == pytest.approx(12.5)
             assert shell._diagnostics_previous.render_time_history_ms == (12.5,)
             assert shell.last_render_time_ms == pytest.approx(12.5)
+            assert shell.last_display_flip_time_ms == pytest.approx(0.5)
 
             pygame.event.post(
                 pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F1)

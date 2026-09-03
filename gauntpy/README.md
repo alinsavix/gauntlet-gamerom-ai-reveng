@@ -67,9 +67,9 @@ uv run --all-extras gauntpy-play --benchmark 600 --workload all
 frames. It disables the limiter, sound playback, and external EEPROM writes,
 then reports mean, median, nearest-rank p95, minimum, and maximum durations for
 host input/event sampling, the complete game update, game-raster composition
-through window blitting, total presentation through display flip, and the
-complete host loop. The raster interval is nested inside presentation, and
-both are nested inside the complete loop; they are not additive columns.
+through window blitting, display-flip synchronization alone, and the complete
+host loop. The first four rows are independent timing boundaries; the complete
+loop is cumulative and includes them plus harness overhead.
 `--workload NAME` builds a repeatable named workload before measuring it;
 `--workload all` runs and reports every workload separately, with the requested
 measured-frame count applied to each one.

@@ -228,6 +228,7 @@ class TestArguments:
             paused = False
             treasure_timer_paused = False
             last_render_time_ms = 3.25
+            last_display_flip_time_ms = 0.75
 
             def __init__(self, **kwargs):
                 assert kwargs["uncapped"] is True
@@ -263,7 +264,13 @@ class TestArguments:
         assert state.eeprom_persistence_enabled is False
         output = capsys.readouterr().out
         assert "gauntpy benchmark: 2 frames at scale 1" in output
-        assert "   3.250" in output
+        rows = {
+            line[:16].strip(): line[16:].split()
+            for line in output.splitlines()
+            if len(line) > 16
+        }
+        assert rows["game raster"][0] == "3.250"
+        assert rows["display flip"][0] == "0.750"
 
     def test_benchmark_all_runs_each_named_workload(self, monkeypatch, capsys):
         from gauntpy.render import host as host_module
@@ -274,6 +281,7 @@ class TestArguments:
             paused = False
             treasure_timer_paused = False
             last_render_time_ms = 1.0
+            last_display_flip_time_ms = 0.5
 
             def __init__(self, **_kwargs):
                 pass

@@ -35,12 +35,12 @@ def summarize_timings(samples: list[float]) -> TimingSummary:
 
 @dataclass
 class BenchmarkRecorder:
-    """Accumulate named host/game intervals, including their documented nesting."""
+    """Accumulate independent host/game intervals and the cumulative loop."""
 
     host_input_ms: list[float] = field(default_factory=list)
     game_update_ms: list[float] = field(default_factory=list)
     game_raster_ms: list[float] = field(default_factory=list)
-    presentation_ms: list[float] = field(default_factory=list)
+    display_flip_ms: list[float] = field(default_factory=list)
     complete_loop_ms: list[float] = field(default_factory=list)
 
     def add(
@@ -49,13 +49,13 @@ class BenchmarkRecorder:
         host_input_ms: float,
         game_update_ms: float,
         game_raster_ms: float,
-        presentation_ms: float,
+        display_flip_ms: float,
         complete_loop_ms: float,
     ) -> None:
         self.host_input_ms.append(host_input_ms)
         self.game_update_ms.append(game_update_ms)
         self.game_raster_ms.append(game_raster_ms)
-        self.presentation_ms.append(presentation_ms)
+        self.display_flip_ms.append(display_flip_ms)
         self.complete_loop_ms.append(complete_loop_ms)
 
     @property
@@ -71,7 +71,7 @@ def format_benchmark_report(
         ("host input", summarize_timings(recorder.host_input_ms)),
         ("game update", summarize_timings(recorder.game_update_ms)),
         ("game raster", summarize_timings(recorder.game_raster_ms)),
-        ("presentation", summarize_timings(recorder.presentation_ms)),
+        ("display flip", summarize_timings(recorder.display_flip_ms)),
         ("complete loop", summarize_timings(recorder.complete_loop_ms)),
     )
     workload_suffix = f", workload {workload}" if workload else ""

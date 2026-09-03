@@ -487,7 +487,6 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                     invariant_seconds = perf_counter() - invariant_started
             else:
                 update_started = update_finished = perf_counter()
-            present_started = perf_counter()
             host.present(state)             # composite + flip
             loop_finished = perf_counter()
             stress_frames += stress_started is not None
@@ -502,7 +501,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                     host_input_ms=(input_finished - input_started) * 1000.0,
                     game_update_ms=(update_finished - update_started) * 1000.0,
                     game_raster_ms=host.last_render_time_ms,
-                    presentation_ms=(loop_finished - present_started) * 1000.0,
+                    display_flip_ms=host.last_display_flip_time_ms,
                     complete_loop_ms=(
                         loop_finished - loop_started - invariant_seconds
                     ) * 1000.0,
@@ -592,7 +591,7 @@ def _main(argv: list[str] | None = None) -> None:
     modes.add_argument(
         "--benchmark", nargs="?", const=600, type=_positive_frame_count,
         metavar="FRAMES",
-        help="benchmark host input, game update, raster, presentation, and the "
+        help="benchmark host input, game update, raster, display flip, and the "
              "complete uncapped loop (default: 600 measured frames)",
     )
     modes.add_argument(
