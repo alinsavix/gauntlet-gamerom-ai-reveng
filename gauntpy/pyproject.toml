@@ -50,6 +50,9 @@ gauntpy-scenario = "gauntpy.scenarios:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+gauntpy = ["data/*.csv"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

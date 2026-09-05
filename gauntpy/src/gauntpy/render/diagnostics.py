@@ -19,6 +19,7 @@ from ..constants import (
     PlayerStatus,
 )
 from ..coords import hpos_x, vpos_y
+from ..sound_catalog import SOUND_COMMAND_DESCRIPTIONS
 from ..state import GameState
 
 DEBUG_PANEL_WIDTH = 320
@@ -601,7 +602,15 @@ def capture_debug_snapshot(
             ("AI", _ai_page_rows(state)),
             ("DISPLAY", _display_page_rows(state)),
             ("ROUTES", _route_page_rows(state)),
-            ("AUDIO", _audio_page_rows(state, sound_descriptions or {})),
+            (
+                "AUDIO",
+                _audio_page_rows(
+                    state,
+                    SOUND_COMMAND_DESCRIPTIONS
+                    if sound_descriptions is None
+                    else sound_descriptions,
+                ),
+            ),
             ("SCENARIO", _scenario_page_rows(state)),
         ),
         paused=paused,

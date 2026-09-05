@@ -14,6 +14,8 @@ from pathlib import Path
 import re
 from typing import Mapping, Sequence
 
+from ..sound_catalog import SOUND_COMMAND_DESCRIPTIONS
+
 __all__ = ["SoundLibraryError", "StaticSoundPlayer"]
 
 
@@ -42,25 +44,6 @@ _MIXER_EFFECT_LEVEL = {
     0xD8: 2.0 / 3.0,
     0xD9: 1.0,
 }
-_CONTROL_DESCRIPTIONS = {
-    0x00: "Clear/reinitialize audio",
-    0x01: "High sound filter",
-    0x02: "Clear sound filter",
-    0x03: "Input/status query",
-    0x06: "Command-count query",
-    0x07: "Diagnostic query",
-    0x21: "Death silencer",
-    0x2F: "Force field silencer",
-    0x39: "Slow motion silencer",
-    0x3C: "Theme song fade out",
-    0x41: "Treasure room music fade out",
-    0xD6: "Effects off",
-    0xD7: "Low effects",
-    0xD8: "Medium effects",
-    0xD9: "Full effects",
-    0xDA: "Queue status response",
-}
-
 # Sound-ROM type-7 chain records. Each tuple is (physical channel, priority);
 # transcribed from the command parameter/chain tables catalogued by the
 # companion sound-ROM project. Equal priority replaces the old member, while a
@@ -175,12 +158,7 @@ class StaticSoundPlayer:
 
     @property
     def command_descriptions(self) -> Mapping[int, str]:
-        descriptions = dict(_CONTROL_DESCRIPTIONS)
-        descriptions.update(
-            (command, self._description_from_path(path))
-            for command, path in self._paths.items()
-        )
-        return descriptions
+        return SOUND_COMMAND_DESCRIPTIONS
 
     def _index_library(self) -> dict[int, Path]:
         paths: dict[int, Path] = {}
@@ -195,11 +173,6 @@ class StaticSoundPlayer:
                 )
             paths[command] = path
         return paths
-
-    @staticmethod
-    def _description_from_path(path: Path) -> str:
-        description = path.stem[5:].replace("__", " / ").replace("_", " ")
-        return description.strip()
 
     def skip_existing(self, commands: Sequence[int]) -> None:
         """Begin after an existing persistent log, as when loading a snapshot."""

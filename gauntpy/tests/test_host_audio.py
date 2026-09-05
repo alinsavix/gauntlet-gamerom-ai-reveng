@@ -4,6 +4,7 @@ from pathlib import Path
 
 from gauntpy.render import audio
 from gauntpy.render.audio import SoundLibraryError, StaticSoundPlayer
+from gauntpy.sound_catalog import SOUND_COMMAND_DESCRIPTIONS
 
 
 class _Sound:
@@ -348,10 +349,14 @@ def test_skip_existing_does_not_replay_snapshot_history(tmp_path):
     assert mixer.channels[0].sound.path.name == "0x13_test.wav"
 
 
-def test_command_descriptions_come_from_wav_names_and_control_semantics(tmp_path):
+def test_command_descriptions_come_from_catalog_not_wav_names(tmp_path):
     player = StaticSoundPlayer(
         _Mixer(), _library(tmp_path, 0x26, 0x4A),
     )
 
-    assert player.command_descriptions[0x26] == "test"
-    assert player.command_descriptions[0x39] == "Slow motion silencer"
+    assert player.command_descriptions[0x26] == "Treasure / Potion Taken"
+    assert player.command_descriptions[0x39] == "Slow Motion Silencer"
+
+
+def test_packaged_catalog_names_every_valid_sound_command():
+    assert set(SOUND_COMMAND_DESCRIPTIONS) == set(range(0xDB))

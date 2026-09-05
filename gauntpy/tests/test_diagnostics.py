@@ -183,6 +183,24 @@ def test_audio_page_lists_recent_commands_one_per_line_with_descriptions():
         ("-01", "38 End of Slow Motion"),
         ("+00", "39 Slow Motion Silencer"),
     )
+
+
+def test_audio_page_uses_packaged_command_names_without_audio_playback():
+    state = _diagnostic_state()
+    state.sound_log = [0x0E, 0x26, 0xA1]
+
+    rows = debug_page_lines(
+        capture_debug_snapshot(state),
+        DEBUG_PAGES.index("AUDIO"),
+    )
+
+    assert rows[-3:] == (
+        ("-02", "0E Red Player Exits"),
+        ("-01", "26 Treasure / Potion Taken"),
+        ("+00", "A1 BETTER HURRY!"),
+    )
+
+
 def test_level_page_names_the_current_maze_secret_trick():
     state = _diagnostic_state()
     state.maze = type("Maze", (), {"secret": 13})()
