@@ -156,6 +156,46 @@ def prepare_workload_state(
         raise ValueError(f"unknown workload setup {workload.setup!r}")
 
 
+def build_workload_state(
+    workload: PerformanceWorkload, rng_seed: int,
+) -> GameState:
+    """Construct the same explicit recipe for benchmark and stress runners."""
+    if workload.scenario_filename is not None:
+        from .custom_scenario import (
+            build_synthetic_state,
+            load_synthetic_scenario,
+            override_synthetic_seed,
+        )
+
+        scenario = load_synthetic_scenario(scenario_path(workload))
+        state = build_synthetic_state(override_synthetic_seed(scenario, rng_seed))
+        prepare_workload_state(state, workload)
+        return state
+    if workload.attract_mode is not None:
+        from .rng import GameRandom
+        from .subsystems.attract import start_attract_screen
+        from .subsystems.eeprom import GAME_DEFAULT_SETTINGS
+
+        state = GameState(
+            game_settings=GAME_DEFAULT_SETTINGS,
+            rng=GameRandom(rng_seed),
+            eeprom_persistence_enabled=False,
+        )
+        start_attract_screen(state, workload.attract_mode)
+        return state
+
+    if workload.level_maze is None:
+        raise ValueError(f"workload {workload.name!r} has no state recipe")
+    from .host.startup import build_state
+
+    level, maze_number = workload.level_maze
+    state = build_state(
+        level, workload.character, maze_number=maze_number, rng_seed=rng_seed,
+    )
+    state.eeprom_persistence_enabled = False
+    return state
+
+
 def _join_four_players(state: GameState) -> None:
     from .constants import SLOT_PLAYER_SHOTS
     from .subsystems.players import player_join

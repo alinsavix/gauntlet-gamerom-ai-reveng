@@ -1,4 +1,4 @@
-"""Display compositor and host shell. PLAN.md §6 WP-2.
+"""Game-raster composition, with compatibility exports for old host imports.
 
 Owns no main-loop calls -- rendering happens after ``tick()`` returns, not
 inside it (``mainloop.py`` is untouched by this package). The compositor
@@ -7,7 +7,7 @@ inside it (``mainloop.py`` is untouched by this package). The compositor
 -> ``Framebuffer`` and never imports pygame, per PLAN.md §3 rule 7 ("the
 simulation core imports nothing... Rendering reads state; it is never read
 *by* state") and this package's own brief ("make pygame an OPTIONAL
-import"). Only ``host.py`` (the pygame window/input/pump) touches pygame,
+import"). Only ``gauntpy.host.shell`` (the pygame window/input/pump) touches pygame,
 and only when a ``HostShell`` is actually constructed.
 
 Quick tour:
@@ -28,10 +28,10 @@ Quick tour:
   ``Framebuffer``; layer 4 (priority/shadowing) falls out of the draw order
   itself (see that module's docstring). ``render_full_playfield_frame`` is the
   host-only whole-world diagnostic view.
-- ``diagnostics`` -- immutable state snapshots, nine host-only pages, selected
+- ``gauntpy.host.diagnostics`` -- immutable state snapshots, host-only pages, selected
   MOB inspection, and snapshot-derived events; never writes modeled game or
   video memory.
-- ``host.HostShell`` -- the pygame window + input + 60Hz pump; supplies
+- ``gauntpy.host.shell.HostShell`` -- the pygame window + input + 60Hz pump; supplies
   ``wait_for_vblank``/``present`` so ``mainloop.g2mainloop(state, host)`` can
   drive it directly.
 """
@@ -52,7 +52,7 @@ from .compositor import (
     render_frame,
     render_full_playfield_frame,
 )
-from .diagnostics import (
+from ..host.diagnostics import (
     DEBUG_PAGES,
     DebugSnapshot,
     capture_debug_snapshot,
@@ -60,14 +60,14 @@ from .diagnostics import (
     derive_debug_events,
     render_debug_panel,
 )
-from .state_dump import (
+from ..host.state_dump import (
     StateDumpError,
     dump_game_state,
     game_state_from_payload,
     load_game_state,
     state_dump_payload,
 )
-from .debug_controls import debug_add_key, debug_add_potion, debug_skip_level
+from ..host.debug_controls import debug_add_key, debug_add_potion, debug_skip_level
 from .framebuffer import Framebuffer
 
 __all__ = [

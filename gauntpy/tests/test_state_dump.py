@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from gauntpy.state import GameState
-from gauntpy.render.state_dump import (
+from gauntpy.host.state_dump import (
     StateDumpError,
     dump_game_state,
     load_game_state,

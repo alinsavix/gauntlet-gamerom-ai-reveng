@@ -60,7 +60,7 @@ def _idle(_frame: int) -> int:
 
 
 def _level1_state() -> GameState:
-    from .play import build_state
+    from .host.startup import build_state
 
     return build_state(1, Character.WARRIOR)
 
@@ -74,7 +74,7 @@ def _level1_input(frame: int) -> int:
 
 
 def _level7_state() -> GameState:
-    from .play import build_state
+    from .host.startup import build_state
 
     return build_state(7, Character.WARRIOR)
 
@@ -333,10 +333,10 @@ def run_synthetic_scenario(
 ) -> tuple[object, list[dict]]:
     """Run a declarative synthetic fixture through the ordinary frame loop."""
     from .custom_scenario import (
-        apply_synthetic_events,
         build_synthetic_state,
         load_synthetic_scenario,
     )
+    from .host.session import HostSession
 
     scenario = load_synthetic_scenario(path)
     frame_count = scenario.default_frames if frames is None else frames
@@ -345,9 +345,10 @@ def run_synthetic_scenario(
     if every < 1:
         raise ValueError("every must be at least one")
     state = build_synthetic_state(scenario)
+    session = HostSession(state)
     trace = [digest_state(state)]
     for frame in range(frame_count):
-        apply_synthetic_events(state)
+        session.apply_events()
         tick(state)
         if (frame + 1) % every == 0:
             trace.append(digest_state(state))

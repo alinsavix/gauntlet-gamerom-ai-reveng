@@ -19,6 +19,20 @@ See [PLAN.md](PLAN.md) and [ISSUES.md](ISSUES.md).
 Contributors should also read the concise [fidelity rules](FIDELITY.md) before
 changing simulation state or coordinate arithmetic.
 
+## Code boundaries
+
+`gauntpy.host` owns application startup, window/input pacing, audio playback,
+diagnostics, troubleshooting controls, and state snapshots. `render` composes
+game-owned video memory into pixels; its old host imports remain compatibility
+exports. `gauntpy.play` preserves the CLI and `build_state`/`run` APIs.
+Cold boot, direct play, synthetic fixtures, and snapshot resume remain distinct
+entry paths: resuming never boots the cabinet or rebuilds game/video memory.
+`host.session.HostSession` is caller-owned, never attached to `GameState`.
+Existing synthetic-state APIs retain their runtime attachment and serialize
+its provenance in the separate synthetic-scenario envelope.
+Synthetic fixtures and performance workloads stay host-side test inputs, not
+evidence of original arcade behavior.
+
 ## Play it
 
 With [uv](https://docs.astral.sh/uv/) (recommended — it resolves the local

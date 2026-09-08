@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy import play
+from gauntpy.host import application as play
+from gauntpy.host import startup
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.state import GameState
 
@@ -219,7 +220,7 @@ class TestArguments:
     def test_benchmark_loop_excludes_warmup_and_uses_host_raster_timing(
         self, monkeypatch, capsys,
     ):
-        from gauntpy.render import host as host_module
+        from gauntpy.host import shell as host_module
 
         state = GameState()
         calls = {"wait": 0, "present": 0, "tick": 0}
@@ -273,7 +274,7 @@ class TestArguments:
         assert rows["display flip"][0] == "0.750"
 
     def test_benchmark_all_runs_each_named_workload(self, monkeypatch, capsys):
-        from gauntpy.render import host as host_module
+        from gauntpy.host import shell as host_module
 
         built = []
 
@@ -321,7 +322,7 @@ class TestArguments:
     def test_stress_loop_advances_each_phase_in_order(
         self, monkeypatch, capsys,
     ):
-        from gauntpy.render import host as host_module
+        from gauntpy.host import shell as host_module
 
         built_phases = []
 
@@ -379,7 +380,7 @@ class TestArguments:
 
     def test_host_frame_limit_policy_does_not_require_pygame(self):
         from gauntpy.constants import FRAMES_PER_SECOND
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.shell import HostShell
 
         class Clock:
             def __init__(self):
@@ -597,9 +598,9 @@ def test_playerstart_fallback_installs_the_live_character_palette(monkeypatch):
 
     state = GameState()
     init_mob_color_ram(state)
-    monkeypatch.setattr(play, "player_join", lambda *_args: None)
+    monkeypatch.setattr(startup, "player_join", lambda *_args: None)
 
-    slot = play._spawn_player(state, Character.WARRIOR)
+    slot = startup.spawn_player(state, Character.WARRIOR)
 
     assert state.mobs.hpos[slot] & 0x0F == 0x0C
     assert mob_palette_words(state, 0x0C) != mob_palette_words(GameState(), 0x0C)
@@ -891,7 +892,7 @@ class TestBuildState:
     def test_f4_state_can_resume_deterministically(self, tmp_path):
         from gauntpy.coords import hpos_x
         from gauntpy.mainloop import tick
-        from gauntpy.render.state_dump import dump_game_state, load_game_state
+        from gauntpy.host.state_dump import dump_game_state, load_game_state
         from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
 
         saved = dump_game_state(

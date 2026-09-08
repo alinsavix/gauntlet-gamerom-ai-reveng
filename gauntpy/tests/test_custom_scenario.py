@@ -28,12 +28,12 @@ from gauntpy.performance_workloads import (
     prepare_workload_state,
     validate_runtime_invariants,
 )
-from gauntpy.render.state_dump import (
+from gauntpy.host.state_dump import (
     StateDumpError,
     game_state_from_payload,
     state_dump_payload,
 )
-from gauntpy.render.diagnostics import (
+from gauntpy.host.diagnostics import (
     DEBUG_PAGES,
     capture_debug_snapshot,
     debug_page_lines,

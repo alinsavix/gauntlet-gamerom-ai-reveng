@@ -2357,7 +2357,7 @@ class TestHostShellInput:
         pressed' must be all bits set (0xFFFF), and a held key must clear
         (not set) its bit -- getting this backwards inverts every control.
         """
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.shell import HostShell
 
         shell = HostShell(assets=_FakeAssets())
         try:
@@ -2368,7 +2368,7 @@ class TestHostShellInput:
             shell.close()
 
     def test_gamepad_maps_stick_dpad_and_buttons_to_cabinet_word(self):
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.shell import HostShell
         from gauntpy.subsystems.input import (
             JOY_DOWN, JOY_FIRE_BIT, JOY_LEFT, JOY_MAGIC_BIT,
         )
@@ -2408,7 +2408,7 @@ class TestHostShellInput:
             shell.close()
 
     def test_gamepad_coin_and_pause_buttons_are_edges(self):
-        from gauntpy.render.host import (
+        from gauntpy.host.shell import (
             GAMEPAD_COIN_BUTTON, GAMEPAD_PAUSE_BUTTON, HostShell,
         )
 
@@ -2452,7 +2452,7 @@ class TestHostShellInput:
         """Smoke test of the exact g2mainloop interface (wait_for_vblank
         then present), using the fake asset source so it needs no ROMs.
         """
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.shell import HostShell
 
         shell = HostShell(assets=_FakeAssets())
         try:
@@ -2463,7 +2463,7 @@ class TestHostShellInput:
             shell.close()
 
     def test_present_delivers_the_accepted_sound_stream_to_the_host_player(self):
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.shell import HostShell
 
         class AudioPlayer:
             def __init__(self):
@@ -2485,7 +2485,7 @@ class TestHostShellInput:
         assert audio.closed
 
     def test_p_key_toggles_host_pause(self):
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.shell import HostShell
 
         shell = HostShell(assets=_FakeAssets())
         try:
@@ -2506,9 +2506,9 @@ class TestHostShellInput:
 
     def test_f1_toggles_the_separate_host_diagnostics_panel(self, monkeypatch):
         from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
-        from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
-        from gauntpy.render import host
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.diagnostics import DEBUG_PANEL_WIDTH
+        from gauntpy.host import shell as host
+        from gauntpy.host.shell import HostShell
 
         times = iter((10.0, 10.0125, 20.0, 20.0005))
         monkeypatch.setattr(host, "perf_counter", lambda: next(times))
@@ -2545,7 +2545,7 @@ class TestHostShellInput:
     def test_f4_writes_a_host_state_dump_without_mutating_game_memory(
         self, monkeypatch, tmp_path,
     ):
-        from gauntpy.render import host
+        from gauntpy.host import shell as host
 
         saved = tmp_path / "state.json"
         calls = []
@@ -2574,7 +2574,7 @@ class TestHostShellInput:
             shell.close()
 
     def test_troubleshooting_function_keys_route_to_controls(self, monkeypatch):
-        from gauntpy.render import host
+        from gauntpy.host import shell as host
 
         calls = []
         monkeypatch.setattr(
@@ -2627,7 +2627,7 @@ class TestHostShellInput:
             shell.close()
 
     def test_f8_unpauses_and_clears_when_bonus_room_ends(self):
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.shell import HostShell
 
         shell = HostShell(assets=_FakeAssets())
         try:
@@ -2653,8 +2653,8 @@ class TestHostShellInput:
 
     def test_diagnostics_panel_stays_native_width_when_game_is_scaled(self):
         from gauntpy.render.compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH
-        from gauntpy.render.diagnostics import DEBUG_PANEL_WIDTH
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.diagnostics import DEBUG_PANEL_WIDTH
+        from gauntpy.host.shell import HostShell
 
         shell = HostShell(assets=_FakeAssets(), scale=3, diagnostics=True)
         try:
@@ -2667,7 +2667,7 @@ class TestHostShellInput:
             shell.close()
 
     def test_full_playfield_host_uses_the_world_raster_size(self):
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.shell import HostShell
 
         shell = HostShell(assets=_FakeAssets(), scale=1, full_playfield=True)
         try:
@@ -2677,7 +2677,7 @@ class TestHostShellInput:
             shell.close()
 
     def test_diagnostics_page_and_mob_navigation_is_host_only(self):
-        from gauntpy.render.host import HostShell
+        from gauntpy.host.shell import HostShell
 
         state = GameState()
         state.mobs.picture[32] = 0x1000

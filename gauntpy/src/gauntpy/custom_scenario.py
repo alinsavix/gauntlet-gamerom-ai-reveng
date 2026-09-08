@@ -358,7 +358,7 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
     from gex.mazedecode import Maze
 
     from . import maze as maze_module
-    from .play import _spawn_player
+    from .host.startup import spawn_player
     from .subsystems.display import init_alpha_color_ram
     from .subsystems.exits import exit_scan_level
     from .subsystems.maze_objects import (
@@ -418,7 +418,7 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
     maze_doors_setup(state)
     maze_module.postdecode_level_setup(state)
     exit_scan_level(state)
-    _spawn_player(state, scenario.character)
+    spawn_player(state, scenario.character)
     state.players[0].health = scenario.health
     setup_infopanel(state, -1)
 

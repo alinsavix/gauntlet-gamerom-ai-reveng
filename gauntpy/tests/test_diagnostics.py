@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
-from gauntpy.render.diagnostics import (
+from gauntpy.host.diagnostics import (
     DEBUG_PAGES,
     DEBUG_FONT_SIZE,
     DEBUG_PANEL_HEIGHT,
@@ -335,7 +335,7 @@ def test_level_page_suppresses_stale_bonus_header_during_tally_transition():
 
 
 def test_routes_page_snapshots_both_route_nibbles_without_mutating_state():
-    from gauntpy.render import diagnostics
+    from gauntpy.host import diagnostics
 
     state = _diagnostic_state()
     slot = pack_slot(10, 10)

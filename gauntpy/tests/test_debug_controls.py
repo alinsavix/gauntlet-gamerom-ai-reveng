@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
-from gauntpy.render.debug_controls import (
+from gauntpy.host.debug_controls import (
     debug_add_key,
     debug_add_potion,
     debug_enable_secret_room,
@@ -181,7 +181,7 @@ def test_secret_room_shortcuts_reject_bonus_rooms_and_inactive_players():
 
 @requires_roms
 def test_skip_level_uses_rotation_and_preserves_inventory():
-    from gauntpy.play import build_state
+    from gauntpy.host.startup import build_state
 
     state = build_state(1, Character.ELF, keys=2, potions=3)
 
@@ -219,7 +219,7 @@ def test_skip_level_rejects_non_gameplay_modes():
 
 @requires_roms
 def test_skip_level_advances_treasure_countdown_before_start_screen():
-    from gauntpy.play import build_state
+    from gauntpy.host.startup import build_state
 
     state = build_state(7, Character.ELF)
     state.level_next_treasure = 1
@@ -234,7 +234,7 @@ def test_skip_level_advances_treasure_countdown_before_start_screen():
 
 @requires_roms
 def test_skip_level_neutralizes_an_in_flight_exit():
-    from gauntpy.play import build_state
+    from gauntpy.host.startup import build_state
     from gauntpy.subsystems import exits
 
     state = build_state(7, Character.ELF)

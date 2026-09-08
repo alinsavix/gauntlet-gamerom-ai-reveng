@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gauntpy.render import audio
-from gauntpy.render.audio import SoundLibraryError, StaticSoundPlayer
+from gauntpy.host import audio
+from gauntpy.host.audio import SoundLibraryError, StaticSoundPlayer
 from gauntpy.sound_catalog import SOUND_COMMAND_DESCRIPTIONS
 
 
