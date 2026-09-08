@@ -26,7 +26,8 @@ def build_cold_boot_state(
     from ..subsystems.boot import one_time_init
 
     state = GameState(rng=GameRandom(rng_seed))
-    bind_eeprom_storage(state, policy=persistence_policy)
+    if persistence_policy is not PersistencePolicy.ISOLATED:
+        bind_eeprom_storage(state, policy=persistence_policy)
     one_time_init(state)
     return state
 

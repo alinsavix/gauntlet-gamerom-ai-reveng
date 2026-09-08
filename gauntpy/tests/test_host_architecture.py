@@ -241,3 +241,19 @@ def test_cold_boot_binds_host_storage_before_game_initialization(monkeypatch, re
     monkeypatch.setattr(boot, "one_time_init", initialize)
     startup.build_cold_boot_state(persistence_policy=policy)
     assert seen == [policy]
+
+
+def test_isolated_cold_boot_starts_with_an_unprogrammed_device(monkeypatch):
+    from gauntpy.eeprom_device import MemoryEepromStorage
+    from gauntpy.host.eeprom import FileEepromStorage, PersistencePolicy
+    from gauntpy.subsystems.eeprom import game_difficulty
+
+    def forbidden(*_args):
+        pytest.fail("isolated cold boot accessed an external EEPROM image")
+
+    monkeypatch.setattr(FileEepromStorage, "read", forbidden)
+    state = startup.build_cold_boot_state(persistence_policy=PersistencePolicy.ISOLATED)
+    assert isinstance(state.eeprom_storage, MemoryEepromStorage)
+    assert state.game_settings == 0xE090
+    assert state.eeprom_settings_cache == 0xE090
+    assert game_difficulty(state) == 4

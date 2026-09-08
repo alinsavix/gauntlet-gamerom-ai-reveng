@@ -116,16 +116,15 @@ class InfoPanel:
 class GameState:
     """Everything the main loop's 28 per-frame calls read and write.
 
-    **Adding fields: append under your own work package's heading below.**
+    Keep addressed RAM names and shared storage visible to the ROM reader.
+    Necessary port execution state (such as a deferred level-start phase) also
+    belongs here and must survive snapshots, even without its own RAM address.
+    The historical work-package headings group related fields, not independent
+    subsystem ownership.
 
-    This is the one file every work package may touch, so it is partitioned by
-    owner. Appending under your own heading means two agents working in
-    parallel anchor on different text and cannot clobber each other. Do not
-    reorder the blocks, and do not add fields to another package's block or to
-    the shared core.
-
-    Every field needs its documented name and its RAM address in a comment. If
-    the docs give no name for it, say so in the comment.
+    Host configuration retained for snapshot/API compatibility is labeled
+    explicitly. Device bindings are outside the dataclass field schema; host
+    snapshots preserve their contents separately, never their filesystem policy.
     """
 
     def __post_init__(self) -> None:
@@ -697,7 +696,7 @@ class GameState:
     # on the treasure/secret-room exit screen.
     global_delay_timer: int = 0
     bonus_amount: int = 0
-    # Host-side phase marker for the shared 0x904A4E timer. True after the next
+    # Port execution phase for the shared 0x904A4E timer. True after the next
     # maze and its level splash are prepared, while hero placement is deferred.
     level_start_pending: bool = False
     # 0x904B80: levels left before the next treasure room. Seeded with

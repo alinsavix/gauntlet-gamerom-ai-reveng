@@ -361,6 +361,10 @@ cd gauntpy && GEX_ROM_DIR=../ROMs PYTHONPATH=src python -m gauntpy.play
 | [`mainloop.py`](src/gauntpy/mainloop.py) | `game_frame` — the 28-call frame sequence as straight-line code |
 | [`subsystems/`](src/gauntpy/subsystems/) | The 28 main-loop calls and supporting systems, each tied to its ROM address and references |
 | [`subsystems/input.py`](src/gauntpy/subsystems/input.py) | `input_debounce` — the worked example of a completed work package |
+| [`host/`](src/gauntpy/host/) | Startup, CLI, window, diagnostics, snapshots, and external persistence policy |
+| [`maze_rom.py`](src/gauntpy/maze_rom.py) / [`maze.py`](src/gauntpy/maze.py) | ROM acquisition adapters / game-owned level setup and descriptor decisions |
+| [`playfield.py`](src/gauntpy/playfield.py) / [`alpha_memory.py`](src/gauntpy/alpha_memory.py) | Shared game-side cell replacement / hidden alpha-word and route-byte writes |
+| [`player_animation.py`](src/gauntpy/subsystems/player_animation.py) / [`player_names.py`](src/gauntpy/subsystems/player_names.py) | ROM picture banks and writers / initials and secret-code routine families |
 
 `game_frame` calls its subsystems by name, directly — the loop is a function,
 not a table something interprets. [test_mainloop.py](tests/test_mainloop.py)

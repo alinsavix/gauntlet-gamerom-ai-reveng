@@ -20,9 +20,10 @@ import random
 import pytest
 
 from gauntpy import coords
-from gauntpy.constants import NULL_SLOT, NUM_MOB_SLOTS, MazeObjIds
+from gauntpy.constants import NULL_SLOT, NUM_MOB_SLOTS, GameMode, MazeObjIds
 from gauntpy.mob import MobTable
-from gauntpy.state import Player
+from gauntpy.state import GameState, Player
+from gauntpy.subsystems.session import coincheck
 
 SEEDS = [1, 2, 3, 17, 12345]
 
@@ -131,31 +132,28 @@ def test_depth_list_head_is_null_or_currently_active(seed):
         assert table.depth_list_head in active
 
 
-# --- health never exceeds its documented bounds ------------------------------
-#
-# PLAN.md §3 ground rule 6: "Health and score are 32-bit [longwords] ...
-# Mask on write where width is observable." No WP-6 writer exists yet --
-# state.py's ``Player.health`` has no setter of its own, so there is no
-# production code path to exercise here. What *is* checkable today: the
-# masking rule itself, against an independent reference, and the dataclass
-# defaults. Once WP-6 lands a real health-write function, swap ``_mask_u32``
-# below for it and this test starts checking the genuine article.
-
-def _mask_u32(value: int) -> int:
-    return value & 0xFFFFFFFF
+# --- health writers preserve the documented longword width -------------------
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_health_mask_matches_32bit_unsigned_wraparound(seed):
+def test_coin_health_writer_preserves_signed_longword_wraparound(seed):
+    """0x42C2C adds the configured coin health using the signed RAM convention."""
     rng = random.Random(seed)
-    for _ in range(200):
-        # Both a plausible in-range accumulation and values far outside 32
-        # bits in either sign, mirroring what an unmasked write -- or an
-        # underflowing `subq.l` -- could produce on real hardware.
-        value = rng.randint(-(1 << 40), 1 << 40)
-        masked = _mask_u32(value)
-        assert 0 <= masked <= 0xFFFFFFFF
-        assert masked == value % (1 << 32), "must match 32-bit unsigned wraparound exactly"
+    values = [1, 100, 0x7FFFFFFF - 99, 0x7FFFFFFF]
+    values.extend(rng.randint(1, 0x7FFFFFFF) for _ in range(200))
+    state = GameState(game_mode=GameMode.NORMAL, game_settings=0)
+    player = state.players[0]
+    for value in values:
+        player.health = value
+        player.coin_count = 2
+        state.last_coin_state = 0
+        state.coin_counters = 1
+        state.health_dirty[0] = 0
+        coincheck(state)
+        # Config index zero is the literal 100-health word at ROM 0x57862.
+        expected = ((value + 100 + (1 << 31)) % (1 << 32)) - (1 << 31)
+        assert player.health == expected
+        assert state.health_dirty[0] == 1
 
 
 def test_default_player_health_and_score_are_in_bounds():

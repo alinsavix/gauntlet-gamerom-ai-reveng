@@ -133,12 +133,20 @@ gauntpy/
     state.py           GameState / Player              DONE
     mainloop.py        g2mainloop / game_frame / tick  DONE
     assets.py          gex bridge                      WP-1
-    maze.py            gex maze/ROM-data bridge        WP-3
-    render/            compositor + host shell         WP-2
+    maze.py            game-side maze/level setup      WP-3
+    maze_rom.py        gex ROM/decoder/stamp boundary
+    maze_data.py       pure decoded-data contract
+    playfield.py       shared pf_replace game writer
+    alpha_memory.py    alpha-word / route-byte alias
+    eeprom_device.py   typed image and memory device
+    host/              startup, shell, snapshots, storage
+    render/            native-memory compositor        WP-2
     subsystems/
       __init__.py      subsystem package               DONE
       input.py         WP-4, the worked example        DONE
       players.py       WP-5 + WP-6                     DONE
+      player_animation.py  picture tables and writers
+      player_names.py  high-score and secret-name routines
       shots.py         WP-7                            DONE
       monsters.py      WP-8                            DONE
       dragon.py        WP-9                            DONE

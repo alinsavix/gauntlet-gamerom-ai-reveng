@@ -1315,8 +1315,9 @@ class TestTitleMobs:
             init_alpha_color_ram(state)
             start_attract_screen(state, int(mode))
             fb = Framebuffer(336, 240)
+            blank = fb.image.tobytes()
             draw_alpha_layer(fb, state)
-            assert fb.image.getbbox(), mode
+            assert fb.image.tobytes() != blank, mode
 
     def test_scores_preserve_the_maze_between_opaque_score_boxes(self):
         from PIL import Image
@@ -1351,8 +1352,9 @@ class TestTitleMobs:
         state.players[0].status = PlayerStatus.SELECTING
         _write_character_select_alpha(state)
         fb = Framebuffer(336, 240)
+        blank = fb.image.tobytes()
         draw_alpha_layer(fb, state)
-        assert fb.image.getbbox()
+        assert fb.image.tobytes() != blank
 
 class TestFrontEndTextIsRomData:
     """Front-end routines put ROM copy into alpha VRAM, not render calls."""

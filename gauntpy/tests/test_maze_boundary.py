@@ -6,6 +6,7 @@ import inspect
 import pytest
 
 from gauntpy import maze, maze_rom
+from gauntpy.constants import GameMode
 from gauntpy.render.state_dump import state_dump_payload
 from gauntpy.state import GameState
 
@@ -66,3 +67,26 @@ def test_adapter_exposes_acquisition_errors_without_game_fallbacks(monkeypatch):
     with pytest.raises(maze.MazeError, match="could not decode maze 7") as error:
         maze_rom.decode_maze(7)
     assert isinstance(error.value.__cause__, maze_rom.GexError)
+
+
+@pytest.mark.parametrize(
+    "mode,requested_maze", [(GameMode.SCORES, 103), (GameMode.DEMO, 102)],
+)
+def test_rom_free_attract_requests_scenery_without_pretending_it_loaded(
+    monkeypatch, mode, requested_maze,
+):
+    from gauntpy.subsystems.attract import start_attract_screen
+
+    requests = []
+
+    def unavailable(number):
+        requests.append(number)
+        raise maze.MazeError("deliberately unavailable test ROM")
+
+    monkeypatch.setattr(maze, "decode_maze", unavailable)
+    state = GameState(levelnum_current=42, mazenum_current=77)
+    start_attract_screen(state, mode)
+    assert requests == [requested_maze]
+    assert state.levelnum_current == 1
+    assert state.mazenum_current == 0
+    assert state.maze is None

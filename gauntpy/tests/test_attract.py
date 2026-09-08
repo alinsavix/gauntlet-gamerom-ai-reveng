@@ -283,6 +283,7 @@ class TestLegendPaging:
 
 
 class TestStartAttractScreen:
+    @requires_roms
     def test_screen_change_sounds_and_position_reset(self):
         """0x4444E/0x4445A/0x44462/0x4447A."""
         state = GameState()
@@ -380,6 +381,7 @@ class TestStartAttractScreen:
 
 
 class TestDemoInit:
+    @requires_roms
     def test_demo_switch_loads_demo_maze(self):
         state = GameState()
         start_attract_screen(state, int(GameMode.DEMO))

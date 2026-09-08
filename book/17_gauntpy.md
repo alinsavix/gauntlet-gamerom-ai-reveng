@@ -125,10 +125,16 @@ observable masks and wraparound.
 `mainloop.py` calls the subsystems in order; `tick` advances a modeled
 frame without imposing wall-clock pacing. Game-side presentation routines
 write modeled display memory. The renderer reads that memory with
-ROM-derived assets to produce pixels. `render\host.py` supplies the
+ROM-derived assets to produce pixels. `host\shell.py` supplies the
 window, input sampling, pacing, and diagnostic interface. Reading those
 three boundaries—game, renderer, host—makes the project much easier to
 navigate.
+
+ROM acquisition lives in `maze_rom.py`; game-side maze setup still owns
+placement and random choices. The EEPROM model likewise talks to a device
+interface, while the host chooses file-backed or isolated storage. A resumed
+snapshot restores its captured device image without reopening the current
+save file. Protecting that file does not freeze the game's EEPROM timer.
 
 With `--sound`, the host maps accepted commands to local
 `sounds\0xNN_description.wav` files, or a library selected by
@@ -155,12 +161,12 @@ only after that ordinary-maze workflow.
 
 - Setup, controls, snapshots, audio, and workload details:
   [gauntpy README](../gauntpy/README.md) and
-  [current command parser](../gauntpy/src/gauntpy/play.py).
+  [current command parser](../gauntpy/src/gauntpy/host/application.py).
 - Architecture: [state](../gauntpy/src/gauntpy/state.py),
   [MOB tables](../gauntpy/src/gauntpy/mob.py),
   [main loop](../gauntpy/src/gauntpy/mainloop.py),
   [compositor](../gauntpy/src/gauntpy/render/compositor.py), and
-  [host](../gauntpy/src/gauntpy/render/host.py).
+  [host](../gauntpy/src/gauntpy/host/shell.py).
 
 [Previous: Waking the cabinet](16_waking_the_cabinet.md) |
 [Contents](README.md) |

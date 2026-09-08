@@ -46,7 +46,21 @@ routine signatures, calls, RAM operands, and ROM table ranges.
 - `gauntpy/src/gauntpy/subsystems/`
   - The 28 main-loop calls and related ROM routines.
 - `gauntpy/src/gauntpy/maze.py`
-  - ROM/gex bridge for maze decode, placement, mirroring, and level VRAM setup.
+  - Game-side placement, mirroring, random selection, and level VRAM setup.
+- `gauntpy/src/gauntpy/maze_rom.py`
+  - ROM/gex acquisition, decode, immutable data, and stamp adapters.
+- `gauntpy/src/gauntpy/host/`
+  - Startup, application shell, audio, diagnostics, snapshots, and EEPROM files.
+  - Cold boot, direct play, synthetic fixtures, and resume stay distinct.
+- `gauntpy/src/gauntpy/eeprom_device.py`
+  - Pure typed storage seam. Bare states use independent memory devices;
+    hosts bind external persistence explicitly before boot or live stepping.
+- `gauntpy/src/gauntpy/alpha_memory.py`
+  - Coupled hidden-alpha word and thief route-byte writes.
+- `gauntpy/src/gauntpy/subsystems/player_animation.py` / `player_names.py`
+  - Extracted ROM routine families; players retains compatibility reexports.
+- `gauntpy/src/gauntpy/playfield.py`
+  - Shared game-side `pf_replace`, formerly owned by shots.
 - `gauntpy/src/gauntpy/playfield_vram.py`
   - Authoritative column-first playfield descriptor/color writers.
 - `gauntpy/src/gauntpy/render/`
