@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..alpha_memory import fill_alpha_words, write_alpha_word
 from ..mob import MobTable
 from ..state import GameState
 
@@ -521,8 +522,9 @@ def write_alpha_glyphs(
     for offset, glyph in enumerate(glyphs):
         x = column + offset
         if 0 <= x < ALPHA_COLUMNS:
-            state.alpha_ram[alpha_index(x, row)] = alpha_word(
-                attribute, 0 if glyph == 0x20 else glyph,
+            write_alpha_word(
+                state, alpha_index(x, row),
+                alpha_word(attribute, 0 if glyph == 0x20 else glyph),
             )
 
 
@@ -571,8 +573,9 @@ def write_alpha_large_char(
         width = 2
     for dx, dy, glyph in cells:
         if 0 <= column + dx < ALPHA_COLUMNS and 0 <= row + dy < ALPHA_ROWS:
-            state.alpha_ram[alpha_index(column + dx, row + dy)] = alpha_word(
-                cell_attribute, glyph | 0x0100,
+            write_alpha_word(
+                state, alpha_index(column + dx, row + dy),
+                alpha_word(cell_attribute, glyph | 0x0100),
             )
     return width
 
@@ -594,8 +597,9 @@ def write_alpha_name_entry_large_char(
         (1, 0, special[2]), (1, 1, special[3]),
     ):
         if 0 <= column + dx < ALPHA_COLUMNS and 0 <= row + dy < ALPHA_ROWS:
-            state.alpha_ram[alpha_index(column + dx, row + dy)] = alpha_word(
-                attribute, glyph,
+            write_alpha_word(
+                state, alpha_index(column + dx, row + dy),
+                alpha_word(attribute, glyph),
             )
     return 2
 
@@ -625,17 +629,8 @@ def fill_alpha_rect(
     bottom = min(ALPHA_ROWS, row + height)
     if left >= right or top >= bottom:
         return
-    values = [word & 0xFFFF] * (right - left)
     for y in range(top, bottom):
-        start = alpha_index(left, y)
-        state.alpha_ram[start:start + len(values)] = values
-        hidden_left = max(42, left)
-        hidden_right = min(64, right)
-        if y < 24 and hidden_left < hidden_right:
-            for hidden_column in range(hidden_left, hidden_right):
-                route_offset = y * 0x80 + (hidden_column - 42) * 2
-                state.path_direction_grid[route_offset] = (word >> 8) & 0xFF
-                state.path_direction_grid[route_offset + 1] = word & 0xFF
+        fill_alpha_words(state, alpha_index(left, y), right - left, word)
 
 
 def clear_alpha_visible(state: GameState) -> None:

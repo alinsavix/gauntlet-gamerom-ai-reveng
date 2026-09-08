@@ -499,6 +499,12 @@ record must succeed before a level reset mutates state. The explicit
 ROM-free `reset_and_load_level` failure path returns false without partial
 setup; errors during game-side setup are not swallowed.
 
+`alpha_memory.py` owns synchronization between alpha words and the live
+44-byte route rows. Glyph, rectangle, and thief route writers use that
+boundary; the two serialized representations are not independently owned RAM.
+Keep unused route-stride padding unchanged, and do not rebuild either view
+when restoring an exact historical snapshot.
+
 ## Deterministic scenarios
 
 `gauntpy-scenario` provides reusable traces for:

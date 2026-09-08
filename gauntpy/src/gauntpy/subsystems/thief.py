@@ -6,6 +6,8 @@ and the checked ``row76.bin`` routines at 0x4DEB8-0x4FEB0.
 
 from __future__ import annotations
 
+from ..alpha_memory import write_path_grid_byte as _write_path_grid_byte
+
 from ..constants import FIRST_PLAYABLE_SLOT, MazeObjIds
 from ..coords import (
     decode_hpos,
@@ -133,20 +135,6 @@ def _path_grid_offset(grid_index: int) -> int:
     if not 0 <= grid_index <= _PATH_GRID_MAX_CELL:
         raise ValueError(f"path-grid cell out of range: {grid_index:#x}")
     return (grid_index // _PATH_GRID_COLUMNS) * _PATH_GRID_ROW_STRIDE + grid_index % _PATH_GRID_COLUMNS
-
-
-def _write_path_grid_byte(state: GameState, offset: int, value: int) -> None:
-    """Write the route byte and its big-endian hidden-alpha RAM alias."""
-    value &= 0xFF
-    state.path_direction_grid[offset] = value
-    byte_offset = 0x54 + offset
-    word_index, low_byte = divmod(byte_offset, 2)
-    word = state.alpha_ram[word_index]
-    state.alpha_ram[word_index] = (
-        (word & 0xFF00) | value
-        if low_byte
-        else (word & 0x00FF) | (value << 8)
-    )
 
 
 def path_grid_get_direction(state: GameState, grid_index: int) -> int:
