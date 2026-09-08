@@ -5,14 +5,10 @@ level transitions: WP-20's boot/front-end path (``session.main_start_game``
 via ``reset_and_load_level``), WP-15's exit sequence, WP-17's attract demo,
 and the ``gauntpy-play`` runner all reach the maze through it.
 
-Like ``assets.py``, this is a bridge module: it is allowed to import ``gex``
-(the sibling ``../python-gex`` project) but must not import any gauntpy
-subsystem module. gex already implements the Slapstic ROM reader and the
-maze bytecode decompressor -- this module *reuses* both rather than porting
-them (PLAN.md WP-3), and adds the game-specific layer gex has no reason to
-know about: level selection, level-flag randomization and the maze mirroring
-it drives, row-0 wall fill, and turning decoded tokens into ``MobTable``
-records.
+ROM acquisition and decoder/stamp access belong to ``maze_rom``. This module
+owns the game-side setup sequence, level-flag randomization, maze mirroring,
+row-0 wall fill, and native MOB and playfield writes. In particular, random
+stamp selection stays at the original game-side write point.
 
 Reference: ``doc/04_game_subsystems.md`` section 5; ``doc/06_maze_catalog.md``;
 ``book/09_mazes_and_slapstic.md``; ``../python-gex/src/gex/{roms,mazedecode}.py``.
@@ -44,45 +40,19 @@ from __future__ import annotations
 
 import struct
 from dataclasses import replace
-from typing import NamedTuple
-
-from gex.adjacency import (
-    checkffadj4,
-    ff_make_map,
-    whatis,
-)
-from gex.constants import (
-    LFLAG4_TRAPS_LOCAL,
-    LFLAG4_WRAP_H,
-    LFLAG4_WRAP_V,
-    MAX_MAZE_NUM,
-)
-from gex.floor import floor_get_stamp
-from gex.palettes import (
-    FLOOR_PALETTES,
-    SHRUB_FLOOR_COLOR_NUMS,
-    SHRUB_PALETTE_DEFAULT,
-    WALL_PALETTES,
-)
-from gex.mazedecode import Maze, maze_decompress
-from gex.objparams import (
-    PICTURE_MARKER,
-    base_picture,
-    hpos_correction,
-    hsize_tier,
-    vpos_offset,
-)
-from gex.roms import (
-    GexError,
-    coderom_get_bytes,
-    slapstic_maze_get_bank,
-    slapstic_maze_get_real_addr,
-    slapstic_read_maze,
-)
-from gex.wall import ff_get_stamp, wall_get_destructable_stamp, wall_get_stamp
 
 from . import coords
 from .constants import FIRST_PLAYABLE_SLOT, GameMode, MazeObjIds
+from .maze_rom import (
+    FLOOR_PALETTES, GexError, LFLAG4_TRAPS_LOCAL, LFLAG4_WRAP_H, LFLAG4_WRAP_V,
+    PICTURE_MARKER, SHRUB_FLOOR_COLOR_NUMS, SHRUB_PALETTE_DEFAULT, WALL_PALETTES,
+    Maze, MazeError, MazeLocation, SeededRandom, base_picture, checkffadj4,
+    coderom_get_bytes, decode_maze, ff_get_stamp, ff_make_map, find_maze,
+    floor_get_stamp, food_invuln_pictures_read as _food_invuln_pictures_read,
+    hpos_correction, hsize_tier,
+    random_maze_flags_table_read as _random_maze_flags_table_read,
+    vpos_offset, wall_get_destructable_stamp, wall_get_stamp, whatis,
+)
 from .mob import MobTable
 from .playfield_vram import (
     EXIT_SETTLED_DESC,
@@ -168,14 +138,6 @@ def load_attract_fixed_palette() -> tuple[int, ...] | None:
         return None
     return struct.unpack(">128H", raw)
 
-
-
-class MazeError(Exception):
-    """Something WP-3 could not satisfy: an out-of-range maze/level number
-    or a gex-level decode failure. Mirrors ``assets.py``'s ``AssetError``
-    pattern -- callers of this module never need to catch gex's own
-    ``GexError``.
-    """
 
 
 def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
@@ -635,7 +597,6 @@ def initialize_playfield_ram(state: GameState, maze: Maze) -> None:
                 )
             )
 
-    from gex.rand import SeededRandom
     if maze.wallpattern in (0, 1, 2, 3, 4, 5, 6, 11):
         for adjacency in range(256):
             state.playfield_wall_catalog[adjacency] = _descriptor_words(
@@ -676,57 +637,6 @@ def initialize_playfield_ram(state: GameState, maze: Maze) -> None:
             if obj in _WALL_TYPES and _wall_is_visible(state, obj):
                 descriptor = _descriptor_for_cell(state, slot, obj)
                 write_tile_descriptor(state, slot, descriptor)
-
-
-# ---------------------------------------------------------------------------
-# find_maze (0x40C78) and maze decode -- thin wrappers over gex
-# ---------------------------------------------------------------------------
-
-class MazeLocation(NamedTuple):
-    """``find_maze``'s result: which Slapstic bank holds the record, and its
-    normalized address within the 32 KiB image (doc/06 sections 1-2).
-    """
-
-    bank: int
-    addr: int
-
-
-def find_maze(maze_number: int) -> MazeLocation:
-    """``find_maze`` (0x40C78): maze number -> Slapstic bank + data pointer
-    (doc/04 section 5.1). See the module docstring's "Scope note" -- this
-    maps a *maze number*, not a level.
-
-    Delegates entirely to gex, which already implements the 2-bit bank
-    lookup table (0x39FE0) and the 117-entry pointer table (0x3800C),
-    normalized into the interleaved 32 KiB image (doc/06 sections 1-2).
-    """
-    if not (0 <= maze_number <= MAX_MAZE_NUM):
-        raise MazeError(f"maze number {maze_number} out of range 0..{MAX_MAZE_NUM}")
-    try:
-        bank = slapstic_maze_get_bank(maze_number)
-        addr = slapstic_maze_get_real_addr(maze_number)
-    except GexError as exc:
-        raise MazeError(f"could not resolve maze {maze_number}: {exc}") from exc
-    return MazeLocation(bank, addr)
-
-
-def decode_maze(maze_number: int) -> Maze:
-    """Read and decompress one maze record: ``find_maze``'s pointer feeds
-    ``maze_decode`` (0x4C1BC) in the original; here both steps are gex calls
-    (``slapstic_read_maze`` + ``maze_decompress``), never ported.
-
-    Maze 116 has no trailing zero delimiter -- its stream runs into the bank
-    lookup table at the end of the 32 KiB image (doc/06 section 8) -- so it
-    is decoded with ``allow_missing_delimiter``, matching gex's own CLI
-    (``gex/maze.py`` ``domaze``).
-    """
-    if not (0 <= maze_number <= MAX_MAZE_NUM):
-        raise MazeError(f"maze number {maze_number} out of range 0..{MAX_MAZE_NUM}")
-    try:
-        compressed = slapstic_read_maze(maze_number)
-        return maze_decompress(compressed, allow_missing_delimiter=maze_number == MAX_MAZE_NUM)
-    except GexError as exc:
-        raise MazeError(f"could not decode maze {maze_number}: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -901,9 +811,7 @@ TILE_MARKER_PICTURE = 0x8001
 # table at 0x58F20 (doc/04 sec 5.4; ROM 0x46150-0x46168). Read through gex's
 # generic code-ROM reader and cached, like the level-flags table below --
 # never transcribed by hand.
-_FOOD_INVULN_PICTURES_ADDR = 0x58F20
 _FOOD_INVULN_PICTURES_COUNT = 3
-_food_invuln_pictures: tuple[int, ...] | None = None
 
 # challenge_target_object_types, ROM 0x57056 -- one generator type selected by
 # each challenge code 0x50-0x5D. maze_new_level_setup 0x43C20-0x43D10 turns
@@ -926,16 +834,6 @@ _LFLAG3_WALLS_DELETABLE2 = 0x20
 _TRAP_TYPE_FIRST = int(MazeObjIds.TILE_TRAP1)
 _TRAP_TYPE_COUNT = 3
 _ADAPTIVE_FOOD_PICTURE = 0x277B
-
-
-def _food_invuln_pictures_read() -> tuple[int, ...]:
-    global _food_invuln_pictures
-    if _food_invuln_pictures is None:
-        raw = coderom_get_bytes(
-            _FOOD_INVULN_PICTURES_ADDR, _FOOD_INVULN_PICTURES_COUNT * 2
-        )
-        _food_invuln_pictures = struct.unpack(f">{_FOOD_INVULN_PICTURES_COUNT}H", raw)
-    return _food_invuln_pictures
 
 
 def _dragon_suppressed(state: GameState, object_type: int) -> bool:
@@ -1497,17 +1395,7 @@ def _join_flags(b1: int, b2: int, b3: int, b4: int) -> int:
 # table is read directly from the game ROM via gex's existing generic code
 # -ROM reader (never re-derived or hand-copied). Read once and cached --
 # it is fixed ROM content, not per-maze state.
-_RANDOM_MAZE_FLAGS_ADDR = 0x57012
 _RANDOM_MAZE_FLAGS_COUNT = 13
-_random_maze_flags_table: tuple[int, ...] | None = None
-
-
-def _random_maze_flags_table_read() -> tuple[int, ...]:
-    global _random_maze_flags_table
-    if _random_maze_flags_table is None:
-        raw = coderom_get_bytes(_RANDOM_MAZE_FLAGS_ADDR, _RANDOM_MAZE_FLAGS_COUNT * 4)
-        _random_maze_flags_table = struct.unpack(f">{_RANDOM_MAZE_FLAGS_COUNT}I", raw)
-    return _random_maze_flags_table
 
 
 def get_random_maze_flags(state: GameState) -> int:
@@ -1607,6 +1495,15 @@ def maze_load_pickup_config(state: GameState, maze: Maze) -> None:
 # load_level -- the public entry point
 # ---------------------------------------------------------------------------
 
+def _level_maze_number(
+    state: GameState, level_number: int, maze_number: int | None,
+) -> int:
+    if maze_number is not None:
+        return maze_number
+    opening_maze = maze_for_level(level_number)
+    return state.mazenum_current if opening_maze is None else opening_maze
+
+
 def load_level(state: GameState, level_number: int, maze_number: int | None = None) -> None:
     """Load and set up the maze for ``level_number`` (PLAN.md sec 6 WP-3).
 
@@ -1632,6 +1529,15 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     reads are represented by ordered live-MOB scans because packed slot is
     already the stored table value.
     """
+    mazenum = _level_maze_number(state, level_number, maze_number)
+    decoded = decode_maze(mazenum)
+    _setup_decoded_level(state, level_number, mazenum, decoded)
+
+
+def _setup_decoded_level(
+    state: GameState, level_number: int, mazenum: int, maze: Maze,
+) -> None:
+    """Run the game-owned setup writes after ROM acquisition succeeds."""
     state.levelnum_current = level_number
     state.monster_slowmo_timer = 0                         # 0x438C2
     state.thief_enter_time = -1                            # 0x438CA
@@ -1646,21 +1552,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     state.special_bonus_score = 100      # 0x44166, ordinary score-bag value
     state.random_pickups_setup_done = False
 
-    if maze_number is not None:
-        # Caller pins a specific maze (attract demo/legend, treasure rooms) that
-        # is not the level's fixed maze.
-        mazenum = maze_number
-    else:
-        mazenum = maze_for_level(level_number)
-        if mazenum is None:
-            # No fixed rule past the opening act (doc/06 sec 3.2) -- trust that
-            # the caller (eventually WP-15's exit sequence via WP-20 boot) has
-            # already advanced state.mazenum_current. See module docstring
-            # "Scope note".
-            mazenum = state.mazenum_current
     state.mazenum_current = mazenum
-
-    maze = decode_maze(mazenum)
 
     maze_load_pickup_config(state, maze)
 
@@ -1695,16 +1587,6 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     _remove_deletable_trap_walls(state)                 # 0x43BA0-0x43C1A
     _prepare_secret_challenge(state)
 
-    # maze_new_level_setup step 10: rebuild the exit table from the MOBs just
-    # placed (0x43B3A-0x43B9A). It has to live on the common load path, not in
-    # each caller: the runner's mid-level drop went straight to load_level, so
-    # exit_slots stayed empty, exit_open_id stayed zero, and main_exit_move
-    # returned at its first gate -- moving exits never moved. WP-15 owns the
-    # scan; this is the call site the ROM puts it at. Function-local because
-    # exits.py reaches back into this module for its own reload, and it must
-    # run last: the scan reads the placed EXIT MOBs and the level flags.
-
-
 def reset_and_load_level(
     state: GameState, level_number: int, maze_number: int | None = None
 ) -> bool:
@@ -1714,18 +1596,17 @@ def reset_and_load_level(
     ``maze_number`` to pin a specific maze (attract demo/legend, treasure rooms)
     instead of the level's fixed maze.
 
-    Returns ``True`` on success. On a decode failure -- most commonly no ROMs
-    configured -- the previous MOB table is restored and ``False`` is returned,
-    so callers (the attract->game start, the exit sequence) advance their level
-    counters but do not crash a ROM-less environment. Players are re-placed by
-    the caller after a successful load.
+    Returns ``True`` on success. A decode failure returns ``False`` without
+    changing state, retaining the explicit ROM-free harness path without a
+    partially initialized level. Other setup errors propagate. Players are
+    re-placed by the caller after a successful load.
     """
-    old_mobs = state.mobs
+    mazenum = _level_maze_number(state, level_number, maze_number)
+    try:
+        decoded = decode_maze(mazenum)
+    except MazeError:
+        return False
     state.mobs = MobTable()
     state.level_players_active = 0
-    try:
-        load_level(state, level_number, maze_number)
-    except MazeError:
-        state.mobs = old_mobs
-        return False
+    _setup_decoded_level(state, level_number, mazenum, decoded)
     return True

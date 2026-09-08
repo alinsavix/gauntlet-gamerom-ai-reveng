@@ -490,6 +490,15 @@ implementation specification.
 5. Commit the completed, verified batch at the end of the turn. Do not include
    ROMs, local EEPROM/NVRAM, `extra_docs/`, or generated traces.
 
+## Implementation boundaries
+
+`maze_rom.py` owns ROM acquisition and the gex decoder/stamp adapters;
+`maze.py` owns setup sequencing, random selection, and native memory writes.
+Decoded maze data satisfies the pure `MazeData` contract. Acquiring a maze
+record must succeed before a level reset mutates state. The explicit
+ROM-free `reset_and_load_level` failure path returns false without partial
+setup; errors during game-side setup are not swallowed.
+
 ## Deterministic scenarios
 
 `gauntpy-scenario` provides reusable traces for:
