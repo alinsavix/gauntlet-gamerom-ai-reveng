@@ -11,9 +11,16 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ..eeprom_device import MemoryEepromStorage
 from ..mob import MobTable
 from ..rng import GameRandom
 from ..state import GameState
+from .eeprom import (
+    PersistencePolicy,
+    bind_eeprom_storage,
+    parse_eeprom_snapshot,
+    serialize_eeprom_snapshot,
+)
 
 STATE_DUMP_SCHEMA = 1
 _SCHEMA_1_RETIRED_FIELDS = {"suppress_first_encounter_messages"}
@@ -104,6 +111,7 @@ def state_dump_payload(state: GameState) -> dict[str, object]:
         "captured_at_utc": datetime.now(timezone.utc).isoformat(),
         "frame": state.frame_counter,
         "state": _json_value(state, set()),
+        "eeprom": serialize_eeprom_snapshot(state.eeprom_storage.read()),
     }
     from ..custom_scenario import synthetic_runtime_payload
 
@@ -343,6 +351,14 @@ def game_state_from_payload(payload: object) -> GameState:
             restore_synthetic_runtime(state, payload["synthetic_scenario"])
         except SyntheticScenarioError as exc:
             raise StateDumpError(f"invalid synthetic scenario metadata: {exc}") from exc
+    if "eeprom" in payload:
+        try:
+            image = parse_eeprom_snapshot(payload["eeprom"])
+        except ValueError as exc:
+            raise StateDumpError(f"invalid EEPROM snapshot: {exc}") from exc
+        state.eeprom_storage = MemoryEepromStorage(image)
+    else:
+        bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
     return state
 
 

@@ -15,6 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .constants import Character, GameMode, PlayerStatus
+from .eeprom_device import EepromStorage, MemoryEepromStorage
+from .maze_data import MazeData
 from .mob import MobTable
 from .rng import GameRandom
 
@@ -126,6 +128,10 @@ class GameState:
     the docs give no name for it, say so in the comment.
     """
 
+    def __post_init__(self) -> None:
+        # A device binding is not working RAM or part of dataclass snapshots.
+        self.eeprom_storage: EepromStorage = MemoryEepromStorage()
+
     # =========================================================================
     # Shared core -- owned by no work package. Do not append here.
     # =========================================================================
@@ -162,7 +168,7 @@ class GameState:
     level_flags_3: int = 0          # 0x90491E, LFLAG3 byte
     level_flags_4: int = 0          # 0x90491F, LFLAG4 byte
     level_players_active: int = 0
-    maze: object | None = None      # gex.mazedecode.Maze once WP-3 lands
+    maze: MazeData | None = None    # decoded layout supplied by the ROM adapter
     wrap_h: bool = False            # 0x90491F bit 5, from LFLAG4_WRAP_H
     wrap_v: bool = False            # 0x90491F bit 4, from LFLAG4_WRAP_V
 
@@ -818,7 +824,8 @@ class GameState:
     game_settings: int = 0            # 0x904A24, EEPROM options word; bit layout in subsystems/eeprom.py
     eeprom_write_timer: int = 0x8CA0  # 0x904012; 36,000 frames (~10 min at 60 Hz)
     eeprom_settings_cache: int = 0   # 0x904B94, last-written game_settings
-    eeprom_save_path: str = "gauntpy_eeprom.json"  # no ROM address -- local persistence target, see eeprom.py
+    # Compatibility host configuration; only host.eeprom interprets this path.
+    eeprom_save_path: str = "gauntpy_eeprom.json"
     # Host boundary: resumed historical states cannot overwrite newer external
     # EEPROM progress. Fresh boot/direct-play states leave persistence enabled.
     eeprom_persistence_enabled: bool = True

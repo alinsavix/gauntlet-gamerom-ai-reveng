@@ -492,6 +492,13 @@ implementation specification.
 
 ## Implementation boundaries
 
+The EEPROM model consumes `EepromStorage`, never host paths or JSON. Bare
+states use independent memory devices; the host binds a file device before
+cold boot or live stepping. Read-only and isolated policies suppress external
+writes, not the ROM countdown or accepted device writes. New state dumps
+preserve the exact device image in a separate envelope and restore it to
+memory without reading the current external save file.
+
 `subsystems/player_animation.py` and `subsystems/player_names.py` own their
 ROM routine families and literal tables. `playfield.py` owns the shared
 `pf_replace` producer; it is game code, not a renderer. Older player/shot

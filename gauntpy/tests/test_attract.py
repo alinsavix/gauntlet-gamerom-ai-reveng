@@ -357,15 +357,18 @@ class TestStartAttractScreen:
         """0x444A4-0x444C2: an operator-menu change is picked up without a
         reboot, through WP-19's real loader."""
         from gauntpy.subsystems.eeprom import eeprom_save_settings
+        from gauntpy.host.eeprom import bind_eeprom_storage
 
         saved = GameState()
         saved.eeprom_save_path = str(tmp_path / "eeprom.json")
+        bind_eeprom_storage(saved)
         saved.game_settings = _SETTINGS_ATTRACT_SOUND
         saved.two_player_mode = 0
         eeprom_save_settings(saved)
 
         state = GameState()
         state.eeprom_save_path = saved.eeprom_save_path
+        bind_eeprom_storage(state)
         state.game_settings = 0
         state.two_player_mode = 1
         for _ in range(_TITLE_SETTINGS_REFRESH_CYCLE - 1):

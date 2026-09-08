@@ -33,6 +33,15 @@ its provenance in the separate synthetic-scenario envelope.
 Synthetic fixtures and performance workloads stay host-side test inputs, not
 evidence of original arcade behavior.
 
+The EEPROM subsystem talks to a typed device, not to JSON or filesystem APIs.
+Bare/headless states use an isolated memory device. Interactive startup binds
+the local JSON backend explicitly; operator re-reads still observe live edits.
+Benchmark/stress runs, synthetic play, and resumed snapshots never write that
+file. Their modeled EEPROM timer and accepted in-memory writes still advance.
+For a custom host, call `host.eeprom.bind_eeprom_storage(state)` after choosing
+`state.eeprom_save_path` and before booting or stepping; changing legacy path or
+enable fields later requires rebinding the device.
+
 ## Play it
 
 With [uv](https://docs.astral.sh/uv/) (recommended — it resolves the local

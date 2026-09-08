@@ -1,4 +1,4 @@
-"""EEPROM persistence and operator configuration -- WP-19.
+"""ROM EEPROM timing, record codecs, and operator configuration -- WP-19.
 
 The options word (0x904A24) matters even though the operator menus do not:
 bits 5-7 are the operator-facing "Game Difficulty", whose principal gameplay
@@ -12,7 +12,8 @@ written by ``eeprom_process``/``eeprom_read_block`` and read back by
 ``PLAN.md`` §1 rules out of scope ("we reimplement behaviour, not
 instructions"); this module reimplements the *behaviour* --
 ``eeprom_periodic_write``'s countdown-timer/change-detection/flush pattern --
-against a plain local file instead of the redundant physical layout.
+against a typed device instead of the redundant physical layout. Host setup
+chooses its storage; this module never selects a path or performs file I/O.
 
 High-score tables also live in the real EEPROM image (``doc/02_os_rom.md``
 §8.11, ``read_high_score_entry`` 0x39B0 / ``write_high_score_entry`` 0x3A7E),
@@ -42,9 +43,7 @@ codec) and the EEPROM codec / redundant-block format;
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
+from ..eeprom_device import EepromImage, EepromRotation
 from ..state import GameState
 
 # --- game_settings (0x904A24) bit layout ---------------------------------
@@ -155,7 +154,7 @@ def decode_initials(packed: int) -> str:
 def _stored_record(score: int, initials: str) -> list:
     """One ladder entry as the EEPROM would hold it.
 
-    The file is JSON rather than the physical five-byte record (see the module
+    The device image is not the physical five-byte record (see the module
     docstring), but the *constraints* of that record are behaviour, not
     layout: a score is clamped to 24 bits and initials are round-tripped
     through the base-40 codec, so what survives a save/reload here is exactly
@@ -192,28 +191,6 @@ def _high_score_image(ladders) -> list:
         if not ladder:
             ladder = list(factory[character])
         image.append([_stored_record(*entry) for entry in ladder[:HIGHSCORE_RANKS]])
-    return image
-
-
-def _parse_high_score_image(data) -> list | None:
-    """Validate a loaded ``high_scores`` payload, or ``None`` if it is junk."""
-    if not isinstance(data, list) or len(data) != HIGHSCORE_CLASSES:
-        return None
-    image = []
-    for ladder in data:
-        if not isinstance(ladder, list) or len(ladder) > HIGHSCORE_RANKS:
-            return None
-        records = []
-        for entry in ladder:
-            if not isinstance(entry, (list, tuple)) or len(entry) != 2:
-                return None
-            score, initials = entry
-            if not isinstance(score, int) or isinstance(score, bool):
-                return None
-            if not isinstance(initials, str):
-                return None
-            records.append(_stored_record(score, initials))
-        image.append(records)
     return image
 
 
@@ -314,19 +291,6 @@ def _factory_rotation() -> dict:
     }
 
 
-def _parse_rotation_image(data) -> dict | None:
-    """Validate a loaded ``rotation`` payload, or ``None`` if it is junk."""
-    if not isinstance(data, dict):
-        return None
-    values = {}
-    for name in _ROTATION_FIELDS:
-        value = data.get(name)
-        if not isinstance(value, int) or isinstance(value, bool):
-            return None
-        values[name] = value
-    return values
-
-
 def game_difficulty(state: GameState) -> int:
     """Operator "Game Difficulty", 0-7 -- bits 5-7 of ``game_settings``.
 
@@ -367,13 +331,13 @@ def set_coins_to_start(state: GameState, coins: int) -> None:
 
 
 def eeprom_load_settings(state: GameState) -> None:
-    """Restore the persisted EEPROM image from ``state.eeprom_save_path``.
+    """Restore the current image from the cabinet's bound EEPROM device.
 
     No documented equivalent -- reimplements the *effect* of ``eeprom_init``
     (0x44E8) restoring the saved image at boot, plus ``one_time_init``'s
     factory-default arm (0x432D8-0x432FA), not the redundant-block decode.
 
-    A missing file is a factory-fresh part. The real cabinet reads its
+    An unprogrammed device is a factory-fresh part. The real cabinet reads its
     unprogrammed configuration item 12 back with bit 12 set,
     ``one_time_init`` sees that and installs ``game_default_settings``
     (ROM 0x40070 = 0xE090) instead, then writes it back so the part is
@@ -384,19 +348,16 @@ def eeprom_load_settings(state: GameState) -> None:
     in a way the whole cabinet could feel -- difficulty 0, attract sound off,
     and a coin-health table index that is not the ROM's.
 
-    A file that exists but is unreadable, truncated, or not the JSON this
-    module writes is treated exactly like a missing one, deliberately: the real
-    EEPROM's whole point is that a bad block falls back to defaults rather than
-    bricking the cabinet (``doc/02_os_rom.md`` §8.9's Hamming redundancy is
-    that idea in hardware). Refusing to boot because a save file got truncated
-    would be a worse reimplementation than ignoring it. So is carrying on with
-    whatever happened to be in RAM.
+    A storage backend may report an unreadable image as an unprogrammed part:
+    the real EEPROM's bad-block arm falls back to defaults
+    (``doc/02_os_rom.md`` §8.9). Transport validation and diagnostics belong to
+    that backend, not to the ROM model.
 
     A stored word that *itself* has bit 12 set gets the same treatment, because
     that is literally the ROM's test (0x432D8) -- the operator's "restore
     factory defaults" request.
 
-    High-score banks are only overwritten when the file actually carries
+    High-score banks are only overwritten when the image actually carries
     them. An absent or unusable ``high_scores`` payload leaves
     ``state.high_scores`` empty, which is exactly the ROM's "high-score banks
     are empty" condition that ``score.highscore_table_init`` (0x49BD0) fills
@@ -409,36 +370,29 @@ def eeprom_load_settings(state: GameState) -> None:
     file, because ``eeprom_load_config`` (0x42F86) range-checks those four
     values unconditionally on the way into RAM.
     """
-    path = Path(state.eeprom_save_path)
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        settings = int(data["game_settings"]) & 0xFFFF
-    except (OSError, ValueError, TypeError, KeyError):
+    image = state.eeprom_storage.read()
+    if image is None:
         _install_factory_settings(state)
         eeprom_validate_rotation(state)
         return
+    settings = image.game_settings & 0xFFFF
     if settings & GSETTING_RESTORE_DEFAULTS:            # 0x432DE
         _install_factory_settings(state)
     else:
         state.game_settings = settings
         state.eeprom_settings_cache = state.game_settings
-    try:
-        state.two_player_mode = int(
-            data.get("two_player_mode", state.two_player_mode)
-        ) & 0xFFFF
-    except (ValueError, TypeError):
-        pass
+    if image.two_player_mode is not None:
+        state.two_player_mode = image.two_player_mode & 0xFFFF
 
-    ladders = _parse_high_score_image(data.get("high_scores"))
-    if ladders is not None:
+    if image.high_scores is not None:
         state.high_scores = [
-            [(score, initials) for score, initials in ladder] for ladder in ladders
+            [tuple(_stored_record(score, initials)) for score, initials in ladder]
+            for ladder in image.high_scores
         ]
 
-    rotation = _parse_rotation_image(data.get("rotation"))
-    if rotation is not None:
-        for name, value in rotation.items():
-            setattr(state, name, value)
+    if image.rotation is not None:
+        for name in _ROTATION_FIELDS:
+            setattr(state, name, getattr(image.rotation, name))
     eeprom_validate_rotation(state)
 
 
@@ -454,39 +408,33 @@ def _install_factory_settings(state: GameState) -> None:
     state.eeprom_settings_cache = state.game_settings
 
 
+def eeprom_image(state: GameState) -> EepromImage:
+    """Snapshot the ROM-normalized records without changing working RAM."""
+    return EepromImage(
+        game_settings=state.game_settings,
+        two_player_mode=state.two_player_mode,
+        high_scores=tuple(
+            tuple((score, initials) for score, initials in ladder)
+            for ladder in _high_score_image(state.high_scores)
+        ),
+        rotation=EepromRotation(**_rotation_image(state)),
+    )
+
+
 def eeprom_save_settings(state: GameState) -> None:
-    """Persist the current EEPROM image to ``state.eeprom_save_path``.
+    """Write the current EEPROM image through the cabinet's bound device.
 
     No documented equivalent -- reimplements the *effect* of ``eeprom_write``
     (0x43192) flushing the write buffer via OS 0x24E, not the physical
-    Hamming-encoded layout. ``game_difficulty``/``coins_to_start`` are
-    included decoded, for a human reading the file; ``two_player_mode`` is the
-    host-side pricing/DIP seam re-read alongside ``game_settings``.
-    ``eeprom_load_settings`` reads back.
-    Written to a sibling temporary file and renamed over the target, so a
-    process that dies mid-write leaves the previous image intact instead of
-    a half-written file. That is the software equivalent of what the real
-    part's redundant blocks buy: a flush is either visible or it isn't.
+    Hamming-encoded layout. ``two_player_mode`` is the pricing/DIP seam re-read
+    alongside ``game_settings``. The storage backend owns external write policy
+    and transport atomicity; failures propagate without updating the shadow.
     """
-    path = Path(state.eeprom_save_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(
-        {
-            "game_settings": state.game_settings,
-            "two_player_mode": state.two_player_mode,
-            "game_difficulty": game_difficulty(state),
-            "coins_to_start": coins_to_start(state),
-            "rotation": _rotation_image(state),
-            "high_scores": _high_score_image(state.high_scores),
-        }
-    )
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(payload, encoding="utf-8")
-    temp.replace(path)
+    state.eeprom_storage.write(eeprom_image(state))
 
 
 def _stored_image(state: GameState) -> tuple[int | None, int | None, list, dict]:
-    """What the host image holds: ``(settings, pricing, ladders, rotation)``.
+    """What the device holds: ``(settings, pricing, ladders, rotation)``.
 
     An absent or unusable file is a factory-fresh part, so its ladders read
     back as the factory table, its rotation as the fresh-cabinet block, and its
@@ -496,26 +444,20 @@ def _stored_image(state: GameState) -> tuple[int | None, int | None, list, dict]
     at 0x43262 -- but returning all three keeps "what is on the part" in one
     place.
     """
-    path = Path(state.eeprom_save_path)
     empty_ladders = _high_score_image([[] for _ in range(HIGHSCORE_CLASSES)])
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        settings = int(data["game_settings"]) & 0xFFFF
-    except (OSError, ValueError, TypeError, KeyError):
+    image = state.eeprom_storage.read()
+    if image is None:
         return None, None, empty_ladders, _factory_rotation()
 
-    try:
-        pricing = int(data["two_player_mode"]) & 0xFFFF
-    except (ValueError, TypeError, KeyError):
-        pricing = None
-
-    ladders = _parse_high_score_image(data.get("high_scores"))
-    if ladders is None:
-        ladders = empty_ladders
-    rotation = _parse_rotation_image(data.get("rotation"))
-    if rotation is None:
-        rotation = _factory_rotation()
-    return settings, pricing, ladders, rotation
+    pricing = None if image.two_player_mode is None else image.two_player_mode & 0xFFFF
+    ladders = empty_ladders if image.high_scores is None else [
+        [_stored_record(score, initials) for score, initials in ladder]
+        for ladder in image.high_scores
+    ]
+    rotation = _factory_rotation() if image.rotation is None else {
+        name: getattr(image.rotation, name) for name in _ROTATION_FIELDS
+    }
+    return image.game_settings & 0xFFFF, pricing, ladders, rotation
 
 
 def eeprom_periodic_write(state: GameState) -> None:
@@ -550,8 +492,6 @@ def eeprom_periodic_write(state: GameState) -> None:
     docstring. It differing also triggers the write, so the original flushes
     strictly more often than this does.
     """
-    if not state.eeprom_persistence_enabled:
-        return
     if state.eeprom_write_timer > 0:
         state.eeprom_write_timer -= 1
         if state.eeprom_write_timer > 0:

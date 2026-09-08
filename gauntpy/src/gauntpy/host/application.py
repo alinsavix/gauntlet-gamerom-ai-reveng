@@ -34,6 +34,7 @@ from ..performance_workloads import (
     validate_runtime_invariants,
 )
 from ..state import GameState
+from .eeprom import PersistencePolicy, bind_eeprom_storage
 from .session import HostSession
 from .startup import build_cold_boot_state, build_state
 
@@ -229,7 +230,13 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         except SyntheticScenarioError as exc:
             raise SystemExit(f"could not load synthetic scenario: {exc}") from exc
     elif from_attract:
-        state = build_cold_boot_state(rng_seed)
+        state = build_cold_boot_state(
+            rng_seed,
+            persistence_policy=(
+                PersistencePolicy.READ_ONLY
+                if benchmark_frames is not None else PersistencePolicy.READ_WRITE
+            ),
+        )
     else:
         from ..maze import MazeError
         try:
@@ -247,6 +254,13 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
 
     if benchmark_frames is not None or stress_seconds is not None:
         state.eeprom_persistence_enabled = False
+        if load_state_path is None:
+            bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
+    elif scenario_path is not None:
+        state.eeprom_persistence_enabled = False
+        bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
+    elif load_state_path is None and not from_attract:
+        bind_eeprom_storage(state)
 
     session = HostSession(state)
 
@@ -318,6 +332,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                     state = _build_stress_state(
                         stress_phase_indices[stress_phase], rng_seed,
                     )
+                    bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
                     session = HostSession(state)
                     _apply_operator_overrides(state, reduce_text=reduce_text)
 
@@ -384,6 +399,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                     state = _build_workload_state(workload, rng_seed)
                     session = HostSession(state)
                     state.eeprom_persistence_enabled = False
+                    bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
                     _apply_operator_overrides(state, reduce_text=reduce_text)
                     benchmark = BenchmarkRecorder()
                     warmup_remaining = min(30, benchmark_frames)

@@ -160,6 +160,8 @@ def build_workload_state(
     workload: PerformanceWorkload, rng_seed: int,
 ) -> GameState:
     """Construct the same explicit recipe for benchmark and stress runners."""
+    from .host.eeprom import PersistencePolicy, bind_eeprom_storage
+
     if workload.scenario_filename is not None:
         from .custom_scenario import (
             build_synthetic_state,
@@ -170,8 +172,7 @@ def build_workload_state(
         scenario = load_synthetic_scenario(scenario_path(workload))
         state = build_synthetic_state(override_synthetic_seed(scenario, rng_seed))
         prepare_workload_state(state, workload)
-        return state
-    if workload.attract_mode is not None:
+    elif workload.attract_mode is not None:
         from .rng import GameRandom
         from .subsystems.attract import start_attract_screen
         from .subsystems.eeprom import GAME_DEFAULT_SETTINGS
@@ -182,18 +183,17 @@ def build_workload_state(
             eeprom_persistence_enabled=False,
         )
         start_attract_screen(state, workload.attract_mode)
-        return state
+    else:
+        if workload.level_maze is None:
+            raise ValueError(f"workload {workload.name!r} has no state recipe")
+        from .host.startup import build_state
 
-    if workload.level_maze is None:
-        raise ValueError(f"workload {workload.name!r} has no state recipe")
-    from .host.startup import build_state
-
-    level, maze_number = workload.level_maze
-    state = build_state(
-        level, workload.character, maze_number=maze_number, rng_seed=rng_seed,
-    )
+        level, maze_number = workload.level_maze
+        state = build_state(
+            level, workload.character, maze_number=maze_number, rng_seed=rng_seed,
+        )
     state.eeprom_persistence_enabled = False
-    return state
+    return bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
 
 
 def _join_four_players(state: GameState) -> None:

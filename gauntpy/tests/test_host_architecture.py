@@ -162,13 +162,17 @@ def test_resume_reconstructs_runtime_without_any_game_initialization(monkeypatch
 
 
 @pytest.mark.parametrize("paused", [False, True])
+@pytest.mark.parametrize("benchmark_frames", [None, 1])
 def test_resumed_application_skips_boot_and_honors_pause(
-    monkeypatch, tmp_path, paused,
+    monkeypatch, tmp_path, paused, benchmark_frames,
 ):
+    from gauntpy.eeprom_device import EepromImage, MemoryEepromStorage
     from gauntpy.host import shell
     from gauntpy.subsystems import boot
 
     state = GameState(eeprom_persistence_enabled=False)
+    device_image = EepromImage(0x2345)
+    state.eeprom_storage = MemoryEepromStorage(device_image)
     state.frame_counter = 73
     state.sound_log[:] = [1, 2]
     path = tmp_path / "state.json"
@@ -185,6 +189,7 @@ def test_resumed_application_skips_boot_and_honors_pause(
             calls.append(("audio", list(current.sound_log)))
 
         def wait_for_vblank(self, current):
+            assert current.eeprom_storage.read() == device_image
             calls.append(("input", current.frame_counter))
 
         def present(self, current):
@@ -212,10 +217,27 @@ def test_resumed_application_skips_boot_and_honors_pause(
         HostSession, "apply_events", forbidden if paused else apply_events,
     )
 
-    application.run(load_state_path=path)
+    application.run(load_state_path=path, benchmark_frames=benchmark_frames)
 
     updates = [] if paused else [("events", 73), ("tick", 73)]
     assert calls == [
         ("audio", [1, 2]), ("input", 73), *updates,
         ("present", 73 if paused else 74), ("close",),
     ]
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+def test_cold_boot_binds_host_storage_before_game_initialization(monkeypatch, read_only):
+    from gauntpy.host.eeprom import FileEepromStorage, PersistencePolicy
+    from gauntpy.subsystems import boot
+
+    policy = PersistencePolicy.READ_ONLY if read_only else PersistencePolicy.READ_WRITE
+    seen = []
+
+    def initialize(state):
+        assert isinstance(state.eeprom_storage, FileEepromStorage)
+        seen.append(state.eeprom_storage.policy)
+
+    monkeypatch.setattr(boot, "one_time_init", initialize)
+    startup.build_cold_boot_state(persistence_policy=policy)
+    assert seen == [policy]

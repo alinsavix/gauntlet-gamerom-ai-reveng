@@ -12,15 +12,21 @@ from ..coords import encode_hpos, encode_vpos_at_y, pack_slot, slot_to_pixels
 from ..rng import GameRandom
 from ..state import GameState
 from ..subsystems.camera import snap_camera
-from ..subsystems.players import player_join, update_player_sprite
+from ..subsystems.player_animation import update_player_sprite
+from ..subsystems.players import player_join
 from ..subsystems.session import configured_start_health
+from .eeprom import PersistencePolicy, bind_eeprom_storage
 
 
-def build_cold_boot_state(rng_seed: int = 0) -> GameState:
+def build_cold_boot_state(
+    rng_seed: int = 0, *,
+    persistence_policy: PersistencePolicy = PersistencePolicy.READ_WRITE,
+) -> GameState:
     """Seed one power-on and let the cabinet boot routine enter TITLE attract."""
     from ..subsystems.boot import one_time_init
 
     state = GameState(rng=GameRandom(rng_seed))
+    bind_eeprom_storage(state, policy=persistence_policy)
     one_time_init(state)
     return state
 
