@@ -473,6 +473,25 @@ implementation specification.
     `d3 >= 4` branch skips slow motion, dialogs, flash, and `potion_player`;
     only player shots activate potion magic. Do not infer a secondary effect
     from item removal or sound alone.
+97. **Door fronts are directional, not flood fills.** `main_open_doors` probes
+    one next cell per live channel and turns left at every accepted junction
+    picture, regardless of its neighbors. Mirroring can therefore change how
+    much of a connected door opens. Keep the original fixed turn, picture-range
+    gates, and channel order; removing door MOBs does not restamp survivors or
+    rewrite the floor underneath them.
+98. **Door geometry is live picture state.** `pf_isdoor` classifies picture
+    ranges and rejects reserved row zero, not a logical/type label. An isolated
+    horizontal door tests wall geometry at its left/right ends; a vertical one
+    tests above/below. A redrawn junction can become straight. Preserve the
+    parallel picture/H/V selector and the exact per-end predicate rather than
+    treating the picture as cosmetic.
+99. **A level rewind restores a completed level instance.** Host checkpoints
+    capture after player placement, random pickups, and visitor scheduling,
+    retaining full modeled memory, RNG, synthetic event progress, and the device
+    image. A fresh MOB table distinguishes a new level even when its number or
+    layout repeats. Never regenerate the maze, call setup on restore, or treat a
+    resumed mid-level dump as a level start. Restore into independent memory and
+    keep external EEPROM files isolated from the abandoned timeline.
 
 ## Investigation workflow
 

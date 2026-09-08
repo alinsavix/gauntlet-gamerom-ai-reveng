@@ -126,4 +126,8 @@ def build_state(
     for power in powers:
         initialize_player_temporary_power(state, 0, power)
     setup_infopanel(state, -1)
+    from ..subsystems.thief import thief_setup
+
+    thief_setup(state)
+    state.idle_timer = 0
     return state

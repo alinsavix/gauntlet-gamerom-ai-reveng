@@ -87,6 +87,7 @@ __all__ = [
     "DEFAULT_SKIP_LEVEL_KEY", "DEFAULT_ADD_KEY_KEY", "DEFAULT_ADD_POTION_KEY",
     "DEFAULT_TREASURE_TIMER_PAUSE_KEY",
     "DEFAULT_ENABLE_SECRET_ROOM_KEY", "DEFAULT_FORCE_SECRET_ROOM_KEY",
+    "DEFAULT_RESTART_LEVEL_KEY",
     "GAMEPAD_AXIS_DEADZONE", "GAMEPAD_FIRE_BUTTON", "GAMEPAD_MAGIC_BUTTON",
     "GAMEPAD_COIN_BUTTON", "GAMEPAD_PAUSE_BUTTON",
 ]
@@ -130,6 +131,7 @@ DEFAULT_ADD_POTION_KEY = "K_F7"
 DEFAULT_TREASURE_TIMER_PAUSE_KEY = "K_F8"
 DEFAULT_ENABLE_SECRET_ROOM_KEY = "K_F9"
 DEFAULT_FORCE_SECRET_ROOM_KEY = "K_F10"
+DEFAULT_RESTART_LEVEL_KEY = "K_F11"
 GAMEPAD_AXIS_DEADZONE = 0.5
 GAMEPAD_FIRE_BUTTON = 0
 GAMEPAD_MAGIC_BUTTON = 1
@@ -180,6 +182,7 @@ class HostShell:
         self.uncapped = uncapped
         self.paused = False
         self.treasure_timer_paused = False
+        self.restart_level_requested = False
         self.diagnostics_visible = diagnostics
         self.full_playfield = full_playfield
         self.render_width = OVERVIEW_WIDTH if full_playfield else LOGICAL_WIDTH
@@ -244,6 +247,7 @@ class HostShell:
         self._force_secret_room_key = getattr(
             pygame, DEFAULT_FORCE_SECRET_ROOM_KEY,
         )
+        self._restart_level_key = getattr(pygame, DEFAULT_RESTART_LEVEL_KEY)
 
     def _set_window_mode(self):
         game_width = self.render_width * self.scale
@@ -317,6 +321,8 @@ class HostShell:
                 elif event.key == self._state_dump_key:
                     self.last_state_dump_path = dump_game_state(state)
                     print(f"gauntpy state saved: {self.last_state_dump_path}")
+                elif event.key == self._restart_level_key:
+                    self.restart_level_requested = True
                 elif event.key == self._skip_level_key:
                     if debug_skip_level(state):
                         print(
@@ -498,6 +504,19 @@ class HostShell:
         """Do not replay the historical sound log in a loaded state dump."""
         if self._audio_player is not None:
             self._audio_player.skip_existing(state.sound_log)
+
+    def state_restored(self, state: GameState) -> None:
+        """Discard host history belonging to the abandoned timeline."""
+        if self._audio_player is not None:
+            self._audio_player.reset(state.sound_log)
+        self._cache = RenderCache()
+        self._diagnostics_previous = None
+        self._diagnostics_events.clear()
+        self.diagnostics_selected_mob = 0
+        self._render_times_ms.clear()
+        self.last_render_time_ms = 0.0
+        self.last_display_flip_time_ms = 0.0
+        self.treasure_timer_paused = False
 
     # -- input ---------------------------------------------------------------
 

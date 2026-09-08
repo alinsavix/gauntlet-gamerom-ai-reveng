@@ -299,8 +299,8 @@ address,rom_name,status,python_equivalent,evidence,confidence
 0x5F598,refresh_tile_visual_stack,unnecessary,none (body: maze.set_cell_descriptor),Register/stack ABI variant that falls through into an already ported body; Python calls the single shared helper directly.,high
 0x5F5A0,refresh_tile_visual,complete,gauntpy/src/gauntpy/maze.py :: maze.set_cell_descriptor (maze.py:180),MERGED ALIAS: neighbour-refresh order reproduced at maze.py:198-231.,high
 0x5F644,refresh_tile_visual_legacy,unnecessary,none,doc/07: 'Unreferenced legacy 3x3 refresh'. Superseded by refresh_tile_visual (0x5F5A0) -> maze.set_cell_descriptor.,high
-0x5F772,pf_isdoor_stack,unnecessary,none (body: maze_objects._is_door),Register/stack ABI variant that falls through into an already ported body; Python calls the single shared helper directly.,high
-0x5F77A,pf_isdoor,complete,gauntpy/src/gauntpy/subsystems/maze_objects.py :: maze_objects._is_door (maze_objects.py:177),MERGED ALIAS.,high
+0x5F772,pf_isdoor_stack,unnecessary,none (body: maze_objects.pf_isdoor),Register/stack ABI variant that falls through into an already ported body; Python calls the single shared helper directly.,high
+0x5F77A,pf_isdoor,complete,gauntpy/src/gauntpy/subsystems/maze_objects.py :: maze_objects.pf_isdoor,Wrapped coordinates represented as a packed slot; preserves the live-picture class and reserved-row guard.,high
 0x5F7C0,maze_doors_setup,complete,gauntpy/src/gauntpy/subsystems/maze_objects.py :: maze_doors_setup,"Direct port: the ROM address is annotated on the porting function's docstring/comment in maze_objects.py, the gauntpy convention for a one-to-one transcription.",high
 0x5F7F0,pf_door_update_surrounding_xy,complete,gauntpy/src/gauntpy/subsystems/maze_objects.py :: pf_door_update_surrounding_xy,"Direct port: the ROM address is annotated on the porting function's docstring/comment in maze_objects.py, the gauntpy convention for a one-to-one transcription.",high
 0x5F7FA,pf_door_update_surrounding,complete,gauntpy/src/gauntpy/subsystems/maze_objects.py :: maze_objects.pf_door_update_surrounding_xy,MERGED ALIAS; invoked from maze.py:196 and maze.py:230.,high

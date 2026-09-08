@@ -262,7 +262,10 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     elif load_state_path is None and not from_attract:
         bind_eeprom_storage(state)
 
-    session = HostSession(state)
+    session = HostSession(
+        state, resumed=load_state_path is not None,
+        restart_enabled=benchmark_frames is None and stress_seconds is None,
+    )
 
     try:
         from .shell import HostShell, PygameUnavailable
@@ -291,6 +294,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         host.skip_existing_audio(state)
 
     _apply_operator_overrides(state, reduce_text=reduce_text)
+    session.capture_level_start()
 
     # mainloop.g2mainloop's body: pump input, run a frame, present. The camera
     # (main_scroll_playfield) runs inside tick() and the compositor converts its
@@ -333,12 +337,25 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                         stress_phase_indices[stress_phase], rng_seed,
                     )
                     bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
-                    session = HostSession(state)
+                    session = HostSession(state, restart_enabled=False)
                     _apply_operator_overrides(state, reduce_text=reduce_text)
 
             input_started = perf_counter()
             host.wait_for_vblank(state)     # pump events + sample keyboard + coins
             input_finished = perf_counter()
+            if getattr(host, "restart_level_requested", False):
+                host.restart_level_requested = False
+                if session.restart_level():
+                    state = session.state
+                    host.state_restored(state)
+                    print(
+                        "gauntpy restored level start: "
+                        f"level {state.levelnum_current} / maze {state.mazenum_current}; "
+                        "external EEPROM writes disabled"
+                    )
+                    host.present(state)
+                    continue
+                print("gauntpy level restart unavailable until a new playable level starts")
             frame_updated = not host.paused
             invariant_seconds = 0.0
             if not host.paused:
@@ -349,6 +366,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                     treasure_timer_paused=host.treasure_timer_paused,
                 )                           # one full 60 Hz game frame
                 update_finished = perf_counter()
+                session.capture_level_start()
                 if benchmark is not None or stress_started is not None:
                     invariant_workload = (
                         stress_workloads[stress_phase].name
@@ -397,7 +415,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                     workload = benchmark_workloads[benchmark_workload_index]
                     benchmark_label = workload.name
                     state = _build_workload_state(workload, rng_seed)
-                    session = HostSession(state)
+                    session = HostSession(state, restart_enabled=False)
                     state.eeprom_persistence_enabled = False
                     bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
                     _apply_operator_overrides(state, reduce_text=reduce_text)

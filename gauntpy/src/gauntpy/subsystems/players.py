@@ -1224,7 +1224,7 @@ def door_open_start(state: GameState, door_slot: int, player_index: int) -> None
     seeds them and hands over; the picture ranges that decide how far a front
     travels stay that module's business.
     """
-    from .maze_objects import main_open_doors
+    from .maze_objects import main_open_doors, pf_isdoor
 
     if not 0 <= player_index < NUM_PLAYERS:
         return
@@ -1248,19 +1248,13 @@ def door_open_start(state: GameState, door_slot: int, player_index: int) -> None
         found = []
         for scan in scans:
             for offset, direction in scan:
-                candidate = door_slot + offset
+                candidate = (door_slot + offset) & 0x3FF
                 if offset in (-1, 1):
                     candidate = (
                         (door_slot & 0x3E0)
                         | ((door_slot + offset) & 0x1F)
                     )
-                if (
-                    FIRST_PLAYABLE_SLOT <= candidate < len(state.mobs.picture)
-                    and state.mobs.obj_type(candidate) in (
-                        int(MazeObjIds.DOOR_HORIZ),
-                        int(MazeObjIds.DOOR_VERT),
-                    )
-                ):
+                if pf_isdoor(state, candidate):
                     found.append(direction)
                     if len(found) == 2:
                         break
@@ -1268,8 +1262,6 @@ def door_open_start(state: GameState, door_slot: int, player_index: int) -> None
                 break
         directions = tuple(found)
 
-    state.door_endpoint_pos[channel:channel + 2] = [0, 0]
-    state.door_endpoint_dir[channel:channel + 2] = [0, 0]
     for offset, direction in enumerate(directions):
         state.door_endpoint_pos[channel + offset] = door_slot
         state.door_endpoint_dir[channel + offset] = direction
@@ -1283,9 +1275,8 @@ def _door_unlock(state: GameState, door_slot: int, player_index: int) -> None:
     cell the player is standing against, starts the two fronts that walk the
     rest of the door line, and plays "Doors Open".
 
-    The ROM leaves the touched cell to the fronts because its own traversal has
-    already stepped the player through it; this port's collision model reads the
-    cell directly, so the cell is cleared here as well.
+    The shared interaction tail removes the touched MOB at 0x51E64-0x51E6A,
+    after the fronts have advanced. Neither removal redraws adjacent doors.
     """
     player = state.players[player_index]
     state.escape_timer = 0                          # 0x51DAE: clr.w (a3)

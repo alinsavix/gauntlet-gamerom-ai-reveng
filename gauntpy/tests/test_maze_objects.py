@@ -371,9 +371,9 @@ class TestDoorOpening:
 
         maze_doors_setup(state)
 
-        assert state.mobs.picture[slot] == 0x9D4C
-        assert state.mobs.hpos[slot] == ((5 << 11) - 0x0200) & 0xFFFF
-        assert state.mobs.vpos[slot] == (((5 << 11) ^ 0xF800) + 0x11) & 0xFFFF
+        assert state.mobs.picture[slot] == 0x9D48
+        assert state.mobs.hpos[slot] == 5 << 11
+        assert state.mobs.vpos[slot] == (((5 << 11) ^ 0xF800) + 0x09) & 0xFFFF
         assert state.mobs.state(slot) == 10
 
     def test_open_front_removes_cells_and_turns_at_a_junction(self):

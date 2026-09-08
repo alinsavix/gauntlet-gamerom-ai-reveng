@@ -79,6 +79,26 @@ def _library(tmp_path, *commands):
     return tmp_path
 
 
+def test_rewind_stops_audio_and_skips_baseline_log(tmp_path):
+    mixer = _Mixer()
+    player = StaticSoundPlayer(mixer, _library(tmp_path, 0x20, 0x55, 0x56, 0x0D))
+    player.consume([0x20, 0x55, 0x56])
+    assert player._speech_queue
+    baseline = [0x20]
+
+    player.reset(baseline)
+
+    assert mixer.stops == 1
+    assert not mixer.speech.busy
+    assert not player._speech_queue
+    assert not player._playing
+    assert not player._type7_playbacks
+    player.consume(baseline)
+    assert not any(channel.busy for channel in mixer.channels)
+    player.consume([*baseline, 0x0D])
+    assert any(channel.busy for channel in mixer.channels)
+
+
 def test_effect_commands_play_once_and_looping_commands_wait_for_their_stop(tmp_path):
     mixer = _Mixer()
     player = StaticSoundPlayer(mixer, _library(tmp_path, 0x0D, 0x20))

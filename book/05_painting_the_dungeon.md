@@ -44,7 +44,7 @@ controls: which drawing, which colors, and where it appears.
 The bottom layer is the **playfield**, a grid of sixty-four by sixty-four
 tiles. At eight pixels per tile, that describes a 512-pixel-square world.
 The game's larger, sixteen-pixel maze cell occupies four playfield tiles.
-Opening a door means updating a small block of this grid, not repainting
+Replacing a wall means updating a small block of this grid, not repainting
 the entire visible dungeon.
 
 Above it are **motion objects**, Atari's term for sprites, usually shortened

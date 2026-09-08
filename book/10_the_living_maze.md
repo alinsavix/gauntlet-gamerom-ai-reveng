@@ -14,13 +14,25 @@ you less than the collision rules know.
 ## Getting through is a transaction
 
 At the first door, a key buys more than the deletion of the single cell
-your hero touches. The game follows connected door cells and opens the
-connected structure. Individual sections animate, and neighboring artwork
-is reconsidered as the boundary changes. The result is a new passage,
-not a player temporarily allowed to ignore a wall.
+your hero touches. It starts up to two opening fronts, each advancing one
+cell per update. A straight section continues the front along its axis.
+At a junction, however, the program always turns the front left. It does
+not inspect the remaining branches to choose a way around the corner. If
+the next cell is not a compatible door picture, that front stops.
+
+This makes a winding door more surprising than a connected line on a map.
+Maze 39 contains a long spiral, but opening it by walking down from the
+center does not remove every adjoining section. In its vertically mirrored
+orientation, that first key removes only twelve of the maze's 167 door
+cells. With both mirror axes applied, it removes sixty-seven. The geometry
+has been reflected; the program's fixed left-turn rule has not.
+
+The disappearance is still a real change to the shared world. The program
+removes each door's motion-object record, exposing the floor already below
+it; it does not temporarily allow a player to ignore a closed barrier.
 
 That matters to the next person behind you. They inherit the opening without
-paying another key for the same closed structure. It matters to creatures
+paying another key for the sections already removed. It matters to creatures
 too: a route that did not exist now does. Keys alter the shared world.
 
 The transporter offers a different kind of passage. It selects among pads
@@ -109,6 +121,9 @@ exit the maze record had hidden all along.
 - [Data reference](../doc/05_data_reference.md), `idle_timer` and
   `exit_rotation_offset_by_count`: timed-door state and exit movement's
   stored-position traversal.
+- `door_open_start` (`0x51E80`) and `main_open_doors` (`0x45C00`),
+  [game subsystems](../doc/04_game_subsystems.md), §23.4: the fixed corner rule
+  and original-ROM execution results for all four maze-39 mirror orientations.
 - ROM entry points underlying the wall interactions are
   `resolve_shot_hit` (`0x4AF50`), `wall_crumble` (`0x5303A`), and
   `maze_convert_walls_to_exits` (`0x5E80C`), documented in

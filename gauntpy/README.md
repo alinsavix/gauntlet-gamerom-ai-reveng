@@ -172,6 +172,7 @@ the simulation.
 | **F8** | pause / resume the current treasure or secret-room timer |
 | **F9** | arm this maze's secret trick; perform it and exit |
 | **F10** | force the host player into a secret room on exit |
+| **F11** | restore the current level's captured starting state |
 | **[ / ]** | select the previous / next occupied MOB |
 
 The first connected gamepad is used, including devices connected after launch.
@@ -219,7 +220,7 @@ Synthetic-scenario dumps additionally embed the complete normalized fixture,
 its SHA-256 and source filename, plus event progress, so resume never depends on
 the original file remaining present or unchanged.
 
-F5–F10 are host troubleshooting controls, not original cabinet inputs. The
+F5–F11 are host troubleshooting controls, not original cabinet inputs. The
 level skip uses the live cabinet maze rotation, enters the normal `LEVEL n`
 splash, and respawns the surviving party when its presentation timer expires.
 Inventory grants update the selected host
@@ -233,6 +234,23 @@ must still be completed before exiting. From level 6 onward, F10 sets the
 selected live player as the sole winner and disables further ordinary-objective
 selection, but the exit animation and between-level secret-room handoff still
 run.
+
+**F11** rewinds to an in-memory copy taken after direct-start setup, or at the
+end of the first frame completing a new playable level's setup. It restores
+players, inventory, randomly placed objects, all modeled video memory, timers,
+RNG, and any synthetic scenario's provenance and event progress—not a newly
+generated version of the maze. Each new level replaces the checkpoint, including
+treasure/secret rooms and returns to the same layout. Attract screens and
+new-level splashes have no usable checkpoint. After `--load-state`,
+F11 remains unavailable until the next new level: an arbitrary mid-level dump
+is not a level start, and F4 does not save this host checkpoint.
+
+The restored frame is displayed before simulation resumes. `P` pause is
+preserved; F8's timer hold, diagnostic history, and render caches are cleared.
+Playback stops and skips the restored historical sound log (music/speech already
+in progress is not reconstructed). The captured EEPROM device image is restored
+to isolated memory; external EEPROM writes stay disabled for the rest of the run,
+while modeled EEPROM timers and accepted device writes continue normally.
 
 By default the runner drops you straight into a level. Options:
 

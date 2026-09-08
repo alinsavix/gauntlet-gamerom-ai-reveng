@@ -61,8 +61,8 @@ _DOOR_GFX_TYPE3 = (
     0x9D8C, 0x9D82, 0x9D86, 0x9D94,
 )
 _DOOR_VPOS_SUB3 = (
-    0x0000, 0x0100, 0x0000, 0x0000, 0x0000,
-    0x0100, 0x0000, 0x0000, 0x0100,
+    0x0000, 0x0100, 0x0000, 0x0000, 0x0100,
+    0x0000, 0x0000, 0x0100, 0x0000,
 )
 _DOOR_VPOS_ADD3 = (
     0x000A, 0x000A, 0x000A, 0x000B, 0x000B,
@@ -90,7 +90,7 @@ def _clear_slot(state: GameState, slot: int) -> None:
     """Clear a dynamic MOB without corrupting synthetic, unlinked test tiles."""
     from ..maze import clear_cell_descriptor
 
-    was_door = _is_door(state, slot)
+    was_door = pf_isdoor(state, slot)
     clear_cell_descriptor(state, slot)
     if _slot_is_linked(state, slot):
         state.mobs.unlink_and_clear(slot)
@@ -174,17 +174,19 @@ def _door_neighbor(slot: int, dx: int, dy: int) -> int:
     return (((row + dy) & 0x1F) << 5) | ((col + dx) & 0x1F)
 
 
-def _is_door(state: GameState, slot: int) -> bool:
-    if state.maze is not None:
-        row, col = slot >> 5, slot & 0x1F
-        data = getattr(state.maze, "data", None)
-        if data is not None and (col, row) in data:
-            return int(data[(col, row)]) in (
-                int(MazeObjIds.DOOR_HORIZ), int(MazeObjIds.DOOR_VERT),
-            )
-    return state.mobs.obj_type(slot) in (
-        int(MazeObjIds.DOOR_HORIZ), int(MazeObjIds.DOOR_VERT),
-    )
+def pf_isdoor(state: GameState, slot: int) -> int:
+    """0x5F77A -- picture class, with wrapped X/Y represented as one slot."""
+    slot &= 0x3FF
+    if slot < FIRST_PLAYABLE_SLOT:
+        return 0
+    picture = state.mobs.picture[slot]
+    if _DOOR_JUNCTION_MIN <= picture < _DOOR_HORIZONTAL_MIN:
+        return 1
+    if _DOOR_HORIZONTAL_MIN <= picture < _DOOR_VERTICAL_MIN:
+        return 2
+    if _DOOR_VERTICAL_MIN <= picture <= _DOOR_VERTICAL_MAX:
+        return 3
+    return 0
 
 
 def pf_isblankfloor(state: GameState, slot: int) -> bool:
@@ -201,9 +203,9 @@ def _door_orientation_index(
     state: GameState, slot: int, *, vertical: bool,
 ) -> int:
     """The 3x3 negative/neither/positive blank-floor selector at 0x5F9EE."""
-    nx, ny = ((1, 0) if vertical else (0, 1))
+    nx, ny = ((0, 1) if vertical else (1, 0))
     px, py = (-nx, -ny)
-    sx, sy = ((0, 1) if vertical else (1, 0))
+    sx, sy = ((1, 0) if vertical else (0, 1))
 
     if not pf_isblankfloor(state, _door_neighbor(slot, px, py)):
         negative = 6
@@ -216,7 +218,7 @@ def _door_orientation_index(
     else:
         negative = 0
 
-    if pf_isblankfloor(state, _door_neighbor(slot, nx, ny)):
+    if not pf_isblankfloor(state, _door_neighbor(slot, nx, ny)):
         positive = 2
     elif (
         pf_isblankfloor(state, _door_neighbor(slot, 2 * nx, 2 * ny))
@@ -232,38 +234,25 @@ def _door_orientation_index(
 def pf_door_draw_xy(state: GameState, slot: int) -> None:
     """pf_door_draw_xy 0x5F876 for one already-classified door."""
     row, col = slot >> 5, slot & 0x1F
-    obj_type = state.mobs.obj_type(slot)
-    picture = state.mobs.picture[slot]
-    if _DOOR_JUNCTION_MIN <= picture <= _DOOR_JUNCTION_MAX:
-        door_class = 1
-    elif _DOOR_HORIZONTAL_MIN <= picture <= _DOOR_HORIZONTAL_MAX:
-        door_class = 2
-    elif _DOOR_VERTICAL_MIN <= picture <= _DOOR_VERTICAL_MAX:
-        door_class = 3
-    else:
-        door_class = (
-            2 if obj_type == int(MazeObjIds.DOOR_HORIZ) else 3
-        )
-    horizontal = door_class == 2
-    connected = (
-        _is_door(state, _door_neighbor(slot, 0, -1))
-        or _is_door(state, _door_neighbor(slot, 0, 1))
-    ) if door_class == 2 else (
-        _is_door(state, _door_neighbor(slot, -1, 0))
-        or _is_door(state, _door_neighbor(slot, 1, 0))
+    door_class = pf_isdoor(state, slot)
+    up, right, down, left = (
+        bool(pf_isdoor(state, _door_neighbor(slot, dx, dy)))
+        for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0))
     )
-    if door_class == 1:
-        connected = any(
-            _is_door(state, _door_neighbor(slot, dx, dy))
-            for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0))
-        )
+    horizontal = door_class == 2
+    if door_class == 2:
+        connected = up or down
+    elif door_class == 3:
+        connected = left or right
+    else:
+        # 0x5F8E4-0x5F938: a former junction may now be a straight run.
+        horizontal = (left or right) and not (up or down)
+        vertical = (up or down) and not (left or right)
+        connected = not (horizontal or vertical)
 
     if connected:
         neighbors = (
-            int(_is_door(state, _door_neighbor(slot, 0, -1)))
-            | (int(_is_door(state, _door_neighbor(slot, 1, 0))) << 1)
-            | (int(_is_door(state, _door_neighbor(slot, 0, 1))) << 2)
-            | (int(_is_door(state, _door_neighbor(slot, -1, 0))) << 3)
+            int(up) | (int(right) << 1) | (int(down) << 2) | (int(left) << 3)
         )
         state.mobs.picture[slot] = _DOOR_GFX_BY_NEIGHBORS[neighbors]
         state.mobs.hpos[slot] = (col << 11) & 0xFFFF
@@ -271,13 +260,6 @@ def pf_door_draw_xy(state: GameState, slot: int) -> None:
         state.mobs.set_state(slot, neighbors)
         return
 
-    horizontal = (
-        door_class == 2
-        or (
-            door_class == 1
-            and obj_type == int(MazeObjIds.DOOR_HORIZ)
-        )
-    )
     index = _door_orientation_index(state, slot, vertical=not horizontal)
     if horizontal:
         state.mobs.picture[slot] = _DOOR_GFX_TYPE2[index]
@@ -303,14 +285,14 @@ def pf_door_update_surrounding_xy(state: GameState, slot: int) -> None:
     """pf_door_update_surrounding_xy 0x5F7F0, including ROM visit order."""
     for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
         neighbour = _door_neighbor(slot, dx, dy)
-        if _is_door(state, neighbour):
+        if pf_isdoor(state, neighbour):
             pf_door_draw_xy(state, neighbour)
 
 
 def maze_doors_setup(state: GameState) -> None:
     """maze_doors_setup 0x5F7C0 -- draw the initial complete door set."""
     for slot in range(FIRST_PLAYABLE_SLOT, NUM_MOB_SLOTS):
-        if _is_door(state, slot):
+        if pf_isdoor(state, slot):
             pf_door_draw_xy(state, slot)
 
 
@@ -469,14 +451,14 @@ def _door_picture_matches(picture: int, direction: int) -> tuple[bool, int | Non
 
 def _next_door_slot(slot: int, direction: int) -> int | None:
     if direction == 0:
-        return slot - 0x20 if slot >= 0x20 else None
+        return slot - 0x20 if slot >= 0x40 else None
     if direction == 1:
         return (slot & 0x3E0) | ((slot + 1) & 0x1F)
     if direction == 2:
         candidate = slot + 0x20
         return candidate if candidate < NUM_MOB_SLOTS else None
     if direction == 3:
-        return (slot & 0x3E0) | ((slot - 1) & 0x1F)
+        return (slot & 0x3E0) | ((slot - 1) & 0x1F) if slot >= 0x20 else None
     return None
 
 
@@ -486,6 +468,9 @@ def main_open_doors(state: GameState) -> None:
     Idle timing is owned by ``main_move_players`` at 0x4ACDA.  This routine is
     the independent animation consumer of the endpoint records that traversal
     has already installed at 0x904A76/0x904A86.
+
+    Junction pictures always turn left (0->3, 1->0, 2->1, 3->2), regardless
+    of the surviving neighbors. This is not a connected-component flood fill.
     """
     for channel, position in enumerate(state.door_endpoint_pos):
         direction = state.door_endpoint_dir[channel]

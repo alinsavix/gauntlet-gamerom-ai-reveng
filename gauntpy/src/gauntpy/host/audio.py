@@ -178,6 +178,12 @@ class StaticSoundPlayer:
         """Begin after an existing persistent log, as when loading a snapshot."""
         self._consumed_count = len(commands)
 
+    def reset(self, commands: Sequence[int]) -> None:
+        """Abandon playback and skip historical commands after a host rewind."""
+        self._dispatch(0x00)
+        self._next_effect_channel = 1
+        self.skip_existing(commands)
+
     def consume(self, commands: Sequence[int]) -> None:
         """Play every command appended since the previous host update."""
         if self._consumed_count > len(commands):

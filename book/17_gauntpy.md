@@ -95,9 +95,18 @@ successive snapshots while the panel is open, not a recording of every
 instruction executed.
 
 These pages read an immutable post-frame snapshot outside modeled game
-and video RAM. F5–F10 are different: they are deliberate host interventions,
+and video RAM. F5–F11 are different: they are deliberate host interventions,
 including a level skip, inventory grants, room-timer control, and secret-room
 helpers. Keep that distinction in mind when describing what a run shows.
+
+Press **F11** to try the current level again from its captured starting state.
+The same pickups, players, timers, video memory, and random stream return; the
+host does not generate another maze. The checkpoint is replaced whenever a new
+playable level finishes setup, including bonus rooms. It is unavailable during
+attract or new-level splashes, and after loading a saved state until the
+next new level. A mid-level capture cannot tell us how that level began.
+Rewinding preserves `P` pause but clears F8's timer hold and diagnostic history,
+stops current audio, and isolates subsequent EEPROM writes from the local file.
 
 Press **F4** to save the complete modeled state. The terminal prints the
 JSON filename under `traces\state-dumps`. In the following command, replace

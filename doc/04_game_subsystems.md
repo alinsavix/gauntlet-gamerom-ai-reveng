@@ -2346,6 +2346,11 @@ the typed modeled RAM, MOB tables, decoded
 maze, path grids, display memory, and RNG seed, then resumes at the repeated
 frame body. It deliberately does not call `one_time_init` (0x4327A), level
 setup, or any display rebuilder; those would overwrite the captured state.
+F11 is a separate, explicitly non-arcade host rewind: it restores an in-memory
+checkpoint after completed level setup, including the device image and synthetic
+event state. It never regenerates the maze or reconnects the restored device to
+writable external EEPROM. Usage and availability are documented in
+`gauntpy/README.md` and the book's gauntpy chapter, not as a ROM routine.
 
 ### 14.3 Logo Color Cycling (`main_logo_updcolors`, 0x4DCBA)
 
@@ -2550,6 +2555,22 @@ not baked as 2×2 playfield stamps. Treating `door_gfx_by_neighbors` as a
 playfield descriptor creates extra artwork below horizontal runs because its
 words are picture numbers, not four sequential tile numbers.
 
+The isolated orientation selectors inspect **along** the door axis: left/right
+for class 2 and above/below for class 3. Each end contributes a digit 0–2.
+Digit 2 means the immediate cell fails `pf_isblankfloor`; digit 1 means that
+cell and the next cell pass while the immediate cell's two perpendicular
+flanks fail; otherwise the digit is 0. The word index is
+`3 * negative_end + positive_end`. Here `pf_isblankfloor` recognizes the
+`0x8000` wall marker except forcefield hubs (and treats reserved row zero as
+passing), not ordinary empty floor. Both open ends therefore choose index 8:
+horizontal picture 0x9D48 or vertical picture 0x9D94.
+
+A class-1 picture is reconsidered from live picture neighbors, not its stored
+DOOR_HORIZ/DOOR_VERT object type. Only horizontal neighbors select the class-2
+writer; only vertical neighbors select class 3; mixed or absent neighbors use
+the four-bit junction table. This redraw belongs to setup/replacement:
+`main_open_doors` removes MOBs directly and does **not** redraw survivors.
+
 ---
 
 ## 19. Random Wall System (`main_walls_random_move`, 0x5E41A)
@@ -2726,6 +2747,39 @@ endpoints, and return the next endpoint index. Vertical direction codes are
 0/2 and horizontal codes are 3/1. The common tail then calls
 `main_open_doors`, so this routine starts the opening rather than merely
 recording endpoints.
+
+The scanner predicate is `pf_isdoor`: wrapped coordinates, reserved-row
+rejection, and the **live picture class**, not the object-type field.
+Scanners overwrite only the endpoint words they find; an unused channel is
+not explicitly cleared. After the immediate opening pass, the shared
+`player_tile_interact` tail at 0x51E64–0x51E6A removes the touched MOB itself.
+
+**Opening is not a connectivity flood fill.** Direct M68000 execution of
+0x45C00–0x45E3E confirms one next-cell probe per active channel per invocation.
+Up/down accept pictures 0x9D7C–0x9DAC; left/right accept 0x9D3C–0x9D6E.
+All four directions also accept junction pictures 0x9D18–0x9D38, remove that
+cell, and unconditionally turn **left**: 0→3, 1→0, 2→1, 3→2. The routine
+never examines the junction's shape mask or searches for another surviving
+branch. A nonmatching next picture clears the position word. Horizontal
+steps wrap within the row; upward steps reject row zero and downward steps
+reject positions at or beyond 0x400.
+
+Consequently a key need not open an entire connected spiral, and mirroring
+changes how far its fronts travel. Executing `maze_doors_setup`,
+`door_open_start`, the touched-cell removal, and repeated `main_open_doors`
+against maze 39's 167-door layout gives the following first downward-contact
+results from the center start (row 16, column 16):
+
+| Placement mirror bits (`LFLAG1 & 0x0C`) | Touched cell (row, column) | Doors removed | Doors remaining |
+|---|---|---|---|
+| 0x00 | (19, 16) | 52 | 115 |
+| 0x04, horizontal | (19, 16) | 31 | 136 |
+| 0x08, vertical | (20, 16) | 12 | 155 |
+| 0x0C, both | (20, 16) | 67 | 100 |
+
+These are original-ROM routine results, not an inferred rule that every
+adjoining door must disappear. Removal clears the MOB's five words and depth
+membership, leaving its existing floor playfield descriptors unchanged.
 
 ### 23.5 `mob_create` Argument Layout (0x5DC58)
 

@@ -231,8 +231,8 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904A64 | 2 B | `monster_cull_v_origin` | Vertical origin for monster visibility/culling, computed as `(0xF9 - pf_vscroll_lo) << 7` |
 | 0x904A66 | 2 B × 4 | `lobber_shot_h_accum` | Per-lobber-projectile horizontal subpixel accumulator; updated from velocity table 0x9048F8 and converted back into MOB hpos |
 | 0x904A6E | 2 B × 4 | `lobber_shot_v_accum` | Matching vertical subpixel accumulator; updated from velocity table 0x904900 and converted back into MOB vpos |
-| 0x904A76 | 2 B × 4 × 2 | `door_endpoint_pos[4][2]` | Four two-ended door records. Each word is a packed maze position; `door_open_start` (0x51E80) and its vertical/horizontal scanners populate the two endpoints. |
-| 0x904A86 | 2 B × 4 × 2 | `door_endpoint_dir[4][2]` | Direction code parallel to `door_endpoint_pos`: vertical scans write 0 for above and 2 for below; horizontal scans write 3 for left and 1 for right. Door pictures ≥0x9D7C directly install 0/2 and pictures ≥0x9D3C directly install 3/1. Consumed by the door-opening/traversal logic. |
+| 0x904A76 | 2 B × 4 × 2 | `door_endpoint_pos[4][2]` | Four two-ended door records. Each word is a packed maze position; `door_open_start` (0x51E80) and its vertical/horizontal scanners populate endpoints at the touched cell, then immediately advance all live fronts. Scanners leave an unwritten channel unchanged. Zero parks a front; a failed next-picture probe writes zero. |
+| 0x904A86 | 2 B × 4 × 2 | `door_endpoint_dir[4][2]` | Direction code parallel to `door_endpoint_pos`: 0=up, 1=right, 2=down, 3=left. Door pictures ≥0x9D7C directly install 0/2 and pictures ≥0x9D3C directly install 3/1. `main_open_doors` consumes a junction and always turns left (0→3, 1→0, 2→1, 3→2), without consulting its adjacency mask. |
 
 ### 1.12 Dialog State
 
@@ -1304,11 +1304,11 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x5EE24 | 256 B | `wall_conn_variant_tbl` — 8-neighbor connectivity mask → wall variant byte (verified) |
 | 0x5EF24 | 256 B | `wall_conn_variant_tbl6` — alternate variant table for wallpatterns 6 and 0xB (verified) |
 | 0x5F9CE | 32 B | `door_gfx_by_neighbors` — 16 words: door picture by 4-bit adjacent-door mask (verified in `pf_door_draw`; formerly "straight-wall connectivity") |
-| 0x5FACA | 18 B | `door_gfx_type2` — 9 picture words for isolated type-2 doors, indexed by the same 3×3 negative/neither/positive blank-floor orientation used by type 3 |
+| 0x5FACA | 18 B | `door_gfx_type2` — 9 picture words for horizontal doors, indexed by `3*left_end + right_end`. End digits are 2 for an immediate non-wall, 1 for two walls with non-wall flanks at the first, and 0 otherwise; see §18 of `04_game_subsystems.md` for the exact `pf_isblankfloor` predicate. Two open ends select index 8, picture 0x9D48. |
 | 0x5FADC | 18 B | `door_hpos_sub2` — type-2 horizontal-position subtract corrections parallel to `door_gfx_type2` |
 | 0x5FAEE | 18 B | `door_vpos_add2` — type-2 vertical-position add corrections; ends at 0x5FAFF immediately before the type-3 orientation code |
-| 0x5FBDC | 18 B | `door_gfx_type3` — 9 picture words for isolated type-3 doors. The index is a 3×3 combination of vertical and horizontal blank-floor orientation: blank on the negative side, neither, or blank on the positive side. `pf_door_draw` computes an even byte offset 0,2,...,16 and reads the picture at 0x5FBDC; the same offset selects the vpos corrections below. |
-| 0x5FBEE | 18 B | `door_vpos_sub3` — type-3 door vpos subtract offsets (verified) |
+| 0x5FBDC | 18 B | `door_gfx_type3` — 9 picture words for vertical doors, using the same endpoint digits as type 2 but index `3*upper_end + lower_end`. The even byte offset 0,2,...,16 selects the picture and both V corrections. Two open ends select index 8, picture 0x9D94. |
+| 0x5FBEE | 18 B | `door_vpos_sub3` — literal type-3 V subtract words `{0,0x100,0,0,0x100,0,0,0x100,0}`; the middle column of the 3×3 selector shifts the door by two pixels. |
 | 0x5FC00 | 18 B | `door_vpos_add3` — 9 type-3 vertical-position add offsets parallel to the picture/subtract tables; exact range 0x5FC00–0x5FC11 |
 | 0x5FC12 | 16 B | `player_inventory_vram_ptrs` — four longword pointers (one per player) to the HUD inventory-icon rows; the old 0x5FC10 start overlapped the last `door_vpos_add3` word |
 | 0x5FDAC | 6 B | `supersorc_direction_bias` — three signed words `{0,-1,+1}`. `supersorc_place` adds one to the starting direction when testing its three placement alternatives. |

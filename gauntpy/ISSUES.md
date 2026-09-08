@@ -8,8 +8,9 @@ Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
 All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2595 passed, 1 skipped** (gauntpy) and
-**700 passed** (gex). The six original blocked ROM tables have been transcribed
+present the suites are clean: **2871 passed, 1 skipped** (gauntpy); the ROM-free
+gauntpy suite has **2590 passed, 282 skipped**. The last recorded sibling gex
+result is **700 passed**. The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
 cadence, Death-contact damage) confirmed against radare2, and the
@@ -62,6 +63,52 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-184 · no repeatable host level restart
+
+F11 now restores a host-owned checkpoint of the current level's completed
+starting state: players and inventory, random placements, RNG, all modeled
+video RAM, timers, synthetic event progress/provenance, and the EEPROM device
+image. Each new MOB-table instance replaces the checkpoint after the setup
+tails finish, including bonus rooms and returns to a repeated maze. Direct
+startup now completes its normal thief-setup tail before capture rather than
+leaving it to the first gameplay frame.
+
+Restoration uses independent copies, never initialization or maze regeneration.
+The host displays the restored frame before ticking, preserves P pause, clears
+F8's room-timer hold and diagnostics/render caches, and stops playback while
+skipping historical sound commands. The restored EEPROM device remains in
+isolated memory so later writes cannot roll back the local file. F11 is
+unavailable during attract/new-level splashes and after a mid-level resume
+until a new level starts; F4 does not embed this host-only checkpoint.
+
+### S-183 · maze-39 spiral opening and door geometry audit
+
+The partial spiral opening is original behavior. ROM `main_open_doors`
+0x45C00–0x45E3E always turns left after removing a junction; it never searches
+the remaining connections. Direct M68000 execution of setup, unlock, touched
+cell removal, and repeated opening passes agrees with the straight-down
+gauntpy reproduction in all four mirror orientations. From maze 39's 167 door
+cells, the first key removes 52/31/12/67 for mirror bits 0x00/0x04/0x08/0x0C.
+The vertically mirrored layout therefore really does open only a short
+section. No flood-fill or renderer workaround was added.
+
+The investigation did find coupled state errors. `pf_door_draw_xy` tested
+isolated-door wall geometry across the door rather than along its axis,
+inverted the positive-end predicate, and miscopied three V-correction entries.
+It also kept former junctions as junction pictures after their neighbors
+became a straight line. `pf_isdoor` now uses the literal live-picture classes
+instead of maze/type labels; the initial endpoint scanners share it and retain
+unwritten channels as the ROM does. The upward animation boundary now rejects
+reserved row zero. The touched-cell removal comment was corrected: that clear
+is the original shared interaction tail at 0x51E64, not a Python compensation.
+
+All 18 isolated selectors and all 48 class/neighbor-mask combinations match
+ROM-executed picture/H/V/state words. Regressions protect those combinations,
+the four left turns, picture-class bounds, endpoint preservation, and complete
+maze-39 downward-contact runs with unchanged floor VRAM. The subsystem/data
+references and living-maze chapter now explain why connected does not mean
+fully opened.
 
 ### S-182 · monster shots break potions without activating magic
 

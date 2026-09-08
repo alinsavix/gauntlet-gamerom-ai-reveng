@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ..state import GameState
+from .level_restart import LevelRestart
 
 if TYPE_CHECKING:
     from ..custom_scenario import SyntheticScenarioRuntime
@@ -20,6 +21,24 @@ class HostSession:
     """
 
     state: GameState
+    resumed: bool = False
+    restart_enabled: bool = True
+    level_restart: LevelRestart = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.level_restart = LevelRestart(self.state, resumed=self.resumed)
+
+    def capture_level_start(self) -> bool:
+        return self.restart_enabled and self.level_restart.observe(self.state)
+
+    def restart_level(self) -> bool:
+        if not self.restart_enabled:
+            return False
+        restored = self.level_restart.restore(self.state)
+        if restored is None:
+            return False
+        self.state = restored
+        return True
 
     @property
     def synthetic(self) -> SyntheticScenarioRuntime | None:
