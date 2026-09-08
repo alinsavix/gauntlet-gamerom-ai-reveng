@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from .subsystems.players import _SECRET_CODE_ALPHABET, secret_code_for
+from .subsystems.player_names import _SECRET_CODE_ALPHABET, secret_code_for
 
 
 def verify_secret_code(name: str, code: str) -> tuple[bool, int, int, int]:

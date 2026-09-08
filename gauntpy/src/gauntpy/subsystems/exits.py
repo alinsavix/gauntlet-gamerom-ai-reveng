@@ -1475,7 +1475,7 @@ def show_level_end_bonus_screen(state: GameState) -> None:
         state, ordinary_rows=ordinary_rows, secret_player=secret_player,
     )
     if open_name_entry:
-        from .players import secret_getname
+        from .player_names import secret_getname
 
         secret_getname(state)                        # 0x4D7E0, after tally writes
 

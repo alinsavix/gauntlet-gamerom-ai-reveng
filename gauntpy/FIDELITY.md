@@ -492,6 +492,14 @@ implementation specification.
 
 ## Implementation boundaries
 
+`subsystems/player_animation.py` and `subsystems/player_names.py` own their
+ROM routine families and literal tables. `playfield.py` owns the shared
+`pf_replace` producer; it is game code, not a renderer. Older player/shot
+imports are explicit compatibility reexports of the same function objects.
+Keep the canonical owners in `ROM_FUNCTION_AUDIT.csv` current when moving
+routines; never use a file move to rewrite their algorithms or merge
+distinct ROM branches.
+
 `maze_rom.py` owns ROM acquisition and the gex decoder/stamp adapters;
 `maze.py` owns setup sequencing, random selection, and native memory writes.
 Decoded maze data satisfies the pure `MazeData` contract. Acquiring a maze

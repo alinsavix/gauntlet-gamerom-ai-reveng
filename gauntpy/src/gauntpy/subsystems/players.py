@@ -1,23 +1,9 @@
 """Player movement, lifecycle, health, and tile interaction -- WP-5 and WP-6.
 
-Two work packages share this module: WP-5 owns movement and collision
-(``player_try_move`` and the four ``mob_probe_*`` leaves); WP-6 owns the
-status state machine, health drain, power-ups, ``player_tile_interact`` and the
-transporter entry point ``player_tport``.
-
-WP-5 appends its functions below the WP-6 section.  Both packages call only
-what is already present in this file; no cross-module imports of other
-subsystems are permitted (§3 ground rule 1).  The exceptions are the deliberate
-hand-offs to code that owns a *different* subsystem's state --
-``exits.player_exit_sequence`` for the level advance,
-``thief.thief_track_victim_move`` for the thief's route grid, and
-``maze_objects``' forcefield segment table and door-opening fronts -- and each
-is a function-local import, made where it is called, to keep the module
-importable on its own.
-
-Nothing here is a placeholder any more: every function either performs the
-ROM's whole job or performs its RAM-visible half and says, in its own
-docstring, exactly where the drawing half lives.
+Movement/collision, lifecycle, health, pickups, and transporter logic stay
+here. The name-entry/secret-code family belongs to ``player_names``; literal
+player picture selection belongs to ``player_animation``. Explicit imports
+below preserve the established entry points without forwarding wrappers.
 
 Reference: ``doc/04_game_subsystems.md`` §4 (all), §7.2, §10.5, §10.6, §13,
 §14.1, §21; ``doc/generated/player_collision_contracts.csv``,
@@ -63,6 +49,53 @@ from ..coords import (
 )
 from ..state import NUM_PLAYERS, GameState
 from .input import direction_bits, fire_held
+# Explicit compatibility imports; implementations live with their ROM families.
+from .player_animation import (
+    _PORT_DIR_TO_ROM_DIR as _PORT_DIR_TO_ROM_DIR,
+    _ANIM_TABLE_IDLE as _ANIM_TABLE_IDLE,
+    _PLAYER_EXIT_PICTURE as _PLAYER_EXIT_PICTURE,
+    _rom_picture_table as _rom_picture_table,
+    _ANIM_TABLE_WALKING as _ANIM_TABLE_WALKING,
+    _ANIM_TABLE_FIGHTING as _ANIM_TABLE_FIGHTING,
+    _ANIM_TABLE_SHOOTING as _ANIM_TABLE_SHOOTING,
+    _FIGHTING_ANIM_END as _FIGHTING_ANIM_END,
+    _PLAYER_INVISIBLE_PICTURE as _PLAYER_INVISIBLE_PICTURE,
+    _INVISIBILITY_FLASH_MASKS as _INVISIBILITY_FLASH_MASKS,
+    _player_animation_action as _player_animation_action,
+    update_player_sprite as update_player_sprite,
+    update_player_sprites as update_player_sprites,
+)
+from .player_names import (
+    _NAME_ENTRY_TIMEOUT as _NAME_ENTRY_TIMEOUT,
+    _GAME_OVER_TIMEOUT as _GAME_OVER_TIMEOUT,
+    _NAME_ENTRY_VELOCITY_LIMIT as _NAME_ENTRY_VELOCITY_LIMIT,
+    _NAME_ENTRY_REPEAT_SHIFT as _NAME_ENTRY_REPEAT_SHIFT,
+    _NAME_ENTRY_REPEAT_BASE as _NAME_ENTRY_REPEAT_BASE,
+    _NAME_ENTRY_COMMIT_MASK as _NAME_ENTRY_COMMIT_MASK,
+    _NAME_ENTRY_COMMIT_PATTERN as _NAME_ENTRY_COMMIT_PATTERN,
+    _NAME_ENTRY_COMMIT_ARMED_BELOW as _NAME_ENTRY_COMMIT_ARMED_BELOW,
+    _NAME_ENTRY_STEP_TIMEOUT as _NAME_ENTRY_STEP_TIMEOUT,
+    _NAME_ENTRY_BACKSPACE as _NAME_ENTRY_BACKSPACE,
+    _NAME_ENTRY_SPACE as _NAME_ENTRY_SPACE,
+    _NAME_ENTRY_FIRST_LETTER as _NAME_ENTRY_FIRST_LETTER,
+    _NAME_ENTRY_LAST_LETTER as _NAME_ENTRY_LAST_LETTER,
+    _NAME_ENTRY_LENGTH as _NAME_ENTRY_LENGTH,
+    _HIGHSCORE_NO_RANK as _HIGHSCORE_NO_RANK,
+    _SECRET_CODE_ALPHABET as _SECRET_CODE_ALPHABET,
+    _SECRET_NAME_LENGTH as _SECRET_NAME_LENGTH,
+    _secret_crc16 as _secret_crc16,
+    secret_code_for as secret_code_for,
+    secret_code_build as secret_code_build,
+    secret_getname as secret_getname,
+    secret_name_entry_update as secret_name_entry_update,
+    highscore_check as highscore_check,
+    name_entry_step_char as name_entry_step_char,
+    _name_entry_initials as _name_entry_initials,
+    _name_entry_commit_pressed as _name_entry_commit_pressed,
+    _name_entry_finish as _name_entry_finish,
+    player_death_sequence as player_death_sequence,
+    _name_entry_edit as _name_entry_edit,
+)
 from .sound import sound_play as _sound_play
 from .sound import sound_speech_play as _sound_speech_play
 
@@ -139,38 +172,6 @@ _RESPAWN_WAIT_LIMIT = 0x20
 _DEATH_ANIM_LAST_FRAME = 4
 _DEATH_ANIM_STEP_MASK = 0x03
 
-# player_state_timer reload values for the two status-0x04 dwells:
-# highscore_check loads 0x0A8C for initials entry (0x49D88) and 0x0258 for the
-# GAME OVER display (0x49DCA).  05_data_reference 0x904A26 documents both.
-_NAME_ENTRY_TIMEOUT = 0x0A8C
-_GAME_OVER_TIMEOUT = 0x0258
-
-# Name entry (0x49DE6).  The joystick feeds a signed velocity accumulator
-# clamped to +-0xA0 (0x49E4E/0x49E70); the repeat delay it produces is
-# ``(0xA0 - |velocity|) >> 5 + 8`` (0x49F38-0x49F60), i.e. 13 frames per step at
-# a fresh push down to 8 once the stick has been held for a while.
-_NAME_ENTRY_VELOCITY_LIMIT = 0xA0
-_NAME_ENTRY_REPEAT_SHIFT = 5
-_NAME_ENTRY_REPEAT_BASE = 8
-# The commit button is Magic *or* Fire, settled two frames (0x49F7E/0x49F9E:
-# ``(shift & 0xF) == 0xC``) -- a shorter pattern than the start/join edge.
-_NAME_ENTRY_COMMIT_MASK = 0x0F
-_NAME_ENTRY_COMMIT_PATTERN = 0x0C
-# 0x49FAA: presses are ignored for the first 0x78 frames of the 0x0A8C dwell,
-# so the button that killed the hero cannot also commit its first initial.
-_NAME_ENTRY_COMMIT_ARMED_BELOW = 0x0A14
-# 0x4A00E: every committed initial buys 0x384 more frames.
-_NAME_ENTRY_STEP_TIMEOUT = 0x0384
-# Character codes name_entry_step_char (0x55440) cycles through.
-_NAME_ENTRY_BACKSPACE = 0x08
-_NAME_ENTRY_SPACE = 0x20
-_NAME_ENTRY_FIRST_LETTER = 0x41      # 'A'
-_NAME_ENTRY_LAST_LETTER = 0x5A       # 'Z'
-#: Three initials per record (0x4A08C-0x4A0A0).
-_NAME_ENTRY_LENGTH = 3
-#: ``rank_high_score`` values outside 0-9 skip initials entry (0x49D4C/0x49D5C).
-_HIGHSCORE_NO_RANK = 10
-
 # escape_timer value that fires maze_convert_walls_to_exits (0x5208, §4.1).
 _ESCAPE_TIMER_LIMIT = 0x5208
 # Sound played when the escape timeout actually converted something (0x4AD20).
@@ -192,13 +193,6 @@ _TPORT_ARRIVAL_PICTURE = 0x1DCF
 _DOOR_IDLE_THRESHOLD_WITH_KEYS = 0xA8C
 _DOOR_IDLE_THRESHOLD_NO_KEYS = 0x4B0
 
-# ``player.direction`` -> the ROM's own ``player_facing_dir`` (0x9049A4)
-# encoding, which 05_data_reference documents as 0=up, 1=up-right, 2=right,
-# 3=down-right, 4=down, 5=down-left, 6=left, 7=up-left.  Every ROM table keyed
-# by facing (shot picture, shot spawn offset) is indexed through this map.  The
-# port keeps its own encoding in ``Player.direction`` because ``play.py`` and
-# the level-transition tests already render from it.
-_PORT_DIR_TO_ROM_DIR = [2, 3, 4, 5, 6, 7, 0, 1]
 _POWER_SHOTSPEED = int(PlayerPower.SHOTSPEED)   # bit 3, POWERUP_BIT_MASKS[3]
 # shot_reflect_sound_tbl -- ROM 0x5BAD0, indexed by character.
 _SHOT_REFLECT_SOUND_TBL = [0x45, 0x47, 0x46, 0x48]
@@ -245,199 +239,6 @@ _PLAYER_SHOT_PICTURE = [
     # Elf
     0x1C74, 0x1C78, 0x1C7C, 0x1C80, 0x1C84, 0x1C8B, 0x1C8F, 0x1C93,
 ]
-
-# anim_table_idle -- ROM 0x58A4A, 4 characters x 8 facing directions, indexed
-# ``character * 8 + frame`` by the first half of
-# the status-0x08 branch at 0x4A696: the hero spins from its facing direction
-# down to 4, one step per four frames.
-_ANIM_TABLE_IDLE = [
-    0x0BD8, 0x0BF3, 0x0C12, 0x0C2D, 0x0C3F, 0x0B87, 0x0BA2, 0x0BBD,
-    0x11B4, 0x11CF, 0x1112, 0x112D, 0x1148, 0x1163, 0x117E, 0x1199,
-    0x1412, 0x142D, 0x1448, 0x1463, 0x13A2, 0x13BD, 0x13D8, 0x13F3,
-    0x15D8, 0x15F3, 0x1612, 0x162D, 0x1648, 0x1663, 0x15A2, 0x15BD,
-]
-
-# player_exit_picture_tbl -- ROM 0x5870A, 4 characters x 8 frames, transcribed
-# from row76.bin offset 0x1870A.  The *second* half of the status-0x08 branch
-# (0x4A796-0x4A7BE) steps through it with ``player_anim_counter >> 2`` while the
-# counter climbs 0 -> 0x20, which is the 32-frame dissolve a hero plays in the
-# exit before the level actually ends.
-_PLAYER_EXIT_PICTURE = [
-    0x0C3F, 0x1087, 0x1090, 0x1099, 0x10A2, 0x10AB, 0x10B4, 0x10BD,
-    0x1148, 0x17AB, 0x17B4, 0x17BD, 0x17C6, 0x17CF, 0x17D8, 0x17E1,
-    0x13A2, 0x17EA, 0x17F3, 0x1800, 0x1809, 0x1812, 0x181B, 0x1824,
-    0x1548, 0x176C, 0x1775, 0x177E, 0x1787, 0x1790, 0x1799, 0x17A2,
-]
-
-# The four player picture banks are literal game-ROM words, not host/gex
-# animation metadata.  The port direction is right, down-right, ... up-right;
-# ``_PORT_DIR_TO_ROM_DIR`` below maps that onto these ROM-order tables
-# (up, up-right, ... up-left).
-def _rom_picture_table(words: str) -> tuple[int, ...]:
-    return tuple(int(word, 16) for word in words.split())
-
-
-# anim_table_walking -- ROM 0x58A8A, 4 characters × 8 directions × 4 frames.
-_ANIM_TABLE_WALKING = _rom_picture_table("""
-    0BCF 0BD8 0BE1 0BD8 0BEA 0BF3 0C00 0BF3
-    0C09 0C12 0C1B 0C12 0C24 0C2D 0C36 0C2D
-    0B63 0B6C 0B75 0B6C 0B7E 0B87 0B90 0B87
-    0B99 0BA2 0BAB 0BA2 0BB4 0BBD 0BC6 0BBD
-    11B4 11BD 11C6 11BD 11CF 11D8 11E1 11D8
-    1112 111B 1124 111B 112D 1136 113F 1136
-    1148 1151 115A 1151 1163 116C 1175 116C
-    117E 1187 1190 1187 1199 11A2 11AB 11A2
-    1412 141B 1424 141B 142D 1436 143F 1436
-    1448 1451 145A 1451 1463 146C 1475 146C
-    13A2 13AB 13B4 13AB 13BD 13C6 13CF 13C6
-    13D8 13E1 13EA 13E1 13F3 1400 1409 1400
-    15D8 15E1 15EA 15E1 15F3 1600 1609 1600
-    1612 161B 1624 161B 162D 1636 163F 1636
-    1648 1651 165A 1651 1663 166C 1675 166C
-    15A2 15AB 15B4 15AB 15BD 15C6 15CF 15C6
-""")
-
-# anim_table_fighting -- ROM 0x5884A, 4 characters × 8 directions × 8 frames.
-_ANIM_TABLE_FIGHTING = _rom_picture_table("""
-    0D5A 0D63 0D6C 0D75 0D75 0D6C 0D63 0D5A
-    0D7E 0D87 0D90 0D99 0D99 0D90 0D87 0D7E
-    0DA2 0DAB 0DB4 0DBD 0DBD 0DB4 0DAB 0DA2
-    0DC6 0DCF 0DD8 0DE1 0DE1 0DD8 0DCF 0DC6
-    0CC6 0CCF 0CD8 0CE1 0CE1 0CD8 0CC6 0CBD
-    0CEA 0CF3 0D00 0D09 0D09 0D00 0CF3 0CEA
-    0D12 0D1B 0D24 0D2D 0D2D 0D24 0D1B 0D12
-    0D36 0D3F 0D48 0D51 0D51 0D48 0D3F 0D36
-    12C6 12CF 12D8 12E1 12E1 12D8 12CF 12C6
-    12EA 12F3 1300 1309 1309 1300 12F3 12EA
-    11EA 11F3 1200 1209 1209 1200 11F3 11EA
-    1212 121B 1224 122D 122D 1224 121B 1212
-    1236 123F 1248 1251 1251 1248 123F 1236
-    125A 1263 126C 1275 1275 126C 1263 125A
-    127E 1287 1290 1299 1299 1290 1287 127E
-    12A2 12AB 12B4 12BD 12BD 12B4 12AB 12A2
-    1412 14C6 14C6 14CF 14CF 14C6 14C6 1412
-    142D 14D8 14D8 14E1 14E1 14D8 14D8 142D
-    1448 14EA 14EA 14F3 14F3 14EA 14EA 1448
-    1463 1500 1500 1509 1509 1500 1500 1463
-    13A2 147E 147E 1487 1487 147E 147E 13A2
-    13BD 1490 1490 1499 1499 1490 1490 13BD
-    13D8 14A2 14A2 14AB 14AB 14A2 14A2 13D8
-    13F3 14B4 14B4 14BD 14BD 14B4 14B4 13F3
-    16B4 16BD 16C6 16C6 16C6 16C6 16BD 16B4
-    16CF 16D8 16E1 16E1 16E1 16E1 16D8 16CF
-    16EA 16F3 1712 1712 1712 1712 16F3 16EA
-    171B 1724 172D 172D 172D 172D 1724 171B
-    1736 173F 1748 1748 1748 1748 173F 1736
-    1751 175A 1763 1763 1763 1763 175A 1751
-    167E 1687 1690 1690 1690 1690 1687 167E
-    1699 16A2 16AB 16AB 16AB 16AB 16A2 1699
-""")
-
-# anim_table_shooting -- ROM 0x5874A, 4 characters × 8 directions × 4 frames.
-_ANIM_TABLE_SHOOTING = _rom_picture_table("""
-    0C87 0C90 0C90 0C90 0C99 0CA2 0CA2 0CA2
-    0CAB 0CB4 0CB4 0CB4 1087 0CBD 0CBD 0CBD
-    0C3F 0C48 0C48 0C48 0C51 0C5A 0C5A 0C5A
-    0C63 0C6C 0C6C 0C6C 0C75 0C7E 0C7E 0C7E
-    12C6 1348 1348 1348 12EA 1351 1351 1351
-    11EA 1312 1312 1312 1212 131B 131B 131B
-    1236 1324 1324 1324 125A 132D 132D 132D
-    127E 1336 1336 1336 12A2 133F 133F 133F
-    1412 137E 137E 137E 142D 1387 1387 1387
-    1448 1390 1390 1390 1463 1399 1399 1399
-    13A2 135A 135A 135A 13BD 1363 1363 1363
-    13D8 136C 136C 136C 13F3 1375 1375 1375
-    156C 1524 1524 1524 1575 152D 152D 152D
-    157E 1536 1536 1536 1587 153F 153F 153F
-    1590 1548 1548 1548 1599 1551 1551 1551
-    155A 1512 1512 1512 1563 151B 151B 151B
-""")
-
-# Freeze the literal list as the tuple used by both idle and death-spin readers.
-_ANIM_TABLE_IDLE = tuple(_ANIM_TABLE_IDLE)
-
-# fighting_anim_end -- ROM 0x58090.  It controls both the four-frame firing
-# cadence and the input gate that re-arms another shot.
-_FIGHTING_ANIM_END = (3, 3, 3, 3)
-_PLAYER_INVISIBLE_PICTURE = 0x1709
-_INVISIBILITY_FLASH_MASKS = (
-    0x0004, 0x0002, 0x0002, 0x0001,
-    0x0001, 0x0001, 0x0001, 0x0001,
-    0x0001, 0x0001, 0x0001, 0x0001,
-    0x0001, 0x0001, 0x0001, 0x0001,
-)
-
-
-def _player_animation_action(state: GameState, player_index: int,
-                             walking: bool | None = None) -> str:
-    """Return main_move_players' picture-table branch for one active hero."""
-    if state.player_fighting_dir[player_index]:
-        return "fight"
-    if walking is None:
-        walking = bool(state.player_walking[player_index])
-    if walking:
-        return "walk"
-    if state.player_shooting[player_index]:
-        return "shoot"
-    return "idle"
-
-
-def update_player_sprite(state: GameState, player_index: int,
-                         *, walking: bool | None = None) -> None:
-    """Write one hero's current ROM animation picture without advancing time.
-
-    This is the presentation half of ``main_move_players``' 0x4AB08-0x4AC7A
-    tail.  It intentionally owns no host/gex dependency: the renderer resolves
-    the literal ROM picture through the hero MOB's player record, which is what
-    keeps Wizard frames separate from the identically numbered Sorcerer art.
-
-    The ``walking`` result is a frame-local ROM value.  Core callers pass it
-    directly; public callers can omit it to reuse the last result retained in
-    ``state.player_walking``.  Status-8 death/exit and in-flight transporter
-    pictures are written by their own state machines and must not be replaced.
-    """
-    if not 0 <= player_index < NUM_PLAYERS:
-        return
-    player = state.players[player_index]
-    if (not player.active or not player.mob_slot
-            or state.player_tport_phase[player_index] >= 0):
-        return
-
-    character = player.character & 0x03
-    rom_direction = _PORT_DIR_TO_ROM_DIR[player.direction & 0x07]
-    action = _player_animation_action(state, player_index, walking)
-    counter = player.anim_counter & 0xFFFF
-    if action == "fight":
-        picture = _ANIM_TABLE_FIGHTING[
-            character * 64 + rom_direction * 8 + ((counter >> 1) & 0x07)
-        ]
-    elif action == "walk":
-        picture = _ANIM_TABLE_WALKING[
-            character * 32 + rom_direction * 4 + ((counter >> 2) & 0x03)
-        ]
-    elif action == "shoot":
-        picture = _ANIM_TABLE_SHOOTING[
-            character * 32 + rom_direction * 4 + ((counter >> 2) & 0x03)
-        ]
-    else:
-        picture = _ANIM_TABLE_IDLE[character * 8 + rom_direction]
-
-    # 0x4AC30-0x4AC7A: the invisibility blink is applied after every ordinary
-    # action-table lookup.  ``main_move_players`` clears the power as its timer
-    # reaches zero, so a manual active bit with timer 0 follows ROM table row 0.
-    if player.powers & int(PlayerPower.INVIS):
-        phase = (state.player_invis_timer[player_index] >> 7) & 0x0F
-        if (_INVISIBILITY_FLASH_MASKS[phase] & state.frame_counter) == 0:
-            picture = _PLAYER_INVISIBLE_PICTURE
-
-    state.mobs.picture[player.mob_slot] = picture
-
-
-def update_player_sprites(state: GameState) -> None:
-    """Refresh all active hero MOB pictures without changing their counters."""
-    for player_index in range(NUM_PLAYERS):
-        update_player_sprite(state, player_index)
-
 
 def _player_shooting_input_update_one(state: GameState,
                                       player_index: int) -> None:
@@ -706,143 +507,6 @@ def _play_random_character_voice(state: GameState, character: int) -> None:
 # of each belongs to another work package, so each hook implements exactly the
 # RAM-visible half the ROM performs and routes the rest through the state the
 # owning package already reads.
-
-_SECRET_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTUWXYZ"  # ROM 0x54CA6
-_SECRET_NAME_LENGTH = 29
-
-
-def _secret_crc16(name: list[int]) -> int:
-    """Port secret_code_build's table-driven CRC-CCITT update."""
-    crc = 0
-    for code in name:
-        if code in (0, 0x20):
-            if code == 0:
-                break
-            continue
-        index = (code ^ (crc & 0xFF)) & 0xFF
-        table = index << 8
-        for _ in range(8):
-            table = ((table << 1) ^ 0x1021) & 0xFFFF if table & 0x8000 else (table << 1) & 0xFFFF
-        old_high = (crc >> 8) & 0xFF
-        crc = ((table & 0xFF) << 8) | (old_high ^ (table >> 8))
-    return crc
-
-
-def secret_code_for(
-    name: str, previous_maze: int, previous_trick: int, challenge: int,
-) -> str:
-    """Return secret_code_build 0x54BE0's code for explicit contest fields."""
-    crc = _secret_crc16(list(name.encode("ascii")))
-    packed = (
-        ((((previous_trick & 0x0F) << 4)
-          | (challenge & 0x0F)) << 7)
-        | (previous_maze & 0x7F)
-    )
-    return (
-        _SECRET_CODE_ALPHABET[((crc >> 8) >> 2) & 0x1F]
-        + _SECRET_CODE_ALPHABET[(packed >> 10) & 0x1F]
-        + _SECRET_CODE_ALPHABET[(crc >> 5) & 0x1F]
-        + "-"
-        + _SECRET_CODE_ALPHABET[(packed >> 5) & 0x1F]
-        + _SECRET_CODE_ALPHABET[crc & 0x1F]
-        + _SECRET_CODE_ALPHABET[packed & 0x1F]
-    )
-
-
-def secret_code_build(state: GameState) -> str:
-    """Port secret_code_build 0x54BE0 and return its ``XXX-XXX`` result."""
-    name = bytes(state.secret_name_buffer).split(b"\0", 1)[0].decode("ascii")
-    code = secret_code_for(
-        name, state.secret_prev_maze, state.secret_trick_last,
-        state.secret_trick_id,
-    )
-    state.secret_code = code
-    return code
-
-
-def secret_getname(state: GameState) -> None:
-    """Port secret_getname 0x54EC6, including its alpha-RAM setup."""
-    winner = state.secret_player
-    if not 0 <= winner < NUM_PLAYERS:
-        return
-    player = state.players[winner]
-    if not (state.game_settings & 0x2000):
-        state.global_delay_timer = 0x0385
-        player.status = int(PlayerStatus.ALIVE_NEXT)
-        state.secret_player = -1
-        return
-    player.name_entry_repeat_delay = _NAME_ENTRY_VELOCITY_LIMIT
-    player.name_entry_velocity = 0
-    player.initials_cursor = 0
-    player.status = int(PlayerStatus.SECRET_NAME_ENTRY)
-    state.global_delay_timer = 0x0A8D
-    state.secret_name_buffer = [ord("A")] + [ord(" ")] * (_SECRET_NAME_LENGTH - 1)
-    from .score import write_secret_name_entry
-
-    write_secret_name_entry(state, winner)
-
-
-def secret_name_entry_update(state: GameState) -> None:
-    """Port the 29-character secret winner editor at 0x54FE8."""
-    winner = state.secret_player
-    if not 0 <= winner < NUM_PLAYERS:
-        return
-    player = state.players[winner]
-    if player.status != int(PlayerStatus.SECRET_NAME_ENTRY):
-        return
-
-    cursor = player.initials_cursor
-    dirs = (~(state.player_input_raw[winner] >> 4)) & 0x0F
-    velocity = player.name_entry_velocity
-    if dirs & 0x09:
-        velocity = min(velocity + 1, _NAME_ENTRY_VELOCITY_LIMIT) if velocity >= 0 else 0
-    elif dirs & 0x06:
-        velocity = max(velocity - 1, -_NAME_ENTRY_VELOCITY_LIMIT) if velocity <= 0 else 0
-    else:
-        velocity = 0
-    player.name_entry_velocity = velocity
-
-    delay = player.name_entry_repeat_delay
-    if delay:
-        delay -= 1
-    if delay == 0:
-        if velocity and 0 <= cursor < _SECRET_NAME_LENGTH:
-            state.secret_name_buffer[cursor] = name_entry_step_char(
-                state.secret_name_buffer[cursor], velocity, bool(cursor),
-            )
-        delay = ((_NAME_ENTRY_VELOCITY_LIMIT - abs(velocity))
-                 >> _NAME_ENTRY_REPEAT_SHIFT) + _NAME_ENTRY_REPEAT_BASE
-    player.name_entry_repeat_delay = delay & 0xFF
-
-    from .score import write_secret_code_result, write_secret_name_entry
-
-    write_secret_name_entry(state, winner)
-    if (
-        _name_entry_commit_pressed(state, winner)
-        and state.global_delay_timer < 0x0A15
-    ):
-        if state.secret_name_buffer[cursor] == _NAME_ENTRY_BACKSPACE:
-            state.secret_name_buffer[cursor] = _NAME_ENTRY_SPACE
-            cursor = max(0, cursor - 1)
-        else:
-            cursor += 1
-            state.global_delay_timer = 0x0385
-        player.initials_cursor = cursor
-        if cursor < _SECRET_NAME_LENGTH:
-            write_secret_name_entry(state, winner)
-
-    if state.global_delay_timer >= 5 and cursor < _SECRET_NAME_LENGTH:
-        return
-    for index in range(max(0, cursor), _SECRET_NAME_LENGTH):
-        state.secret_name_buffer[index] = _NAME_ENTRY_SPACE
-    secret_code_build(state)
-    write_secret_code_result(state, winner)
-    player.status = int(PlayerStatus.ALIVE_NEXT)
-    state.secret_player = -1
-    state.debounce_shift_magic[winner] = 0
-    state.debounce_shift_fire[winner] = 0
-    state.global_delay_timer = 0x02D1
-
 
 def show_continue_prompt(state: GameState) -> None:
     """0x44C7E -- the five-line PRESS START continue prompt (§10.5).
@@ -2200,228 +1864,6 @@ def calc_score_per_coin(state: GameState, player_index: int) -> int:
     player = state.players[player_index]
     player.score_per_coin = player.score // max(1, player.coin_count)
     return player.score_per_coin
-
-
-def highscore_check(state: GameState, player_index: int) -> None:
-    """0x49D0E -- rank the dead player and open initials entry (§10.3).
-
-    Ranks ``player_scorepercoin`` through OS ``rank_high_score``
-    (0x1C6, WP-14's ``score.rank_high_score``) for that player's character
-    class and stores the result in ``player_highscore_rank`` (0x904A4A).
-
-      * a rank of 0-9 (0x49D4C/0x49D5C) opens the editor: the repeat delay
-        (0x904A36) is primed to 0xA0, ``player_state_timer`` takes 0x0A8C
-        (2700 frames, 45 s), the velocity accumulator (0x904A2E) and the
-        initials cursor (0x904A3A) are cleared and the status becomes 0x04;
-      * anything else just loads the 0x0258 (600-frame) GAME OVER dwell
-        (0x49DCA) and leaves the status alone.
-
-    Either way the player's panel column is rebuilt (0x49DD6).
-    """
-    from . import score
-
-    player = state.players[player_index]
-    rank = score.rank_high_score(
-        state, int(player.character), player.score_per_coin
-    )                                                        # OS 0x1C6
-    player.highscore_rank = rank                             # 0x904A4A
-
-    if 0 <= rank < _HIGHSCORE_NO_RANK:                       # 0x49D4C/0x49D5C
-        player.name_entry_repeat_delay = _NAME_ENTRY_VELOCITY_LIMIT  # 0x49D78
-        player.state_timer = _NAME_ENTRY_TIMEOUT             # 0x49D88
-        player.name_entry_velocity = 0                       # 0x49D98
-        player.initials_cursor = 0                           # 0x49D9C
-        player.initials = [_NAME_ENTRY_FIRST_LETTER] * _NAME_ENTRY_LENGTH
-        player.status = int(PlayerStatus.DYING)              # 0x49DA6
-    else:
-        player.state_timer = _GAME_OVER_TIMEOUT              # 0x49DCA
-
-    setup_infopanel(state, player_index)                     # 0x49DD6
-
-
-def name_entry_step_char(current: int, direction: int, allow_backspace: bool) -> int:
-    """0x55440 -- step one initials character round its ring.
-
-    The ring is ``backspace (0x08) -> space (0x20) -> 'A'..'Z' -> backspace``,
-    with the backspace glyph skipped when it is not allowed -- which is exactly
-    ``cursor != 0``, since there is nothing to back up into at the first
-    initial.  Every wrap in 0x5545E-0x554A6 is reproduced here.
-    """
-    value = (current + 1) if direction > 0 else (current - 1)
-    if value == _NAME_ENTRY_BACKSPACE + 1:                   # 0x5545E
-        return _NAME_ENTRY_SPACE
-    if value == _NAME_ENTRY_SPACE + 1:                       # 0x55468
-        return _NAME_ENTRY_FIRST_LETTER
-    if value == _NAME_ENTRY_LAST_LETTER + 1:                 # 0x55472
-        return _NAME_ENTRY_BACKSPACE if allow_backspace else _NAME_ENTRY_SPACE
-    if value == _NAME_ENTRY_BACKSPACE - 1:                   # 0x55484
-        return _NAME_ENTRY_LAST_LETTER
-    if value == _NAME_ENTRY_SPACE - 1:                       # 0x5548E
-        return (_NAME_ENTRY_BACKSPACE if allow_backspace
-                else _NAME_ENTRY_LAST_LETTER)
-    if value == _NAME_ENTRY_FIRST_LETTER - 1:                # 0x554A0
-        return _NAME_ENTRY_SPACE
-    return value
-
-
-def _name_entry_initials(player) -> str:  # noqa: ANN001
-    """The three editable codes as the string ``write_high_score_entry`` stores.
-
-    A backspace glyph still sitting in a slot when the countdown expires is
-    stored as a space -- the ROM hands the raw byte to the OS writer, whose
-    base-40 codec (0x3AEC) has no letter for it either.
-    """
-    return "".join(
-        " " if code in (_NAME_ENTRY_BACKSPACE, 0) else chr(code)
-        for code in player.initials[:_NAME_ENTRY_LENGTH]
-    )
-
-
-def _name_entry_commit_pressed(state: GameState, player_index: int) -> bool:
-    """0x49F6E-0x49FA2: Magic or Fire settled over two frames."""
-    for shift in (state.debounce_shift_magic, state.debounce_shift_fire):
-        if (shift[player_index] & _NAME_ENTRY_COMMIT_MASK) == _NAME_ENTRY_COMMIT_PATTERN:
-            return True
-    return False
-
-
-def _name_entry_finish(state: GameState, player_index: int) -> None:
-    """0x4A07A-0x4A116 -- insert the record and end the dwell.
-
-    Builds ``{score_per_coin, initials[3]}`` and hands it to OS
-    ``write_high_score_entry`` (0x1B4) at the stored rank, clears the status
-    (0x4A0D8), zeroes both debounce registers so the commit press cannot leak
-    into the next screen (0x4A0F2/0x4A0F6), loads the 600-frame GAME OVER dwell
-    (0x4A0FE), rebuilds the panel and shows the continue prompt (0x4A110).
-    """
-    from . import score
-
-    player = state.players[player_index]
-    if 0 <= player.highscore_rank < _HIGHSCORE_NO_RANK:
-        score.write_high_score_entry(                        # OS 0x1B4
-            state,
-            int(player.character),
-            player.highscore_rank,
-            player.score_per_coin,
-            _name_entry_initials(player),
-        )
-    player.highscore_rank = _HIGHSCORE_NO_RANK
-    player.status = int(PlayerStatus.REMOVED)                    # 0x4A0D8
-    state.debounce_shift_magic[player_index] = 0             # 0x4A0F6
-    state.debounce_shift_fire[player_index] = 0              # 0x4A0F2
-    player.state_timer = _GAME_OVER_TIMEOUT                  # 0x4A0FE
-    setup_infopanel(state, player_index)                     # 0x4A10A
-    show_continue_prompt(state)                              # 0x4A110
-
-
-def player_death_sequence(state: GameState, player_index: int) -> None:
-    """0x49DE6 -- the status-0x04 per-frame handler (§4.1, player lifecycle).
-
-    **Exact timing, ROM-verified -- the previous "count up to 0x40" was a
-    guess and is wrong in both direction and length.**  0x49E12-0x49E1E is a
-    *countdown*: ``player_state_timer`` (0x904A26) is decremented once per
-    frame while it is non-zero, and the state ends when it reaches zero
-    (0x4A06C).  There is no fixed 0x40 death animation anywhere in the
-    lifecycle -- the animated part is the status-0x08 branch of
-    main_move_players, which runs on the per-four-frame cadence below.
-
-    Status 0x04 is entered only from ``highscore_check`` (0x49DA6): with
-    initials to enter it loads 0x0A8C (2700 frames, 45 s, 0x49D88); the plain
-    GAME OVER display loads 0x0258 (600 frames, 0x49DCA).  05_data_reference's
-    0x904A26 entry documents both.
-
-    The body in between is the initials editor, and all of it is RAM:
-
-      * the joystick's up/right bits (mask 9 of the inverted direction nibble)
-        drive the velocity accumulator up, its down/left bits (mask 6) drive it
-        down, anything else zeroes it, and it clamps at ±0xA0 (0x49E20-0x49E86);
-      * the repeat delay (0x904A36) counts down; on the frame it reaches zero a
-        non-zero velocity steps the character under the cursor through
-        ``name_entry_step_char``, and the delay reloads to
-        ``(0xA0 - |velocity|) >> 5 + 8`` -- a held stick accelerates
-        (0x49E8A-0x49F60);
-      * a settled Magic or Fire press commits the character: a backspace glyph
-        moves the cursor back, anything else moves it on and buys 0x384 more
-        frames (0x49F6E-0x4A066);
-      * the dwell ends when the countdown expires **or** the cursor passes the
-        third initial (0x4A068), and the record is inserted there.
-
-    A plain death does not pass through the ROM's copy of this at all: the
-    health-zero path in main_health_countdown resets the player outright and
-    only ``highscore_check`` can put it in status 4.  This port keeps its own
-    death animation afterwards, so the expired dwell hands over to the
-    status-0x08 branch instead of straight to REMOVED.
-    """
-    player = state.players[player_index]
-    editing = 0 <= player.highscore_rank < _HIGHSCORE_NO_RANK
-
-    if player.state_timer > 0:                       # 0x49E12: tst / subq #1
-        player.state_timer -= 1
-
-    if editing:
-        _name_entry_edit(state, player_index)
-        # 0x4A068: still running while the countdown has time left and the
-        # cursor has not walked past the third initial.
-        if player.state_timer > 0 and player.initials_cursor != _NAME_ENTRY_LENGTH:
-            return
-        _name_entry_finish(state, player_index)
-        return
-    elif player.state_timer > 0:
-        return
-
-    player.status = int(PlayerStatus.RESPAWN_WAIT)
-    player.exit_pending = 0
-    player.anim_counter = 0
-    state.player_death_anim_frame[player_index] = _PORT_DIR_TO_ROM_DIR[
-        player.direction & 0x07
-    ]
-
-
-def _name_entry_edit(state: GameState, player_index: int) -> None:
-    """0x49E20-0x4A066 -- one frame of the initials editor."""
-    player = state.players[player_index]
-
-    # 0x49E20-0x49E34: the raw input word's direction nibble, active-high.
-    dirs = (~(state.player_input_raw[player_index] >> 4)) & 0x0F
-    velocity = player.name_entry_velocity
-    if dirs & 0x09:                                  # 0x49E46: up / right
-        velocity = min(velocity + 1, _NAME_ENTRY_VELOCITY_LIMIT) if velocity >= 0 else 0
-    elif dirs & 0x06:                                # 0x49E68: down / left
-        velocity = max(velocity - 1, -_NAME_ENTRY_VELOCITY_LIMIT) if velocity <= 0 else 0
-    else:                                            # 0x49E80
-        velocity = 0
-    player.name_entry_velocity = velocity            # 0x49E86
-
-    cursor = player.initials_cursor                  # 0x49E0C: byte 0
-    delay = player.name_entry_repeat_delay           # 0x49E8A
-    if delay:
-        delay -= 1
-    if delay == 0:                                   # 0x49E9E
-        if velocity:                                 # 0x49EA6
-            if 0 <= cursor < _NAME_ENTRY_LENGTH:
-                player.initials[cursor] = name_entry_step_char(
-                    player.initials[cursor], velocity, bool(cursor),
-                )                                    # 0x49ED0/0x49EEE
-        # 0x49F32-0x49F60: reload from the accumulated velocity.
-        delay = ((_NAME_ENTRY_VELOCITY_LIMIT - abs(velocity))
-                 >> _NAME_ENTRY_REPEAT_SHIFT) + _NAME_ENTRY_REPEAT_BASE
-    player.name_entry_repeat_delay = delay & 0xFF    # 0x49F62
-    from .score import draw_player_initials_entry
-
-    draw_player_initials_entry(state, player_index)
-
-    if not _name_entry_commit_pressed(state, player_index):
-        return
-    if player.state_timer >= _NAME_ENTRY_COMMIT_ARMED_BELOW:   # 0x49FAA
-        return
-    if 0 <= cursor < _NAME_ENTRY_LENGTH and \
-            player.initials[cursor] == _NAME_ENTRY_BACKSPACE:  # 0x49FFC
-        cursor -= 1                                  # 0x4A016
-    else:
-        cursor += 1                                  # 0x4A008
-        player.state_timer = _NAME_ENTRY_STEP_TIMEOUT           # 0x4A00E
-    player.initials_cursor = max(0, cursor)          # 0x4A066
-    draw_player_initials_entry(state, player_index)
 
 
 def player_start_inner(state: GameState, player_index: int) -> int:
@@ -3901,7 +3343,7 @@ def tport_player_move(state: GameState, player_index: int) -> None:
         # 0x5078E-0x507E8: corner transport may land on an ordinary software
         # wall marker. pf_replace turns both the logical tile and descriptor
         # VRAM into floor before the normal destination check and player move.
-        from .shots import pf_replace
+        from ..playfield import pf_replace
 
         if (
             state.secret_trick_id == 4

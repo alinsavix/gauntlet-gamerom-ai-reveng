@@ -46,6 +46,7 @@ from ..coords import (
     hpos_x, mob_words_to_slot, position_field, replace_position, vpos_y,
 )
 from ..state import GameState
+from ..playfield import pf_replace as pf_replace
 
 CONSUMED = -1      # resolve_shot_hit: mob_unlink(shooter) + picture cleared
 SURVIVES = 0       # resolve_shot_hit: pierce / reflect / no effect
@@ -1426,38 +1427,6 @@ def _potion_blast(state: GameState, shooter_id: int) -> None:
     # resolve_shot_hit 0x4BA6A-0x4BA82 arms the same one-field playfield flash
     # as a drunk potion before storing shooter+4 in potion_player.
     state.playfield_color_latch = ALPHA_PALETTE_INIT[shooter_id * 4 + 7]
-
-
-def pf_replace(state: GameState, slot: int, obj_type: int) -> None:
-    """``pf_replace`` (0x5F31E) -- retile a maze cell in place.
-
-    Replacing with floor takes the ROM's three-way branch at 0x5F352: a static
-    tile marker (picture 0x8000/0x8001) only loses its picture and type, so the
-    cell keeps the H/V words a following ``shot_impact_spawn`` reads back; a
-    real MOB goes through ``mob_free``; an empty cell is left alone.  Stamping
-    a new type uses ``maze._place_one``, the port's single reviewed copy of the
-    ROM's tile write, which unlinks the previous occupant exactly as
-    ``mob_place_tile`` (0x5F310) does.
-    """
-    if obj_type != int(MazeObjIds.TILE_FLOOR):
-        from ..maze import _place_one, set_cell_descriptor
-
-        _place_one(state, slot, obj_type)
-        set_cell_descriptor(state, slot, obj_type)
-        return
-
-    from ..maze import clear_cell_descriptor
-
-    clear_cell_descriptor(state, slot)
-    picture = state.mobs.picture[slot]
-    if picture in (0x8000, 0x8001):
-        hpos = state.mobs.hpos[slot]
-        vpos = state.mobs.vpos[slot]
-        state.mobs.unlink_and_clear(slot)
-        state.mobs.hpos[slot] = hpos
-        state.mobs.vpos[slot] = vpos
-    elif picture:
-        state.mobs.unlink_and_clear(slot)
 
 
 def _spawn_maze_object(state: GameState, slot: int, obj_type: int,
