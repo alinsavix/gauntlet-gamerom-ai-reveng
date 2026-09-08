@@ -6,7 +6,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
 ## Runtime invariants
 
 1. **Native MOB words.** H/V positions are the arcade's words: position in
-   bits 15-7, low field in bits 6-0, one pixel = `0x80`. One 512-pixel maze is
+   bits 15–7, low field in bits 6–0, one pixel = `0x80`. One 512-pixel maze is
    one 16-bit wrap.
 2. **Vertical points up.** Native V counts upward from the playfield floor.
    Convert to downward screen Y only through `coords.py`.
@@ -16,14 +16,14 @@ evidence remains in `../doc/`, generated contracts, and the book.
    pixel-to-cell formulas elsewhere. `test_coordinate_boundaries.py` enforces
    this.
 4. **Identity is location.** Dynamic MOB records, including live players, move
-   to the packed maze slot they occupy. Fixed slots 1-29 are the documented
+   to the packed maze slot they occupy. Fixed slots 1–29 are the documented
    projectile/effect/score/transition reservations and use explicit depth keys.
 5. **Low bits are not coordinates.** H low bits contain software flags and
    palette; V low bits contain sprite size. Position updates preserve them.
 6. **Player identity.** A live player record stores the player index in the
    state field. Never infer the victim solely from a picture or color.
 7. **Palette routing.** Every MOB hpos nibble resolves directly through the
-   authoritative 256-word `GameState.mob_color_ram`; slots 12-15 are the live
+   authoritative 256-word `GameState.mob_color_ram`; slots 12–15 are the live
    player-color palettes. Hurt, power, effect, and title animation are game-side
    color-RAM writes, never renderer overrides. Alpha/HUD code likewise writes
    complete words to `GameState.alpha_ram` / `alpha_color_ram`; render modules
@@ -44,7 +44,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
     the CPU's resolved effective address (and cross-check the loader/catalog),
     not from the textual address of the following instruction.
 12. **Display lifecycle writes.** Screen transitions must port their alpha-RAM
-    teardown as well as setup. In particular, `maze_hide` makes columns 29-41
+    teardown as well as setup. In particular, `maze_hide` makes columns 29–41
     opaque and `maze_show` clears every other alpha column while preserving them.
 13. **Large text is variable-width.** The OS quad record's right-hand word is
     also a width flag: zero means a one-cell glyph. Writers must return and use
@@ -86,7 +86,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
     loot for `maze_addrandompickups`; the next level recreates that pickup using
     the ROM's empty-cell walk rather than retaining an actor or renderer overlay.
 23. **Info-panel headers are maze-mode state.** A whole-panel rebuild first
-    clears rows 0-6. Only maze numbers below 0x68 restore the dungeon logo and
+    clears rows 0–6. Only maze numbers below 0x68 restore the dungeon logo and
     level field; treasure/secret rooms write `TIME:` over that blank region.
     Do not treat the ordinary header as permanent HUD decoration.
 24. **Corner transport has a zero pad identity.** `corner_squeeze_geometry`
@@ -97,8 +97,8 @@ evidence remains in `../doc/`, generated contracts, and the book.
     `0x8000` branch rounds the candidate MOB's live H/V words; it does not rebuild
     them from the packed slot. Door and item pictures can have bit 15 set while
     carrying deliberate placement corrections.
-26. **Dragon damage is a live MOB palette change.** Counted hits 1-2, 3-5, and
-    6-8 rewrite the primary dragon segment's hpos palette nibble to 8, 7, and 6.
+26. **Dragon damage is a live MOB palette change.** Counted hits 1–2, 3–5, and
+    6–8 rewrite the primary dragon segment's hpos palette nibble to 8, 7, and 6.
     Do not represent this progression as a renderer tint.
 27. **Player probes retain the live record identity.** The ROM keeps the current
     `active_mob_ids[player]` slot in D2 for the complete movement transaction.
@@ -110,7 +110,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
     its destination H position four pixels left of the cell. A generic
     `pixel>>4` start or cell-origin placement changes its firing line.
 29. **Hidden-potion pictures encode permanent powers.** Type 61 picture
-    `(picture-0xA728)/4` is power ID 0-5. Only a duplicate grant falls through
+    `(picture-0xA728)/4` is power ID 0–5. Only a duplicate grant falls through
     to the inventory-potion/solo-score branches.
 30. **Visible sprite overlap is not collision penetration.** Player collision
     compares corrected MOB anchors with a strict 0x7C0 window and resolves H
@@ -210,7 +210,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
     the maze, rebuild VRAM, or repair selected fields on load; reject an
     incompatible snapshot rather than blending it with defaults.
 49. **Primary player axes are all-or-nothing transactions.** `player_try_move`
-    adds the complete 1-3 pixel speed word once on H, probes, and either keeps or
+    adds the complete 1–3 pixel speed word once on H, probes, and either keeps or
     rolls back all of H before doing the same for V. Only explicit collision
     response recursion retries with `D6=0x80`; never integrate ordinary movement
     one pixel at a time. The private bottom-row Down gate is signed-coordinate
@@ -278,7 +278,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
     advance. Transcribe the complete pointed-to record and use the caller's
     actual text routine; do not normalize labels before writing alpha RAM.
 62. **Secret exits are generated from challenge targets.** Mazes 115/116 store no
-    exit. Their level-setup arm must use task code 0x50-0x5D to select a generator
+    exit. Their level-setup arm must use task code 0x50–0x5D to select a generator
     type from ROM 0x57056, replace matches with exit markers, clear the other
     eligible generators, and turn ordinary monsters into typed hidden potions
     after the ordinary exit-position scan. Generated exits remain absent from
@@ -324,7 +324,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
     winner's keys in `monster_spawn_probability_bonus` (0x90405F) and potions
     in player 0's key byte (0x90405A), then performs indexed inventory clears
     and the normal spawn-bonus update. Preserve that instruction order and read
-    the same physical bytes on payout; standalone "saved inventory" fields are
+    the same physical bytes on payout; standalone “saved inventory” fields are
     not behaviorally equivalent.
 71. **Simulation SLIP windows wrap before lookup.** `main_move_monsters` masks
     both vertical scroll endpoints with `0x1F0` and indexes the biased
@@ -332,7 +332,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
     insufficient: the depth-chain start/stop arc must also wrap or visible
     monsters near row zero never receive turns.
 72. **The thief fights through ordinary monsters and generators.** Contact with
-    object types 18-45 latches `thief_direction + 1`, resets the shared
+    object types 18–45 latches `thief_direction + 1`, resets the shared
     animation/contact counter, and advances the fight cycle once per thief
     frame. After the counter passes 15, the ROM spawns an impact and removes the
     blocker. Do not treat a non-solid monster cell as inert occupancy.
@@ -345,7 +345,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
 74. **Level flags have every consumer they reach.** A flag can affect setup,
     simulation, video RAM, and presentation independently. In particular,
     `level_splash` writes LFLAG notices and consumes speech/RNG state; LFLAG1
-    bits 2-3 mirror placement even though their historical names mention
+    bits 2–3 mirror placement even though their historical names mention
     monster families; and LFLAG2 bit 7 both hides walls and changes
     destructible-wall damage. An implementation is incomplete until all
     address-proven consumers of the bit are represented.
@@ -414,7 +414,7 @@ evidence remains in `../doc/`, generated contracts, and the book.
     so other encounters emit no speech, box, chime, or pause. Negative attract
     modes retain the full bank. Any retained dialog hold is 120 rather than 150
     frames. Follow the signed branch at 0x4C4E0-0x4C4F4; do not infer mode
-    polarity from the word "attract."
+    polarity from the word “attract.”
 
 87. **Transition cancellation tears down every owned record.** Killing a thief
     during its private transporter transition removes the destination placeholder,

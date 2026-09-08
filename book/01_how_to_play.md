@@ -1,4 +1,4 @@
-# Chapter 1 - Enter the Gauntlet (How the Game Plays)
+# Chapter 1 — Enter the Gauntlet (How the Game Plays)
 
 **This chapter answers:** What is Gauntlet II, what does a player do at the
 cabinet, and which rules give the game its particular character?
@@ -249,38 +249,38 @@ the machine underneath.
 > These are the load-bearing entry points if you want to dig now:
 >
 > - Joystick/button bit assignments (Magic is bit 0, Fire bit 1, both active
->   low): `doc/05_data_reference.md` 3.11; the
+>   low): `doc/05_data_reference.md` §3.11; the
 >   per-frame debounce that reads them is `input_debounce` (0x40644),
->   `doc/04_game_subsystems.md` 15. The start/join press the game waits for
->   is a debounced edge on the Magic line, `doc/04_game_subsystems.md` 6.4.
+>   `doc/04_game_subsystems.md` §15. The start/join press the game waits for
+>   is a debounced edge on the Magic line, `doc/04_game_subsystems.md` §6.4.
 > - Hero selection by joystick direction (up=Warrior, left=Valkyrie,
 >   down=Wizard, right=Elf): `character_select_input_update` (0x42DF4),
->   `doc/04_game_subsystems.md` 22.
+>   `doc/04_game_subsystems.md` §22.
 > - Player-position colors and speech: `player_color_name_ptrs` (0x57212) and
->   `speech_charname_tbl` (0x596F6, "RED WARRIOR" . "GREEN ELF"),
->   `doc/05_data_reference.md` 5.
+>   `speech_charname_tbl` (0x596F6, "RED WARRIOR" … "GREEN ELF"),
+>   `doc/05_data_reference.md` §5.
 > - Health drain, low-health heartbeat cadence, and the pulsing readout:
->   `main_health_countdown` (0x466F6), `doc/04_game_subsystems.md` 4.3 and
->   14.2. Food's +100 health and other walk-into pickups:
->   `player_tile_interact` (0x511AC), 4.6.
-> - Coins  health (operator-configurable table) and mid-game re-coining:
->   `coincheck` (0x42B6A), `doc/04_game_subsystems.md` 10.1; the setting
->   values are in `doc/05_data_reference.md` 3.10.
+>   `main_health_countdown` (0x466F6), `doc/04_game_subsystems.md` §4.3 and
+>   §14.2. Food's +100 health and other walk-into pickups:
+>   `player_tile_interact` (0x511AC), §4.6.
+> - Coins → health (operator-configurable table) and mid-game re-coining:
+>   `coincheck` (0x42B6A), `doc/04_game_subsystems.md` §10.1; the setting
+>   values are in `doc/05_data_reference.md` §3.10.
 > - Score-per-coin high-score ranking: `highscore_check` (0x49D0E),
->   `doc/04_game_subsystems.md` 10.3. Score multiplier:
->   `player_add_score_with_mult` (0x5214C), 4.7.
-> - The continue prompt ("PRESS START . TO CONTINUE GAME AT THIS LEVEL"):
->   `show_continue_prompt` (0x44C7E), `doc/04_game_subsystems.md` 10.5.
+>   `doc/04_game_subsystems.md` §10.3. Score multiplier:
+>   `player_add_score_with_mult` (0x5214C), §4.7.
+> - The continue prompt ("PRESS START … TO CONTINUE GAME AT THIS LEVEL"):
+>   `show_continue_prompt` (0x44C7E), `doc/04_game_subsystems.md` §10.5.
 > - Join-in-progress: `player_join` (0x48BB6), `doc/04_game_subsystems.md`
->   4.4. The IT label, speech, and IT-player variable (0x9049DC):
->   `player_it_label_set` (0x45866), 4.5.
+>   §4.4. The IT label, speech, and IT-player variable (0x9049DC):
+>   `player_it_label_set` (0x45866), §4.5.
 > - Per-level hazard flags (fast/odd-angle monsters, invisible walls,
 >   wraparound, shots-stun/shots-hurt friendly fire): the level-flags enums in
->   `doc/05_data_reference.md` 3.12.
+>   `doc/05_data_reference.md` §3.12.
 > - Dragons are suppressed from maze data before level 12 in a normal game:
->   `maze_place_object` (0x45E40), `doc/04_game_subsystems.md` 5.4.
+>   `maze_place_object` (0x45E40), `doc/04_game_subsystems.md` §5.4.
 > - Treasure-room countdown, including the fake-countdown gag:
->   `main_treasure_timer` (0x4D29E), `doc/04_game_subsystems.md` 16.
+>   `main_treasure_timer` (0x4D29E), `doc/04_game_subsystems.md` §16.
 > - Idle-timer door opening ("Doors Open"): `open_timed_doors` via
->   `main_move_players`, `doc/04_game_subsystems.md` 4.1.
+>   `main_move_players`, `doc/04_game_subsystems.md` §4.1.
 > - The 117 stored maze layouts: `doc/06_maze_catalog.md`.
