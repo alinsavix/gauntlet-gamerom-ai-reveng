@@ -316,7 +316,9 @@ adjacent muzzle cell. Empty cells pass, as do packed types 1, 10–12, 16, 25,
 potion directly beside the demon prevents creation of the shot. A potion two
 or more cells away is not consulted by this gate: the demon creates its
 fireball. Ordinary projectile collision later destroys a destructible potion;
-an invulnerable potion survives the hit.
+an invulnerable potion survives the hit. The monster projectile does not
+activate potion magic: `resolve_shot_hit` branches at 0x4BA32-0x4BA36 for
+shot IDs 4-11, before the player-only flash and `potion_player` writes.
 
 **Shot spawn geometry (`monster_create_shot`, 0x49192–0x49270).** The projectile inherits only the shooter's *position*: 0x49192/0x491A2 mask `mob_hpos`/`mob_vpos` with 0xFF80 before anything else, so the shooter's palette (which for a monster is its health nibble) and its 3×3 packed sprite size are discarded. The per-direction muzzle offset is added on top, and then three small constants land **under** the position field, replacing the low byte:
 
@@ -842,8 +844,10 @@ of the current recording directly. A successful use stores the player index in
 `7 + player*4` into `playfield_color_latch` (0x90401E). VBLANK publishes that
 word at playfield color RAM 0x910510. The next main-loop pass restores the
 ordinary floor color from 0x904020, so the flash is a game-side, one-field
-palette write rather than a renderer effect. Shot-triggered potions perform the
-same write and store `player + 4`.
+palette write rather than a renderer effect. Potions triggered by a **player
+shot** perform the same write and store `player + 4`. A monster or dragon
+projectile still breaks a destructible potion and plays sound 0x1D, but the
+`d3 >= 4` branch at 0x4BA32 skips the magic activation.
 
 `main_handle_potions` runs before `main_move_players` in the gameplay band and
 does not read `player_stundelay`. Its gates at 0x47000-0x4707A are only active
@@ -2861,7 +2865,7 @@ can index a reserved shot channel and place the sparkle at unrelated stale H/V.
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 
-**Food/potions:** destroyed with per-character speech ("<name> … shot the food", table 0x596F6 + suffix 0x9A) and one-time dialogs (ids 2/0x40/0x80). Slow-motion variants are identified **by picture**: food pic 0x25ED sets `monster_slowmo_timer` (0x9048B2) = 0x258 at 0x4B8B0; potion pic 0x20FC sets it to 0x4B0 at 0x4B9EA; both play sound 0x37, catalogued in `refs/soundcmds.csv` as "Slow Motion" (0x38 "End of Slow Motion", 0x39 "Slow Motion Silencer"). The effect is on the monsters, not the shooter — see §3. Treasure and invulnerable food/potions break only with supershot.
+**Food/potions:** destroyed with per-character speech ("<name> … shot the food", table 0x596F6 + suffix 0x9A) and one-time dialogs (ids 2/0x40/0x80). Those secondary effects are player-shot-only: after removing the item, `d3 >= 4` branches to the shared finish at 0x4BA32, so a monster shot can break a destructible potion but cannot activate its magic. For player shots, slow-motion variants are identified **by picture**: food pic 0x25ED sets `monster_slowmo_timer` (0x9048B2) = 0x258 at 0x4B8B0; potion pic 0x20FC sets it to 0x4B0 at 0x4B9EA; both play sound 0x37, catalogued in `refs/soundcmds.csv` as "Slow Motion" (0x38 "End of Slow Motion", 0x39 "Slow Motion Silencer"). The effect is on the monsters, not the shooter — see §3. Treasure and invulnerable food/potions break only with supershot.
 
 **Dragon:** player shots route to `dragon_shot_hit` (0x54112, see §8.3); monster shots just despawn.
 

@@ -63,6 +63,22 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-182 · monster shots break potions without activating magic
+
+A deterministic demon-fire path reproduced the report: the projectile can
+cross a clear muzzle cell and destroy a destructible potion farther downrange,
+but a visible Wizard-vulnerable Ghost remains at full tier. This is original
+behavior, not a missing gauntpy blast.
+
+ROM `resolve_shot_hit` 0x4B9CE removes the potion and sends break command 0x1D
+for every projectile class. It then compares shooter ID D3 with 4 at
+0x4BA32. Monster and dragon channels 4–11 branch directly to the shared finish;
+only player channels continue through the dialog, one-field palette flash, and
+`potion_player = shooter + 4` write at 0x4BA88. Consequently the later
+`monsters_everything` alternate potion scan has no activation to consume.
+Regression coverage now protects the complete demon-shot path, including the
+surviving visible monster.
+
 ### S-181 · unchanged display state repeated host raster work
 
 Profiling the raster/presentation boundary showed that alpha rendering dominated

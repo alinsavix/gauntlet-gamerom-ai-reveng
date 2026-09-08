@@ -1115,18 +1115,24 @@ class TestSpecialCases:
         assert all(state.mobs.picture[s] == 0 for s in range(5, 9)), \
             "a blocked muzzle cell cancels the shot"
 
-    def test_demon_shoots_when_a_potion_is_beyond_the_muzzle_cell(self):
+    def test_demon_shot_breaks_but_does_not_activate_downrange_potion(self):
         state = GameState()
         slot = pack_slot(5, 5)
         potion = pack_slot(5, 7)
+        visible_ghost = pack_slot(7, 7)
         _arena(state, slot)
         _place_monster(state, slot, MazeObjIds.MONST_DEMON, direction=0)
         _place_player(state, 0, pack_slot(5, 10))
+        state.players[0].character = Character.WIZARD
+        _place_monster(state, visible_ghost, MazeObjIds.MONST_GHOST)
         state.mobs.create(
-            potion, tile=0x20FC, hpos=7 * 16 << 7,
+            potion, tile=0x0987, hpos=7 * 16 << 7,
             vpos=native_v(5 * 16) << 7,
             obj_type=int(MazeObjIds.POT_DESTRUCTABLE),
         )
+        state.playfield_color_base = 0x1234
+        state.playfield_color_latch = 0x1234
+        state.potion_player = 0x55AA
 
         monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_DEMON))
 
@@ -1136,6 +1142,15 @@ class TestSpecialCases:
             if state.mobs.picture[potion] == 0:
                 break
         assert state.mobs.picture[potion] == 0
+        assert 0x1D in state.sound_log
+        assert state.playfield_color_latch == state.playfield_color_base
+        assert state.potion_player == 0x55AA
+
+        main_move_monsters(state)
+
+        ghost = _monster_slot(state, int(MazeObjIds.MONST_GHOST))
+        assert ghost is not None
+        assert state.mobs.hpos[ghost] & 0x0F == 4
 
     def test_downrange_invulnerable_potion_does_not_block_or_break(self):
         state = GameState()
