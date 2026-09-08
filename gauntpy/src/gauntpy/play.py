@@ -312,6 +312,7 @@ def _build_stress_state(phase_index: int, rng_seed: int) -> GameState:
 def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         from_attract: bool = False,
         reduce_text: bool = False,
+        full_playfield: bool = False,
         sound_enabled: bool = False,
         uncapped: bool = False,
         keys: int = 0, potions: int = 0,
@@ -397,6 +398,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         host = HostShell(
             scale=scale,
             title="gauntpy",
+            full_playfield=full_playfield,
             sound_dir=_enabled_sound_dir(
                 sound_enabled
                 and not uncapped
@@ -548,8 +550,14 @@ def _main(argv: list[str] | None = None) -> None:
         "--character", choices=sorted(_CHARACTERS),
         help="hero class (default: elf)",
     )
-    parser.add_argument("--scale", type=_positive_scale, default=4,
-                        help="window pixel scale (default: 4)")
+    parser.add_argument(
+        "--scale", type=_positive_scale,
+        help="window pixel scale (default: 4, or 1 with --full-playfield)",
+    )
+    parser.add_argument(
+        "--full-playfield", action="store_true",
+        help="show the entire playfield with the current camera view outlined",
+    )
     parser.add_argument(
         "--seed", type=_seed_value,
         help="initial RNG seed (default: 0); use 'random' for host entropy",
@@ -683,10 +691,12 @@ def _main(argv: list[str] | None = None) -> None:
         else 0 if args.seed is None
         else args.seed
     )
+    scale = args.scale if args.scale is not None else (1 if args.full_playfield else 4)
     run(level=args.level or 1,
-        character=_CHARACTERS[args.character or "elf"], scale=args.scale,
+        character=_CHARACTERS[args.character or "elf"], scale=scale,
         from_attract=args.attract,
         reduce_text=args.reduce_text,
+        full_playfield=args.full_playfield,
         sound_enabled=args.sound and not args.uncapped,
         uncapped=args.uncapped,
         keys=args.keys, potions=args.potions,

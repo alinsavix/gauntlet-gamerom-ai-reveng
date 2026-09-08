@@ -195,7 +195,7 @@ Only two, both recorded here so they do not look like drift:
 
 | Ours | Docs | Why |
 |------|------|-----|
-| `MobTable.slip_heads` | `priority_bucket_heads` | "SLIP" is Atari's own term, used by Ed Logg and by MAME's motion-object device; `book/08` uses it throughout and notes `priority_bucket_heads` as the documentation/r2-loader alias. |
+| `MobTable.slip_heads` | `priority_bucket_heads` | "SLIP" is Atari's own term, used by Ed Logg and by MAME's motion-object device; `book/06_a_world_in_ten_bytes.md` explains the entry points into the chain. |
 | `MazeObjIds` | `MAZEOBJ_*` | Matches `gex.constants.MazeObjIds` value-for-value. Existing Python in this repository wins over the C-style prefix. |
 
 Anything you name that has **no** documented equivalent (helpers, coordinate
@@ -312,7 +312,7 @@ That makes it testable headlessly and lets a future contributor swap pygame for
 something else without touching game code.
 
 **References:** `doc/01_hardware.md` §8 (display composition, MOB shadowing,
-layer priority); `book/04_display_system.md`; `doc/04_game_subsystems.md` §13
+layer priority); `book/05_painting_the_dungeon.md`; `doc/04_game_subsystems.md` §13
 (tile rendering pipeline), §23.3 (playfield RAM mapping), §24 (SLIPs).
 
 **Acceptance:** render a decoded maze with no MOBs and match a gex `genpfimage`
@@ -386,7 +386,7 @@ Ignore the original's register-passing conventions; they are an artifact of
 
 **References:** `doc/04_game_subsystems.md` §4.2, §23.4;
 `doc/generated/player_collision_contracts.csv` (26 checked contracts);
-`book/10_players.md`.
+`book/03_four_players.md`.
 
 **Acceptance:** a player cannot enter a wall from any of eight directions;
 diagonal movement into a corner behaves per the squeeze rule; a door with a key
@@ -421,7 +421,7 @@ the lifecycle half of `main_move_players`.
 
 **References:** `doc/04_game_subsystems.md` §4.1, §4.3–4.7; §21;
 `doc/generated/player_runtime_contracts.csv`,
-`player_lifecycle_contracts.csv`; `book/10_players.md`.
+`player_lifecycle_contracts.csv`; `book/03_four_players.md`.
 
 **Acceptance:** health drains at exactly one point per 64 frames regardless of
 class or difficulty; food adds exactly 100; the forcefield table is indexed
@@ -462,7 +462,7 @@ The 62-entry dispatch table at 0x4B338 is a computed jump; a dict keyed by
 object type is the natural Python equivalent.
 
 **References:** `doc/04_game_subsystems.md` §26, §3.6;
-`doc/generated/monster_combat_contracts.csv`; `book/11_monsters.md`.
+`doc/generated/monster_combat_contracts.csv`; `book/02_one_arrow.md`.
 
 **Acceptance:** every monster type dies after the documented number of hits at
 each tier; supershot pierces but not through Death or IT; a wall takes exactly
@@ -510,7 +510,7 @@ each tier; supershot pierces but not through Death or IT; a wall takes exactly
   for offscreen monsters — it does not skip their movement.
 
 **References:** `doc/04_game_subsystems.md` §3 (all of it);
-`doc/generated/monster_combat_contracts.csv`; `book/11_monsters.md`.
+`doc/generated/monster_combat_contracts.csv`; `book/04_the_horde.md`.
 
 **Acceptance:** 60+ monsters simulate within frame budget; generators respect
 the probability table for every difficulty × player-count combination; slow-mo
@@ -526,7 +526,7 @@ the fully decoded path system, and the dragon ROM data tables. Note it occupies
 a 2-cell stride at decode time (gex's `expand` steps by 2 for `MONST_DRAGON`).
 
 **References:** `doc/04_game_subsystems.md` §8;
-`doc/generated/dragon_thief_exit_contracts.csv`; `book/12_dragon_thief_mugger.md`.
+`doc/generated/dragon_thief_exit_contracts.csv`; `book/12_fighting_the_dragon.md`.
 
 **Acceptance:** the state machine reaches every documented state; path following
 matches the decoded path data.
@@ -556,7 +556,7 @@ in the bounded level-1 attract corpus. Implement from disassembly and flag any
 guess in a comment.
 
 **References:** `doc/04_game_subsystems.md` §9, §23.4;
-`doc/generated/thief_secret_contracts.csv`; `book/12_dragon_thief_mugger.md`.
+`doc/generated/thief_secret_contracts.csv`; `book/11_the_thiefs_trail.md`.
 
 **Acceptance:** targeting picks the wealthiest player by the exact formula; the
 thief never appears before level 6; stolen powers follow the mask order.
@@ -582,7 +582,7 @@ portraits start at 0x36. Spatial reuse of unreachable padding — not aliasing.
 
 **References:** `doc/04_game_subsystems.md` §7, §18, §19;
 `doc/generated/wall_door_contracts.csv`, `tport_forcefield_contracts.csv`;
-`book/13_living_maze.md`.
+`book/10_the_living_maze.md`.
 
 **Acceptance:** cyclic walls follow their documented cycle; a transporter moves
 a player to a valid destination on every route; forcefield colour cycling
@@ -624,7 +624,7 @@ documented outcome; a potion always kills Death.
 4. Move 2 px per axis per frame, snap within a couple of pixels, clamp to the
    legal scroll range.
 
-**References:** `doc/04_game_subsystems.md` §17; `book/08_world_in_memory.md`.
+**References:** `doc/04_game_subsystems.md` §17; `book/03_four_players.md`.
 
 **Acceptance:** one player running away stops dragging the camera at 200 px;
 camera never exceeds the playfield scroll clamps; wraparound levels track
@@ -651,7 +651,7 @@ correctly across the seam.
 
 **References:** `doc/04_game_subsystems.md` §10, §14, §25;
 `doc/generated/score_coin_dialog_contracts.csv`;
-`book/14_score_and_economics.md`.
+`book/08_what_a_quarter_buys.md`.
 
 ---
 
@@ -686,7 +686,7 @@ select 115, 0x57–0x5D select 116).
   initialize `player_bonusmult`, which remains at the reset value 1.
 
 **References:** `doc/04_game_subsystems.md` §10.1, §22, §6.4;
-`book/07_session_lifecycle.md`.
+`book/01_how_to_play.md`; `book/08_what_a_quarter_buys.md`.
 
 ---
 
@@ -765,7 +765,7 @@ init, the boot handoff (`game_start` 0x4014C), and level-transition
 orchestration. Ties the packages into something you can actually launch into.
 
 **References:** `doc/03_game_rom_structure.md` §5, §2.2;
-`book/05_boot_and_os.md`.
+`book/16_waking_the_cabinet.md`.
 
 ---
 
@@ -850,9 +850,10 @@ working camera. **First recognizable Gauntlet** adds WP-7, 8, 11.
 ## 8. Working with the documentation
 
 **The docs are the specification.** `doc/` is authoritative and current; `book/`
-is the same material in narrative form and is the better place to *start* a
-package. `refs/GAME_ROM_KNOWN.md` is older and has been superseded where the two
-disagree.
+provides a reader-facing introduction, with shorter draft chapters that
+deliberately omit implementation detail. Use the book for orientation and
+`doc/` plus ROM evidence for exact contracts. `refs/GAME_ROM_KNOWN.md` is older
+and has been superseded where the two disagree.
 
 Read the confidence labels. **Verified** means checked against disassembly or
 traces. **Contradicted** entries are corrections of earlier wrong claims — those

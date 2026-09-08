@@ -670,7 +670,7 @@ def make_control_panel():
         d.text((bx, cy), name, fill=WHITE, font=f_lab, anchor="mm")
     d.text((570, cy + 108), "two buttons", fill=BLACK, font=f_lab, anchor="mm")
     d.text((W // 2, 326),
-           "The cabinet has no Start button. Fire both starts a game and joins one.",
+           "The cabinet has no Start button. Magic starts or joins a game.",
            fill=BLACK, font=f_small, anchor="mm")
 
     sw, y = 96, 392
@@ -788,17 +788,18 @@ def make_shadow():
     print("wrote ch04_shadow.png")
 
 
-make_tile_zoom()
-make_dragon_tiles()
-make_four_heroes()
-make_anim_frames()
-make_monster_roster()
-make_tier_palettes()
-make_dragon_segments()
-make_thief_mugger()
-make_secret_rooms()
-make_treasure_room()
-make_demo_maze()
-make_demo_script()
-make_control_panel()
-make_shadow()
+if __name__ == "__main__":
+    make_tile_zoom()
+    make_dragon_tiles()
+    make_four_heroes()
+    make_anim_frames()
+    make_monster_roster()
+    make_tier_palettes()
+    make_dragon_segments()
+    make_thief_mugger()
+    make_secret_rooms()
+    make_treasure_room()
+    make_demo_maze()
+    make_demo_script()
+    make_control_panel()
+    make_shadow()

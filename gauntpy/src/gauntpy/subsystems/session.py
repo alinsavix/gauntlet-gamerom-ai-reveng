@@ -1,7 +1,7 @@
 """Coins, credits, character select, and session start -- WP-16.
 
 Reference: ``doc/04_game_subsystems.md`` §10.1, §22, §6.4;
-``book/07_session_lifecycle.md``.
+``book/01_how_to_play.md`` and ``book/08_what_a_quarter_buys.md``.
 """
 
 from __future__ import annotations

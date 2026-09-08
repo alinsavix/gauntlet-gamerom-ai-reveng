@@ -36,6 +36,13 @@ normally limits simulation to 60 frames per second; `--uncapped` removes that
 wait and disables sound for accelerated testing while retaining one complete
 game update per rendered frame.
 
+Pass `--full-playfield` for a host-only view with the entire 512x512 playfield
+and the 104x240 gameplay HUD beside it. A white box over the world shows the
+current 232x240 gameplay viewport, including correctly split outlines at wrap
+seams. Screen-wide alpha content is omitted, and the view does not change
+camera movement or any other gameplay behavior. It defaults to native 1x
+scale; an explicit `--scale` still overrides it.
+
 Put the locally generated recordings in `sounds/`, named
 `0xNN_description.wav` by sound-board command byte. The directory is ignored
 because the recordings are ROM-derived and are not distributed by this

@@ -421,10 +421,25 @@ class TestArguments:
         play.main([])
         assert called["character"] == Character.ELF
         assert called["scale"] == 4
+        assert called["full_playfield"] is False
         assert called["rng_seed"] == 0
 
         play.main(["--character", "wizard"])
         assert called["character"] == Character.WIZARD
+
+    def test_full_playfield_is_forwarded_and_defaults_to_native_scale(
+        self, monkeypatch,
+    ):
+        monkeypatch.setenv("GEX_ROM_DIR", "configured")
+        called = {}
+        monkeypatch.setattr(play, "run", lambda **kwargs: called.update(kwargs))
+
+        play.main(["--full-playfield"])
+        assert called["full_playfield"] is True
+        assert called["scale"] == 1
+
+        play.main(["--full-playfield", "--scale", "2"])
+        assert called["scale"] == 2
 
     def test_level_and_maze_are_forwarded_independently(self, monkeypatch):
         monkeypatch.setenv("GEX_ROM_DIR", "configured")

@@ -5,7 +5,7 @@ Four of them are the VRAM tables the display hardware reads; the fifth lives in
 working RAM and completes the record.
 
 Reference: ``doc/04_game_subsystems.md`` §1.1, §2.1, §24;
-``book/08_world_in_memory.md``.
+``book/06_a_world_in_ten_bytes.md``.
 
     array           hw?  contents
     picture         yes  tile number (bits 14-0), software flag (bit 15)

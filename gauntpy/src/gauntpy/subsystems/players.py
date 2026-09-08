@@ -23,7 +23,8 @@ Reference: ``doc/04_game_subsystems.md`` §4 (all), §7.2, §10.5, §10.6, §13,
 §14.1, §21; ``doc/generated/player_collision_contracts.csv``,
 ``player_runtime_contracts.csv``, ``player_lifecycle_contracts.csv``,
 ``tport_forcefield_contracts.csv``, ``playfield_floor_contracts.csv``;
-``book/10_players.md``.  Tables and gates transcribed from ``row76.bin`` carry
+``book/03_four_players.md`` and ``book/02_one_arrow.md``.
+Tables and gates transcribed from ``row76.bin`` carry
 their ROM address in a comment; where the ROM and the prose docs disagree the
 ROM wins and the disagreement is written down at the point of use.
 """

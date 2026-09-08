@@ -29,7 +29,7 @@ eight-attempt budget, the read head staying put on a busy result, the retry
 count, the 0xB4 reset threshold, the speech-disable bit) are all implemented.
 
 Reference: ``doc/04_game_subsystems.md`` §11; ``refs/soundcmds.csv``;
-``book/16_sound.md``.
+``book/14_a_machine_that_speaks.md``.
 """
 
 from __future__ import annotations

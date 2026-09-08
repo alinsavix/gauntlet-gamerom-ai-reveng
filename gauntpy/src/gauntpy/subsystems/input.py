@@ -16,7 +16,7 @@ a run of 1s means "released". Getting this backwards inverts every button in
 the game, so the polarity is asserted in the tests.
 
 Reference: ``doc/04_game_subsystems.md`` §15 and §6.4;
-``doc/08_known_issues.md`` (the 0x1C correction); ``book/06_main_loop.md``.
+``doc/08_known_issues.md`` (the 0x1C correction); ``book/07_the_games_clock.md``.
 """
 
 from __future__ import annotations

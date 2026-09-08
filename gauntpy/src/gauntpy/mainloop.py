@@ -15,7 +15,7 @@ cross-referencing the disassembly.
 ``doc/generated/main_loop_contracts.csv``, so the sequence cannot drift from the
 ROM's without a test failing.
 
-Reference: ``doc/03_game_rom_structure.md`` §2.1-2.5; ``book/06_main_loop.md``.
+Reference: ``doc/03_game_rom_structure.md`` §2.1-2.5; ``book/07_the_games_clock.md``.
 """
 
 from __future__ import annotations

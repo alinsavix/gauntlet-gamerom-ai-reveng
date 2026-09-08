@@ -28,7 +28,7 @@ Reference: ``doc/04_game_subsystems.md`` §10, §14, §25;
 padding mode: nonzero pads with **spaces**); ``doc/07_function_index.md``
 (0x45940 / 0x459A2 / 0x49BD0 row and attribute notes);
 ``doc/generated/score_coin_dialog_contracts.csv``;
-``book/14_score_and_economics.md``.
+``book/08_what_a_quarter_buys.md``.
 """
 
 from __future__ import annotations

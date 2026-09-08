@@ -21,21 +21,23 @@ def draw_alpha_layer(
     state: GameState,
     *,
     clip: tuple[int, int, int, int] | None = None,
+    origin: tuple[int, int] = (0, 0),
 ) -> None:
     """Composite every visible VRAM cell using its live color-RAM palette."""
     clip = clip or (0, 0, fb.width, fb.height)
     clip_x, clip_y, clip_w, clip_h = clip
     clip_right, clip_bottom = clip_x + clip_w, clip_y + clip_h
+    origin_x, origin_y = origin
     palettes: dict[int, tuple[tuple[int, int, int, int], ...]] = {}
     glyphs = []
 
-    for row in range(min(ALPHA_ROWS, fb.height // GLYPH_H)):
-        y = row * GLYPH_H
+    for row in range(ALPHA_ROWS):
+        y = origin_y + row * GLYPH_H
         if y + GLYPH_H <= clip_y or y >= clip_bottom:
             continue
         base = row * ALPHA_COLUMNS
-        for column in range(min(ALPHA_VISIBLE_COLUMNS, fb.width // GLYPH_W)):
-            x = column * GLYPH_W
+        for column in range(ALPHA_VISIBLE_COLUMNS):
+            x = origin_x + column * GLYPH_W
             if x + GLYPH_W <= clip_x or x >= clip_right:
                 continue
             word = state.alpha_ram[base + column] & 0xFFFF

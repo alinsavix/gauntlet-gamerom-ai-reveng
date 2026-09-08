@@ -8,7 +8,7 @@ The dragon has no channels of its own: ``dragon_find_free_shot_slot``
 (0x540E8) hands its fire one of the monster channels 5-8.
 
 Reference: ``doc/04_game_subsystems.md`` §26, §3.6, §23;
-``doc/generated/monster_combat_contracts.csv``; ``book/11_monsters.md``.
+``doc/generated/monster_combat_contracts.csv``; ``book/02_one_arrow.md``.
 Every table here is transcribed from ``row76.bin`` (game address ``A`` at file
 offset ``A - 0x40000``, big-endian) and every routine follows the
 corresponding disassembly rather than the prose.

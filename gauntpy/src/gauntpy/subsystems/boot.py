@@ -1,6 +1,6 @@
 """Boot and one-time initialization -- WP-20.
 
-Reference: ``doc/03_game_rom_structure.md`` §5, §2.2; ``book/05_boot_and_os.md``.
+Reference: ``doc/03_game_rom_structure.md`` §5, §2.2; ``book/16_waking_the_cabinet.md``.
 
 ``one_time_init`` runs exactly once, before the first VBLANK wait, from
 ``g2mainloop``. It is not part of the per-frame band, so it is not tracked in

@@ -1,7 +1,7 @@
 """Monsters and generators -- WP-8.
 
 Reference: ``doc/04_game_subsystems.md`` §3 (all of it);
-``doc/generated/monster_combat_contracts.csv``; ``book/11_monsters.md``.
+``doc/generated/monster_combat_contracts.csv``; ``book/04_the_horde.md``.
 
 Key facts for whoever implements this, all of which are easy to get backwards:
 

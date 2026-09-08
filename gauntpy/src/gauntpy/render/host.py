@@ -52,7 +52,15 @@ from time import perf_counter
 from ..constants import FRAMES_PER_SECOND, GameMode
 from ..state import GameState
 from ..subsystems.input import JOY_DOWN, JOY_FIRE_BIT, JOY_IDLE, JOY_LEFT, JOY_MAGIC_BIT, JOY_RIGHT, JOY_UP
-from .compositor import LOGICAL_HEIGHT, LOGICAL_WIDTH, RenderCache, render_frame
+from .compositor import (
+    LOGICAL_HEIGHT,
+    LOGICAL_WIDTH,
+    OVERVIEW_HEIGHT,
+    OVERVIEW_WIDTH,
+    RenderCache,
+    render_frame,
+    render_full_playfield_frame,
+)
 from .diagnostics import (
     DEBUG_PAGES,
     DEBUG_PANEL_WIDTH,
@@ -151,6 +159,7 @@ class HostShell:
         title: str = "gauntpy",
         keymap: dict[str, int] | None = None,
         diagnostics: bool = False,
+        full_playfield: bool = False,
         sound_dir=None,
         audio_player=None,
         uncapped: bool = False,
@@ -173,6 +182,9 @@ class HostShell:
         self.paused = False
         self.treasure_timer_paused = False
         self.diagnostics_visible = diagnostics
+        self.full_playfield = full_playfield
+        self.render_width = OVERVIEW_WIDTH if full_playfield else LOGICAL_WIDTH
+        self.render_height = OVERVIEW_HEIGHT if full_playfield else LOGICAL_HEIGHT
         self.diagnostics_page = 0
         self.diagnostics_selected_mob = 0
         self._diagnostics_previous = None
@@ -195,7 +207,7 @@ class HostShell:
         self._audio_player = audio_player
         self.window = self._set_window_mode()
         self._framebuffer = PygameFramebuffer(
-            pygame, LOGICAL_WIDTH, LOGICAL_HEIGHT,
+            pygame, self.render_width, self.render_height,
         )
         pygame.display.set_caption(title)
         self.clock = pygame.time.Clock()
@@ -235,10 +247,10 @@ class HostShell:
         )
 
     def _set_window_mode(self):
-        game_width = LOGICAL_WIDTH * self.scale
+        game_width = self.render_width * self.scale
         panel_width = DEBUG_PANEL_WIDTH if self.diagnostics_visible else 0
         return self._pygame.display.set_mode(
-            (game_width + panel_width, LOGICAL_HEIGHT * self.scale)
+            (game_width + panel_width, self.render_height * self.scale)
         )
 
     def _connect_gamepad(self, device_index: int) -> None:
@@ -430,14 +442,22 @@ class HostShell:
 
             self._assets = AssetStore()
 
-        fb, self._cache = render_frame(
-            state, self._assets, cache=self._cache, paused=self.paused,
-            framebuffer=self._framebuffer,
-        )
+        if self.full_playfield:
+            fb, self._cache = render_full_playfield_frame(
+                state, self._assets, cache=self._cache,
+                paused=self.paused,
+                framebuffer=self._framebuffer,
+            )
+        else:
+            fb, self._cache = render_frame(
+                state, self._assets, cache=self._cache, paused=self.paused,
+                framebuffer=self._framebuffer,
+            )
         surface = fb.surface
         if self.scale != 1:
             surface = self._pygame.transform.scale(
-                surface, (LOGICAL_WIDTH * self.scale, LOGICAL_HEIGHT * self.scale)
+                surface,
+                (self.render_width * self.scale, self.render_height * self.scale),
             )
         self.window.blit(surface, (0, 0))
         render_time_ms = round((perf_counter() - render_started) * 1000.0, 9)
@@ -461,14 +481,14 @@ class HostShell:
             self._diagnostics_previous = snapshot
             panel = render_debug_panel(
                 snapshot,
-                height=LOGICAL_HEIGHT * self.scale,
+                height=self.render_height * self.scale,
                 page=self.diagnostics_page,
                 events=tuple(self._diagnostics_events),
             )
             panel_surface = self._pygame.image.frombuffer(
                 panel.tobytes(), panel.size, panel.mode,
             ).convert_alpha()
-            self.window.blit(panel_surface, (LOGICAL_WIDTH * self.scale, 0))
+            self.window.blit(panel_surface, (self.render_width * self.scale, 0))
         flip_started = perf_counter()
         self._pygame.display.flip()
         self.last_display_flip_time_ms = round(

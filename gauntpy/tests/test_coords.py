@@ -8,7 +8,7 @@ from gauntpy import coords
 
 
 def test_the_worked_example_from_the_book():
-    """book/08_world_in_memory.md traces row 12, column 20 through all three."""
+    """doc/04_game_subsystems.md section 23 defines the coordinate mappings."""
     slot = coords.pack_slot(12, 20)
     assert slot == 0x194
     assert slot == 404

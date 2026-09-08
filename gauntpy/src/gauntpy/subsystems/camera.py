@@ -1,6 +1,6 @@
 """The camera -- WP-13.
 
-Reference: ``doc/04_game_subsystems.md`` §17; ``book/08_world_in_memory.md``.
+Reference: ``doc/04_game_subsystems.md`` §17; ``book/03_four_players.md``.
 """
 
 from __future__ import annotations

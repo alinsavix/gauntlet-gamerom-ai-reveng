@@ -26,7 +26,8 @@ Quick tour:
 - ``text`` -- alpha character-ROM decoding plus the host-only debug fallback.
 - ``compositor.render_frame(state, assets)`` -- assembles all three into one
   ``Framebuffer``; layer 4 (priority/shadowing) falls out of the draw order
-  itself (see that module's docstring).
+  itself (see that module's docstring). ``render_full_playfield_frame`` is the
+  host-only whole-world diagnostic view.
 - ``diagnostics`` -- immutable state snapshots, nine host-only pages, selected
   MOB inspection, and snapshot-derived events; never writes modeled game or
   video memory.
@@ -37,7 +38,20 @@ Quick tour:
 
 from __future__ import annotations
 
-from .compositor import HUD_PANEL, HUD_PANEL_X, LOGICAL_HEIGHT, LOGICAL_WIDTH, PLAYFIELD_VIEWPORT, RenderCache, render_frame
+from .compositor import (
+    FULL_PLAYFIELD_VIEWPORT,
+    FULL_PLAYFIELD_HUD,
+    HUD_PANEL,
+    HUD_PANEL_X,
+    LOGICAL_HEIGHT,
+    LOGICAL_WIDTH,
+    OVERVIEW_HEIGHT,
+    OVERVIEW_WIDTH,
+    PLAYFIELD_VIEWPORT,
+    RenderCache,
+    render_frame,
+    render_full_playfield_frame,
+)
 from .diagnostics import (
     DEBUG_PAGES,
     DebugSnapshot,
@@ -60,9 +74,14 @@ __all__ = [
     "Framebuffer",
     "RenderCache",
     "render_frame",
+    "render_full_playfield_frame",
     "LOGICAL_WIDTH",
     "LOGICAL_HEIGHT",
     "PLAYFIELD_VIEWPORT",
+    "FULL_PLAYFIELD_VIEWPORT",
+    "FULL_PLAYFIELD_HUD",
+    "OVERVIEW_WIDTH",
+    "OVERVIEW_HEIGHT",
     "HUD_PANEL",
     "HUD_PANEL_X",
     "DebugSnapshot",

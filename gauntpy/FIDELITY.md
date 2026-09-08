@@ -1,7 +1,9 @@
 # gauntpy fidelity rules
 
 This is the short, authoritative checklist for changes to gauntpy. Detailed
-evidence remains in `../doc/`, generated contracts, and the book.
+evidence remains in `../doc/` and generated contracts. The book provides
+reader-facing explanations and links to that evidence, not a complete
+implementation specification.
 
 ## Runtime invariants
 
@@ -482,6 +484,9 @@ evidence remains in `../doc/`, generated contracts, and the book.
    iteration. Run the complete gauntpy suite once at the end.
 4. Record terse source/ROM findings while working. Update `doc/`, `book/`, and
    `ISSUES.md` once per completed batch instead of repeatedly during iteration.
+   For the book, revise the affected explanation as a whole; do not append
+   correction histories, captured port failures, or maintenance instructions.
+   Keep host usage in its dedicated gauntpy chapter and follow `book/OUTLINE.md`.
 5. Commit the completed, verified batch at the end of the turn. Do not include
    ROMs, local EEPROM/NVRAM, `extra_docs/`, or generated traces.
 

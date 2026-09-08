@@ -735,8 +735,8 @@ def decode_maze(maze_number: int) -> Maze:
 
 def maze_for_level(level_number: int) -> int | None:
     """The one *fixed* level -> maze rule: levels 1-5 always play mazes 0-4,
-    in that order (doc/06 section 3.1; ``book/09`` "Choosing the next
-    maze"). Returns ``None`` for any other level number -- from level 6 on,
+    in that order (doc/06 section 3.1; ``book/09_mazes_and_slapstic.md``).
+    Returns ``None`` for any other level number -- from level 6 on,
     the maze number is cabinet-rotation state, not a function of the level
     number alone (see module docstring "Scope note").
     """

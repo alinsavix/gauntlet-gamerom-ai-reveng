@@ -27,7 +27,13 @@ import pytest
 
 from gauntpy import coords
 from gauntpy.constants import GameMode, MazeObjIds, PlayerStatus
-from gauntpy.render.compositor import HUD_PANEL, PLAYFIELD_VIEWPORT, render_frame
+from gauntpy.render.compositor import (
+    HUD_PANEL,
+    PLAYFIELD_VIEWPORT,
+    VIEWPORT_BOX_COLOR,
+    render_frame,
+    render_full_playfield_frame,
+)
 from gauntpy.render.framebuffer import Framebuffer
 from gauntpy.render.hud import (
     cell_xy,
@@ -1702,6 +1708,35 @@ class TestRenderFrame:
         fb_b, cache = render_frame(state, _FakeAssets(), cache=cache)
         assert fb_a.image.tobytes() == fb_fresh.image.tobytes() == fb_b.image.tobytes()
 
+    def test_full_playfield_frame_outlines_the_camera_without_mutating_state(self):
+        state = GameState(scroll_x=450, scroll_y=400)
+        before = (state.scroll_x, state.scroll_y)
+
+        fb, _cache = render_full_playfield_frame(state, _FakeAssets())
+
+        assert (fb.width, fb.height) == (616, 512)
+        assert (state.scroll_x, state.scroll_y) == before
+        assert fb.get_pixel(450, 400) == VIEWPORT_BOX_COLOR
+        assert fb.get_pixel((450 + 231) % 512, 400) == VIEWPORT_BOX_COLOR
+        assert fb.get_pixel(450, (400 + 239) % 512) == VIEWPORT_BOX_COLOR
+        assert fb.get_pixel(0, 400) == VIEWPORT_BOX_COLOR
+        assert fb.get_pixel(450, 0) == VIEWPORT_BOX_COLOR
+
+    def test_full_playfield_frame_places_the_existing_hud_beside_the_world(self):
+        from gauntpy.subsystems.display import init_alpha_color_ram
+
+        state = GameState()
+        init_alpha_color_ram(state)
+        state.alpha_ram[score.PANEL_COLUMN] = 0x8C41
+
+        normal, _cache = render_frame(state, _FakeAssets())
+        overview, _cache = render_full_playfield_frame(state, _FakeAssets())
+
+        assert (
+            overview.image.crop((512, 0, 616, 240)).tobytes()
+            == normal.image.crop((232, 0, 336, 240)).tobytes()
+        )
+
 
 
 
@@ -2628,6 +2663,16 @@ class TestHostShellInput:
                 LOGICAL_HEIGHT * 3,
             )
             shell.present(GameState())
+        finally:
+            shell.close()
+
+    def test_full_playfield_host_uses_the_world_raster_size(self):
+        from gauntpy.render.host import HostShell
+
+        shell = HostShell(assets=_FakeAssets(), scale=1, full_playfield=True)
+        try:
+            assert shell.window.get_size() == (616, 512)
+            assert (shell._framebuffer.width, shell._framebuffer.height) == (616, 512)
         finally:
             shell.close()
 

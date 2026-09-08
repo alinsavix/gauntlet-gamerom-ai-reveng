@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from ..constants import GameMode
+from ..coords import WORLD_PIXELS
 from ..state import GameState
 from ..subsystems import score
 from ..subsystems.camera import viewport_scroll
@@ -41,7 +41,9 @@ from .playfield import (
 
 __all__ = [
     "LOGICAL_WIDTH", "LOGICAL_HEIGHT", "PLAYFIELD_VIEWPORT", "HUD_PANEL",
-    "HUD_PANEL_X", "RenderCache", "render_frame",
+    "HUD_PANEL_X", "FULL_PLAYFIELD_VIEWPORT", "FULL_PLAYFIELD_HUD",
+    "OVERVIEW_WIDTH", "OVERVIEW_HEIGHT", "VIEWPORT_BOX_COLOR",
+    "RenderCache", "render_frame", "render_full_playfield_frame",
 ]
 
 #: doc/01_hardware.md §4, Confidence: Verified.
@@ -61,6 +63,17 @@ _HARDWARE_VIEWPORT: tuple[int, int, int, int] = (
 HUD_PANEL: tuple[int, int, int, int] = (
     HUD_PANEL_X, 0, LOGICAL_WIDTH - HUD_PANEL_X, LOGICAL_HEIGHT,
 )
+
+#: Host-only whole-world raster used by ``gauntpy-play --full-playfield``.
+FULL_PLAYFIELD_VIEWPORT: tuple[int, int, int, int] = (
+    0, 0, WORLD_PIXELS, WORLD_PIXELS,
+)
+FULL_PLAYFIELD_HUD: tuple[int, int, int, int] = (
+    WORLD_PIXELS, 0, HUD_PANEL[2], HUD_PANEL[3],
+)
+OVERVIEW_WIDTH = WORLD_PIXELS + HUD_PANEL[2]
+OVERVIEW_HEIGHT = WORLD_PIXELS
+VIEWPORT_BOX_COLOR: tuple[int, int, int, int] = (255, 255, 255, 255)
 
 
 @dataclasses.dataclass
@@ -127,4 +140,74 @@ def render_frame(
     draw_alpha_layer(fb, state)
     draw_pause_indicator(fb, HUD_PANEL, paused=paused)
 
+    return fb, cache
+
+
+def _draw_wrapped_viewport_box(
+    fb,
+    scroll_x: int,
+    scroll_y: int,
+    *,
+    color: tuple[int, int, int, int] = VIEWPORT_BOX_COLOR,
+) -> None:
+    """Outline the visible camera window on the toroidal world raster."""
+    world_w, world_h = FULL_PLAYFIELD_VIEWPORT[2:]
+    view_w, view_h = PLAYFIELD_VIEWPORT[2:]
+    left = scroll_x % world_w
+    top = scroll_y % world_h
+    right = (left + view_w - 1) % world_w
+    bottom = (top + view_h - 1) % world_h
+    for offset in range(view_w):
+        x = (left + offset) % world_w
+        fb.set_pixel(x, top, color)
+        fb.set_pixel(x, bottom, color)
+    for offset in range(view_h):
+        y = (top + offset) % world_h
+        fb.set_pixel(left, y, color)
+        fb.set_pixel(right, y, color)
+
+
+def render_full_playfield_frame(
+    state: GameState,
+    assets: SpriteSource,
+    *,
+    cache: RenderCache | None = None,
+    paused: bool = False,
+    framebuffer=None,
+) -> tuple[Framebuffer, RenderCache]:
+    """Render the complete world, camera outline, and adjacent gameplay HUD.
+
+    This is a host-only diagnostic view. It reads the same playfield and MOB
+    state as the normal compositor, but does not alter camera/gameplay state.
+    Only fixed HUD columns are drawn; screen-wide alpha content is omitted.
+    """
+    cache = cache or RenderCache()
+    fb = framebuffer or Framebuffer(OVERVIEW_WIDTH, OVERVIEW_HEIGHT)
+    if framebuffer is not None:
+        fb.clear()
+
+    if state.maze is not None or state.playfield_generation:
+        cache.playfield = playfield_cache_for_state(state, cache.playfield)
+        draw_playfield(fb, cache.playfield, 0, 0, FULL_PLAYFIELD_VIEWPORT)
+        shadow_src = shadow_source_for(
+            cache.playfield, 0, 0, FULL_PLAYFIELD_VIEWPORT,
+        )
+    else:
+        shadow_src = None
+
+    draw_mob_layer(
+        fb, state, assets, 0, 0, FULL_PLAYFIELD_VIEWPORT,
+        shadow_src=shadow_src,
+    )
+    scroll_x, scroll_y = viewport_scroll(
+        state, PLAYFIELD_VIEWPORT[2], PLAYFIELD_VIEWPORT[3],
+    )
+    _draw_wrapped_viewport_box(fb, scroll_x, scroll_y)
+    draw_alpha_layer(
+        fb,
+        state,
+        clip=FULL_PLAYFIELD_HUD,
+        origin=(WORLD_PIXELS - HUD_PANEL_X, 0),
+    )
+    draw_pause_indicator(fb, FULL_PLAYFIELD_HUD, paused=paused)
     return fb, cache
