@@ -14,6 +14,9 @@ taken before rewriting. Git history is the durable shared reference.
 **Deferred** means useful detail awaiting a fuller explanation.
 **Moved** means the subject has a new home, often in shortened form.
 **Removed** means deliberately excluded from the reader's book.
+**Expanded** means the mechanism now has a developed explanation in the
+September 9 full versions of Chapters 3-8; any remaining detail is named
+in that row. This does not mean the old passage was restored verbatim.
 An incorrect claim is not deferred material to reinsert: recover the
 supported mechanism from the current evidence, not the old wording.
 
@@ -67,7 +70,7 @@ list have been replaced by situations in which those features matter.
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "Choosing your hero": broad class superlatives | Rewritten | Avoid absolute claims such as one class being best at everything in a category. Chapter 2 supplies shot comparisons; Chapter 3 should expand movement, armor, and magic with worked situations. |
+| "Choosing your hero": broad class superlatives | Rewritten / expanded | Chapter 2 supplies shot comparisons. Chapter 3 now works movement patterns, demon-shot armor costs, and a shared potion decision rather than assigning a universally best class. |
 | "Health is money": food and damage summary | Rewritten | Ordinary wholesome food is 100 health; variable and poisoned variants need their own rules. Friendly fire depends on level flags. Chapter 8 owns the fuller accounting. |
 | "The shape of a game": whole-session Mermaid graph | Deferred | A future diagram should show concurrent player lifecycles rather than imply every player dies, continues, and enters initials together. Candidate homes: Chapters 3 and 8. |
 | "What makes it Gauntlet II": compact list of every feature and chapter number | Removed as a list | Subjects remain in the new reading plan. Expand them where their consequences can be explained, rather than rebuilding an introductory catalog. |
@@ -99,16 +102,16 @@ alongside the particular decisions they govern.
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "One evening, two stories" and "Four stories at once": global mode versus independent player status | Retained in concept; full status table deferred | Expand in Chapter 3 with two players in different states, then a small diagram. Include selecting, alive here, exited/waiting for next level, dying/initials, and secret-winner states. |
+| "One evening, two stories" and "Four stories at once": global mode versus independent player status | Expanded; full status table deferred | Chapter 3 follows concurrent selection, fighting, exiting, and player endings. Chapter 8 distinguishes live top-up, continued-player initialization, and ranking. A full concurrent-state diagram and secret-winner states remain for later treatment. |
 | "The idle machine": exact screen timers and one-second attract input lockouts | Moved / deferred | Chapter 15 owns idle-screen controls. Distinguish switching attract pages from starting a paid session. |
-| "A coin becomes a hero": join wrapper, placement, finalizer, installed character helpers | Shortened | Chapter 3 retains placement as a precondition. Detailed helper installation can remain in the technical docs unless a palette example needs it. |
-| Saved PLAYERSTART and removal of unused start markers | Deferred | Chapter 9 expansion can trace one full level setup; Chapter 3 can contrast a first placement with a late join. Remove all port-failure commentary. |
+| "A coin becomes a hero": join wrapper, placement, finalizer, installed character helpers | Expanded / partly deferred | Chapter 3 works a failed and successful late-join placement before finalization. Chapter 8 follows credit into selection. Installed character-helper details remain in the technical docs. |
+| Saved PLAYERSTART and removal of unused start markers | Partly expanded | Chapter 3 contrasts the remembered first-player start with a neighbor search for a late join. Chapter 9 still owns full setup and disposal of unused markers; port-failure commentary remains excluded. |
 | "Starting a level": selection, curtain, decode, object scan, survivor placement, release | Deferred as a worked sequence | Best restored in Chapter 9 with one real layout. Preserve the distinction between continuing survivors and a fresh join; survivors do not receive another join welcome. |
 | Level-entry sound presets, treasure music selected by party size, secret-room music timing, later taunts | Deferred | Chapters 13 and 14 can develop an audio timeline after the ordinary setup explanation. |
-| "Leaving a level": individual exit animation and collective handoff | Retained in outline | Chapters 3 and 10 should expand who can still act while someone has already exited. |
+| "Leaving a level": individual exit animation and collective handoff | Expanded / partly deferred | Chapter 3 explains an exited player waiting while another remains in the maze. Chapter 10 can develop the exit animation and terrain interaction itself. |
 | Treasure transitions and successful/failed secret-room pacing | Moved | Chapter 13. Exact intervals and tally fields need worked examples before restoration. |
-| "Death, and the offer": exact ROM prompt and separate timer-field writer | Deferred | Chapter 8 can show the prompt and explain Magic. Pixel placement and host repair history stay out. |
-| Continued player's full starting health versus an active player's increment | Retained as distinction | Chapter 8, with actual configured examples if expanded. |
+| "Death, and the offer": exact ROM prompt and separate timer-field writer | Partly expanded | Chapter 8 explains continue gates and the prompt's Magic control, distinct from live top-up. Full text layout and separate field writer remain deferred; host repair history stays out. |
+| Continued player's full starting health versus an active player's increment | Expanded | Chapter 8 works a 750-health paid assignment and a 120-to-870 live top-up. Both use the same selected paid-health value; assignment, addition, and the free-play/demo path remain distinct. |
 | "The ceremony": 45-second initials entry and ten-second unranked display | Deferred detail | Chapter 8 for rankings; Chapter 16 for how results persist. |
 | "The whole map": complete combined state diagram | Deferred | Do not reinsert unchanged. Draw a simplified concurrent example, then link to numeric states in the technical reference. |
 
@@ -119,13 +122,17 @@ dispatcher. It retains the one-slot allocation, four-count launch,
 selected speed/damage tables, ordinary grunt progression, generator
 demotion, and the difference between a consumed and surviving projectile.
 
-Deferred details include direction-specific muzzle offsets, diagonal
-velocity rows, fixed-point word packing, shot animation/lifetime counters,
-the complete reflection geometry, monster projectile channels, detailed
-Death counters, potion-shot effects, special wall dispatch, and
-secret-objective hooks. Their possible homes are Chapters 4, 6, 10, 12,
-and 13. Restore an exact branch only when a reader-facing example needs
-it. The current source of truth is `doc/04_game_subsystems.md`, especially
+Chapters 4 and 6 now develop monster projectile channels, fractional
+lobber motion and its late collision window, position-word packing, and
+the separate Death counters. Chapters 3, 4, and 7 connect carried versus
+shot-triggered potions to target effects and frame order.
+
+Still deferred are complete direction-specific muzzle offsets, diagonal
+velocity rows, ordinary shot animation/lifetime tables, reflection
+geometry, special wall dispatch, and secret-objective hooks. Their
+possible homes are Chapters 10, 12, and 13, or a focused later refinement.
+Restore an exact branch only when a reader-facing example needs it.
+The current source of truth is `doc/04_game_subsystems.md`, especially
 sections 2.2, 3, and 26, plus the linked ROM tables.
 
 ## Hardware, display, and world representation
@@ -135,15 +142,15 @@ sections 2.2, 3, and 26, plus the linked ROM tables.
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
 | Hardware, "The main CPU": register and bus widths, address width, endianness, other 68000-family machines | Deferred | Chapter 5 needs only functional orientation; Chapter 18 can introduce byte order when reading a dump. |
-| Hardware, "One address space": memory map, memory-mapped I/O, 4 KB spare-video workspace, unfitted main-RAM aperture | Deferred | Chapters 5 and 16 can add a functional memory diagram. Treat the unfitted-aperture hardware evidence with its actual qualification. |
+| Hardware, "One address space": memory map, memory-mapped I/O, 4 KB spare-video workspace, unfitted main-RAM aperture | Partly expanded | Chapter 5 now includes memory-mapped controls and a functional hardware diagram. Full maps, spare workspace, and qualified unfitted-aperture evidence remain for Chapters 16 and 18 if needed. |
 | Hardware, chip assembly and "Three images, three jobs": physical chip pairs, byte interleave, concatenation, checksums, full ROM inventory | Moved / deferred | Chapter 18 and the repository ROM instructions. Chapters 9, 14, and 16 introduce the level, sound, and OS roles in context. |
 | Hardware, "The supporting cast": sound recovery, EEPROM unlock/cadence, LEDs and board enable, watchdog | Moved / deferred | Chapters 14 and 16. Add only diagnostic details that help a reader follow a failure. |
 | Display, "Tiles": graphics banks, chip wiring, bit-plane reconstruction, graphics inaccessible to main CPU | Shortened / deferred | Chapter 5 retains the direct hardware fetch distinction. A bit-plane decoding example could return in Chapter 18. |
-| Display, "Color by table": bank counts, address ranges, IRGB packing, analog intensity model | Deferred | Chapter 5 after the palette example. Preserve intensity subtraction for shadows; do not replace it with universal RGB halving. |
-| Display, "The playfield": descriptor bits, column-first storage, four-tile cell writes, adjoining-wall restamps | Deferred / moved | Chapter 5 for representation; Chapter 10 for doors and changing wall connectivity. |
+| Display, "Color by table": bank counts, address ranges, IRGB packing, analog intensity model | Expanded / partly deferred | Chapter 5 works palette selection, region sizes, one composed pixel, and IRGB shadow subtraction, including intensity seven reaching zero. Calibrated analog output and a complete address inventory remain deferred. The retained shadow illustration is explicitly approximate. |
+| Display, "The playfield": descriptor bits, column-first storage, four-tile cell writes, adjoining-wall restamps | Expanded / partly moved | Chapter 5 calculates the four destinations for row 12, column 20, explains wall restamps, and distinguishes door removal revealing existing floor. Chapter 10 retains ownership of changing connectivity and traversal. |
 | Display, host caches and frame-time spikes | Removed maintenance | Raster caches and invalidation policies remain implementation documentation. Host performance can be demonstrated in Chapter 17 without explaining a particular repair. |
-| Display, "Motion objects": full dimension encodings and dragon tile-grid image | Deferred | Restore `ch04_dragon_tiles.png` in Chapter 5 for one compound drawing; Chapter 12 owns the articulated dragon. |
-| Display, "The text layer": 64 stored versus 42 visible columns, character ROM, opacity bits | Deferred | Chapter 5 retains the opaque-blank curtain. Chapter 11 can show why hidden columns are useful storage. |
+| Display, "Motion objects": full dimension encodings and dragon tile-grid image | Expanded | Chapter 5 reuses `ch04_dragon_tiles.png`, works tile order and size-minus-one encoding, and distinguishes one stamp from the articulated encounter in Chapter 12. |
+| Display, "The text layer": 64 stored versus 42 visible columns, character ROM, opacity bits | Expanded / partly moved | Chapter 5 explains stored/visible width, character ROM, transparent ink, opaque blanks, and the curtain. Chapter 11 still owns hidden-column route storage. |
 | Display, palette programs and distinct exit descriptors | Moved / deferred | Transporter and special-floor cycles in Chapter 10; animated title colors in Chapter 15. |
 
 ### Former 08_world_in_memory.md
@@ -151,12 +158,12 @@ sections 2.2, 3, and 26, plus the linked ROM tables.
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
 | "What a thing is": partial-record validation and cleanup obligations | Removed maintenance | Keep the ten-byte record; do not address future port maintainers in its explanation. |
-| "Where a thing is": complete row/column, pixel, upward-V, and playfield-address conversion | Deferred | Chapter 6 keeps the cell-404 example. Add one complete conversion with labeled units rather than every mask. |
-| "Who gets which slot": all reserved IDs and row-zero setup markers | Deferred | Chapter 6 distinguishes fixed effects and cell-owned actors. A diagram can restore the reserved region and top-wall implications. |
-| "The chain": depth-key ties, exact remove/clear APIs, physical SLIP addresses | Deferred | Chapter 6 should trace one insertion and removal. Keep one chain with cumulative entry points, not independent bucket lists. |
-| "Three users": asymmetric player probes, top/bottom guards, camera gates, seam arithmetic | Deferred mechanics; capture stories removed | Chapters 3 and 6 can use one exact collision diagram. Do not restore regression coordinates as unexplained prose. |
+| "Where a thing is": complete row/column, pixel, upward-V, and playfield-address conversion | Expanded | Chapters 5 and 6 connect cell 404 to playfield addresses, pixel anchors, upward V, packed H/V words, and the biased ownership change during a two-pixel move. |
+| "Who gets which slot": all reserved IDs and row-zero setup markers | Partly expanded | Chapter 6 gives the fixed/dynamic ranges, projectile allocations, and reserved-border consequence. Exhaustive effect IDs and setup-marker inventory remain deferred. |
+| "The chain": depth-key ties, exact remove/clear APIs, physical SLIP addresses | Partly expanded | Chapter 6 traces insertion, copied type/state with preserved new links, retirement of 404, and shared SLIP entry maintenance. Exhaustive tie rules, endpoint bookkeeping, APIs, and addresses remain reference material. |
+| "Three users": asymmetric player probes, top/bottom guards, camera gates, seam arithmetic | Expanded / partly deferred | Chapter 3 develops axis probes, corner assistance, and camera gates; Chapter 6 separates direct shot candidates from traversal and works the 15.5-pixel movement threshold. Exhaustive seam/top/bottom cases remain deferred; capture stories stay removed. |
 | "The invisible half": direction nibbles, thief routing, door endpoints, logical/visible walls | Moved | Chapters 10 and 11. |
-| "One camera, four players": exact outlier adjustment, wrap folding, clamps, crop versus movement-test origins | Deferred | Chapter 3. Existing camera screenshots remain available, but their captions need review before reuse: an outlier adjustment is more specific than "the camera stops chasing." |
+| "One camera, four players": exact outlier adjustment, wrap folding, clamps, crop versus movement-test origins | Expanded | Chapter 3 works a four-player horizontal extent, smoothing, a wrap comparison, the outlier adjustment, and distinct player edge-test windows. Old screenshots remain unused pending caption review. |
 
 ## Player and monster detail
 
@@ -164,28 +171,28 @@ sections 2.2, 3, and 26, plus the linked ROM tables.
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "A hero, by the numbers": full movement, armor, forcefield, damage, and animation tables | Selected comparisons retained; remainder deferred | Chapter 2 includes shot comparisons. Chapter 3 should work an armor and movement example; Chapter 10 owns forcefields. The animation-strip asset remains available. |
+| "A hero, by the numbers": full movement, armor, forcefield, damage, and animation tables | Expanded comparisons; remainder deferred | Chapter 3 now works four-frame speed patterns, hand-power bases, and demon-shot armor costs beside Chapter 2's shot comparisons. Chapter 10 owns forcefields; full tables and the animation-strip asset remain optional. |
 | "Joining the party": RAM palette helpers and all player-field initialization | Deferred | Restore only if a Chapter 5 hurt-flash example or Chapter 3 join trace needs it. |
-| "From switches to intent": direction maps and separate facing/fighting state | Deferred | Chapters 2, 3, and 7. Explain what a blocked move does to aim before introducing the maps. |
-| "The maze pushes back": poison wobble, acid/stun distinctions, exact lane/camera cases | Deferred mechanics; capture history removed | Chapters 3 and 10. Preserve complete axis proposals and the explicit one-pixel responses, rather than promising arbitrary partial movement. |
-| "Swords and arrows": melee damage and cabinet-position random term | Deferred | Chapter 3 can compare a close fight with Chapter 2's ranged attack. The position-indexed randomness deserves explicit evidence if restored. |
+| "From switches to intent": direction maps and separate facing/fighting state | Expanded / partly deferred | Chapters 3, 4, and 7 connect facing, achieved movement, lobber lead, held Fire, and Magic edges. Full direction-map inventories remain deferred. |
+| "The maze pushes back": poison wobble, acid/stun distinctions, exact lane/camera cases | Expanded / partly moved | Chapter 3 uses complete axis proposals and explicit one-pixel wall responses, poison remapping, and movement stun. Chapter 4 develops Acid; remaining terrain cases belong in Chapter 10. Capture history stays removed. |
+| "Swords and arrows": melee damage and cabinet-position random term | Expanded | Chapter 3 distinguishes class-indexed bases, generator hand power, and the separately position-indexed random term, with source references. |
 | Shot effects and collision-index tagging | Deferred | Chapter 6 can show why an impact's position differs from its lookup identity; low-level porting warnings remain outside the book. |
-| "Potions": complete matrix, shot/enhanced columns, zero semantics, special Acid/Super Sorcerer/dragon branches | Selected example retained; rest deferred / moved | Chapter 3 has the Wizard/Elf generator comparison; Chapter 4 should expand special targets, Chapter 12 the dragon, Chapter 7 the ordering. |
+| "Potions": complete matrix, shot/enhanced columns, zero semantics, special Acid/Super Sorcerer/dragon branches | Expanded / partly moved | Chapter 3 works all four ordinary users against ghosts and a strongest generator, including carried/shot columns and zero semantics. Chapter 4 covers Acid and Super Sorcerer exceptions; Chapter 7 follows the event across calls. Complete matrix remains deferred; Chapter 12 owns the dragon. |
 | "The dwindling number": warning masks, incoming-damage commentary, randomized hurt cooldowns, death audio, reused timers | Moved / deferred | Health accounting in Chapter 8; voice rules in Chapter 14. Visual health pulsing does not accelerate along with heartbeat sound. |
-| "Pockets and doors": twelve-item combined capacity and complete inventory-panel illustration | Deferred | Chapter 3 expansion. Doors and idle opening move to Chapter 10; message gating to Chapter 7. |
-| "The power-up shelf": six permanent powers, duplicate conversion, temporary invisibility/invulnerability/repulsion/reflection/supershot/transportability | Deferred / distributed | Chapter 3 for inventory decisions, Chapter 2 for shots, Chapter 10 for transport, Chapter 13 for hidden rewards, Chapter 14 for announcements. |
-| "When friends become targets": IT color animation, precise friendly-fire damage/stun, sportsmanship hooks | Directional tag transfer retained; rest deferred | Chapter 3 for player interaction, Chapter 5 for color animation, Chapter 13 for objectives. |
+| "Pockets and doors": twelve-item combined capacity and complete inventory-panel illustration | Partly expanded | Chapter 3 works nine keys plus three potions and making room for either kind. Full panel illustration remains deferred. Doors and idle opening belong in Chapter 10; message gating is developed in Chapter 7. |
+| "The power-up shelf": six permanent powers, duplicate conversion, temporary invisibility/invulnerability/repulsion/reflection/supershot/transportability | Partly expanded / distributed | Chapter 3 distinguishes the six permanent powers, duplicate conversion, and temporary effects. Full duration tables remain deferred; transport, hidden rewards, and announcements retain their later homes. |
+| "When friends become targets": IT color animation, precise friendly-fire damage/stun, sportsmanship hooks | Partly expanded | Chapter 3 develops directional tagging, recipient stun, optional shot stun/damage, and immunity gates. Detailed IT color animation and sportsmanship hooks remain for Chapters 5/13 if useful. |
 
 ### Former 11_monsters.md
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "The roster is a table": all types, families, animation pointers, roster image | Deferred | Chapter 4 should expand through contrasting threats rather than list every pointer. |
-| "One brain": fast/odd-angle family configuration, acid masks, slow motion, rotating traversal and culling | Deferred | Chapter 4 for behavior, Chapter 6 for traversal, Chapter 7 for timing. |
-| "Population controller": full difficulty matrix, signed bonus arithmetic, class-dependent solo initialization | Shortened / moved | Chapter 4 retains chance, stagger, level cap, space, and overload gates. Chapter 8 owns score/coin feedback. |
-| "Specialists": lobber vector arithmetic, fractional motion, exact range gates | Deferred | Chapter 4. Current explanation uses achieved movement; do not reinsert the old stored-facing wording. |
-| Super Sorcerer placement and phase transitions | Deferred | Chapter 4; a potion reveal is not an indefinite movement/attack stun. |
-| Death's player-owned accumulator, strict greater-than-200 threshold, armor adjustment, supershots, separate global shot count | Deferred | Chapter 4. Distinguish the several counters rather than describe one generic health field. |
+| "The roster is a table": all types, families, animation pointers, roster image | Contrasts expanded; inventory deferred | Chapter 4 follows distinct threats through one room rather than listing every type and pointer. Full roster art/table remains deferred. |
+| "One brain": fast/odd-angle family configuration, acid masks, slow motion, rotating traversal and culling | Partly expanded | Chapter 4 develops local targeting, occupancy, culling, fast/slow behavior, and Acid. Chapter 6 explains chain traversal and Chapter 7 its frame placement. Full flag/mask inventories remain deferred. |
+| "Population controller": full difficulty matrix, signed bonus arithmetic, class-dependent solo initialization | Expanded; complete matrix deferred | Chapter 4 works two generator schedules, chance, level cap, failed placement, overload, and solo/later-join initialization. Chapter 8 calculates accumulated party feedback and live-coin relief. |
+| "Specialists": lobber vector arithmetic, fractional motion, exact range gates | Expanded | Chapter 4 works achieved-movement lead, class scalars, range units, fractional accumulation, and the late collision window. A full trajectory/muzzle-offset table remains unnecessary to that example. |
+| Super Sorcerer placement and phase transitions | Expanded | Chapter 4 explains rear placement searches and potion reveal followed by later idle behavior, not indefinite movement/attack stun. |
+| Death's player-owned accumulator, strict greater-than-200 threshold, armor adjustment, supershots, separate global shot count | Expanded | Chapter 4 works the ninth supershot and contact thresholds, cross-encounter player ownership/reset, and the separate shot-count input to magic scoring. |
 | "What a hit costs": complete scoring tables, supershot exceptions, destruction resetting idle timers | Moved / deferred | Chapters 2, 4, and 8; idle-world consequences in Chapter 10. |
 
 ### Former 06_main_loop.md
@@ -193,9 +200,9 @@ sections 2.2, 3, and 26, plus the linked ROM tables.
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
 | "Locked to the beam": saved-state reconstruction, uncapped mode, benchmark internals, stress phases | Moved / shortened | Chapter 17 explains useful current options. Detailed host measurement internals and repair stories are removed. |
-| Full named call sequence and mode matrix | Deferred | Chapter 7 gives the bands and a concrete ordering consequence. Restore a compact 28-call strip alongside the narrative, with the initializer separate. |
+| Full named call sequence and mode matrix | Partly expanded | Chapter 7 includes the complete numbered 28-call strip with initializer separate, a five-frame Fire example, dialog timing, alternative potion work, and overflow decay. The exhaustive mode matrix remains in the technical reference. |
 | "Cleaning up the electricity": rotate-through-carry and compiler interpretation | Deferred / moved | Chapter 18 for instruction-level evidence. Chapter 7 retains histories for Fire/Magic rather than claiming every direction switch is debounced this way. |
-| "Three clocks": interrupt/frame/session taxonomy | Distributed | Chapter 7 for frame timing, Chapter 14 for sound interrupt exchange, Chapters 3 and 8 for session lifecycles. |
+| "Three clocks": interrupt/frame/session taxonomy | Expanded / distributed | Chapter 7 distinguishes fields, interrupt service, frame visits, and skipped health opportunities. Chapter 8 contrasts VBLANK-tracked session time with health drain. Chapter 14 retains the full sound exchange. |
 | Overload described as preventing all stutter | Removed claim | Chapter 7 describes a response to missed timing that suppresses spawning and defers sound work; it does not guarantee a fixed simulation rate. |
 
 ## Arcade game, companion, and evidence
@@ -358,25 +365,28 @@ Historical references worth preserving for those future sidebars:
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "The quarter's journey": complete pricing multipliers, bonus units and helpers | Condensed / deferred | Chapter 8 explicitly distinguishes physical coin reports, priced credit, and game-side counts. Expand one actual transaction. |
+| "The quarter's journey": complete pricing multipliers, bonus units and helpers | Expanded; full configuration inventory deferred | Chapter 8 follows a one-unit/no-bonus transaction through the wrapped sound report, OS balance and deduction, selection/join, and live top-up. Pending bonus units remain distinct; every possible pricing combination is not enumerated. |
 | "What things are worth": every award and four floating-score channels | Condensed / distributed | Chapter 8 for awards, Chapter 5 for popup capacity and presentation. |
-| Multiplier described as exclusive to special bags; theft always resetting it | Removed inaccurate simplifications | Chapter 8 explains ordinary treasure's redistribution before its award. Chapter 11 makes the theft reset conditional. |
+| Multiplier described as exclusive to special bags; theft always resetting it | Removed inaccurate simplifications; examples expanded | Chapter 8 works three two-player ordinary pickups before their awards and a conditional multiplier theft. Chapter 11 owns pursuit and recovered loot. |
 | Cross-class high-score comparison | Replaced | Chapter 8 compares two Warrior runs because the rankings are class-specific. |
-| Spawn adjustment called a count cap or freshly recomputed value | Replaced | Chapter 8 describes an accumulated probability bonus and positive-only reductions on live re-coining. |
+| Spawn adjustment called a count cap or freshly recomputed value | Replaced / expanded | Chapter 8 works 196,608 party points on six coins adding two to the existing bonus, then a live coin reducing a positive value. Chapter 4 shows why a binding level cap can conceal that change. |
 | "Info panel": column states, exact palettes, dirty-field cadence, pulse/IT effects and popup tables | Deferred / distributed | Chapter 5 for display, Chapter 8 for health/score meaning, Chapter 14 for spoken warnings. Host controls move to Chapter 17. |
 | Advice masks, reduced-text records, speech gating | Deferred / moved | Chapters 7 and 14. Chapter 8 retains the continue offer without an entire dialog-system inventory. |
 | "What the cabinet remembers": six-value save gate, check syndromes, byte-write retries | Deferred | Chapter 16 for storage mechanics; Chapter 8 for the information kept and its use. |
-| "The operator": descriptor streams and histogram saturation/rescaling | Condensed / deferred | Chapter 8 should show one difficulty-normalized histogram; Chapter 16 can explain descriptor-driven menus. |
+| "The operator": descriptor streams and histogram saturation/rescaling | Partly expanded | Chapter 8 works the shipped time-bin scale and a 180-second/three-coin session, distinguishes header parameters from live difficulty, and explains byte rescaling. It is an illustrative histogram calculation, not a new service-screen capture. Descriptor-driven menus remain in Chapter 16. |
 
 ## Review priorities for expansion
 
-The most valuable deferred material is the material that turns a short
-explanation into something a reader can follow in detail: a four-player
-camera sequence; generator turns and occupancy; one cell migrating through
-its record and links; a real level being decoded; the thief's two route
-grids; the dragon's pose/fire timeline; and a secret objective carried all
-the way through a challenge and code. Exact tables can support those
-examples once the examples have a reason to need them.
+Chapters 3-8 now supply the four-player camera sequence, generator turns
+and occupancy, a composed display pixel, one cell migrating through its
+record and links, an ordered Fire/dialog/overload timeline, and worked
+economic transactions. Their remaining table and diagram deferrals above
+are review choices, not placeholders for unwritten chapters.
+
+The highest-value next expansions are a real level being decoded in
+Chapter 9, the thief's two route grids, the dragon's pose/fire timeline,
+and a secret objective carried through a challenge and code. Exact tables
+can support those examples once the examples have a reason to need them.
 
 Mechanical inventories, port repair histories, and declarations of audit
 completeness should not return merely because they occupied many pages in

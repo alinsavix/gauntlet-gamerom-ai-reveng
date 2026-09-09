@@ -25,11 +25,13 @@ player should still be able to follow the prose without reading code.
 
 ## Shape of this pass
 
-Chapters 1 and 2 are complete first-pass chapters. They establish the voice
-and explanatory depth, rather than setting a word-count quota for the
-rest. Chapters 3-18 are readable short drafts with concrete explanations
-and a recognizable progression. Each draft carries a short "For the full
-chapter" note after the narrative, separated from the reader's main path.
+Chapters 1-8 are complete first-pass chapters. Chapters 1 and 2 established
+the voice and explanatory depth; Chapters 3-8 were expanded on September 9
+with worked multiplayer, generator, display, record-migration, timing, and
+economic examples. Length follows the explanation, not a word-count quota.
+Chapters 9-18 remain readable short drafts with concrete explanations and a
+recognizable progression. Each short draft carries a "For the full chapter"
+note after the narrative, separated from the reader's main path.
 
 Expansion should add examples, causal links, diagrams, consequences, and
 carefully chosen detail. It should not merely restore all the old
@@ -69,7 +71,7 @@ reader can apply, not a catalog of collision branches.
 Follow a join into an occupied level and a disagreement about direction.
 Connect class abilities, solid bodies, movement/corner assistance,
 inventory, camera tracking and movement gates, IT, and optional friendly
-fire. In expansion, show how camera calculations differ from the checks
+fire. Show how camera calculations differ from the checks
 that prevent a hero leaving the usable view. Give magic and its
 class-dependent effects a worked shared-resource decision.
 
@@ -129,6 +131,8 @@ starting health and active-player increments, personal and party
 quotients, and stored adjustments versus immediate outcomes. Explain
 score multipliers and treasure competition through a worked example.
 Continue offers, rankings, and persistent statistics complete the loop.
+Use a worked time-per-coin histogram with the shipped game-header scale;
+distinguish those fixed parameters from the operator's live difficulty.
 
 ### 9. The next maze
 

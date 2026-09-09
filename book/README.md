@@ -8,8 +8,8 @@ and what the machine does with another quarter. The explanations connect
 play to the hardware and program without requiring assembly-language or
 arcade-hardware experience. Familiarity with basic programming helps.
 
-**This is a new first-pass manuscript.** Chapters 1 and 2 are full chapters.
-Chapters 3-18 are shorter narrative drafts: they can be read in sequence,
+**This is a first-pass manuscript.** Chapters 1-8 are full chapters.
+Chapters 9-18 are shorter narrative drafts: they can be read in sequence,
 and each ends with editorial notes identifying work for the full version.
 Source notes are optional reading. The prose describes the arcade game
 unless it explicitly identifies a Python example or a hypothetical
@@ -21,12 +21,12 @@ comparison.
 |---------|------------------------|-------|
 | 1. [Enter the Gauntlet](01_how_to_play.md) | What decisions do these simple controls create? | Full |
 | 2. [One arrow in the air](02_one_arrow.md) | Why can moving closer let you shoot sooner? | Full |
-| 3. [Three friends, one screen](03_four_players.md) | Who decides where four independent players can go? | Draft |
-| 4. [A room full of monsters](04_the_horde.md) | How do simple creatures become an overwhelming crowd? | Draft |
-| 5. [Painting the dungeon](05_painting_the_dungeon.md) | Who draws a picture too busy for the main processor? | Draft |
-| 6. [A world in ten bytes](06_a_world_in_ten_bytes.md) | How does the game find the thing your arrow hit? | Draft |
-| 7. [The game's clock](07_the_games_clock.md) | What keeps everything moving together, and what can stop it? | Draft |
-| 8. [What a quarter buys](08_what_a_quarter_buys.md) | What changes when somebody feeds the coin slot? | Draft |
+| 3. [Three friends, one screen](03_four_players.md) | Who decides where four independent players can go? | Full |
+| 4. [A room full of monsters](04_the_horde.md) | How do simple creatures become an overwhelming crowd? | Full |
+| 5. [Painting the dungeon](05_painting_the_dungeon.md) | Who draws a picture too busy for the main processor? | Full |
+| 6. [A world in ten bytes](06_a_world_in_ten_bytes.md) | How does the game find the thing your arrow hit? | Full |
+| 7. [The game's clock](07_the_games_clock.md) | What keeps everything moving together, and what can stop it? | Full |
+| 8. [What a quarter buys](08_what_a_quarter_buys.md) | What changes when somebody feeds the coin slot? | Full |
 | 9. [The next maze](09_mazes_and_slapstic.md) | Why isn't level six always the same place? | Draft |
 | 10. [The living maze](10_the_living_maze.md) | What happens when the route changes while you use it? | Draft |
 | 11. [The thief's trail](11_the_thiefs_trail.md) | How does the thief know where you went? | Draft |
