@@ -8,8 +8,8 @@ and what the machine does with another quarter. The explanations connect
 play to the hardware and program without requiring assembly-language or
 arcade-hardware experience. Familiarity with basic programming helps.
 
-**This is a first-pass manuscript.** Chapters 1-8 are full chapters.
-Chapters 9-18 are shorter narrative drafts: they can be read in sequence,
+**This is a first-pass manuscript.** Chapters 1-14 are full chapters.
+Chapters 15-18 are shorter narrative drafts: they can be read in sequence,
 and each ends with editorial notes identifying work for the full version.
 Source notes are optional reading. The prose describes the arcade game
 unless it explicitly identifies a Python example or a hypothetical
@@ -27,12 +27,12 @@ comparison.
 | 6. [A world in ten bytes](06_a_world_in_ten_bytes.md) | How does the game find the thing your arrow hit? | Full |
 | 7. [The game's clock](07_the_games_clock.md) | What keeps everything moving together, and what can stop it? | Full |
 | 8. [What a quarter buys](08_what_a_quarter_buys.md) | What changes when somebody feeds the coin slot? | Full |
-| 9. [The next maze](09_mazes_and_slapstic.md) | Why isn't level six always the same place? | Draft |
-| 10. [The living maze](10_the_living_maze.md) | What happens when the route changes while you use it? | Draft |
-| 11. [The thief's trail](11_the_thiefs_trail.md) | How does the thief know where you went? | Draft |
-| 12. [Fighting the dragon](12_fighting_the_dragon.md) | What makes this encounter different from another large monster? | Draft |
-| 13. [Secrets and treasure](13_secrets_and_treasure.md) | What else can the game ask you to accomplish? | Draft |
-| 14. [A machine that speaks](14_a_machine_that_speaks.md) | How does the game make a warning belong to you? | Draft |
+| 9. [The next maze](09_mazes_and_slapstic.md) | Why isn't level six always the same place? | Full |
+| 10. [The living maze](10_the_living_maze.md) | What happens when the route changes while you use it? | Full |
+| 11. [The thief's trail](11_the_thiefs_trail.md) | How does the thief know where you went? | Full |
+| 12. [Fighting the dragon](12_fighting_the_dragon.md) | What makes this encounter different from another large monster? | Full |
+| 13. [Secrets and treasure](13_secrets_and_treasure.md) | What else can the game ask you to accomplish? | Full |
+| 14. [A machine that speaks](14_a_machine_that_speaks.md) | How does the game make a warning belong to you? | Full |
 | 15. [When nobody is playing](15_attract_and_demo.md) | How does the idle machine demonstrate and teach its own game? | Draft |
 | 16. [Waking the cabinet](16_waking_the_cabinet.md) | What has to work before a player can trust the screen? | Draft |
 | 17. [Gauntlet in Python](17_gauntpy.md) | How can we play with and look inside a reconstruction? | Draft |

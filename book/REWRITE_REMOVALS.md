@@ -15,7 +15,7 @@ taken before rewriting. Git history is the durable shared reference.
 **Moved** means the subject has a new home, often in shortened form.
 **Removed** means deliberately excluded from the reader's book.
 **Expanded** means the mechanism now has a developed explanation in the
-September 9 full versions of Chapters 3-8; any remaining detail is named
+September 9 full versions of Chapters 3-14; any remaining detail is named
 in that row. This does not mean the old passage was restored verbatim.
 An incorrect claim is not deferred material to reinsert: recover the
 supported mechanism from the current evidence, not the old wording.
@@ -74,7 +74,7 @@ list have been replaced by situations in which those features matter.
 | "Health is money": food and damage summary | Rewritten | Ordinary wholesome food is 100 health; variable and poisoned variants need their own rules. Friendly fire depends on level flags. Chapter 8 owns the fuller accounting. |
 | "The shape of a game": whole-session Mermaid graph | Deferred | A future diagram should show concurrent player lifecycles rather than imply every player dies, continues, and enters initials together. Candidate homes: Chapters 3 and 8. |
 | "What makes it Gauntlet II": compact list of every feature and chapter number | Removed as a list | Subjects remain in the new reading plan. Expand them where their consequences can be explained, rather than rebuilding an introductory catalog. |
-| Claimed first appearance level of the dragon | Deferred | Check the level-setup gate and distinguish authored placement from runtime enabling before restoring in Chapter 12. |
+| Claimed first appearance level of the dragon | Expanded distinction | Chapter 9 compares the authored dragon in maze 13 at levels six and twelve, separating stored placement from its runtime enabling gate. |
 | Secret objectives described as belonging to every ordinary level | Rewritten | Eligibility and per-player/multiplayer conditions belong in Chapter 13; the introduction no longer universalizes them. |
 | Control-panel illustration's embedded Fire/start caption | Corrected asset | The generator text and image now identify Magic as start/join. There is no correction note in the reader's chapter. |
 
@@ -105,10 +105,10 @@ alongside the particular decisions they govern.
 | "One evening, two stories" and "Four stories at once": global mode versus independent player status | Expanded; full status table deferred | Chapter 3 follows concurrent selection, fighting, exiting, and player endings. Chapter 8 distinguishes live top-up, continued-player initialization, and ranking. A full concurrent-state diagram and secret-winner states remain for later treatment. |
 | "The idle machine": exact screen timers and one-second attract input lockouts | Moved / deferred | Chapter 15 owns idle-screen controls. Distinguish switching attract pages from starting a paid session. |
 | "A coin becomes a hero": join wrapper, placement, finalizer, installed character helpers | Expanded / partly deferred | Chapter 3 works a failed and successful late-join placement before finalization. Chapter 8 follows credit into selection. Installed character-helper details remain in the technical docs. |
-| Saved PLAYERSTART and removal of unused start markers | Partly expanded | Chapter 3 contrasts the remembered first-player start with a neighbor search for a late join. Chapter 9 still owns full setup and disposal of unused markers; port-failure commentary remains excluded. |
-| "Starting a level": selection, curtain, decode, object scan, survivor placement, release | Deferred as a worked sequence | Best restored in Chapter 9 with one real layout. Preserve the distinction between continuing survivors and a fresh join; survivors do not receive another join welcome. |
+| Saved PLAYERSTART and removal of unused start markers | Expanded | Chapter 3 contrasts the remembered first-player start with a neighbor search for a late join. Chapter 9 explains selection, disposal of markers, and the fake-exit flag's alternative marker-bit path; port-failure commentary remains excluded. |
+| "Starting a level": selection, curtain, decode, object scan, survivor placement, release | Expanded sequence; curtain internals deferred | Chapter 9 follows selection through real decoding, start selection, object scans, party placement, and final pickup adjustments. Chapter 5 owns the curtain; continuing placement remains distinct from a fresh join. |
 | Level-entry sound presets, treasure music selected by party size, secret-room music timing, later taunts | Deferred | Chapters 13 and 14 can develop an audio timeline after the ordinary setup explanation. |
-| "Leaving a level": individual exit animation and collective handoff | Expanded / partly deferred | Chapter 3 explains an exited player waiting while another remains in the maze. Chapter 10 can develop the exit animation and terrain interaction itself. |
+| "Leaving a level": individual exit animation and collective handoff | Expanded; animation internals deferred | Chapter 3 explains independent departures. Chapter 10 distinguishes real/fake terrain interactions and Chapter 13 follows exit states into payout and invitation gates. Frame-by-frame departure artwork remains reference detail. |
 | Treasure transitions and successful/failed secret-room pacing | Moved | Chapter 13. Exact intervals and tally fields need worked examples before restoration. |
 | "Death, and the offer": exact ROM prompt and separate timer-field writer | Partly expanded | Chapter 8 explains continue gates and the prompt's Magic control, distinct from live top-up. Full text layout and separate field writer remain deferred; host repair history stays out. |
 | Continued player's full starting health versus an active player's increment | Expanded | Chapter 8 works a 750-health paid assignment and a 120-to-870 live top-up. Both use the same selected paid-health value; assignment, addition, and the free-play/demo path remain distinct. |
@@ -150,7 +150,7 @@ sections 2.2, 3, and 26, plus the linked ROM tables.
 | Display, "The playfield": descriptor bits, column-first storage, four-tile cell writes, adjoining-wall restamps | Expanded / partly moved | Chapter 5 calculates the four destinations for row 12, column 20, explains wall restamps, and distinguishes door removal revealing existing floor. Chapter 10 retains ownership of changing connectivity and traversal. |
 | Display, host caches and frame-time spikes | Removed maintenance | Raster caches and invalidation policies remain implementation documentation. Host performance can be demonstrated in Chapter 17 without explaining a particular repair. |
 | Display, "Motion objects": full dimension encodings and dragon tile-grid image | Expanded | Chapter 5 reuses `ch04_dragon_tiles.png`, works tile order and size-minus-one encoding, and distinguishes one stamp from the articulated encounter in Chapter 12. |
-| Display, "The text layer": 64 stored versus 42 visible columns, character ROM, opacity bits | Expanded / partly moved | Chapter 5 explains stored/visible width, character ROM, transparent ink, opaque blanks, and the curtain. Chapter 11 still owns hidden-column route storage. |
+| Display, "The text layer": 64 stored versus 42 visible columns, character ROM, opacity bits | Expanded / distributed | Chapter 5 explains stored/visible width, character ROM, transparent ink, opaque blanks, and the curtain. Chapter 11 works hidden-column route storage and its separate row width. |
 | Display, palette programs and distinct exit descriptors | Moved / deferred | Transporter and special-floor cycles in Chapter 10; animated title colors in Chapter 15. |
 
 ### Former 08_world_in_memory.md
@@ -240,15 +240,15 @@ sections 2.2, 3, and 26, plus the linked ROM tables.
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "Two bytes make a sentence" / "Speech as game design": complete warning selection, power-loss conditions, latch/cooldown lifecycle | Central example retained; branches deferred | Chapter 14 should follow one complete warning, including suppression. A cooldown does not mean automatic periodic repetition. |
-| "The second computer": CPU clock, memory sizes, sound chips, pitch and mixer controls | Responsibilities retained; detail deferred | Chapter 14 can add a bounded sound-board sidebar, using hardware sources for chip-level behavior. |
-| "The wire": exact ports, interrupt veneer, direct-reply destination, unsolicited response queue | Two-latch exchange retained; details deferred | Chapter 14 can diagram one command/reply transaction. |
-| "Eight slots and one frame": retry arithmetic, exact attempt budget and ring indices | Queue capacity and busy behavior retained; arithmetic deferred | Chapter 14, if needed to explain audible delays or lost requests. |
-| "Watching for a corpse": status timers, thresholds, acknowledgment and reset holdoff | Recovery mechanism retained; exact state machine deferred | Chapter 14. The assertion that a dead sound board leaves the game perfectly playable was removed because coins also depend on the board. |
-| "The coins come back down the same wire": complete interrupt/service chain | Shortened | Chapters 8 and 14 can share a single illustrated quarter-to-credit trace. |
-| "The vocabulary": full command examples, position-indexed effects, start/stop pairs | Selected examples retained; catalog omitted | Compare one looping effect with one spoken phrase in Chapter 14. Keep the full command inventory in its maintained CSV. |
+| "Two bytes make a sentence" / "Speech as game design": complete warning selection, power-loss conditions, latch/cooldown lifecycle | Expanded | Chapter 14 follows the Blue Elf warning from health drain through name lookup, alternate phrases, power-loss conditions, both delivery stages, suppression, latch reset, and cooldown. Heartbeat intervals are compared with the independent visual pulse. |
+| "The second computer": CPU clock, memory sizes, sound chips, pitch and mixer controls | Responsibilities expanded; hardware inventory deferred | Chapter 14 develops command classification, speech admission, and loop stopping across the processor boundary. Clock, memory, pitch, and mixer inventories remain outside its game-side scope. |
+| "The wire": exact ports, interrupt veneer, direct-reply destination, unsolicited response queue | Expanded; port inventory deferred | Chapter 14 diagrams coin and diagnostic transactions through separate registered destinations, then distinguishes unsolicited reception. Exact port and veneer inventory remains reference material. |
+| "Eight slots and one frame": retry arithmetic, exact attempt budget and ring indices | Expanded | Chapter 14 explains seven pending bytes, eight attempts rather than eight guaranteed sends, busy retries, immediate sends overtaking the fallback ring, and overflow's limited scope. |
+| "Watching for a corpse": status timers, thresholds, acknowledgment and reset holdoff | Expanded | Chapter 14 follows the 240-frame diagnostic interval, failed submissions, 180-frame recovery holdoff, and 0xFF acknowledgment. Coin input is explicitly affected by failure; recovery is not speech completion. |
+| "The coins come back down the same wire": complete interrupt/service chain | Expanded | Chapter 14 diagrams the return-latch and interrupt path alongside diagnostics; Chapter 8 develops wrapping counters, pricing, and recorded player coins. |
+| "The vocabulary": full command examples, position-indexed effects, start/stop pairs | Expanded examples; catalog omitted | Chapter 14 contrasts named speech, thief/mugger arrival effects, and the forcefield's sixteen-visit start/stop timeline, with Death as a related loop. Full command inventory stays in the CSV. |
 | "What the technician hears": chip timeouts, RAM/ROM/IRQ faults, manual test menu | Moved / deferred | Chapter 16 owns the diagnostic tour; Chapter 14 retains the status reply's purpose. |
-| Sound-channel priorities, treasure-music replacement/suppression, partial admission, fade ownership | Deferred useful behavior | A Chapter 14 sidebar could explain actual sound-board channel sharing. Chapter 17 already explains why mixed WAV files cannot fully reproduce partial suppression. |
+| Sound-channel priorities, treasure-music replacement/suppression, partial admission, fade ownership | Partly expanded | Chapter 14 explains speech queue capacity and full/lower/equal/higher-priority admission, including preservation of the current phrase. Detailed instrument-channel allocation, treasure music suppression, and fade ownership remain deferred; Chapter 17 distinguishes mixed WAV playback. |
 | Host WAV layout, opt-in playback, accepted-byte stream, loops/fades, uncapped muting | Moved / shortened | Chapter 17 is the current-use guide. An advanced audio example can expand it without reproducing the whole audio module. |
 | Catalog guesses, changed IDs, address-search and recovery-variable history | Removed maintenance | Supported meanings remain in the narrative. Chapter 18 can explain a method without becoming a chronological repair log. |
 
@@ -297,17 +297,17 @@ Historical references worth preserving for those future sidebars:
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "Levels are not mazes": complete record-range table | Condensed | Chapter 9 accounts for all 117 records in prose. Restore a compact visual key if it helps distinguish ordinary, treasure, and secret uses. |
-| "Choosing the next maze": full candidate validation, resume substitution, wrap ordering | Deferred | Chapter 9 needs two complete sessions beside the algorithm. A wrap crossing does not itself guarantee a stride change; the final landing matters. |
-| Level 999 returning to level 6; long trace from a fresh game configuration through level 119 | Deferred | Chapter 9. Preserve dependence on actual persistent game state rather than offer a permanent level-to-maze formula. |
-| Rotation save scheduling and treasure detour restoration | Shortened | Chapter 9 retains the saved ordinary-maze distinction. Chapter 16 owns when writes become durable. |
-| Treasure-room stride and separate persistent rotation | Condensed / deferred | Chapter 13 can give this its own small selector example. |
-| Slapstic helper addresses, access ritual, boot verifier | Condensed / deferred | Chapter 9 explains the bank window. A real access-sequence inset could support the full chapter; verification at boot belongs in Chapter 16. |
-| "Anatomy": byte-by-byte header and every flag | Deferred | Chapter 9 after the worked record. Keep the exhaustive layout in the reference. |
-| "The decoder": every opcode class and the longer first-row trace | Deferred | The new draft retains three actual bytes. Expand that example through a row and an upward-written span. |
-| Maze 116 ending without a delimiter and overlapping the bank table | Deferred useful storage detail | Chapter 9 as a boundary example, or Chapter 18 as a small investigation. This is shipped behavior, not merely a correction story. |
-| "From tokens": all object materialization, anchors, start removal, wall-neighbor scans | Distributed / deferred | Chapter 6 for representation, Chapter 3 for placement, Chapter 9 for one complete setup sequence. |
-| "Three kinds of random": flags, depth tiers, trap setup, pickup placement/removal order | Condensed / deferred | Chapters 9 and 10. Preserve deterministic selection versus randomized setup. |
+| "Levels are not mazes": complete record-range table | Expanded | Chapter 9 gives a compact key accounting for all 117 records and separates progression depth from layout identity. |
+| "Choosing the next maze": full candidate validation, resume substitution, wrap ordering | Expanded | Chapter 9 works two sessions from resume 98/stride 1 through wrap, last death, the shortcut, and resume 14/stride 2. It contrasts crossing maze 5 with finishing on it. |
+| Level 999 returning to level 6; long trace from a fresh game configuration through level 119 | Partly expanded | Chapter 9 explains the displayed counter wrap and compares ordinary versus shortcut starts on a fresh configuration. The long level-119 inventory remains deferred. |
+| Rotation save scheduling and treasure detour restoration | Expanded distinction | Chapter 9 follows last-player death and restoration of the queued ordinary maze after a treasure detour, separating RAM changes from EEPROM persistence. Chapter 16 owns durability details. |
+| Treasure-room stride and separate persistent rotation | Partly expanded | Chapter 9 gives the separate eleven-room rotation and effective step range, distinct from randomized countdown timing. A complete treasure-selector trace remains deferred. |
+| Slapstic helper addresses, access ritual, boot verifier | Expanded access example; boot deferred | Chapter 9 shows the actual bank-zero/bank-three helper accesses, packed bank lookup, pointer lookup, and bitwise-path latch. Boot verification remains Chapter 16 material. |
+| "Anatomy": byte-by-byte header and every flag | Selected contexts expanded; inventory deferred | Chapter 9 explains the reusable contexts needed by the actual decode and distinguishes geometry from level-added behavior. Exhaustive header/flag tables remain in the reference. |
+| "The decoder": every opcode class and the longer first-row trace | Expanded example; full grammar deferred | Chapter 9 decodes eight bytes through a complete row, then follows upward door and wall writes that change it later. The main cursor and finished contents are explicitly different. |
+| Maze 116 ending without a delimiter and overlapping the bank table | Boundary rule expanded; special record deferred | Chapter 9 explains termination at 1,024 cells rather than at an end opcode. Maze 116's exact overlap remains useful Chapter 18 storage archaeology. |
+| "From tokens": all object materialization, anchors, start removal, wall-neighbor scans | Expanded / distributed | Chapters 6 and 3 supply representation and placement; Chapter 9 now traces start selection, terrain/table preparation, party placement, and final pickup work. Exhaustive materializer branches remain reference detail. |
+| "Three kinds of random": flags, depth tiers, trap setup, pickup placement/removal order | Expanded examples; full tier catalog deferred | Chapter 9 compares maze 13 at levels six and twelve with equal or differing mirrors, then follows setup ordering. Chapter 10 contrasts trap families, cyclic updates, and independent random-wall toggles. |
 | RNG equation and exact cross-system draw ordering | Deferred | Chapters 7 or 9 can show one coupling example. Chapter 15 handles repeatability; Chapter 17 handles host seed choices. |
 | Level notices, speech priority, reduced-text tips | Moved / deferred | Chapter 14 for spoken information and Chapter 5 for display ownership. |
 
@@ -316,20 +316,20 @@ Historical references worth preserving for those future sidebars:
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
 | Combined creature framing and claims about what the designers were willing to express | Replaced | Separate thief and dragon questions now carry Chapters 11 and 12. Intent claims need evidence. |
-| "The dragon is four sprites": complete private-state and slot inventory | Condensed | Chapter 12 retains the four-piece encounter. Restore one geometry diagram, with representation details linked to Chapter 6. |
-| Exact wrapped proximity bounds and every signed transition | Deferred | Chapter 12 keeps event-triggered waking, the 49-frame transition, and potion/shot effects. |
-| "Five programs": full path table, other rhythms, exact pose/open-mouth indices | Condensed / deferred | Restore the path strip with distinct pose and open/closed artwork lookups. |
-| Projectile origin/owner encoding, slot numbers, exact large/small size words | Deferred | Chapter 12 keeps shared channels and relative flame size. A firing diagram can introduce the native fields if useful. |
-| "Nine hits": doubled collision tags and exact palette arithmetic | Deferred | One accepted-hit trace in Chapter 12 or an instruction example in Chapter 18. Remove all "dropping this breaks the port" framing. |
-| Nine-hit palette bands and reward offsets | Condensed / deferred | Chapter 12 can add a damage-progress strip and prize-placement diagram. Duplicate reward paragraphs were removed. |
-| Dragon contribution to a secret objective | Deferred | Chapter 13 must explain the actual masked progress-byte predicate. Do not restore the simplified claim that a clean killer necessarily qualifies. |
-| Thief target and delay tables, scaling, clamps | Condensed / deferred | Chapter 11 retains valuation and separate delay measures. The delay's score is shifted by 13 before division; restore a sourced numerical example rather than the old unscaled formula. |
-| Hidden-alpha route storage, nibble packing, reset owner, transporter tables | Core route retained; storage detail deferred | Chapter 11 should overlay pursuit and escape arrows; Chapter 6 can explain hidden-memory reuse. |
+| "The dragon is four sprites": complete private-state and slot inventory | Expanded; inventory deferred | Chapter 12 separates body footprint, tracked head geometry, and leading-cell probes, with a qualified ROM-art illustration and approach diagrams. Complete field inventory remains in the reference. |
+| Exact wrapped proximity bounds and every signed transition | Partly expanded | Chapter 12 works the ten-by-ten entrance region, 49-frame waking, indefinite stun, and reversal of a remaining negative count. Exhaustive wrapped bounds remain deferred. |
+| "Five programs": full path table, other rhythms, exact pose/open-mouth indices | Expanded; full catalog deferred | Chapter 12 decodes a complete sweep program and a second program for the hit transition, with open/closed offsets and lookup indices. Three other programs remain reference material. |
+| Projectile origin/owner encoding, slot numbers, exact large/small size words | Partly expanded | Chapter 12 identifies shared slots 5-8, compares graphics dimensions, and works unlocked and locked firing timelines. Exact owner and size-word encodings remain deferred. |
+| "Nine hits": doubled collision tags and exact palette arithmetic | Expanded; tag encoding deferred | Chapter 12 follows the marked-head and phase gates through a hit, matches the entire pose/fire byte in a new program, and computes the palette bands. Native doubled-tag encoding remains in the technical reference. |
+| Nine-hit palette bands and reward offsets | Expanded | Chapter 12 gives the hit-count bands and works cumulative right-facing reward offsets, the bag's multiplied award, and the hidden potion's collection rules. |
+| Dragon contribution to a secret objective | Expanded | Chapter 13 explains the low-two-bit exit predicate, dragon-fire increments, and killing-shot write of two unless already one. A clean killer is not automatically qualified. |
+| Thief target and delay tables, scaling, clamps | Expanded | Chapter 11 compares three inventories, then works score 196,608 on three recorded coins at level 38 through the correctly scaled delay, random range, and depth clamp. Full treasure-delay arithmetic remains reference detail. |
+| Hidden-alpha route storage, nibble packing, reset owner, transporter tables | Expanded | Chapter 11 overlays both routes through a transporter, packs bytes 0x75 and 0x13, maps cell 133 into the hidden text columns, and explains clearing and the different overwrite rules. Exhaustive transporter-field inventory remains deferred. |
 | Thief body probes, centering nudges, seam movement | Deferred | Chapter 11 only as needed for one corridor example; general collision belongs in Chapters 3 and 6. |
 | Stuck-visitor captures, missing trail setup, stale state, exact repair coordinates | Removed maintenance | Correct routing and movement are presented without port postmortems. |
-| Theft category weights, multiplier-loot encoding | Condensed / deferred | Chapter 11 can compare stealing an upgrade, potions, and the multiplier. Only multiplier theft resets the multiplier. |
-| Pitched laughter, transport effects, kill cleanup, next-level placement stride | Recovery retained; detail distributed | Chapter 14 for voice, Chapter 11 for a returned-loot example, Chapter 9 for placement if necessary. |
-| Mugger speed constants, palette/art banks, warning IDs | Condensed / deferred | Chapter 11 retains slower movement and 100-health theft. Restore a measured speed comparison rather than an unsupported "faster thief" characterization. |
+| Theft category weights, multiplier-loot encoding | Expanded | Chapter 11 compares power, potion, and multiplier theft and distinguishes losses from recoverable objects: a stolen power yields an ordinary potion, not restoration of that power. |
+| Pitched laughter, transport effects, kill cleanup, next-level placement stride | Partly expanded / distributed | Chapter 11 follows immediate versus later floor recovery and excludes secret-room placement; exact placement stride remains reference detail. Chapter 14 owns the audio cues. |
+| Mugger speed constants, palette/art banks, warning IDs | Expanded comparison; encoding deferred | Chapter 11 uses four- and three-pixel straight-line speeds, compares heroes over their complete movement cycle, and works relative motion against the Elf. Artwork has a ROM-derived caption; exact art-bank and warning encodings remain reference detail. |
 | Successful-theft allowances versus deployment count | Retained explicitly | Killing a visitor before theft does not necessarily finish that variant's opportunities on the level. |
 
 ### Former 13_living_maze.md
@@ -337,28 +337,28 @@ Historical references worth preserving for those future sidebars:
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
 | Overall logical-type/rendering pipeline and demo illustration | Distributed | Chapter 10 keeps changing-route consequences. Chapters 5 and 6 explain picture and state. The existing door/forcefield image remains available. |
-| "Doors": classes, endpoint masks, eight animation channels, neighboring restamps | Condensed / deferred | Chapter 10 should trace one connected opening shared by two players. |
-| Key-sensitive idle thresholds, one-shot disabling and rearming | Deferred | Chapter 10 keeps the conditional door timer distinct from the 21,000-frame no-progress escape timer. |
-| "Transporters": every rejection rule, animation stage, pad palette | Condensed / deferred | Chapter 10 needs one rejected and one usable destination. Chapter 11 owns thief link continuity; Chapter 5 owns palette effects. |
-| "Forcefields": segment encoding, all phase durations, damage table, hurt flash and buzz timers | Condensed / deferred | Chapter 10 retains the live/dark damage distinction. Restore one class-dependent crossing-cost example. |
+| "Doors": classes, endpoint masks, eight animation channels, neighboring restamps | Expanded geometry; channel inventory deferred | Chapter 10 traces a shared opening, a left-turn junction, and all four documented maze-39 mirror results. Complete endpoint masks and channel inventory remain deferred. |
+| Key-sensitive idle thresholds, one-shot disabling and rearming | Expanded | Chapter 10 specifies eligible input-processing visits, strict 1,200/2,700 comparisons, the negative disabling sentinel and rearming, separately from the 21,000-update escape timer and its reset events. |
+| "Transporters": every rejection rule, animation stage, pad palette | Expanded traversal; visual stages deferred | Chapter 10 distinguishes pads from landing cells, accepts empty floor, compares blocked candidates, and explains usable occupants and transportability. Chapter 11 follows pad links; exhaustive animation and palette stages remain deferred. |
+| "Forcefields": segment encoding, all phase durations, damage table, hurt flash and buzz timers | Expanded damage and audio; encoding deferred | Chapter 10 works six-frame Wizard/Valkyrie exposures, armor costs, acid gating, and randomized lit/dark durations. Chapter 14 follows the buzz timer. Complete segment encoding and phase tables remain reference detail. |
 | Forcefield hub and palette-cache repair history | Removed | Segment discovery and live colors may return as mechanisms, not debugging stories. |
-| "Walls": cyclic assignments, random scan, trap flags, invisible variants | Condensed / deferred | Chapter 10 should compare timed, random, and triggered changes with pictures. |
-| Movable-wall 25-hit removal, crumble stages, strong-shot passage and reflection geometry | Deferred | Chapter 10 with a link back to Chapter 2's projectile lifecycle. |
-| Secret-wall complete loot table and party-size odds | Condensed / deferred | Chapter 10 retains the possibility of a reward or Death. Expand with an actual risk comparison. |
+| "Walls": cyclic assignments, random scan, trap flags, invisible variants | Expanded | Chapter 10 uses before/after route diagrams, explains 121-call cyclic timing and occupancy, contrasts local/global triggers with independent random toggles, and separates hidden artwork from obstruction. |
+| Movable-wall 25-hit removal, crumble stages, strong-shot passage and reflection geometry | Partly expanded | Chapter 10 derives twenty-five hits and reconnects flight time to shot reservations. Full crumble-stage and reflection-geometry tables remain deferred. |
+| Secret-wall complete loot table and party-size odds | Expanded | Chapter 10 gives accepted draw outcomes and compares solo and four-player useful-reward odds while retaining the same one-eighth Death risk. |
 | Maze-specific placement, palette mistakes and collision-engine lessons | Removed maintenance; real setup distinctions deferred | Chapters 6, 9, and 10 for the supported mechanisms. |
-| "Exits": movement tables, animations, choose-one configuration | Condensed / deferred | Chapter 10 retains recorded exit positions rather than random-floor relocation, fake-art persistence, and no-progress conversion. |
+| "Exits": movement tables, animations, choose-one configuration | Expanded examples; full table deferred | Chapter 10 works a five-position/step-three traversal, compares genuine/fake state and artwork, crosses a wrap seam, and explains the escape conversion disabling cyclic walls and moving exits. |
 | "Traps and special floors": stun, poison remap, acid slowdown/panel dim, offscreen gates | Deferred | Chapter 10 for hazards, Chapter 3 for control consequences, Chapter 5 for visual effects. |
-| "Treasure rooms": full music/HUD setup, warning choices, false-countdown sequences | Condensed / deferred | Chapter 13 keeps the clock and joke; Chapters 14 and 5 can expand sound and display. |
-| Treasure tally/curtain ordering and all payout fields | Selected worked example retained | Chapter 13 must keep successful exit separate from merely seeing a tally after timeout. |
-| "Secret objective": all seventeen tasks, event hooks, hint aliases | Deferred | Chapter 13 should first trace one armed objective end to end, then offer a compact reference. |
-| Misleading clue versus exact predicate, including masked "Don't Get Hit" state and harmless/reflected player shots | Deferred useful behavior | Chapter 13. These deserve careful explanation, not removal as inconvenient implementation details. |
-| Availability counter values and success/miss adjustments | Condensed / deferred | Chapter 13 retains setup-time arming, solo cancellation, and changing opportunity intervals. |
-| "Secret challenge": fourteen-code table, potion substitutions, timers, generated exits | Condensed / deferred | Chapter 13 keeps separate invitation/challenge tasks and exits created at setup. Restore one challenge construction sequence. |
+| "Treasure rooms": full music/HUD setup, warning choices, false-countdown sequences | Partly expanded | Chapter 13 relates frame allowances, TIME display, false speech, and the six-second warning. The four complete false-number sequences and full music setup remain reference detail. |
+| Treasure tally/curtain ordering and all payout fields | Expanded example; curtain internals deferred | Chapter 13 follows two players to an eligible 3,600-point award and a zero timeout award, including exit states and the party count taken at tally rather than frozen at entry. |
+| "Secret objective": all seventeen tasks, event hooks, hint aliases | Expanded example; full catalog deferred | Chapter 13 follows maze 6's actual objective 0x0D through arming, individual food hooks, the exit predicate, and invitation. Transport and shooting hint aliases illustrate why clues are not complete rules; the seventeen-row inventory stays in the reference. |
+| Misleading clue versus exact predicate, including masked "Don't Get Hit" state and harmless/reflected player shots | Expanded | Chapter 13 explains both dietary and dragon low-bit tests and harmless/reflected friend-shot contacts. Dietary counted pickups include ordinary/adaptive food; poisoned food bypasses the increment. |
+| Availability counter values and success/miss adjustments | Expanded | Chapter 13 works initial twenty, successful invitation adding fifteen up to forty, and a missed armed opportunity subtracting two down to four, separately from challenge success. |
+| "Secret challenge": fourteen-code table, potion substitutions, timers, generated exits | Expanded example; full table deferred | Chapter 13 constructs challenge 0x50 in maze 115, selects generator type 0x2C for exits, works a 23-second allowance, and follows exactly six treasures plus exit into a 15,000-point award. |
 | Secret-room scratch aliases and player-zero inventory consequences | Deferred useful RAM behavior | Chapter 6 for aliasing, with a carefully sourced consequence note in Chapter 13. Do not silently replace this with an idealized independent saved inventory. |
 | Label padding, invitation timing, screenshot/renderer repair commentary | Presentation deferred; repair history removed | Chapter 5 for text layout; Chapter 13 for invitation pacing. |
-| "Name entry": input repeat, timeouts, commits, buffer replacement, unusual glyphs | Deferred | Chapter 13 can give a usable name-entry example; Chapter 5 owns glyph mechanics. |
-| Code's complete CRC construction and symbol interleave | Condensed / deferred | Chapter 13 retains name consistency, encoded state, and the objective's low-four-bit limitation. Expand with one actual decoded code. |
-| "Checking the math": verifier commands, Python implementation, numerical example and emulated-ROM comparisons | Deferred | Chapter 18 for independent evidence; a small worked code can remain in Chapter 13. |
+| "Name entry": input repeat, timeouts, commits, buffer replacement, unusual glyphs | Partly expanded | Chapter 13 uses an invented name, last/first ordering, joystick and button commits, capacity, and timeout padding. Input repeat internals and unusual glyph handling remain deferred. |
+| Code's complete CRC construction and symbol interleave | Expanded | Chapter 13 calculates and decodes 7TP-0J6 for SMITH ADA, maze 6, objective 13, challenge 0x50. It includes checksum parameters, byte swap, alphabet, state packing, interleave, and limits of the claim. |
+| "Checking the math": verifier commands, Python implementation, numerical example and emulated-ROM comparisons | Example expanded; tooling deferred | Chapter 13's encoder example agrees between direct instruction emulation and independent bitwise arithmetic. Command-by-command verification belongs in Chapter 18 rather than the player narrative. |
 | Appended transport sparkle, EXIT TO 6 glyph, trap palette, and mirrored dragon geometry details | Relocated by subject | Chapters 5, 6, 9, and 12. These do not belong as an unrelated appendix to the secret-code explanation. |
 
 ### Former 14_score_and_economics.md
@@ -383,10 +383,17 @@ record and links, an ordered Fire/dialog/overload timeline, and worked
 economic transactions. Their remaining table and diagram deferrals above
 are review choices, not placeholders for unwritten chapters.
 
-The highest-value next expansions are a real level being decoded in
-Chapter 9, the thief's two route grids, the dragon's pose/fire timeline,
-and a secret objective carried through a challenge and code. Exact tables
-can support those examples once the examples have a reason to need them.
+Chapters 9-14 now supply the real maze decode, changing-route diagrams,
+paired pursuit/escape trail, dragon phase and channel timelines, an armed
+objective carried through a challenge and code, and the warning's two
+delivery stages. Remaining detailed inventories above are deliberate
+reference deferrals, not unwritten chapter placeholders.
+
+The next short drafts are Chapters 15-18. Their high-value expansions are
+the demo's script/display timelines, a boot and diagnostic walkthrough,
+a practical reconstruction exercise, and one evidence chain with selected
+ROM archaeology. Exact tables should support those explanations rather
+than determine their order.
 
 Mechanical inventories, port repair histories, and declarations of audit
 completeness should not return merely because they occupied many pages in
