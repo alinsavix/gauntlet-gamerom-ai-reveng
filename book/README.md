@@ -8,12 +8,11 @@ and what the machine does with another quarter. The explanations connect
 play to the hardware and program without requiring assembly-language or
 arcade-hardware experience. Familiarity with basic programming helps.
 
-**This is a first-pass manuscript.** Chapters 1-14 are full chapters.
-Chapters 15-18 are shorter narrative drafts: they can be read in sequence,
-and each ends with editorial notes identifying work for the full version.
-Source notes are optional reading. The prose describes the arcade game
-unless it explicitly identifies a Python example or a hypothetical
-comparison.
+**This is a complete first-pass manuscript:** eighteen full chapters and
+an expanded glossary/source map. It still awaits author review and
+publication editing. Source notes are optional reading. The prose
+describes the arcade game unless it explicitly identifies a Python
+example or a hypothetical comparison.
 
 ## Contents
 
@@ -33,11 +32,11 @@ comparison.
 | 12. [Fighting the dragon](12_fighting_the_dragon.md) | What makes this encounter different from another large monster? | Full |
 | 13. [Secrets and treasure](13_secrets_and_treasure.md) | What else can the game ask you to accomplish? | Full |
 | 14. [A machine that speaks](14_a_machine_that_speaks.md) | How does the game make a warning belong to you? | Full |
-| 15. [When nobody is playing](15_attract_and_demo.md) | How does the idle machine demonstrate and teach its own game? | Draft |
-| 16. [Waking the cabinet](16_waking_the_cabinet.md) | What has to work before a player can trust the screen? | Draft |
-| 17. [Gauntlet in Python](17_gauntpy.md) | How can we play with and look inside a reconstruction? | Draft |
-| 18. [Reading the ROMs](18_reading_the_roms.md) | What supports these explanations, and what remains unknowable? | Draft |
-| [Glossary and source map](appendix_glossary.md) | Where can I look up a term or follow a source? | Reference |
+| 15. [When nobody is playing](15_attract_and_demo.md) | How does the idle machine demonstrate and teach its own game? | Full |
+| 16. [Waking the cabinet](16_waking_the_cabinet.md) | What has to work before a player can trust the screen? | Full |
+| 17. [Gauntlet in Python](17_gauntpy.md) | How can we play with and look inside a reconstruction? | Full |
+| 18. [Reading the ROMs](18_reading_the_roms.md) | What supports these explanations, and what remains unknowable? | Full |
+| [Glossary and source map](appendix_glossary.md) | Where can I look up a term or follow a source? | Full reference |
 
 ## For readers
 

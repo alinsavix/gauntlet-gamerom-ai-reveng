@@ -25,18 +25,23 @@ player should still be able to follow the prose without reading code.
 
 ## Shape of this pass
 
-Chapters 1-14 are complete first-pass chapters. Chapters 1 and 2 established
+Chapters 1-18 and the glossary/source map are complete first-pass text.
+Chapters 1 and 2 established
 the voice and explanatory depth; Chapters 3-8 were expanded on September 9
 with worked multiplayer, generator, display, record-migration, timing, and
 economic examples. Chapters 9-14 now develop maze selection and decoding,
 changing routes, thief pursuit and escape, the dragon's attack programs,
 secret-room qualification and codes, and sound communication.
-Length follows the explanation, not a word-count quota.
-Chapters 15-18 remain readable short drafts with concrete explanations and a
-recognizable progression. Each short draft carries a "For the full chapter"
-note after the narrative, separated from the reader's main path.
+Chapters 15-18 now develop the recorded-input and display timelines,
+an operator's boot and EEPROM walkthrough, a practical companion
+inspection/capture exercise, and an instruction-level evidence chain
+with selected ROM archaeology. The backmatter supplies notation,
+linked definitions, a chapter-to-research map, and provenance guidance.
+No short-chapter expansion placeholders remain. Length follows the
+explanation, not a word-count quota; full first-pass text still needs
+author review and publication editing.
 
-Expansion should add examples, causal links, diagrams, consequences, and
+Further revision should add examples, causal links, diagrams, consequences, and
 carefully chosen detail. It should not merely restore all the old
 paragraphs. The [removal ledger](REWRITE_REMOVALS.md) is a review queue,
 not an instruction to put everything back.

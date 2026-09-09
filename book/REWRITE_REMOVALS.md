@@ -15,7 +15,7 @@ taken before rewriting. Git history is the durable shared reference.
 **Moved** means the subject has a new home, often in shortened form.
 **Removed** means deliberately excluded from the reader's book.
 **Expanded** means the mechanism now has a developed explanation in the
-September 9 full versions of Chapters 3-14; any remaining detail is named
+September 9 full versions of Chapters 3-18 and the backmatter; any remaining detail is named
 in that row. This does not mean the old passage was restored verbatim.
 An incorrect claim is not deferred material to reinsert: recover the
 supported mechanism from the current evidence, not the old wording.
@@ -41,7 +41,7 @@ supported mechanism from the current evidence, not the old wording.
 | 15, Attract and demo | [15, When nobody is playing](15_attract_and_demo.md) |
 | 16, Sound | [14, A machine that speaks](14_a_machine_that_speaks.md) |
 | 17, Methodology | [18, Reading the ROMs](18_reading_the_roms.md) |
-| Appendix | Shorter [glossary and source map](appendix_glossary.md); editorial rules in [OUTLINE](OUTLINE.md) |
+| Appendix | Expanded [glossary and source map](appendix_glossary.md); editorial rules in [OUTLINE](OUTLINE.md) |
 
 ## Changes applying across the manuscript
 
@@ -57,7 +57,7 @@ supported mechanism from the current evidence, not the old wording.
 | Promises of a future sound-ROM volume | Removed | State this book's scope without committing to another publication. |
 | Old numbered image identifiers | Retained | All original image files remain available, even when not used in this pass. Renumbering the book does not require regenerating its art. |
 | Old chapter filenames cited by Python documentation | Updated | References now point at the corresponding new chapters. These changes affect comments/documentation only, not simulation behavior. |
-| Contributor instructions treating the book as a complete implementation reference | Updated | The gauntpy documentation now distinguishes the short narrative drafts from exact ROM contracts and asks future edits to revise explanations instead of appending repair history. |
+| Contributor instructions treating the book as a complete implementation reference | Updated | The gauntpy documentation distinguishes the full first-pass narrative from exhaustive ROM contracts and asks future edits to revise explanations instead of appending repair history. |
 
 ## Opening and lifecycle material
 
@@ -86,8 +86,8 @@ that produced the explanations.
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "Why this machine deserves a book": ROM-size comparison with web pages | Removed | The concrete game supplies the motivation. Storage figures may return in a useful compression or hardware comparison. |
-| "What reverse engineered means here": project history, decades of manual work, AI-assisted pass, modern function names | Moved | Chapter 18 carries the short account; README gives only the reading orientation. |
+| "Why this machine deserves a book": ROM-size comparison with web pages | Removed comparison; storage context expanded | Chapter 18 explains the 128 KiB image through byte lanes, file offsets, and CPU mapping, not a comparison with modern web pages. |
+| "What reverse engineered means here": project history, decades of manual work, AI-assisted pass, modern function names | Expanded | Chapter 18 connects the manual foundation and AI-assisted work to accountability for names, contracts, and independent evidence; README gives reading orientation. |
 | "The cast of chips": full early hardware cast | Moved | Chapter 5 introduces hardware with the picture it must produce; Chapter 14 introduces the sound processor when it becomes relevant. |
 | "What thoroughly documented means": byte totals, region totals, contract counts, coverage claims | Removed | Maintained reports remain in `doc/generated`. Do not turn changing audit totals into the book's evidence argument. |
 | "How to read this book": strict front-to-back dependency contract and confidence-label tutorial | Shortened / moved | README explains the new draft state. Chapter 18 explains evidence without making it a prerequisite for Chapter 1. |
@@ -141,9 +141,9 @@ sections 2.2, 3, and 26, plus the linked ROM tables.
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| Hardware, "The main CPU": register and bus widths, address width, endianness, other 68000-family machines | Deferred | Chapter 5 needs only functional orientation; Chapter 18 can introduce byte order when reading a dump. |
+| Hardware, "The main CPU": register and bus widths, address width, endianness, other 68000-family machines | Selected concepts expanded; inventory deferred | Chapter 18 explains registers, word/longword sizes, big-endian arguments, and address mapping through shot allocation. The appendix supplies notation. Other-machine comparisons remain omitted. |
 | Hardware, "One address space": memory map, memory-mapped I/O, 4 KB spare-video workspace, unfitted main-RAM aperture | Partly expanded | Chapter 5 now includes memory-mapped controls and a functional hardware diagram. Full maps, spare workspace, and qualified unfitted-aperture evidence remain for Chapters 16 and 18 if needed. |
-| Hardware, chip assembly and "Three images, three jobs": physical chip pairs, byte interleave, concatenation, checksums, full ROM inventory | Moved / deferred | Chapter 18 and the repository ROM instructions. Chapters 9, 14, and 16 introduce the level, sound, and OS roles in context. |
+| Hardware, chip assembly and "Three images, three jobs": physical chip pairs, byte interleave, concatenation, checksums, full ROM inventory | Expanded explanation; inventory linked | Chapter 18 works a labeled illustrative byte interleave, row order, image identity, file-offset arithmetic, and banked-address qualification. Exact chip inventories remain in the repository ROM instructions. |
 | Hardware, "The supporting cast": sound recovery, EEPROM unlock/cadence, LEDs and board enable, watchdog | Moved / deferred | Chapters 14 and 16. Add only diagnostic details that help a reader follow a failure. |
 | Display, "Tiles": graphics banks, chip wiring, bit-plane reconstruction, graphics inaccessible to main CPU | Shortened / deferred | Chapter 5 retains the direct hardware fetch distinction. A bit-plane decoding example could return in Chapter 18. |
 | Display, "Color by table": bank counts, address ranges, IRGB packing, analog intensity model | Expanded / partly deferred | Chapter 5 works palette selection, region sizes, one composed pixel, and IRGB shadow subtraction, including intensity seven reaching zero. Calibrated analog output and a complete address inventory remain deferred. The retained shadow illustration is explicitly approximate. |
@@ -211,29 +211,29 @@ sections 2.2, 3, and 26, plus the linked ROM tables.
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "Two seconds of housekeeping": exact reset vectors, board-latch pulses, delays and watchdog writes | Deferred | Chapter 16 retains reset and watchdog roles. Do not restore an unmeasured startup-duration claim. |
-| "Testing the floor": register-held continuation, region order, short/full pattern suites | Core mechanism retained; exact patterns deferred | Chapter 16 explicitly distinguishes the short route's first-word walking-bit stages from full-region testing. A full walkthrough can show one pattern and one failure. |
-| "The failure policy": lane checksums, header checks, Slapstic hook, complete flowchart | Shortened / deferred | Chapter 16 distinguishes missing program from checksum failure and the game error entry's startup path. Financial explanations of why faults are tolerated were unsupported and removed. |
+| "Two seconds of housekeeping": exact reset vectors, board-latch pulses, delays and watchdog writes | Expanded sequence; literals deferred | Chapter 16 follows reset, working-video-RAM stack, latch pulse, delay, watchdog servicing, and switch polarity. No unmeasured startup duration is asserted. |
+| "Testing the floor": register-held continuation, region order, short/full pattern suites | Expanded example; exhaustive patterns deferred | Chapter 16 follows A4/A6 continuations, test order, condition-code effects on short loops, and a constructed 8000-to-0000 playfield failure with an annotated schematic report. No hardware capture is claimed. |
+| "The failure policy": lane checksums, header checks, Slapstic hook, complete flowchart | Expanded | Chapter 16 works OS lane sums, header validation, Slapstic result 0001FFFE, ordinary versus self-test policies, and nonzero game error-entry action. The complete flowchart stays in the reference; financial intent remains excluded. |
 | Switch-polarity corrections and historical notes | Removed maintenance | The current self-test behavior is described without its correction history. |
-| "Why there is an OS" / "The contract runs both ways": jump-table encoding, optional hooks, header scalars and API inventory | Relationship retained; layout deferred | Chapter 16 can expand one two-way call rather than all fields. Reuse decisions require historical evidence beyond the interface itself. |
-| "Interrupts": vector dispatch, OS/game VBLANK ownership, self-jump traps and abort paths | Distributed / deferred | Chapter 7 handles timing. Chapter 16 can follow a specific exception without promising every fault produces a successful recovery. |
-| "The operator's back room": every diagnostic screen, sprite controls, convergence, manual sound commands, options/statistics | Deferred | Chapter 16 should expand with actual screens. Pricing/statistics also belong in Chapter 8. |
-| EEPROM record decoding and repair | Shortened / deferred | Chapter 16 retains redundant copies and correctable errors. Restore a worked record example, not a claim of whole-record transaction safety. |
+| "Why there is an OS" / "The contract runs both ways": jump-table encoding, optional hooks, header scalars and API inventory | Expanded examples; layout deferred | Chapter 16 follows the verification hook and game-supplied options through shared services and their consumers. Full API/header inventories remain reference detail. |
+| "Interrupts": vector dispatch, OS/game VBLANK ownership, self-jump traps and abort paths | Expanded / distributed | Chapter 7 handles timing; Chapter 16 distinguishes diagnostic VBLANK, idle-before-watchdog exit, and action-zero abort from boot continuation. It does not promise successful recovery from every fault. |
+| "The operator's back room": every diagnostic screen, sprite controls, convergence, manual sound commands, options/statistics | Expanded selected tour | Chapter 16 links switch tests to an intermittent-button complaint, gives actual motion-object controls, and separates sound response failures from reported chip faults. Full descriptor streams and new screenshots remain omitted. |
+| EEPROM record decoding and repair | Expanded | Chapter 16 computes a constructed 2A-to-2E error, syndrome 0x13 and correction, follows redundant-copy selection into queued rewriting, and distinguishes fifteen device bytes from thirty CPU address positions. It explains write verification, the six-value save gate, and power-loss limits without transaction guarantees. |
 
 ### Former 15_attract_and_demo.md
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "The empty room": mode/timer table, screen-clearing order, legend counter | Durations retained; internal sequence deferred | Chapter 15 can add a small transition diagram and explain which layers persist between screens. |
-| "The title screen keeps a small secret": settings-refresh and long-entrance cadences, motion record format, trajectories | Deferred | Chapter 15 keeps long/short entrances and optional theme. Restore a short real motion program with its visible path. |
-| "The demo plays the game": complete setup, maze inventory, bit table, first nine input pairs | Selected example retained; remainder deferred | Chapter 15 keeps one decoded pair and both demo illustrations. Expand through an actual movement sequence. |
-| "Where the recording is read": separate input consumers, exact join times, no-input spans, transporter coordinates | Deferred | Follow a caption or transport across the input consumers in Chapter 15; keep literal coordinates only when the diagram needs them. |
-| "The captions stop the clock": all captions, detailed dual-clock timeline and Reduce Text behavior | Core mechanism retained; rest deferred / moved | Chapter 15 needs an illustrated script-versus-display timeline. Chapter 17 explains the usable Reduce Text option. |
+| "The empty room": mode/timer table, screen-clearing order, legend counter | Expanded sequence; full clearing inventory deferred | Chapter 15 diagrams the screen cycle and counts, explains the legend selector, and follows maze 103 scenery into score boxes. |
+| "The title screen keeps a small secret": settings-refresh and long-entrance cadences, motion record format, trajectories | Expanded | Chapter 15 decodes three actual motion records, explains direction and settling, palette motion, theme/intro state, and the separate thirteenth-title settings refresh. Full programs remain reference data. |
+| "The demo plays the game": complete setup, maze inventory, bit table, first nine input pairs | Expanded | Chapter 15 follows nine actual pairs through approach, caption, and wall push, with active-low interpretation and accurately captioned retained illustrations. Full maze inventory remains unnecessary. |
+| "Where the recording is read": separate input consumers, exact join times, no-input spans, transporter coordinates | Expanded selected timeline | Chapter 15 distinguishes movement, Fire, and Magic consumers, decodes both joins, and uses the existing documented MAME transporter observation. Absolute join timestamps and exhaustive records remain deferred. |
+| "The captions stop the clock": all captions, detailed dual-clock timeline and Reduce Text behavior | Expanded | Chapter 15 diagrams script and display progress, including the already-passed gate on the caption-creation frame. It and Chapter 17 distinguish retained attract messages from their shorter 120-count Reduce Text duration. Full caption catalog remains in the reference. |
 | Keyboard attract routing, rescued demo paths, palette fallbacks, pickup approximations, push-cadence repair stories | Removed maintenance | A current shortcut can enter Chapter 17. Actual arcade pushing belongs in Chapters 3 or 10, without the port's development story. |
-| Demo completion: final effect waits and same-frame exit handoff | Shortened | Chapter 15 retains DEMO-to-LEGEND rather than next-playable-level behavior. Exact gates can support its full timeline. |
-| "How much repeats": fixed setup versus shared RNG and hazard rerolls | Retained distinction | The literal-address scan cannot alone prove that no other initialization or access exists. Chapter 18 explains that limit; Chapter 17 owns host seed options. |
-| "When somebody touches controls": four-position shortcuts and pricing-dependent input masks | Deferred | Chapter 15 distinguishes selecting attract pages from starting a session. Add a compact control guide in expansion. |
-| "The legend": combat matrix, complete credits, transparent rectangles, retained scenery, palette cycling | Shortened / deferred | Restore the matrix and credited people in Chapter 15. Detailed rectangles and palette writes belong with a Chapter 5 example or the technical reference. |
+| Demo completion: final effect waits and same-frame exit handoff | Expanded | Chapter 15 distinguishes zero-duration parking, no-input waits, outer timeout, and actor/effect completion leading to LEGEND rather than another playable maze. |
+| "How much repeats": fixed setup versus shared RNG and hazard rerolls | Expanded with supported distinction | Chapter 15 follows shared RNG and fixed preparation, but excludes hazard rerolls: the attract branch skips ordinary level-flag randomization. Chapter 18 explains limits of absence claims; Chapter 17 owns host seeds. |
+| "When somebody touches controls": four-position shortcuts and pricing-dependent input masks | Expanded | Chapter 15 gives all four positions, the browsing lockout, paid/free-play button distinction, and independent coin/start paths. |
+| "The legend": combat matrix, complete credits, transparent rectangles, retained scenery, palette cycling | Expanded; rectangle inventory deferred | Chapter 15 supplies the displayed combat matrix with state-dependent caveats, credited names, and opaque/transparent scenery explanation. Exact rectangles remain reference detail. |
 | Claims about what designers wanted noticed; modern "integration test" framing | Removed | Describe what the demo demonstrates. Source intentions separately. |
 
 ### Former 16_sound.md
@@ -256,16 +256,16 @@ sections 2.2, 3, and 26, plus the linked ROM tables.
 
 | Old section / information | Fate | Restoration decision |
 |---------------------------|------|----------------------|
-| "An evidence ladder": ranking different forms of evidence | Reworked | Chapter 18 explains what each source can establish. A reconstruction does not outrank an observed original-ROM operation. |
-| Synthetic fixtures, immutable snapshots, scenario hashes/timers and event schemas | Practical use moved; deep representation deferred | Chapter 17 for usage; Chapter 18 for the distinction between synthetic and original evidence. Full schemas stay in developer docs. |
+| "An evidence ladder": ranking different forms of evidence | Expanded evidence chain | Chapter 18 reads actual allocation instructions, the prior-counter launch comparison, and hit-result consumer; it supplies a labeled original-ROM observation plan, not an invented capture. Chapter 15 separately cites an existing documented MAME observation. |
+| Synthetic fixtures, immutable snapshots, scenario hashes/timers and event schemas | Expanded practical use; schemas deferred | Chapter 17 follows ordinary-maze thief diagnostics through F4/resume and F11, then the existing narrow-lane mugger fixture and a checked 1,500-frame headless baseline. Chapter 18 explains evidence independence. Full schemas remain in developer docs. |
 | ROM-to-Python crosswalk totals and deliberate omission totals | Removed from narrative | Keep changing inventory numbers in maintained audits. |
 | "Proving a negative": RNG literal-address scan and missed short-call encoding | Claims narrowed; discovery story removed | Chapter 18 explicitly includes indirect, indexed, bulk-clear, and alias limitations. A future instruction example can compare encodings without telling the correction history. |
 | "Keeping an AI-assisted pass honest": project history and accountability | Retained in proportion | Chapter 18; command-by-command generator tours and coverage tables were removed. |
 | Contradicted-claim history, issue closure, assertions of complete runtime understanding | Removed | These are not material to reinsert as evidence of correctness. |
-| "Fingerprints": stack frames, register classes, assembly exceptions, Green Hills inference | Deferred | Chapter 18 can show one compiler-shaped routine and one hand-written fragment. Specific vendor attribution needs its historical qualifications. |
-| "Nine bytes that never run": Morse bytes, continuous bit segmentation/padding, chip interleave, affidavit | Deferred useful archaeology | A Chapter 18 sidebar is explicitly planned. Separate the decoded pattern from an inferred purpose for these particular bytes. |
-| "A whole game asleep in the OS ROM": retained module, stale targets, earlier strings, shared part numbers | Deferred useful archaeology | Chapter 18, grounded in OS reference sections 10.5 and 12.4-12.8 and MAME definitions. A retained support module is not automatically an entire complete game. |
-| "Where evidence stops": open-bus behavior, arbitrary fills, unused regions | General limits retained; examples deferred | Chapter 18 can add one hardware limit without claiming all other unknowns are closed. |
+| "Fingerprints": stack frames, register classes, assembly exceptions, Green Hills inference | Expanded selected example | Chapter 18 explains the actual shot argument at a6+0xA, caller cleanup, register/shared-stack exceptions, and qualified vendor attribution. An additional assembly-filter listing and exhaustive register inventory remain omitted. |
+| "Nine bytes that never run": Morse bytes, continuous bit segmentation/padding, chip interleave, affidavit | Expanded | Chapter 18 supplies nine bytes, 69-bit grouping, padding, interleave, and historical context while distinguishing decoded text from inferred purpose. |
+| "A whole game asleep in the OS ROM": retained module, stale targets, earlier strings, shared part numbers | Expanded with narrower claim | Chapter 18 contrasts retained options with the live game-header consumer, discusses older text, and refuses to infer a complete hidden game or original build intent. Full retained-module contracts stay in the OS reference. |
+| "Where evidence stops": open-bus behavior, arbitrary fills, unused regions | Expanded | Chapter 18 distinguishes missing file bytes from physical empty-socket responses, and implementation consequences from historical intention. |
 | "Where to go next": dense audit links and future publication promises | Shortened | Stable links remain in chapter notes and the appendix. |
 
 Historical references worth preserving for those future sidebars:
@@ -284,12 +284,12 @@ Historical references worth preserving for those future sidebars:
 
 | Old material | Fate | Restoration decision |
 |--------------|------|----------------------|
-| Glossary as a second creature/item catalog | Reduced | Keep definitions needed to read mechanisms; develop the creature or item in its chapter. |
-| Audit terminology, counts, correction history, Morse and retained-module glossary entries | Removed / moved | Chapter 18 for methods and possible archaeology. |
-| Long repository/source essay and issue-led navigation | Replaced | The appendix now maps reader questions to stable references. |
+| Glossary as a second creature/item catalog | Expanded reference, not bestiary | The appendix adds number/coordinate conventions and linked definitions emphasizing distinctions: credit versus coins, latch versus cooldown, level versus maze, and phase versus pose. Creatures retain their chapter explanations. |
+| Audit terminology, counts, correction history, Morse and retained-module glossary entries | Removed / moved | Chapter 18 develops methods and selected archaeology; the appendix defines useful evidence terms without coverage totals or correction history. |
+| Long repository/source essay and issue-led navigation | Expanded reader map | The appendix maps all eighteen chapters to research, explains asset identifiers and provenance, and distinguishes the separate gex checkout and historical sources. |
 | Publication checklist | Removed from reading path | Editorial expectations live in OUTLINE; do not restore printed learning-objective boilerplate. |
 | Old Chapters 6/14: nested benchmark boundaries | Replaced with current interface | Chapter 17 distinguishes input, game update, raster-through-blit, display flip, and cumulative host iteration. Do not restore obsolete measurement descriptions. |
-| Render rolling-window length, graph-axis details, PAUSED placement, complete stress/workload catalog | Deferred companion detail | Chapter 17 can grow by adding a focused exercise. The current README is the full operational reference. |
+| Render rolling-window length, graph-axis details, PAUSED placement, complete stress/workload catalog | Focused exercise expanded; inventory deferred | Chapter 17 now provides a complete inspection/capture workflow and fixed benchmark example. Rolling-window internals and the full workload catalog remain in the current README. |
 
 ## Mazes, special encounters, and scoring
 
@@ -305,7 +305,7 @@ Historical references worth preserving for those future sidebars:
 | Slapstic helper addresses, access ritual, boot verifier | Expanded access example; boot deferred | Chapter 9 shows the actual bank-zero/bank-three helper accesses, packed bank lookup, pointer lookup, and bitwise-path latch. Boot verification remains Chapter 16 material. |
 | "Anatomy": byte-by-byte header and every flag | Selected contexts expanded; inventory deferred | Chapter 9 explains the reusable contexts needed by the actual decode and distinguishes geometry from level-added behavior. Exhaustive header/flag tables remain in the reference. |
 | "The decoder": every opcode class and the longer first-row trace | Expanded example; full grammar deferred | Chapter 9 decodes eight bytes through a complete row, then follows upward door and wall writes that change it later. The main cursor and finished contents are explicitly different. |
-| Maze 116 ending without a delimiter and overlapping the bank table | Boundary rule expanded; special record deferred | Chapter 9 explains termination at 1,024 cells rather than at an end opcode. Maze 116's exact overlap remains useful Chapter 18 storage archaeology. |
+| Maze 116 ending without a delimiter and overlapping the bank table | Expanded | Chapter 18 follows offset 0x7E48 through 423 consumed bytes to 0x7FEF, diagrams the fifteen-byte bank-table overlap, and separates observed layout from inferred packing intent. |
 | "From tokens": all object materialization, anchors, start removal, wall-neighbor scans | Expanded / distributed | Chapters 6 and 3 supply representation and placement; Chapter 9 now traces start selection, terrain/table preparation, party placement, and final pickup work. Exhaustive materializer branches remain reference detail. |
 | "Three kinds of random": flags, depth tiers, trap setup, pickup placement/removal order | Expanded examples; full tier catalog deferred | Chapter 9 compares maze 13 at levels six and twelve with equal or differing mirrors, then follows setup ordering. Chapter 10 contrasts trap families, cyclic updates, and independent random-wall toggles. |
 | RNG equation and exact cross-system draw ordering | Deferred | Chapters 7 or 9 can show one coupling example. Chapter 15 handles repeatability; Chapter 17 handles host seed choices. |
@@ -372,7 +372,7 @@ Historical references worth preserving for those future sidebars:
 | Spawn adjustment called a count cap or freshly recomputed value | Replaced / expanded | Chapter 8 works 196,608 party points on six coins adding two to the existing bonus, then a live coin reducing a positive value. Chapter 4 shows why a binding level cap can conceal that change. |
 | "Info panel": column states, exact palettes, dirty-field cadence, pulse/IT effects and popup tables | Deferred / distributed | Chapter 5 for display, Chapter 8 for health/score meaning, Chapter 14 for spoken warnings. Host controls move to Chapter 17. |
 | Advice masks, reduced-text records, speech gating | Deferred / moved | Chapters 7 and 14. Chapter 8 retains the continue offer without an entire dialog-system inventory. |
-| "What the cabinet remembers": six-value save gate, check syndromes, byte-write retries | Deferred | Chapter 16 for storage mechanics; Chapter 8 for the information kept and its use. |
+| "What the cabinet remembers": six-value save gate, check syndromes, byte-write retries | Expanded | Chapter 16 follows the six cached comparisons, 36,000-call timer, record correction and queued byte verification. Chapter 8 supplies the information's gameplay meaning. |
 | "The operator": descriptor streams and histogram saturation/rescaling | Partly expanded | Chapter 8 works the shipped time-bin scale and a 180-second/three-coin session, distinguishes header parameters from live difficulty, and explains byte rescaling. It is an illustrative histogram calculation, not a new service-screen capture. Descriptor-driven menus remain in Chapter 16. |
 
 ## Review priorities for expansion
@@ -389,11 +389,14 @@ objective carried through a challenge and code, and the warning's two
 delivery stages. Remaining detailed inventories above are deliberate
 reference deferrals, not unwritten chapter placeholders.
 
-The next short drafts are Chapters 15-18. Their high-value expansions are
-the demo's script/display timelines, a boot and diagnostic walkthrough,
-a practical reconstruction exercise, and one evidence chain with selected
-ROM archaeology. Exact tables should support those explanations rather
-than determine their order.
+Chapters 15-18 and the backmatter are now full first-pass text. They
+provide the demo's script/display timelines, boot and diagnostic
+walkthrough, practical reconstruction exercise, and instruction-level
+evidence chain with selected ROM archaeology. Schematic diagnostics and
+checked textual host state replace proposed new screenshots; the arrow's
+runtime table is explicitly an observation plan, not a fabricated trace.
+No chapter-expansion placeholders remain. Author review, line editing,
+and publication layout are still separate work.
 
 Mechanical inventories, port repair histories, and declarations of audit
 completeness should not return merely because they occupied many pages in
