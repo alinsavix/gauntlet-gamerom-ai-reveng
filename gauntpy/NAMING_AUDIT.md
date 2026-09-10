@@ -79,6 +79,12 @@ The generator inputs and generated movement/startup/callable contracts use
 these same names. `ROM_FUNCTION_AUDIT.csv` points each direct Python port at
 the selected symbol.
 
+Canonical implementation paths are now under `gauntpy.game`; routine-family
+extraction changes ownership, not ROM names. The older paths alias those
+modules or reexport the same functions. The crosswalk names the actual owner,
+including `score.player_add_score_with_mult` and
+`player_transport.tport_find_id`, rather than their former duplicate bodies.
+
 ## Persisted-data policy
 
 - Schema-1 state dumps require the current `GameState` field names. The

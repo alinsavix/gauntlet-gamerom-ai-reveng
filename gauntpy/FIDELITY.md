@@ -492,6 +492,17 @@ implementation specification.
     layout repeats. Never regenerate the maze, call setup on restore, or treat a
     resumed mid-level dump as a level start. Restore into independent memory and
     keep external EEPROM files isolated from the abandoned timeline.
+100. **Shared score awards consume a word, not an unbounded integer.**
+     `player_add_score_with_mult` (0x5214C) takes the low unsigned word of the
+     prepared base, multiplies by the bonus word, adds with 32-bit wrap, and sets
+     only the score redraw latch, even for zero. Shot callers first multiply
+     damage by the target factor; narrowing after all three factors is different.
+101. **Transporter lookup misses are past-the-end IDs.** `tport_find_id`
+     (0x4E7C0) returns the matching one-based index or `count + 1` on exhaustion,
+     including one for an empty table. Zero belongs to other callers' corner/no-pad
+     state. The ROM searches a stored ordered position table; the port's existing
+     live-MOB-derived representation is not independently validated by sharing
+     the lookup implementation.
 
 ## Investigation workflow
 
@@ -511,6 +522,12 @@ implementation specification.
 
 ## Implementation boundaries
 
+`gauntpy.game` owns the ROM/game routines, modeled RAM, literal data, and
+video-memory writers. Host startup, clocks, diagnostics, persistence backends,
+and rasterization remain outside it. Old root game modules and
+`gauntpy.subsystems.*` alias the canonical modules so legacy imports and
+monkeypatches still resolve to the same objects.
+
 The EEPROM model consumes `EepromStorage`, never host paths or JSON. Bare
 states use independent memory devices; the host binds a file device before
 cold boot or live stepping. Read-only and isolated policies suppress external
@@ -518,22 +535,27 @@ writes, not the ROM countdown or accepted device writes. New state dumps
 preserve the exact device image in a separate envelope and restore it to
 memory without reading the current external save file.
 
-`subsystems/player_animation.py` and `subsystems/player_names.py` own their
-ROM routine families and literal tables. `playfield.py` owns the shared
-`pf_replace` producer; it is game code, not a renderer. Older player/shot
-imports are explicit compatibility reexports of the same function objects.
+`game/subsystems` separates player lifecycle/items/transport/movement,
+monster movement/shooting/spawning, projectile collision/damage, and
+level-transition/treasure/secret-room families. Animation and name entry retain
+their own modules. Public generic MOB probes, private player probes, and monster
+ray marches remain distinct. The original subsystem modules reexport moved
+routines as the same function objects; their individual bodies and calls stay
+ROM-shaped. Shared literals have one `*_data` owner where needed.
+`game/playfield.py` owns `pf_replace`; `score.py` owns shared score awards;
+`player_transport.py` owns transporter ID lookup.
 Keep the canonical owners in `ROM_FUNCTION_AUDIT.csv` current when moving
 routines; never use a file move to rewrite their algorithms or merge
 distinct ROM branches.
 
 `maze_rom.py` owns ROM acquisition and the gex decoder/stamp adapters;
-`maze.py` owns setup sequencing, random selection, and native memory writes.
+`game/maze.py` owns setup sequencing, random selection, and native memory writes.
 Decoded maze data satisfies the pure `MazeData` contract. Acquiring a maze
 record must succeed before a level reset mutates state. The explicit
 ROM-free `reset_and_load_level` failure path returns false without partial
 setup; errors during game-side setup are not swallowed.
 
-`alpha_memory.py` owns synchronization between alpha words and the live
+`game/alpha_memory.py` owns synchronization between alpha words and the live
 44-byte route rows. Glyph, rectangle, and thief route writers use that
 boundary; the two serialized representations are not independently owned RAM.
 Keep unused route-stride padding unchanged, and do not rebuild either view

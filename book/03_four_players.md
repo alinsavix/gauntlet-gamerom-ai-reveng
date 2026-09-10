@@ -375,9 +375,12 @@ They have fewer decisions to make, but there are many more of them.
   `0x46D62–0x46D6E`: mask to five bits, multiply by sixteen, subtract
   four. Movement edge gates are separate branches in `player_try_move_core`.
 - All party situations and numerical movement/camera examples here are
-  illustrative, not captured original-ROM play. The
-  [player reconstruction](../gauntpy/src/gauntpy/subsystems/players.py)
-  is useful reading but is not independent confirmation of its sources.
+  illustrative, not captured original-ROM play. The reconstructed
+  [player frame loop](../gauntpy/src/gauntpy/game/subsystems/players.py),
+  [join routines](../gauntpy/src/gauntpy/game/subsystems/player_lifecycle.py),
+  [movement](../gauntpy/src/gauntpy/game/subsystems/player_movement.py), and
+  [camera](../gauntpy/src/gauntpy/game/subsystems/camera.py) are useful
+  reading but are not independent confirmation of their sources.
 
 [Previous: One arrow in the air](02_one_arrow.md) |
 [Contents](README.md) |

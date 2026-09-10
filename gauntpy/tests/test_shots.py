@@ -3152,7 +3152,12 @@ _STUB_MARKERS = (
 
 def _shots_source() -> str:
     import inspect
-    return inspect.getsource(shots)
+    from gauntpy.game.subsystems import shot_collision, shot_damage, shot_data
+
+    return "\n".join(
+        inspect.getsource(module)
+        for module in (shots, shot_collision, shot_damage, shot_data)
+    )
 
 
 class TestNoResidualStubs:
@@ -3179,7 +3184,11 @@ class TestNoResidualStubs:
         import textwrap
         empty = []
         for name, obj in vars(shots).items():
-            if not inspect.isfunction(obj) or obj.__module__ != shots.__name__:
+            if not inspect.isfunction(obj) or obj.__module__ not in {
+                shots.__name__,
+                "gauntpy.game.subsystems.shot_collision",
+                "gauntpy.game.subsystems.shot_damage",
+            }:
                 continue
             body = textwrap.dedent(inspect.getsource(obj)).splitlines()
             statements = [

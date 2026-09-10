@@ -309,11 +309,15 @@ must move through one shared view.
   [Game subsystems](../doc/04_game_subsystems.md), section 26,
   `resolve_shot_hit` (`0x4AF50`).
 - Readable implementation counterparts:
-  [`players.py`](../gauntpy/src/gauntpy/subsystems/players.py),
+  [`players.py`](../gauntpy/src/gauntpy/game/subsystems/players.py),
   `player_create_shot` and `_advance_player_sprite`;
-  [`shots.py`](../gauntpy/src/gauntpy/subsystems/shots.py),
-  `shot_velocity` and `resolve_shot_hit`. These are the project's Python
-  reconstruction, not original Atari source.
+  [`shots.py`](../gauntpy/src/gauntpy/game/subsystems/shots.py),
+  `shot_velocity`;
+  [`shot_collision.py`](../gauntpy/src/gauntpy/game/subsystems/shot_collision.py),
+  collision probes and reflection; and
+  [`shot_damage.py`](../gauntpy/src/gauntpy/game/subsystems/shot_damage.py),
+  `resolve_shot_hit`. These are the project's Python reconstruction,
+  not original Atari source.
 
 [Previous: Enter the Gauntlet](01_how_to_play.md) |
 [Contents](README.md) |

@@ -11,10 +11,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..eeprom_device import MemoryEepromStorage
-from ..mob import MobTable
-from ..rng import GameRandom
-from ..state import GameState
+from ..game.eeprom_device import MemoryEepromStorage
+from ..game.mob import MobTable
+from ..game.rng import GameRandom
+from ..game.state import GameState
 from .eeprom import (
     PersistencePolicy,
     bind_eeprom_storage,

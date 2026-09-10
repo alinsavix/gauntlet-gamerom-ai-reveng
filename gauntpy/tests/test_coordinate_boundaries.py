@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "gauntpy"
-COORDS = SRC / "coords.py"
+COORDS = SRC / "game" / "coords.py"
 
 
 def _python_sources():

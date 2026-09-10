@@ -8,7 +8,9 @@ import pytest
 from gauntpy import playfield
 from gauntpy.constants import Character, PlayerStatus
 from gauntpy.state import GameState
-from gauntpy.subsystems import player_animation, player_names, players, shots
+from gauntpy.game.subsystems import (
+    player_animation, player_names, player_transport, players, shots,
+)
 
 
 @pytest.mark.parametrize(
@@ -76,7 +78,7 @@ def test_game_families_do_not_import_host_or_rendering(module):
 
 
 def test_transport_and_shots_import_the_shared_game_playfield_owner():
-    for module in (players, shots):
+    for module in (player_transport, shots):
         imports = [
             node for node in ast.walk(ast.parse(inspect.getsource(module)))
             if isinstance(node, ast.ImportFrom)

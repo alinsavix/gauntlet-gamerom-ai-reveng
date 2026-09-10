@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .constants import (
+from .game.constants import (
     SLOT_DEMON_SHOTS,
     SLOT_LOBBER_SHOTS,
     SLOT_PLAYER_SHOTS,
@@ -22,16 +22,10 @@ from .constants import (
     MazeObjIds,
     PlayerStatus,
 )
-from .coords import (
-    encode_hpos,
-    encode_vpos_at_y,
-    hpos_x,
-    pack_slot,
-    vpos_y,
-)
-from .mainloop import tick
-from .state import GameState
-from .subsystems.input import JOY_DOWN, JOY_IDLE, JOY_LEFT, JOY_RIGHT
+from .game.coords import encode_hpos, encode_vpos_at_y, hpos_x, pack_slot, vpos_y
+from .game.mainloop import tick
+from .game.state import GameState
+from .game.subsystems.input import JOY_DOWN, JOY_IDLE, JOY_LEFT, JOY_RIGHT
 
 
 Step = Callable[[GameState, int], None]
@@ -84,7 +78,7 @@ def _level7_input(frame: int) -> int:
 
 
 def _forcefield_state() -> GameState:
-    from .maze import maze_place_object
+    from .game.maze import maze_place_object
 
     state = GameState(game_mode=GameMode.NORMAL, level_players_active=1)
     left, right = pack_slot(5, 5), pack_slot(5, 9)
@@ -108,7 +102,7 @@ def _forcefield_state() -> GameState:
 
 
 def _dragon_state() -> GameState:
-    from .subsystems.dragon import dragon_setup_segments
+    from .game.subsystems.dragon import dragon_setup_segments
 
     state = GameState(game_mode=GameMode.NORMAL, level_players_active=1)
     primary = pack_slot(10, 10)
@@ -144,14 +138,14 @@ def _dragon_state() -> GameState:
 
 
 def _dragon_step(state: GameState, _frame: int) -> None:
-    from .subsystems.dragon import main_handle_dragon
+    from .game.subsystems.dragon import main_handle_dragon
 
     main_handle_dragon(state)
     state.frame_counter = (state.frame_counter + 1) & 0xFFFF
 
 
 def _demo_state() -> GameState:
-    from .subsystems.attract import start_attract_screen
+    from .game.subsystems.attract import start_attract_screen
 
     state = GameState()
     start_attract_screen(state, int(GameMode.DEMO))
@@ -159,7 +153,7 @@ def _demo_state() -> GameState:
 
 
 def _close_combat_state() -> GameState:
-    from .subsystems.players import player_create_shot
+    from .game.subsystems.players import player_create_shot
 
     state = GameState(game_mode=GameMode.NORMAL, level_players_active=1)
     player = state.players[0]
@@ -187,7 +181,7 @@ def _close_combat_state() -> GameState:
 
 
 def _shots_step(state: GameState, _frame: int) -> None:
-    from .subsystems.shots import resolve_shot_hit, shot_mob_collision
+    from .game.subsystems.shots import resolve_shot_hit, shot_mob_collision
 
     target = shot_mob_collision(state, pack_slot(10, 10), 0)
     if target >= 0:

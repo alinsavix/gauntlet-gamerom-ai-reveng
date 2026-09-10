@@ -28,13 +28,16 @@ from __future__ import annotations
 from typing import Iterator, NamedTuple, Protocol
 
 from ..assets import HERO_NAMES, AssetError
-from ..constants import (
-    NUM_SLIP_BANDS, SLIP_BAND_PIXELS, SLOT_DEMON_SHOTS,
-    SLOT_PLAYER_SHOTS, MazeObjIds,
+from ..game.constants import (
+    NUM_SLIP_BANDS,
+    SLIP_BAND_PIXELS,
+    SLOT_DEMON_SHOTS,
+    SLOT_PLAYER_SHOTS,
+    MazeObjIds,
 )
-from ..coords import CELL_PIXELS, decode_hpos, decode_vpos, sprite_top_y
-from ..state import GameState
-from ..subsystems.display import mob_palette_rgba
+from ..game.coords import CELL_PIXELS, decode_hpos, decode_vpos, sprite_top_y
+from ..game.state import GameState
+from ..game.subsystems.display import mob_palette_rgba
 
 __all__ = [
     "MobDrawInfo", "SpriteSource", "iter_visible_mobs", "draw_mob_layer",

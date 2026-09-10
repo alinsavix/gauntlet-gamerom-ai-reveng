@@ -902,17 +902,16 @@ class TestPlayerAddScoreWithMult:
         p.score = 0
         p.bonusmult = 9
         gp.player_add_score_with_mult(state, 0, 999999)
-        assert p.score == 9 * 999999  # 8,999,991
+        assert p.score == 9 * (999999 & 0xFFFF)  # 152,631
 
-    def test_score_is_32bit_no_truncation(self):
-        """Score is a 32-bit longword; no masking (§4.3 TRAP 2 parallel)."""
+    def test_base_score_is_narrowed_to_a_word(self):
+        """0x52158 reads only the base argument's low word."""
         state = _active_state()
         p = _make_player_active(state, 0)
         p.score = 0xFFFF0000
         p.bonusmult = 1
         gp.player_add_score_with_mult(state, 0, 0x10000)
-        # Must exceed 32-bit unsigned range -- Python ints do not overflow.
-        assert p.score == 0xFFFF0000 + 0x10000
+        assert p.score == 0xFFFF0000
 
 
 # =============================================================================

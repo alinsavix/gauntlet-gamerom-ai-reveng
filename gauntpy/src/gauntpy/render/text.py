@@ -182,7 +182,7 @@ def _alpha_rom_tile(code: int, palette: tuple, opaque: bool):
 
 @lru_cache(maxsize=1)
 def _hud_fallback_text() -> dict[int, str]:
-    from .. import romtext
+    from ..game import romtext
 
     result = {romtext.GLYPH_KEY: "K", romtext.GLYPH_POTION: "P"}
     for codes, text in zip(
@@ -208,10 +208,7 @@ def _hud_fallback_text() -> dict[int, str]:
 def _large_fallback_tiles() -> dict[int, object]:
     """Build readable PIL substitutes for OS large-font quadrant glyphs."""
     from PIL import Image
-    from ..subsystems.display import (
-        _LARGE_GLYPH_INDEX_MAP,
-        _LARGE_GLYPH_QUADS,
-    )
+    from ..game.subsystems.display import _LARGE_GLYPH_INDEX_MAP, _LARGE_GLYPH_QUADS
 
     result = {}
     characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"

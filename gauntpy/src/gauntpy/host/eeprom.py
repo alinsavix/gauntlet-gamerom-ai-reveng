@@ -9,16 +9,16 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..eeprom_device import (
+from ..game.eeprom_device import (
     EepromImage,
     EepromRotation,
     HighScoreImage,
     MemoryEepromStorage,
 )
-from ..subsystems.eeprom import HIGHSCORE_CLASSES, HIGHSCORE_RANKS
+from ..game.subsystems.eeprom import HIGHSCORE_CLASSES, HIGHSCORE_RANKS
 
 if TYPE_CHECKING:
-    from ..state import GameState
+    from ..game.state import GameState
 
 _LOG = logging.getLogger(__name__)
 DEFAULT_EEPROM_PATH = "gauntpy_eeprom.json"
@@ -150,7 +150,7 @@ class FileEepromStorage:
         if self.policy is PersistencePolicy.READ_ONLY:
             self._overlay = image
             return
-        from ..subsystems.eeprom import (
+        from ..game.subsystems.eeprom import (
             GSETTING_COINTOSTART_MASK,
             GSETTING_COINTOSTART_SHIFT,
             GSETTING_DIFFICULTY_MASK,
@@ -189,7 +189,7 @@ def bind_eeprom_storage(
             else PersistencePolicy.READ_ONLY
         )
     if policy is PersistencePolicy.ISOLATED:
-        from ..subsystems.eeprom import eeprom_image
+        from ..game.subsystems.eeprom import eeprom_image
 
         state.eeprom_storage = MemoryEepromStorage(eeprom_image(state))
     else:

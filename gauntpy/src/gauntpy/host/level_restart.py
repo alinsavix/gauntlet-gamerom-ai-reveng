@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from ..constants import GameMode
-from ..eeprom_device import MemoryEepromStorage
-from ..state import GameState
+from ..game.constants import GameMode
+from ..game.eeprom_device import MemoryEepromStorage
+from ..game.state import GameState
 
 
 def _isolated_copy(state: GameState) -> GameState:

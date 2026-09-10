@@ -1,16 +1,7 @@
-"""Structural contract for decoded maze data, independent of the ROM decoder."""
+"""Compatibility alias for :mod:`gauntpy.game.maze_data`."""
 
-from __future__ import annotations
+import sys
 
-from typing import Protocol
+from .game import maze_data as _implementation
 
-
-class MazeData(Protocol):
-    data: dict[tuple[int, int], int]
-    encodedbytes: int
-    secret: int
-    flags: int
-    wallpattern: int
-    wallcolor: int
-    floorpattern: int
-    floorcolor: int
+sys.modules[__name__] = _implementation

@@ -27,10 +27,10 @@ from __future__ import annotations
 
 import dataclasses
 
-from ..coords import WORLD_PIXELS
-from ..state import GameState
-from ..subsystems import score
-from ..subsystems.camera import viewport_scroll
+from ..game.coords import WORLD_PIXELS
+from ..game.state import GameState
+from ..game.subsystems import score
+from ..game.subsystems.camera import viewport_scroll
 from .alpha import draw_alpha_layer
 from .framebuffer import Framebuffer
 from .hud import draw_pause_indicator

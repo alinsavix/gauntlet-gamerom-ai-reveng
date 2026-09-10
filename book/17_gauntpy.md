@@ -139,31 +139,41 @@ part of the stated starting conditions.
 Before opening the diagnostics, separate the game from the machinery
 used to observe it.
 
-`GameState` holds modeled working state: players, timers, maze data,
-random state, and display memory. Its motion objects retain five
-parallel arrays of native-format words. A moving monster can migrate
-between cell-indexed records rather than remain one permanent Python
-object. Packed positions, bit fields, and explicitly masked arithmetic
-preserve relationships that ordinary unconstrained Python integers would
-not preserve automatically.
+`GameState`, in `gauntpy.game.state`, holds modeled working state:
+players, timers, maze data, random state, and display memory. Its motion
+objects retain five parallel arrays of native-format words. A moving
+monster can migrate between cell-indexed records rather than remain one
+permanent Python object. Packed positions, bit fields, and explicitly
+masked arithmetic preserve relationships that ordinary unconstrained
+Python integers would not preserve automatically.
 
-The main loop advances this state through the ordered subsystem calls.
-Calling `tick` performs a modeled frame; it does not wait for the next
+The main loop in `gauntpy.game.mainloop` advances this state through
+twenty-eight explicitly ordered subsystem calls. Calling `tick`
+performs a modeled frame; it does not wait for the next
 sixtieth of a second. Game-side presentation routines also write modeled
 playfield, alpha, and color memory. The alpha layer is the game's text
 and overlay plane, not the host diagnostics panel.
 
-The renderer then reads that display memory and combines it with
-ROM-derived graphics to make pixels. Asset acquisition is separate from
-game decisions: `gex` decodes artwork, while game-side maze setup still
-chooses placements and consumes randomness. The renderer should not
-decide where a potion belongs merely because it knows how to draw one.
+Within `game/subsystems`, files group related ROM routines rather than
+introducing a different object model. Following an arrow takes us through
+`shots.py` for flight, `shot_collision.py` for collision probes, and
+`shot_damage.py` for hit resolution. Each stage still calls individual
+routines directly. Shared score awards belong to
+`score.player_add_score_with_mult`, whether the player collects a pickup,
+hits a target, or defeats a thief.
 
-Finally, the host owns the window, input sampling, pacing, sound playback,
-and inspection controls. Its normal limiter targets sixty frames per
-second. These boundaries let the same game state run without a window,
-appear at different scales, or be inspected without adding debug text
-to the game's own video memory.
+The renderer, `gauntpy.render`, then reads that display memory and
+combines it with ROM-derived graphics to make pixels. Asset acquisition
+is separate from game decisions: `gex` decodes artwork, and `maze_rom.py`
+adapts its maze data, while `game/maze.py` chooses placements and consumes
+randomness. The renderer should not decide where a potion belongs merely
+because it knows how to draw one.
+
+Finally, `gauntpy.host` owns the window, input sampling, pacing, sound
+playback, and inspection controls. Its normal limiter targets sixty
+frames per second. These boundaries let the same game state run without
+a window, appear at different scales, or be inspected without adding
+debug text to the game's own video memory.
 
 They also help locate a disagreement. If a potion exists in the logical
 maze but its display word is wrong, presentation needs investigation.
@@ -411,6 +421,12 @@ complete game update, raster composition through window blitting, and
 display flip are separate timing boundaries. The complete-loop row is
 cumulative: do not add it to the others as another independent cost.
 
+The host application keeps input sampling, one game update, and
+presentation in that order. `host.run_policy` accounts for benchmark
+warm-up and stress-workload rotation; it neither samples clocks nor
+advances the game itself. Those measurements and scheduling choices
+belong to the harness, not to the ROM-shaped frame sequence.
+
 Compare like workloads, scales, and machines. The **PERFORMANCE** page
 can reveal render-time spikes, but a slow renderer is not evidence that
 the original monster routine exhausted its CPU budget. `--uncapped`
@@ -424,23 +440,31 @@ explain. That gives us something concrete to take back to the ROMs.
 
 ### Source notes
 
+The game-side links below point to `gauntpy.game`, where the implementations
+live. Older imports such as `gauntpy.state` and `gauntpy.subsystems.players`
+remain compatibility paths to the same code, not separate simulations.
+
 - Installation, controls, and option contracts:
   [gauntpy README](../gauntpy/README.md#play-it),
   [dependency configuration](../gauntpy/pyproject.toml), and
   [command parser](../gauntpy/src/gauntpy/host/application.py).
 - Game/render/host boundaries:
-  [state](../gauntpy/src/gauntpy/state.py),
-  [MOB arrays](../gauntpy/src/gauntpy/mob.py),
-  [main loop](../gauntpy/src/gauntpy/mainloop.py),
+  [state](../gauntpy/src/gauntpy/game/state.py),
+  [MOB arrays](../gauntpy/src/gauntpy/game/mob.py),
+  [main loop](../gauntpy/src/gauntpy/game/mainloop.py),
+  [routine families](../gauntpy/src/gauntpy/game/subsystems/),
   [compositor](../gauntpy/src/gauntpy/render/compositor.py), and
   [host shell](../gauntpy/src/gauntpy/host/shell.py).
+- Maze acquisition and game-side setup:
+  [ROM adapter](../gauntpy/src/gauntpy/maze_rom.py) and
+  [placement routines](../gauntpy/src/gauntpy/game/maze.py).
 - The direct-start reference uses
   [startup](../gauntpy/src/gauntpy/host/startup.py),
-  [thief setup and routing](../gauntpy/src/gauntpy/subsystems/thief.py), and
+  [thief setup and routing](../gauntpy/src/gauntpy/game/subsystems/thief.py), and
   [diagnostic row definitions](../gauntpy/src/gauntpy/host/diagnostics.py).
   [Chapter 11](11_the_thiefs_trail.md) explains pursuit and escape.
 - Advice selection and dialog durations:
-  [message routines](../gauntpy/src/gauntpy/subsystems/score.py).
+  [message routines](../gauntpy/src/gauntpy/game/subsystems/score.py).
 - Capture and replay boundaries:
   [state dumps](../gauntpy/src/gauntpy/host/state_dump.py),
   [level restart](../gauntpy/src/gauntpy/host/level_restart.py), and
@@ -452,7 +476,9 @@ explain. That gives us something concrete to take back to the ROMs.
   [headless runner and digest](../gauntpy/src/gauntpy/scenarios.py).
   The 1,500-frame stationary run was checked without launching a GUI.
 - Playback limitations and measurement boundaries:
-  [audio host](../gauntpy/src/gauntpy/host/audio.py) and
+  [audio host](../gauntpy/src/gauntpy/host/audio.py),
+  [application frame loop](../gauntpy/src/gauntpy/host/application.py),
+  [benchmark/stress accounting](../gauntpy/src/gauntpy/host/run_policy.py), and
   [performance workloads](../gauntpy/src/gauntpy/performance_workloads.py).
 
 [Previous: Waking the cabinet](16_waking_the_cabinet.md) |

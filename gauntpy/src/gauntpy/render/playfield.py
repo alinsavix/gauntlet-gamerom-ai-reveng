@@ -12,9 +12,9 @@ import dataclasses
 
 from PIL import Image
 
-from ..coords import PF_COLS, PF_ROWS, WORLD_PIXELS
-from ..playfield_vram import PF_PALETTE_MASK, PF_TILE_MASK
-from ..subsystems.display import _irgb_rgba
+from ..game.coords import PF_COLS, PF_ROWS, WORLD_PIXELS
+from ..game.playfield_vram import PF_PALETTE_MASK, PF_TILE_MASK
+from ..game.subsystems.display import _irgb_rgba
 
 __all__ = [
     "PlayfieldCache",

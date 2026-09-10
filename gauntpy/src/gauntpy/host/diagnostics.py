@@ -10,7 +10,7 @@ from typing import Mapping
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..constants import (
+from ..game.constants import (
     GENERATOR_TYPES,
     MONSTER_TYPES,
     Character,
@@ -18,9 +18,9 @@ from ..constants import (
     MazeObjIds,
     PlayerStatus,
 )
-from ..coords import hpos_x, vpos_y
+from ..game.coords import hpos_x, vpos_y
 from ..sound_catalog import SOUND_COMMAND_DESCRIPTIONS
-from ..state import GameState
+from ..game.state import GameState
 
 DEBUG_PANEL_WIDTH = 320
 DEBUG_PANEL_HEIGHT = 240

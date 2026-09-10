@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ..state import GameState
-from ..subsystems.display import (
+from ..game.state import GameState
+from ..game.subsystems.display import (
     ALPHA_ATTRIBUTE_MASK,
     ALPHA_COLUMNS,
     ALPHA_GLYPH_MASK,

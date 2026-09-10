@@ -24,19 +24,24 @@ import os
 import sys
 from pathlib import Path
 from time import perf_counter
+from typing import TYPE_CHECKING
 
-from ..constants import Character, MazeObjIds
-from ..mainloop import tick
+from ..game.constants import Character, MazeObjIds
+from ..game.mainloop import tick
 from ..performance_workloads import (
     WORKLOADS,
     build_workload_state as _build_workload_state,
     selected_workloads,
     validate_runtime_invariants,
 )
-from ..state import GameState
+from ..game.state import GameState
 from .eeprom import PersistencePolicy, bind_eeprom_storage
+from .run_policy import BenchmarkRun, RunPolicy, StressRun
 from .session import HostSession
 from .startup import build_cold_boot_state, build_state
+
+if TYPE_CHECKING:
+    from .shell import HostShell
 
 #: Highest maze number the Slapstic image holds (gex's own bound, restated so
 #: ``--maze`` can be checked without importing gex at module import time --
@@ -137,7 +142,7 @@ def _enabled_sound_dir(enabled: bool) -> Path | None:
 
 def _apply_operator_overrides(state: GameState, *, reduce_text: bool) -> None:
     if reduce_text:
-        from ..subsystems.score import GAME_SETTINGS_REDUCE_TEXT
+        from ..game.subsystems.score import GAME_SETTINGS_REDUCE_TEXT
 
         state.game_settings |= GAME_SETTINGS_REDUCE_TEXT
 
@@ -196,6 +201,10 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     screen uses the ROM's fixed playfield and procedurally built MOB records.
     """
     _ensure_rom_dir()
+    policy = RunPolicy(
+        benchmark_frames=benchmark_frames, stress_seconds=stress_seconds,
+        uncapped=uncapped, sound_enabled=sound_enabled,
+    )
 
     benchmark_workloads = (
         selected_workloads(workload_name)
@@ -238,7 +247,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
             ),
         )
     else:
-        from ..maze import MazeError
+        from ..game.maze import MazeError
         try:
             state = build_state(
                 level, character, keys=keys, potions=potions, powers=powers,
@@ -252,7 +261,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                 "dump (file list in python-gex/README.md)."
             ) from exc
 
-    if benchmark_frames is not None or stress_seconds is not None:
+    if policy.performance_mode:
         state.eeprom_persistence_enabled = False
         if load_state_path is None:
             bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
@@ -264,7 +273,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
 
     session = HostSession(
         state, resumed=load_state_path is not None,
-        restart_enabled=benchmark_frames is None and stress_seconds is None,
+        restart_enabled=not policy.performance_mode,
     )
 
     try:
@@ -277,13 +286,8 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
             scale=scale,
             title="gauntpy",
             full_playfield=full_playfield,
-            sound_dir=_enabled_sound_dir(
-                sound_enabled
-                and not uncapped
-                and benchmark_frames is None
-                and stress_seconds is None
-            ),
-            uncapped=uncapped or benchmark_frames is not None or stress_seconds is not None,
+            sound_dir=_enabled_sound_dir(policy.playback_enabled),
+            uncapped=policy.accelerated,
         )
     except PygameUnavailable as exc:
         raise SystemExit(
@@ -296,46 +300,63 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     _apply_operator_overrides(state, reduce_text=reduce_text)
     session.capture_level_start()
 
-    # mainloop.g2mainloop's body: pump input, run a frame, present. The camera
-    # (main_scroll_playfield) runs inside tick() and the compositor converts its
-    # scroll to the viewport (I-23), so no runner-side camera fix-up is needed.
-    benchmark = None
-    warmup_remaining = 0
-    benchmark_workload_index = 0
-    benchmark_label = (
-        benchmark_workloads[0].name if benchmark_workloads else "selected-state"
+    benchmark = (
+        BenchmarkRun(benchmark_frames, benchmark_workloads)
+        if benchmark_frames is not None else None
     )
-    if benchmark_frames is not None:
-        from ..performance import BenchmarkRecorder
-
-        benchmark = BenchmarkRecorder()
-        warmup_remaining = min(30, benchmark_frames)
-
-    stress_started = perf_counter() if stress_seconds is not None else None
-    stress_phase = 0
-    stress_phase_seconds = (
-        min(2.0, stress_seconds / len(stress_workloads))
+    stress = (
+        StressRun(
+            stress_seconds, stress_workloads, stress_phase_indices,
+            started=perf_counter(),
+        )
         if stress_seconds is not None else None
     )
-    next_stress_phase_at = stress_phase_seconds
-    stress_frames = 0
+    _run_loop(
+        host, session, benchmark=benchmark, stress=stress,
+        rng_seed=rng_seed, reduce_text=reduce_text, scale=scale,
+    )
+
+
+def _restore_requested_level(host: HostShell, session: HostSession) -> bool:
+    """Consume F11 before a tick; presentation remains the loop's responsibility."""
+    if not getattr(host, "restart_level_requested", False):
+        return False
+    host.restart_level_requested = False
+    if not session.restart_level():
+        print("gauntpy level restart unavailable until a new playable level starts")
+        return False
+    state = session.state
+    host.state_restored(state)
+    print(
+        "gauntpy restored level start: "
+        f"level {state.levelnum_current} / maze {state.mazenum_current}; "
+        "external EEPROM writes disabled"
+    )
+    return True
+
+
+def _run_loop(
+    host: HostShell,
+    session: HostSession,
+    *,
+    benchmark: BenchmarkRun | None,
+    stress: StressRun | None,
+    rng_seed: int,
+    reduce_text: bool,
+    scale: int,
+) -> None:
+    """Pump input, update once, and present; all clocks remain host observations."""
+    state = session.state
     try:
         while True:
             loop_started = perf_counter()
-            if stress_started is not None:
-                elapsed = loop_started - stress_started
-                if elapsed >= stress_seconds:
-                    print(
-                        f"gauntpy stress test complete: {stress_frames} frames "
-                        f"in {elapsed:.3f} seconds"
-                    )
+            if stress is not None:
+                elapsed = loop_started - stress.started
+                if elapsed >= stress.seconds:
+                    print(stress.completion_report(elapsed))
                     break
-                if elapsed >= next_stress_phase_at:
-                    stress_phase = (stress_phase + 1) % len(stress_workloads)
-                    next_stress_phase_at += stress_phase_seconds
-                    state = _build_stress_state(
-                        stress_phase_indices[stress_phase], rng_seed,
-                    )
+                if stress.advance_if_due(elapsed):
+                    state = _build_stress_state(stress.phase_index, rng_seed)
                     bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
                     session = HostSession(state, restart_enabled=False)
                     _apply_operator_overrides(state, reduce_text=reduce_text)
@@ -343,19 +364,10 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
             input_started = perf_counter()
             host.wait_for_vblank(state)     # pump events + sample keyboard + coins
             input_finished = perf_counter()
-            if getattr(host, "restart_level_requested", False):
-                host.restart_level_requested = False
-                if session.restart_level():
-                    state = session.state
-                    host.state_restored(state)
-                    print(
-                        "gauntpy restored level start: "
-                        f"level {state.levelnum_current} / maze {state.mazenum_current}; "
-                        "external EEPROM writes disabled"
-                    )
-                    host.present(state)
-                    continue
-                print("gauntpy level restart unavailable until a new playable level starts")
+            if _restore_requested_level(host, session):
+                state = session.state
+                host.present(state)
+                continue
             frame_updated = not host.paused
             invariant_seconds = 0.0
             if not host.paused:
@@ -367,11 +379,9 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                 )                           # one full 60 Hz game frame
                 update_finished = perf_counter()
                 session.capture_level_start()
-                if benchmark is not None or stress_started is not None:
+                if benchmark is not None or stress is not None:
                     invariant_workload = (
-                        stress_workloads[stress_phase].name
-                        if stress_started is not None
-                        else benchmark_label
+                        stress.label if stress is not None else benchmark.label
                     )
                     invariant_started = perf_counter()
                     validate_runtime_invariants(
@@ -384,15 +394,13 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                 update_started = update_finished = perf_counter()
             host.present(state)             # composite + flip
             loop_finished = perf_counter()
-            stress_frames += stress_started is not None
+            if stress is not None:
+                stress.frames += 1
 
-            if benchmark is not None:
-                if not frame_updated:
-                    continue
-                if warmup_remaining:
-                    warmup_remaining -= 1
-                    continue
-                benchmark.add(
+            if benchmark is not None and benchmark.should_record(
+                frame_updated=frame_updated,
+            ):
+                benchmark.recorder.add(
                     host_input_ms=(input_finished - input_started) * 1000.0,
                     game_update_ms=(update_finished - update_started) * 1000.0,
                     game_raster_ms=host.last_render_time_ms,
@@ -401,26 +409,17 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
                         loop_finished - loop_started - invariant_seconds
                     ) * 1000.0,
                 )
-                if benchmark.frames >= benchmark_frames:
-                    from ..performance import format_benchmark_report
-
-                    print(format_benchmark_report(
-                        benchmark,
-                        scale=scale,
-                        workload=benchmark_label if benchmark_workloads else None,
-                    ))
-                    if benchmark_workload_index + 1 >= len(benchmark_workloads):
+                if benchmark.complete:
+                    print(benchmark.report(scale=scale))
+                    workload = benchmark.advance_workload()
+                    if workload is None:
                         break
-                    benchmark_workload_index += 1
-                    workload = benchmark_workloads[benchmark_workload_index]
-                    benchmark_label = workload.name
                     state = _build_workload_state(workload, rng_seed)
                     session = HostSession(state, restart_enabled=False)
                     state.eeprom_persistence_enabled = False
                     bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
                     _apply_operator_overrides(state, reduce_text=reduce_text)
-                    benchmark = BenchmarkRecorder()
-                    warmup_remaining = min(30, benchmark_frames)
+                    benchmark.reset_recording()
     except SystemExit:
         pass
     finally:

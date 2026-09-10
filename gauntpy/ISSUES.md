@@ -7,9 +7,10 @@ it.
 Status legend: **open** = needs action; **resolved** = fixed (kept for the
 record).
 
-All 28 main-loop calls and `one_time_init` are implemented. With the ROMs
-present the suites are clean: **2871 passed, 1 skipped** (gauntpy); the ROM-free
-gauntpy suite has **2590 passed, 282 skipped**. The last recorded sibling gex
+All 28 main-loop calls and `one_time_init` are implemented. Graphics-ROM cases
+require `GEX_ROM_DIR`; optional direct-execution checks additionally use the
+owner's local `row76.bin` and Unicorn. Missing assets skip those cases rather
+than weakening the ROM-free regressions. The last recorded sibling gex
 result is **700 passed**. The six original blocked ROM tables have been transcribed
 from `row76.bin`, the
 disassembly-verifiable constants (player speed, exit timer, monster-speed
@@ -63,6 +64,34 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-185 · divergent implementations of shared ROM leaves
+
+`player_add_score_with_mult` (0x5214C) had separate player and projectile
+bodies, plus an inline thief bounty. The player version lacked 32-bit wrap;
+both ignored the callee's unsigned word-sized operands, and the projectile
+version combined caller and callee multiplications. The shared owner is now
+`game/subsystems/score.py`. Shots prepare damage times target factor before
+the call; thief removal retains its bounty sentinel and uses the same owner.
+Direct ROM instructions 0x52154-0x52182 and M68000 execution establish operand
+widths, wrapping addition, zero-award redraw, and preservation of other redraw
+bits (the port models health and score as separate latches).
+
+`tport_find_id` (0x4E7C0) also differed between maze objects and thief routing:
+the ROM returns `level_tport_count + 1`, not zero, on a miss. Both now use
+`game/subsystems/player_transport.py`; successful IDs and caller-specific
+route/progress guards remain intact. Player pad visits use the same helper,
+matching the shared calls at 0x50278 and 0x509FE. This does not change the port's existing
+live-MOB-derived position-table representation or establish its lifecycle
+equivalence with the ROM's stored table.
+
+These are explicit ROM-backed corrections, separate from the mechanical move
+of game modules into `gauntpy.game` and their routine-family extraction.
+The 28-call sequence and unrelated routine bodies remain unchanged. Host
+benchmark/stress accounting moved to `host/run_policy.py` without changing
+input/update/presentation order, ROM acquisition, startup/resume, or EEPROM
+policies. See `test_shared_rom_routines.py` for numerical and side-effect
+regressions, including optional execution of the owner's local ROM image.
 
 ### S-184 · no repeatable host level restart
 

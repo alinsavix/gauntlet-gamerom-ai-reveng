@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ..constants import GameMode, MazeObjIds, PlayerStatus
-from ..state import GameState
+from ..game.constants import GameMode, MazeObjIds, PlayerStatus
+from ..game.state import GameState
 
 
 def debug_add_key(state: GameState, player_index: int) -> bool:
@@ -14,7 +14,7 @@ def debug_add_key(state: GameState, player_index: int) -> bool:
     if not player.active:
         return False
     player.keysnum = (player.keysnum + 1) & 0xFF
-    from ..subsystems.players import player_inv_update
+    from ..game.subsystems.players import player_inv_update
 
     player_inv_update(state, player_index)
     return True
@@ -28,7 +28,7 @@ def debug_add_potion(state: GameState, player_index: int) -> bool:
     if not player.active:
         return False
     player.potionsnum = (player.potionsnum + 1) & 0xFF
-    from ..subsystems.players import player_inv_update
+    from ..game.subsystems.players import player_inv_update
 
     player_inv_update(state, player_index)
     return True
@@ -39,7 +39,7 @@ def debug_enable_secret_room(state: GameState) -> bool:
     if state.game_mode != int(GameMode.NORMAL):
         return False
 
-    from ..subsystems import exits
+    from ..game.subsystems import exits
 
     if exits.in_bonus_room(state):
         return False
@@ -54,7 +54,7 @@ def debug_enable_secret_room(state: GameState) -> bool:
     previous_counter = state.secret_possible_counter
     state.secret_possible_counter = 0
     exits.secret_new_level_setup(state)
-    from ..subsystems.session import _cancel_solo_only_trick
+    from ..game.subsystems.session import _cancel_solo_only_trick
 
     _cancel_solo_only_trick(state)
     if state.secret_trick_id == exits.TRICK_NONE:
@@ -70,7 +70,7 @@ def debug_force_secret_room(state: GameState, player_index: int) -> bool:
     if not 0 <= player_index < len(state.players):
         return False
 
-    from ..subsystems import exits
+    from ..game.subsystems import exits
 
     if exits.in_bonus_room(state):
         return False
@@ -107,7 +107,7 @@ def debug_skip_level(state: GameState) -> bool:
     if not survivors:
         return False
 
-    from ..subsystems import exits
+    from ..game.subsystems import exits
 
     old_level = state.levelnum_current
     was_bonus_room = exits.in_bonus_room(state)
