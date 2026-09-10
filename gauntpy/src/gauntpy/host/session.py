@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from ..state import GameState
+from ..game.state import GameState
 from .level_restart import LevelRestart
 
 if TYPE_CHECKING:

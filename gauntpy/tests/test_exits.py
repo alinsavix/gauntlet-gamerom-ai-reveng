@@ -1115,7 +1115,7 @@ class TestLevelEndHold:
         assert state.rng.bounds == [4, 9]
 
     def test_secret_hint_uses_the_armed_next_maze_objective(self, monkeypatch):
-        from gauntpy.subsystems import exits as exits_module
+        from gauntpy.game.subsystems import secret_rooms
 
         state = GameState()
         state.levelnum_current = 12
@@ -1124,7 +1124,7 @@ class TestLevelEndHold:
         state.secret_need_hint = 1
         state.secret_possible_counter = 0
         monkeypatch.setattr(
-            exits_module, "_maze_secret_for_hint", lambda _state: TRICK_NOGETHIT,
+            secret_rooms, "_maze_secret_for_hint", lambda _state: TRICK_NOGETHIT,
         )
 
         show_level_start_screen(state)

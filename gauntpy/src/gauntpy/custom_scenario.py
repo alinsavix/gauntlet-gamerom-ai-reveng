@@ -12,10 +12,10 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .constants import Character, GameMode, MazeObjIds
-from .rng import GameRandom
-from .state import GameState
-from .subsystems.input import (
+from .game.constants import Character, GameMode, MazeObjIds
+from .game.rng import GameRandom
+from .game.state import GameState
+from .game.subsystems.input import (
     JOY_DOWN,
     JOY_FIRE_BIT,
     JOY_IDLE,
@@ -357,18 +357,18 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
     """Build a playable state through the ordinary game-side memory writers."""
     from gex.mazedecode import Maze
 
-    from . import maze as maze_module
+    from .game import maze as maze_module
     from .host.startup import spawn_player
-    from .subsystems.display import init_alpha_color_ram
-    from .subsystems.exits import exit_scan_level
-    from .subsystems.maze_objects import (
+    from .game.subsystems.display import init_alpha_color_ram
+    from .game.subsystems.exits import exit_scan_level
+    from .game.subsystems.maze_objects import (
         forcefield_segments_setup,
         maze_forcefield_setup,
         select_forcefield_delay_profile,
         maze_doors_setup,
     )
-    from .subsystems.players import setup_infopanel
-    from .subsystems.eeprom import GAME_DEFAULT_SETTINGS
+    from .game.subsystems.players import setup_infopanel
+    from .game.subsystems.eeprom import GAME_DEFAULT_SETTINGS
 
     state = GameState(
         game_mode=GameMode.NORMAL,
@@ -434,8 +434,8 @@ def _prepare_thief(
     state: GameState, target_frame: int, row_text: str, column_text: str,
     variant: str = "thief",
 ) -> None:
-    from .coords import pack_slot
-    from .subsystems import thief
+    from .game.coords import pack_slot
+    from .game.subsystems import thief
 
     row = _integer(row_text, "thief row", 1, 31)
     column = _integer(column_text, "thief column", 0, 31)
@@ -466,7 +466,7 @@ def _seed_synthetic_thief_route(
     state: GameState, start: int, target: int,
 ) -> None:
     """Create the victim breadcrumbs a delayed normal deployment would inherit."""
-    from .subsystems import thief
+    from .game.subsystems import thief
 
     directions = ((0, -1, 0), (2, 0, 1), (4, 1, 0), (6, 0, -1))
     queue = deque([start])

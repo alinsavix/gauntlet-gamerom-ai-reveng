@@ -34,6 +34,20 @@ while `demo_message_show` (0x4C9A2) writes and times a dialog without making a
 sound or speech call. The exhaustive CSV and generated contracts use those
 caller-visible names.
 
+Canonical source paths now live under `gauntpy.game`; the CSV identifies the
+defining routine-family module rather than a compatibility reexport. This
+reorganization does not change classifications, ROM names, frame order, or
+individual algorithms. Old root modules remain identity aliases.
+
+Two duplicated ROM entries were consolidated against direct disassembly and
+M68000 execution: `score.player_add_score_with_mult` (0x5214C) consumes a
+16-bit base and bonus, wraps the score addition to 32 bits, and marks only score
+redraw; `player_transport.tport_find_id` (0x4E7C0) returns a one-based match or
+`count + 1` on exhaustion. Shot callers prepare damage times target factor
+before the shared score routine narrows its argument, and thief bounties use the
+same owner. The ROM-free vectors and optional local-ROM execution checks are
+in `tests/test_shared_rom_routines.py`.
+
 ## Missing game behavior
 
 **None.** `player_hurt_speech_timer` (`0x49A98`) now owns the exact
@@ -88,12 +102,12 @@ The largest merged families are:
 - The eight player hurt/power palette leaves (`0x404A0`–`0x4051A`) are literal
   tables plus `display.player_palette_vblank`.
 - Player probe leaves (`0x425D0`–`0x4270C`) are represented by
-  `players.mob_probe_*`, `_probe_candidate_blocks`, and the top-boundary gate in
-  `player_try_move`.
+  `player_movement._player_probe_*` and the private mover's boundary gates.
+  The public `mob_probes.mob_probe_*` leaves (`0x406B6`–`0x408A0`) are distinct.
 - Monster shared/interior entries (`0x40FAE`, `0x4119A`, `0x414A4`) are folded
   into the monster walk and dispatch helpers.
 - The four `ray_march_*` entries (`0x5E10C`–`0x5E35E`) share
-  `monsters._ray_march`.
+  `monster_movement._ray_march`.
 - Playfield register/stack variants and initialization passes are folded into
   `maze`, `playfield_vram`, and `maze_objects`.
 - MOB insertion/removal/depth wrapper families (`0x5DC58`–`0x5E064`) are
@@ -111,9 +125,9 @@ upstream behavior.
 
 | Python location | Correction |
 |---|---|
-| `players._probe_candidate_blocks` | In DEMO, every random-wall candidate is treated as nonblocking so host timing cannot derail the recorded route. |
-| `players._player_fight_collision` | On the final active demo record, colliding Grunt/Aux-Grunt records are deleted because Python's earlier monster evolution put them across the route. |
-| `players.mob_probe_left/right` | DEMO retains an upper flank from maze row one where the normal ROM threshold suppresses it. |
+| `mob_probes._probe_candidate_blocks` | In DEMO, every random-wall candidate is treated as nonblocking so host timing cannot derail the recorded route. |
+| `player_movement._player_fight_collision` | On the final active demo record, colliding Grunt/Aux-Grunt records are deleted because Python's earlier monster evolution put them across the route. |
+| `mob_probes.mob_probe_left/right` | DEMO retains an upper flank from maze row one where the normal ROM threshold suppresses it. |
 | `score.main_score_display` | Live score/health values are compared with host latches to force redraws because some Python producers do not set the ROM dirty bits. |
 
 Host-only controls, diagnostics, ROM-free glyph fallbacks, and the

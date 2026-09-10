@@ -332,7 +332,7 @@ the length of one hero's life.
   `0x4ABD2-0x4ABF2`, and the threshold table at `0x58090`.
   It assumes a stationary eligible hero, uninterrupted gameplay, and
   no pre-existing shot; it is not a captured input-latency measurement.
-- [Python main loop](../gauntpy/src/gauntpy/mainloop.py) presents the
+- [Python main loop](../gauntpy/src/gauntpy/game/mainloop.py) presents the
   reconstructed order as readable calls. Its host timing is not evidence
   for the original processor's instruction budget.
 

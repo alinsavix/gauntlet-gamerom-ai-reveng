@@ -48,9 +48,17 @@ from __future__ import annotations
 from collections import deque
 from time import perf_counter
 
-from ..constants import FRAMES_PER_SECOND, GameMode
-from ..state import GameState
-from ..subsystems.input import JOY_DOWN, JOY_FIRE_BIT, JOY_IDLE, JOY_LEFT, JOY_MAGIC_BIT, JOY_RIGHT, JOY_UP
+from ..game.constants import FRAMES_PER_SECOND, GameMode
+from ..game.state import GameState
+from ..game.subsystems.input import (
+    JOY_DOWN,
+    JOY_FIRE_BIT,
+    JOY_IDLE,
+    JOY_LEFT,
+    JOY_MAGIC_BIT,
+    JOY_RIGHT,
+    JOY_UP,
+)
 from ..render.compositor import (
     LOGICAL_HEIGHT,
     LOGICAL_WIDTH,

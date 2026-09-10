@@ -900,6 +900,14 @@ adds `base_score × ram.player_bonusmult[player]` to the player's 32-bit score
 accumulator at `0x904990` and sets score-redraw bit 0. It does **not** call
 `highscore_check`; the former claim was contradicted by its complete body.
 
+At 0x52158 the callee loads only the base argument's low word; 0x52172-0x52178
+loads the bonus word, performs unsigned `mulu.w`, and adds with 32-bit wrap.
+The `ori.b #1` at 0x52182 preserves other redraw bits and executes even for a
+zero award. The shot tail prepares a signed-word damage-times-target-factor
+product at 0x4BD7A-0x4BD80 before calling this routine at 0x4BD88; only that
+product's low word reaches the unsigned bonus multiplication. The thief bounty
+at 0x4F5F4 passes 500 to the same routine.
+
 **Thief wealth calculation** (for thief targeting, `thief_target_calc`, 0x4DFF6):
 - Shot power: +0x3E8
 - Extra speed: +0x2BC

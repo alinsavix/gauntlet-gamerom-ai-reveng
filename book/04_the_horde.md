@@ -448,9 +448,14 @@ the players are trying to win.
   are separate paths at `0x415AC` and `0x4112C`.
 - The [tier illustration](img/ch11_tier_palettes.png) is rendered from
   graphics-ROM data. All worked scenarios are illustrative.
-  [The monster reconstruction](../gauntpy/src/gauntpy/subsystems/monsters.py)
-  can help readers follow the code, but agreement with it is not
-  independent original-ROM evidence.
+  The reconstructed
+  [monster traversal](../gauntpy/src/gauntpy/game/subsystems/monsters.py)
+  and its
+  [movement](../gauntpy/src/gauntpy/game/subsystems/monster_movement.py),
+  [shooting](../gauntpy/src/gauntpy/game/subsystems/monster_shooting.py), and
+  [spawning](../gauntpy/src/gauntpy/game/subsystems/monster_spawning.py)
+  families can help readers follow the code, but agreement with them is
+  not independent original-ROM evidence.
 
 [Previous: Three friends, one screen](03_four_players.md) |
 [Contents](README.md) |

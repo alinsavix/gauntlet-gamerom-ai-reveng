@@ -371,7 +371,7 @@ take, and where you might intercept its return.
   the speed at `0x4EA36` and clamps centering steps at `0x4EB28–0x4EB68`.
   Escaped-loot
   placement is at `0x44166–0x441A6`.
-- [`thief.py`](../gauntpy/src/gauntpy/subsystems/thief.py) provides a
+- [`thief.py`](../gauntpy/src/gauntpy/game/subsystems/thief.py) provides a
   readable reconstruction of these mechanisms, not independent
   confirmation of them. Diagrams and numerical situations above are
   illustrative; no new execution capture is implied.

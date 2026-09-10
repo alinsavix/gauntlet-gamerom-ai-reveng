@@ -7,14 +7,14 @@ initializer here.
 
 from __future__ import annotations
 
-from ..constants import GameMode, MazeObjIds, PlayerStatus
-from ..coords import encode_hpos, encode_vpos_at_y, pack_slot, slot_to_pixels
-from ..rng import GameRandom
-from ..state import GameState
-from ..subsystems.camera import snap_camera
-from ..subsystems.player_animation import update_player_sprite
-from ..subsystems.players import player_join
-from ..subsystems.session import configured_start_health
+from ..game.constants import GameMode, MazeObjIds, PlayerStatus
+from ..game.coords import encode_hpos, encode_vpos_at_y, pack_slot, slot_to_pixels
+from ..game.rng import GameRandom
+from ..game.state import GameState
+from ..game.subsystems.camera import snap_camera
+from ..game.subsystems.player_animation import update_player_sprite
+from ..game.subsystems.players import player_join
+from ..game.subsystems.session import configured_start_health
 from .eeprom import PersistencePolicy, bind_eeprom_storage
 
 
@@ -23,7 +23,7 @@ def build_cold_boot_state(
     persistence_policy: PersistencePolicy = PersistencePolicy.READ_WRITE,
 ) -> GameState:
     """Seed one power-on and let the cabinet boot routine enter TITLE attract."""
-    from ..subsystems.boot import one_time_init
+    from ..game.subsystems.boot import one_time_init
 
     state = GameState(rng=GameRandom(rng_seed))
     if persistence_policy is not PersistencePolicy.ISOLATED:
@@ -48,7 +48,7 @@ def spawn_player(state: GameState, character: int) -> int:
     player_join(state, 0)                   # positioned spawn + finalize
 
     if not p.active:                        # no PLAYERSTART: centre fallback
-        from ..subsystems.display import init_player_mob_palette
+        from ..game.subsystems.display import init_player_mob_palette
 
         start = pack_slot(16, 16)
         px, py = slot_to_pixels(start)
@@ -87,10 +87,10 @@ def build_state(
     stored maze record; without it, levels 1-5 use mazes 0-4 and level 6+
     advances the cabinet rotation from its current resume position.
     """
-    from .. import maze
+    from ..game import maze
 
-    from ..subsystems.eeprom import GAME_DEFAULT_SETTINGS
-    from ..subsystems.display import init_alpha_color_ram
+    from ..game.subsystems.eeprom import GAME_DEFAULT_SETTINGS
+    from ..game.subsystems.display import init_alpha_color_ram
 
     state = GameState(
         game_mode=GameMode.NORMAL,
@@ -99,7 +99,7 @@ def build_state(
     )
     init_alpha_color_ram(state)
     if maze_number is None and level > 5:
-        from ..subsystems.exits import compute_next_level
+        from ..game.subsystems.exits import compute_next_level
 
         state.levelnum_current = 5
         state.mazenum_current = 4
@@ -112,21 +112,18 @@ def build_state(
         state, level, maze_number=maze_number,
     )                                       # places objects with their pictures
     spawn_player(state, character)
-    from ..subsystems.exits import update_monster_spawn_bonus_from_score_per_coin
+    from ..game.subsystems.exits import update_monster_spawn_bonus_from_score_per_coin
 
     update_monster_spawn_bonus_from_score_per_coin(state)
     maze.maze_addrandompickups(state, True)
-    from ..subsystems.players import (
-        initialize_player_temporary_power,
-        setup_infopanel,
-    )
+    from ..game.subsystems.players import initialize_player_temporary_power, setup_infopanel
     player = state.players[0]
     player.keysnum = keys
     player.potionsnum = potions
     for power in powers:
         initialize_player_temporary_power(state, 0, power)
     setup_infopanel(state, -1)
-    from ..subsystems.thief import thief_setup
+    from ..game.subsystems.thief import thief_setup
 
     thief_setup(state)
     state.idle_timer = 0

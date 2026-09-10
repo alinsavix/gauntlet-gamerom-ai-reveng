@@ -21,6 +21,13 @@ changing simulation state or coordinate arithmetic.
 
 ## Code boundaries
 
+`gauntpy.game` owns ROM/game logic, modeled RAM, literal tables, and video-memory
+writers. Its `subsystems` directory groups routines by ROM family, not by a new
+entity/component model. Individual routines retain their ROM-shaped bodies and
+the explicit frame sequence. The older `gauntpy.state`, `gauntpy.mainloop`, and
+`gauntpy.subsystems.*` paths alias the canonical modules, preserving object
+identity and legacy monkeypatches; new code should use `gauntpy.game.*`.
+
 `gauntpy.host` owns application startup, window/input pacing, audio playback,
 diagnostics, troubleshooting controls, and state snapshots. `render` composes
 game-owned video memory into pixels; its old host imports remain compatibility
@@ -32,6 +39,9 @@ Existing synthetic-state APIs retain their runtime attachment and serialize
 its provenance in the separate synthetic-scenario envelope.
 Synthetic fixtures and performance workloads stay host-side test inputs, not
 evidence of original arcade behavior.
+`host.application` keeps the input/update/presentation order explicit;
+`host.run_policy` accounts for benchmark warm-up and stress phases without
+sampling clocks, constructing states, or stepping the game itself.
 
 The EEPROM subsystem talks to a typed device, not to JSON or filesystem APIs.
 Bare/headless states use an isolated memory device. Interactive startup binds
@@ -372,17 +382,33 @@ cd gauntpy && GEX_ROM_DIR=../ROMs PYTHONPATH=src python -m gauntpy.play
 
 | Module | What it is |
 |--------|-----------|
-| [`coords.py`](src/gauntpy/coords.py) | The three coordinate systems: maze cells, packed slots, world pixels, and the playfield tile grid — plus the native MOB H/V word encoding (position in bits 15-7, vertical measured up from the playfield floor) |
-| [`mob.py`](src/gauntpy/mob.py) | The MOB slot table — five parallel arrays, the doubly linked depth chain, and the 64 SLIP band heads |
-| [`rng.py`](src/gauntpy/rng.py) | The game's LCG, ported from `random_core` (0x5FC2C) |
-| [`state.py`](src/gauntpy/state.py) | `GameState` — the stand-in for working RAM, with the original's variable names |
-| [`mainloop.py`](src/gauntpy/mainloop.py) | `game_frame` — the 28-call frame sequence as straight-line code |
-| [`subsystems/`](src/gauntpy/subsystems/) | The 28 main-loop calls and supporting systems, each tied to its ROM address and references |
-| [`subsystems/input.py`](src/gauntpy/subsystems/input.py) | `input_debounce` — the worked example of a completed work package |
+| [`game/coords.py`](src/gauntpy/game/coords.py) | Maze cells, packed slots, world pixels, playfield tiles, and native MOB H/V encoding |
+| [`game/mob.py`](src/gauntpy/game/mob.py) | Five parallel word arrays, the doubly linked depth chain, and 64 SLIP band heads |
+| [`game/rng.py`](src/gauntpy/game/rng.py) | The game's LCG, ported from `random_core` (0x5FC2C) |
+| [`game/state.py`](src/gauntpy/game/state.py) | Modeled working RAM, preserving the original's variable names |
+| [`game/mainloop.py`](src/gauntpy/game/mainloop.py) | The 28-call frame sequence as straight-line code |
+| [`game/subsystems/`](src/gauntpy/game/subsystems/) | Main-loop entries and supporting ROM routine families |
+| [`input.py`](src/gauntpy/game/subsystems/input.py) | `input_debounce`, a completed work-package example |
 | [`host/`](src/gauntpy/host/) | Startup, CLI, window, diagnostics, snapshots, and external persistence policy |
-| [`maze_rom.py`](src/gauntpy/maze_rom.py) / [`maze.py`](src/gauntpy/maze.py) | ROM acquisition adapters / game-owned level setup and descriptor decisions |
-| [`playfield.py`](src/gauntpy/playfield.py) / [`alpha_memory.py`](src/gauntpy/alpha_memory.py) | Shared game-side cell replacement / hidden alpha-word and route-byte writes |
-| [`player_animation.py`](src/gauntpy/subsystems/player_animation.py) / [`player_names.py`](src/gauntpy/subsystems/player_names.py) | ROM picture banks and writers / initials and secret-code routine families |
+| [`maze_rom.py`](src/gauntpy/maze_rom.py) / [`game/maze.py`](src/gauntpy/game/maze.py) | ROM acquisition adapters / game-owned level setup and descriptor decisions |
+| [`game/playfield.py`](src/gauntpy/game/playfield.py) / [`game/alpha_memory.py`](src/gauntpy/game/alpha_memory.py) | Shared cell replacement / coupled hidden-alpha and route-byte writes |
+
+Within `game/subsystems`, `players`, `monsters`, `shots`, and `exits` retain
+their main orchestration and compatibility exports. Their supporting families
+have explicit owners:
+
+| Family | Modules |
+|---|---|
+| Players | `player_lifecycle`, `player_items`, `player_transport`, `player_movement`, `player_animation`, `player_names` |
+| Generic MOB probes | `mob_probes` (not the private player probes or monster ray marches) |
+| Monsters | `monster_movement`, `monster_shooting`, `monster_spawning` |
+| Projectiles | `shot_collision`, `shot_damage` |
+| Level progression | `level_transitions`, `treasure_rooms`, `secret_rooms` |
+
+Cross-family literal tables live in the corresponding `*_data` modules.
+The shared `player_add_score_with_mult` belongs to `score`; `tport_find_id`
+belongs to `player_transport`. Their callers retain ROM-specific argument
+preparation rather than embedding duplicate implementations.
 
 `game_frame` calls its subsystems by name, directly — the loop is a function,
 not a table something interprets. [test_mainloop.py](tests/test_mainloop.py)

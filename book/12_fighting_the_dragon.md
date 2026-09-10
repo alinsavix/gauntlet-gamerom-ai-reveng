@@ -396,7 +396,7 @@ decide what happens during it.
 - Potion transitions and shot-before-hit proximity ordering:
   [Game subsystems](../doc/04_game_subsystems.md), §4.6.1;
   potion branch `0x470D2–0x47128`, proximity routine `0x549EA`.
-  [`dragon.py`](../gauntpy/src/gauntpy/subsystems/dragon.py) is a readable
+  [`dragon.py`](../gauntpy/src/gauntpy/game/subsystems/dragon.py) is a readable
   reconstruction, not independent evidence. The examples above are
   conditional calculations and diagrams, not new original-ROM captures.
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ..state import GameState
-from ..subsystems import score
+from ..game.state import GameState
+from ..game.subsystems import score
 from .alpha import draw_alpha_layer
 from .text import GLYPH_W
 

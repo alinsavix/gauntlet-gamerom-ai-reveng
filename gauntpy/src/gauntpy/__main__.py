@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import inspect
 
-from .constants import GameMode
-from .mainloop import check_frame_overflow, game_frame, tick
-from .state import GameState
+from .game.constants import GameMode
+from .game.mainloop import check_frame_overflow, game_frame, tick
+from .game.state import GameState
 
 
 def _loop_calls() -> list[str]:
