@@ -12,12 +12,12 @@ import json
 
 import pytest
 
-from gauntpy.constants import GameMode
+from gauntpy.game.constants import GameMode
 from gauntpy.host.eeprom import bind_eeprom_storage
-from gauntpy.mainloop import tick
-from gauntpy.state import GameState
-from gauntpy.subsystems import eeprom as ee
-from gauntpy.subsystems.score import high_scores, write_high_score_entry
+from gauntpy.game.mainloop import tick
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems import eeprom as ee
+from gauntpy.game.subsystems.score import high_scores, write_high_score_entry
 
 
 def _persisted_state(**kwargs) -> GameState:
@@ -349,7 +349,7 @@ class TestInitialsCodec:
         assert len(seen) == limit
 
     def test_every_factory_name_round_trips(self):
-        from gauntpy.subsystems.score import FACTORY_HIGHSCORE_RECORDS
+        from gauntpy.game.subsystems.score import FACTORY_HIGHSCORE_RECORDS
 
         for ladder in FACTORY_HIGHSCORE_RECORDS:
             for _score, initials in ladder:
@@ -378,7 +378,7 @@ class TestHighScorePersistence:
         """``highscore_table_init`` (0x49BD0) only fills *empty* banks, which
         is what lets an EEPROM load run before it. If the load left the bank
         empty the restored names would be silently replaced by the ROM's."""
-        from gauntpy.subsystems.score import FACTORY_HIGHSCORE_RECORDS
+        from gauntpy.game.subsystems.score import FACTORY_HIGHSCORE_RECORDS
 
         writer = self._played_state(tmp_path)
         write_high_score_entry(writer, 0, 0, 999999, "NEW")
@@ -521,8 +521,8 @@ class TestHighScoreChangeDetection:
 def test_the_boot_handshake_restores_scores_before_anything_reads_them(tmp_path):
     """``one_time_init`` loads the EEPROM at §5 step 6, and the first
     ``high_scores()`` call seeds only the banks it did not supply."""
-    from gauntpy.subsystems.boot import one_time_init
-    from gauntpy.subsystems.score import FACTORY_HIGHSCORE_RECORDS
+    from gauntpy.game.subsystems.boot import one_time_init
+    from gauntpy.game.subsystems.score import FACTORY_HIGHSCORE_RECORDS
 
     save_path = tmp_path / "eeprom.json"
     writer = _persisted_state(game_settings=0xE090, eeprom_save_path=str(save_path))
@@ -741,7 +741,7 @@ class TestRotationChangeDetection:
         """``maze_checknum`` sets ``eeprom_write_timer = 1`` when the rotation
         wraps past 101 (exits.py, ROM 0x52E4C) -- a line that only became
         meaningful once these fields were in the saved image."""
-        from gauntpy.subsystems.exits import maze_checknum
+        from gauntpy.game.subsystems.level_transitions import maze_checknum
 
         save_path = tmp_path / "eeprom.json"
         state = _persisted_state(eeprom_save_path=str(save_path))
@@ -761,7 +761,7 @@ class TestRotationChangeDetection:
 
 
 def test_the_boot_handshake_restores_the_rotation_too(tmp_path):
-    from gauntpy.subsystems.boot import one_time_init
+    from gauntpy.game.subsystems.boot import one_time_init
 
     save_path = tmp_path / "eeprom.json"
     writer = _persisted_state(eeprom_save_path=str(save_path))

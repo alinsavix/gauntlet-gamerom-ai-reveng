@@ -1,9 +1,10 @@
-"""Player frame orchestration, demo input, and projectile creation -- WP-5/6.
+"""Player frame orchestration, projectile creation, and compatibility entry points.
 
 Movement/collision, lifecycle/health, pickups, and transport live in the
 corresponding ``player_*`` families. Public generic probes belong to
-``mob_probes``; picture selection and names retain their separate owners.
-Explicit imports preserve established entry points without forwarding wrappers.
+``mob_probes``; recorded input, picture selection, and names have separate owners.
+Public reexports preserve function identity. The legacy exit adapter additionally
+retains optional arguments; game callers use the actual transition routine.
 
 Reference: ``doc/04_game_subsystems.md`` §4 (all), §7.2, §10.5, §10.6, §13,
 §14.1, §21; ``doc/generated/player_collision_contracts.csv``,
@@ -17,160 +18,49 @@ ROM wins and the disagreement is written down at the point of use.
 
 from __future__ import annotations
 
-from .. import romtext
 from ..constants import (
     FIRST_PLAYABLE_SLOT,
-    GENERATOR_TYPES,
-    HEALTH_DRAIN_MASK,
-    MONSTER_TYPES,
-    POWERUP_BIT_MASKS,
-    POWERUP_ITEM_ID,
     SLOT_PLAYER_SHOTS,
-    SLOT_TPORT_ANIMS,
-    Character,
     GameMode,
     MazeObjIds,
     PlayerPower,
     PlayerStatus,
 )
-from ..coords import (
-    POS_SHIFT,
-    encode_hpos,
-    encode_vpos,
-    encode_vpos_at_y,
-    hpos_x,
-    mob_cell_of,
-    native_v,
-    position_field,
-    replace_position,
-    screen_y,
-    vpos_v,
-    vpos_y,
-)
+from ..coords import POS_SHIFT, position_field
 from ..state import NUM_PLAYERS, GameState
-from .input import direction_bits, fire_held
+from .input import fire_held
 from .score import player_add_score_with_mult as player_add_score_with_mult
 # Explicit compatibility imports; implementations live with their ROM families.
 from .player_animation import (
-    _PORT_DIR_TO_ROM_DIR as _PORT_DIR_TO_ROM_DIR,
-    _ANIM_TABLE_IDLE as _ANIM_TABLE_IDLE,
-    _PLAYER_EXIT_PICTURE as _PLAYER_EXIT_PICTURE,
-    _rom_picture_table as _rom_picture_table,
-    _ANIM_TABLE_WALKING as _ANIM_TABLE_WALKING,
-    _ANIM_TABLE_FIGHTING as _ANIM_TABLE_FIGHTING,
-    _ANIM_TABLE_SHOOTING as _ANIM_TABLE_SHOOTING,
-    _FIGHTING_ANIM_END as _FIGHTING_ANIM_END,
-    _PLAYER_INVISIBLE_PICTURE as _PLAYER_INVISIBLE_PICTURE,
-    _INVISIBILITY_FLASH_MASKS as _INVISIBILITY_FLASH_MASKS,
-    _player_animation_action as _player_animation_action,
+    _PORT_DIR_TO_ROM_DIR,
+    _ANIM_TABLE_IDLE,
+    _PLAYER_EXIT_PICTURE,
+    _FIGHTING_ANIM_END,
     update_player_sprite as update_player_sprite,
     update_player_sprites as update_player_sprites,
 )
 from .player_names import (
-    _NAME_ENTRY_TIMEOUT as _NAME_ENTRY_TIMEOUT,
-    _GAME_OVER_TIMEOUT as _GAME_OVER_TIMEOUT,
-    _NAME_ENTRY_VELOCITY_LIMIT as _NAME_ENTRY_VELOCITY_LIMIT,
-    _NAME_ENTRY_REPEAT_SHIFT as _NAME_ENTRY_REPEAT_SHIFT,
-    _NAME_ENTRY_REPEAT_BASE as _NAME_ENTRY_REPEAT_BASE,
-    _NAME_ENTRY_COMMIT_MASK as _NAME_ENTRY_COMMIT_MASK,
-    _NAME_ENTRY_COMMIT_PATTERN as _NAME_ENTRY_COMMIT_PATTERN,
-    _NAME_ENTRY_COMMIT_ARMED_BELOW as _NAME_ENTRY_COMMIT_ARMED_BELOW,
-    _NAME_ENTRY_STEP_TIMEOUT as _NAME_ENTRY_STEP_TIMEOUT,
-    _NAME_ENTRY_BACKSPACE as _NAME_ENTRY_BACKSPACE,
-    _NAME_ENTRY_SPACE as _NAME_ENTRY_SPACE,
-    _NAME_ENTRY_FIRST_LETTER as _NAME_ENTRY_FIRST_LETTER,
-    _NAME_ENTRY_LAST_LETTER as _NAME_ENTRY_LAST_LETTER,
-    _NAME_ENTRY_LENGTH as _NAME_ENTRY_LENGTH,
-    _HIGHSCORE_NO_RANK as _HIGHSCORE_NO_RANK,
-    _SECRET_CODE_ALPHABET as _SECRET_CODE_ALPHABET,
-    _SECRET_NAME_LENGTH as _SECRET_NAME_LENGTH,
-    _secret_crc16 as _secret_crc16,
     secret_code_for as secret_code_for,
     secret_code_build as secret_code_build,
     secret_getname as secret_getname,
     secret_name_entry_update as secret_name_entry_update,
     highscore_check as highscore_check,
     name_entry_step_char as name_entry_step_char,
-    _name_entry_initials as _name_entry_initials,
-    _name_entry_commit_pressed as _name_entry_commit_pressed,
-    _name_entry_finish as _name_entry_finish,
     player_death_sequence as player_death_sequence,
-    _name_entry_edit as _name_entry_edit,
 )
 from .sound import sound_play as _sound_play
-from .sound import sound_speech_play as _sound_speech_play
 
 
 # Compatibility exports; each routine and table has a single game-side owner.
 from .mob_probes import (
-    _MAZE_COLS as _MAZE_COLS,
-    _probe_candidate_anchor as _probe_candidate_anchor,
-    _probe_candidate_blocks as _probe_candidate_blocks,
-    _wrapped_position_delta as _wrapped_position_delta,
     mob_probe_down as mob_probe_down,
     mob_probe_left as mob_probe_left,
     mob_probe_right as mob_probe_right,
     mob_probe_up as mob_probe_up,
 )
-from .player_data import (
-    _FIGHT_PASS_TYPES as _FIGHT_PASS_TYPES,
-    _LOW_HEALTH_THRESHOLD as _LOW_HEALTH_THRESHOLD,
-    _MAZE_ROWS as _MAZE_ROWS,
-    _NO_MOVE as _NO_MOVE,
-    _PLAYER_OFFSCREEN as _PLAYER_OFFSCREEN,
-    _POWER_TRANSPORT as _POWER_TRANSPORT,
-    _PROBE_OVERLAP as _PROBE_OVERLAP,
-    _SHOT_PALETTE_BASE as _SHOT_PALETTE_BASE,
-    _SPEECH_CHARNAME_TBL as _SPEECH_CHARNAME_TBL,
-    _STATE_TIMER_DISABLED as _STATE_TIMER_DISABLED,
-    _TOP_PLAYER_BOUNDARY_V as _TOP_PLAYER_BOUNDARY_V,
-    _VERTICAL_BOUNDARY as _VERTICAL_BOUNDARY,
-    _WALL_PICTURE as _WALL_PICTURE,
-)
+from .player_data import _NO_MOVE, _SHOT_PALETTE_BASE
 from .player_items import (
-    _CHARACTER_REPULSE_TIMER_INIT as _CHARACTER_REPULSE_TIMER_INIT,
-    _DIALOG_FAKE_EXIT as _DIALOG_FAKE_EXIT,
-    _DIALOG_FOOD as _DIALOG_FOOD,
-    _DIALOG_INVENTORY_FULL as _DIALOG_INVENTORY_FULL,
-    _DIALOG_KEYS as _DIALOG_KEYS,
-    _DIALOG_POISONED as _DIALOG_POISONED,
-    _DIALOG_SAVE_POTIONS as _DIALOG_SAVE_POTIONS,
-    _DIALOG_STUN_FLOOR as _DIALOG_STUN_FLOOR,
-    _DIALOG_TRAP as _DIALOG_TRAP,
-    _DIZZY_TIMER_LOAD as _DIZZY_TIMER_LOAD,
-    _FAKE_EXIT_FLAG as _FAKE_EXIT_FLAG,
-    _GAME_SETTINGS_REDUCE_TEXT as _GAME_SETTINGS_REDUCE_TEXT,
-    _INVIS_TIMER_LOAD as _INVIS_TIMER_LOAD,
-    _INVULN_TIMER_LOAD as _INVULN_TIMER_LOAD,
-    _KEY_SCORE as _KEY_SCORE,
-    _MOVABLE_WALL_PICTURE as _MOVABLE_WALL_PICTURE,
-    _PICKUP_SCORE_POPUP_TYPES as _PICKUP_SCORE_POPUP_TYPES,
-    _POISONED_FOOD_PICTURE as _POISONED_FOOD_PICTURE,
-    _POISONED_POTION_PICTURE as _POISONED_POTION_PICTURE,
-    _POISON_DAMAGE as _POISON_DAMAGE,
-    _POWERUP_SPEECH_IDS as _POWERUP_SPEECH_IDS,
-    _RANDOM_FOOD_HEALTH as _RANDOM_FOOD_HEALTH,
-    _RANDOM_FOOD_PICTURE as _RANDOM_FOOD_PICTURE,
-    _SUPERSHOT_CHARGES as _SUPERSHOT_CHARGES,
-    _TASK_HIDDENPOT_A as _TASK_HIDDENPOT_A,
-    _TASK_HIDDENPOT_B as _TASK_HIDDENPOT_B,
-    _TREASURE_ROOM_MAZES as _TREASURE_ROOM_MAZES,
-    _TRICK_FOOD as _TRICK_FOOD,
-    _TRICK_NOFOOLED as _TRICK_NOFOOLED,
-    _TRICK_NOGREEDY1 as _TRICK_NOGREEDY1,
-    _TRICK_NOUSEINVUL as _TRICK_NOUSEINVUL,
-    _clear_floor_marker as _clear_floor_marker,
-    _dialog as _dialog,
-    _door_unlock as _door_unlock,
-    _drop_trap_walls as _drop_trap_walls,
-    _player_give_item as _player_give_item,
-    _player_give_item_id as _player_give_item_id,
-    _poisoned as _poisoned,
-    _secret_trick_progress as _secret_trick_progress,
-    _secret_trick_set as _secret_trick_set,
-    _tile_contact_progress as _tile_contact_progress,
-    _treasure_bonus_multiplier as _treasure_bonus_multiplier,
-    _treasure_collected as _treasure_collected,
+    _dialog,
     door_open_start as door_open_start,
     initialize_player_temporary_power as initialize_player_temporary_power,
     maze_convert_walls_to_exits as maze_convert_walls_to_exits,
@@ -178,17 +68,7 @@ from .player_items import (
     player_tile_interact as player_tile_interact,
 )
 from .player_lifecycle import (
-    _CHARACTER_LOWHEALTH_SPEECH as _CHARACTER_LOWHEALTH_SPEECH,
-    _DAMAGE_COMMENT_SPEECH_IDS as _DAMAGE_COMMENT_SPEECH_IDS,
-    _DIALOG_LOW_HEALTH as _DIALOG_LOW_HEALTH,
-    _HEARTBEAT_MASK_TABLE as _HEARTBEAT_MASK_TABLE,
-    _HEARTBEAT_SOUND_TABLE as _HEARTBEAT_SOUND_TABLE,
-    _LOWHEALTH_SPEECH_TIMEOUT as _LOWHEALTH_SPEECH_TIMEOUT,
-    _PLAYER_COIN_SOUND_IDS as _PLAYER_COIN_SOUND_IDS,
-    _RANDOM_ITEM_GROUP_VALUES as _RANDOM_ITEM_GROUP_VALUES,
-    _SPEECH_WELCOME_LEADIN as _SPEECH_WELCOME_LEADIN,
-    _WELCOME_DELAY as _WELCOME_DELAY,
-    _play_random_character_voice as _play_random_character_voice,
+    _play_random_character_voice,
     calc_score_per_coin as calc_score_per_coin,
     main_handle_death as main_handle_death,
     main_health_countdown as main_health_countdown,
@@ -206,64 +86,14 @@ from .player_lifecycle import (
     speech_welcome as speech_welcome,
 )
 from .player_movement import (
-    _BLOCKING_OBJ_TYPES as _BLOCKING_OBJ_TYPES,
-    _DIALOG_LOCKED_TREASURE as _DIALOG_LOCKED_TREASURE,
-    _DIRECTION_COLUMN_DELTA as _DIRECTION_COLUMN_DELTA,
-    _DIRECTION_ROW_DELTA as _DIRECTION_ROW_DELTA,
-    _GENERATOR_FIGHT_POWER as _GENERATOR_FIGHT_POWER,
-    _HAND_POWER as _HAND_POWER,
-    _HAND_RANDOM as _HAND_RANDOM,
-    _JOYSTICK_NIBBLE_TO_DIRECTION as _JOYSTICK_NIBBLE_TO_DIRECTION,
-    _JOY_DOWN as _JOY_DOWN,
-    _JOY_LEFT as _JOY_LEFT,
-    _JOY_RIGHT as _JOY_RIGHT,
-    _JOY_UP as _JOY_UP,
-    _PLAYER_ANIM_RATE as _PLAYER_ANIM_RATE,
-    _PLAYER_SPEED_BOOST as _PLAYER_SPEED_BOOST,
-    _PLAYER_SPEED_NORMAL as _PLAYER_SPEED_NORMAL,
-    _POWER_SPEED as _POWER_SPEED,
-    _PROBE_BLOCKED as _PROBE_BLOCKED,
-    _PROBE_CLEAR as _PROBE_CLEAR,
-    _PROBE_FIGHTING as _PROBE_FIGHTING,
-    _PROBE_PUSHED as _PROBE_PUSHED,
-    _PROBE_SQUEEZED as _PROBE_SQUEEZED,
-    _SCREEN_H_SPAN as _SCREEN_H_SPAN,
-    _SCREEN_V_SPAN as _SCREEN_V_SPAN,
-    _SPECIAL_MAZE_FIRST as _SPECIAL_MAZE_FIRST,
-    _SPECIAL_MAZE_SPEED as _SPECIAL_MAZE_SPEED,
-    _direction_from_input as _direction_from_input,
-    _direction_neighbor as _direction_neighbor,
-    _door_try_traverse as _door_try_traverse,
-    _fight_effect as _fight_effect,
-    _inside_player_screen_window as _inside_player_screen_window,
-    _move_player_to_slot as _move_player_to_slot,
-    _pixel_to_slot as _pixel_to_slot,
-    _player_fight_collision as _player_fight_collision,
-    _player_probe_down as _player_probe_down,
-    _player_probe_horizontal as _player_probe_horizontal,
-    _player_probe_up as _player_probe_up,
-    _player_probe_vertical as _player_probe_vertical,
-    _player_record_cell as _player_record_cell,
-    _player_speed as _player_speed,
-    _player_speed_units as _player_speed_units,
-    _push_movable_wall as _push_movable_wall,
-    _resolve_probe as _resolve_probe,
-    _slot_is_blocking as _slot_is_blocking,
-    _track_thief_victim_move as _track_thief_victim_move,
-    _u16_pos as _u16_pos,
-    _wall_collision_response as _wall_collision_response,
+    _PLAYER_SPEED_NORMAL,
+    _direction_from_input,
+    _player_record_cell,
+    _track_thief_victim_move,
     migrate_player_record as migrate_player_record,
     player_try_move as player_try_move,
 )
 from .player_transport import (
-    _DIALOG_TRANSPORTER as _DIALOG_TRANSPORTER,
-    _TPORT_ARRIVAL_PICTURE as _TPORT_ARRIVAL_PICTURE,
-    _TRICK_TRANSPORT1 as _TRICK_TRANSPORT1,
-    _TRICK_TRANSPORT2 as _TRICK_TRANSPORT2,
-    _TRICK_VISIT_TPORTS as _TRICK_VISIT_TPORTS,
-    _tport_landing_trick as _tport_landing_trick,
-    _tport_pos_table as _tport_pos_table,
-    _tport_visit_pad as _tport_visit_pad,
     corner_squeeze_geometry as corner_squeeze_geometry,
     handle_tport as handle_tport,
     nearby_mob_clearance_test as nearby_mob_clearance_test,
@@ -274,6 +104,15 @@ from .player_transport import (
     tport_check_dest as tport_check_dest,
     tport_player_move as tport_player_move,
     tport_transition_arm as tport_transition_arm,
+)
+from .player_input import (
+    _JOY_DIRECTIONS,
+    _demo_playback,
+    _joystick_direction_bits,
+    _joystick_fire_held,
+    demo_playback_start as demo_playback_start,
+    demo_record_word as demo_record_word,
+    player_joystick_word as player_joystick_word,
 )
 
 
@@ -436,13 +275,12 @@ _DIZZY_DIRECTION_REMAP = (
 def player_exit_sequence(state: GameState, player_index: int,
                          exit_mob_slot: int = 0,
                          exit_type: int = int(MazeObjIds.EXIT)) -> None:
-    """Exit-tile interaction hook (§4.6): delegate to WP-15's real
-    ``exits.player_exit_sequence`` (0x52B40), which drives the level advance.
+    """Legacy default-argument adapter for the exit routine (0x52B40).
 
-    Function-local import to avoid an import cycle (exits.py re-enters players
-    for the post-transition respawn).
+    Game callers import ``level_transitions.player_exit_sequence`` directly;
+    this adapter retains the older optional exit-slot/type arguments.
     """
-    from .exits import player_exit_sequence as _exit_sequence
+    from .level_transitions import player_exit_sequence as _exit_sequence
     _exit_sequence(state, player_index, exit_mob_slot, exit_type)
 
 
@@ -491,7 +329,7 @@ def player_create_shot(state: GameState, player_index: int) -> None:
         + ((_SHOT_TILE_HEIGHT - 1) & 0x07)
     ) & 0xFFFF
     state.shot_direction[player_index] = rom_dir
-    from .shots import shot_velocity
+    from .shot_state import shot_velocity
 
     vx, vv = shot_velocity(state, player_index, rom_dir)
     state.shot_dx[shot_slot] = vx >> POS_SHIFT
@@ -503,204 +341,7 @@ def player_create_shot(state: GameState, player_index: int) -> None:
 
 
 # =============================================================================
-# WP-6 helpers (§4.3, §4.4, §4.6, §4.7)
-# =============================================================================
-
-# =============================================================================
-# Demo playback (§6.2, main_move_players 0x4A560-0x4A5F0)
-# =============================================================================
-#
-# The record stream is pairs of bytes: ``[timer, joystick]``.  ``demo_ptr``
-# (0x904B66, one longword per player) points at the *current* record and
-# ``demo_timer`` (0x904B76, one byte per player) counts that record's frames
-# down.  This port keeps a per-player list in ``demo_streams`` with
-# ``demo_stream_pos`` as the byte index standing in for ``demo_ptr``.
-#
-# **The playback section writes neither the joystick nor anything else.**  It
-# only decrements ``demo_timer`` and advances ``demo_ptr``.  Consumers reach the
-# record themselves: ``tport_player_move`` (0x50690-0x506B8) is the worked
-# example -- ``game_mode`` non-zero selects ``move.w (demo_ptr),d0`` in place of
-# ``move.w player_input_raw,d0``, then both paths mask the same bits out of the
-# resulting word.  Writing the recorded byte into ``player_input_raw`` instead,
-# as this used to, hands the demo's joystick to every *other* reader of that
-# array: ``_button_pressed``/``_direction_pressed`` in the attract interruption
-# tests see phantom presses (several recorded bytes have the active-low FIRE or
-# MAGIC bit clear), and ``input_debounce`` shifts them into the registers
-# ``main_start_game`` watches for a free-play join.  A demo that restarts the
-# attract screens or starts a game is exactly the failure that motivated the
-# split below.
-
-_DEMO_RECORD_MESSAGE = 0xFF          # 0x4A59E
-_DEMO_RECORD_JOIN = 0xFE            # 0x4A5A2 falls through to the join branch
-_DEMO_RECORD_MAX_ORDINARY = 0xFD    # 0x4A58E: ``cmpi.b #$fd`` / ``bls``
-_DEMO_JOIN_KICKOFF_TIMER = 1        # 0x4A5CC: the joined slot expires next frame
-
-#: All bits high = nothing pressed.  Mirrors ``input.JOY_IDLE``; inlined so the
-#: demo readers below need no cross-subsystem import for a constant.
-_JOY_IDLE = 0xFFFF
-_JOY_FIRE_BIT = 0x02                # input.JOY_FIRE_BIT
-_JOY_DIRECTIONS = 0xF0              # input.JOY_DIRECTIONS
-
-
-def demo_record_word(state: GameState, player_index: int) -> int:
-    """The 16-bit word the ROM reads at ``demo_ptr[player]`` (0x506B6).
-
-    That word is the current record's two bytes, ``(timer << 8) | joystick``:
-    the ROM never separates them, it just masks whichever bits a consumer wants
-    out of the word, and every bit a consumer wants lives in the low
-    (joystick) byte.  ``demo_timer`` is the RAM countdown, a separate byte, so
-    this word does not change while the record is being held.
-
-    Returns ``0xFFFF`` -- nothing pressed, since the switches are active low --
-    for a player with no live record: an empty stream, an exhausted one, or a
-    slot the demo never started.
-    """
-    if not 0 <= player_index < NUM_PLAYERS:
-        return _JOY_IDLE
-    stream = state.demo_streams[player_index]
-    pos = state.demo_stream_pos[player_index]
-    if state.demo_timers[player_index] == 0:
-        return _JOY_IDLE            # 0x4A56E: an inert slot drives nothing
-    if pos < 0 or pos + 1 >= len(stream):
-        return _JOY_IDLE
-    return ((stream[pos] & 0xFF) << 8) | (stream[pos + 1] & 0xFF)
-
-
-def _demo_final_move_record(state: GameState, player_index: int) -> bool:
-    """Whether the active recording is on its last non-sentinel input pair."""
-    if (
-        state.game_mode != int(GameMode.DEMO)
-        or player_index != state.demo_active_player
-    ):
-        return False
-    stream = state.demo_streams[player_index]
-    return (
-        len(stream) >= 4
-        and state.demo_stream_pos[player_index] == len(stream) - 4
-        and stream[-2] == 0
-    )
-
-
-def player_joystick_word(state: GameState, player_index: int) -> int:
-    """The joystick word a consumer should read, per 0x50690-0x506B8.
-
-    In DEMO the recorded record word replaces the hardware sample; in every
-    other mode it *is* the hardware sample.  This is the only place the two
-    sources are chosen between, so nothing has to write one into the other.
-    """
-    if state.game_mode == int(GameMode.DEMO):
-        return demo_record_word(state, player_index)
-    return state.player_input_raw[player_index]
-
-
-def _joystick_direction_bits(state: GameState, player_index: int) -> int:
-    """``input.direction_bits`` over ``player_joystick_word`` (active high)."""
-    if state.game_mode == int(GameMode.DEMO):
-        return ~demo_record_word(state, player_index) & _JOY_DIRECTIONS
-    return direction_bits(state, player_index)
-
-
-def _joystick_fire_held(state: GameState, player_index: int) -> bool:
-    """``input.fire_held`` over ``player_joystick_word`` (active low bit 1)."""
-    if state.game_mode == int(GameMode.DEMO):
-        return not (demo_record_word(state, player_index) & _JOY_FIRE_BIT)
-    return fire_held(state, player_index)
-
-
-def demo_playback_start(state: GameState, player_index: int) -> None:
-    """0x44A38-0x44A48 -- arm one slot's recorded stream.
-
-    ``attract_demo_init`` points the slot at the head of its stream and seeds
-    ``demo_timer`` from that first record's timer byte; every other slot is left
-    with a null pointer and a zero timer, so only the demo's own hero runs until
-    a join record starts someone else.  Exposed here because the record state is
-    WP-6's, and used by ``_demo_playback`` below to arm the slot WP-17 selected.
-    """
-    if not 0 <= player_index < NUM_PLAYERS:
-        return
-    stream = state.demo_streams[player_index]
-    state.demo_stream_pos[player_index] = 0
-    state.demo_timers[player_index] = stream[0] & 0xFF if stream else 0
-
-
-def _demo_join_record(state: GameState, payload: int) -> None:
-    """0x4A5B2-0x4A5DE -- the ``FE nn`` record joins a slot mid-demo.
-
-    The payload byte is two nibbles: the high nibble is the character class
-    written straight into ``player_character`` (0x4A5BE) and the low nibble is
-    the slot.  ``player_join`` then runs the ordinary spawn path (0x4A5C4), the
-    joined slot's timer is set to 1 so it expires on the next frame (0x4A5CC),
-    and its pointer is reloaded from the table at 0x58098 (0x4A5DE) -- which in
-    this port is the head of that slot's own stream.
-
-    The reload deliberately targets the *joined* slot, which may be the slot
-    whose stream is being scanned; the caller's advance then steps that reloaded
-    pointer, exactly as the ROM's ``bra`` back to 0x4A584 does.
-    """
-    joined = payload & 0x0F
-    character = (payload >> 4) & 0x0F
-    if not 0 <= joined < NUM_PLAYERS:
-        return
-    state.players[joined].character = character     # 0x4A5BE
-    player_join(state, joined)                      # 0x4A5C4
-    state.demo_timers[joined] = _DEMO_JOIN_KICKOFF_TIMER   # 0x4A5CC
-    state.demo_stream_pos[joined] = 0                      # 0x4A5DE
-
-
-def _demo_playback(state: GameState) -> None:
-    """0x4A560-0x4A5F0 -- advance every slot's demo record cursor.
-
-    Per slot: skip a zero timer, decrement it, and when it reaches zero walk
-    records forward until an ordinary one is consumed.  ``0xFF`` is a caption
-    record and ``0xFE`` a join record; both are consumed and the walk continues,
-    so several can sit back to back (player 1's stream has ``FE 20 FE 03``).
-    An ordinary record simply loads its timer byte (0x4A5E6) -- and *nothing
-    else*: the joystick byte is read from the record by the consumers above.
-
-    The ROM would run off the end of a malformed stream; the port stops and
-    leaves the slot inert instead.
-    """
-    # 0x44A38-0x44A48: attract_demo_init arms one slot.  WP-17 installs the
-    # streams and names that slot in ``demo_active_player``; arming it is this
-    # module's half, done once, here, so no other slot's captions or joins fire.
-    active = state.demo_active_player
-    if (0 <= active < NUM_PLAYERS
-            and state.demo_timers[active] == 0
-            and state.demo_stream_pos[active] == 0
-            and state.demo_streams[active]):
-        demo_playback_start(state, active)
-
-    for player_index in range(NUM_PLAYERS):
-        if state.demo_timers[player_index] == 0:        # 0x4A56E
-            continue
-        state.demo_timers[player_index] -= 1            # 0x4A576
-        if state.demo_timers[player_index] != 0:        # 0x4A57A
-            continue
-
-        stream = state.demo_streams[player_index]
-        for _ in range(len(stream) // 2 + 1):           # the ROM's 0x4A584 loop
-            pos = state.demo_stream_pos[player_index] + 2
-            state.demo_stream_pos[player_index] = pos
-            if pos + 1 >= len(stream):
-                state.demo_timers[player_index] = 0     # stream exhausted
-                break
-
-            code = stream[pos] & 0xFF
-            if code <= _DEMO_RECORD_MAX_ORDINARY:       # 0x4A58E
-                state.demo_timers[player_index] = code  # 0x4A5E6
-                break
-
-            payload = stream[pos + 1] & 0xFF            # 0x4A596
-            if code == _DEMO_RECORD_MESSAGE:
-                from .score import demo_message_show
-
-                demo_message_show(state, player_index, payload)
-                continue
-            _demo_join_record(state, payload)
-
-
-# =============================================================================
-# WP-6 main-loop functions
+# Player frame helpers and main-loop routine
 # =============================================================================
 
 def _check_forcefield_collision(state: GameState, player_index: int) -> bool:
@@ -826,11 +467,8 @@ def _status8_complete(state: GameState, player_index: int) -> None:
         state.level_players_active = max(0, state.level_players_active - 1)
         setup_infopanel(state, player_index)
         if state.level_players_active == 0:                  # 0x4A6E6
-            from .exits import (
-                _finish_level_end,
-                advance_level_countdowns,
-                show_level_end_bonus_screen,
-            )
+            from .level_transitions import _finish_level_end, advance_level_countdowns
+            from .treasure_rooms import show_level_end_bonus_screen
 
             if advance_level_countdowns(state):              # 0x4A748-0x4A788
                 show_level_end_bonus_screen(state)           # 0x4A78C
@@ -840,7 +478,7 @@ def _status8_complete(state: GameState, player_index: int) -> None:
                 # but level 2 is never committed for the recorded actors.
                 if state.game_mode == int(GameMode.DEMO):
                     return
-                from .exits import secret_check
+                from .secret_rooms import secret_check
 
                 secret_check(state)                          # 0x480EC
                 state.levelnum_current = state.level_next

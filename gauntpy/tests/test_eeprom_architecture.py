@@ -10,15 +10,15 @@ from pathlib import Path
 
 import pytest
 
-from gauntpy import eeprom_device
-from gauntpy.eeprom_device import EepromImage, EepromRotation, MemoryEepromStorage
+from gauntpy.game import eeprom_device
+from gauntpy.game.eeprom_device import EepromImage, EepromRotation, MemoryEepromStorage
 from gauntpy.host.eeprom import (
     FileEepromStorage,
     PersistencePolicy,
     bind_eeprom_storage,
 )
-from gauntpy.state import GameState
-from gauntpy.subsystems import eeprom
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems import eeprom
 
 
 @pytest.mark.parametrize("module", [eeprom, eeprom_device])

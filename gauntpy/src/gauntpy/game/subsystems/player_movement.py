@@ -24,8 +24,7 @@ _DIALOG_LOCKED_TREASURE = 0x08000000  # record 27, mob_collision_test 0x52614
 # Reference: doc/04_game_subsystems.md §4.2; player_collision_contracts.csv
 # =============================================================================
 
-# Direction bit masks mirror input.JOY_* (05_data_reference.md §3.11); inlined
-# to avoid a cross-subsystem import (PLAN.md §3 ground rule 1).  Directions live
+# Direction bit masks mirror input.JOY_* (05_data_reference.md §3.11). Directions live
 # in bits 4-7 of the raw word: RIGHT=4, LEFT=5, DOWN=6, UP=7 (bits 2-3 are the
 # unconnected JOY_SPARE lines).
 _JOY_RIGHT = 0x10   # bit 4
@@ -309,7 +308,7 @@ def _slot_is_blocking(state: GameState, slot: int) -> bool:
 
 def _fight_effect(state: GameState, slot: int, player_index: int) -> None:
     """The contact burst shared by hand-to-hand monster/generator hits."""
-    from .shots import shot_impact_spawn
+    from .shot_effects import shot_impact_spawn
 
     shot_impact_spawn(state, slot, player_index)
 
@@ -329,9 +328,7 @@ def _player_fight_collision(
     from .player_lifecycle import (
         player_inv_update as player_inv_update,
     )
-    from .players import (
-        _demo_final_move_record as _demo_final_move_record,
-    )
+    from .player_input import _demo_final_move_record
     from .score import player_add_score_with_mult
 
     player = state.players[player_index]
@@ -355,11 +352,8 @@ def _player_fight_collision(
         _sound_play(state, 0x2A)                         # 0x52644
         player.stundelay = 30                            # 0x52654
 
-        from .shots import (
-            _MAZEOBJ_BASE_PICTURE_TBL,
-            dragon_player_proximity,
-            tport_cycle_start,
-        )
+        from .shot_damage import _MAZEOBJ_BASE_PICTURE_TBL, dragon_player_proximity
+        from .shot_effects import tport_cycle_start
 
         tport_cycle_start(state, slot, player_index)     # start_poof
         roll = state.getrandom(8 + 2 * state.level_players_active)
@@ -471,7 +465,7 @@ def _player_fight_collision(
         int(MazeObjIds.MONST_ACID),
         int(MazeObjIds.MONST_IT),
     ):
-        from .monsters import monster_playerhit
+        from .monster_contact import monster_playerhit
 
         monster_playerhit(state, player_index, slot)
         return -1
@@ -482,11 +476,8 @@ def _player_fight_collision(
     if obj_type == int(MazeObjIds.MONST_SUPERSORC):
         if state.mobs.hpos[slot] & 0x30 == 0x20:
             return 0
-        from .monsters import (
-            _anim_add_high,
-            monster_update_anim_tile,
-            supersorc_place,
-        )
+        from .monster_state import _anim_add_high, monster_update_anim_tile
+        from .monster_spawning import supersorc_place
 
         _anim_add_high(state, slot, 0xE0)
         state.mobs.hpos[slot] &= ~0x30
@@ -500,7 +491,7 @@ def _player_fight_collision(
 
     if (obj_type == int(MazeObjIds.MONST_SORC)
             and state.mobs.hpos[slot] & 0x10):
-        from .monsters import monster_update_anim_tile
+        from .monster_state import monster_update_anim_tile
 
         state.mobs.hpos[slot] &= ~0x10
         monster_update_anim_tile(state, slot, obj_type)
@@ -568,7 +559,7 @@ def _push_movable_wall(
     new_v = (old_v - (step_y << POS_SHIFT)) & 0xFFFF
     # 0x42820/0x428B6/0x4294C/0x429E2 call the same ray-march family as monster
     # movement, not the player's directional probes.
-    from .monsters import _ray_march
+    from .monster_movement import _ray_march
 
     blocker = _ray_march(state, slot, ray_probe, new_h, new_v)
     if blocker is not None:
@@ -582,7 +573,7 @@ def _push_movable_wall(
                 and state.secret_trick_id == 10
             ):
                 state.secret_player = player_index               # 0x42846-0x42A1A
-            from .shots import tport_cycle_start
+            from .shot_effects import tport_cycle_start
 
             tport_cycle_start(state, slot, player_index)
             state.mobs.unlink_and_clear(slot)
@@ -1059,7 +1050,7 @@ def player_try_move(
     migrate_player_record(state, player_index)
     if track_thief:
         _track_thief_victim_move(state, player_index, destination)
-    from .shots import dragon_player_proximity
+    from .shot_damage import dragon_player_proximity
 
     dragon_player_proximity(state, destination, cur_slot)
     moved_dirs = _NO_MOVE

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from gauntpy.constants import GameMode, MazeObjIds
-from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
-from gauntpy.state import GameState
-from gauntpy.subsystems.maze_objects import (
+from gauntpy.game.constants import GameMode, MazeObjIds
+from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, pack_slot
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.maze_objects import (
     pf_isblankfloor,
     check_forcefield_collision,
     forcefield_segments_setup,
@@ -64,7 +64,7 @@ class TestTransporterAndForcefieldCycle:
         assert state.playfield_color_ram == before
         assert state.forcefield_color == 0x9FFF
         assert state.tport_cycle_pos == 1
-        from gauntpy.subsystems.maze_objects import playfield_palette_vblank
+        from gauntpy.game.subsystems.maze_objects import playfield_palette_vblank
         playfield_palette_vblank(state)
         assert state.playfield_color_ram[3 * 16] == 0x9FFF
         assert state.playfield_color_ram[4 * 16 + 8:4 * 16 + 14] == [
@@ -72,7 +72,7 @@ class TestTransporterAndForcefieldCycle:
         ]
 
     def test_vblank_palette_colors_bounce_at_the_rom_bounds(self):
-        from gauntpy.subsystems.maze_objects import playfield_palette_vblank
+        from gauntpy.game.subsystems.maze_objects import playfield_palette_vblank
 
         state = GameState(frame_counter=2, game_mode=GameMode.NORMAL)
         state.maze = SimpleNamespace(floorpattern=5)
@@ -88,7 +88,7 @@ class TestTransporterAndForcefieldCycle:
             assert state.playfield_color_ram[2 * 16 + index] == 0xEEE0
 
     def test_title_vblank_skips_all_playfield_palette_writes(self):
-        from gauntpy.subsystems.maze_objects import playfield_palette_vblank
+        from gauntpy.game.subsystems.maze_objects import playfield_palette_vblank
 
         state = GameState(game_mode=GameMode.TITLE, frame_counter=2)
         state.forcefield_color = 0xFFFF
@@ -101,7 +101,7 @@ class TestTransporterAndForcefieldCycle:
         assert state.playfield_color_ram == before
 
     def test_odd_vblank_still_writes_forcefield_and_transporter_only(self):
-        from gauntpy.subsystems.maze_objects import playfield_palette_vblank
+        from gauntpy.game.subsystems.maze_objects import playfield_palette_vblank
 
         state = GameState(game_mode=GameMode.NORMAL, frame_counter=3)
         state.maze = SimpleNamespace(floorpattern=0)
@@ -269,7 +269,7 @@ class TestForcefieldSetup:
         assert not check_forcefield_collision(state, pack_slot(6, 6))
 
     def test_real_marker_hubs_build_the_same_repeating_beam(self):
-        from gauntpy.maze import maze_place_object
+        from gauntpy.game.maze import maze_place_object
 
         state = GameState()
         left = pack_slot(5, 5)

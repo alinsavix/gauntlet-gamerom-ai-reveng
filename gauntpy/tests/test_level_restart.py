@@ -5,21 +5,21 @@ from types import SimpleNamespace
 
 import pytest
 
-from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.custom_scenario import (
     SyntheticScenarioRuntime,
     attach_synthetic_runtime,
     build_synthetic_state,
     load_synthetic_scenario,
 )
-from gauntpy.eeprom_device import EepromImage, MemoryEepromStorage
+from gauntpy.game.eeprom_device import EepromImage, MemoryEepromStorage
 from gauntpy.host import application, shell, startup
 from gauntpy.host.eeprom import FileEepromStorage, PersistencePolicy
 from gauntpy.host.session import HostSession
 from gauntpy.host.state_dump import state_dump_payload
-from gauntpy.mainloop import tick
-from gauntpy.mob import MobTable
-from gauntpy.state import GameState
+from gauntpy.game.mainloop import tick
+from gauntpy.game.mob import MobTable
+from gauntpy.game.state import GameState
 
 from gex.roms import SLAPSTIC_ROMS, TILE_ROMS, _rom_dir
 
@@ -137,7 +137,7 @@ def test_resume_waits_for_a_new_level_not_a_midlevel_join():
 
 
 def test_failed_level_acquisition_cannot_replace_the_checkpoint(monkeypatch):
-    from gauntpy import maze
+    from gauntpy.game import maze
 
     state = _ready_state()
     session = HostSession(state)
@@ -156,7 +156,7 @@ def test_failed_level_acquisition_cannot_replace_the_checkpoint(monkeypatch):
 
 
 def test_rewind_never_reads_or_writes_the_live_eeprom_again(tmp_path, monkeypatch):
-    from gauntpy.subsystems.eeprom import eeprom_periodic_write
+    from gauntpy.game.subsystems.eeprom import eeprom_periodic_write
 
     path = tmp_path / "operator.json"
     state = _ready_state()
@@ -185,8 +185,8 @@ def test_rewind_never_reads_or_writes_the_live_eeprom_again(tmp_path, monkeypatc
 
 @requires_roms
 def test_direct_start_is_complete_and_replays_exact_ticks(monkeypatch):
-    from gauntpy import maze
-    from gauntpy.subsystems import boot, thief
+    from gauntpy.game import maze
+    from gauntpy.game.subsystems import boot, thief
 
     state = startup.build_state(16, Character.ELF, maze_number=15, rng_seed=1234)
     assert state.random_pickups_setup_done and state.thief_level_setup_done
@@ -225,7 +225,7 @@ def _advance_to_capture(session, limit=1000):
 @pytest.mark.parametrize("transition", ["skip", "exit", "treasure", "secret"])
 def test_natural_and_shortcut_transitions_capture_after_all_setup_tails(transition):
     from gauntpy.host.debug_controls import debug_force_secret_room, debug_skip_level
-    from gauntpy.subsystems.exits import player_exit_sequence
+    from gauntpy.game.subsystems.level_transitions import player_exit_sequence
 
     state = startup.build_state(12, Character.ELF, maze_number=11)
     state.level_next_treasure = 1 if transition == "treasure" else 4

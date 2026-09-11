@@ -34,9 +34,7 @@ def _write_level_flag_hint(state: GameState, key: str) -> None:
 
 def _write_level_splash_details(state: GameState) -> None:
     """0x4BE24-0x4C1B2 -- write flag notices and the lower gameplay hint."""
-    from .exits import (
-        in_bonus_room as in_bonus_room,
-    )
+    from .level_state import in_bonus_room
     from .secret_rooms import (
         _write_secret_hint as _write_secret_hint,
     )
@@ -146,9 +144,7 @@ def compute_next_level(state: GameState, exit_type: int) -> None:
     before it was interleaved -- the rotation maze it displaced is played next,
     at the same level number (doc/06 §3.5).
     """
-    from .exits import (
-        in_bonus_room as in_bonus_room,
-    )
+    from .level_state import in_bonus_room
 
     if exit_type == int(MazeObjIds.EXITTO6):
         # EXITTO6 (maze 0 only): jump straight to level 6 at the resume
@@ -219,14 +215,12 @@ def player_exit_sequence(state: GameState, player_index: int,
     zero at 0x4A6E6 -- do the end-of-level countdowns and the tally screen run
     (0x4A748-0x4A78C).  ``players._status8_complete`` is that tail.
     """
-    from .exits import (
-        in_bonus_room as in_bonus_room,
-    )
+    from .level_state import in_bonus_room
     from .secret_rooms import (
         secret_trick_check as secret_trick_check,
     )
 
-    from .players import _PORT_DIR_TO_ROM_DIR
+    from .player_animation import _PORT_DIR_TO_ROM_DIR
 
     secret_trick_check(state, player_index)        # 0x52B60-0x52C4E
 
@@ -259,7 +253,7 @@ def player_exit_sequence(state: GameState, player_index: int,
     if hero_slot:                                  # 0x52D76: the hero leaves
         state.mobs.unlink_and_clear(hero_slot)
     player.powers &= 0xF3FF                        # 0x52D88
-    from .players import player_inv_update
+    from .player_lifecycle import player_inv_update
 
     player_inv_update(state, player_index)
     player.mob_slot = anim_slot                    # 0x52DA0
@@ -291,9 +285,7 @@ def advance_level_countdowns(state: GameState) -> bool:
     block exists to feed WP-15's treasure scheduling, and this reimplementation
     reaches the end of the level through ``player_exit_sequence``.
     """
-    from .exits import (
-        in_bonus_room as in_bonus_room,
-    )
+    from .level_state import in_bonus_room
 
     if state.secret_possible_counter:                    # 0x4A748
         state.secret_possible_counter -= 1
@@ -338,14 +330,10 @@ def show_level_start_screen(state: GameState) -> None:
 
     The level-6 seed of ``level_next_treasure`` belongs to
     ``maze_new_level_setup`` (0x438E4-0x438FC), which the ROM runs immediately
-    after this call; WP-3's ``load_level`` does not model it, so it is applied
-    here in the same order the ROM performs it.
+    after this call. The port applies the seed here, before the subsequent
+    maze load, rather than inside ``load_level``.
     """
-    from .exits import (
-        in_bonus_room as in_bonus_room,
-        in_secret_room as in_secret_room,
-        player_activecount as player_activecount,
-    )
+    from .level_state import in_bonus_room, in_secret_room, player_activecount
     from .secret_rooms import (
         _enter_secret_room as _enter_secret_room,
         _write_secret_room_start as _write_secret_room_start,
@@ -373,7 +361,7 @@ def show_level_start_screen(state: GameState) -> None:
     if state.levelnum_current == 6:
         state.level_next_treasure = state.getrandom(3) + 3
 
-    from .players import setup_infopanel
+    from .player_lifecycle import setup_infopanel
 
     setup_infopanel(state, -1)                               # 0x44F38-0x44F3E
     fill_alpha_rect(state, 0, 0, 29, 30, alpha_word(0x8000)) # 0x44F44-0x44F66
@@ -450,9 +438,7 @@ def update_monster_spawn_bonus_from_score_per_coin(state: GameState) -> None:
     ``divs.w`` would trap on a coinless party; every joined player carries at
     least one coin (0x48962), so the zero case simply does nothing here.
     """
-    from .exits import (
-        in_secret_room as in_secret_room,
-    )
+    from .level_state import in_secret_room
 
     total_coins = 0
     total_score = 0
@@ -504,16 +490,13 @@ def _load_next_level(
 
 def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     """Run main_start_game's post-splash player placement on the loaded maze."""
-    from .exits import (
-        in_secret_room as in_secret_room,
-        player_activecount as player_activecount,
-    )
+    from .level_state import in_secret_room, player_activecount
     from .secret_rooms import (
         secret_new_level_setup as secret_new_level_setup,
         secret_room_spawn as secret_room_spawn,
     )
 
-    from .players import player_start_inner, setup_infopanel
+    from .player_lifecycle import player_start_inner, setup_infopanel
 
     if in_secret_room(state):                        # 0x48232
         secret_room_spawn(state)

@@ -54,7 +54,7 @@ import inspect
 from pathlib import Path
 
 from contracts import first_address_in, parse_int
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 
 #: Per-player fields whose base address (player 0's copy) and byte stride are
 #: confirmed in the documentation. address(player_index) = base + stride *

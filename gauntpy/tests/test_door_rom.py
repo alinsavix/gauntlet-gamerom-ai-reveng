@@ -2,16 +2,16 @@
 
 import pytest
 
-from gauntpy.constants import MazeObjIds
-from gauntpy.coords import pack_slot
-from gauntpy.state import GameState
-from gauntpy.subsystems.maze_objects import (
+from gauntpy.game.constants import MazeObjIds
+from gauntpy.game.coords import pack_slot
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.maze_objects import (
     main_open_doors,
     maze_doors_setup,
     pf_door_draw_xy,
     pf_isdoor,
 )
-from gauntpy.subsystems.players import door_open_start
+from gauntpy.game.subsystems.player_items import door_open_start
 
 
 def _door(state, row, col, *, vertical=False, picture=None):
@@ -183,8 +183,8 @@ def test_maze39_downward_contact_matches_rom_partial_spiral(seed, mirror, remain
     if not (_rom_dir() / SLAPSTIC_ROMS[0]).is_file():
         pytest.skip("Local maze ROMs unavailable")
     from gauntpy.host.startup import build_state
-    from gauntpy.mainloop import tick
-    from gauntpy.subsystems.input import JOY_DOWN
+    from gauntpy.game.mainloop import tick
+    from gauntpy.game.subsystems.input import JOY_DOWN
 
     state = build_state(40, 3, maze_number=39, keys=1, rng_seed=seed)
     state.game_settings |= 0x0400

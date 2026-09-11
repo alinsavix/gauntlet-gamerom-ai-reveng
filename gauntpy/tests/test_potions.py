@@ -6,27 +6,24 @@ produce the documented outcome; a potion always kills Death.
 
 from __future__ import annotations
 
-from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
-from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
-from gauntpy.state import GameState
-from gauntpy.subsystems.monsters import (
-    _in_cull_rect,
-    _supersorc_dispatch,
-    _update_cull_rect,
-)
-from gauntpy.subsystems.potions import (
+from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, pack_slot
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.monsters import _in_cull_rect, _update_cull_rect
+from gauntpy.game.subsystems.monster_spawning import _supersorc_dispatch
+from gauntpy.game.subsystems.potions import (
     main_handle_potions,
     potion_blast,
 )
-from gauntpy.subsystems.dragon import (
+from gauntpy.game.subsystems.dragon import (
     _ST_STUNNED,
     _ST_WAKING,
     main_handle_dragon,
 )
-from gauntpy.subsystems.display import potion_flash_vblank
-from gauntpy.subsystems.monsters import main_move_monsters
-from gauntpy.subsystems import score
-from gauntpy.subsystems.players import setup_infopanel
+from gauntpy.game.subsystems.display import potion_flash_vblank
+from gauntpy.game.subsystems.monsters import main_move_monsters
+from gauntpy.game.subsystems import score
+from gauntpy.game.subsystems.player_lifecycle import setup_infopanel
 
 
 def _active(state: GameState, index: int, slot: int,
@@ -204,7 +201,7 @@ class TestMagicGate:
         state.playfield_color_latch = 0xFF00
         state.playfield_color_ram[8] = 0xFF00
 
-        from gauntpy.mainloop import game_frame
+        from gauntpy.game.mainloop import game_frame
         game_frame(state)
         potion_flash_vblank(state)
 
@@ -257,7 +254,7 @@ class TestMagicGate:
         assert state.dragon_state == _ST_WAKING
         assert state.dragon_anim_ctr == 0
 
-        from gauntpy.subsystems.shots import dragon_player_proximity
+        from gauntpy.game.subsystems.shot_damage import dragon_player_proximity
 
         dragon_player_proximity(state, dragon)
         assert state.dragon_anim_ctr == 0x31
@@ -503,7 +500,7 @@ class TestBlastOutcomes:
         state.playfield_color_latch = 0xFF00
         state.potion_player = 0
 
-        from gauntpy.subsystems import monsters
+        from gauntpy.game.subsystems import monsters
         monkeypatch.setattr(
             monsters, "monsters_everything",
             lambda *_args, **_kwargs: pytest.fail("ordinary monster pass ran"),

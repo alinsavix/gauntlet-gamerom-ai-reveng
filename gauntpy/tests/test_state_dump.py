@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from gauntpy.eeprom_device import EepromImage, EepromRotation, MemoryEepromStorage
+from gauntpy.game.eeprom_device import EepromImage, EepromRotation, MemoryEepromStorage
 from gauntpy.host.eeprom import bind_eeprom_storage
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 from gauntpy.host.state_dump import (
     StateDumpError,
     dump_game_state,
@@ -166,7 +166,7 @@ def test_load_rejects_schema_one_fields_from_before_the_naming_policy(tmp_path):
 
 
 def test_loaded_state_cannot_overwrite_external_eeprom(tmp_path, monkeypatch):
-    from gauntpy.subsystems import eeprom
+    from gauntpy.game.subsystems import eeprom
 
     external = tmp_path / "eeprom.json"
     original = '{"game_settings": 57488}'
@@ -218,7 +218,7 @@ def test_load_rejects_unknown_schema_and_incomplete_state(tmp_path):
 
 
 def test_snapshot_preserves_device_image_distinct_from_live_ram(tmp_path):
-    from gauntpy.subsystems.eeprom import eeprom_load_settings
+    from gauntpy.game.subsystems.eeprom import eeprom_load_settings
 
     image = EepromImage(
         0x2345, 0, (((12345, "ABC"),), (), (), ()),
@@ -264,7 +264,7 @@ def test_snapshot_round_trips_exact_device_values_without_normalization(tmp_path
 
 @pytest.mark.parametrize("legacy", [False, True])
 def test_resume_never_reads_external_eeprom_or_calls_game_initializers(tmp_path, monkeypatch, legacy):
-    from gauntpy.subsystems import boot, eeprom
+    from gauntpy.game.subsystems import boot, eeprom
 
     external = tmp_path / "eeprom.json"
     external.write_text('{"game_settings": 9029}')
@@ -296,7 +296,7 @@ def test_resume_never_reads_external_eeprom_or_calls_game_initializers(tmp_path,
 
 
 def test_legacy_snapshot_seeds_isolated_device_from_reconstructed_ram():
-    from gauntpy.subsystems.eeprom import eeprom_image
+    from gauntpy.game.subsystems.eeprom import eeprom_image
 
     state = GameState(
         game_settings=0x2345, two_player_mode=0, maze_number=47,

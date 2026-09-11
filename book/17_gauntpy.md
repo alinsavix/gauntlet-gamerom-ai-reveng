@@ -157,8 +157,10 @@ and overlay plane, not the host diagnostics panel.
 Within `game/subsystems`, files group related ROM routines rather than
 introducing a different object model. Following an arrow takes us through
 `shots.py` for flight, `shot_collision.py` for collision probes, and
-`shot_damage.py` for hit resolution. Each stage still calls individual
-routines directly. Shared score awards belong to
+`shot_damage.py` for hit resolution. Shared projectile state and effects
+belong to `shot_state.py` and `shot_effects.py`. Each stage still calls
+individual routines directly, including calls across subsystem families.
+Shared score awards belong to
 `score.player_add_score_with_mult`, whether the player collects a pickup,
 hits a target, or defeats a thief.
 
@@ -441,8 +443,10 @@ explain. That gives us something concrete to take back to the ROMs.
 ### Source notes
 
 The game-side links below point to `gauntpy.game`, where the implementations
-live. Older imports such as `gauntpy.state` and `gauntpy.subsystems.players`
-remain compatibility paths to the same code, not separate simulations.
+live. Larger subsystem modules retain explicitly listed public aliases from
+their smaller family modules; these are references to the same functions, not
+separate simulations. Private helpers are not compatibility APIs, and game
+callers import the defining owner rather than depending back on a facade.
 
 - Installation, controls, and option contracts:
   [gauntpy README](../gauntpy/README.md#play-it),

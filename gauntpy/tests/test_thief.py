@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.constants import Character, PlayerStatus
-from gauntpy.coords import hpos_x, vpos_y
-from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
-from gauntpy.constants import MazeObjIds
-from gauntpy.state import GameState
-from gauntpy.subsystems.thief import (
+from gauntpy.game.constants import Character, PlayerStatus
+from gauntpy.game.coords import hpos_x, vpos_y
+from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, pack_slot
+from gauntpy.game.constants import MazeObjIds
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.thief import (
     THIEF_DEAD,
     THIEF_DODGE,
     THIEF_ENTER_OK,
@@ -49,8 +49,8 @@ from gauntpy.subsystems.thief import (
     _THIEF_DIRECTION_STEP_SIZE,
     _set_thief_animation,
 )
-from gauntpy.subsystems import score
-from gauntpy.subsystems.players import setup_infopanel
+from gauntpy.game.subsystems import score
+from gauntpy.game.subsystems.player_lifecycle import setup_infopanel
 
 # Same skip condition test_assets.py uses: the ROM byte-match below needs the
 # real code ROMs, everything else in this module does not.
@@ -161,7 +161,7 @@ class TestScheduling:
 
     @requires_roms
     def test_level_load_clears_stale_arrival_before_it_can_deploy(self):
-        from gauntpy import maze
+        from gauntpy.game import maze
 
         state = GameState()
         _active(state, 0, pack_slot(15, 15))
@@ -353,7 +353,7 @@ class TestRouteGrid:
         assert path_grid_get_direction(state, 56) == 8
 
     def test_level_handoff_clears_stale_escape_routes_in_hidden_alpha_ram(self):
-        from gauntpy.subsystems.display import maze_show
+        from gauntpy.game.subsystems.display import maze_show
 
         state = GameState()
         state.thief_mode = THIEF_PURSUE
@@ -764,7 +764,7 @@ class TestDeployAndEscapeGraph:
         state.thief_victim_pos = corner
         started = []
         monkeypatch.setattr(
-            "gauntpy.subsystems.thief.thief_start_tport_anim",
+            "gauntpy.game.subsystems.thief.thief_start_tport_anim",
             lambda _state, destination: started.append(destination),
         )
 
@@ -786,7 +786,7 @@ class TestDeployAndEscapeGraph:
         path_grid_set_low_direction(state, state.thief_next_pos, 2)
         started = []
         monkeypatch.setattr(
-            "gauntpy.subsystems.thief.thief_start_tport_anim",
+            "gauntpy.game.subsystems.thief.thief_start_tport_anim",
             lambda _state, destination: started.append(destination),
         )
 
@@ -809,7 +809,7 @@ class TestDeployAndEscapeGraph:
         )
         started = []
         monkeypatch.setattr(
-            "gauntpy.subsystems.thief.thief_start_tport_anim",
+            "gauntpy.game.subsystems.thief.thief_start_tport_anim",
             lambda _state, destination: started.append(destination),
         )
 
@@ -852,7 +852,7 @@ class TestDeployAndEscapeGraph:
         assert state.thief_next_pos == previous
 
     def test_escape_retraces_a_players_learned_transporter_route(self):
-        from gauntpy.subsystems.score import main_score_update
+        from gauntpy.game.subsystems.score import main_score_update
 
         state = GameState()
         source_pad = pack_slot(10, 8)

@@ -5,10 +5,11 @@ import inspect
 
 import pytest
 
-from gauntpy import maze, maze_rom
-from gauntpy.constants import GameMode
+from gauntpy.game import maze
+from gauntpy import maze_rom
+from gauntpy.game.constants import GameMode
 from gauntpy.render.state_dump import state_dump_payload
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 
 
 def test_game_maze_module_does_not_import_the_decoder_directly():
@@ -75,7 +76,7 @@ def test_adapter_exposes_acquisition_errors_without_game_fallbacks(monkeypatch):
 def test_rom_free_attract_requests_scenery_without_pretending_it_loaded(
     monkeypatch, mode, requested_maze,
 ):
-    from gauntpy.subsystems.attract import start_attract_screen
+    from gauntpy.game.subsystems.attract import start_attract_screen
 
     requests = []
 

@@ -19,20 +19,26 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.constants import Character, MazeObjIds, PlayerPower, PlayerStatus
-from gauntpy.coords import hpos_x, native_v, vpos_y
-from gauntpy.state import GameState, Player
-from gauntpy.subsystems import shots
-from gauntpy.subsystems.shots import (
-    _WALL_MOVE_DISSOLVE,
-    main_handle_shots,
-    resolve_shot_hit,
+from gauntpy.game.constants import Character, MazeObjIds, PlayerPower, PlayerStatus
+from gauntpy.game.coords import hpos_x, native_v, vpos_y
+from gauntpy.game import playfield
+from gauntpy.game.state import GameState, Player
+from gauntpy.game.subsystems import (
+    shot_collision,
+    shot_damage,
+    shot_data,
+    shot_effects,
+    shot_state,
+    shots,
+)
+from gauntpy.game.subsystems.shot_damage import _WALL_MOVE_DISSOLVE, resolve_shot_hit
+from gauntpy.game.subsystems.shots import main_handle_shots
+from gauntpy.game.subsystems.shot_effects import (
     shot_impact_spawn,
-    shot_mob_collision,
-    shot_reflect_calc,
     tport_cycle_start,
     wall_crumble,
 )
+from gauntpy.game.subsystems.shot_collision import shot_mob_collision, shot_reflect_calc
 
 
 # =============================================================================
@@ -41,7 +47,7 @@ from gauntpy.subsystems.shots import (
 
 def _make_state() -> GameState:
     """Fresh GameState in normal gameplay mode with player 0 alive."""
-    from gauntpy.constants import GameMode
+    from gauntpy.game.constants import GameMode
     state = GameState(game_mode=GameMode.NORMAL)
     p = state.players[0]
     p.status = int(PlayerStatus.ALIVE_HERE)
@@ -670,12 +676,12 @@ class TestPlayerShotStatTables:
     """0x4AFA6 and 0x47846 keep shot power and shot speed independent."""
 
     def test_damage_tables_and_selectors_match_all_character_columns(self):
-        assert shots._SHOT_DAMAGE_BASE_TBL == [
+        assert shot_damage._SHOT_DAMAGE_BASE_TBL == [
             2, 1, 1, 1,
             1, 1, 1, 1,
             2, 2, 2, 2,
         ]
-        assert shots._SHOT_DAMAGE_RAND_TBL == [
+        assert shot_damage._SHOT_DAMAGE_RAND_TBL == [
             0, 0, 1, 0,
             0, 0, 0, 0,
             1, 0, 0, 0,
@@ -691,7 +697,7 @@ class TestPlayerShotStatTables:
                     int(PlayerPower.SHOTPOWER) if powered else 0
                 )
                 state.rng = _FixedRandom([1])
-                assert shots._shot_damage(state, 0) == damage
+                assert shot_damage._shot_damage(state, 0) == damage
 
     def test_velocity_tables_use_shot_speed_not_shot_power(self):
         base_right = (0x180, 0x200, 0x200, 0x280)
@@ -699,13 +705,13 @@ class TestPlayerShotStatTables:
         for character in range(4):
             state = _make_state()
             state.players[0].character = character
-            assert shots.shot_velocity(state, 0, 2)[0] == base_right[character]
+            assert shot_state.shot_velocity(state, 0, 2)[0] == base_right[character]
 
             state.players[0].powers = int(PlayerPower.SHOTPOWER)
-            assert shots.shot_velocity(state, 0, 2)[0] == base_right[character]
+            assert shot_state.shot_velocity(state, 0, 2)[0] == base_right[character]
 
             state.players[0].powers = int(PlayerPower.SHOTSPEED)
-            assert shots.shot_velocity(state, 0, 2)[0] == powered_right[character]
+            assert shot_state.shot_velocity(state, 0, 2)[0] == powered_right[character]
 
 
 def _place_player_mob(state: GameState, slot: int, player_index: int,
@@ -1722,7 +1728,7 @@ def _arm_lobber(state: GameState, shooter_id: int = 8, x: int = 160,
                 y: int = 160, vec_h: int = 0, vec_v: int = 0,
                 palette: int = 5, size: int = 9, direction: int = 2) -> int:
     """Arm channel ``shooter_id`` exactly the way ``monster_create_shot`` does."""
-    from gauntpy.subsystems.shots import lobber_accumulator_seed
+    from gauntpy.game.subsystems.shot_state import lobber_accumulator_seed
 
     slot = shooter_id + 1
     state.mobs.picture[slot] = 1
@@ -1933,8 +1939,8 @@ class TestDragonFireChannel:
     def test_the_breath_is_a_max_tier_shot_on_a_demon_channel(self):
         state = _make_state()
         _arm_dragon_fire(state)
-        assert shots._is_maxtier(state, 7)
-        assert shots._shot_tier(state, 7) == 0x30
+        assert shot_state._is_maxtier(state, 7)
+        assert shot_state._shot_tier(state, 7) == 0x30
 
     def test_it_uses_the_0x50_velocity_block_on_even_frames_only(self):
         state = _make_state()
@@ -2033,7 +2039,7 @@ class TestDragonFireChannel:
         assert victim.health == 500 - 8          # monstshot_damage_tbl[0x20]
 
     def test_it_raises_the_dragon_dialog_and_spends_dont_get_hit(self):
-        from gauntpy.subsystems.exits import TRICK_NOGETHIT
+        from gauntpy.game.subsystems.secret_rooms import TRICK_NOGETHIT
 
         state = _make_state()
         _arm_dragon_fire(state)
@@ -2257,7 +2263,7 @@ class TestHudLatches:
 
     def test_the_info_panel_picks_a_shot_kill_up_on_the_next_turn(self):
         """End to end: the latch is what WP-14's main_score_display consumes."""
-        from gauntpy.subsystems.score import info_panel, main_score_display
+        from gauntpy.game.subsystems.score import info_panel, main_score_display
 
         state = _make_state()
         state.players[0].character = Character.ELF
@@ -2281,7 +2287,7 @@ class TestScoreEffectAnimationInterop:
     """The impact/dissolve MOBs WP-7 spawns must age under WP-14's loop 3."""
 
     def test_an_impact_effect_ages_and_expires(self):
-        from gauntpy.subsystems.score import main_score_update
+        from gauntpy.game.subsystems.score import main_score_update
 
         state = _make_state()
         SLOT = 411
@@ -2294,7 +2300,7 @@ class TestScoreEffectAnimationInterop:
         assert state.mobs.picture[0x0D] == 0, "the pool channel is released"
 
     def test_a_transporter_dissolve_ages_through_its_own_cycle(self):
-        from gauntpy.subsystems.score import main_score_update
+        from gauntpy.game.subsystems.score import main_score_update
 
         state = _make_state()
         source = 412
@@ -2329,8 +2335,8 @@ class TestEncounterRecords:
         SLOT = 420
         _place_typed(state, SLOT, MazeObjIds.FOOD_DESTRUCTABLE, picture=0x0963)
         resolve_shot_hit(state, SLOT, 0)
-        assert _records_raised(state) == {shots._DIALOG_FOOD_SHOT}
-        assert shots._DIALOG_FOOD_SHOT == 1
+        assert _records_raised(state) == {shot_damage._DIALOG_FOOD_SHOT}
+        assert shot_damage._DIALOG_FOOD_SHOT == 1
 
     def test_shooting_a_potion_raises_record_6(self):
         """0x4BA46 pushes 0x40: 'SHOOTING A POTION HAS A LESSER EFFECT'."""
@@ -2338,8 +2344,8 @@ class TestEncounterRecords:
         SLOT = 421
         _place_typed(state, SLOT, MazeObjIds.POT_DESTRUCTABLE, picture=0x0987)
         resolve_shot_hit(state, SLOT, 0)
-        assert shots._DIALOG_POTION_SHOT in _records_raised(state)
-        assert shots._DIALOG_POTION_SHOT == 6
+        assert shot_damage._DIALOG_POTION_SHOT in _records_raised(state)
+        assert shot_damage._DIALOG_POTION_SHOT == 6
         assert state.playfield_color_latch == 0xFF00
 
     def test_shooting_poison_raises_record_7_instead(self):
@@ -2348,14 +2354,14 @@ class TestEncounterRecords:
         SLOT = 422
         _place_typed(state, SLOT, MazeObjIds.FOOD_DESTRUCTABLE, picture=0x25ED)
         resolve_shot_hit(state, SLOT, 0)
-        assert _records_raised(state) == {shots._DIALOG_POISON_SHOT}
-        assert shots._DIALOG_POISON_SHOT == 7
+        assert _records_raised(state) == {shot_damage._DIALOG_POISON_SHOT}
+        assert shot_damage._DIALOG_POISON_SHOT == 7
 
         state = _make_state()
         SLOT = 423
         _place_typed(state, SLOT, MazeObjIds.POT_DESTRUCTABLE, picture=0x20FC)
         resolve_shot_hit(state, SLOT, 0)
-        assert _records_raised(state) == {shots._DIALOG_POISON_SHOT}
+        assert _records_raised(state) == {shot_damage._DIALOG_POISON_SHOT}
 
     def _monster_shot_record(self, shooter_id, tier):
         state = _make_state()
@@ -2368,23 +2374,23 @@ class TestEncounterRecords:
 
     def test_an_ordinary_monster_shot_raises_the_demon_record_10(self):
         """0x4B2D8 pushes 0x400 -- channels 4-7 are the demon shots."""
-        assert self._monster_shot_record(4, 0) == {shots._DIALOG_DEMON_SHOT}
-        assert shots._DIALOG_DEMON_SHOT == 10
+        assert self._monster_shot_record(4, 0) == {shot_damage._DIALOG_DEMON_SHOT}
+        assert shot_damage._DIALOG_DEMON_SHOT == 10
 
     def test_a_special_channel_shot_raises_the_lobber_record_11(self):
         """0x4B2CE pushes 0x800 -- channels 8-11 are the lobber shots."""
-        assert self._monster_shot_record(8, 0) == {shots._DIALOG_LOBBER_SHOT}
-        assert shots._DIALOG_LOBBER_SHOT == 11
+        assert self._monster_shot_record(8, 0) == {shot_damage._DIALOG_LOBBER_SHOT}
+        assert shot_damage._DIALOG_LOBBER_SHOT == 11
 
     def test_a_tier_one_shot_raises_record_16(self):
-        assert self._monster_shot_record(4, 0x10) == {shots._DIALOG_STRONG_SHOT}
-        assert shots._DIALOG_STRONG_SHOT == 16
+        assert self._monster_shot_record(4, 0x10) == {shot_damage._DIALOG_STRONG_SHOT}
+        assert shot_damage._DIALOG_STRONG_SHOT == 16
 
     def test_a_tier_two_or_three_shot_raises_the_dragon_record_14(self):
         """0x4B292 pushes 0x4000 -- \"SHOOT DRAGON'S HEAD\"."""
-        assert self._monster_shot_record(4, 0x20) == {shots._DIALOG_DRAGON_SHOT}
-        assert self._monster_shot_record(4, 0x30) == {shots._DIALOG_DRAGON_SHOT}
-        assert shots._DIALOG_DRAGON_SHOT == 14
+        assert self._monster_shot_record(4, 0x20) == {shot_damage._DIALOG_DRAGON_SHOT}
+        assert self._monster_shot_record(4, 0x30) == {shot_damage._DIALOG_DRAGON_SHOT}
+        assert shot_damage._DIALOG_DRAGON_SHOT == 14
 
     def test_shooting_another_player_raises_record_18(self):
         state = _make_state()
@@ -2392,16 +2398,16 @@ class TestEncounterRecords:
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
         _place_player_mob(state, 425, 1)
         resolve_shot_hit(state, 425, 0)
-        assert _records_raised(state) == {shots._DIALOG_PLAYER_SHOT}
-        assert shots._DIALOG_PLAYER_SHOT == 18
+        assert _records_raised(state) == {shot_damage._DIALOG_PLAYER_SHOT}
+        assert shot_damage._DIALOG_PLAYER_SHOT == 18
 
     def test_shooting_a_destructible_wall_raises_record_22(self):
         state = _make_state()
         SLOT = 426
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
         resolve_shot_hit(state, SLOT, 0)
-        assert _records_raised(state) == {shots._DIALOG_WALL_SHOT}
-        assert shots._DIALOG_WALL_SHOT == 22
+        assert _records_raised(state) == {shot_damage._DIALOG_WALL_SHOT}
+        assert shot_damage._DIALOG_WALL_SHOT == 22
 
     def test_the_box_is_shown_once_per_game(self):
         state = _make_state()
@@ -2450,12 +2456,12 @@ class TestEncounterRecords:
 
     def test_player_shot_record_shows_the_rom_message_without_speech(self):
         state = _make_state()
-        assert shots._dialog(state, 0, shots._DIALOG_PLAYER_SHOT) == 0
+        assert shot_damage._dialog(state, 0, shot_damage._DIALOG_PLAYER_SHOT) == 0
         assert state.dialog_message == [
             "  SHOTS DO NOT HURT  ",
             " OTHER PLAYERS (YET) ",
         ]
-        assert shots._DIALOG_PLAYER_SHOT in _records_raised(state)
+        assert shot_damage._DIALOG_PLAYER_SHOT in _records_raised(state)
 
 
 # =============================================================================
@@ -2514,7 +2520,7 @@ def _probe_indices(cell: int, direction: int):
     index = (cell * 2) & 0xFFFF
     yield index
     row_base = index & 0x7C0
-    for h_delta, v_delta in shots._PROBE_OFFSETS[direction & 7]:
+    for h_delta, v_delta in shot_collision._PROBE_OFFSETS[direction & 7]:
         index = ((index + h_delta) & 0xFFFF) & 0x3E
         index = (index + v_delta + row_base) & 0xFFFF
         yield index
@@ -2527,7 +2533,7 @@ class TestProbeWrapWindows:
         for y, expected in ((0, False), (8, False), (9, True),
                             (240, True), (241, False), (500, False)):
             state.mobs.vpos[1] = native_v(y & 0x1FF) << 7
-            assert shots._wrap_allowed(state, 0) is expected, y
+            assert shot_collision._wrap_allowed(state, 0) is expected, y
 
     def test_a_genuine_downward_overflow_needs_cell_row_31(self):
         """Only the bottom maze row can push a probe past the last cell."""
@@ -2545,11 +2551,11 @@ class TestProbeWrapWindows:
         for y in range(512):
             state.mobs.hpos[1] = 0
             state.mobs.vpos[1] = native_v(y) << 7
-            if shots._shot_cell(state, 1) >> 5 != 31:
+            if shot_state._shot_cell(state, 1) >> 5 != 31:
                 continue
             rows += 1
             assert y >= 488, y
-            assert not shots._wrap_allowed(state, 0), y
+            assert not shot_collision._wrap_allowed(state, 0), y
         assert rows, "no vertical position keys onto the bottom maze row"
 
     def test_the_only_wrapped_indices_land_on_row_31(self):
@@ -2635,18 +2641,18 @@ class TestWallCrumbleStages:
         state.maze = _FakeMaze(wallpattern=6)
         SLOT = 400
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        assert shots.wall_crumble_descriptor(state, SLOT) is None
+        assert shot_effects.wall_crumble_descriptor(state, SLOT) is None
         for stage in (1, 2):
             assert wall_crumble(state, SLOT, 1) == 0
             assert state.destructible_wall_stage[SLOT] == stage
-            assert (shots.wall_crumble_descriptor(state, SLOT)
-                    == shots._WALL_CRUMBLE_DESCS[stage])
+            assert (shot_effects.wall_crumble_descriptor(state, SLOT)
+                    == shot_effects._WALL_CRUMBLE_DESCS[stage])
         assert wall_crumble(state, SLOT, 1) == -1
         assert SLOT not in state.destructible_wall_stage
 
     def test_the_stamp_records_are_the_rom_descriptors(self):
         """0x5BA5C -> 0x5D3D0/0x5D3D8/0x5D3E0, four stamp words each."""
-        assert shots._WALL_CRUMBLE_DESCS == (
+        assert shot_effects._WALL_CRUMBLE_DESCS == (
             (0x07A7, 0x07A8, 0x07A9, 0x07AA),
             (0x07AB, 0x07AC, 0x07AD, 0x07AE),
             (0x07AF, 0x07B0, 0x07B1, 0x07B2),
@@ -2654,7 +2660,7 @@ class TestWallCrumbleStages:
 
     def test_they_match_gex_shrub_destruct_stamps(self):
         gex_wall = pytest.importorskip("gex.wall")
-        assert [list(d) for d in shots._WALL_CRUMBLE_DESCS] == [
+        assert [list(d) for d in shot_effects._WALL_CRUMBLE_DESCS] == [
             list(s) for s in gex_wall.SHRUB_DESTRUCT_STAMPS
         ]
 
@@ -2663,13 +2669,13 @@ class TestWallCrumbleStages:
         state.maze = _FakeMaze(wallpattern=0)
         SLOT = 401
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        assert shots.wall_crumble_palette(state, SLOT) == 7
+        assert shot_effects.wall_crumble_palette(state, SLOT) == 7
         assert wall_crumble(state, SLOT, 1) == 0
-        assert shots.wall_crumble_palette(state, SLOT) == 6
+        assert shot_effects.wall_crumble_palette(state, SLOT) == 6
         assert wall_crumble(state, SLOT, 1) == 0
-        assert shots.wall_crumble_palette(state, SLOT) == 5
+        assert shot_effects.wall_crumble_palette(state, SLOT) == 5
         assert wall_crumble(state, SLOT, 1) == -1
-        assert shots.wall_crumble_descriptor(state, SLOT) is None
+        assert shot_effects.wall_crumble_descriptor(state, SLOT) is None
 
     @pytest.mark.parametrize("wallpattern", [0, 5, 6, 11])
     @pytest.mark.parametrize("first,second", [(1, 2), (2, 1), (3, 0)])
@@ -2720,7 +2726,7 @@ class TestWallCrumbleStages:
         SLOT = 406
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
         assert wall_crumble(state, SLOT, 1) == 0
-        assert shots.wall_crumble_palette(state, SLOT) == 6
+        assert shot_effects.wall_crumble_palette(state, SLOT) == 6
 
 
 # =============================================================================
@@ -2738,7 +2744,7 @@ class TestDragonProximity:
         state = _make_state()
         head = (10 << 5) | 10
         self._sleeping_dragon(state, head)
-        shots.dragon_player_proximity(state, (13 << 5) | 15)      # offsets +3, +5
+        shot_damage.dragon_player_proximity(state, (13 << 5) | 15)      # offsets +3, +5
         assert state.dragon_anim_ctr == 0x31
 
     @pytest.mark.parametrize("cell_offset", [(0, 6), (5, 0)])
@@ -2747,7 +2753,7 @@ class TestDragonProximity:
         head = (10 << 5) | 10
         self._sleeping_dragon(state, head)
         drow, dcol = cell_offset
-        shots.dragon_player_proximity(state, ((10 + drow) << 5) | (10 + dcol))
+        shot_damage.dragon_player_proximity(state, ((10 + drow) << 5) | (10 + dcol))
         assert state.dragon_anim_ctr == 0
 
     def test_the_box_is_ten_by_ten_around_the_primary_segment(self):
@@ -2758,27 +2764,27 @@ class TestDragonProximity:
             (-4, -5, True), (5, 4, True), (-5, 0, False), (0, 5, False),
         ):
             self._sleeping_dragon(state, head)
-            shots.dragon_player_proximity(state, ((10 + drow) << 5) | (10 + dcol))
+            shot_damage.dragon_player_proximity(state, ((10 + drow) << 5) | (10 + dcol))
             assert (state.dragon_anim_ctr == 0x31) is wakes
 
     def test_no_dragon_means_nothing_happens(self):
         state = _make_state()
         state.dragon_seg_mob_ids[0] = 0
         state.dragon_state = 0x01
-        shots.dragon_player_proximity(state, (10 << 5) | 10)
+        shot_damage.dragon_player_proximity(state, (10 << 5) | 10)
         assert state.dragon_anim_ctr == 0
 
     def test_a_dragon_already_moving_is_left_alone(self):
         state = _make_state()
         self._sleeping_dragon(state, (10 << 5) | 10)
         state.dragon_anim_ctr = 7
-        shots.dragon_player_proximity(state, (10 << 5) | 10)
+        shot_damage.dragon_player_proximity(state, (10 << 5) | 10)
         assert state.dragon_anim_ctr == 7
 
     def test_the_box_folds_on_a_wrapping_level(self):
         state = _make_state()
         self._sleeping_dragon(state, (10 << 5) | 1)
-        shots.dragon_player_proximity(state, (10 << 5) | 30)      # dx 29 -> 3
+        shot_damage.dragon_player_proximity(state, (10 << 5) | 30)      # dx 29 -> 3
         assert state.dragon_anim_ctr == 0x31
 
     def test_stun_clears_when_an_event_enters_the_box(self):
@@ -2787,7 +2793,7 @@ class TestDragonProximity:
         state.dragon_seg_mob_ids[0] = head
         state.dragon_state = 0x02
 
-        shots.dragon_player_proximity(state, head)
+        shot_damage.dragon_player_proximity(state, head)
 
         assert state.dragon_state == 0
         assert state.sound_log[-1] == 0xD5
@@ -2798,7 +2804,7 @@ class TestDragonProximity:
         state.dragon_seg_mob_ids[0] = head
         state.dragon_state = 0x02
 
-        shots.dragon_player_proximity(state, head + 1, head)
+        shot_damage.dragon_player_proximity(state, head + 1, head)
 
         assert state.dragon_state == 0x02
 
@@ -2810,7 +2816,7 @@ class TestDragonProximity:
         outside = (10 << 5) | 16
         inside = (10 << 5) | 15
 
-        shots.dragon_player_proximity(state, inside, outside)
+        shot_damage.dragon_player_proximity(state, inside, outside)
 
         assert state.dragon_state == 0
 
@@ -2843,7 +2849,7 @@ class TestPlayfieldShowscore:
         state = _make_state()
         SLOT = (9 << 5) | 9
         _place_typed(state, SLOT, MazeObjIds.MONST_GHOST, x=160, y=160)
-        shots._playfield_showscore(state, SLOT, 0)
+        shot_effects.playfield_showscore(state, SLOT, 0)
         assert state.score_display_timer == [0x3C, 0, 0, 0]
         assert state.mobs.picture[0x11] == 0x1C88
         assert state.mobs.hpos[0x11] == ((160 << 7) & 0xFF80) + 5
@@ -2854,7 +2860,7 @@ class TestPlayfieldShowscore:
         state.score_display_timer = [4, 0, 0, 0]
         SLOT = (9 << 5) | 9
         _place_typed(state, SLOT, MazeObjIds.MONST_GHOST)
-        shots._playfield_showscore(state, SLOT, 0)
+        shot_effects.playfield_showscore(state, SLOT, 0)
         assert state.score_display_timer == [4, 0x3C, 0, 0]
         assert state.mobs.picture[0x11] == 0
         assert state.mobs.picture[0x12] == 0x1C88
@@ -2864,7 +2870,7 @@ class TestPlayfieldShowscore:
         state.score_display_timer = [1, 1, 1, 1]
         SLOT = (9 << 5) | 9
         _place_typed(state, SLOT, MazeObjIds.MONST_GHOST)
-        shots._playfield_showscore(state, SLOT, 0)
+        shot_effects.playfield_showscore(state, SLOT, 0)
         assert state.score_display_timer == [1, 1, 1, 1]
         assert all(state.mobs.picture[0x11 + i] == 0 for i in range(4))
 
@@ -2873,7 +2879,7 @@ class TestPlayfieldShowscore:
         state = _make_state()
         SLOT = (9 << 5) | 9
         _place_typed(state, SLOT, MazeObjIds.MONST_GHOST, x=160, y=160)
-        shots._playfield_showscore(state, SLOT, 10)
+        shot_effects.playfield_showscore(state, SLOT, 10)
         assert state.mobs.picture[0x11] == 0x25F6
         assert state.mobs.hpos[0x11] == ((160 << 7) & 0xFF80) + 1
         assert state.mobs.vpos[0x11] == ((native_v(160) << 7) & 0xFF80) + 0x400 + 8
@@ -2882,7 +2888,7 @@ class TestPlayfieldShowscore:
         state = _make_state()
         SLOT = (9 << 5) | 9
         _place_typed(state, SLOT, MazeObjIds.MONST_GHOST)
-        shots._playfield_showscore(state, SLOT, 0)
+        shot_effects.playfield_showscore(state, SLOT, 0)
         assert state.mobs.depth_key[0x11] == SLOT
 
     def test_the_super_sorcerer_raises_one(self):
@@ -2894,11 +2900,11 @@ class TestPlayfieldShowscore:
         assert state.mobs.picture[0x11] == 0x1C88
 
     def test_the_timer_ages_out_through_wp14(self):
-        from gauntpy.subsystems.score import main_score_update
+        from gauntpy.game.subsystems.score import main_score_update
         state = _make_state()
         SLOT = (9 << 5) | 9
         _place_typed(state, SLOT, MazeObjIds.MONST_GHOST)
-        shots._playfield_showscore(state, SLOT, 0)
+        shot_effects.playfield_showscore(state, SLOT, 0)
         for _ in range(0x3C):
             main_score_update(state)
         assert state.score_display_timer[0] == 0
@@ -2922,7 +2928,7 @@ class TestThiefShotDead:
 
     def test_the_kill_calls_the_thief_api_with_the_rom_arguments(self, monkeypatch):
         """0x4B7E8 pushes (d3, d4): the shooter, then the thief's MOB slot."""
-        from gauntpy.subsystems import thief as thief_module
+        from gauntpy.game.subsystems import thief as thief_module
         calls = []
         monkeypatch.setattr(
             thief_module, "thief_remove_and_drop_loot",
@@ -3068,7 +3074,7 @@ class TestPfReplace:
         state.maze = _FakeMaze(wallpattern=0)
         state.maze.data[(9, 9)] = int(MazeObjIds.WALL_DESTRUCTABLE)
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        shots.pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
+        playfield.pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
         assert state.mobs.picture[SLOT] == 0
         assert state.mobs.link[SLOT] == 0
         assert state.mobs.obj_type(SLOT) == int(MazeObjIds.TILE_FLOOR)
@@ -3079,7 +3085,7 @@ class TestPfReplace:
         SLOT = (9 << 5) | 9
         state.maze = _FakeMaze(wallpattern=0)
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        shots.pf_replace(state, SLOT, int(MazeObjIds.WALL_REGULAR))
+        playfield.pf_replace(state, SLOT, int(MazeObjIds.WALL_REGULAR))
         assert state.mobs.obj_type(SLOT) == int(MazeObjIds.WALL_REGULAR)
         assert state.mobs.picture[SLOT] != 0
         assert state.maze.data[(9, 9)] == int(MazeObjIds.WALL_REGULAR)
@@ -3090,7 +3096,7 @@ class TestPfReplace:
         SLOT = (9 << 5) | 9
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE,
                      picture=0x8000, x=160, y=160)
-        shots.pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
+        playfield.pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
         assert state.mobs.picture[SLOT] == 0
         assert state.mobs.link[SLOT] == 0
         assert state.mobs.hpos[SLOT] == 160 << 7
@@ -3101,7 +3107,7 @@ class TestPfReplace:
         state = _make_state()
         SLOT = (9 << 5) | 9
         state.mobs.hpos[SLOT] = 160 << 7
-        shots.pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
+        playfield.pf_replace(state, SLOT, int(MazeObjIds.TILE_FLOOR))
         assert state.mobs.hpos[SLOT] == 160 << 7
 
 
@@ -3152,11 +3158,12 @@ _STUB_MARKERS = (
 
 def _shots_source() -> str:
     import inspect
-    from gauntpy.game.subsystems import shot_collision, shot_damage, shot_data
 
     return "\n".join(
         inspect.getsource(module)
-        for module in (shots, shot_collision, shot_damage, shot_data)
+        for module in (
+            shots, shot_collision, shot_damage, shot_data, shot_effects, shot_state,
+        )
     )
 
 
@@ -3170,7 +3177,7 @@ class TestNoResidualStubs:
 
     def test_every_cross_subsystem_call_reaches_a_real_owner(self):
         """The shared ROM routines resolve_shot_hit calls are all wired."""
-        from gauntpy.subsystems import potions, score, thief
+        from gauntpy.game.subsystems import potions, score, thief
         assert callable(score.dialog_first_encounter)
         assert callable(potions.potion_blast)
         assert callable(thief.thief_remove_and_drop_loot)
@@ -3183,20 +3190,19 @@ class TestNoResidualStubs:
         import inspect
         import textwrap
         empty = []
-        for name, obj in vars(shots).items():
-            if not inspect.isfunction(obj) or obj.__module__ not in {
-                shots.__name__,
-                "gauntpy.game.subsystems.shot_collision",
-                "gauntpy.game.subsystems.shot_damage",
-            }:
-                continue
-            body = textwrap.dedent(inspect.getsource(obj)).splitlines()
-            statements = [
-                line for line in body[1:]
-                if line.strip() and not line.strip().startswith(("#", '"', "'"))
-            ]
-            if not statements:
-                empty.append(name)
+        for module in (
+            shots, shot_collision, shot_damage, shot_effects, shot_state,
+        ):
+            for name, obj in vars(module).items():
+                if not inspect.isfunction(obj) or obj.__module__ != module.__name__:
+                    continue
+                body = textwrap.dedent(inspect.getsource(obj)).splitlines()
+                statements = [
+                    line for line in body[1:]
+                    if line.strip() and not line.strip().startswith(("#", '"', "'"))
+                ]
+                if not statements:
+                    empty.append(name)
         assert empty == [], f"stub functions remain: {empty}"
 
 
@@ -3204,7 +3210,7 @@ class TestNoResidualStubs:
 # Secret-room progress (WP-15's counter) raised from the exact WP-7 sites
 # =============================================================================
 
-from gauntpy.subsystems.exits import (            # noqa: E402
+from gauntpy.game.subsystems.secret_rooms import (
     TRICK_NOGETHIT,
     TRICK_NOHURTFRIENDS,
     TRICK_NOUSEINVUL,
@@ -3344,7 +3350,7 @@ class TestFoodTrick:
         """0x4B8FC branches past the trick test to the poison dialog."""
         state = _make_state()
         state.secret_trick_id = TRICK_WATCHSHOOT1
-        self._shoot_food(state, picture=shots._PIC_SLOWMO_FOOD)
+        self._shoot_food(state, picture=shot_damage._PIC_SLOWMO_FOOD)
         assert state.secret_tricks_flags[0] == 0
         assert state.monster_slowmo_timer
 
@@ -3488,21 +3494,21 @@ class TestTrickWiringUsesWp15:
         source = _shots_source()
         assert source.count("state.secret_tricks_flags[") == 1
         assert "state.secret_tricks_flags[player_index] & 0x80" in (
-            inspect.getsource(shots._trick_bump)
+            inspect.getsource(shot_damage._trick_bump)
         )
 
     def test_the_progress_helpers_delegate(self, monkeypatch):
-        from gauntpy.subsystems import exits as exits_module
+        from gauntpy.game.subsystems import secret_rooms
         calls = []
-        monkeypatch.setattr(exits_module, "secret_trick_progress",
+        monkeypatch.setattr(secret_rooms, "secret_trick_progress",
                             lambda *a: calls.append(("progress",) + a[1:]))
-        monkeypatch.setattr(exits_module, "secret_trick_set",
+        monkeypatch.setattr(secret_rooms, "secret_trick_set",
                             lambda *a: calls.append(("set",) + a[1:]))
         state = _make_state()
-        shots._trick_bump(state, 0, TRICK_WATCHSHOOT1)
+        shot_damage._trick_bump(state, 0, TRICK_WATCHSHOOT1)
         state.secret_tricks_flags[0] = 0x80
-        shots._trick_bump(state, 0, TRICK_WATCHSHOOT1)
-        shots._trick_set(state, 2, TRICK_NOUSEINVUL, 0)
+        shot_damage._trick_bump(state, 0, TRICK_WATCHSHOOT1)
+        shot_damage._trick_set(state, 2, TRICK_NOUSEINVUL, 0)
         assert calls == [
             ("progress", 0, TRICK_WATCHSHOOT1),
             ("set", 0, TRICK_WATCHSHOOT1, 1),

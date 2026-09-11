@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.rng import INCREMENT, MAX_SAFE_BOUND, MULTIPLIER, SEED_BIAS, GameRandom
+from gauntpy.game.rng import INCREMENT, MAX_SAFE_BOUND, MULTIPLIER, SEED_BIAS, GameRandom
 
 
 # ---------------------------------------------------------------------------

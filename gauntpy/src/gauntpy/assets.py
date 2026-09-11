@@ -258,7 +258,7 @@ _FAMILIES: dict[str, dict] = {
 #: other as well as with the Wizard). Lookup order in ``_frame_for`` is scoped
 #: map first, flat map second, so ``kind`` never *loses* a picture -- a hero
 #: slot momentarily holding a non-hero picture (the death-animation frames of
-#: ``players._ANIM_TABLE_IDLE``, the bonus-screen icon ``score`` parks in
+#: ``player_animation._ANIM_TABLE_IDLE``, the bonus-screen icon ``score`` parks in
 #: the player's slot) still resolves exactly as it did before.
 def _build_scoped_indexes() -> dict[str, dict[int, SpriteFrame]]:
     scoped: dict[str, dict[int, SpriteFrame]] = {}
@@ -293,7 +293,7 @@ _ENTITIES = {**MONSTERS, **HEROES, **NPCS}
 _DIRECT_PNUM_NAMES = frozenset(HEROES) | frozenset(NPCS)
 
 #: mob_picture bits 14-0 are the tile number; bit 15 is a separate software
-#: flag (gauntpy/src/gauntpy/mob.py's MobTable docstring; consistent with
+#: flag (gauntpy/src/gauntpy/game/mob.py's MobTable docstring; consistent with
 #: every "N | tile | picture+flag" row in doc/05_data_reference.md's fixed
 #: object picture table, e.g. "Potion (destr) | ... | 2300+flag | bit 15").
 PICTURE_TILE_MASK = 0x7FFF
@@ -348,18 +348,18 @@ MAX_BLOCK_TILES = 8
 # those live at the call sites that spawn the MOB rather than in the tables --
 # and gauntpy already transcribes every one of them:
 #
-#   score popups   ``shots._playfield_showscore`` (0x49498): the size and
+#   score popups   ``shot_effects._playfield_showscore`` (0x49498): the size and
 #                  palette go into the popup MOB's own H/V words, three tiles
 #                  wide + palette 5 for the score-value popups at 0x4954A, two
 #                  wide + palette 1 for the bonus popups at 0x4956A -- which is
 #                  also exactly the spacing of the two halves of the table
 #                  (0x1DB4, 0x1DB7, ... three apart; 0x25F6, 0x25F8, ... two).
-#   floating stars ``shots.tport_cycle_start`` -> ``_place_effect`` with
+#   floating stars ``shot_effects.tport_cycle_start`` -> ``_place_effect`` with
 #                  ``vpos + 0x12`` = 3x3 tiles, ``hpos + 1`` = palette 1. gex
 #                  states the same 3x3 geometry itself (``STAR_XSIZE``/
 #                  ``STAR_YSIZE``/``star_stamp``), so its constants are used
 #                  and this port's placement is the cross-check.
-#   impact bursts  ``shots.shot_impact_spawn`` -> ``_place_effect`` with
+#   impact bursts  ``shot_effects.shot_impact_spawn`` -> ``_place_effect`` with
 #                  ``vpos + 9`` = 2x2 tiles, ``hpos + 1`` = palette 1; again
 #                  the table's own stride (0x1C5C, 0x1C60, 0x1C64).
 #
@@ -378,7 +378,7 @@ _SCORE_FX = TileBlock(2, 2, DEFAULT_BLOCK_PTYPE, 1)
 #: transition loops step their animation MOB through (the twelve-word table is
 #: symmetric, so these six words are all of its distinct frames; the same
 #: transcription lives in ``subsystems/score.py`` as
-#: ``_TPORT_TRANSITION_PICTURES``, and ``subsystems/players.handle_tport``
+#: ``_TPORT_TRANSITION_PICTURES``, and ``subsystems/player_transport.handle_tport``
 #: installs the first of them). They are real ROM tile blocks that gex's
 #: effects metadata does not list, so the dispatch below would otherwise skip
 #: every transporter arrival and level transition in the game.
@@ -755,7 +755,7 @@ class AssetStore:
         Every table above is *metadata* about which picture means what -- and
         that metadata is not complete, because the game plays real artwork
         that is in no animation table at all. The hero exit/death dissolve of
-        ``players._PLAYER_EXIT_PICTURE`` is the clearest case: seven 3x3
+        ``player_animation._PLAYER_EXIT_PICTURE`` is the clearest case: seven 3x3
         blocks per class, 27 of the 28 in no gex record (the odd one out is
         also one of the Warrior's shooting frames), so every hero that reached
         an exit or died simply stopped being drawn mid-animation.

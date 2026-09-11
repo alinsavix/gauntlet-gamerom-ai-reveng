@@ -19,7 +19,7 @@ from gauntpy.performance_workloads import (
     scenario_path,
     validate_runtime_invariants,
 )
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 
 
 def test_timing_summary_uses_nearest_rank_p95():

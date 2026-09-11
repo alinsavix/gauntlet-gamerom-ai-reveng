@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.host.debug_controls import (
     debug_add_key,
     debug_add_potion,
@@ -12,7 +12,7 @@ from gauntpy.host.debug_controls import (
     debug_force_secret_room,
     debug_skip_level,
 )
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 
 from gex.roms import SLAPSTIC_ROMS, _rom_dir
 
@@ -70,7 +70,7 @@ def test_enable_secret_room_arms_current_maze_through_level_setup():
 
 
 def test_enabled_secret_trick_enters_room_only_after_exit_check_passes():
-    from gauntpy.subsystems import exits
+    from gauntpy.game.subsystems import exits
 
     state = _active_state()
     state.levelnum_current = 20
@@ -126,7 +126,7 @@ def test_force_secret_room_marks_only_selected_live_player():
 
 
 def test_force_secret_room_winner_cannot_be_replaced_by_exit_objective_check():
-    from gauntpy.subsystems import exits
+    from gauntpy.game.subsystems import exits
 
     state = _active_state()
     state.levelnum_current = 20
@@ -141,7 +141,7 @@ def test_force_secret_room_winner_cannot_be_replaced_by_exit_objective_check():
 
 
 def test_forced_secret_winner_enters_through_normal_status_handoff():
-    from gauntpy.subsystems import exits
+    from gauntpy.game.subsystems import exits
 
     state = _active_state()
     state.levelnum_current = 20
@@ -200,7 +200,7 @@ def test_skip_level_uses_rotation_and_preserves_inventory():
         for column in range(29)
     )
 
-    from gauntpy.subsystems.session import main_start_game
+    from gauntpy.game.subsystems.session import main_start_game
 
     for _ in range(0xB4):
         main_start_game(state)
@@ -235,7 +235,7 @@ def test_skip_level_advances_treasure_countdown_before_start_screen():
 @requires_roms
 def test_skip_level_neutralizes_an_in_flight_exit():
     from gauntpy.host.startup import build_state
-    from gauntpy.subsystems import exits
+    from gauntpy.game.subsystems import exits
 
     state = build_state(7, Character.ELF)
     state.level_next_treasure = 2
@@ -256,7 +256,7 @@ def test_skip_level_neutralizes_an_in_flight_exit():
 
 
 def test_skip_secret_room_restores_stashed_inventory(monkeypatch):
-    from gauntpy.subsystems import exits
+    from gauntpy.game.subsystems import level_transitions
 
     state = GameState(game_mode=GameMode.NORMAL)
     state.levelnum_current, state.mazenum_current = 20, 115
@@ -275,7 +275,7 @@ def test_skip_secret_room_restores_stashed_inventory(monkeypatch):
     state.players[0].keysnum = 4
     state.secret_possible_counter = 5
     monkeypatch.setattr(
-        exits, "_finish_level_end",
+        level_transitions, "_finish_level_end",
         lambda current: setattr(current, "level_start_pending", True),
     )
 
@@ -290,7 +290,7 @@ def test_skip_secret_room_restores_stashed_inventory(monkeypatch):
 def test_skip_secret_room_splash_does_not_duplicate_unstashed_inventory(
     monkeypatch,
 ):
-    from gauntpy.subsystems import exits
+    from gauntpy.game.subsystems import level_transitions
 
     state = _active_state()
     state.levelnum_current, state.mazenum_current = 20, 115
@@ -303,7 +303,7 @@ def test_skip_secret_room_splash_does_not_duplicate_unstashed_inventory(
     state.monster_spawn_probability_bonus = 7
     state.secret_saved_supershot = 9
     monkeypatch.setattr(
-        exits, "_finish_level_end",
+        level_transitions, "_finish_level_end",
         lambda current: setattr(current, "level_start_pending", True),
     )
 

@@ -24,8 +24,8 @@ import re
 
 import pytest
 
-from gauntpy import mainloop
-from gauntpy.subsystems import sound
+from gauntpy.game import mainloop
+from gauntpy.game.subsystems import sound
 
 from contracts import (
     REPO_ROOT,

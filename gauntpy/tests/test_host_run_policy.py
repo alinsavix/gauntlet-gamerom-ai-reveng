@@ -12,7 +12,7 @@ from gauntpy.host.eeprom import PersistencePolicy
 from gauntpy.host.run_policy import BenchmarkRun, RunPolicy, StressRun
 from gauntpy.host.session import HostSession
 from gauntpy.performance_workloads import WORKLOADS
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 
 
 class LoopHarness:

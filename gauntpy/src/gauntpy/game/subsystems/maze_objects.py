@@ -316,9 +316,7 @@ def record_transporter_secret_progress(
     if not 0 <= player_index < len(state.players) or powers_gate:
         return
 
-    from .exits import (
-        secret_trick_set,
-    )
+    from .secret_rooms import secret_trick_set
 
     # 0x5025C / 0x509E4: task 0x56 ORs 1 << tport_find_id(pad), where the
     # ROM ID is one-based.  The setter preserves its active-objective gate.

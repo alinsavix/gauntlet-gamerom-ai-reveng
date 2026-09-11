@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from gauntpy.constants import MazeObjIds, PlayerStatus
-from gauntpy.coords import decode_hpos, decode_vpos_at_y, encode_hpos, encode_vpos_at_y, pack_slot
-from gauntpy.state import GameState
-from gauntpy.subsystems.dragon import (
+from gauntpy.game.constants import MazeObjIds, PlayerStatus
+from gauntpy.game.coords import decode_hpos, decode_vpos_at_y, encode_hpos, encode_vpos_at_y, pack_slot
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.dragon import (
     _DRAGON_FIRE_SEGMENT_TBL,
     _DRAGON_HEAD_PICS,
     _DRAGON_PATH_PROGRAMS,
@@ -25,8 +25,8 @@ from gauntpy.subsystems.dragon import (
     main_handle_dragon,
     dragon_setup_segments,
 )
-from gauntpy.subsystems.exits import TRICK_NOGETHIT
-from gauntpy.subsystems.shots import shot_cell
+from gauntpy.game.subsystems.secret_rooms import TRICK_NOGETHIT
+from gauntpy.game.subsystems.shot_state import shot_cell
 
 # Same skip condition test_assets.py/test_monsters.py use: only the ROM
 # byte-match checks need the real ROMs on disk.
@@ -376,7 +376,7 @@ class TestPoseAndAttack:
         assert state.dragon_state & _ST_LOCKED
 
     def test_leading_wall_blocks_target_publication_and_flame_lock(self):
-        from gauntpy.subsystems.dragon import _choose_move_direction
+        from gauntpy.game.subsystems.dragon import _choose_move_direction
 
         state = GameState()
         primary = _place_dragon(state)

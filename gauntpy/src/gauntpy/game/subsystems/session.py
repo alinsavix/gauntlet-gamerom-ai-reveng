@@ -12,7 +12,7 @@ from ..state import NUM_PLAYERS, GameState
 from .display import (
     clear_alpha_visible, write_alpha_glyphs, write_alpha_large_text,
 )
-from .players import player_join_finalize, player_start_inner, setup_infopanel
+from .player_lifecycle import player_join_finalize, player_start_inner, setup_infopanel
 
 # ---------------------------------------------------------------------------
 # Health added per coin for an active player, indexed by game_settings & 0x1F.
@@ -101,7 +101,7 @@ def start_attract_to_game(state: GameState) -> None:
     is parked on its 0xFFFF disabled sentinel at 0x4436C so ``main_attract``
     stops running until a screen loads a timer again.
     """
-    from .players import player_resetall
+    from .player_lifecycle import player_resetall
     from .sound import sound_play
 
     state.dialog_once_flags = 0              # 0x4423A
@@ -313,7 +313,8 @@ def _cancel_solo_only_trick(state: GameState) -> None:
     Friends") all need a second hero on the level, so with exactly one player
     active the objective is cleared rather than left unwinnable.
     """
-    from .exits import _TRICK_MULTIPLAYER_FIRST, _TRICK_MULTIPLAYER_LAST, TRICK_NONE
+    from .exits import _TRICK_MULTIPLAYER_FIRST, _TRICK_MULTIPLAYER_LAST
+    from .secret_rooms import TRICK_NONE
 
     if not _TRICK_MULTIPLAYER_FIRST <= state.secret_trick_id <= _TRICK_MULTIPLAYER_LAST:
         return
@@ -361,7 +362,7 @@ def main_start_game(state: GameState) -> None:
             state.mobs.picture[slot] for slot in SLOT_SHOT_EXPLOSIONS
         )
     ):
-        from .players import player_resetall
+        from .player_lifecycle import player_resetall
         from .score import main_msgbox_countdown
 
         player_resetall(state)                                    # 0x480C0
@@ -384,11 +385,8 @@ def main_start_game(state: GameState) -> None:
 
             sound_play(state, 0x3B)                         # 0x4817C-0x48190
         if state.global_delay_timer == 0:
-            from .exits import (
-                _exiting_or_here,
-                _finish_level_end,
-                _spawn_level_players,
-            )
+            from .treasure_rooms import _exiting_or_here
+            from .level_transitions import _finish_level_end, _spawn_level_players
 
             if state.level_start_pending:
                 from .display import maze_show
@@ -434,7 +432,9 @@ def main_start_game(state: GameState) -> None:
             player_join_finalize(state, i)
             if initial_selection:
                 from ..maze import maze_addrandompickups
-                from .exits import update_monster_spawn_bonus_from_score_per_coin
+                from .level_transitions import (
+                    update_monster_spawn_bonus_from_score_per_coin,
+                )
 
                 update_monster_spawn_bonus_from_score_per_coin(state)
                 if not state.random_pickups_setup_done:

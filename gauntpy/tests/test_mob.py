@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from gauntpy import coords
-from gauntpy.constants import NULL_SLOT, MazeObjIds
-from gauntpy.mob import MobTable
+from gauntpy.game import coords
+from gauntpy.game.constants import NULL_SLOT, MazeObjIds
+from gauntpy.game.mob import MobTable
 
 
 def place(mobs: MobTable, row: int, col: int, obj_type=MazeObjIds.MONST_GHOST) -> int:

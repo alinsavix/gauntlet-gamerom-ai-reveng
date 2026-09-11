@@ -459,7 +459,7 @@ def _thief_deploy(state: GameState) -> None:
     state.thief_tport_active = 0
     path_grid_set_high_direction_if_empty(state, slot, 8)
     thief_compute_path(state)
-    from .shots import tport_cycle_start
+    from .shot_effects import tport_cycle_start
 
     tport_cycle_start(state, slot, state.thief_victim)
     _sound_play(state, 0x2D if state.thief_mode & THIEF_IS_MUGGER else 0x29)
@@ -573,7 +573,7 @@ def thief_steal_from_player(state: GameState, player_index: int) -> int:
             state.thief_item_carried = (player.bonusmult * 500 << 6) | int(MazeObjIds.TREASURE_BAG)
             player.bonusmult = 1
 
-    from .players import setup_infopanel
+    from .player_lifecycle import setup_infopanel
 
     setup_infopanel(state, player_index)                         # 0x4E3F8
     state.thief_mode |= THIEF_ENTER_OK
@@ -621,7 +621,7 @@ def thief_remove_and_drop_loot(
     if current_slot:
         # The transporter animation itself is owned by WP-7, but its start is
         # part of this ROM routine's observable thief-removal transaction.
-        from .shots import tport_cycle_start
+        from .shot_effects import tport_cycle_start
 
         tport_cycle_start(state, drop_slot, effect_player)
         state.mobs.unlink_and_clear(current_slot)
@@ -732,7 +732,7 @@ def thief_handle_tile_collision(state: GameState, candidate_mob_slot: int) -> in
             return 0
         if state.thief_stolen_item <= 0x0F:
             return 0
-        from .shots import shot_impact_spawn
+        from .shot_effects import shot_impact_spawn
 
         shot_impact_spawn(
             state, candidate_mob_slot, state.thief_victim,
@@ -814,7 +814,7 @@ def _thief_corner_squeeze_geometry(
 
 def thief_start_tport_anim(state: GameState, destination_pos: int) -> None:
     """0x4FBFC -- arm the shared transition and destination placeholder."""
-    from .players import handle_tport
+    from .player_transport import handle_tport
 
     state.thief_tport_active = 1
     handle_tport(state, state.thief_current_pos, 4)
@@ -869,7 +869,7 @@ def thief_enter_tport(state: GameState, transporter_pos: int) -> int:
     landing = _advance_route_cell(destination_pad, direction) & 0x3FF
     if (state.mobs.hpos[landing] & 0x0F) >= 0x0C:
         return 0
-    from .players import nearby_mob_clearance_test
+    from .player_transport import nearby_mob_clearance_test
 
     if not nearby_mob_clearance_test(state, landing, 4):
         return 0
@@ -915,7 +915,7 @@ def _move_thief_axis(
     new_x = _clamp_or_wrap(x + dx, state.wrap_h)
     new_y = _clamp_or_wrap(y + dy, state.wrap_v)
 
-    from .players import (
+    from .mob_probes import (
         mob_probe_down,
         mob_probe_left,
         mob_probe_right,
@@ -938,7 +938,7 @@ def _move_thief_axis(
     )
     if candidate >= 0:
         if allow_wall_response and state.mobs.picture[candidate] in (0x8000, 0x8001):
-            from .players import _probe_candidate_anchor, _wrapped_position_delta
+            from .mob_probes import _probe_candidate_anchor, _wrapped_position_delta
 
             candidate_h, candidate_v = _probe_candidate_anchor(state, candidate)
             row_delta = ((candidate >> 5) - (slot >> 5)) & 0x1F
@@ -1127,7 +1127,7 @@ def _finish_escape_at_start(state: GameState) -> bool:
     else:
         state.thief_item_nextlevel = state.thief_item_carried
     if slot:
-        from .shots import tport_cycle_start
+        from .shot_effects import tport_cycle_start
 
         tport_cycle_start(state, slot, state.thief_victim)
         state.mobs.unlink_and_clear(slot)

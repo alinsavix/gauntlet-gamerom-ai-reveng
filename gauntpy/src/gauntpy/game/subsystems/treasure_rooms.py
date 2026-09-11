@@ -128,10 +128,7 @@ def main_treasure_timer(state: GameState) -> None:
 
     Reference: doc/04_game_subsystems.md §16.
     """
-    from .exits import (
-        in_bonus_room as in_bonus_room,
-        player_activecount as player_activecount,
-    )
+    from .level_state import in_bonus_room, player_activecount
 
     # main_treasure_timer only tests this shared timer. main_start_game owns its
     # decrement and transition actions at 0x4817C-0x481E8.
@@ -274,17 +271,14 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     just played, and ``secret_check`` (0x4D8DC) adapts how soon the next secret
     room may be offered.
     """
-    from .exits import (
-        in_secret_room as in_secret_room,
-        player_activecount as player_activecount,
-    )
+    from .level_state import in_secret_room, player_activecount
     from .secret_rooms import (
         _secret_room_payout as _secret_room_payout,
         secret_check as secret_check,
         secret_check_winner as secret_check_winner,
     )
 
-    from .players import setup_infopanel
+    from .player_lifecycle import setup_infopanel
 
     was_secret_room = in_secret_room(state)          # 0x4D496, before the commit
     secret_player = state.secret_player if was_secret_room else -1

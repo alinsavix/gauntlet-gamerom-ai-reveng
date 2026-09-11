@@ -7,9 +7,9 @@ import inspect
 import time
 from types import SimpleNamespace
 
-from gauntpy.constants import MazeObjIds
-from gauntpy.maze import initialize_playfield_ram, set_cell_descriptor
-from gauntpy.playfield_vram import (
+from gauntpy.game.constants import MazeObjIds
+from gauntpy.game.maze import initialize_playfield_ram, set_cell_descriptor
+from gauntpy.game.playfield_vram import (
     EXIT_SETTLED_DESC,
     EXITTO6_SETTLED_DESC,
     TRANSPORTER_DESC,
@@ -19,7 +19,7 @@ from gauntpy.playfield_vram import (
     write_tile_descriptor,
 )
 from gauntpy.render.playfield import playfield_cache_for_state
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 
 
 def test_playfield_ram_is_the_exact_column_first_hardware_table():
@@ -38,7 +38,7 @@ def test_playfield_ram_is_the_exact_column_first_hardware_table():
 
 
 def test_lflag1_invisible_trap_walls_preserve_floor_descriptors():
-    import gauntpy.maze as maze_module
+    import gauntpy.game.maze as maze_module
 
     state = GameState(level_flags=0x80)
     slot = (5 << 5) | 5
@@ -59,7 +59,7 @@ def test_lflag1_invisible_trap_walls_preserve_floor_descriptors():
 
 
 def test_lflag2_invisible_all_walls_preserves_floor_descriptors():
-    import gauntpy.maze as maze_module
+    import gauntpy.game.maze as maze_module
 
     state = GameState(level_flags_2=0x80)
     slot = (5 << 5) | 5
@@ -77,7 +77,7 @@ def test_lflag2_invisible_all_walls_preserves_floor_descriptors():
 
 
 def test_level_9999_overrides_both_wall_invisibility_flags():
-    import gauntpy.maze as maze_module
+    import gauntpy.game.maze as maze_module
 
     state = GameState(
         levelnum_current=maze_module.LEVEL_SENTINEL,
@@ -310,7 +310,7 @@ def test_descriptor_stays_committed_until_a_real_restamp_then_rerolls():
 
 
 def test_live_random_wall_draw_uses_state_rng_at_the_write(monkeypatch):
-    import gauntpy.maze as maze_module
+    import gauntpy.game.maze as maze_module
 
     class RecordingRng:
         def __init__(self):
@@ -348,7 +348,7 @@ def test_live_random_wall_draw_uses_state_rng_at_the_write(monkeypatch):
 
 
 def test_initial_floor_and_random_wall_writes_use_state_rng(monkeypatch):
-    import gauntpy.maze as maze_module
+    import gauntpy.game.maze as maze_module
 
     class RecordingRng:
         def __init__(self):
@@ -408,7 +408,7 @@ def test_initial_floor_and_random_wall_writes_use_state_rng(monkeypatch):
 
 
 def test_initial_descriptor_decision_is_object_aware_and_draws_once(monkeypatch):
-    import gauntpy.maze as maze_module
+    import gauntpy.game.maze as maze_module
 
     class RecordingRng:
         def __init__(self):
@@ -489,7 +489,7 @@ def test_live_wall_refresh_updates_the_wrapped_adjacency_ring():
 
 
 def test_reserved_boundary_row_connects_as_one_continuous_wall():
-    import gauntpy.maze as maze_module
+    import gauntpy.game.maze as maze_module
 
     state = GameState()
     state.maze = SimpleNamespace(data={})
@@ -539,8 +539,8 @@ def test_all_floor_live_refresh_draws_center_then_exact_three_neighbors():
 
 
 def test_live_refresh_visits_walls_and_door_routines_in_rom_order(monkeypatch):
-    import gauntpy.maze as maze_module
-    import gauntpy.subsystems.maze_objects as maze_objects
+    import gauntpy.game.maze as maze_module
+    import gauntpy.game.subsystems.maze_objects as maze_objects
 
     center = (5 << 5) | 5
     neighbors = (
@@ -584,7 +584,7 @@ def test_live_refresh_visits_walls_and_door_routines_in_rom_order(monkeypatch):
 
 
 def test_initial_floor_rng_mapping_is_column_outer_row_inner(monkeypatch):
-    import gauntpy.maze as maze_module
+    import gauntpy.game.maze as maze_module
 
     class SequencedRng:
         def __init__(self):

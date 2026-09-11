@@ -6,12 +6,22 @@ from ..constants import MazeObjIds
 from ..coords import POS_SHIFT, mob_cell_of
 from ..state import GameState
 from .monster_data import (
-    _BLANK_PICTURE as _BLANK_PICTURE,
-    _HPOS_FLAG_ATTACK as _HPOS_FLAG_ATTACK,
-    _HPOS_FLAG_MOVING as _HPOS_FLAG_MOVING,
-    _MONSTER_ODDANGLE_TABLE as _MONSTER_ODDANGLE_TABLE,
-    _OVERLAP as _OVERLAP,
-    _SOFTWARE_MOB_BIAS as _SOFTWARE_MOB_BIAS,
+    _BLANK_PICTURE,
+    _HPOS_FLAG_ATTACK,
+    _HPOS_FLAG_MOVING,
+    _MONSTER_ODDANGLE_TABLE,
+    _OVERLAP,
+    _SOFTWARE_MOB_BIAS,
+)
+from .monster_state import (
+    _aim_direction,
+    _anim_add_high,
+    _anim_advance,
+    _delta_units,
+    _get_direction,
+    _s16,
+    _set_direction,
+    monster_update_anim_tile,
 )
 
 #: 0x41484 -- extra counter bump applied when entering the blink state.
@@ -59,11 +69,6 @@ def _march_cell_blocks(state: GameState, cell: int, h: int, v: int) -> bool:
     return abs(_s16(v - state.mobs.vpos[cell])) < _OVERLAP
 
 
-def _s16(value: int) -> int:
-    value &= 0xFFFF
-    return value - 0x10000 if value & 0x8000 else value
-
-
 def _ray_march(state: GameState, slot: int, probe: tuple[int, int],
                h: int, v: int) -> int | None:
     """The four ray marches -- returns the blocking cell, or None when clear.
@@ -109,10 +114,6 @@ def _probe_phase(state: GameState, slot: int, step: int,
     it is the heading to store; ``blocking_cell`` is set only when a probe ran
     into something the caller has to resolve as contact.
     """
-    from .monsters import (
-        _get_direction as _get_direction,
-    )
-
     h = state.mobs.hpos[slot]
     v = state.mobs.vpos[slot]
     rom_dir = (_get_direction(state, slot) + 2) & 0x07
@@ -188,10 +189,6 @@ def _monster_move_engine(state: GameState, slot: int, obj_type: int, index: int,
     blocked doubles it first (``add.w d6,d6; subi #0x400``), which is how the
     creature turns away from what it hit.
     """
-    from .monsters import (
-        _monster_speed as _monster_speed,
-    )
-
     speed = _monster_speed(state, obj_type, frame_word)
     h, v, d6, clear, blocker = _probe_phase(state, slot, speed << POS_SHIFT)
     if blocker is not None:
@@ -209,10 +206,7 @@ def _march_hit_player(state: GameState, slot: int, blocker: int) -> None:
     to face what it hit (0x413CC), unless the contact removed it -- a ghost
     exploding on the player.
     """
-    from .monsters import (
-        _iter_ptr_forget as _iter_ptr_forget,
-        monster_playerhit as monster_playerhit,
-    )
+    from .monster_contact import monster_playerhit
 
     victim = _cell_player_index(state, blocker)
     if victim is None:
@@ -246,12 +240,6 @@ def apply_direction_from_delta(state: GameState, slot: int, victim_cell: int) ->
     Same picker as the idle aim with the fixed 0x400-position-unit threshold,
     which is 8 pixels, i.e. 4 of the 2-pixel units the picker counts in.
     """
-    from .monsters import (
-        _aim_direction as _aim_direction,
-        _delta_units as _delta_units,
-        _set_direction as _set_direction,
-    )
-
     victim = _cell_player_index(state, victim_cell)
     target_slot = (
         state.players[victim].mob_slot if victim is not None else victim_cell
@@ -263,10 +251,6 @@ def apply_direction_from_delta(state: GameState, slot: int, victim_cell: int) ->
 
 def _write_direction(state: GameState, slot: int, d6: int) -> None:
     """0x4133E -- store the ROM-compass direction field back into the state."""
-    from .monsters import (
-        _set_direction as _set_direction,
-    )
-
     _set_direction(state, slot, ((d6 >> 10) - 2) & 0x07)
 
 
@@ -285,11 +269,7 @@ def _destination_cell(h: int, v: int) -> int:
 def _commit_move(state: GameState, slot: int, index: int, d6: int, h: int,
                  v: int, clear: bool, frame_word: int, acted: bool) -> None:
     """0x4133E-0x413AE -- store the heading, then relocate if a probe was clear."""
-    from .monsters import (
-        _iter_ptr_forget as _iter_ptr_forget,
-        monster_playerhit as monster_playerhit,
-        monster_update_anim_tile as monster_update_anim_tile,
-    )
+    from .monster_contact import monster_playerhit
 
     _write_direction(state, slot, d6)
     h &= ~_HPOS_FLAG_MOVING                    # 0x41348: bclr #5
@@ -340,11 +320,6 @@ def _move_tail(state: GameState, slot: int, index: int, frame_word: int,
     flag instead.  When the counter wraps, byte 2 either bumps it further or --
     with bit 0 set -- flips the creature into its blink state.
     """
-    from .monsters import (
-        _anim_add_high as _anim_add_high,
-        _anim_advance as _anim_advance,
-    )
-
     row = _MONSTER_ODDANGLE_TABLE[index]
     if moved:
         mask = row[1]
@@ -374,3 +349,50 @@ def _move_tail(state: GameState, slot: int, index: int, frame_word: int,
         state.mobs.picture[slot] = _BLANK_PICTURE
         return
     _anim_add_high(state, slot, delta)
+
+
+# Base per-step movement in pixels; the ROM's 0x80/0x100 words are one and two
+# native position pixels.
+_MONSTER_SPEED_BASE = 1
+_MONSTER_SPEED_FAST = 2
+
+# obj_type -> its per-family LFLAG2 "fast" bit in the ``level_flags_2`` byte.
+# Each fast flag speeds up exactly one family (gex.constants LFLAG2_FAST_*:
+# longword bits 16-22 = level_flags_2 byte bits 0-6). Acid, Super Sorcerer, and
+# IT have no fast flag. §3.3.
+_FAST_FAMILY_BIT = {
+    int(MazeObjIds.MONST_GHOST): 0x01,       # LFLAG2_FAST_GHOSTS
+    int(MazeObjIds.MONST_GRUNT): 0x02,       # LFLAG2_FAST_GRUNTS
+    int(MazeObjIds.MONST_DEMON): 0x04,       # LFLAG2_FAST_DEMONS
+    int(MazeObjIds.MONST_LOBBER): 0x08,      # LFLAG2_FAST_LOBBERS
+    int(MazeObjIds.MONST_SORC): 0x10,        # LFLAG2_FAST_SORCERERS
+    int(MazeObjIds.MONST_AUX_GRUNT): 0x20,   # LFLAG2_FAST_AUX_GRUNTS
+    int(MazeObjIds.MONST_DEATH): 0x40,       # LFLAG2_FAST_DEATHS
+}
+
+
+def _monster_speed(state: GameState, obj_type: int, frame_word: int) -> int:
+    """Base 0x80 (1 px); a family raised to 0x100 (2 px) on frames where bit 1 of
+    the frame word is set, averaging ~1.5x (§3.3).
+
+    Verified by disassembly of monsters_everything (0x40EEE-0x40F34): the config
+    pushes 0x80 for every family, and only when ``level_flags_2`` has *that
+    family's* fast bit set **and** bit 1 of the cadence word is set is it raised
+    to 0x100.  That word is ``frame_counter`` doubled outside slow-motion, so
+    without slow-motion the test lands on ``frame_counter`` bit 0.
+
+    The ``level_flags`` ODDANGLE override at 0x40E02 rides in the *high* byte of
+    the same longword and is not a speed at all -- see ``_oddangle_override``.
+    """
+    bit = _FAST_FAMILY_BIT.get(obj_type)
+    if bit and (state.level_flags_2 & bit) and (frame_word & 2):
+        return _MONSTER_SPEED_FAST
+    return _MONSTER_SPEED_BASE
+
+
+def _iter_ptr_forget(state: GameState, slot: int) -> None:
+    """0x414FE -- a creature that removed itself hands the marker back."""
+    if state.monster_iter_ptr != slot:
+        return
+    state.monster_iter_ptr = (state.mobs.prev_slot(slot)
+                              or state.mobs.depth_list_head)

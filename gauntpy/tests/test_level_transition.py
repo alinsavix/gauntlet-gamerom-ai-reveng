@@ -19,14 +19,17 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus, SLOT_PLAYER_SHOTS
-from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
-from gauntpy.mainloop import tick
-from gauntpy.state import GameState
-from gauntpy.subsystems import exits as ex
-from gauntpy.subsystems import players as gp
-from gauntpy.subsystems import session as sess
-from gauntpy.subsystems.input import JOY_MAGIC_BIT, JOY_RIGHT
+from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus, SLOT_PLAYER_SHOTS
+from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, pack_slot
+from gauntpy.game.mainloop import tick
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems import exits as ex
+from gauntpy.game.subsystems import players as gp
+from gauntpy.game.subsystems import session as sess
+from gauntpy.game.subsystems import (
+    level_transitions, player_animation, player_lifecycle, secret_rooms,
+)
+from gauntpy.game.subsystems.input import JOY_MAGIC_BIT, JOY_RIGHT
 
 from gex.roms import SLAPSTIC_ROMS, _rom_dir
 
@@ -216,7 +219,7 @@ class TestPlayerExitSequence:
         gp.main_move_players(state)
         gp.main_move_players(state)
         gp.main_move_players(state)
-        assert state.mobs.picture[anim_slot] == gp._PLAYER_EXIT_PICTURE[
+        assert state.mobs.picture[anim_slot] == player_animation._PLAYER_EXIT_PICTURE[
             (p.character & 3) * 8 + (p.anim_counter >> 2)
         ]
         assert p.status == int(PlayerStatus.EXITING)
@@ -266,13 +269,13 @@ def test_survivor_spawn_does_not_replay_join_sound_or_welcome(monkeypatch):
         inner_state.level_players_active += 1
         return -1
 
-    monkeypatch.setattr(gp, "player_start_inner", spawn)
+    monkeypatch.setattr(player_lifecycle, "player_start_inner", spawn)
     monkeypatch.setattr(
-        gp, "setup_infopanel",
+        player_lifecycle, "setup_infopanel",
         lambda inner_state, player_index: panel_calls.append(player_index),
     )
 
-    ex._spawn_level_players(state, [0])
+    level_transitions._spawn_level_players(state, [0])
 
     assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
     assert state.secret_tricks_flags[0] == 0
@@ -283,9 +286,9 @@ def test_survivor_spawn_does_not_replay_join_sound_or_welcome(monkeypatch):
 def test_failed_survivor_spawn_keeps_next_level_status(monkeypatch):
     state = GameState(game_mode=GameMode.NORMAL)
     state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
-    monkeypatch.setattr(gp, "player_start_inner", lambda _state, _player: 0)
+    monkeypatch.setattr(player_lifecycle, "player_start_inner", lambda _state, _player: 0)
 
-    ex._spawn_level_players(state, [0])
+    level_transitions._spawn_level_players(state, [0])
 
     assert state.players[0].status == int(PlayerStatus.ALIVE_NEXT)
     assert state.players[0].mob_slot == 0
@@ -309,7 +312,7 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
     def test_level_splash_timer_advances_while_a_dialog_gates_the_world(self, monkeypatch):
         spawned = []
         monkeypatch.setattr(
-            ex, "_spawn_level_players",
+            level_transitions, "_spawn_level_players",
             lambda state, survivors: spawned.append((state, survivors)),
         )
         state = GameState(
@@ -328,7 +331,7 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
         assert spawned and spawned[0][1] == [0]
 
     def test_solo_exit_loads_next_level_and_respawns_survivor(self):
-        from gauntpy import maze
+        from gauntpy.game import maze
 
         state = GameState()
         maze.load_level(state, 1)                       # level 1 = maze 0
@@ -425,7 +428,7 @@ class TestTreasureRoomRoundTrip:
     """
 
     def _level_12_with_a_hero(self) -> GameState:
-        from gauntpy import maze
+        from gauntpy.game import maze
 
         state = GameState()
         state.game_mode = GameMode.NORMAL
@@ -552,9 +555,9 @@ class TestPlayerStartInner:
 
     @requires_roms
     def test_post_death_continue_reuses_saved_start_and_snaps_camera(self):
-        from gauntpy import maze
-        from gauntpy.coords import slot_to_pixels
-        from gauntpy.subsystems.camera import viewport_scroll
+        from gauntpy.game import maze
+        from gauntpy.game.coords import slot_to_pixels
+        from gauntpy.game.subsystems.camera import viewport_scroll
 
         state = GameState(game_mode=GameMode.NORMAL)
         maze.load_level(state, 2)
@@ -735,7 +738,7 @@ class TestSecretRoomRoundTrip:
     _SHOOT_MAZE = 11
 
     def _level_12(self, maze_number: int) -> GameState:
-        from gauntpy import maze
+        from gauntpy.game import maze
 
         state = GameState()
         state.game_mode = GameMode.NORMAL
@@ -802,8 +805,8 @@ class TestSecretRoomRoundTrip:
             state, 0, self._secret_exit(state), int(MazeObjIds.EXIT),
         )
         _run_exit_animation(state)
-        assert state.bonus_amount == ex._SECRET_ROOM_BONUS
-        assert p.score == ex._SECRET_ROOM_BONUS
+        assert state.bonus_amount == secret_rooms._SECRET_ROOM_BONUS
+        assert p.score == secret_rooms._SECRET_ROOM_BONUS
         assert (p.keysnum, p.potionsnum, p.supershot) == (3, 3, 5)
         assert state.secret_player == -1
 

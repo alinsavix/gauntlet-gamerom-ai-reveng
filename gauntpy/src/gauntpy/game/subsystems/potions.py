@@ -25,14 +25,9 @@ from __future__ import annotations
 from ..constants import GameMode, MazeObjIds
 from ..state import GameState
 from .display import ALPHA_PALETTE_INIT
-from .monsters import (
-    _ANIM_ACID_IDLE,
-    _HPOS_FLAG_ATTACK,
-    _HPOS_FLAG_MOVING,
-    _in_cull_rect,
-    monster_update_anim_tile,
-    _update_cull_rect,
-)
+from .monster_state import _ANIM_ACID_IDLE, monster_update_anim_tile
+from .monster_data import _HPOS_FLAG_ATTACK, _HPOS_FLAG_MOVING
+from .monsters import _in_cull_rect, _update_cull_rect
 from .sound import sound_play as _sound_play
 
 
@@ -181,7 +176,7 @@ def main_handle_potions(state: GameState) -> None:
         state.playfield_color_latch = ALPHA_PALETTE_INIT[p.index * 4 + 7]
         p.potionsnum -= 1
         _sound_play(state, _SOUND_POTION)
-        from .players import player_inv_update
+        from .player_lifecycle import player_inv_update
 
         player_inv_update(state, p.index)                 # 0x470BA
         _dialog_first_encounter(state, p.index, _DIALOG_POTION_USED)
@@ -201,7 +196,7 @@ def _magic_press_edge(state: GameState, player_index: int) -> bool:
     if state.game_mode != GameMode.NORMAL:
         # 0x4702E-0x47048 reads bit 0 directly from the current demo record.
         # The hardware debounce register is only consulted in normal play.
-        from .players import demo_record_word
+        from .player_input import demo_record_word
 
         return not (demo_record_word(state, player_index) & 0x01)
     reg = state.debounce_shift_magic[player_index]
@@ -293,7 +288,7 @@ def _apply_potion_effect(state: GameState, slot: int, obj_type: int,
 
     if entry == 0:
         if obj_type == int(MazeObjIds.MONST_DEATH):
-            from .shots import playfield_showscore
+            from .shot_effects import playfield_showscore
 
             index = state.death_hits & 7
             playfield_showscore(

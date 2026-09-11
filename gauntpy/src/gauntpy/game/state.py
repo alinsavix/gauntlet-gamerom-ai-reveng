@@ -160,7 +160,7 @@ class GameState:
     # level_flags_4 as a standalone byte at 0x90491F. gex.constants'
     # LFLAG1_*/LFLAG2_*/LFLAG3_*/LFLAG4_* masks are longword-relative
     # (bits 24-31/16-23/8-15/0-7); only LFLAG4 tests directly against its
-    # byte here without shifting -- see gauntpy.maze._split_flags/_join_flags
+    # byte here without shifting -- see gauntpy.game.maze._split_flags/_join_flags
     # for the reassembly WP-3 needs internally.
     level_flags: int = 0            # 0x90491C, LFLAG1 byte
     level_flags_2: int = 0          # 0x90491D, LFLAG2 byte
@@ -341,18 +341,16 @@ class GameState:
     # 0x9048C8 ``active_mob_ids`` entries 4-11: the MOB slot that fired each
     # monster/dragon shot channel, so a shot cannot hit its own shooter.
     # Entries 0-3 come from ``Player.mob_slot`` and are refreshed each frame.
-    # -1 = unknown; main_handle_shots latches the spawn cell (identity is
-    # location) the frame a channel goes live.  See the WP-8 follow-up note in
-    # ``shots.py``: monster_create_shot should write this directly.
+    # -1 = unknown. Monster/dragon creation writes the firing MOB identity;
+    # main_handle_shots retains a fallback for manually armed channels.
     shot_owner_mob: list[int] = field(default_factory=lambda: [-1] * 12)
     # Destructible-wall crumble stage, one entry per damaged wall slot.
     # wall_crumble (0x5303A) keeps the stage in the playfield tile itself: on a
     # shrub level (``wallpattern >= 6``) it is which of the three
     # ``wall_desc_destructible`` descriptors is stamped, elsewhere it is how far
-    # the tile's palette nibble has been walked down from 7.  The port's terrain
-    # raster is a cache built from ``maze``, so the stage lives here and the
-    # renderer reads it back: shrub levels pick ``SHRUB_DESTRUCT_STAMPS[stage]``,
-    # the rest draw the wall with palette ``7 - stage``.
+    # the tile's palette nibble has been walked down from 7. The port tracks
+    # the stage here; wall_crumble writes the resulting descriptor/palette to
+    # playfield RAM. Rendering consumes those words, not this dictionary.
     destructible_wall_stage: dict = field(default_factory=dict)  # slot → 0-2
     # 0x90486E ``secret_need_hint``: set when a secret wall is shot open, so
     # the next level start screen offers the hint.  WP-7 writes, WP-15 reads.
@@ -574,7 +572,7 @@ class GameState:
     # 0x904BD8: per-player tile position for camera extent calculation.
     # Each entry is the packed slot (row<<5|col) of that player's cell, which
     # is ``Player.mob_slot`` itself except on the rare frame where an occupied
-    # destination held the migrating record back (players.migrate_player_record).
+    # destination held the migrating record back (player_movement.migrate_player_record).
     player_tile_or_tport_dest: list[int] = field(default_factory=lambda: [0] * 4)
     # Python polarity-normalized view of player_tport_phase for camera tracking.
     # It has no separate ROM address: 0x904BCE is player_tport_phase.
@@ -689,7 +687,7 @@ class GameState:
     # bonus tally's treasure factor (show_level_end_bonus_screen 0x4D57E/0x4D638).
     # The ROM bumps it in player_tile_interact's treasure arm (0x519F8) and
     # clears it in player_start_inner (0x48E86); WP-15 owns the counter and
-    # exposes ``exits.treasure_collected()`` as that write site.
+    # exposes ``secret_rooms.treasure_collected()`` as that write site.
     player_treascount: list[int] = field(default_factory=lambda: [0] * NUM_PLAYERS)
     # 0x904A4E global_delay_timer: holds the bonus tally and then the level
     # splash before player placement. bonus_amount is the computed award shown
@@ -716,8 +714,8 @@ class GameState:
     treasure_voice_set: int = 0
     # 0x910740 exit_slot_list / 0x904A06 exit_count: every EXIT tile the current
     # maze decoded to, in slot order. The ROM fills this in maze_new_level_setup
-    # (0x43A34-0x43A5A); exits.py rebuilds it from the MOB table because WP-3's
-    # level setup does not (see exits.exit_scan_level).
+    # (0x43A34-0x43A5A); game-side level setup calls exit_scan_level to populate
+    # the port's table from live markers before secret-challenge transformation.
     exit_slots: list[int] = field(default_factory=list)
     # 0x904A0A: slot of the exit that is currently open. Zero disables
     # main_exit_move entirely (maze_new_level_setup clears it at 0x43B9A when

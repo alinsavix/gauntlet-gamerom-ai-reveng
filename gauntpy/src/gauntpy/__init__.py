@@ -13,10 +13,11 @@ the section or ROM address it came from.
 
 from __future__ import annotations
 
-from .game import (
-    Character, GameMode, GameRandom, GameState, MazeObjIds, MobTable, Player,
-    PlayerStatus, g2mainloop, game_frame, tick,
-)
+from .game.constants import Character, GameMode, MazeObjIds, PlayerStatus
+from .game.rng import GameRandom
+from .game.state import GameState, Player
+from .game.mob import MobTable
+from .game.mainloop import g2mainloop, game_frame, tick
 
 __version__ = "0.0.1"
 

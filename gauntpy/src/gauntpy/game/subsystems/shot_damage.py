@@ -8,6 +8,22 @@ from ..playfield import pf_replace as pf_replace
 from .shot_data import (
     CONSUMED as CONSUMED,
 )
+from .shot_effects import (
+    _potion_blast,
+    _sound,
+    _spawn_maze_object,
+    _speech,
+    playfield_showscore,
+    shot_impact_spawn,
+    tport_cycle_start,
+    wall_crumble,
+)
+from .shot_state import (
+    _channel_clear,
+    _is_maxtier,
+    _shot_tier,
+    _u16,
+)
 
 SURVIVES = 0       # resolve_shot_hit: pierce / reflect / no effect
 
@@ -157,7 +173,7 @@ def _trick_bump(state: GameState, player_index: int, trick_id: int) -> None:
     instead of wrapping.  Both halves go through the WP-15 entry points, which
     carry the ``cmpi.b #<trick>,secret_trick_id`` guard themselves.
     """
-    from .exits import secret_trick_progress, secret_trick_set
+    from .secret_rooms import secret_trick_progress, secret_trick_set
     if state.secret_tricks_flags[player_index] & 0x80:
         secret_trick_set(state, player_index, trick_id, 1)
     else:
@@ -167,7 +183,7 @@ def _trick_bump(state: GameState, player_index: int, trick_id: int) -> None:
 def _trick_set(state: GameState, player_index: int, trick_id: int,
                value: int) -> None:
     """0x4B052 / 0x4B312 -- the ``move.b #n`` and ``clr.b`` progress sites."""
-    from .exits import secret_trick_set
+    from .secret_rooms import secret_trick_set
     secret_trick_set(state, player_index, trick_id, value)
 
 
@@ -229,10 +245,6 @@ def death_damage_accumulate(state: GameState, player_index: int,
     belongs to the player and persists across multiple Death MOBs within a
     level; player_start_inner resets it on join/transition.
     """
-    from .shots import (
-        tport_cycle_start as tport_cycle_start,
-    )
-
     player = state.players[player_index]
     player.death_damage_counter += damage
     if player.death_damage_counter > 200:
@@ -277,10 +289,6 @@ def _monstshot_damage_index(state: GameState, victim, shooter_id: int) -> int:  
     *shot's* own hpos bits 4-5 and falls back to 8 for a special/dragon
     channel when those bits are clear.
     """
-    from .shots import (
-        _shot_tier as _shot_tier,
-    )
-
     index = (victim.character & 0x03)
     if victim.powers & _POWER_ARMOR:
         index += 4
@@ -300,28 +308,6 @@ def _supershot(state: GameState, shooter_id: int) -> bool:
     return shooter_id < 4 and bool(state.players[shooter_id].supershot)
 
 
-# =============================================================================
-# resolve_shot_hit tails
-# =============================================================================
-
-def _channel_clear(state: GameState, shooter_id: int) -> None:
-    """``mob_depth_remove(shooter)`` + ``mob_picture[shooter+1] = 0``.
-
-    The ROM leaves H/V alone here; only the off-screen path clears them.
-    """
-    from .shots import (
-        _shot_slot as _shot_slot,
-    )
-
-    slot = _shot_slot(shooter_id)
-    state.mobs.depth_remove(shooter_id)
-    state.mobs.picture[slot] = 0
-    state.shot_dx[slot] = 0
-    state.shot_dy[slot] = 0
-    state.shot_direction[shooter_id] = 8
-    state.shot_owner_mob[shooter_id] = -1
-
-
 def _consume(state: GameState, shooter_id: int) -> int:
     """0x4B6CE -- unconditional "shot used up" tail."""
     _channel_clear(state, shooter_id)
@@ -333,11 +319,6 @@ def _finish(state: GameState, slot: int, shooter_id: int) -> int:
 
     Otherwise it sparkles on a still-present target and is consumed.
     """
-    from .shots import (
-        _is_maxtier as _is_maxtier,
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     if _is_maxtier(state, shooter_id):
         return SURVIVES
     if state.mobs.picture[slot] != 0:
@@ -351,11 +332,6 @@ def _finish(state: GameState, slot: int, shooter_id: int) -> int:
 
 def _handle_player_victim(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B02C-0x4B316 -- the target MOB is a player."""
-    from .shots import (
-        _sound as _sound,
-        dragon_player_proximity as dragon_player_proximity,
-    )
-
     mobs = state.mobs
     victim_index = mobs.state(slot) & 0x3F
     if victim_index >= len(state.players):
@@ -366,7 +342,7 @@ def _handle_player_victim(state: GameState, slot: int, shooter_id: int) -> int:
         return _monster_shot_on_player(state, slot, shooter_id, victim_index, victim)
 
     # ---- player versus player (0x4B046) ----
-    from .exits import TRICK_NOHURTFRIENDS
+    from .secret_rooms import TRICK_NOHURTFRIENDS
     _trick_set(state, shooter_id, TRICK_NOHURTFRIENDS, 1)
 
     hurt = False
@@ -397,15 +373,11 @@ def _handle_player_victim(state: GameState, slot: int, shooter_id: int) -> int:
 def _monster_shot_on_player(state: GameState, slot: int, shooter_id: int,
                             victim_index: int, victim) -> int:  # noqa: ANN001
     """0x4B1AC -- a monster/dragon shot landing on a player."""
-    from .shots import (
-        _sound as _sound,
-    )
-
     index = _monstshot_damage_index(state, victim, shooter_id)
 
     if victim.acid_timer:
         # 0x4B306: an acid-slowed player is immune, and loses trick 8.
-        from .exits import TRICK_NOUSEINVUL
+        from .secret_rooms import TRICK_NOUSEINVUL
         _trick_set(state, victim_index, TRICK_NOUSEINVUL, 0)
         return _finish(state, slot, shooter_id)
 
@@ -416,7 +388,7 @@ def _monster_shot_on_player(state: GameState, slot: int, shooter_id: int,
     if index >= 0x18:
         _dialog(state, victim_index, _DIALOG_DRAGON_SHOT, damage)
         # 0x4B2A2: only the dragon's own fire counts against "don't get hit".
-        from .exits import TRICK_NOGETHIT, secret_trick_progress
+        from .secret_rooms import TRICK_NOGETHIT, secret_trick_progress
         secret_trick_progress(state, victim_index, TRICK_NOGETHIT)
     elif index >= 0x10:
         _dialog(state, victim_index, _DIALOG_STRONG_SHOT, damage)
@@ -433,10 +405,6 @@ def _monster_shot_on_player(state: GameState, slot: int, shooter_id: int,
 def _handle_monster(state: GameState, slot: int, shooter_id: int, damage: int,
                     obj_type: int, multiplier: int) -> int:
     """0x4BB36 -- subtract the damage from the target's own hpos tier nibble."""
-    from .shots import (
-        _u16 as _u16,
-    )
-
     mobs = state.mobs
     mobs.hpos[slot] = _u16(mobs.hpos[slot] - damage)
     tier = mobs.hpos[slot] & 0x0F
@@ -450,10 +418,6 @@ def _handle_monster(state: GameState, slot: int, shooter_id: int, damage: int,
 def _destroy_target(state: GameState, slot: int, shooter_id: int, damage: int,
                     obj_type: int, multiplier: int) -> int:
     """0x4BCB8 -- sparkle, then remove when this shooter is allowed to."""
-    from .shots import (
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     shot_impact_spawn(state, slot, shooter_id)
     remove = (
         shooter_id < 4
@@ -468,9 +432,6 @@ def _destroy_target(state: GameState, slot: int, shooter_id: int, damage: int,
 def _score_tail(state: GameState, slot: int, shooter_id: int, damage: int,
                 obj_type: int, multiplier: int) -> int:
     """0x4BD66 -- award the score, then pierce unless the target is Death/IT."""
-    from .shots import (
-        dragon_player_proximity as dragon_player_proximity,
-    )
     from .score import player_add_score_with_mult
 
     if shooter_id >= 4:
@@ -509,11 +470,6 @@ def _handle_supersorc(state: GameState, slot: int, shooter_id: int,
     A supershot takes the shared destroy path instead, where D5 is still the
     zeroed victim register -- so it scores nothing.  That is the ROM.
     """
-    from .shots import (
-        playfield_showscore as playfield_showscore,
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     if _supershot(state, shooter_id):
         return _destroy_target(state, slot, shooter_id, damage, obj_type, 0)
     if state.mobs.hpos[slot] & _MONST_PHASED:
@@ -533,10 +489,6 @@ def _handle_supersorc(state: GameState, slot: int, shooter_id: int,
 def _handle_death(state: GameState, slot: int, shooter_id: int,
                   damage: int, obj_type: int) -> int:
     """0x4BC12 -- Death: count the hit, and only a supershot really hurts."""
-    from .shots import (
-        _u16 as _u16,
-    )
-
     if shooter_id < 4:
         state.death_hits = _u16(state.death_hits + 1)
         if state.players[shooter_id].supershot:
@@ -549,10 +501,6 @@ def _handle_death(state: GameState, slot: int, shooter_id: int,
 def _handle_it(state: GameState, slot: int, shooter_id: int,
                damage: int, obj_type: int) -> int:
     """0x4BC48 -- shooting IT folds its state field down and phases it out."""
-    from .shots import (
-        _u16 as _u16,
-    )
-
     mobs = state.mobs
     previous = mobs.state_link[slot]
     mobs.state_link[slot] = previous & 0x1FFF
@@ -569,10 +517,6 @@ def _handle_it(state: GameState, slot: int, shooter_id: int,
 def _handle_generator(state: GameState, slot: int, shooter_id: int,
                       damage: int, obj_type: int) -> int:
     """0x4BCB0/0x4BD04/0x4BD14 -- tier 1 always dies, 2 and 3 need the damage."""
-    from .shots import (
-        _u16 as _u16,
-    )
-
     state.escape_timer = 0
     tier = ((obj_type - _GEN_BASE) % 3) + 1
     if tier == 1 or damage >= tier:
@@ -592,11 +536,6 @@ def _handle_generator(state: GameState, slot: int, shooter_id: int,
 def _handle_wall(state: GameState, raw_target: int, slot: int,
                  shooter_id: int, obj_type: int) -> int:
     """0x4B448 -- movable walls first, then the shared wall/tile path."""
-    from .shots import (
-        _u16 as _u16,
-        tport_cycle_start as tport_cycle_start,
-    )
-
     mobs = state.mobs
     if shooter_id < 4 and obj_type == int(MazeObjIds.WALL_MOVABLE):
         # The ROM accumulates 0x400 -- one step of the object-state field --
@@ -625,11 +564,6 @@ def _handle_generic_wall(state: GameState, raw_target: int,
     from .shot_collision import (
         shot_reflect_calc as shot_reflect_calc,
     )
-    from .shots import (
-        _is_maxtier as _is_maxtier,
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     if shooter_id < 4 and (state.players[shooter_id].powers & _POWER_REFLECT):
         state.shot_direction[shooter_id] = shot_reflect_calc(
             state, raw_target, shooter_id,
@@ -645,14 +579,6 @@ def _handle_generic_wall(state: GameState, raw_target: int,
 
 def _handle_secret_wall(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B528 -- reveal the wall, roll a prize, credit the trick."""
-    from .shots import (
-        _sound as _sound,
-        _spawn_maze_object as _spawn_maze_object,
-        _u16 as _u16,
-        dragon_player_proximity as dragon_player_proximity,
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     mobs = state.mobs
     _sound(state, _SOUND_SECRET_WALL)
     # 0x4B53C then 0x4B55A: stamp floor over the tile, spawn the burst at the
@@ -690,7 +616,7 @@ def _handle_secret_wall(state: GameState, slot: int, shooter_id: int) -> int:
         return _consume(state, shooter_id)
 
     # 0x4B672/0x4B67E/0x4B68A: three secret-room tasks watch what you shoot.
-    from .exits import TRICK_WATCHSHOOT2
+    from .secret_rooms import TRICK_WATCHSHOOT2
     for trick in (TRICK_WATCHSHOOT2, _TASK_SHOOT_SECRET_A, _TASK_SHOOT_SECRET_B):
         _trick_bump(state, shooter_id, trick)
     state.secret_need_hint = 1
@@ -704,12 +630,6 @@ def _handle_secret_wall(state: GameState, slot: int, shooter_id: int) -> int:
 def _handle_destructible_wall(state: GameState, raw_target: int, slot: int,
                               shooter_id: int, damage: int) -> int:
     """0x4B6F2 -- crumble it, and let a supershot carry on through."""
-    from .shots import (
-        dragon_player_proximity as dragon_player_proximity,
-        shot_impact_spawn as shot_impact_spawn,
-        wall_crumble as wall_crumble,
-    )
-
     if shooter_id < 4:
         _dialog(state, shooter_id, _DIALOG_WALL_SHOT)
 
@@ -731,10 +651,6 @@ def _handle_destructible_wall(state: GameState, raw_target: int, slot: int,
 
 def _handle_wall_tail(state: GameState, shooter_id: int) -> int:
     """0x4B502 -- the wall paths' shared close: max-tier keeps going."""
-    from .shots import (
-        _is_maxtier as _is_maxtier,
-    )
-
     if _is_maxtier(state, shooter_id):
         return SURVIVES
     return _consume(state, shooter_id)
@@ -745,10 +661,6 @@ def _handle_door(state: GameState, slot: int, shooter_id: int) -> int:
     from .shot_collision import (
         shot_onscreen_check as shot_onscreen_check,
     )
-    from .shots import (
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     if shot_onscreen_check(state, slot, _DOOR_LIMIT, _DOOR_LIMIT) == 0:
         return SURVIVES
     shot_impact_spawn(state, slot, shooter_id)
@@ -762,11 +674,6 @@ def _handle_playerstart(state: GameState, slot: int, shooter_id: int) -> int:
     thief's own dispatch case.  A shot that finds the mugger already up to
     speed only drags it back (0x4B7F0); everything else is a kill.
     """
-    from .shots import (
-        _u16 as _u16,
-        dragon_player_proximity as dragon_player_proximity,
-    )
-
     if shooter_id >= 4:
         return _finish(state, slot, shooter_id)
 
@@ -787,15 +694,10 @@ def _handle_playerstart(state: GameState, slot: int, shooter_id: int) -> int:
 def _handle_treasure(state: GameState, slot: int, shooter_id: int,
                      obj_type: int) -> int:
     """0x4B80E -- treasure and the invulnerable food/potion: supershot only."""
-    from .shots import (
-        dragon_player_proximity as dragon_player_proximity,
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     if shooter_id >= 4 or not state.players[shooter_id].supershot:
         return _finish(state, slot, shooter_id)
 
-    from .exits import TRICK_WATCHSHOOT1, secret_trick_progress
+    from .secret_rooms import TRICK_WATCHSHOOT1, secret_trick_progress
     if obj_type == int(MazeObjIds.TREASURE):
         # 0x4B826: this task counts plainly, with no negative-byte restart.
         secret_trick_progress(state, shooter_id, _TASK_SHOOT_TREASURE)
@@ -811,13 +713,6 @@ def _handle_treasure(state: GameState, slot: int, shooter_id: int,
 
 def _handle_food(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B894 -- destructible food, with the slow-motion picture special case."""
-    from .shots import (
-        _sound as _sound,
-        _speech as _speech,
-        dragon_player_proximity as dragon_player_proximity,
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     mobs = state.mobs
     picture = 0
     if shooter_id < 4:
@@ -836,7 +731,7 @@ def _handle_food(state: GameState, slot: int, shooter_id: int) -> int:
         spoke = 1
     else:
         # 0x4B904: shooting ordinary food is what TRICK_WATCHSHOOT1 counts.
-        from .exits import TRICK_WATCHSHOOT1
+        from .secret_rooms import TRICK_WATCHSHOOT1
         _trick_bump(state, shooter_id, TRICK_WATCHSHOOT1)
         spoke = _dialog(state, shooter_id, _DIALOG_FOOD_SHOT)
 
@@ -860,15 +755,6 @@ def _handle_food(state: GameState, slot: int, shooter_id: int) -> int:
 
 def _handle_potion(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B9CE -- a shot potion detonates; some pictures start slow motion."""
-    from .shots import (
-        _potion_blast as _potion_blast,
-        _sound as _sound,
-        _speech as _speech,
-        _u16 as _u16,
-        dragon_player_proximity as dragon_player_proximity,
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     mobs = state.mobs
     picture = 0
     if shooter_id < 4:
@@ -920,11 +806,6 @@ def _handle_potion(state: GameState, slot: int, shooter_id: int) -> int:
 def _handle_dragon(state: GameState, raw_target: int, slot: int,
                    shooter_id: int) -> int:
     """0x4B3B4 -- player shots go to the dragon handler, monster shots die."""
-    from .shots import (
-        dragon_player_proximity as dragon_player_proximity,
-        shot_impact_spawn as shot_impact_spawn,
-    )
-
     if shooter_id >= 4:
         shot_impact_spawn(state, slot, shooter_id)
         return _consume(state, shooter_id)
@@ -968,10 +849,6 @@ def resolve_shot_hit(state: GameState, target: int, shooter_id: int) -> int:
     tile with no MOB of its own.  ``shooter_id`` is 0-3 for player shots and
     >= 4 for the monster/dragon channels.
     """
-    from .shots import (
-        _u16 as _u16,
-    )
-
     mobs = state.mobs
     raw_target = _u16(target)
     slot = raw_target & 0x3FF
@@ -1033,3 +910,54 @@ def resolve_shot_hit(state: GameState, target: int, shooter_id: int) -> int:
         return _handle_dragon(state, raw_target, slot, shooter_id)
 
     return _finish(state, slot, shooter_id)
+
+
+# =============================================================================
+# Dragon proximity reaction shared with player movement
+# =============================================================================
+
+_DRAGON_WAKE_FRAMES = 0x31       # 0x54ABC, the wake animation the ROM starts
+_DRAGON_BOX_WIDTH = 10           # inclusive offsets -4..+5
+_DRAGON_BOX_HEIGHT = 10          # inclusive offsets -5..+4
+
+
+def dragon_player_proximity(
+    state: GameState, cell: int, previous_cell: int = 0,
+) -> None:
+    """``dragon_player_proximity`` (0x549EA) -- react to entry into its box.
+
+    The current cell must be inside the wrapped 10x10 rectangle around the
+    primary segment, while a nonzero previous cell must be outside it. Sleeping
+    dragons start/reverse their wake transition; stunned dragons clear stun.
+    """
+    head = state.dragon_seg_mob_ids[0]
+    if not head:
+        return
+
+    start_col = ((head & 0x1F) - 4) & 0x1F
+    start_row = (((head >> 5) & 0x1F) - 5) & 0x1F
+
+    def inside(value: int) -> bool:
+        col = value & 0x1F
+        row = (value >> 5) & 0x1F
+        return (
+            ((col - start_col) & 0x1F) < _DRAGON_BOX_WIDTH
+            and ((row - start_row) & 0x1F) < _DRAGON_BOX_HEIGHT
+        )
+
+    if not inside(cell) or (previous_cell and inside(previous_cell)):
+        return
+
+    from .dragon import _ST_STUNNED, _ST_WAKING
+
+    if state.dragon_state & _ST_WAKING:
+        if state.dragon_anim_ctr > 0:
+            return
+        if state.dragon_anim_ctr == 0:
+            state.dragon_anim_ctr = _DRAGON_WAKE_FRAMES
+        else:
+            state.dragon_anim_ctr = -state.dragon_anim_ctr
+        _sound(state, 0xD5)
+    elif state.dragon_state & _ST_STUNNED:
+        state.dragon_state &= ~_ST_STUNNED
+        _sound(state, 0xD5)

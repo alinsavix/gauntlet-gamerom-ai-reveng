@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -105,15 +105,20 @@ def test_crosswalk_names_match_canonical_function_index():
 def test_direct_python_ports_keep_canonical_function_names():
     direct_ports = {
         0x40A78: ("gauntpy.game.subsystems.shot_collision", "shot_collision_candidate_core"),
-        0x414A4: ("gauntpy.game.subsystems.monsters", "monster_update_anim_tile"),
+        0x414A4: ("gauntpy.game.subsystems.monster_state", "monster_update_anim_tile"),
         0x41B16: ("gauntpy.game.subsystems.monster_shooting", "find_unused_shot"),
-        0x41B52: ("gauntpy.game.subsystems.monsters", "monster_shooter_in_view"),
+        0x41B52: ("gauntpy.game.subsystems.monster_shooting", "monster_shooter_in_view"),
         0x41B7E: ("gauntpy.game.subsystems.monster_movement", "apply_direction_from_delta"),
         0x4526A: ("gauntpy.game.subsystems.display", "maze_show"),
         0x45940: ("gauntpy.game.subsystems.score", "draw_player_score"),
         0x459A2: ("gauntpy.game.subsystems.score", "draw_player_health"),
         0x46F56: ("gauntpy.game.subsystems.camera", "set_scroll_pos"),
+        0x47C0E: ("gauntpy.game.subsystems.shot_effects", "tport_cycle_start"),
+        0x47DAE: ("gauntpy.game.subsystems.shot_effects", "shot_impact_spawn"),
         0x488CA: ("gauntpy.game.subsystems.session", "player_coindrop"),
+        0x49498: ("gauntpy.game.subsystems.shot_effects", "playfield_showscore"),
+        0x495A6: ("gauntpy.game.subsystems.monster_contact", "monster_playerhit"),
+        0x49A98: ("gauntpy.game.subsystems.monster_contact", "player_hurt_speech_timer"),
         0x49D0E: ("gauntpy.game.subsystems.player_names", "highscore_check"),
         0x49DE6: ("gauntpy.game.subsystems.player_names", "player_death_sequence"),
         0x4A124: ("gauntpy.game.subsystems.score", "attract_highscores"),
@@ -122,16 +127,18 @@ def test_direct_python_ports_keep_canonical_function_names():
         0x4CB50: ("gauntpy.game.subsystems.score", "dialog_position_box"),
         0x4CD1C: ("gauntpy.game.subsystems.attract", "load_legend_page"),
         0x4D1A4: ("gauntpy.game.subsystems.secret_rooms", "secret_check_winner"),
-        0x4D900: ("gauntpy.game.subsystems.exits", "player_activecount"),
+        0x4D900: ("gauntpy.game.subsystems.level_state", "player_activecount"),
         0x4E7C0: ("gauntpy.game.subsystems.player_transport", "tport_find_id"),
         0x50BB8: ("gauntpy.game.subsystems.player_transport", "scan_move_path_interactions"),
         0x51E80: ("gauntpy.game.subsystems.player_items", "door_open_start"),
         0x5214C: ("gauntpy.game.subsystems.score", "player_add_score_with_mult"),
+        0x52B40: ("gauntpy.game.subsystems.level_transitions", "player_exit_sequence"),
+        0x5303A: ("gauntpy.game.subsystems.shot_effects", "wall_crumble"),
         0x540E8: ("gauntpy.game.subsystems.dragon", "dragon_find_free_shot_slot"),
         0x545FA: ("gauntpy.game.subsystems.dragon", "dragon_head_pose_update"),
         0x54748: ("gauntpy.game.subsystems.dragon", "dragon_fire_setup"),
         0x5496E: ("gauntpy.game.subsystems.dragon", "dragon_setup_segments"),
-        0x549EA: ("gauntpy.game.subsystems.shots", "dragon_player_proximity"),
+        0x549EA: ("gauntpy.game.subsystems.shot_damage", "dragon_player_proximity"),
         0x54BE0: ("gauntpy.game.subsystems.player_names", "secret_code_build"),
         0x54EC6: ("gauntpy.game.subsystems.player_names", "secret_getname"),
         0x54FE8: ("gauntpy.game.subsystems.player_names", "secret_name_entry_update"),
@@ -270,7 +277,10 @@ def test_approved_names_replace_stale_identifiers_on_current_audit_surfaces():
         capture_output=True,
         text=True,
     )
-    paths = {ROOT / relative for relative in result.stdout.splitlines()}
+    paths = {
+        ROOT / relative for relative in result.stdout.splitlines()
+        if (ROOT / relative).is_file()
+    }
     paths.update((ROOT / "gauntpy" / "src").rglob("*.py"))
     paths.update((ROOT / "gauntpy" / "tests").glob("test_*.py"))
     violations = []
@@ -293,17 +303,17 @@ def test_literal_tables_keep_canonical_data_reference_names():
         0x57942: ("gauntpy.game.subsystems.player_lifecycle", "_HEARTBEAT_SOUND_TABLE"),
         0x579D2: ("gauntpy.game.subsystems.potions", "_DEATH_POTION_SCORE_TABLE"),
         0x579E2: ("gauntpy.game.subsystems.potions", "_DEATH_POTION_POPUP_TYPE_TABLE"),
-        0x579F2: ("gauntpy.game.subsystems.shots", "_SCORE_POPUP_PICTURE_TABLE"),
-        0x57A2E: ("gauntpy.game.subsystems.monsters", "_MONSTER_CONTACT_DAMAGE_TABLE"),
+        0x579F2: ("gauntpy.game.subsystems.shot_effects", "_SCORE_POPUP_PICTURE_TABLE"),
+        0x57A2E: ("gauntpy.game.subsystems.monster_contact", "_MONSTER_CONTACT_DAMAGE_TABLE"),
         0x58A4A: ("gauntpy.game.subsystems.player_animation", "_ANIM_TABLE_IDLE"),
-        0x58A8A: ("gauntpy.game.subsystems.players", "_ANIM_TABLE_WALKING"),
-        0x5884A: ("gauntpy.game.subsystems.players", "_ANIM_TABLE_FIGHTING"),
-        0x5874A: ("gauntpy.game.subsystems.players", "_ANIM_TABLE_SHOOTING"),
+        0x58A8A: ("gauntpy.game.subsystems.player_animation", "_ANIM_TABLE_WALKING"),
+        0x5884A: ("gauntpy.game.subsystems.player_animation", "_ANIM_TABLE_FIGHTING"),
+        0x5874A: ("gauntpy.game.subsystems.player_animation", "_ANIM_TABLE_SHOOTING"),
         0x571DA: ("gauntpy.game.subsystems.maze_objects", "_FORCEFIELD_CYCLE_DELAY_PROFILES"),
         0x5737C: ("gauntpy.game.subsystems.secret_rooms", "_CHALLENGE_TIMER_RANDOM_MINUTES"),
         0x5864C: ("gauntpy.render.mobs", "_MAZEOBJ_HSIZE_TIER_TBL"),
         0x580FC: ("gauntpy.game.subsystems.monster_shooting", "_JOYSTICK_NIBBLE_TO_DIRECTION"),
-        0x57AAE: ("gauntpy.game.subsystems.monsters", "_CHARACTER_HURT_SOUND_BANKS"),
+        0x57AAE: ("gauntpy.game.subsystems.monster_contact", "_CHARACTER_HURT_SOUND_BANKS"),
         0x57B50: ("gauntpy.game.subsystems.monster_spawning", "_GENERATOR_CELL_DX"),
         0x578A2: ("gauntpy.game.subsystems.monster_spawning", "_SPAWN_CANDIDATE_COLUMN_DELTA"),
         0x5AB90: ("gauntpy.game.subsystems.treasure_rooms", "_TREASURE_FAKE_COUNTDOWN_SEQUENCES"),

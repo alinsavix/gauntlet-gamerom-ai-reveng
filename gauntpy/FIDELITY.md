@@ -524,9 +524,10 @@ implementation specification.
 
 `gauntpy.game` owns the ROM/game routines, modeled RAM, literal data, and
 video-memory writers. Host startup, clocks, diagnostics, persistence backends,
-and rasterization remain outside it. Old root game modules and
-`gauntpy.subsystems.*` alias the canonical modules so legacy imports and
-monkeypatches still resolve to the same objects.
+and rasterization remain outside it. Imports and monkeypatch targets use
+`gauntpy.game.*`; there are no root game-module aliases or legacy
+`gauntpy.subsystems` package. Import defining owners even for cross-subsystem
+calls; those calls are normal ROM dependencies, not an architectural violation.
 
 The EEPROM model consumes `EepromStorage`, never host paths or JSON. Bare
 states use independent memory devices; the host binds a file device before
@@ -539,14 +540,23 @@ memory without reading the current external save file.
 monster movement/shooting/spawning, projectile collision/damage, and
 level-transition/treasure/secret-room families. Animation and name entry retain
 their own modules. Public generic MOB probes, private player probes, and monster
-ray marches remain distinct. The original subsystem modules reexport moved
-routines as the same function objects; their individual bodies and calls stay
+ray marches remain distinct. Shared routine owners include `player_input`,
+`level_state`, `monster_state`, `monster_contact`, `shot_state`, and
+`shot_effects`. Extracted families do not import their orchestration facade.
+The original subsystem modules retain explicitly listed public identity
+reexports; private helpers are not compatibility APIs. The legacy
+`players.player_exit_sequence` optional-argument adapter remains separate from
+the actual `level_transitions` routine. Individual bodies and calls stay
 ROM-shaped. Shared literals have one `*_data` owner where needed.
 `game/playfield.py` owns `pf_replace`; `score.py` owns shared score awards;
 `player_transport.py` owns transporter ID lookup.
 Keep the canonical owners in `ROM_FUNCTION_AUDIT.csv` current when moving
 routines; never use a file move to rewrite their algorithms or merge
 distinct ROM branches.
+
+`test_game_dependencies.py` guards defining-owner imports and prevents reverse
+facade dependencies; `test_game_package_architecture.py` fixes the public
+compatibility allowlist rather than exporting every future extracted helper.
 
 `maze_rom.py` owns ROM acquisition and the gex decoder/stamp adapters;
 `game/maze.py` owns setup sequencing, random selection, and native memory writes.

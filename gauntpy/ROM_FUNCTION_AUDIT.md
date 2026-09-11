@@ -37,7 +37,12 @@ caller-visible names.
 Canonical source paths now live under `gauntpy.game`; the CSV identifies the
 defining routine-family module rather than a compatibility reexport. This
 reorganization does not change classifications, ROM names, frame order, or
-individual algorithms. Old root modules remain identity aliases.
+individual algorithms. Legacy root game-module aliases and the old
+`gauntpy.subsystems` package are removed; imports use `gauntpy.game.*`.
+Shared input, level-state, monster-state/contact, and projectile-state/effect
+owners likewise replace reverse imports through the large subsystem facades.
+Public identity exports remain an explicit compatibility list, not an
+alternative ownership map; private helper exports are not part of that API.
 
 Two duplicated ROM entries were consolidated against direct disassembly and
 M68000 execution: `score.player_add_score_with_mult` (0x5214C) consumes a

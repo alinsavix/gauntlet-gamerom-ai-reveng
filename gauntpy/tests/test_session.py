@@ -10,9 +10,9 @@ Reference: doc/04_game_subsystems.md §10.1, §22, §6.4; PLAN.md §6 WP-16.
 
 from __future__ import annotations
 
-from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
-from gauntpy.state import GameState
-from gauntpy.subsystems.session import (
+from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.session import (
     character_select_input_update,
     coincheck,
     main_start_game,
@@ -79,7 +79,7 @@ def test_coincheck_active_player_health_uses_table_index():
 
 
 def test_coin_health_table_matches_all_32_rom_words():
-    from gauntpy.subsystems.session import _HEALTH_PER_COIN_TABLE
+    from gauntpy.game.subsystems.session import _HEALTH_PER_COIN_TABLE
 
     assert _HEALTH_PER_COIN_TABLE == [
         100, 125, 150, 175, 200, 225, 250, 300,
@@ -743,7 +743,7 @@ class TestPlayerReset:
         state.player_tport_phase[index] = 4
 
     def test_resetcounters_clears_the_whole_slot(self):
-        from gauntpy.subsystems.players import player_resetcounters
+        from gauntpy.game.subsystems.player_lifecycle import player_resetcounters
 
         state = GameState()
         self._dirty(state, 2)
@@ -763,7 +763,7 @@ class TestPlayerReset:
         assert (p.health, p.score) == (777, 4242)
 
     def test_resetall_clears_every_slot_and_the_counters(self):
-        from gauntpy.subsystems.players import player_resetall
+        from gauntpy.game.subsystems.player_lifecycle import player_resetall
 
         state = GameState()
         for i in range(4):
@@ -781,7 +781,7 @@ class TestPlayerReset:
     def test_every_attract_screen_resets_the_players(self):
         """0x4446E: start_attract_screen calls player_resetall unconditionally,
         so no session can leak an inventory into the attract screens."""
-        from gauntpy.subsystems.attract import start_attract_screen
+        from gauntpy.game.subsystems.attract import start_attract_screen
 
         for mode in (GameMode.TITLE, GameMode.SCORES, GameMode.LEGEND):
             state = GameState()
@@ -814,7 +814,7 @@ class TestPlayerReset:
 class TestSpawnProbabilityBonus:
     def test_the_level_handoff_adds_score_per_coin_over_the_party(self):
         """0x48B58, called from the level handoff at 0x4834E."""
-        from gauntpy.subsystems.exits import (
+        from gauntpy.game.subsystems.level_transitions import (
             update_monster_spawn_bonus_from_score_per_coin,
         )
 
@@ -829,7 +829,7 @@ class TestSpawnProbabilityBonus:
         assert state.monster_spawn_probability_bonus == 4
 
     def test_only_players_on_the_level_count(self):
-        from gauntpy.subsystems.exits import (
+        from gauntpy.game.subsystems.level_transitions import (
             update_monster_spawn_bonus_from_score_per_coin,
         )
 
@@ -843,7 +843,7 @@ class TestSpawnProbabilityBonus:
 
     def test_a_coinless_party_is_left_alone(self):
         """The ROM's divs.w would trap; nothing is added instead."""
-        from gauntpy.subsystems.exits import (
+        from gauntpy.game.subsystems.level_transitions import (
             update_monster_spawn_bonus_from_score_per_coin,
         )
 
@@ -855,7 +855,7 @@ class TestSpawnProbabilityBonus:
         assert state.monster_spawn_probability_bonus == 7
 
     def test_the_bonus_is_a_byte(self):
-        from gauntpy.subsystems.exits import (
+        from gauntpy.game.subsystems.level_transitions import (
             update_monster_spawn_bonus_from_score_per_coin,
         )
 

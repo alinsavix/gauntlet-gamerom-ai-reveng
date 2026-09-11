@@ -12,8 +12,8 @@ import pytest
 
 from gauntpy.host import application as play
 from gauntpy.host import startup
-from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
-from gauntpy.state import GameState
+from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game.state import GameState
 
 from gex.roms import SLAPSTIC_ROMS, TILE_ROMS, _rom_dir
 
@@ -379,7 +379,7 @@ class TestArguments:
         assert play._enabled_sound_dir(True) == tmp_path
 
     def test_host_frame_limit_policy_does_not_require_pygame(self):
-        from gauntpy.constants import FRAMES_PER_SECOND
+        from gauntpy.game.constants import FRAMES_PER_SECOND
         from gauntpy.host.shell import HostShell
 
         class Clock:
@@ -563,9 +563,12 @@ class TestArguments:
 
 def test_front_end_character_commit_uses_the_selected_hero_picture():
     """The no-ROM front-end path finalizes a real Wizard MOB with core artwork."""
-    from gauntpy.coords import encode_hpos, encode_vpos_at_y, slot_to_pixels
-    from gauntpy.subsystems.players import _ANIM_TABLE_IDLE, _PORT_DIR_TO_ROM_DIR
-    from gauntpy.subsystems.session import main_start_game
+    from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, slot_to_pixels
+    from gauntpy.game.subsystems.player_animation import (
+        _ANIM_TABLE_IDLE,
+        _PORT_DIR_TO_ROM_DIR,
+    )
+    from gauntpy.game.subsystems.session import main_start_game
 
     state = GameState(game_mode=GameMode.NORMAL, maze=object())
     start = 0x80
@@ -592,7 +595,7 @@ def test_front_end_character_commit_uses_the_selected_hero_picture():
 # ---------------------------------------------------------------------------
 
 def test_playerstart_fallback_installs_the_live_character_palette(monkeypatch):
-    from gauntpy.subsystems.display import (
+    from gauntpy.game.subsystems.display import (
         init_mob_color_ram, mob_palette_words,
     )
 
@@ -654,7 +657,7 @@ class TestBuildState:
 
     def test_the_spawn_uses_the_core_rom_idle_picture(self):
         state = play.build_state(1, Character.ELF)
-        from gauntpy.subsystems.players import (
+        from gauntpy.game.subsystems.player_animation import (
             _ANIM_TABLE_IDLE,
             _PORT_DIR_TO_ROM_DIR,
         )
@@ -689,9 +692,9 @@ class TestBuildState:
         assert real_exit_index(second) == 0
 
     def test_level_20_upper_right_passage_accepts_continued_downward_motion(self):
-        from gauntpy.coords import hpos_x, vpos_y
-        from gauntpy.subsystems.input import JOY_DOWN
-        from gauntpy.subsystems.players import player_try_move
+        from gauntpy.game.coords import hpos_x, vpos_y
+        from gauntpy.game.subsystems.input import JOY_DOWN
+        from gauntpy.game.subsystems.player_movement import player_try_move
 
         state = play.build_state(20, Character.ELF, maze_number=19, keys=1)
         player = state.players[0]
@@ -705,9 +708,9 @@ class TestBuildState:
         assert vpos_y(state.mobs.vpos[player.mob_slot]) > 352
 
     def test_level_18_top_wall_coordinate_allows_lateral_movement(self):
-        from gauntpy.coords import encode_hpos, encode_vpos_at_y, hpos_x, mob_cell_of
-        from gauntpy.subsystems.input import JOY_LEFT, JOY_RIGHT
-        from gauntpy.subsystems.players import player_try_move
+        from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, hpos_x, mob_cell_of
+        from gauntpy.game.subsystems.input import JOY_LEFT, JOY_RIGHT
+        from gauntpy.game.subsystems.player_movement import player_try_move
 
         for direction, expected_x in ((JOY_LEFT, 266), (JOY_RIGHT, 270)):
             state = play.build_state(18, Character.ELF, maze_number=17)
@@ -727,12 +730,12 @@ class TestBuildState:
             assert hpos_x(state.mobs.hpos[player.mob_slot]) == expected_x
 
     def test_level_17_reported_coordinate_has_no_static_downward_block(self):
-        from gauntpy.coords import (
+        from gauntpy.game.coords import (
             encode_hpos, encode_vpos_at_y, hpos_x, mob_cell_of, vpos_y,
         )
-        from gauntpy.subsystems.camera import snap_camera
-        from gauntpy.subsystems.input import JOY_DOWN
-        from gauntpy.subsystems.players import player_try_move
+        from gauntpy.game.subsystems.camera import snap_camera
+        from gauntpy.game.subsystems.input import JOY_DOWN
+        from gauntpy.game.subsystems.player_movement import player_try_move
 
         state = play.build_state(17, Character.ELF, maze_number=16)
         player = state.players[0]
@@ -755,9 +758,9 @@ class TestBuildState:
         )
 
     def test_level_one_top_wall_stops_at_rom_anchor_and_allows_diagonal_slide(self):
-        from gauntpy.coords import hpos_x, vpos_y
-        from gauntpy.mainloop import tick
-        from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT, JOY_UP
+        from gauntpy.game.coords import hpos_x, vpos_y
+        from gauntpy.game.mainloop import tick
+        from gauntpy.game.subsystems.input import JOY_IDLE, JOY_RIGHT, JOY_UP
 
         state = play.build_state(1, Character.ELF)
         player = state.players[0]
@@ -779,12 +782,12 @@ class TestBuildState:
         assert hpos_x(state.mobs.hpos[slot]) > x_before
 
     def test_level_18_left_seam_coordinate_matches_rom_movement(self):
-        from gauntpy.coords import (
+        from gauntpy.game.coords import (
             encode_hpos, encode_vpos_at_y, hpos_x, mob_cell_of, vpos_y,
         )
-        from gauntpy.subsystems.camera import snap_camera
-        from gauntpy.subsystems.input import JOY_DOWN, JOY_LEFT, JOY_RIGHT, JOY_UP
-        from gauntpy.subsystems.players import player_try_move
+        from gauntpy.game.subsystems.camera import snap_camera
+        from gauntpy.game.subsystems.input import JOY_DOWN, JOY_LEFT, JOY_RIGHT, JOY_UP
+        from gauntpy.game.subsystems.player_movement import player_try_move
 
         expected = (
             (JOY_LEFT, (14, 10)),
@@ -815,8 +818,8 @@ class TestBuildState:
             ) == position
 
     def test_direct_start_inventory_and_powers_initialize_live_state(self):
-        from gauntpy.constants import PlayerPower
-        from gauntpy.subsystems.players import (
+        from gauntpy.game.constants import PlayerPower
+        from gauntpy.game.subsystems.player_items import (
             _INVIS_TIMER_LOAD,
             _CHARACTER_REPULSE_TIMER_INIT,
             _SUPERSHOT_CHARGES,
@@ -849,7 +852,7 @@ class TestBuildState:
     def test_a_built_level_survives_a_run_of_real_frames(self):
         """The whole point of the runner: ``game_frame`` drives the genuine
         simulation over a genuine maze without anything blowing up."""
-        from gauntpy.mainloop import tick
+        from gauntpy.game.mainloop import tick
 
         state = play.build_state(1, Character.WARRIOR)
         for _ in range(120):
@@ -865,9 +868,9 @@ class TestBuildState:
         The former picture-zero ``mob_create`` approximation put those exits in
         the depth chain, and a monster moving at frame 21,008 linked one twice.
         """
-        from gauntpy.mainloop import tick
-        from gauntpy.maze import TILE_MARKER_PICTURE
-        from gauntpy.subsystems.players import _ESCAPE_TIMER_LIMIT
+        from gauntpy.game.mainloop import tick
+        from gauntpy.game.maze import TILE_MARKER_PICTURE
+        from gauntpy.game.subsystems.players import _ESCAPE_TIMER_LIMIT
 
         state = play.build_state(1, Character.ELF, rng_seed=0)
         play._apply_operator_overrides(state, reduce_text=True)
@@ -890,10 +893,10 @@ class TestBuildState:
         assert not set(converted_exits) & set(chain)
 
     def test_f4_state_can_resume_deterministically(self, tmp_path):
-        from gauntpy.coords import hpos_x
-        from gauntpy.mainloop import tick
+        from gauntpy.game.coords import hpos_x
+        from gauntpy.game.mainloop import tick
         from gauntpy.host.state_dump import dump_game_state, load_game_state
-        from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
+        from gauntpy.game.subsystems.input import JOY_IDLE, JOY_RIGHT
 
         saved = dump_game_state(
             play.build_state(1, Character.ELF, keys=2, potions=1), tmp_path,
@@ -927,7 +930,7 @@ class TestBuildState:
             assert state.mobs.obj_type(slot) == MazeObjIds.EXIT
 
     def test_post_death_coin_restores_the_same_full_starting_health(self):
-        from gauntpy.subsystems.session import coincheck
+        from gauntpy.game.subsystems.session import coincheck
 
         state = play.build_state(2, Character.WARRIOR)
         player = state.players[0]
@@ -948,7 +951,7 @@ class TestBuildState:
         returned at its first gate every frame -- the exit sat still forever.
         Driving real frames through ``tick`` is the end-to-end check.
         """
-        from gauntpy.mainloop import tick
+        from gauntpy.game.mainloop import tick
 
         state = play.build_state(4, Character.WARRIOR)
         assert state.exit_open_id, "the level must arrive with an open exit"

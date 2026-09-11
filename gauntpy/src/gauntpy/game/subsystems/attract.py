@@ -18,7 +18,7 @@ timers, the one-second input lockout that gates screen switching, the five
 interruption test blocks, and the three expiry outcomes at 0x44860-0x4491A
 (legend paging, the ``start_attract_to_game`` hand-off at 0x448CE, and the
 ``game_mode -= 1`` rotation). Consuming a stream's 0xFE join record is WP-6's
-``players._demo_playback``.
+``player_input._demo_playback``.
 """
 
 from __future__ import annotations
@@ -312,7 +312,7 @@ def _adjust_legend_monster_mobs(state: GameState) -> None:
 def load_legend_page(state: GameState) -> None:
     """Port load_legend_page 0x4CD1C, including its maze/palette reload."""
     from .. import maze
-    from .players import setup_infopanel
+    from .player_lifecycle import setup_infopanel
 
     maze.reset_and_load_level(
         state, state.levelnum_current, maze_number=_LEGEND_MAZE,
@@ -488,7 +488,7 @@ def _attract_timer_expired(state: GameState, mode: int) -> None:
             # (0x44882-0x4489C, and the attract_legend != 2 skip at 0x44904).
             state.attract_legend -= 1
             state.attract_timer = _LOADED_TIMER[int(GameMode.LEGEND)]
-            from .players import player_resetall
+            from .player_lifecycle import player_resetall
 
             player_resetall(state)
             load_legend_page(state)                # 0x4488C-0x4489C
@@ -507,7 +507,7 @@ def _attract_timer_expired(state: GameState, mode: int) -> None:
         # SCORES -> TITLE -> DEMO -> LEGEND.
         state.game_mode = _NEXT_SCREEN[mode]
         if state.game_mode == int(GameMode.LEGEND):
-            from .players import setup_infopanel
+            from .player_lifecycle import setup_infopanel
 
             state.attract_legend = 2               # 0x448DE
             setup_infopanel(state, -1)             # 0x448EC-0x448F2
@@ -547,7 +547,7 @@ def start_attract_screen(state: GameState, mode: int) -> None:
     state.levelnum_current = _ATTRACT_LEVEL        # 0x4445A
     state.mazenum_current = _ATTRACT_MAZE          # 0x44462
 
-    from .players import player_resetall
+    from .player_lifecycle import player_resetall
     from .display import clear_attract_display_memory, restore_alpha_color_ram
 
     clear_attract_display_memory(state)              # 0x44468 / 0x44474
@@ -618,7 +618,7 @@ def attract_demo_init(state: GameState) -> None:
 
     The 0xFE join records inside the streams (``FE 20`` = slot 0 as Wizard,
     ``FE 03`` = slot 3 as Warrior, both at ROM 0x58234/0x58236) are consumed by
-    ``players._demo_playback``; acting on them -- writing ``player_character``,
+    ``player_input._demo_playback``; acting on them -- writing ``player_character``,
     calling ``player_join``, and reloading that slot's pointer from the table at
     0x58098 (0x4A5B2-0x4A5DE) -- is WP-6's side of §6.2.
     """
@@ -629,14 +629,14 @@ def attract_demo_init(state: GameState) -> None:
         state.demo_stream_pos[i] = 0
         state.demo_timers[i] = 0
     # 0x44A76 -- the demo has no random spawn draw; its generators run off this
-    # countdown instead (``monsters.handle_generate``'s negative-game_mode path).
-    from .monsters import GENERATOR_RETRY_RELOAD
+    # countdown instead (``monster_spawning.handle_generate``'s negative-game_mode path).
+    from .monster_spawning import GENERATOR_RETRY_RELOAD
 
     state.monster_generation_retry_timer = GENERATOR_RETRY_RELOAD
 
     from .. import maze
     from .exits import exit_scan_level
-    from .players import player_join, setup_infopanel
+    from .player_lifecycle import player_join, setup_infopanel
     from .session import player_coindrop
 
     setup_infopanel(state, -1)                     # 0x449DE-0x449E4
@@ -654,7 +654,7 @@ def attract_demo_init(state: GameState) -> None:
     if maze.reset_and_load_level(state, state.levelnum_current, maze_number=_DEMO_MAZE):
         exit_scan_level(state)
         player_join(state, _DEMO_ACTIVE_PLAYER)
-        from .exits import update_monster_spawn_bonus_from_score_per_coin
+        from .level_transitions import update_monster_spawn_bonus_from_score_per_coin
 
         update_monster_spawn_bonus_from_score_per_coin(state)
         maze.maze_addrandompickups(state, False)         # 0x48590
@@ -706,7 +706,7 @@ def _check_attract_interrupt(state: GameState, mode: int) -> bool:
         if state.attract_legend > 0:
             state.attract_legend -= 1
             state.attract_timer = _LOADED_TIMER[int(GameMode.LEGEND)]
-            from .players import player_resetall
+            from .player_lifecycle import player_resetall
 
             player_resetall(state)
             load_legend_page(state)

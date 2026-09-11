@@ -101,8 +101,8 @@ architectural drift. They are not style preferences.
 1. **Reuse subsystem APIs.** The temporary implementation-wave isolation rule
    has been lifted. Shared persistent state still belongs in `GameState`;
    behavior owned by another subsystem should be called rather than copied.
-2. **Every main-loop call is implemented** in `subsystems/`, with the ROM's
-   name, address, and references. `mainloop.py` wires all 28 calls directly in
+2. **Every main-loop call is implemented** in `game/subsystems/`, with the ROM's
+   name, address, and references. `game/mainloop.py` wires all 28 calls directly in
    ROM order.
 3. **Use the documentation's names.** See §4 — this is the rule most likely to
    be broken by accident, so it has its own section.
@@ -126,41 +126,59 @@ gauntpy/
   README.md
   pyproject.toml
   src/gauntpy/
-    constants.py       enums, slot map, timing         DONE
-    coords.py          three coordinate systems        DONE
-    rng.py             the game's LCG                  DONE
-    mob.py             slot table + depth chain        DONE
-    state.py           GameState / Player              DONE
-    mainloop.py        g2mainloop / game_frame / tick  DONE
+    __init__.py        public game API exports
+    __main__.py        headless demonstration entry
+    play.py            graphical CLI entry
     assets.py          gex bridge                      WP-1
-    maze.py            game-side maze/level setup      WP-3
     maze_rom.py        gex ROM/decoder/stamp boundary
-    maze_data.py       pure decoded-data contract
-    playfield.py       shared pf_replace game writer
-    alpha_memory.py    alpha-word / route-byte alias
-    eeprom_device.py   typed image and memory device
+    custom_scenario.py synthetic maze fixtures and events
+    scenarios.py       headless scenario runner
+    performance.py     host timing reports
+    performance_workloads.py  benchmark/stress recipes
+    secret_code_verifier.py   offline contest-code tool
+    sound_catalog.py   host sound-command descriptions
     host/              startup, shell, snapshots, storage
     render/            native-memory compositor        WP-2
-    subsystems/
-      __init__.py      subsystem package               DONE
-      input.py         WP-4, the worked example        DONE
-      players.py       WP-5 + WP-6                     DONE
-      player_animation.py  picture tables and writers
-      player_names.py  high-score and secret-name routines
-      shots.py         WP-7                            DONE
-      monsters.py      WP-8                            DONE
-      dragon.py        WP-9                            DONE
-      thief.py         WP-10                           DONE
-      maze_objects.py  WP-11                           DONE
-      potions.py       WP-12                           DONE
-      camera.py        WP-13                           DONE
-      score.py         WP-14                           DONE
-      exits.py         WP-15                           DONE
-      session.py       WP-16                           DONE
-      attract.py       WP-17                           DONE
-      sound.py         WP-18                           DONE
-      eeprom.py        WP-19                           DONE
-      boot.py          WP-20                           DONE
+    game/
+      constants.py     enums, slot map, timing         DONE
+      coords.py        three coordinate systems        DONE
+      rng.py           the game's LCG                  DONE
+      mob.py           slot table + depth chain        DONE
+      state.py         GameState / Player              DONE
+      mainloop.py      g2mainloop / game_frame / tick  DONE
+      maze.py          game-side maze/level setup      WP-3
+      maze_data.py     pure decoded-data contract
+      playfield.py     shared pf_replace game writer
+      playfield_vram.py  native descriptor/color writers
+      alpha_memory.py  alpha-word / route-byte alias
+      eeprom_device.py typed image and memory device
+      subsystems/
+        __init__.py    subsystem package               DONE
+        input.py       WP-4, the worked example        DONE
+        players.py     WP-5 + WP-6 frame orchestration DONE
+        player_*.py    lifecycle, items, transport, movement,
+                       animation, names, shared data
+        mob_probes.py  public generic probe family
+        shots.py       WP-7 projectile ticking         DONE
+        shot_*.py      collision, damage, shared data
+        monsters.py    WP-8 traversal and dispatch     DONE
+        monster_*.py   movement, shooting, spawning, shared data
+        dragon.py      WP-9                            DONE
+        thief.py       WP-10                           DONE
+        maze_objects.py  WP-11                         DONE
+        potions.py     WP-12                           DONE
+        camera.py      WP-13                           DONE
+        score.py       WP-14                           DONE
+        exits.py       WP-15 exit scanning/movement    DONE
+        level_transitions.py  level handoffs and spawning
+        level_data.py  shared level constants
+        treasure_rooms.py  treasure countdown and tally
+        secret_rooms.py    secret objectives and payout
+        session.py     WP-16                           DONE
+        attract.py     WP-17                           DONE
+        sound.py       WP-18                           DONE
+        eeprom.py      WP-19                           DONE
+        boot.py        WP-20                           DONE
   tests/
 ```
 
@@ -226,7 +244,7 @@ documented name that means something else.
   gate as a literal `if`, and `check_frame_overflow`'s set-and-decay.
 - All subsystem modules and main-loop calls, carrying their ROM addresses and
   documentation references.
-- `subsystems/input.py`: `input_debounce` implemented — the worked example.
+- `game/subsystems/input.py`: `input_debounce` implemented — the worked example.
 
 Run it:
 
@@ -358,7 +376,7 @@ level→maze selection reproduces the documented table.
 
 #### WP-4 · Input · **DONE**
 
-**Owns:** `input_debounce`. See `subsystems/input.py` — the reference for what
+**Owns:** `input_debounce`. See `game/subsystems/input.py` — the reference for what
 a finished package looks like: ROM names, cited constants, the polarity pinned
 down in tests, and no empty implementation body.
 
@@ -687,7 +705,7 @@ select 115, 0x57–0x5D select 116).
 - Character selection and the join flow.
 - **The start/join/commit press is on the Magic line**, matching
   `(debounce_magic & 0x1F) == 0x1C`. Not Fire — this was a documented
-  correction. `subsystems/input.py` already provides `magic_press_edge`.
+  correction. `game/subsystems/input.py` already provides `magic_press_edge`.
 - First active player's class indexes the four bytes at 0x40E66: Warrior→3,
   Valkyrie→0, Wizard→4, Elf→0 and writes the result to
   `monster_spawn_probability_bonus`; later joins clear that byte. It does not
@@ -910,7 +928,7 @@ it needs an r2 shim and `PYTHONUTF8` set on Windows.
 > Working directory: `<repo>/gauntpy`. Read `PLAN.md` §3 (ground rules), §4
 > (names), and your package's entry in §6 before writing any code.
 >
-> Your module already exists: `src/gauntpy/subsystems/<name>.py`. Preserve its
+> Your module already exists: `src/gauntpy/game/subsystems/<name>.py`. Preserve its
 > ROM-addressed contracts, reuse existing subsystem APIs and `GameState`, and
 > do not alter `mainloop.py`'s ROM-ordered call sequence.
 >

@@ -198,7 +198,7 @@ def build_workload_state(
 
 def _join_four_players(state: GameState) -> None:
     from .game.constants import SLOT_PLAYER_SHOTS
-    from .game.subsystems.players import player_join
+    from .game.subsystems.player_lifecycle import player_join
 
     for slot in SLOT_PLAYER_SHOTS:
         state.mobs.unlink_and_clear(slot)
@@ -217,7 +217,7 @@ def _join_four_players(state: GameState) -> None:
 
 def _fill_projectile_channels(state: GameState) -> None:
     from .game.constants import MazeObjIds, SLOT_DEMON_SHOTS, SLOT_LOBBER_SHOTS
-    from .game.subsystems.monsters import monster_create_shot
+    from .game.subsystems.monster_shooting import monster_create_shot
     from .game.subsystems.players import player_create_shot
 
     for player_index, direction in enumerate((0, 2, 6, 4)):

@@ -1,4 +1,4 @@
-"""Shared projectile power masks."""
+"""Projectile hit outcome shared by collision, damage, and effect writers."""
 
 from __future__ import annotations
 

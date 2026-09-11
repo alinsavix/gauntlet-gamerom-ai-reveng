@@ -26,7 +26,7 @@ Four ROM facts shape every test below:
 
 from __future__ import annotations
 
-from gauntpy.constants import (
+from gauntpy.game.constants import (
     Character,
     GENERATOR_TYPES,
     SLOT_DEMON_SHOTS,
@@ -36,7 +36,7 @@ from gauntpy.constants import (
     PlayerPower,
     PlayerStatus,
 )
-from gauntpy.coords import (
+from gauntpy.game.coords import (
     decode_hpos,
     decode_vpos_at_y,
     encode_hpos,
@@ -46,14 +46,29 @@ from gauntpy.coords import (
     pack_slot,
     vpos_y,
 )
-from gauntpy.state import GameState
-from gauntpy.subsystems.exits import (
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.secret_rooms import (
     TRICK_NOUSEINVUL,
     secret_check_winner,
     secret_trick_check,
 )
-from gauntpy.subsystems.monsters import (
+from gauntpy.game.subsystems.monster_shooting import (
     _DEMON_SHOT_HPOS_LOW,
+    _LOBBER_SHOT_HPOS_LOW,
+    _LOBBER_SHOT_SPAWN_H,
+    _LOBBER_SHOT_SPAWN_V,
+    _MONSTER_SHOT_SPAWN_H,
+    _MONSTER_SHOT_SPAWN_V,
+    _MONSTER_SHOOT_AXIS_THRESHOLDS,
+    _SHOT_COOLDOWN,
+    _SHOT_VPOS_LOW,
+    _lobber_lead,
+    _oddangle_override,
+    monster_shooter_in_view,
+    monster_create_shot,
+    monster_find_and_shoot,
+)
+from gauntpy.game.subsystems.monster_spawning import (
     _GEN_ATTRACT_GHOST_FAMILIES,
     _GEN_ATTRACT_START_GHOST,
     _GEN_ATTRACT_START_OTHER,
@@ -62,64 +77,61 @@ from gauntpy.subsystems.monsters import (
     _GENERATOR_CELL_DY,
     _GENERATOR_SPAWN,
     _GENERATOR_TIER_PENALTY,
-    _HPOS_FLAG_ATTACK,
-    _HPOS_FLAG_MOVING,
-    _LOBBER_SHOT_HPOS_LOW,
-    _LOBBER_SHOT_SPAWN_H,
-    _LOBBER_SHOT_SPAWN_V,
     _MAZEOBJ_VSIZE,
-    _MONSTER_ODDANGLE_TABLE,
-    _MONSTER_SHOT_SPAWN_H,
-    _MONSTER_SHOT_SPAWN_V,
-    _MONSTER_SPEED_BASE,
-    _MONSTER_SPEED_FAST,
     _MONSTER_WALK_PICTURES,
-    _MONSTER_IDLE_ANIMS,
-    _MONSTER_MOVING_ANIMS,
     _SPAWN_CANDIDATE_COLUMN_DELTA,
     _SPAWN_CANDIDATE_ROW_DELTA,
-    _MONSTER_SHOOT_AXIS_THRESHOLDS,
-    _SHOT_COOLDOWN,
-    _SHOT_VPOS_LOW,
     _MONSTER_SPAWN_PROBABILITY_TABLE,
-    _aim_direction,
-    _destination_cell,
-    _dispatch_monster,
     _handle_generator,
-    _in_cull_rect,
-    _lobber_lead,
-    _monster_move_engine,
-    _monster_animation_index,
-    _monster_speed,
-    _oddangle_override,
-    _probe_phase,
-    monster_update_anim_tile,
-    monster_shooter_in_view,
     _spawn_probability,
     _supersorc_dispatch,
     supersorc_place,
     tile_on_screen_d4,
-    _update_cull_rect,
-    _walk_band_head,
     GENERATOR_RETRY_RELOAD,
     generator_candidate_slot,
     handle_generate,
-    main_move_monsters,
-    monster_create_shot,
-    monster_find_and_shoot,
-    player_hurt_speech_timer,
-    monster_playerhit,
     monster_walk_picture,
-    monsters_everything,
     tile_occupancy_test,
 )
-from gauntpy.subsystems.shots import (
+from gauntpy.game.subsystems.monster_data import (
+    _HPOS_FLAG_ATTACK,
+    _HPOS_FLAG_MOVING,
+    _MONSTER_ODDANGLE_TABLE,
+)
+from gauntpy.game.subsystems.monster_movement import (
+    _MONSTER_SPEED_BASE,
+    _MONSTER_SPEED_FAST,
+    _destination_cell,
+    _monster_move_engine,
+    _monster_speed,
+    _probe_phase,
+)
+from gauntpy.game.subsystems.monster_state import (
+    _MONSTER_IDLE_ANIMS,
+    _MONSTER_MOVING_ANIMS,
+    _aim_direction,
+    _monster_animation_index,
+    monster_update_anim_tile,
+)
+from gauntpy.game.subsystems.monsters import (
+    _dispatch_monster,
+    _in_cull_rect,
+    _update_cull_rect,
+    _walk_band_head,
+    main_move_monsters,
+    monsters_everything,
+)
+from gauntpy.game.subsystems.monster_contact import (
+    player_hurt_speech_timer,
+    monster_playerhit,
+)
+from gauntpy.game.subsystems.shot_state import (
     _MONSTER_PROJECTILE_PICTURE_TBL,
     _PROJECTILE_PICTURE_TBL,
     _SHOT_COUNTER_RELOAD,
-    main_handle_shots,
     shot_picture,
 )
+from gauntpy.game.subsystems.shots import main_handle_shots
 
 # Same skip condition test_assets.py uses: only the ROM byte-match and the
 # renderer-resolvability checks need the real ROMs.
@@ -435,7 +447,7 @@ class TestCullingRectangle:
 
     @requires_roms
     def test_level_seven_left_seam_keeps_its_visible_generator_active(self):
-        from gauntpy import maze
+        from gauntpy.game import maze
 
         state = GameState(game_mode=GameMode.NORMAL)
         maze.load_level(state, 7, maze_number=6)
@@ -975,8 +987,8 @@ class TestTargeting:
     def test_power_masks_are_the_rom_bits(self):
         """0x4176C/0x4185C test the high byte's bits 0 and 1 -- word bits 8/9,
         which ``powerup_bit_masks`` (0x59B64) assigns to these two powers."""
-        from gauntpy.subsystems.monsters import (
-            _POWER_ARMOR,
+        from gauntpy.game.subsystems.monster_contact import _POWER_ARMOR
+        from gauntpy.game.subsystems.monster_shooting import (
             _POWER_INVIS,
             _POWER_REPULSE,
         )
@@ -1449,7 +1461,7 @@ class TestShotSpawnPicture:
 
     def test_lobber_arc_accumulators_start_at_the_rock(self):
         """0x49216/0x4922A seeds the *masked* spawn position, palette-free."""
-        from gauntpy.coords import POS_FIELD_MASK
+        from gauntpy.game.coords import POS_FIELD_MASK
 
         state = GameState()
         slot = pack_slot(10, 4)
@@ -1467,7 +1479,7 @@ class TestShotSpawnPicture:
 
     def test_a_thrown_rock_flies_on_its_accumulator_not_the_velocity_table(self):
         """End to end: 0x419FA's vector, 0x49216's seed, 0x479C2's mover."""
-        from gauntpy.coords import POS_FIELD_MASK
+        from gauntpy.game.coords import POS_FIELD_MASK
 
         state = GameState()
         slot = pack_slot(10, 4)
@@ -1495,7 +1507,7 @@ class TestShotSpawnPicture:
             assert state.mobs.hpos[channel] == (expect_h & POS_FIELD_MASK) + low_h
             assert state.mobs.vpos[channel] == (expect_v & POS_FIELD_MASK) + low_v
         # A straight channel would have taken shot_velocity_x[0x20 + dir].
-        from gauntpy.subsystems.shots import _SHOT_VELOCITY_X
+        from gauntpy.game.subsystems.shot_state import _SHOT_VELOCITY_X
         straight = _SHOT_VELOCITY_X[0x20 + state.shot_direction[shooter]]
         assert state.mobs.hpos[channel] != (
             (accum_h + 3 * straight) & POS_FIELD_MASK
@@ -1576,7 +1588,7 @@ class TestShotSpawnGeometry:
         assert spots[4] == (156, 160)
 
     def test_the_shot_is_depth_keyed_where_the_next_frame_will_re_key_it(self):
-        from gauntpy.subsystems.shots import shot_cell
+        from gauntpy.game.subsystems.shot_state import shot_cell
 
         for direction in range(8):
             state = self._fire(direction)
@@ -1692,7 +1704,7 @@ class TestIterationAndContact:
         """A moved player is hit at the cell its record migrated into.
 
         Identity is location for a hero exactly as it is for a monster
-        (``players.migrate_player_record``), so a creature stepping into the
+        (``player_movement.migrate_player_record``), so a creature stepping into the
         cell the hero now owns finds it there -- no pixel overlay involved.
         """
         state = GameState()
@@ -2702,7 +2714,7 @@ def _place_monster_corrected(state: GameState, slot: int,
 # ---------------------------------------------------------------------------
 
 #: ROM 0x40DB2's ten pointers, and the eight animation-frame-0 words each names.
-#: Transcribed independently of ``monsters._MONSTER_WALK_PICTURES`` so the two
+#: Transcribed independently of ``monster_spawning._MONSTER_WALK_PICTURES`` so the two
 #: have to agree, and byte-checked against the ROM itself below.
 _ROM_WALK_TABLE_POINTERS = (
     0x058F26, 0x058FA6, 0x0590A6, 0x0591A6, 0x058C0A,
@@ -2807,7 +2819,7 @@ class TestSpawnPictures:
     @requires_roms
     def test_full_animation_banks_are_literal_rom_words(self):
         from gex.roms import coderom_get_bytes
-        from gauntpy.subsystems.monsters import (
+        from gauntpy.game.subsystems.monster_state import (
             _ANIM_ACID_IDLE,
             _ANIM_DEATH_IDLE,
             _ANIM_DEATH_MOVING,
@@ -2895,7 +2907,7 @@ class TestSpawnPictures:
     def test_every_live_animation_frame_resolves_in_the_asset_store(self):
         from gauntpy.assets import AssetStore
         from gauntpy.render.mobs import _MONSTER_ENTITY
-        from gauntpy.subsystems.monsters import (
+        from gauntpy.game.subsystems.monster_state import (
             _ANIM_DEMON_SPECIAL,
             _ANIM_IT_SPECIAL,
             _ANIM_LOBBER_THROW,
@@ -2936,7 +2948,7 @@ class TestAttractModeGeneration:
     """
 
     def test_the_demo_start_loads_the_rom_reload_value(self):
-        from gauntpy.subsystems.attract import attract_demo_init
+        from gauntpy.game.subsystems.attract import attract_demo_init
 
         state = GameState()
         state.monster_generation_retry_timer = 0
@@ -3143,7 +3155,7 @@ class TestAttractModeReachability:
         """Demo maze 102 holds a GEN_GHOST2, whose family index (1) is inside
         0x492F6's 0-2 window -- so the seed-7 sweep, and with it the three
         read-past indices, is a live path and not dead code."""
-        from gauntpy.subsystems.attract import attract_demo_init
+        from gauntpy.game.subsystems.attract import attract_demo_init
 
         state = GameState()
         state.game_mode = int(GameMode.DEMO)

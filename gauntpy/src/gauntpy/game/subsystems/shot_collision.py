@@ -8,6 +8,16 @@ from ..state import GameState
 from .shot_data import (
     CONSUMED as CONSUMED,
 )
+from .shot_effects import (
+    _sound,
+)
+from .shot_state import (
+    _is_maxtier,
+    _live_direction,
+    _s16,
+    _shot_slot,
+    _u16,
+)
 
 # shot_collision_width (0x40B98) and its companion span table (0x40BB0),
 # twelve words each, in native position units.  Player shots index by
@@ -67,10 +77,6 @@ def shot_onscreen_check(state: GameState, target: int,
     accepted candidate and compares them against the door's own open-direction
     bits in ``mob_state_link``.  -1 = react, 0 = ignore.
     """
-    from .shots import (
-        _s16 as _s16,
-    )
-
     door = state.mobs.state_link[target]
 
     if v_limit > state.collision_dist_V:
@@ -99,11 +105,6 @@ def shot_collision_candidate_core(state: GameState, index: int, shooter_id: int,
     MOB slot, or ``None``.  Also publishes the signed and folded separations
     the door check reads back.
     """
-    from .shots import (
-        _shot_slot as _shot_slot,
-        _u16 as _u16,
-    )
-
     mobs = state.mobs
 
     if index >= 0x800:
@@ -181,10 +182,6 @@ def _wrap_allowed(state: GameState, shooter_id: int) -> bool:
     The companion window at 0x40A9A, ``V > 0xF3FF``, guards the row-0 case
     ``shot_collision_candidate_core`` refuses outright.
     """
-    from .shots import (
-        _shot_slot as _shot_slot,
-    )
-
     vpos = state.mobs.vpos[_shot_slot(shooter_id)] & 0xFFFF
     return 0x8000 <= vpos <= 0xF3FF
 
@@ -196,13 +193,6 @@ def shot_mob_collision(state: GameState, cell: int, shooter_id: int) -> int:
     ``mob_depth_key[shot]``).  The shot's own cell is probed first, then the
     five direction-dependent offsets from ``shot_collision_probe_offsets``.
     """
-    from .shots import (
-        _is_maxtier as _is_maxtier,
-        _live_direction as _live_direction,
-        _shot_slot as _shot_slot,
-        _u16 as _u16,
-    )
-
     mobs = state.mobs
     slot = _shot_slot(shooter_id)
     maxtier = _is_maxtier(state, shooter_id)
@@ -256,11 +246,6 @@ def _dragon_hitbox_retry(state: GameState, slot: int, shooter_id: int,
                          shot_h: int, shot_v: int, self_index: int,
                          maxtier: bool) -> int:
     """0x40A3E -- the dragon gets a second, tighter pass over the same cell."""
-    from .shots import (
-        _s16 as _s16,
-        _u16 as _u16,
-    )
-
     if slot >= 0x400:
         return slot
     if state.mobs.obj_type(slot) != int(MazeObjIds.MONST_DRAGON):
@@ -327,12 +312,6 @@ def shot_reflect_calc(state: GameState, target: int, shooter_id: int) -> int:
     signed cell delta between this wall and the last one, then confirms it
     against the two neighbouring wall pictures, exactly as 0x5399C-0x53C98 do.
     """
-    from .shots import (
-        _live_direction as _live_direction,
-        _s16 as _s16,
-        _shot_slot as _shot_slot,
-    )
-
     mobs = state.mobs
     direction = state.shot_direction[shooter_id] & 0xFFFF
     if 0 <= direction <= 7 and not direction & 1:
@@ -387,11 +366,6 @@ _REFLECT_CORNERS = {
 def _reflect_corner(state: GameState, target: int, shooter_id: int,
                     direction: int, band: str) -> tuple[int, int]:
     """0x5399C / 0x53A50 / 0x53AFC / 0x53BA6 and their three dispatchers."""
-    from .shots import (
-        _s16 as _s16,
-        _shot_slot as _shot_slot,
-    )
-
     if band == "A_":       # 0x53C84, same row, wall to the left
         if direction == 5:
             band = "DL"
@@ -450,12 +424,6 @@ def _reflect_corner(state: GameState, target: int, shooter_id: int,
 def _reflect_finish(state: GameState, target: int, shooter_id: int,
                     direction: int, outcome: int) -> int:
     """0x53CB0-0x53D02 -- apply the outcome, spend a bounce, remember the wall."""
-    from .shots import (
-        _shot_slot as _shot_slot,
-        _sound as _sound,
-        _u16 as _u16,
-    )
-
     if outcome == _REFLECT_NONE:
         return direction
     if outcome == _REFLECT_XOR2:

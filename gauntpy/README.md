@@ -24,9 +24,12 @@ changing simulation state or coordinate arithmetic.
 `gauntpy.game` owns ROM/game logic, modeled RAM, literal tables, and video-memory
 writers. Its `subsystems` directory groups routines by ROM family, not by a new
 entity/component model. Individual routines retain their ROM-shaped bodies and
-the explicit frame sequence. The older `gauntpy.state`, `gauntpy.mainloop`, and
-`gauntpy.subsystems.*` paths alias the canonical modules, preserving object
-identity and legacy monkeypatches; new code should use `gauntpy.game.*`.
+the explicit frame sequence. Import game modules through `gauntpy.game.*`;
+the former root game-module and `gauntpy.subsystems.*` paths are no longer
+provided. Larger modules inside `game.subsystems` retain a finite set of
+public compatibility reexports as the same function objects; private imports
+are implementation details, not compatibility APIs. Internal callers import
+the defining module, including for normal cross-subsystem ROM calls.
 
 `gauntpy.host` owns application startup, window/input pacing, audio playback,
 diagnostics, troubleshooting controls, and state snapshots. `render` composes
@@ -399,16 +402,22 @@ have explicit owners:
 
 | Family | Modules |
 |---|---|
-| Players | `player_lifecycle`, `player_items`, `player_transport`, `player_movement`, `player_animation`, `player_names` |
+| Players | `player_lifecycle`, `player_items`, `player_transport`, `player_movement`, `player_input`, `player_animation`, `player_names` |
 | Generic MOB probes | `mob_probes` (not the private player probes or monster ray marches) |
-| Monsters | `monster_movement`, `monster_shooting`, `monster_spawning` |
-| Projectiles | `shot_collision`, `shot_damage` |
-| Level progression | `level_transitions`, `treasure_rooms`, `secret_rooms` |
+| Monsters | `monster_movement`, `monster_shooting`, `monster_spawning`, `monster_state`, `monster_contact` |
+| Projectiles | `shot_collision`, `shot_damage`, `shot_state`, `shot_effects` |
+| Level progression | `level_state`, `level_transitions`, `treasure_rooms`, `secret_rooms` |
 
 Cross-family literal tables live in the corresponding `*_data` modules.
 The shared `player_add_score_with_mult` belongs to `score`; `tport_find_id`
 belongs to `player_transport`. Their callers retain ROM-specific argument
 preparation rather than embedding duplicate implementations.
+
+Extracted families do not import their orchestration/compatibility facade.
+Shared input selection, level predicates, MOB-state operations, and effects
+have their own owners instead. `players.player_exit_sequence` is the one
+legacy optional-argument adapter; game callers supply the explicit arguments
+to `level_transitions.player_exit_sequence`.
 
 `game_frame` calls its subsystems by name, directly — the loop is a function,
 not a table something interprets. [test_mainloop.py](tests/test_mainloop.py)

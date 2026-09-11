@@ -81,9 +81,15 @@ routine signatures, calls, RAM operands, and ROM table ranges.
   - Sibling ROM graphics/maze decoder. gauntpy imports it only through bridge
     surfaces such as assets, maze, and rendering.
 
-Legacy root game modules and `gauntpy.subsystems.*` are module aliases, not
-second implementations. Import new code from `gauntpy.game.*`; original
-subsystem modules also reexport their extracted routines by object identity.
+Import game modules from `gauntpy.game.*`; the old root game modules and
+`gauntpy.subsystems` package have been removed. Larger subsystem modules
+inside `game` retain explicitly listed public identity reexports; private
+helpers are not compatibility APIs. Source and tests import defining owners,
+including for cross-subsystem calls. Extracted families do not depend back on
+their facade. Shared owners include `player_input`, `level_state`,
+`monster_state`/`monster_contact`, and `shot_state`/`shot_effects`.
+`players.player_exit_sequence` retains its legacy optional arguments; game
+callers use `level_transitions.player_exit_sequence` directly.
 Moves must preserve executable bodies and calls. Shared-routine discrepancies
 are separate ROM-backed fidelity corrections, not permission to redesign
 movement, RAM, or frame dispatch.

@@ -508,9 +508,7 @@ def tport_player_move(state: GameState, player_index: int) -> None:
         _direction_neighbor as _direction_neighbor,
         _move_player_to_slot as _move_player_to_slot,
     )
-    from .players import (
-        _joystick_direction_bits as _joystick_direction_bits,
-    )
+    from .player_input import _joystick_direction_bits
 
     landing = state.player_tile_or_tport_dest[player_index] & 0x3FF
     destination_pad = state.player_tport_type[player_index] & 0x3FF

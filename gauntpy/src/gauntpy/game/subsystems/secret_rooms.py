@@ -100,9 +100,7 @@ def secret_new_level_setup(state: GameState) -> None:
     byte (gex ``Maze.secret``) only when ``secret_possible_counter`` has run
     out. Trick 9 wants a dragon to survive, so it is cancelled below level 12.
     """
-    from .exits import (
-        in_secret_room as in_secret_room,
-    )
+    from .level_state import in_secret_room
 
     if in_secret_room(state):                    # 0x43916
         return
@@ -279,7 +277,7 @@ def _enter_secret_room(state: GameState) -> bool:
 
 def _maze_secret_for_hint(state: GameState) -> int:
     """Read the selected maze header byte that level_splash sees at 0x4C084."""
-    from ..maze import MazeError, decode_maze
+    from ...maze_rom import MazeError, decode_maze
 
     try:
         return int(decode_maze(state.mazenum_current).secret)
@@ -289,9 +287,7 @@ def _maze_secret_for_hint(state: GameState) -> int:
 
 def _write_secret_hint(state: GameState) -> None:
     """0x4C04E-0x4C108 -- consume secret_need_hint into alpha RAM."""
-    from .exits import (
-        in_bonus_room as in_bonus_room,
-    )
+    from .level_state import in_bonus_room
 
     if not state.secret_need_hint:
         return
@@ -354,7 +350,7 @@ def secret_room_spawn(state: GameState) -> None:
     so the challenge starts from nothing. ``show_level_end_bonus_screen`` adds
     the stash back on the way out.
     """
-    from .players import player_start_inner
+    from .player_lifecycle import player_start_inner
 
     winner = state.secret_player
     if not 0 <= winner < NUM_PLAYERS:
@@ -371,7 +367,7 @@ def secret_room_spawn(state: GameState) -> None:
     state.secret_saved_keys = state.monster_spawn_probability_bonus
     state.secret_saved_potions = state.players[0].keysnum
     state.secret_tricks_flags[winner] = 0    # player_start_inner 0x48ED6
-    from .players import setup_infopanel
+    from .player_lifecycle import setup_infopanel
 
     setup_infopanel(state, winner)
 
@@ -405,7 +401,7 @@ def _secret_room_payout(state: GameState, completed: bool) -> bool:
             player.potionsnum + state.players[0].keysnum
         ) & 0xFF
         player.supershot = (player.supershot + state.secret_saved_supershot) & 0xFF
-        from .players import player_inv_update
+        from .player_lifecycle import player_inv_update
 
         player_inv_update(state, winner)
     state.secret_saved_keys = state.monster_spawn_probability_bonus

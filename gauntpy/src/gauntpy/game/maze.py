@@ -802,7 +802,7 @@ _TILE_MARKERS = frozenset((
 #: 62 px of "correction" that would fling the hub across the maze.
 _ROM_MARKER_TYPES = _SOLID_WALL_MARKERS | _TILE_MARKERS
 
-#: The solid-wall marker word (doc/04 sec 5.4; ``players._slot_is_blocking``).
+#: The solid-wall marker word (doc/04 sec 5.4; ``player_movement._slot_is_blocking``).
 WALL_MARKER_PICTURE = 0x8000
 #: Floor/animated marker word (ROM 0x460B8-0x46100).
 TILE_MARKER_PICTURE = 0x8001
@@ -1387,14 +1387,9 @@ def _join_flags(b1: int, b2: int, b3: int, b4: int) -> int:
     return ((b1 & 0xFF) << 24) | ((b2 & 0xFF) << 16) | ((b3 & 0xFF) << 8) | (b4 & 0xFF)
 
 
-# get_random_maze_flags (0x436CC): a 13-entry, 4-byte-per-entry ROM table at
-# 0x57012 (doc/04 sec 5.5; doc/05_data_reference.md sec 5.2 names the size
-# "13 x 4B" but -- out of WP-3's doc-read scope -- does not transcribe the
-# values). Per PLAN.md sec 8 ("when the docs and the ROM disagree, the ROM
-# wins") and the standing instruction to verify rather than invent, the
-# table is read directly from the game ROM via gex's existing generic code
-# -ROM reader (never re-derived or hand-copied). Read once and cached --
-# it is fixed ROM content, not per-maze state.
+# get_random_maze_flags (0x436CC): thirteen longwords at ROM 0x57012.
+# maze_rom reads and caches the literal table; this routine owns selection
+# and its game RNG draw (doc/04 sec 5.5, doc/05_data_reference.md sec 5.2).
 _RANDOM_MAZE_FLAGS_COUNT = 13
 
 
@@ -1524,7 +1519,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     consolidated entry point, and it is the only way the flags are set at all
     in normal play.)
 
-    The common post-spawn tail in ``exits._spawn_level_players`` owns thief
+    The common post-spawn tail in ``level_transitions._spawn_level_players`` owns thief
     scheduling and party-dependent random pickups. Transporter position-table
     reads are represented by ordered live-MOB scans because packed slot is
     already the stored table value.

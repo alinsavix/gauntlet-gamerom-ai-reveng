@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.coords import hpos_x, vpos_y
-from gauntpy.constants import GameMode, MazeObjIds, PlayerStatus
-from gauntpy.state import GameState
-from gauntpy.subsystems.attract import (
+from gauntpy.game.coords import hpos_x, vpos_y
+from gauntpy.game.constants import GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.attract import (
     main_attract,
     main_logo_updcolors,
     start_attract_screen,
@@ -313,7 +313,7 @@ class TestStartAttractScreen:
 
     @requires_roms
     def test_title_builds_its_fixed_playfield_and_mob_display(self):
-        from gauntpy.playfield_vram import playfield_index
+        from gauntpy.game.playfield_vram import playfield_index
 
         state = GameState()
         start_attract_screen(state, int(GameMode.TITLE))
@@ -357,7 +357,7 @@ class TestStartAttractScreen:
     def test_thirteenth_title_rereads_the_operator_settings(self, tmp_path):
         """0x444A4-0x444C2: an operator-menu change is picked up without a
         reboot, through WP-19's real loader."""
-        from gauntpy.subsystems.eeprom import eeprom_save_settings
+        from gauntpy.game.subsystems.eeprom import eeprom_save_settings
         from gauntpy.host.eeprom import bind_eeprom_storage
 
         saved = GameState()
@@ -430,7 +430,7 @@ class TestDemoInit:
         on that count.  So the real DEMO screen moves its hero for a full second
         while ``idle_timer`` and ``escape_timer`` -- the timed doors and the
         escape-timeout wall conversion -- stand completely still."""
-        from gauntpy.mainloop import tick
+        from gauntpy.game.mainloop import tick
 
         state = GameState()
         start_attract_screen(state, int(GameMode.DEMO))
@@ -454,8 +454,8 @@ class TestDemoInit:
     @requires_roms
     def test_demo_elf_pushes_out_of_the_starting_box(self):
         """The opening script is DOWN 8, then DOWN 144 while pushing a wall."""
-        from gauntpy.constants import MazeObjIds
-        from gauntpy.mainloop import tick
+        from gauntpy.game.constants import MazeObjIds
+        from gauntpy.game.mainloop import tick
 
         state = GameState()
         start_attract_screen(state, int(GameMode.DEMO))
@@ -480,7 +480,7 @@ class TestDemoInit:
 
     @requires_roms
     def test_demo_recording_uses_the_mame_transporter_landing(self, tmp_path):
-        from gauntpy.mainloop import tick
+        from gauntpy.game.mainloop import tick
 
         state = GameState()
         state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
@@ -526,7 +526,7 @@ class TestDemoInit:
 
     @requires_roms
     def test_demo_transfers_it_and_spends_the_elf_potion(self, tmp_path):
-        from gauntpy.mainloop import tick
+        from gauntpy.game.mainloop import tick
 
         state = GameState()
         state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
@@ -567,13 +567,13 @@ class TestDemoInit:
     def test_completed_demo_advances_to_legend_not_playable_level_two(
         self, tmp_path, monkeypatch,
     ):
-        from gauntpy.mainloop import tick
-        from gauntpy.subsystems import players
+        from gauntpy.game.mainloop import tick
+        from gauntpy.game.subsystems import player_lifecycle
 
         state = GameState()
         state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
         completed_demo_resets = 0
-        original_resetall = players.player_resetall
+        original_resetall = player_lifecycle.player_resetall
 
         def tracked_resetall(reset_state):
             nonlocal completed_demo_resets
@@ -588,7 +588,7 @@ class TestDemoInit:
                 completed_demo_resets += 1
             original_resetall(reset_state)
 
-        monkeypatch.setattr(players, "player_resetall", tracked_resetall)
+        monkeypatch.setattr(player_lifecycle, "player_resetall", tracked_resetall)
         start_attract_screen(state, int(GameMode.DEMO))
         started_level_two = False
 
@@ -611,8 +611,8 @@ class TestDemoInit:
 
     @requires_roms
     def test_rom_reduce_text_setting_preserves_the_demo_dialog_timing(self, tmp_path):
-        from gauntpy.mainloop import tick
-        from gauntpy.subsystems.score import GAME_SETTINGS_REDUCE_TEXT
+        from gauntpy.game.mainloop import tick
+        from gauntpy.game.subsystems.score import GAME_SETTINGS_REDUCE_TEXT
 
         state = GameState()
         state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
