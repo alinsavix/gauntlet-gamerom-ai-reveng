@@ -32,32 +32,35 @@ doc/05_data_reference.md §5.5.
 
 from __future__ import annotations
 
-from gauntpy import romtext
-from gauntpy.constants import GameMode, MazeObjIds, PlayerStatus
-from gauntpy.coords import encode_hpos, encode_vpos_at_y
-from gauntpy.playfield_vram import (
+from gauntpy.game import romtext
+from gauntpy.game.constants import GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game.coords import encode_hpos, encode_vpos_at_y
+from gauntpy.game.playfield_vram import (
     EXIT_SETTLED_DESC,
     exit_descriptor,
     read_tile_descriptor,
     write_tile_descriptor,
 )
-from gauntpy.rng import GameRandom
-from gauntpy.state import GameState
-from gauntpy.subsystems.exits import (
+from gauntpy.game.rng import GameRandom
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.exits import (
     _EXIT_ANIM_SETTLE,
     _EXIT_FAKE_MARK,
     _EXIT_MOVE_TIMER_RELOAD,
     _LFLAG3_EXIT_CHOOSEONE,
-    _LFLAG3_EXIT_MOVES,
     _LFLAG4_EXIT_FAKE,
+    TRICK_NO_FOOD,
+    TRICK_TRANSPORT1,
+    exit_get_id,
+    exit_scan_level,
+    main_exit_move,
+    maze_pick_one_exit,
+)
+from gauntpy.game.subsystems.level_data import _LFLAG3_EXIT_MOVES
+from gauntpy.game.subsystems.secret_rooms import (
     _SECRET_ROOM_BONUS,
     _SECRET_START_MAX,
     _SECRET_START_MIN,
-    _TREASURE_FAKE_COUNTDOWN_SEQUENCES,
-    _TREASURE_ROOM_DURATION,
-    _TREASURE_SECONDS_SPEECH,
-    _TREASURE_TIMEOUT_SPEECH,
-    _TREASURE_WARNING_SPEECH,
     CHALLENGE_COUNT,
     CHALLENGE_FIRST,
     TRICK_BEPUSHY,
@@ -69,19 +72,10 @@ from gauntpy.subsystems.exits import (
     TRICK_NOHURTFRIENDS,
     TRICK_NONE,
     TRICK_NOUSEINVUL,
-    TRICK_NO_FOOD,
     TRICK_NO_TREASURE,
     TRICK_SAVESUPERSHOTS,
-    TRICK_TRANSPORT1,
     TRICK_WATCHSHOOT1,
     TRICK_WATCHSHOOT2,
-    advance_level_countdowns,
-    exit_get_id,
-    exit_scan_level,
-    main_exit_move,
-    main_treasure_timer,
-    maze_pick_one_exit,
-    player_exit_sequence,
     secret_check,
     secret_check_winner,
     secret_new_level_setup,
@@ -89,9 +83,21 @@ from gauntpy.subsystems.exits import (
     secret_trick_check,
     secret_trick_progress,
     secret_trick_set,
-    show_level_end_bonus_screen,
-    show_level_start_screen,
     treasure_collected,
+)
+from gauntpy.game.subsystems.treasure_rooms import (
+    _TREASURE_FAKE_COUNTDOWN_SEQUENCES,
+    _TREASURE_SECONDS_SPEECH,
+    _TREASURE_TIMEOUT_SPEECH,
+    _TREASURE_WARNING_SPEECH,
+    main_treasure_timer,
+    show_level_end_bonus_screen,
+)
+from gauntpy.game.subsystems.level_transitions import (
+    _TREASURE_ROOM_DURATION,
+    advance_level_countdowns,
+    player_exit_sequence,
+    show_level_start_screen,
     update_monster_spawn_bonus_from_score_per_coin,
 )
 
@@ -128,7 +134,7 @@ def _run_exit_animation(state: GameState, frames: int = 96) -> None:
     have to run those frames.  The mode is forced out of attract because the
     player loop is gated on it (0x4A53A).
     """
-    from gauntpy.subsystems.players import main_move_players
+    from gauntpy.game.subsystems.players import main_move_players
 
     if state.game_mode < 0:
         state.game_mode = int(GameMode.NORMAL)
@@ -763,7 +769,7 @@ class TestExitMove:
         assert state.exit_close_id == 100
         assert state.mobs.obj_type(200) == int(MazeObjIds.EXIT)
         assert not state.mobs.is_occupied(100)
-        from gauntpy.maze import placement_geometry
+        from gauntpy.game.maze import placement_geometry
 
         expected_h, expected_v = placement_geometry(int(MazeObjIds.EXIT), 200)
         assert state.mobs.hpos[200] == expected_h
@@ -795,7 +801,7 @@ class TestExitMove:
         assert p.status == int(PlayerStatus.ALIVE_NEXT)
 
     def test_entering_an_opening_exit_animates_at_its_new_location(self):
-        from gauntpy.maze import placement_geometry
+        from gauntpy.game.maze import placement_geometry
 
         state = _exit_moves_state(timer=1, exits=(100, 200))
         main_exit_move(state)
@@ -1019,7 +1025,7 @@ class TestLevelEndHold:
         )
 
     def test_ordinary_level_start_draws_the_rom_level_splash(self):
-        from gauntpy.subsystems.display import (
+        from gauntpy.game.subsystems.display import (
             _LARGE_GLYPH_INDEX_MAP,
             _LARGE_GLYPH_QUADS,
         )
@@ -1566,7 +1572,7 @@ class TestSecretRoomEntry:
         state.players[0].character = 3
         show_level_start_screen(state)
 
-        from gauntpy.subsystems.display import (
+        from gauntpy.game.subsystems.display import (
             _LARGE_GLYPH_INDEX_MAP,
             _LARGE_GLYPH_QUADS,
         )
@@ -1706,7 +1712,7 @@ class TestSecretRoomPayout:
 
 class TestSecretRoomInventoryAliases:
     def test_spawn_matches_rom_alias_order_for_player_zero(self, monkeypatch):
-        from gauntpy.subsystems import players
+        from gauntpy.game.subsystems import players
 
         state = GameState(mazenum_current=115, secret_player=0)
         player = state.players[0]

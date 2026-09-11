@@ -6,10 +6,10 @@ button in the game when you do. These tests pin the polarity down.
 
 from __future__ import annotations
 
-from gauntpy.constants import GameMode
-from gauntpy.mainloop import tick
-from gauntpy.state import GameState
-from gauntpy.subsystems import input as gin
+from gauntpy.game.constants import GameMode
+from gauntpy.game.mainloop import tick
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems import input as gin
 
 
 def press(*bits: int) -> int:

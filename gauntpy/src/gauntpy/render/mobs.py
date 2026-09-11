@@ -101,7 +101,7 @@ MAX_MOB_PIXELS = MAX_MOB_TILES * 8
 #: ``MobTable.band_of`` derives the band from the record's *cell row* (the ROM's
 #: own rule, 0x5DCD6-0x5DCE6), while the sprite is drawn from ``mob_vpos``; a
 #: creature's pixels lead its cell by up to half a cell in either direction
-#: (``monsters._destination_cell``'s +8px bias), and maze placement can nudge a
+#: (``monster_movement._destination_cell``'s +8px bias), and maze placement can nudge a
 #: sprite wider than its cell. One whole cell is the bound on that gap.
 BAND_SLACK_PIXELS = MAX_MOB_PIXELS - CELL_PIXELS
 
@@ -189,14 +189,14 @@ def sprite_kind(state: GameState, slot: int) -> str | None:
     already knows better, from two independent places:
 
     * a player's hero class is ``Player.character`` and its record slot is
-      ``Player.mob_slot`` (``players.player_start_inner``), and
+      ``Player.mob_slot`` (``player_lifecycle.player_start_inner``), and
     * every other creature's family is ``mob_link`` bits 15-10, the object type.
 
     Players are checked first because a hero's record keeps the PLAYERSTART
     object type it was spawned from, which the thief's MOB also uses
     (``thief._thief_spawn``) -- so the type alone cannot tell a hero from an
     NPC, but the slot can. ``Player.mob_slot`` is the *current* cell: the
-    record migrates with the hero (``players.migrate_player_record``), so the
+    record migrates with the hero (``player_movement.migrate_player_record``), so the
     lookup stays a single equality test.
     """
     for player in state.players:
@@ -227,7 +227,7 @@ def _chain_band_window(state: GameState, scroll_y: int, viewport_h: int) -> tupl
     visibility; the walk still stops early, it just stops at the right band.
 
     No family is exempt any more: a hero's record migrates into the cell it
-    stands in (``players.migrate_player_record``), so its band tracks it the
+    stands in (``player_movement.migrate_player_record``), so its band tracks it the
     same way a monster's does and one geometric window covers everything.
     """
     del state

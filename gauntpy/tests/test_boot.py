@@ -5,9 +5,9 @@ Reference: doc/03_game_rom_structure.md §5.
 
 from __future__ import annotations
 
-from gauntpy.constants import Character, GameMode
-from gauntpy.state import GameState
-from gauntpy.subsystems.boot import one_time_init
+from gauntpy.game.constants import Character, GameMode
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.boot import one_time_init
 
 
 class TestOneTimeInit:

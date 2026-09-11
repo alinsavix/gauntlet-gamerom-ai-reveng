@@ -100,7 +100,7 @@ _DIALOG_FAKE_EXIT = 0x40000000      # record 30, 0x513EC
 _FAKE_EXIT_FLAG = 0x0010
 
 # Secret-room objective codes this subsystem reports progress on.  WP-15
-# (``exits.secret_trick_progress``/``secret_trick_set``) owns the counter and
+# (``secret_rooms.secret_trick_progress``/``secret_trick_set``) owns the counter and
 # the ``secret_trick_id`` guard; these are just the literals the ROM compares.
 _TRICK_NOGREEDY1 = 12       # 0x0C -- "don't be greedy": keys or potions
 _TRICK_NOUSEINVUL = 8       # 0x08 -- "don't use invulnerability"
@@ -108,7 +108,7 @@ _TRICK_NOUSEINVUL = 8       # 0x08 -- "don't use invulnerability"
 _TRICK_NOFOOLED = 11
 #: The food arm reports 0x0D (0x51C0C/0x51CEE).  The treasure arm's own codes
 #: -- 0x0E (0x519C2), 0x50 (0x519CE) and 0x5A (0x519DA) -- belong to the same
-#: ROM block as the count bump and are reported by ``exits.treasure_collected``.
+#: ROM block as the count bump and are reported by ``secret_rooms.treasure_collected``.
 #: Note that WP-15's ``TRICK_NOGREEDY2 = 13``/``TRICK_DIET = 14`` comments read
 #: the other way round from the ROM's compares; these follow the ROM.
 _TRICK_FOOD = 0x0D
@@ -178,21 +178,21 @@ def _poisoned(state: GameState, player_index: int) -> None:
 
 def _secret_trick_progress(state: GameState, player_index: int,
                            trick_id: int, amount: int = 1) -> None:
-    """WP-15's ``exits.secret_trick_progress`` -- the ``addq.b #1`` hook shape.
+    """WP-15's ``secret_rooms.secret_trick_progress`` -- the ``addq.b #1`` hook shape.
 
     Every progress site in the ROM is ``cmpi.b #<trick>,secret_trick_id`` followed
     by a bump of that player's ``secret_tricks_flags`` byte, so the guard lives
     in WP-15's routine and the call sites here stay one line each.
     """
-    from .exits import secret_trick_progress
+    from .secret_rooms import secret_trick_progress
 
     secret_trick_progress(state, player_index, trick_id, amount)
 
 
 def _secret_trick_set(state: GameState, player_index: int,
                       trick_id: int, value: int) -> None:
-    """WP-15's ``exits.secret_trick_set`` -- the ``move.b #n`` hook shape."""
-    from .exits import secret_trick_set
+    """WP-15's ``secret_rooms.secret_trick_set`` -- the ``move.b #n`` hook shape."""
+    from .secret_rooms import secret_trick_set
 
     secret_trick_set(state, player_index, trick_id, value)
 
@@ -203,7 +203,7 @@ def _treasure_collected(state: GameState, player_index: int) -> None:
     ``player_treascount`` (0x904A50) is the treasure factor of the per-player
     level-end bonus (0x4D57E), so a pickup has to name its collector rather than
     only bumping the level total.  WP-15 owns that counter and exposes
-    ``exits.treasure_collected`` as its single write site; that routine raises
+    ``secret_rooms.treasure_collected`` as its single write site; that routine raises
     ``player_treascount[p]`` *and* ``level_treasures``, which is why this arm no
     longer touches the total itself.
 
@@ -212,10 +212,10 @@ def _treasure_collected(state: GameState, player_index: int) -> None:
 
     0x519C2/0x519CE/0x519DA -- the three objective codes that share the
     ``addq.b #1`` at 0x519EC -- are part of the same ROM block and are reported
-    by ``exits.treasure_collected`` itself, so this arm must not repeat them or
+    by ``secret_rooms.treasure_collected`` itself, so this arm must not repeat them or
     a "collect six treasures" task would finish in three pickups.
     """
-    from .exits import treasure_collected
+    from .secret_rooms import treasure_collected
 
     treasure_collected(state, player_index)
 
@@ -382,7 +382,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     from .player_transport import (
         player_tport as player_tport,
     )
-    from .players import (
+    from .level_transitions import (
         player_exit_sequence as player_exit_sequence,
     )
     from .score import player_add_score_with_mult
@@ -406,7 +406,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             if picture == _RANDOM_FOOD_PICTURE:
                 adaptive_index = (player.health & 0xFFFF) % 20
                 health_gain = _RANDOM_FOOD_HEALTH[adaptive_index]
-                from .shots import playfield_showscore
+                from .shot_effects import playfield_showscore
 
                 playfield_showscore(
                     state, tile_mob_slot, _PICKUP_SCORE_POPUP_TYPES[adaptive_index],
@@ -505,7 +505,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     # only then awards the score (0x51AC4), so the award uses the *new* value.
     if obj_type == int(MazeObjIds.TREASURE):
         # §4.6: treasure (sound 0x26, calls player_add_score_with_mult).
-        from .shots import playfield_showscore
+        from .shot_effects import playfield_showscore
 
         playfield_showscore(state, tile_mob_slot, 1)
         _treasure_collected(state, player_index)
@@ -516,7 +516,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         return -1
 
     if obj_type == int(MazeObjIds.TREASURE_BAG):
-        from .shots import playfield_showscore
+        from .shot_effects import playfield_showscore
 
         bonus_score = state.special_bonus_score & 0xFFFF
         playfield_showscore(
@@ -697,7 +697,7 @@ def _tile_contact_progress(state: GameState, player_index: int) -> None:
     state.escape_timer = 0
     if state.idle_timer > 0:
         state.idle_timer = 0
-    from .shots import dragon_player_proximity
+    from .shot_damage import dragon_player_proximity
 
     dragon_player_proximity(state, state.players[player_index].mob_slot)
 

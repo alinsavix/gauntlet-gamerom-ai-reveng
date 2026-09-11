@@ -5,16 +5,16 @@ from __future__ import annotations
 import ast
 import inspect
 
-from gauntpy.constants import PlayerStatus
+from gauntpy.game.constants import PlayerStatus
 from gauntpy.render import hud
 from gauntpy.render import mobs as mob_renderer
 from gauntpy.render import text as text_renderer
 from gauntpy import assets
 from gauntpy.render.alpha import draw_alpha_layer
 from gauntpy.render.framebuffer import Framebuffer
-from gauntpy.state import GameState
-from gauntpy.subsystems import score
-from gauntpy.subsystems.display import (
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems import score
+from gauntpy.game.subsystems.display import (
     CHARACTER_MOB_PALETTES,
     MOB_PALETTE_INIT,
     PLAYER_HURT_PALETTE_CYCLES,
@@ -31,7 +31,7 @@ from gauntpy.subsystems.display import (
     player_palette_vblank,
     update_title_logo_colors,
 )
-from gauntpy.subsystems.players import setup_infopanel
+from gauntpy.game.subsystems.player_lifecycle import setup_infopanel
 
 
 def _calls(function) -> set[str]:
@@ -53,7 +53,7 @@ def test_game_content_render_entry_points_only_delegate_to_generic_alpha():
 
 
 def test_subsystem_display_has_no_gex_dependency():
-    import gauntpy.subsystems.display as display
+    import gauntpy.game.subsystems.display as display
 
     assert "gex" not in inspect.getsource(display)
 
@@ -82,7 +82,7 @@ def test_maze_show_clears_everything_except_the_status_panel():
 
 
 def test_full_alpha_initializers_clear_the_route_alias():
-    from gauntpy.subsystems.display import (
+    from gauntpy.game.subsystems.display import (
         clear_attract_display_memory,
         init_alpha_color_ram,
     )
@@ -98,7 +98,7 @@ def test_full_alpha_initializers_clear_the_route_alias():
 
 
 def test_large_text_uses_rom_variable_width_glyphs():
-    from gauntpy.subsystems.display import write_alpha_large_text
+    from gauntpy.game.subsystems.display import write_alpha_large_text
 
     state = GameState()
     width = write_alpha_large_text(state, 4, 9, "L:", 0x8000)
@@ -154,7 +154,7 @@ def test_setup_infopanel_makes_the_entire_status_column_opaque():
 
 
 def test_vblank_cycles_the_dungeon_header_color_from_the_rom_gradient():
-    from gauntpy.subsystems.display import (
+    from gauntpy.game.subsystems.display import (
         VSCROLL_ALPHA_GRADIENT,
         alpha_palette_vblank,
     )
@@ -168,7 +168,7 @@ def test_vblank_cycles_the_dungeon_header_color_from_the_rom_gradient():
 
 
 def test_vblank_flashes_the_four_it_label_palettes_from_rom_color_ram():
-    from gauntpy.subsystems.display import (
+    from gauntpy.game.subsystems.display import (
         ALPHA_PALETTE_INIT,
         alpha_palette_vblank,
         restore_alpha_color_ram,

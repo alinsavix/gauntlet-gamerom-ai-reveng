@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy import coords
+from gauntpy.game import coords
 
 
 def test_the_worked_example_from_the_book():

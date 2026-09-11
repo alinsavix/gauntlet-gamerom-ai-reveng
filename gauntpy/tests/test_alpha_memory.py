@@ -1,8 +1,8 @@
 """Independent address examples for the hidden-alpha/route-grid byte alias."""
 
-from gauntpy.alpha_memory import write_alpha_word, write_path_grid_byte
-from gauntpy.state import GameState
-from gauntpy.subsystems.display import (
+from gauntpy.game.alpha_memory import write_alpha_word, write_path_grid_byte
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.display import (
     fill_alpha_rect, write_alpha_glyphs, write_alpha_name_entry_large_char,
 )
 

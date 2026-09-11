@@ -19,10 +19,10 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.coords import native_v
-from gauntpy.constants import GameMode, PlayerStatus
-from gauntpy.state import GameState
-from gauntpy.subsystems.camera import (
+from gauntpy.game.coords import native_v
+from gauntpy.game.constants import GameMode, PlayerStatus
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.camera import (
     main_scroll_playfield,
     scroll_to_slot,
     snap_camera,

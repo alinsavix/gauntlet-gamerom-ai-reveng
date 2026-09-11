@@ -27,13 +27,25 @@ checked against ``row76.bin`` rather than the prose docs:
 
 from __future__ import annotations
 
-from gauntpy import maze as gm
-from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
-from gauntpy.coords import hpos_x, native_v, vpos_y
-from gauntpy.coords import decode_hpos, decode_vpos_at_y, slot_to_pixels
-from gauntpy.state import GameState, Player
-from gauntpy.subsystems import players as gp
-from gauntpy.subsystems.sound import main_update_sound
+from gauntpy.game import maze as gm
+from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game.coords import hpos_x, native_v, vpos_y
+from gauntpy.game.coords import decode_hpos, decode_vpos_at_y, slot_to_pixels
+from gauntpy.game.state import GameState, Player
+from gauntpy.game.subsystems import (
+    level_transitions,
+    player_animation,
+    player_data,
+    player_input,
+    player_items,
+    player_lifecycle,
+    player_movement,
+    player_names,
+    player_transport,
+    score,
+)
+from gauntpy.game.subsystems import players as gp
+from gauntpy.game.subsystems.sound import main_update_sound
 
 
 # =============================================================================
@@ -80,7 +92,7 @@ def _make_food_slot(state: GameState, destructable: bool = True,
     obj_type = (int(MazeObjIds.FOOD_DESTRUCTABLE) if destructable
                 else int(MazeObjIds.FOOD_INVULN))
     picture = (
-        gp._POISONED_FOOD_PICTURE if poisoned
+        player_items._POISONED_FOOD_PICTURE if poisoned
         else gp._WHOLESOME_FOOD_PICTURE
     )
     state.mobs.create(slot, tile=picture, hpos=0, vpos=0, obj_type=obj_type)
@@ -105,7 +117,7 @@ class TestMainHealthCountdown:
         state = _active_state()
         p = _make_player_active(state, 0, health=500)
         state.frame_counter = 1  # 1 & 0x3F = 1, not 0 -- no drain
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.health == 500
 
     def test_drains_exactly_one_point_on_gate_frame(self):
@@ -113,7 +125,7 @@ class TestMainHealthCountdown:
         state = _active_state()
         p = _make_player_active(state, 0, health=500)
         state.frame_counter = 64  # 64 & 0x3F == 0
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.health == 499
 
     def test_drain_rate_is_class_independent(self):
@@ -123,7 +135,7 @@ class TestMainHealthCountdown:
             state = _active_state()
             p = _make_player_active(state, 0, character=char, health=500)
             state.frame_counter = 0  # gate open
-            gp.main_health_countdown(state)
+            player_lifecycle.main_health_countdown(state)
             assert p.health == 499, \
                 f"character {char!r} drained {500 - p.health} instead of 1"
 
@@ -134,7 +146,7 @@ class TestMainHealthCountdown:
         _make_player_active(state, 0, health=500)
         state.players[1].health = 300  # REMOVED status (default)
         state.frame_counter = 0
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert state.players[0].health == 499
         assert state.players[1].health == 300, "REMOVED player must not drain"
 
@@ -148,11 +160,11 @@ class TestMainHealthCountdown:
         state = _active_state()
         p = _make_player_active(state, 0, health=0)
         state.frame_counter = 0
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.health == 0, "0-health player must not drain further (0x46720)"
 
         p.health = -5           # e.g. an overshooting forcefield hit
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.health == -6, "negative health must survive unmasked"
 
     def test_drain_skipped_without_a_mob(self):
@@ -160,7 +172,7 @@ class TestMainHealthCountdown:
         state = _active_state()
         p = _make_player_active(state, 0, health=500, mob_slot=0)
         state.frame_counter = 0
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.health == 500
 
     def test_drain_skipped_while_acid_slowed(self):
@@ -169,7 +181,7 @@ class TestMainHealthCountdown:
         p = _make_player_active(state, 0, health=500)
         p.acid_timer = 30
         state.frame_counter = 0
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.health == 500
 
     def test_drain_requires_status_exactly_alive_here(self):
@@ -178,7 +190,7 @@ class TestMainHealthCountdown:
         p = _make_player_active(state, 0, health=500)
         p.status = int(PlayerStatus.ALIVE_NEXT)
         state.frame_counter = 0
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.health == 500
 
     def test_drain_marks_health_dirty(self):
@@ -187,7 +199,7 @@ class TestMainHealthCountdown:
         _make_player_active(state, 0, health=500)
         state.health_dirty[0] = 0
         state.frame_counter = 0
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert state.health_dirty[0] == 1
 
     def test_low_health_timer_increments_below_threshold(self):
@@ -196,7 +208,7 @@ class TestMainHealthCountdown:
         p = _make_player_active(state, 0, health=100)
         p.state_timer = 0
         state.frame_counter = 1  # not a drain frame
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.state_timer == 1
 
     def test_low_health_timer_untouched_at_200_or_above(self):
@@ -211,21 +223,21 @@ class TestMainHealthCountdown:
         p = _make_player_active(state, 0, health=200)
         p.state_timer = 42
         state.frame_counter = 1
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.state_timer == 42
 
     def test_heartbeat_uses_rom_mask_table_and_per_player_sound(self):
         """0x576A8 gates 0x18 + player, not the spoken warning (0x46BC0)."""
-        assert gp._HEARTBEAT_MASK_TABLE == [
+        assert player_lifecycle._HEARTBEAT_MASK_TABLE == [
             0x1F, 0x3F, 0x3F, 0x7F, 0x7F, 0xFF, 0xFF,
         ]
-        assert gp._HEARTBEAT_SOUND_TABLE == [0x18, 0x19, 0x1A, 0x1B]
+        assert player_lifecycle._HEARTBEAT_SOUND_TABLE == [0x18, 0x19, 0x1A, 0x1B]
 
         state = _active_state()
         p = _make_player_active(state, 1, health=0x20)   # health >> 5 == 1
         p.state_timer = 0x3F        # +1 -> 0x40, 0x40 & 0x3F == 0 -> fires
         state.frame_counter = 1
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert 0x19 in state.sound_log
 
     def test_heartbeat_silent_between_pulses(self):
@@ -233,7 +245,7 @@ class TestMainHealthCountdown:
         p = _make_player_active(state, 0, health=0x20)
         p.state_timer = 0           # +1 -> 1, 1 & 0x3F != 0
         state.frame_counter = 1
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert state.sound_log == []
 
     def test_lowhealth_speech_fires_on_the_drain_tick(self):
@@ -245,13 +257,13 @@ class TestMainHealthCountdown:
         state = _active_state()
         _make_player_active(state, 0, character=Character.WARRIOR, health=150)
         state.frame_counter = 0     # drain frame
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         # charname phrase then one of the four low-health phrases (0x48884/0x4889C)
         emitted = state.sound_log
         assert 0xBD in emitted
-        assert any(p in emitted for p in gp._CHARACTER_LOWHEALTH_SPEECH)
+        assert any(p in emitted for p in player_lifecycle._CHARACTER_LOWHEALTH_SPEECH)
         assert emitted.index(0xBD) < min(
-            emitted.index(p) for p in gp._CHARACTER_LOWHEALTH_SPEECH if p in emitted
+            emitted.index(p) for p in player_lifecycle._CHARACTER_LOWHEALTH_SPEECH if p in emitted
         )
         assert state.player_lowhealth_spoken[0] == 1
         # The ROM's drain loop finishes for all four players before the
@@ -261,12 +273,12 @@ class TestMainHealthCountdown:
 
     def test_low_health_shows_the_insert_coins_box(self):
         """0x4677E: record 2 rides along with the spoken warning."""
-        from gauntpy.subsystems.score import DIALOG_MESSAGES
+        from gauntpy.game.subsystems.score import DIALOG_MESSAGES
 
         state = _active_state()
         _make_player_active(state, 0, health=150)
         state.frame_counter = 0
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert state.dialog_message == list(DIALOG_MESSAGES[2])
     def test_respawn_speech_timer_counts_down(self):
         """0x467C8-0x467D8 decrements the timer while it is non-negative."""
@@ -274,10 +286,10 @@ class TestMainHealthCountdown:
         _make_player_active(state, 0, health=500)
         state.player_respawn_speech_timer[0] = 3
         state.frame_counter = 1
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert state.player_respawn_speech_timer[0] == 2
         state.player_respawn_speech_timer[0] = -1
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert state.player_respawn_speech_timer[0] == -1
 
     def test_drain_fires_every_64_frames(self):
@@ -286,7 +298,7 @@ class TestMainHealthCountdown:
         p = _make_player_active(state, 0, health=1000)
         for frame in range(1, 129):
             state.frame_counter = frame & 0xFFFF
-            gp.main_health_countdown(state)
+            player_lifecycle.main_health_countdown(state)
         # frame 64 and 128 are the gate frames
         assert p.health == 1000 - 2
 
@@ -302,7 +314,7 @@ class TestPlayerTileInteract:
         state = _active_state()
         p = _make_player_active(state, 0, health=300)
         slot = _make_food_slot(state, destructable=True)
-        result = gp.player_tile_interact(state, slot, 0)
+        result = player_items.player_tile_interact(state, slot, 0)
         assert result == -1, "food must return -1 (handled)"
         assert p.health == 400
 
@@ -311,7 +323,7 @@ class TestPlayerTileInteract:
         state = _active_state()
         _make_player_active(state, 0, health=100)
         slot = _make_food_slot(state)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         _emitted(state)
         assert 0x0D in state.sound_log
 
@@ -320,7 +332,7 @@ class TestPlayerTileInteract:
         state = _active_state()
         _make_player_active(state, 0, health=100)
         slot = _make_food_slot(state, destructable=True)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert not state.mobs.is_occupied(slot)
 
     def test_invuln_food_is_removed_after_pickup(self):
@@ -328,16 +340,16 @@ class TestPlayerTileInteract:
         state = _active_state()
         _make_player_active(state, 0, health=100)
         slot = _make_food_slot(state, destructable=False)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert not state.mobs.is_occupied(slot)
 
     def test_adaptive_food_uses_the_low_health_word_modulo_twenty(self):
         state = _active_state()
         p = _make_player_active(state, 0, health=7)
         slot = _make_food_slot(state)
-        state.mobs.picture[slot] = gp._RANDOM_FOOD_PICTURE
+        state.mobs.picture[slot] = player_items._RANDOM_FOOD_PICTURE
 
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
 
         assert p.health == 207  # table[7] = 200
         assert state.score_display_timer[0] == 60
@@ -349,7 +361,7 @@ class TestPlayerTileInteract:
         p = _make_player_active(state, 0)
         p.keysnum = 0
         slot = _make_key_slot(state)
-        result = gp.player_tile_interact(state, slot, 0)
+        result = player_items.player_tile_interact(state, slot, 0)
         assert result == -1
         assert p.keysnum == 1
 
@@ -358,7 +370,7 @@ class TestPlayerTileInteract:
         state = _active_state()
         _make_player_active(state, 0)
         slot = _make_key_slot(state)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         _emitted(state)
         assert 0x13 in state.sound_log
 
@@ -366,7 +378,7 @@ class TestPlayerTileInteract:
         state = _active_state()
         _make_player_active(state, 0)
         slot = _make_key_slot(state)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert not state.mobs.is_occupied(slot)
 
     def test_power_pickups_use_rom_bits_eight_through_thirteen(self):
@@ -378,7 +390,7 @@ class TestPlayerTileInteract:
         are switched back off with a ``bclr`` on the word's *high* byte
         (0x4A80E/0x4A826/0x4A880).
         """
-        from gauntpy.constants import PlayerPower
+        from gauntpy.game.constants import PlayerPower
 
         expected = {
             MazeObjIds.POWER_INVIS: PlayerPower.INVIS,          # 0x0100
@@ -400,12 +412,12 @@ class TestPlayerTileInteract:
                 slot, tile=1, hpos=0, vpos=0, obj_type=int(obj_type),
             )
 
-            gp.player_tile_interact(state, slot, 0)
+            player_items.player_tile_interact(state, slot, 0)
 
             assert player.powers == 0x003F | int(mask)
 
     def test_the_mask_table_matches_the_rom_image(self):
-        from gauntpy.constants import POWERUP_BIT_MASKS, POWERUP_ITEM_ID
+        from gauntpy.game.constants import POWERUP_BIT_MASKS, POWERUP_ITEM_ID
 
         assert POWERUP_BIT_MASKS == (
             0x0002, 0x0001, 0x0020, 0x0010, 0x0008, 0x0004,
@@ -419,7 +431,7 @@ class TestPlayerTileInteract:
 
     def test_stat_power_bits_are_unchanged(self):
         """The low six were never in dispute; two are ROM-confirmed."""
-        from gauntpy.constants import PlayerPower
+        from gauntpy.game.constants import PlayerPower
 
         assert int(PlayerPower.SPEED) == 0x01      # btst #0, 0x4A932
         assert int(PlayerPower.ARMOR) == 0x02      # btst #1, 0x4AA82
@@ -428,7 +440,7 @@ class TestPlayerTileInteract:
     def test_an_already_owned_power_is_not_regranted(self):
         """0x4C762: player_give_item_with_message returns 0 and speaks nothing
         when the bit is already set."""
-        from gauntpy.constants import PlayerPower
+        from gauntpy.game.constants import PlayerPower
 
         state = _active_state()
         player = _make_player_active(state, 0)
@@ -437,7 +449,7 @@ class TestPlayerTileInteract:
         state.mobs.create(slot, tile=1, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_INVIS))
 
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
 
         assert player.powers == int(PlayerPower.INVIS)
         assert 0x8E not in state.sound_log, "no repeat announcement"
@@ -451,7 +463,7 @@ class TestPlayerTileInteract:
         state.mobs.create(slot, tile=1, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_INVIS))
 
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
 
         assert state.sound_log[:3] == [0xBD, 0x8D, 0x8E]
         assert 0x26 in state.sound_log
@@ -462,7 +474,7 @@ class TestPlayerTileInteract:
         state.game_settings = 0x0400
         _make_player_active(state, 0)
 
-        assert gp._player_give_item_id(state, 0, 6)
+        assert player_items._player_give_item_id(state, 0, 6)
 
         assert state.sound_log == [0x8E]
 
@@ -471,7 +483,7 @@ class TestPlayerTileInteract:
         state.game_settings = 1 << 11
         _make_player_active(state, 0)
 
-        assert gp._player_give_item_id(state, 0, 6)
+        assert player_items._player_give_item_id(state, 0, 6)
 
         assert state.sound_log == []
 
@@ -483,7 +495,7 @@ class TestPlayerTileInteract:
             slot = 38 + i
             state.mobs.create(slot, tile=1, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.POWER_SUPERSHOT))
-            gp.player_tile_interact(state, slot, 0)
+            player_items.player_tile_interact(state, slot, 0)
         assert player.supershot == 22
 
     def test_timed_powers_arm_their_countdowns(self):
@@ -500,14 +512,14 @@ class TestPlayerTileInteract:
             slot = 40 + i
             state.mobs.create(slot, tile=1, hpos=0, vpos=0,
                               obj_type=int(obj_type))
-            gp.player_tile_interact(state, slot, 0)
+            player_items.player_tile_interact(state, slot, 0)
             assert check(), f"{obj_type!r} did not arm its countdown"
 
     def test_zero_slot_returns_unhandled(self):
         """Slot 0 (NULL_SLOT) must return 0 without side-effects."""
         state = _active_state()
         _make_player_active(state, 0)
-        result = gp.player_tile_interact(state, 0, 0)
+        result = player_items.player_tile_interact(state, 0, 0)
         assert result == 0
 
     def test_treasure_adds_score(self):
@@ -524,7 +536,7 @@ class TestPlayerTileInteract:
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
         before = p.score
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         # 100 base score × multiplier 2 = 200
         assert p.score == before + 200
 
@@ -536,7 +548,7 @@ class TestPlayerTileInteract:
         slot = 35
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.DOOR_HORIZ))
-        result = gp.player_tile_interact(state, slot, 0)
+        result = player_items.player_tile_interact(state, slot, 0)
         assert result == 0, "door with no key must return 0 (unhandled)"
         assert state.mobs.is_occupied(slot), "door must not be removed"
 
@@ -548,7 +560,7 @@ class TestPlayerTileInteract:
         slot = 35
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.DOOR_HORIZ))
-        result = gp.player_tile_interact(state, slot, 0)
+        result = player_items.player_tile_interact(state, slot, 0)
         assert result == -1
         assert p.keysnum == 0
         assert not state.mobs.is_occupied(slot)
@@ -576,8 +588,8 @@ class TestForcefieldDamageTable:
     @staticmethod
     def _stand_on_forcefield(state: GameState, p) -> None:  # noqa: ANN001
         """Place the player on a beam between two forcefield hubs."""
-        from gauntpy.constants import MazeObjIds
-        from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
+        from gauntpy.game.constants import MazeObjIds
+        from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, pack_slot
         slot = pack_slot(5, 5)
         # The live record owns the cell it stands in.
         p.mob_slot = slot
@@ -652,7 +664,7 @@ class TestForcefieldDamageTable:
         assert state.forcefield_hurt_timer[0] == 0x10
 
     def test_unpaired_hub_does_not_hurt(self):
-        from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
+        from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, pack_slot
 
         state = _active_state()
         state.forcefield_color = 1
@@ -670,7 +682,7 @@ class TestForcefieldDamageTable:
         assert p.health == 1000
 
     def test_wall_breaks_forcefield_pair(self):
-        from gauntpy.coords import pack_slot
+        from gauntpy.game.coords import pack_slot
 
         state = _active_state()
         state.forcefield_color = 1
@@ -723,8 +735,8 @@ class TestDyingStatusSequence:
 
     def test_name_entry_and_game_over_reloads_are_the_rom_values(self):
         """highscore_check's two loads: 0x0A8C initials, 0x0258 GAME OVER."""
-        assert gp._NAME_ENTRY_TIMEOUT == 0x0A8C
-        assert gp._GAME_OVER_TIMEOUT == 0x0258
+        assert player_names._NAME_ENTRY_TIMEOUT == 0x0A8C
+        assert player_names._GAME_OVER_TIMEOUT == 0x0258
 
     def test_zero_health_unranked_player_is_removed(self):
         """An unranked zero-health player remains cleared after highscore_check.
@@ -782,7 +794,7 @@ class TestDyingStatusSequence:
         for _ in range(4):
             gp.main_move_players(state)
         assert state.player_death_anim_frame[0] == 6
-        assert state.mobs.picture[30] == gp._ANIM_TABLE_IDLE[6]
+        assert state.mobs.picture[30] == player_animation._ANIM_TABLE_IDLE[6]
 
         for _ in range(8):
             gp.main_move_players(state)
@@ -873,7 +885,7 @@ class TestPlayerAddScoreWithMult:
         p = _make_player_active(state, 0)
         p.score = 0
         p.bonusmult = 3
-        gp.player_add_score_with_mult(state, 0, 100)
+        score.player_add_score_with_mult(state, 0, 100)
         assert p.score == 300
 
     def test_multiplier_one_adds_base_score(self):
@@ -881,7 +893,7 @@ class TestPlayerAddScoreWithMult:
         p = _make_player_active(state, 0)
         p.score = 500
         p.bonusmult = 1
-        gp.player_add_score_with_mult(state, 0, 250)
+        score.player_add_score_with_mult(state, 0, 250)
         assert p.score == 750
 
     def test_accumulates_across_calls(self):
@@ -889,8 +901,8 @@ class TestPlayerAddScoreWithMult:
         p = _make_player_active(state, 0)
         p.score = 0
         p.bonusmult = 2
-        gp.player_add_score_with_mult(state, 0, 100)
-        gp.player_add_score_with_mult(state, 0, 50)
+        score.player_add_score_with_mult(state, 0, 100)
+        score.player_add_score_with_mult(state, 0, 50)
         assert p.score == 300
 
     def test_does_not_call_highscore_check(self):
@@ -901,7 +913,7 @@ class TestPlayerAddScoreWithMult:
         p = _make_player_active(state, 0)
         p.score = 0
         p.bonusmult = 9
-        gp.player_add_score_with_mult(state, 0, 999999)
+        score.player_add_score_with_mult(state, 0, 999999)
         assert p.score == 9 * (999999 & 0xFFFF)  # 152,631
 
     def test_base_score_is_narrowed_to_a_word(self):
@@ -910,7 +922,7 @@ class TestPlayerAddScoreWithMult:
         p = _make_player_active(state, 0)
         p.score = 0xFFFF0000
         p.bonusmult = 1
-        gp.player_add_score_with_mult(state, 0, 0x10000)
+        score.player_add_score_with_mult(state, 0, 0x10000)
         assert p.score == 0xFFFF0000
 
 
@@ -924,7 +936,7 @@ class TestMainHandleDeath:
         """A negative forcefield_hurt_timer → sound 0x2E (§21)."""
         state = _active_state()
         state.forcefield_hurt_timer[0] = -30
-        gp.main_handle_death(state)
+        player_lifecycle.main_handle_death(state)
         _emitted(state)
         assert 0x2E in state.sound_log, \
             "negative forcefield_hurt_timer must play sound 0x2E"
@@ -933,21 +945,21 @@ class TestMainHandleDeath:
         """Timer flips positive so the countdown begins (§21)."""
         state = _active_state()
         state.forcefield_hurt_timer[0] = -30
-        gp.main_handle_death(state)
+        player_lifecycle.main_handle_death(state)
         assert state.forcefield_hurt_timer[0] == 30
 
     def test_forcefield_timer_counts_down(self):
         """Positive timer decrements by 1 per frame (§21)."""
         state = _active_state()
         state.forcefield_hurt_timer[0] = 10
-        gp.main_handle_death(state)
+        player_lifecycle.main_handle_death(state)
         assert state.forcefield_hurt_timer[0] == 9
 
     def test_forcefield_timer_zero_plays_0x2F(self):
         """When the forcefield countdown reaches 0, sound 0x2F plays (§21)."""
         state = _active_state()
         state.forcefield_hurt_timer[0] = 1  # one step from zero
-        gp.main_handle_death(state)
+        player_lifecycle.main_handle_death(state)
         _emitted(state)
         assert 0x2F in state.sound_log, \
             "forcefield timer reaching 0 must play sound 0x2F"
@@ -957,7 +969,7 @@ class TestMainHandleDeath:
         """A timer already at 0 (no contact) plays nothing."""
         state = _active_state()
         state.forcefield_hurt_timer[0] = 0
-        gp.main_handle_death(state)
+        player_lifecycle.main_handle_death(state)
         _emitted(state)
         assert 0x2E not in state.sound_log
         assert 0x2F not in state.sound_log
@@ -966,7 +978,7 @@ class TestMainHandleDeath:
         """A negative death_touch_timer → sound 0x20 (§21)."""
         state = _active_state()
         state.death_touch_timer[0] = -20
-        gp.main_handle_death(state)
+        player_lifecycle.main_handle_death(state)
         _emitted(state)
         assert 0x20 in state.sound_log
 
@@ -974,7 +986,7 @@ class TestMainHandleDeath:
         """death_touch_timer countdown reaching 0 plays sound 0x21 (§21)."""
         state = _active_state()
         state.death_touch_timer[0] = 1
-        gp.main_handle_death(state)
+        player_lifecycle.main_handle_death(state)
         _emitted(state)
         assert 0x21 in state.sound_log
 
@@ -983,7 +995,7 @@ class TestMainHandleDeath:
         state = _active_state()
         for i in range(4):
             state.forcefield_hurt_timer[i] = -5
-        gp.main_handle_death(state)
+        player_lifecycle.main_handle_death(state)
         for i in range(4):
             assert state.forcefield_hurt_timer[i] == 5, \
                 f"player {i} timer should have been negated"
@@ -1003,7 +1015,7 @@ class TestPlayerDamageSampleUpdate:
         state = _active_state()
         p = _make_player_active(state, 0)
         p.damage_sample_timer = 10
-        gp.player_damage_sample_update(state, 0)
+        player_lifecycle.player_damage_sample_update(state, 0)
         assert p.damage_sample_timer == 9
 
     def test_timer_reloads_at_60_on_expiry(self):
@@ -1011,7 +1023,7 @@ class TestPlayerDamageSampleUpdate:
         state = _active_state()
         p = _make_player_active(state, 0, health=500)
         p.damage_sample_timer = 1
-        gp.player_damage_sample_update(state, 0)
+        player_lifecycle.player_damage_sample_update(state, 0)
         assert p.damage_sample_timer == 60
 
     def test_pending_damage_above_20_accumulates(self):
@@ -1021,7 +1033,7 @@ class TestPlayerDamageSampleUpdate:
         p.damage_sample_timer = 1
         p.pending_damage = 50
         p.cumulative_damage = 0
-        gp.player_damage_sample_update(state, 0)
+        player_lifecycle.player_damage_sample_update(state, 0)
         assert p.cumulative_damage == 50
 
     def test_pending_damage_at_or_below_20_not_accumulated(self):
@@ -1031,7 +1043,7 @@ class TestPlayerDamageSampleUpdate:
         p.damage_sample_timer = 1
         p.pending_damage = 20
         p.cumulative_damage = 0
-        gp.player_damage_sample_update(state, 0)
+        player_lifecycle.player_damage_sample_update(state, 0)
         assert p.cumulative_damage == 0
         assert p.damage_sample_count == 0
 
@@ -1042,7 +1054,7 @@ class TestPlayerDamageSampleUpdate:
         p.damage_sample_timer = 1
         p.pending_damage = 9999
         p.cumulative_damage = 0x7C00
-        gp.player_damage_sample_update(state, 0)
+        player_lifecycle.player_damage_sample_update(state, 0)
         assert p.cumulative_damage == 0x7D00
 
     def test_pending_damage_cleared_on_expiry(self):
@@ -1051,7 +1063,7 @@ class TestPlayerDamageSampleUpdate:
         p = _make_player_active(state, 0, health=500)
         p.damage_sample_timer = 1
         p.pending_damage = 100
-        gp.player_damage_sample_update(state, 0)
+        player_lifecycle.player_damage_sample_update(state, 0)
         assert p.pending_damage == 0
 
     def test_bravery_comment_requires_high_average_after_four_samples(self, monkeypatch):
@@ -1061,11 +1073,11 @@ class TestPlayerDamageSampleUpdate:
         for damage in (110, 110, 110):
             p.damage_sample_timer = 1
             p.pending_damage = damage
-            gp.player_damage_sample_update(state, 0)
+            player_lifecycle.player_damage_sample_update(state, 0)
 
         p.damage_sample_timer = 1
         p.pending_damage = 20
-        gp.player_damage_sample_update(state, 0)
+        player_lifecycle.player_damage_sample_update(state, 0)
 
         assert state.sound_log[-1] == 0x5F
         assert p.damage_sample_timer == -600
@@ -1081,7 +1093,7 @@ class TestPlayerDamageSampleUpdate:
         p.cumulative_damage = 320
         p.pending_damage = 20
 
-        gp.player_damage_sample_update(state, 0)
+        player_lifecycle.player_damage_sample_update(state, 0)
 
         assert 0x5F not in state.sound_log
         assert 0x60 not in state.sound_log
@@ -1095,7 +1107,7 @@ class TestPlayerDamageSampleUpdate:
         p.damage_sample_count = 4
         p.pending_damage = 20
 
-        gp.player_damage_sample_update(state, 0)
+        player_lifecycle.player_damage_sample_update(state, 0)
 
         assert p.damage_sample_timer == 60
         assert p.damage_sample_count == 0
@@ -1112,7 +1124,7 @@ class TestPlayerJoin:
         """player_join with maze=None leaves status REMOVED (§4.4)."""
         state = _active_state()
         assert state.maze is None
-        gp.player_join(state, 0)
+        player_lifecycle.player_join(state, 0)
         assert state.players[0].status == int(PlayerStatus.REMOVED)
 
     def test_join_with_spawn_tile_sets_alive(self):
@@ -1123,7 +1135,7 @@ class TestPlayerJoin:
         # Put a PLAYERSTART in the mob table.
         state.mobs.create(50, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.PLAYERSTART))
-        gp.player_join(state, 0)
+        player_lifecycle.player_join(state, 0)
         assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
 
 
@@ -1147,7 +1159,7 @@ class TestScoreMultiplierInTileInteract:
         slot = 40
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert p.bonusmult == 2   # clamped to 2 x 1
         assert p.score == 200     # 100 base × the clamped 2
 
@@ -1163,7 +1175,7 @@ class TestOpenTimedDoors:
         slot = 36
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.DOOR_HORIZ))
-        gp.open_timed_doors(state)
+        player_items.open_timed_doors(state)
         assert not state.mobs.is_occupied(slot)
 
     def test_removes_vertical_doors(self):
@@ -1171,13 +1183,13 @@ class TestOpenTimedDoors:
         slot = 37
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.DOOR_VERT))
-        gp.open_timed_doors(state)
+        player_items.open_timed_doors(state)
         assert not state.mobs.is_occupied(slot)
 
     def test_plays_sound_0x12_only_when_a_door_was_removed(self):
         """0x47FF0 gates the "Doors Open" command on the removed flag."""
         state = _active_state()
-        gp.open_timed_doors(state)
+        player_items.open_timed_doors(state)
         _emitted(state)
         assert 0x12 not in state.sound_log, \
             "no doors on the level means no sound (0x47FF0)"
@@ -1185,7 +1197,7 @@ class TestOpenTimedDoors:
         state = _active_state()
         state.mobs.create(39, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.DOOR_VERT))
-        gp.open_timed_doors(state)
+        player_items.open_timed_doors(state)
         _emitted(state)
         assert 0x12 in state.sound_log
 
@@ -1194,7 +1206,7 @@ class TestOpenTimedDoors:
         slot = 38
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.FOOD_DESTRUCTABLE))
-        gp.open_timed_doors(state)
+        player_items.open_timed_doors(state)
         assert state.mobs.is_occupied(slot), \
             "open_timed_doors must only remove DOOR_HORIZ/VERT"
 
@@ -1209,18 +1221,18 @@ class TestPlayerLowHealth:
         """Two speech commands: charname (0x596F6) then phrase (0x5797A)."""
         state = _active_state()
         _make_player_active(state, 2, character=Character.ELF, health=50)
-        gp.player_lowhealth(state, 2)
+        player_lifecycle.player_lowhealth(state, 2)
         # index = character + player * 4 = 3 + 8 = 11 -> 0xC8
         assert state.sound_log[0] == 0xC8
-        assert state.sound_log[1] in gp._CHARACTER_LOWHEALTH_SPEECH
+        assert state.sound_log[1] in player_lifecycle._CHARACTER_LOWHEALTH_SPEECH
 
     def test_latch_makes_it_one_shot(self):
         state = _active_state()
         _make_player_active(state, 0, health=50)
-        gp.player_lowhealth(state, 0)
+        player_lifecycle.player_lowhealth(state, 0)
         assert state.player_lowhealth_spoken[0] == 1
         state.sound_log.clear()
-        gp.player_lowhealth(state, 0)
+        player_lifecycle.player_lowhealth(state, 0)
         assert state.sound_log == [], "latch must suppress the repeat (0x487DE)"
 
     def test_non_negative_speech_timer_blocks(self):
@@ -1228,7 +1240,7 @@ class TestPlayerLowHealth:
         state = _active_state()
         _make_player_active(state, 0, health=50)
         state.player_respawn_speech_timer[0] = 0
-        gp.player_lowhealth(state, 0)
+        player_lifecycle.player_lowhealth(state, 0)
         assert state.sound_log == []
         assert state.player_lowhealth_spoken[0] == 0
 
@@ -1237,7 +1249,7 @@ class TestPlayerLowHealth:
         state.game_settings = 1 << 11
         _make_player_active(state, 0, health=100)
 
-        gp.player_lowhealth(state, 0)
+        player_lifecycle.player_lowhealth(state, 0)
 
         assert state.sound_log == []
         assert state.player_lowhealth_spoken[0] == 1
@@ -1246,7 +1258,7 @@ class TestPlayerLowHealth:
     def test_reloads_the_speech_timer(self):
         state = _active_state()
         _make_player_active(state, 0, health=50)
-        gp.player_lowhealth(state, 0)
+        player_lifecycle.player_lowhealth(state, 0)
         assert state.player_respawn_speech_timer[0] == 0x708
 
     def test_powers_phrase_needs_two_bits_and_the_random_gate(self):
@@ -1257,8 +1269,8 @@ class TestPlayerLowHealth:
             state.rng.seed = seed
             p = _make_player_active(state, 0, health=50)
             p.powers = 0x01                     # exactly one low bit
-            gp.player_lowhealth(state, 0)
-            assert state.sound_log[1] != gp._CHARACTER_LOWHEALTH_SPEECH[3]
+            player_lifecycle.player_lowhealth(state, 0)
+            assert state.sound_log[1] != player_lifecycle._CHARACTER_LOWHEALTH_SPEECH[3]
 
     def test_powers_phrase_is_reachable_with_two_bits(self):
         """With two low power bits some seed must reach entry 3."""
@@ -1268,8 +1280,8 @@ class TestPlayerLowHealth:
             state.rng.seed = seed
             p = _make_player_active(state, 0, health=50)
             p.powers = 0x03                     # speed + armour
-            gp.player_lowhealth(state, 0)
-            if state.sound_log[1] == gp._CHARACTER_LOWHEALTH_SPEECH[3]:
+            player_lifecycle.player_lowhealth(state, 0)
+            if state.sound_log[1] == player_lifecycle._CHARACTER_LOWHEALTH_SPEECH[3]:
                 reached = True
                 break
         assert reached, "entry 3 must be reachable through the powers branch"
@@ -1281,8 +1293,8 @@ class TestPlayerLowHealth:
             state.rng.seed = seed
             p = _make_player_active(state, 0, health=50)
             p.powers = 0x0F00                   # reflect/transport/super/invuln
-            gp.player_lowhealth(state, 0)
-            assert state.sound_log[1] != gp._CHARACTER_LOWHEALTH_SPEECH[3]
+            player_lifecycle.player_lowhealth(state, 0)
+            assert state.sound_log[1] != player_lifecycle._CHARACTER_LOWHEALTH_SPEECH[3]
 
 
 class TestFoodRearmsLowHealthWarning:
@@ -1294,7 +1306,7 @@ class TestFoodRearmsLowHealthWarning:
         p.state_timer = 42
         state.player_lowhealth_spoken[0] = 1
         slot = _make_food_slot(state, destructable=True)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert p.health == 250
         assert p.state_timer == 0xFFFF
         assert state.player_lowhealth_spoken[0] == 0
@@ -1306,7 +1318,7 @@ class TestFoodRearmsLowHealthWarning:
         p.state_timer = 42
         state.player_lowhealth_spoken[0] = 1
         slot = _make_food_slot(state, destructable=True)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert p.health == 150
         assert p.state_timer == 42
         assert state.player_lowhealth_spoken[0] == 1
@@ -1323,14 +1335,14 @@ class TestSpeechWelcome:
         state = _active_state()
         state.level_players_active = 1
         state.welcome_elapsed_frames = 0
-        gp.speech_welcome(state, 0)
-        assert state.sound_log == [gp._SPEECH_WELCOME_LEADIN]
+        player_lifecycle.speech_welcome(state, 0)
+        assert state.sound_log == [player_lifecycle._SPEECH_WELCOME_LEADIN]
 
     def test_silent_when_not_solo_and_below_the_delay(self):
         state = _active_state()
         state.level_players_active = 2
         state.welcome_elapsed_frames = 0
-        gp.speech_welcome(state, 0)
+        player_lifecycle.speech_welcome(state, 0)
         assert state.sound_log == []
 
     def test_full_greeting_above_the_delay(self):
@@ -1339,14 +1351,14 @@ class TestSpeechWelcome:
         state.level_players_active = 3
         state.welcome_elapsed_frames = 0x258
         state.players[1].character = int(Character.WIZARD)
-        gp.speech_welcome(state, 1)
+        player_lifecycle.speech_welcome(state, 1)
         # index = 2 + 1 * 4 = 6 -> 0xC3
-        assert state.sound_log == [gp._SPEECH_WELCOME_LEADIN, 0xC3]
+        assert state.sound_log == [player_lifecycle._SPEECH_WELCOME_LEADIN, 0xC3]
 
     def test_reloads_the_elapsed_counter(self):
         state = _active_state()
         state.welcome_elapsed_frames = 5000
-        gp.speech_welcome(state, 0)
+        player_lifecycle.speech_welcome(state, 0)
         assert state.welcome_elapsed_frames == 0x258
 
     def test_operator_speech_disable_silences_welcome(self):
@@ -1355,24 +1367,24 @@ class TestSpeechWelcome:
         state.level_players_active = 1
         state.welcome_elapsed_frames = 0x258
 
-        gp.speech_welcome(state, 0)
+        player_lifecycle.speech_welcome(state, 0)
 
         assert state.sound_log == []
 
     def test_join_finalize_greets_and_rearms_the_low_health_warning(self):
-        from gauntpy.subsystems.score import info_panel
+        from gauntpy.game.subsystems.score import info_panel
 
         state = _active_state()
         state.level_players_active = 1
         state.player_lowhealth_spoken[0] = 1
         state.player_respawn_speech_timer[0] = 900
         state.players[0].health = 700
-        gp.player_join_finalize(state, 0)
+        player_lifecycle.player_join_finalize(state, 0)
         assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
         assert state.players[0].state_timer == 0xFFFF
         assert state.player_lowhealth_spoken[0] == 0
         assert state.player_respawn_speech_timer[0] == -1
-        assert gp._SPEECH_WELCOME_LEADIN in state.sound_log
+        assert player_lifecycle._SPEECH_WELCOME_LEADIN in state.sound_log
         # setup_infopanel rebuilds the joining player's column at once.
         field = info_panel(state).players[0]
         assert field.score_drawn and field.health_drawn
@@ -1383,9 +1395,9 @@ class TestSpeechWelcome:
         state.level_players_active = 1
         state.players[0].character = int(Character.ELF)
 
-        gp.player_join_finalize(state, 0)
+        player_lifecycle.player_join_finalize(state, 0)
 
-        assert state.sound_log[:2] == [0x0C, gp._SPEECH_WELCOME_LEADIN]
+        assert state.sound_log[:2] == [0x0C, player_lifecycle._SPEECH_WELCOME_LEADIN]
 
 
 # =============================================================================
@@ -1398,7 +1410,7 @@ class TestHudHooks:
 
     @staticmethod
     def _field(state: GameState, player_index: int):
-        from gauntpy.subsystems.score import info_panel
+        from gauntpy.game.subsystems.score import info_panel
 
         return info_panel(state).players[player_index]
 
@@ -1409,7 +1421,7 @@ class TestHudHooks:
         state.score_dirty = [1, 1, 1, 1]
         state.health_dirty = [1, 1, 1, 1]
 
-        gp.setup_infopanel(state, 2)
+        player_lifecycle.setup_infopanel(state, 2)
 
         field = self._field(state, 2)
         assert field.score_drawn and field.health_drawn
@@ -1427,7 +1439,7 @@ class TestHudHooks:
         state.score_dirty = [1, 1, 1, 1]
         state.health_dirty = [1, 1, 1, 1]
 
-        gp.setup_infopanel(state, -1)
+        player_lifecycle.setup_infopanel(state, -1)
 
         for i in range(4):
             field = self._field(state, i)
@@ -1437,13 +1449,13 @@ class TestHudHooks:
         assert state.health_dirty == [0, 0, 0, 0]
 
     def test_it_label_uses_the_rom_white_attribute_family(self):
-        from gauntpy.subsystems import score
+        from gauntpy.game.subsystems import score
 
         state = _active_state()
         _make_player_active(state, 2, health=100)
         state.player_it = 2
 
-        gp.setup_infopanel(state, 2)
+        player_lifecycle.setup_infopanel(state, 2)
 
         row = 2 * score.PLAYER_BLOCK_STRIDE + score.PLAYER_LABEL_ROW
         words = state.alpha_ram[
@@ -1453,7 +1465,7 @@ class TestHudHooks:
         assert [word & 0xFC00 for word in words] == [0xB800, 0xB800]
 
     def test_panel_bottom_contains_no_host_diagnostics(self):
-        from gauntpy.subsystems import score
+        from gauntpy.game.subsystems import score
 
         state = _active_state()
         player = _make_player_active(state, 0, health=100, mob_slot=(10 << 5) | 12)
@@ -1461,7 +1473,7 @@ class TestHudHooks:
         state.mobs.hpos[player.mob_slot] = 188 << 7
         state.mobs.vpos[player.mob_slot] = native_v(160) << 7
 
-        gp.setup_infopanel(state, -1)
+        player_lifecycle.setup_infopanel(state, -1)
 
         for row in (27, 28):
             start = row * score.ALPHA_ROW_STRIDE + score.PANEL_COLUMN
@@ -1470,7 +1482,7 @@ class TestHudHooks:
 
     def test_setup_infopanel_ignores_an_out_of_range_selector(self):
         state = _active_state()
-        gp.setup_infopanel(state, 9)
+        player_lifecycle.setup_infopanel(state, 9)
         assert not self._field(state, 0).score_drawn
 
     def test_player_inv_update_relatches_the_panel_row(self):
@@ -1478,7 +1490,7 @@ class TestHudHooks:
         p = _make_player_active(state, 1, health=250)
         p.bonusmult = 4
 
-        gp.player_inv_update(state, 1)
+        player_lifecycle.player_inv_update(state, 1)
 
         field = self._field(state, 1)
         assert field.health_drawn
@@ -1490,7 +1502,7 @@ class TestHudHooks:
         p = _make_player_active(state, 0, health=175)
         slot = _make_key_slot(state)
 
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
 
         assert p.keysnum == 1
         assert self._field(state, 0).health_drawn, (
@@ -1504,7 +1516,7 @@ class TestHudHooks:
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POT_DESTRUCTABLE))
 
-        gp.player_tile_interact(state, slot, 3)
+        player_items.player_tile_interact(state, slot, 3)
 
         assert p.potionsnum == 1
         assert self._field(state, 3).health_drawn
@@ -1522,7 +1534,7 @@ class TestHudHooks:
                 slot, tile=0x1234, hpos=0, vpos=0, obj_type=int(obj_type),
             )
 
-            assert gp.player_tile_interact(state, slot, 0) == 0
+            assert player_items.player_tile_interact(state, slot, 0) == 0
 
             assert (player.keysnum, player.potionsnum) == (5, 11)
             assert state.mobs.obj_type(slot) == int(obj_type)
@@ -1534,7 +1546,7 @@ class TestHudHooks:
         player.potionsnum = 11
         slot = _make_key_slot(state)
 
-        assert gp.player_tile_interact(state, slot, 0) == 0
+        assert player_items.player_tile_interact(state, slot, 0) == 0
 
         assert (player.keysnum, player.potionsnum) == (5, 11)
         assert state.mobs.obj_type(slot) == int(MazeObjIds.KEY)
@@ -1546,7 +1558,7 @@ class TestHudHooks:
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_INVULN))
 
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
 
         assert self._field(state, 0).health_drawn
 
@@ -1559,7 +1571,7 @@ class TestRedrawBitsOnEveryValueChange:
         state = _active_state()
         _make_player_active(state, 0, health=300)
         state.health_dirty = [0, 0, 0, 0]
-        gp.player_tile_interact(state, _make_food_slot(state), 0)
+        player_items.player_tile_interact(state, _make_food_slot(state), 0)
         assert state.health_dirty[0] == 1
 
     def test_health_drain_raises_the_health_bit(self):
@@ -1567,11 +1579,11 @@ class TestRedrawBitsOnEveryValueChange:
         _make_player_active(state, 0, health=300)
         state.health_dirty = [0, 0, 0, 0]
         state.frame_counter = 0
-        gp.main_health_countdown(state)
+        player_lifecycle.main_health_countdown(state)
         assert state.health_dirty[0] == 1
 
     def test_forcefield_damage_raises_the_health_bit(self):
-        from gauntpy.coords import pack_slot
+        from gauntpy.game.coords import pack_slot
 
         state = _active_state()
         state.forcefield_color = 1
@@ -1590,7 +1602,7 @@ class TestRedrawBitsOnEveryValueChange:
         assert state.health_dirty[0] == 1
 
     def test_death_rebuilds_the_panel_column(self):
-        from gauntpy.subsystems.score import info_panel
+        from gauntpy.game.subsystems.score import info_panel
 
         state = _active_state()
         p = _make_player_active(state, 0, health=0)
@@ -1607,7 +1619,7 @@ class TestRedrawBitsOnEveryValueChange:
         slot = 46
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
-        gp.player_tile_interact(state, slot, 1)
+        player_items.player_tile_interact(state, slot, 1)
         assert state.score_dirty[1] == 1
 
 
@@ -1622,7 +1634,7 @@ class TestShowContinuePrompt:
 
     def test_draws_when_every_gate_passes(self):
         state = self._ready()
-        gp.show_continue_prompt(state)
+        player_lifecycle.show_continue_prompt(state)
         assert 0x3B in state.sound_log          # "Gauntlet II Theme Song"
         assert state.title_intro_state == 1
         start = 13 * 64 + 5
@@ -1634,31 +1646,31 @@ class TestShowContinuePrompt:
     def test_blocked_while_players_remain_on_the_level(self):
         state = self._ready()
         state.level_players_active = 1
-        gp.show_continue_prompt(state)
+        player_lifecycle.show_continue_prompt(state)
         assert state.sound_log == []
 
     def test_blocked_on_level_1(self):
         state = self._ready()
         state.levelnum_current = 1
-        gp.show_continue_prompt(state)
+        player_lifecycle.show_continue_prompt(state)
         assert state.sound_log == []
 
     def test_blocked_by_the_disabled_attract_timer_sentinel(self):
         state = self._ready()
         state.attract_timer = 0xFFFF
-        gp.show_continue_prompt(state)
+        player_lifecycle.show_continue_prompt(state)
         assert state.sound_log == []
 
     def test_blocked_by_any_non_idle_player_status(self):
         state = self._ready()
         state.players[3].status = int(PlayerStatus.ALIVE_NEXT)
-        gp.show_continue_prompt(state)
+        player_lifecycle.show_continue_prompt(state)
         assert state.sound_log == []
 
     def test_selecting_status_is_allowed(self):
         state = self._ready()
         state.players[3].status = int(PlayerStatus.SELECTING)
-        gp.show_continue_prompt(state)
+        player_lifecycle.show_continue_prompt(state)
         assert 0x3B in state.sound_log
 
 
@@ -1671,17 +1683,17 @@ class TestSecretNameEntry:
         state.secret_trick_id = 0x5A
         state.secret_prev_maze = 73
 
-        assert gp.secret_code_build(state) == "FB9-AD9"
+        assert player_names.secret_code_build(state) == "FB9-AD9"
 
     def test_secret_code_result_clears_the_old_name_row(self):
         state = _active_state()
         state.secret_player = 0
         state.game_settings |= 0x2000
-        gp.secret_getname(state)
+        player_names.secret_getname(state)
         state.secret_name_buffer = list(b"ALINSA" + b" " * 20 + b"TDV")
         state.secret_code = "FB9-AD9"
 
-        from gauntpy.subsystems.score import write_secret_code_result
+        from gauntpy.game.subsystems.score import write_secret_code_result
 
         write_secret_code_result(state, 0)
 
@@ -1693,7 +1705,7 @@ class TestSecretNameEntry:
         )
 
     def test_secret_code_dash_uses_name_entry_control_glyphs(self):
-        from gauntpy.subsystems.score import write_secret_code_result
+        from gauntpy.game.subsystems.score import write_secret_code_result
 
         state = _active_state()
         state.secret_code = "W1Y-GN0"
@@ -1710,7 +1722,7 @@ class TestSecretNameEntry:
         state.secret_player = 1
         p = state.players[1]
         state.game_settings |= 0x2000
-        gp.secret_getname(state)
+        player_names.secret_getname(state)
         assert p.status == int(PlayerStatus.SECRET_NAME_ENTRY)
         assert state.alpha_ram[1 * 64 + 4] & 0x0100
         state.global_delay_timer = 4
@@ -1742,7 +1754,7 @@ class TestMazeConvertWallsToExits:
     def test_converts_solid_walls_to_exits(self):
         state = _active_state()
         self._wall(state, 100, int(MazeObjIds.WALL_REGULAR))
-        assert gp.maze_convert_walls_to_exits(state) == 1
+        assert player_items.maze_convert_walls_to_exits(state) == 1
         assert state.mobs.obj_type(100) == int(MazeObjIds.EXIT)
         assert state.mobs.picture[100] == gm.TILE_MARKER_PICTURE
         assert not state.mobs.is_linked(100)
@@ -1752,7 +1764,7 @@ class TestMazeConvertWallsToExits:
         state.mobs.create(101, tile=0x20F6, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.WALL_MOVABLE))
         assert state.mobs.is_linked(101)
-        assert gp.maze_convert_walls_to_exits(state) == 1
+        assert player_items.maze_convert_walls_to_exits(state) == 1
         assert state.mobs.obj_type(101) == int(MazeObjIds.EXIT)
         assert state.mobs.picture[101] == gm.TILE_MARKER_PICTURE
         assert not state.mobs.is_linked(101)
@@ -1767,31 +1779,31 @@ class TestMazeConvertWallsToExits:
         })
         self._wall(state, slot, int(MazeObjIds.WALL_REGULAR))
 
-        assert gp.maze_convert_walls_to_exits(state) == 1
+        assert player_items.maze_convert_walls_to_exits(state) == 1
         assert state.maze.data[(9, 8)] == int(MazeObjIds.EXIT)
 
     def test_forcefield_hubs_survive(self):
         """0x5E844 excludes object type 0x3F."""
         state = _active_state()
         self._wall(state, 102, int(MazeObjIds.FORCEFIELDHUB))
-        assert gp.maze_convert_walls_to_exits(state) == 0
+        assert player_items.maze_convert_walls_to_exits(state) == 0
         assert state.mobs.obj_type(102) == int(MazeObjIds.FORCEFIELDHUB)
 
     def test_ordinary_objects_are_untouched(self):
         state = _active_state()
         state.mobs.create(103, tile=0x1234, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
-        assert gp.maze_convert_walls_to_exits(state) == 0
+        assert player_items.maze_convert_walls_to_exits(state) == 0
         assert state.mobs.obj_type(103) == int(MazeObjIds.TREASURE)
 
     def test_returns_zero_when_nothing_changed(self):
-        assert gp.maze_convert_walls_to_exits(_active_state()) == 0
+        assert player_items.maze_convert_walls_to_exits(_active_state()) == 0
 
     def test_converted_exit_carries_its_cell_position(self):
         state = _active_state()
         slot = (7 << 5) | 9
         self._wall(state, slot, int(MazeObjIds.WALL_SECRET))
-        gp.maze_convert_walls_to_exits(state)
+        player_items.maze_convert_walls_to_exits(state)
         assert hpos_x(state.mobs.hpos[slot]) == 9 * 16
         assert vpos_y(state.mobs.vpos[slot]) == 7 * 16
 
@@ -1880,7 +1892,7 @@ class TestPlayerTport:
 
     def test_records_the_source_in_the_route_state(self):
         state, source = self._world()
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         assert state.player_tport_route_state[0] == source
 
     def test_arms_the_transition_instead_of_moving(self):
@@ -1894,32 +1906,32 @@ class TestPlayerTport:
         before_h = state.mobs.hpos[30]
         before_v = state.mobs.vpos[30]
 
-        assert gp.player_tport(state, 0, source) == -2
+        assert player_transport.player_tport(state, 0, source) == -2
 
         # Scan order is direction 0..7 and the final loop keeps only the
         # diagonals, so direction 1 (up-right of the destination) wins.
         assert state.player_tile_or_tport_dest[0] == _pack(4, 10)     # 0x50606
         assert state.player_tport_type[0] == _pack(5, 9)    # 0x5051A
         assert state.player_tport_phase[0] == 0             # 0x5052A
-        assert state.mobs.picture[0x19] == gp._TPORT_ARRIVAL_PICTURE
+        assert state.mobs.picture[0x19] == player_transport._TPORT_ARRIVAL_PICTURE
         assert state.mobs.hpos[30] == before_h, "no immediate commit"
         assert state.mobs.vpos[30] == before_v
 
     def test_plays_the_transport_sound(self):
         state, source = self._world()
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         assert 0x28 in state.sound_log
 
     def test_picks_the_nearest_pad_by_manhattan_distance(self):
         state, source = self._world(pads=((5, 5), (5, 12), (7, 6)))
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         # (7,6) is 3 away, (5,12) is 7 away -> the destination is (7,6).
         assert state.player_tile_or_tport_dest[0] == _pack(6, 7)
 
     def test_off_screen_pads_are_not_candidates(self):
         """A pad outside tile_on_screen_test's window is skipped (0x502D8)."""
         state, source = self._world(pads=((5, 5), (20, 20)))
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         # No usable destination -> the source pad is the destination (0x503AA).
         assert state.player_tile_or_tport_dest[0] == _pack(4, 6)
 
@@ -1932,7 +1944,7 @@ class TestPlayerTport:
                     continue
                 state.mobs.picture[slot] = 0x8000        # solid wall marker
         before = state.mobs.hpos[30]
-        assert gp.player_tport(state, 0, source) == 0
+        assert player_transport.player_tport(state, 0, source) == 0
         assert state.mobs.hpos[30] == before
         assert 0x28 not in state.sound_log
 
@@ -1942,23 +1954,23 @@ class TestPlayerTport:
         slot = _pack(4, 10)
         state.mobs.create(slot, tile=0x1000, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.DOOR_HORIZ))
-        assert gp.tport_check_dest(state, slot, 0) == 1
+        assert player_transport.tport_check_dest(state, slot, 0) == 1
         state.players[0].keysnum = 1
-        assert gp.tport_check_dest(state, slot, 0) == 0
+        assert player_transport.tport_check_dest(state, slot, 0) == 0
 
     def test_transporter_visibility_wraps_across_the_maze_seam(self):
         state = GameState(scroll_x=480, scroll_y=4 * 16)
 
-        assert gp.tile_on_screen_test(state, _pack(4, 2))
-        assert not gp.tile_on_screen_test(state, _pack(4, 20))
+        assert player_transport.tile_on_screen_test(state, _pack(4, 2))
+        assert not player_transport.tile_on_screen_test(state, _pack(4, 20))
 
     def test_another_players_sprite_blocks_a_landing_cell(self):
         state, _ = self._world()
         slot = _pack(4, 10)
         state.mobs.create(slot, tile=0x1000, hpos=0x0D, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
-        assert gp.tport_check_dest(state, slot, 0) == 1   # palette 0x0D = P2
-        assert gp.tport_check_dest(state, slot, 1) == 0   # ... its owner
+        assert player_transport.tport_check_dest(state, slot, 0) == 1   # palette 0x0D = P2
+        assert player_transport.tport_check_dest(state, slot, 1) == 0   # ... its owner
 
     def test_clearance_test_rejects_a_cell_another_player_stands_on(self):
         state, _ = self._world()
@@ -1972,22 +1984,22 @@ class TestPlayerTport:
             vpos=native_v(4 * 16 + 8) << 7,
             obj_type=int(MazeObjIds.PLAYERSTART), state=1,
         )
-        assert not gp.nearby_mob_clearance_test(state, _pack(4, 10), 0)
-        assert gp.nearby_mob_clearance_test(state, _pack(4, 10), 1)
+        assert not player_transport.nearby_mob_clearance_test(state, _pack(4, 10), 0)
+        assert player_transport.nearby_mob_clearance_test(state, _pack(4, 10), 1)
 
     def test_transportability_power_keeps_the_player_on_its_own_pad(self):
         """0x50252 tests ``btst #3`` of the powers high byte -- word bit 11,
         the bit ``POWER_TRANSPORT`` grants -- and short-circuits the
         destination search (0x5025A)."""
         state, source = self._world()
-        state.players[0].powers = gp._POWER_TRANSPORT
-        assert gp.player_tport(state, 0, source) == -2
+        state.players[0].powers = player_data._POWER_TRANSPORT
+        assert player_transport.player_tport(state, 0, source) == -2
         assert state.player_tile_or_tport_dest[0] == _pack(4, 6)    # diagonal of (5,5)
 
     def test_secret_trick_0x56_records_the_pad_index(self):
         state, source = self._world(pads=((5, 5), (5, 9), (7, 6)))
         state.secret_trick_id = 0x56
-        gp.player_tport(state, 0, _pack(7, 6))
+        player_transport.player_tport(state, 0, _pack(7, 6))
         # tport_find_id is one-based: sorted index 2 becomes bit 3.
         assert state.secret_tricks_flags[0] & (1 << 3)
 
@@ -2004,7 +2016,7 @@ class TestPlayerTport:
                     continue
                 state.mobs.picture[slot] = 0x8000
         # No contention: one clear cell is enough.
-        assert gp.player_tport(state, 0, source) == -2
+        assert player_transport.player_tport(state, 0, source) == -2
 
         state, source = self._world()
         for row in range(4, 7):
@@ -2016,7 +2028,7 @@ class TestPlayerTport:
                 state.mobs.picture[slot] = 0x8000
         state.player_tport_type[2] = _pack(5, 9)
         state.player_tport_phase[2] = 0
-        assert gp.player_tport(state, 0, source) == 0
+        assert player_transport.player_tport(state, 0, source) == 0
 
     def test_tile_interact_propagates_the_abort(self):
         state, source = self._world()
@@ -2026,11 +2038,11 @@ class TestPlayerTport:
                 if state.mobs.obj_type(slot) == int(MazeObjIds.TRANSPORTER):
                     continue
                 state.mobs.picture[slot] = 0x8000
-        assert gp.player_tile_interact(state, source, 0) == 0
+        assert player_items.player_tile_interact(state, source, 0) == 0
 
     def test_tile_interact_reports_a_completed_teleport(self):
         state, source = self._world()
-        assert gp.player_tile_interact(state, source, 0) == -1
+        assert player_items.player_tile_interact(state, source, 0) == -1
 
 
 # =============================================================================
@@ -2054,7 +2066,7 @@ class TestShotSpawnGeometry:
         assert gp._SHOT_REFLECT_VDELTA == [
             0x0700, 0x0300, 0x0180, -0x0080, -0x0100, -0x0280, 0x0180, 0x0380,
         ]
-        assert gp._PORT_DIR_TO_ROM_DIR == [2, 3, 4, 5, 6, 7, 0, 1]
+        assert player_animation._PORT_DIR_TO_ROM_DIR == [2, 3, 4, 5, 6, 7, 0, 1]
         assert gp._PLAYER_SHOT_PICTURE[:8] == [
             0x1C9F, 0x1CA7, 0x1CAF, 0x1CB7, 0x1CBF, 0x1CC7, 0x1CCF, 0x1C97,
         ]
@@ -2087,7 +2099,7 @@ class TestShotSpawnGeometry:
         state.mobs.hpos[32] = 100 << 7
         state.mobs.vpos[32] = native_v(200) << 7
         gp.player_create_shot(state, 2)
-        assert (state.mobs.hpos[3] & 0x0F) == gp._SHOT_PALETTE_BASE + 2
+        assert (state.mobs.hpos[3] & 0x0F) == player_data._SHOT_PALETTE_BASE + 2
 
     def test_shot_is_two_tiles_square(self):
         state, _ = self._shooter(direction=0)
@@ -2113,7 +2125,7 @@ class TestScoreRedrawBit:
         state = _active_state()
         _make_player_active(state, 1)
         state.score_dirty = [0, 0, 0, 0]
-        gp.player_add_score_with_mult(state, 1, 100)
+        score.player_add_score_with_mult(state, 1, 100)
         assert state.score_dirty == [0, 1, 0, 0]
 
 
@@ -2125,9 +2137,9 @@ class TestHandleTport:
         p = _make_player_active(state, 2, mob_slot=30)
         state.mobs.hpos[30] = (0x1234 & 0xFF80)
         state.mobs.vpos[30] = (0x2345 & 0xFF80)
-        gp.handle_tport(state, 30, 2)
+        player_transport.handle_tport(state, 30, 2)
         slot = 0x19 + 2
-        assert state.mobs.picture[slot] == gp._TPORT_ARRIVAL_PICTURE
+        assert state.mobs.picture[slot] == player_transport._TPORT_ARRIVAL_PICTURE
         assert state.mobs.hpos[slot] == (state.mobs.hpos[30] & 0xFF80) + 1
         assert state.mobs.vpos[slot] == (state.mobs.vpos[30] & 0xFF80) + 0x12
 
@@ -2136,8 +2148,8 @@ class TestHandleTport:
         _make_player_active(state, 0, mob_slot=30)
         state.mobs.create(0x19, tile=0x1111, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
-        gp.handle_tport(state, 30, 0)
-        assert state.mobs.picture[0x19] == gp._TPORT_ARRIVAL_PICTURE
+        player_transport.handle_tport(state, 30, 0)
+        assert state.mobs.picture[0x19] == player_transport._TPORT_ARRIVAL_PICTURE
 
 
 class TestDeathAnimationSeed:
@@ -2182,7 +2194,7 @@ class TestDeathAnimationSeed:
         p.hurt_cooldown = 9
         state.forcefield_hurt_timer[0] = 7
         state.death_touch_timer[0] = 8
-        assert gp.player_start_inner(state, 0) == -1
+        assert player_lifecycle.player_start_inner(state, 0) == -1
         assert p.death_damage_counter == 0
         assert p.pending_damage == 0
         assert p.cumulative_damage == 0
@@ -2209,7 +2221,7 @@ class TestDeathAnimationSeed:
             )
 
         for player_index in range(4):
-            assert gp.player_start_inner(state, player_index) == -1
+            assert player_lifecycle.player_start_inner(state, player_index) == -1
             slot = state.players[player_index].mob_slot
             assert state.mobs.state(slot) == player_index
 
@@ -2228,7 +2240,7 @@ class TestForcefieldUsesTheSegmentTable:
         assert not hasattr(gp, "_FORCEFIELD_BLOCKERS")
 
     def test_contact_builds_the_table_when_driven_standalone(self):
-        from gauntpy.coords import pack_slot
+        from gauntpy.game.coords import pack_slot
 
         state = _active_state()
         state.forcefield_color = 1
@@ -2248,7 +2260,7 @@ class TestForcefieldUsesTheSegmentTable:
 
     def test_query_follows_the_table_not_the_mob_grid(self):
         """A hand-written segment hurts even with no hub MOBs on the level."""
-        from gauntpy.coords import pack_slot
+        from gauntpy.game.coords import pack_slot
 
         state = _active_state()
         state.forcefield_color = 1
@@ -2265,7 +2277,7 @@ class TestForcefieldUsesTheSegmentTable:
 
     def test_wrapped_segment_is_honoured(self):
         """The wrap bit is a segment field the old grid scan could not see."""
-        from gauntpy.coords import pack_slot
+        from gauntpy.game.coords import pack_slot
 
         state = _active_state()
         state.forcefield_color = 1
@@ -2286,7 +2298,7 @@ class TestForcefieldUsesTheSegmentTable:
 class TestOpenTimedDoorsDelegates:
 
     def test_shares_wp11s_implementation(self):
-        from gauntpy.subsystems import maze_objects
+        from gauntpy.game.subsystems import maze_objects
 
         state = _active_state()
         state.mobs.create(300, tile=0, hpos=0, vpos=0,
@@ -2302,7 +2314,7 @@ class TestOpenTimedDoorsDelegates:
 
         maze_objects.open_timed_doors = _spy
         try:
-            gp.open_timed_doors(state)
+            player_items.open_timed_doors(state)
         finally:
             maze_objects.open_timed_doors = original
 
@@ -2330,7 +2342,7 @@ class TestDoorOpeningFronts:
         slot = (8 << 5) | 8
         self._door_line(state, [slot - 0x20, slot, slot + 0x20],
                         self._DOOR_VERT_PICTURE, MazeObjIds.DOOR_VERT)
-        gp.door_open_start(state, slot, 1)
+        player_items.door_open_start(state, slot, 1)
         # door_open_start ends by stepping both fronts once (0x51F9E), so they
         # now sit on the cells above and below, which are already open.
         assert state.door_endpoint_dir[2:4] == [0, 2]
@@ -2344,7 +2356,7 @@ class TestDoorOpeningFronts:
         slot = (8 << 5) | 8
         self._door_line(state, [slot - 1, slot, slot + 1],
                         self._DOOR_HORIZ_PICTURE, MazeObjIds.DOOR_HORIZ)
-        gp.door_open_start(state, slot, 0)
+        player_items.door_open_start(state, slot, 0)
         assert state.door_endpoint_dir[0:2] == [3, 1]
         assert state.door_endpoint_pos[0:2] == [slot - 1, slot + 1]
         assert not state.mobs.is_occupied(slot - 1)
@@ -2367,7 +2379,7 @@ class TestDoorOpeningFronts:
             obj_type=int(MazeObjIds.DOOR_VERT),
         )
 
-        gp.door_open_start(state, slot, 0)
+        player_items.door_open_start(state, slot, 0)
 
         assert state.door_endpoint_dir[0:2] == [3, 0]
         assert state.mobs.picture[slot - 1] == 0
@@ -2388,7 +2400,7 @@ class TestDoorOpeningFronts:
             obj_type=int(MazeObjIds.DOOR_HORIZ),
         )
 
-        gp.door_open_start(state, slot, 0)
+        player_items.door_open_start(state, slot, 0)
 
         assert state.door_endpoint_pos[0:2] == [0, 0]
         assert state.mobs.picture[reserved] == 0x9D3C
@@ -2399,7 +2411,7 @@ class TestDoorOpeningFronts:
         slot = (8 << 5) | 8
         self._door_line(state, [slot], self._DOOR_HORIZ_PICTURE,
                         MazeObjIds.DOOR_HORIZ)
-        gp.door_open_start(state, slot, 0)
+        player_items.door_open_start(state, slot, 0)
         assert state.door_endpoint_pos[0:2] == [0, 0]
 
     def test_each_player_owns_its_own_channel_pair(self):
@@ -2407,7 +2419,7 @@ class TestDoorOpeningFronts:
         slot = (8 << 5) | 8
         self._door_line(state, [slot - 1, slot, slot + 1],
                         self._DOOR_HORIZ_PICTURE, MazeObjIds.DOOR_HORIZ)
-        gp.door_open_start(state, slot, 3)
+        player_items.door_open_start(state, slot, 3)
         assert state.door_endpoint_pos[6:8] == [slot - 1, slot + 1]
         assert state.door_endpoint_pos[0:6] == [0] * 6
 
@@ -2420,7 +2432,7 @@ class TestDoorOpeningFronts:
         self._door_line(state, [slot, slot + 1], self._DOOR_HORIZ_PICTURE,
                         MazeObjIds.DOOR_HORIZ)
 
-        assert gp.player_tile_interact(state, slot, 0) == -1
+        assert player_items.player_tile_interact(state, slot, 0) == -1
 
         assert p.keysnum == 1
         assert not state.mobs.is_occupied(slot)
@@ -2429,7 +2441,7 @@ class TestDoorOpeningFronts:
         assert state.health_dirty[0] == 1
 
     def test_the_front_walks_the_rest_of_the_door_line(self):
-        from gauntpy.subsystems.maze_objects import main_open_doors
+        from gauntpy.game.subsystems.maze_objects import main_open_doors
 
         state = _active_state()
         p = _make_player_active(state, 0)
@@ -2439,7 +2451,7 @@ class TestDoorOpeningFronts:
         self._door_line(state, line, self._DOOR_HORIZ_PICTURE,
                         MazeObjIds.DOOR_HORIZ)
 
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         # door_open_start already ran one step (0x51F9E).
         assert not state.mobs.is_occupied(slot + 1)
         main_open_doors(state)
@@ -2454,7 +2466,7 @@ class TestDoorOpeningFronts:
         self._door_line(state, [slot], self._DOOR_HORIZ_PICTURE,
                         MazeObjIds.DOOR_HORIZ)
 
-        assert gp.player_tile_interact(state, slot, 0) == 0
+        assert player_items.player_tile_interact(state, slot, 0) == 0
 
         assert state.mobs.is_occupied(slot)
         assert state.door_endpoint_pos == [0] * 8
@@ -2522,33 +2534,33 @@ class TestDemoRecordWord:
         """0x506B6 reads a word: (timer << 8) | joystick."""
         state = _demo_state([[], [6, 0xB3], [], []])
         gp.main_move_players(state)
-        assert gp.demo_record_word(state, 1) == 0x06B3
+        assert player_input.demo_record_word(state, 1) == 0x06B3
 
     def test_idle_for_a_slot_the_demo_never_started(self):
         state = _demo_state([[6, 0xB3], [6, 0xB3], [], []], active=1)
         gp.main_move_players(state)
-        assert gp.demo_record_word(state, 0) == 0xFFFF
-        assert gp.demo_record_word(state, 2) == 0xFFFF
+        assert player_input.demo_record_word(state, 0) == 0xFFFF
+        assert player_input.demo_record_word(state, 2) == 0xFFFF
 
     def test_idle_when_the_stream_is_empty(self):
         state = _demo_state([[], [], [], []])
-        assert gp.demo_record_word(state, 1) == 0xFFFF
+        assert player_input.demo_record_word(state, 1) == 0xFFFF
 
     def test_word_is_stable_while_the_record_is_held(self):
         state = _demo_state([[], [4, 0xB3, 4, 0xF3], [], []])
         gp.main_move_players(state)
-        first = gp.demo_record_word(state, 1)
+        first = player_input.demo_record_word(state, 1)
         gp.main_move_players(state)
-        assert gp.demo_record_word(state, 1) == first
+        assert player_input.demo_record_word(state, 1) == first
 
     def test_selector_follows_the_game_mode(self):
         """0x50690: DEMO reads the record, every other mode the hardware word."""
         state = _demo_state([[], [6, 0xB3], [], []])
         gp.main_move_players(state)
         state.player_input_raw[1] = 0x1234
-        assert gp.player_joystick_word(state, 1) == 0x06B3
+        assert player_input.player_joystick_word(state, 1) == 0x06B3
         state.game_mode = int(GameMode.NORMAL)
-        assert gp.player_joystick_word(state, 1) == 0x1234
+        assert player_input.player_joystick_word(state, 1) == 0x1234
 
 
 class TestDemoDrivesMovementAndFire:
@@ -2613,18 +2625,18 @@ class TestDemoJoinRecords:
 
     def test_join_calls_player_join(self):
         joined = []
-        original = gp.player_join
+        original = player_input.player_join
 
         def _spy(st, index):
             joined.append(index)
             return original(st, index)
 
-        gp.player_join = _spy
+        player_input.player_join = _spy
         try:
             state = _demo_state([[], [1, 0xF3, 0xFE, 0x13, 9, 0xF3], [], []])
             gp.main_move_players(state)
         finally:
-            gp.player_join = original
+            player_input.player_join = original
         assert joined == [3], "the low nibble selects the joining slot"
 
     def test_back_to_back_join_records(self):
@@ -2657,7 +2669,7 @@ class TestDemoJoinRecords:
         gp.main_move_players(state)
         assert state.demo_timers[3] == 8
         assert state.demo_stream_pos[3] == 2
-        assert gp.demo_record_word(state, 3) == 0x08B3
+        assert player_input.demo_record_word(state, 3) == 0x08B3
 
     def test_a_slot_joined_earlier_in_the_loop_waits_a_frame(self):
         state = _demo_state(
@@ -2691,9 +2703,9 @@ class TestDemoDoesNotDisturbAttractOrTheSession:
     not start a free-play session."""
 
     def _run_demo(self, frames: int) -> GameState:
-        from gauntpy.subsystems.attract import main_attract, start_attract_screen
-        from gauntpy.subsystems.input import input_debounce
-        from gauntpy.subsystems.session import coincheck, main_start_game
+        from gauntpy.game.subsystems.attract import main_attract, start_attract_screen
+        from gauntpy.game.subsystems.input import input_debounce
+        from gauntpy.game.subsystems.session import coincheck, main_start_game
 
         state = GameState()
         start_attract_screen(state, int(GameMode.DEMO))
@@ -2710,7 +2722,7 @@ class TestDemoDoesNotDisturbAttractOrTheSession:
         """Guard the guard: the P1 stream carries bytes with the active-low
         FIRE/MAGIC and direction bits clear, so writing them into
         player_input_raw is not a harmless mistake."""
-        from gauntpy.subsystems.attract import _DEMO_STREAMS
+        from gauntpy.game.subsystems.attract import _DEMO_STREAMS
 
         joysticks = _DEMO_STREAMS[1][1::2]
         assert any((b & 0x03) != 0x03 for b in joysticks)
@@ -2725,7 +2737,7 @@ class TestDemoDoesNotDisturbAttractOrTheSession:
         assert state.player_input_raw == [0xFFFF] * 4
 
     def test_demo_never_arms_a_debounced_press_edge(self):
-        from gauntpy.subsystems.input import magic_press_edge
+        from gauntpy.game.subsystems.input import magic_press_edge
 
         state = self._run_demo(400)
         assert not any(magic_press_edge(state, p) for p in range(4))
@@ -2767,7 +2779,7 @@ class TestTreasureAttribution:
         state = _active_state()
         _make_player_active(state, 2)
         slot = self._treasure(state, 50, MazeObjIds.TREASURE)
-        gp.player_tile_interact(state, slot, 2)
+        player_items.player_tile_interact(state, slot, 2)
         assert state.player_treascount == [0, 0, 1, 0]
         assert state.score_display_timer[0] == 0x3C
         assert state.mobs.picture[0x11] == 0x1DB4
@@ -2776,7 +2788,7 @@ class TestTreasureAttribution:
         state = _active_state()
         _make_player_active(state, 1)
         slot = self._treasure(state, 51, MazeObjIds.TREASURE_BAG)
-        gp.player_tile_interact(state, slot, 1)
+        player_items.player_tile_interact(state, slot, 1)
         assert state.player_treascount == [0, 1, 0, 0]
 
     def test_locked_treasure_is_not_a_walk_in_pickup(self):
@@ -2789,7 +2801,7 @@ class TestTreasureAttribution:
         p = _make_player_active(state, 3)
         p.keysnum = 1
         slot = self._treasure(state, 52, MazeObjIds.TREASURE_LOCKED)
-        assert gp.player_tile_interact(state, slot, 3) == 0
+        assert player_items.player_tile_interact(state, slot, 3) == 0
         assert state.player_treascount == [0, 0, 0, 0]
         assert p.keysnum == 1, "the key is not spent"
         assert state.mobs.obj_type(slot) == int(MazeObjIds.TREASURE_LOCKED)
@@ -2799,7 +2811,7 @@ class TestTreasureAttribution:
         p = _make_player_active(state, 0)
         p.keysnum = 0
         slot = self._treasure(state, 53, MazeObjIds.TREASURE_LOCKED)
-        assert gp.player_tile_interact(state, slot, 0) == 0
+        assert player_items.player_tile_interact(state, slot, 0) == 0
         assert state.player_treascount == [0, 0, 0, 0]
         assert state.level_treasures == 0
 
@@ -2810,7 +2822,7 @@ class TestTreasureAttribution:
         state = _active_state()
         _make_player_active(state, 0)
         for i, kind in enumerate((MazeObjIds.TREASURE, MazeObjIds.TREASURE_BAG)):
-            gp.player_tile_interact(state, self._treasure(state, 60 + i, kind), 0)
+            player_items.player_tile_interact(state, self._treasure(state, 60 + i, kind), 0)
         assert state.level_treasures == 2
         assert state.player_treascount == [2, 0, 0, 0]
 
@@ -2820,11 +2832,11 @@ class TestTreasureAttribution:
         state = _active_state()
         _make_player_active(state, 1)
         _make_player_active(state, 3)
-        gp.player_tile_interact(
+        player_items.player_tile_interact(
             state, self._treasure(state, 70, MazeObjIds.TREASURE), 1)
-        gp.player_tile_interact(
+        player_items.player_tile_interact(
             state, self._treasure(state, 71, MazeObjIds.TREASURE), 3)
-        gp.player_tile_interact(
+        player_items.player_tile_interact(
             state, self._treasure(state, 72, MazeObjIds.TREASURE_BAG), 3)
         assert state.player_treascount == [0, 1, 0, 2]
         assert sum(state.player_treascount) == state.level_treasures
@@ -2834,17 +2846,17 @@ class TestTreasureAttribution:
         p = _make_player_active(state, 0)
         state.level_players_active = 1     # solo: multiplier stays at 1
         p.score = 0
-        gp.player_tile_interact(
+        player_items.player_tile_interact(
             state, self._treasure(state, 80, MazeObjIds.TREASURE), 0)
         assert p.score == 100
         state.special_bonus_score = 200
-        gp.player_tile_interact(
+        player_items.player_tile_interact(
             state, self._treasure(state, 81, MazeObjIds.TREASURE_BAG), 0)
         assert p.score == 300
         assert state.score_display_timer[0] == 60
         # A locked chest pays nothing at all from the walk path.
         p.keysnum = 1
-        assert gp.player_tile_interact(
+        assert player_items.player_tile_interact(
             state, self._treasure(state, 82, MazeObjIds.TREASURE_LOCKED), 0) == 0
         assert p.score == 300
 
@@ -2855,7 +2867,7 @@ class TestTreasureAttribution:
         state.mobs.create(90, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.PLAYERSTART))
         state.player_treascount[0] = 7
-        assert gp.player_start_inner(state, 0) == -1
+        assert player_lifecycle.player_start_inner(state, 0) == -1
         assert state.player_treascount[0] == 0
 
 
@@ -2869,28 +2881,28 @@ class TestPickupDialogs:
 
     @staticmethod
     def _lines(index: int) -> list[str]:
-        from gauntpy.subsystems.score import DIALOG_MESSAGES
+        from gauntpy.game.subsystems.score import DIALOG_MESSAGES
 
         return list(DIALOG_MESSAGES[index])
 
     def test_masks_match_their_record_numbers(self):
-        assert gp._DIALOG_FOOD == 1 << 0
-        assert gp._DIALOG_LOW_HEALTH == 1 << 2
-        assert gp._DIALOG_KEYS == 1 << 3
-        assert gp._DIALOG_SAVE_POTIONS == 1 << 5
-        assert gp._DIALOG_POISONED == 1 << 13
+        assert player_items._DIALOG_FOOD == 1 << 0
+        assert player_lifecycle._DIALOG_LOW_HEALTH == 1 << 2
+        assert player_items._DIALOG_KEYS == 1 << 3
+        assert player_items._DIALOG_SAVE_POTIONS == 1 << 5
+        assert player_items._DIALOG_POISONED == 1 << 13
 
     def test_food_shows_record_0(self):
         state = _active_state()
         _make_player_active(state, 0, health=300)
-        gp.player_tile_interact(state, _make_food_slot(state), 0)
+        player_items.player_tile_interact(state, _make_food_slot(state), 0)
         assert state.dialog_message == self._lines(0)      # 0x51CDE
         assert state.dialog_player == 0
 
     def test_key_shows_record_3(self):
         state = _active_state()
         _make_player_active(state, 0)
-        gp.player_tile_interact(state, _make_key_slot(state), 0)
+        player_items.player_tile_interact(state, _make_key_slot(state), 0)
         assert state.dialog_message == self._lines(3)      # 0x51620
 
     def test_potion_shows_record_5(self):
@@ -2899,22 +2911,22 @@ class TestPickupDialogs:
         slot = 47
         state.mobs.create(slot, tile=0x1234, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POT_DESTRUCTABLE))
-        gp.player_tile_interact(state, slot, 2)
+        player_items.player_tile_interact(state, slot, 2)
         assert state.dialog_message == self._lines(5)      # 0x51796
         assert state.dialog_player == 2
 
     def test_each_record_is_one_shot(self):
         state = _active_state()
         _make_player_active(state, 0, health=300)
-        gp.player_tile_interact(state, _make_food_slot(state), 0)
-        from gauntpy.subsystems.score import dialog_clear_message
+        player_items.player_tile_interact(state, _make_food_slot(state), 0)
+        from gauntpy.game.subsystems.score import dialog_clear_message
         dialog_clear_message(state)
         state.dialog_timer = 0
-        gp.player_tile_interact(state, _make_food_slot(state), 0)
+        player_items.player_tile_interact(state, _make_food_slot(state), 0)
         assert state.dialog_message == [], "first-encounter flags are one-shot"
 
     def test_forcefield_contact_shows_its_own_record(self):
-        from gauntpy.coords import pack_slot
+        from gauntpy.game.coords import pack_slot
 
         state = _active_state()
         state.forcefield_color = 1
@@ -2933,7 +2945,7 @@ class TestPickupDialogs:
         p = _make_player_active(state, 0, health=150)
         p.damage_sample_timer = 1
         p.pending_damage = 50
-        gp.player_damage_sample_update(state, 0)          # 0x50EB0
+        player_lifecycle.player_damage_sample_update(state, 0)          # 0x50EB0
         assert state.dialog_message == self._lines(2)
 
 
@@ -2942,12 +2954,12 @@ class TestPoisonedPickups:
     wholesome food is 0x277B (0x51B86), a poisoned potion is 0x20FC (0x5163A)."""
 
     def test_poisoned_food_costs_fifty_and_shows_record_13(self):
-        from gauntpy.subsystems.score import DIALOG_MESSAGES, _dialog_line
+        from gauntpy.game.subsystems.score import DIALOG_MESSAGES, _dialog_line
 
         state = _active_state()
         p = _make_player_active(state, 0, health=300)
         slot = _make_food_slot(state, poisoned=True)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert p.health == 250                                   # 0x51C4A
         assert state.player_dizzy_timer[0] == 0x4B0              # 0x51C68
         # Record 13 shares the numeric line, so the 50 the caller passed is
@@ -2961,10 +2973,10 @@ class TestPoisonedPickups:
         state = _active_state()
         p = _make_player_active(state, 0, health=300)
         slot = 48
-        state.mobs.create(slot, tile=gp._POISONED_POTION_PICTURE,
+        state.mobs.create(slot, tile=player_items._POISONED_POTION_PICTURE,
                           hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POT_DESTRUCTABLE))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert p.health == 250
         assert p.potionsnum == 0, "a poisoned potion is not collected"
         assert state.player_dizzy_timer[0] == 0x4B0
@@ -2972,7 +2984,7 @@ class TestPoisonedPickups:
     def test_poison_damage_floors_at_zero(self):
         state = _active_state()
         p = _make_player_active(state, 0, health=20)
-        gp.player_tile_interact(state, _make_food_slot(state, poisoned=True), 0)
+        player_items.player_tile_interact(state, _make_food_slot(state, poisoned=True), 0)
         assert p.health == 0
 
     def test_poison_uses_the_character_random_voice_bank(self):
@@ -2980,11 +2992,11 @@ class TestPoisonedPickups:
         _make_player_active(state, 0, character=Character.VALKYRIE, health=300)
         slot = 48
         state.mobs.create(
-            slot, tile=gp._POISONED_POTION_PICTURE, hpos=0, vpos=0,
+            slot, tile=player_items._POISONED_POTION_PICTURE, hpos=0, vpos=0,
             obj_type=int(MazeObjIds.POT_DESTRUCTABLE),
         )
 
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
 
         assert 0xB5 in state.sound_log
         assert not any(command in range(0x14, 0x18) for command in state.sound_log)
@@ -2993,7 +3005,7 @@ class TestPoisonedPickups:
         state = _active_state()
         _make_player_active(state, 0, health=300)
         state.player_dizzy_timer[0] = 500
-        gp.player_tile_interact(state, _make_food_slot(state), 0)   # 0x51CDA
+        player_items.player_tile_interact(state, _make_food_slot(state), 0)   # 0x51CDA
         assert state.player_dizzy_timer[0] == 0
 
     def test_the_dizzy_timer_runs_down(self):
@@ -3006,10 +3018,10 @@ class TestPoisonedPickups:
 
     def test_dizzy_timer_remaps_live_movement_by_frame_phase(self):
         cases = (
-            (0x00, gp._JOY_UP, gp._JOY_UP | gp._JOY_RIGHT),
-            (0x00, gp._JOY_DOWN, gp._JOY_DOWN | gp._JOY_LEFT),
-            (0x10, gp._JOY_UP, gp._JOY_UP),
-            (0x20, gp._JOY_UP, gp._JOY_UP | gp._JOY_LEFT),
+            (0x00, player_movement._JOY_UP, player_movement._JOY_UP | player_movement._JOY_RIGHT),
+            (0x00, player_movement._JOY_DOWN, player_movement._JOY_DOWN | player_movement._JOY_LEFT),
+            (0x10, player_movement._JOY_UP, player_movement._JOY_UP),
+            (0x20, player_movement._JOY_UP, player_movement._JOY_UP | player_movement._JOY_LEFT),
         )
         for frame, raw_direction, expected_direction in cases:
             state = _active_state()
@@ -3030,14 +3042,14 @@ class TestPoisonedPickups:
         _make_player_active(state, 0, health=500)
         state.level_flags_4 |= 0x80
         state.player_dizzy_timer[0] = 1
-        state.player_input_raw[0] = 0xFFFF & ~gp._JOY_UP
+        state.player_input_raw[0] = 0xFFFF & ~player_movement._JOY_UP
 
         from unittest.mock import patch
         with patch.object(gp, "player_try_move", return_value=0xF0) as move:
             gp.main_move_players(state)
 
         assert state.player_dizzy_timer[0] == 0
-        assert move.call_args.args[2] == gp._JOY_UP
+        assert move.call_args.args[2] == player_movement._JOY_UP
 
 
 # =============================================================================
@@ -3066,38 +3078,38 @@ class TestTreasureBonusMultiplier:
         """0x51A16: ``level_players_active == 1`` skips the +2 entirely."""
         state = self._party(1)
         state.players[0].bonusmult = 1
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.players[0].bonusmult == 1
 
     def test_multi_player_adds_two(self):
         state = self._party(3)
         state.players[0].bonusmult = 1
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.players[0].bonusmult == 3      # 0x51A2A
 
     def test_the_cap_is_twice_the_active_count(self):
         state = self._party(2)
         state.players[0].bonusmult = 4              # already at 2 x 2
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.players[0].bonusmult == 4      # +2 then clamped back
 
     def test_the_cap_also_trims_a_value_that_was_already_over(self):
         state = self._party(2)
         state.players[0].bonusmult = 9
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.players[0].bonusmult == 4      # 0x51A60
 
     def test_solo_cap_is_two(self):
         state = self._party(1)
         state.players[0].bonusmult = 7
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.players[0].bonusmult == 2
 
     def test_every_other_live_player_loses_one(self):
         state = self._party(4)
         for i in range(4):
             state.players[i].bonusmult = 5
-        gp.player_tile_interact(state, self._treasure(state), 1)
+        player_items.player_tile_interact(state, self._treasure(state), 1)
         assert state.players[1].bonusmult == 7      # 5 + 2, cap 8
         assert [state.players[i].bonusmult for i in (0, 2, 3)] == [4, 4, 4]
 
@@ -3105,7 +3117,7 @@ class TestTreasureBonusMultiplier:
         state = self._party(2)
         state.players[0].bonusmult = 1
         state.players[1].bonusmult = 1
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.players[1].bonusmult == 1      # 0x51A84 ``bls``
 
     def test_a_dead_player_keeps_its_multiplier(self):
@@ -3114,7 +3126,7 @@ class TestTreasureBonusMultiplier:
         for i in range(3):
             state.players[i].bonusmult = 4
         state.players[2].health = 0
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.players[1].bonusmult == 3
         assert state.players[2].bonusmult == 4
 
@@ -3123,7 +3135,7 @@ class TestTreasureBonusMultiplier:
         state.players[0].bonusmult = 3
         state.players[1].bonusmult = 3
         state.health_dirty = [0, 0, 0, 0]
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.health_dirty[1] == 1           # 0x51AA2
 
     def test_the_score_uses_the_updated_multiplier(self):
@@ -3131,14 +3143,14 @@ class TestTreasureBonusMultiplier:
         state = self._party(2)
         state.players[0].bonusmult = 1
         state.players[0].score = 0
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.players[0].bonusmult == 3
         assert state.players[0].score == 300        # 100 x the *new* 3
 
     def test_the_multiplier_is_a_16_bit_word(self):
         state = self._party(2)
         state.players[0].bonusmult = 0xFFFF
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         # ``addq.w #2`` on 0xFFFF wraps to 1, which is under the 2 x 2 cap and
         # so survives the clamp -- the width is observable.
         assert state.players[0].bonusmult == 1
@@ -3148,7 +3160,7 @@ class TestTreasureBonusMultiplier:
         state = self._party(3)
         state.mazenum_current = 0x68
         state.players[0].bonusmult = 1
-        gp.player_tile_interact(state, self._treasure(state), 0)
+        player_items.player_tile_interact(state, self._treasure(state), 0)
         assert state.players[0].bonusmult == 1
 
     def test_a_bag_uses_the_same_block_as_a_coin_pile(self):
@@ -3157,7 +3169,7 @@ class TestTreasureBonusMultiplier:
         slot = 56
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE_BAG))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert state.players[0].bonusmult == 3
 
     def test_a_chest_does_not_reach_the_block_at_all(self):
@@ -3168,7 +3180,7 @@ class TestTreasureBonusMultiplier:
         slot = 56
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE_LOCKED))
-        assert gp.player_tile_interact(state, slot, 0) == 0
+        assert player_items.player_tile_interact(state, slot, 0) == 0
         assert state.players[0].bonusmult == 1
 
 
@@ -3182,13 +3194,13 @@ class TestTimedPowerSemantics:
         """0x4185C ``btst #1`` on the powers high byte is the make-monsters-flee
         test, and 0x4176C ``btst #0`` is the invisible-so-untargetable one.
         Reflection is a different power: shots read bit 10 at 0x4B4B0."""
-        from gauntpy.constants import PlayerPower
-        from gauntpy.subsystems import shots
+        from gauntpy.game.constants import PlayerPower
+        from gauntpy.game.subsystems import shot_damage
 
         assert int(PlayerPower.REPULSE) == 0x0200
         assert int(PlayerPower.INVIS) == 0x0100
         assert int(PlayerPower.REFLECT) == 0x0400
-        assert shots._POWER_REFLECT == int(PlayerPower.REFLECT)
+        assert shot_damage._POWER_REFLECT == int(PlayerPower.REFLECT)
 
     def test_the_repulse_pickup_arms_the_repulse_timer(self):
         state = _active_state()
@@ -3196,14 +3208,14 @@ class TestTimedPowerSemantics:
         slot = 57
         state.mobs.create(slot, tile=1, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_REPULSE))
-        gp.player_tile_interact(state, slot, 0)
-        assert state.player_repulse_timer[0] == gp._CHARACTER_REPULSE_TIMER_INIT[2]
+        player_items.player_tile_interact(state, slot, 0)
+        assert state.player_repulse_timer[0] == player_items._CHARACTER_REPULSE_TIMER_INIT[2]
         assert state.players[0].powers & int(
-            __import__("gauntpy.constants", fromlist=["PlayerPower"]).PlayerPower.REPULSE
+            __import__("gauntpy.game.constants", fromlist=["PlayerPower"]).PlayerPower.REPULSE
         )
 
     def test_the_repulse_timer_expiry_clears_bit_9(self):
-        from gauntpy.constants import PlayerPower
+        from gauntpy.game.constants import PlayerPower
 
         state = _active_state()
         p = _make_player_active(state, 0, health=500)
@@ -3215,7 +3227,7 @@ class TestTimedPowerSemantics:
     def test_bit_13_is_a_damage_over_time_flag_not_invulnerability(self):
         """The 0x3B pickup arms 900 frames of 1-2 health lost every eighth
         frame (0x5189E then 0x4A838-0x4A85E) -- the opposite of protection."""
-        from gauntpy.constants import PlayerPower
+        from gauntpy.game.constants import PlayerPower
 
         assert int(PlayerPower.ACID_AFFLICTION) == 0x2000
         assert int(PlayerPower.INVULN) == int(PlayerPower.ACID_AFFLICTION)
@@ -3225,7 +3237,7 @@ class TestTimedPowerSemantics:
         slot = 58
         state.mobs.create(slot, tile=1, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_INVULN))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert p.acid_timer == 0x384
         assert p.powers & int(PlayerPower.ACID_AFFLICTION)
 
@@ -3234,7 +3246,7 @@ class TestTimedPowerSemantics:
         assert p.health < 1000, "the 0x3B pickup hurts, it does not protect"
 
     def test_the_affliction_bit_clears_with_its_countdown(self):
-        from gauntpy.constants import PlayerPower
+        from gauntpy.game.constants import PlayerPower
 
         state = _active_state()
         p = _make_player_active(state, 0, health=500)
@@ -3277,7 +3289,7 @@ class TestTransportTransition:
     @staticmethod
     def _frame(state: GameState) -> None:
         """The two loop members this transition spans, in frame order."""
-        from gauntpy.subsystems.score import main_score_update
+        from gauntpy.game.subsystems.score import main_score_update
 
         gp.main_move_players(state)
         main_score_update(state)
@@ -3301,7 +3313,7 @@ class TestTransportTransition:
 
     def test_loop_2_drives_the_phase(self):
         state, _, source = self._world()
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         assert state.player_tport_phase[0] == 0
         self._frame(state)
         assert state.player_tport_phase[0] == 1, "loop 2 owns the counter"
@@ -3309,7 +3321,7 @@ class TestTransportTransition:
     def test_the_hero_dissolves_then_moves_then_re_forms(self):
         state, _, source = self._world()
         state.player_input_raw[0] = 0xFFFF & ~0x20  # LEFT
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         trace = self._run(state)
 
         # Step 5 (phase 10) replaces the hero with the ROM flash picture.
@@ -3330,7 +3342,7 @@ class TestTransportTransition:
 
     def test_the_transition_retires_itself(self):
         state, _, source = self._world()
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         trace = self._run(state)
         assert trace[-1][0] < 0, "phase returns to its idle sentinel"
         assert state.mobs.picture[0x19] == 0, "the animation MOB is released"
@@ -3345,7 +3357,7 @@ class TestTransportTransition:
         state, p, source = self._world()
         p.keysnum = 0
         state.player_input_raw[0] = 0xFFFF & ~0x10      # RIGHT held
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         p.health = 500
         p.anim_counter = 0
         state.player_invis_timer[0] = 5
@@ -3359,7 +3371,7 @@ class TestTransportTransition:
 
     def test_the_camera_destination_is_not_dragged_back(self):
         state, _, source = self._world()
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         for _ in range(4):
             self._frame(state)
         assert state.player_tile_or_tport_dest[0] == _pack(4, 10), (
@@ -3369,7 +3381,7 @@ class TestTransportTransition:
     def test_player_transition_does_not_claim_a_shared_effect_slot(self):
         """0x47324 calls tport_player_move; no 0x0D-0x10 sparkle is spawned."""
         state, _, source = self._world()
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         for _ in range(30):
             self._frame(state)
         assert not any(state.mobs.picture[0x0D + c] for c in range(4))
@@ -3377,9 +3389,9 @@ class TestTransportTransition:
     def test_a_second_transporter_hop_works(self):
         """The machine must be reusable, not one-shot."""
         state, _, source = self._world()
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         self._run(state)
-        assert gp.player_tport(state, 0, _pack(5, 9)) == -2
+        assert player_transport.player_tport(state, 0, _pack(5, 9)) == -2
         trace = self._run(state)
         assert trace[-1][0] < 0
         slot = state.players[0].mob_slot
@@ -3390,10 +3402,10 @@ class TestTransportTransition:
 
     def test_a_full_game_frame_drives_it(self):
         """Through ``tick`` -- every loop member in its real order."""
-        from gauntpy.mainloop import tick
+        from gauntpy.game.mainloop import tick
 
         state, _, source = self._world()
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         for _ in range(80):
             tick(state)
             if state.player_tport_phase[0] < 0:
@@ -3410,7 +3422,7 @@ class TestTransportTransition:
 class TestCornerSqueezeUsesTheSameTransition:
 
     def _world(self):
-        from gauntpy.constants import PlayerPower
+        from gauntpy.game.constants import PlayerPower
 
         state = _active_state()
         player_slot = _pack(5, 6)
@@ -3433,21 +3445,21 @@ class TestCornerSqueezeUsesTheSameTransition:
             state.mobs.hpos[player.mob_slot], state.mobs.vpos[player.mob_slot],
         )
 
-        assert gp.corner_squeeze_geometry(
+        assert player_transport.corner_squeeze_geometry(
             state, player.mob_slot, 0, 0x10,        # JOY_RIGHT
         ) == -2
 
         assert state.player_tport_phase[0] == 0
-        assert state.mobs.picture[0x19] == gp._TPORT_ARRIVAL_PICTURE
+        assert state.mobs.picture[0x19] == player_transport._TPORT_ARRIVAL_PICTURE
         assert (
             state.mobs.hpos[player.mob_slot], state.mobs.vpos[player.mob_slot],
         ) == before
 
     def test_it_completes_through_loop_2(self):
-        from gauntpy.subsystems.score import main_score_update
+        from gauntpy.game.subsystems.score import main_score_update
 
         state, player = self._world()
-        gp.corner_squeeze_geometry(state, player.mob_slot, 0, 0x10)
+        player_transport.corner_squeeze_geometry(state, player.mob_slot, 0, 0x10)
         target = state.player_tile_or_tport_dest[0]
         for frame in range(80):
             state.frame_counter = frame
@@ -3461,11 +3473,11 @@ class TestCornerSqueezeUsesTheSameTransition:
         assert vpos_y(state.mobs.vpos[slot]) == (target >> 5) * 16
 
     def test_held_direction_does_not_redirect_corner_squeeze_landing(self):
-        from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
-        from gauntpy.subsystems.score import main_score_update
+        from gauntpy.game.subsystems.input import JOY_IDLE, JOY_RIGHT
+        from gauntpy.game.subsystems.score import main_score_update
 
         state, player = self._world()
-        gp.corner_squeeze_geometry(state, player.mob_slot, 0, JOY_RIGHT)
+        player_transport.corner_squeeze_geometry(state, player.mob_slot, 0, JOY_RIGHT)
         target = state.player_tile_or_tport_dest[0]
         state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
 
@@ -3508,56 +3520,56 @@ class TestGreedyObjectiveSites:
     """0x514D4 and 0x5179C -- keys and potions both feed trick 0x0C."""
 
     def test_key_pickup_reports_progress(self):
-        state = _trick_state(gp._TRICK_NOGREEDY1)
+        state = _trick_state(player_items._TRICK_NOGREEDY1)
         p = _make_player_active(state, 0)
         slot = _make_key_slot(state)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert state.secret_tricks_flags[0] == 1
         assert p.keysnum == 1
 
     def test_potion_pickup_reports_progress(self):
-        state = _trick_state(gp._TRICK_NOGREEDY1)
+        state = _trick_state(player_items._TRICK_NOGREEDY1)
         _make_player_active(state, 0)
         slot = 34
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POT_DESTRUCTABLE))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert state.secret_tricks_flags[0] == 1
 
     def test_progress_accumulates_across_both(self):
         """One shared counter -- 0x514DE and 0x517AA bump the same byte."""
-        state = _trick_state(gp._TRICK_NOGREEDY1)
+        state = _trick_state(player_items._TRICK_NOGREEDY1)
         _make_player_active(state, 0)
-        gp.player_tile_interact(state, _make_key_slot(state), 0)
+        player_items.player_tile_interact(state, _make_key_slot(state), 0)
         slot = 34
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POT_DESTRUCTABLE))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert state.secret_tricks_flags[0] == 2
 
     def test_a_poisoned_potion_is_not_greed(self):
         """0x5179C sits on the good-potion path, past the 0x5163A branch."""
-        state = _trick_state(gp._TRICK_NOGREEDY1)
+        state = _trick_state(player_items._TRICK_NOGREEDY1)
         _make_player_active(state, 0)
         slot = 34
-        state.mobs.create(slot, tile=gp._POISONED_POTION_PICTURE,
+        state.mobs.create(slot, tile=player_items._POISONED_POTION_PICTURE,
                           hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POT_DESTRUCTABLE))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert state.secret_tricks_flags[0] == 0
 
     def test_a_different_objective_is_not_touched(self):
         """The ``cmpi.b`` guard: any other level objective ignores the site."""
-        state = _trick_state(gp._TRICK_NOUSEINVUL)
+        state = _trick_state(player_items._TRICK_NOUSEINVUL)
         _make_player_active(state, 0)
-        gp.player_tile_interact(state, _make_key_slot(state), 0)
+        player_items.player_tile_interact(state, _make_key_slot(state), 0)
         assert state.secret_tricks_flags[0] == 0
 
     def test_only_the_collecting_player_is_credited(self):
-        state = _trick_state(gp._TRICK_NOGREEDY1)
+        state = _trick_state(player_items._TRICK_NOGREEDY1)
         _make_player_active(state, 0)
         _make_player_active(state, 1)
-        gp.player_tile_interact(state, _make_key_slot(state), 1)
+        player_items.player_tile_interact(state, _make_key_slot(state), 1)
         assert state.secret_tricks_flags == [0, 1, 0, 0]
 
 
@@ -3568,28 +3580,28 @@ class TestKeyPickupRomTail:
         state = _active_state()
         _make_player_active(state, 0)
         state.escape_timer = 900
-        gp.player_tile_interact(state, _make_key_slot(state), 0)
+        player_items.player_tile_interact(state, _make_key_slot(state), 0)
         assert state.escape_timer == 0        # 0x514EA: clr.w (a3)
 
     def test_a_key_is_worth_a_hundred(self):
         state = _active_state()
         p = _make_player_active(state, 0)
         p.bonusmult = 1
-        gp.player_tile_interact(state, _make_key_slot(state), 0)
+        player_items.player_tile_interact(state, _make_key_slot(state), 0)
         assert p.score == 100                 # 0x514F4: pea $64
 
     def test_the_key_award_uses_the_bonus_multiplier(self):
         state = _active_state()
         p = _make_player_active(state, 0)
         p.bonusmult = 3
-        gp.player_tile_interact(state, _make_key_slot(state), 0)
+        player_items.player_tile_interact(state, _make_key_slot(state), 0)
         assert p.score == 300                 # 0x514FE: player_add_score_with_mult
         assert state.score_dirty[0] == 1
 
     def test_the_key_still_sounds_and_counts(self):
         state = _active_state()
         p = _make_player_active(state, 0)
-        gp.player_tile_interact(state, _make_key_slot(state), 0)
+        player_items.player_tile_interact(state, _make_key_slot(state), 0)
         assert p.keysnum == 1
         assert 0x13 in _emitted(state)
 
@@ -3601,35 +3613,35 @@ class TestInvulnerabilityObjectiveIsAnAssignment:
         slot = 35
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_INVULN))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
 
     def test_pickup_sets_the_flag(self):
-        state = _trick_state(gp._TRICK_NOUSEINVUL)
+        state = _trick_state(player_items._TRICK_NOUSEINVUL)
         _make_player_active(state, 0)
         self._pickup(state)
         assert state.secret_tricks_flags[0] == 1
 
     def test_a_second_pickup_does_not_push_the_byte_past_one(self):
-        state = _trick_state(gp._TRICK_NOUSEINVUL)
+        state = _trick_state(player_items._TRICK_NOUSEINVUL)
         _make_player_active(state, 0)
         self._pickup(state)
         self._pickup(state)
         assert state.secret_tricks_flags[0] == 1, "0x518C8 assigns"
 
     def test_other_powerups_do_not_report(self):
-        state = _trick_state(gp._TRICK_NOUSEINVUL)
+        state = _trick_state(player_items._TRICK_NOUSEINVUL)
         _make_player_active(state, 0)
         slot = 36
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_INVIS))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert state.secret_tricks_flags[0] == 0
 
     def test_the_power_itself_still_arms(self):
-        state = _trick_state(gp._TRICK_NOUSEINVUL)
+        state = _trick_state(player_items._TRICK_NOUSEINVUL)
         p = _make_player_active(state, 0)
         self._pickup(state)
-        assert p.acid_timer == gp._INVULN_TIMER_LOAD
+        assert p.acid_timer == player_items._INVULN_TIMER_LOAD
 
 
 class TestHiddenPotObjectiveCodes:
@@ -3639,23 +3651,23 @@ class TestHiddenPotObjectiveCodes:
         slot = 37
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.HIDDENPOT))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
 
     def test_code_51_reports(self):
-        state = _trick_state(gp._TASK_HIDDENPOT_A)
+        state = _trick_state(player_items._TASK_HIDDENPOT_A)
         _make_player_active(state, 0)
         self._pot(state)
         assert state.secret_tricks_flags[0] == 1
 
     def test_code_5d_reports(self):
-        state = _trick_state(gp._TASK_HIDDENPOT_B)
+        state = _trick_state(player_items._TASK_HIDDENPOT_B)
         _make_player_active(state, 0)
         self._pot(state)
         assert state.secret_tricks_flags[0] == 1
 
     def test_the_two_codes_never_both_fire(self):
         """0x51904 ``beq`` jumps *into* the bump, so it happens once."""
-        state = _trick_state(gp._TASK_HIDDENPOT_A)
+        state = _trick_state(player_items._TASK_HIDDENPOT_A)
         _make_player_active(state, 0)
         self._pot(state)
         self._pot(state)
@@ -3668,13 +3680,13 @@ class TestHiddenPotObjectiveCodes:
         assert state.secret_tricks_flags[0] == 0
 
     def test_the_potion_is_still_collected(self):
-        state = _trick_state(gp._TASK_HIDDENPOT_A)
+        state = _trick_state(player_items._TASK_HIDDENPOT_A)
         p = _make_player_active(state, 0)
         self._pot(state)
         assert p.potionsnum == 1
 
     def test_special_potions_grant_stat_powers_and_write_their_icons(self):
-        from gauntpy.subsystems import score
+        from gauntpy.game.subsystems import score
 
         for item_id, mask in enumerate((
             0x0002, 0x0001, 0x0020, 0x0010, 0x0008, 0x0004,
@@ -3687,7 +3699,7 @@ class TestHiddenPotObjectiveCodes:
                 obj_type=int(MazeObjIds.HIDDENPOT),
             )
 
-            assert gp.player_tile_interact(state, slot, 0) == -1
+            assert player_items.player_tile_interact(state, slot, 0) == -1
 
             assert player.powers & mask
             assert player.potionsnum == 0
@@ -3713,41 +3725,41 @@ class TestFoodAndTreasureObjectiveSites:
         slot = 38
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
-        gp.player_tile_interact(state, slot, player_index)
+        player_items.player_tile_interact(state, slot, player_index)
 
     def test_wholesome_food_reports(self):
-        state = _trick_state(gp._TRICK_FOOD)
+        state = _trick_state(player_items._TRICK_FOOD)
         _make_player_active(state, 0, health=100)
-        gp.player_tile_interact(state, _make_food_slot(state), 0)
+        player_items.player_tile_interact(state, _make_food_slot(state), 0)
         assert state.secret_tricks_flags[0] == 1
 
     def test_poisoned_food_reports_too(self):
         """0x51C0C is on the poisoned path and bumps the same byte."""
-        state = _trick_state(gp._TRICK_FOOD)
+        state = _trick_state(player_items._TRICK_FOOD)
         _make_player_active(state, 0, health=500)
         slot = _make_food_slot(state, poisoned=True)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert state.secret_tricks_flags[0] == 1
 
     def test_a_treasure_reports_exactly_once(self):
         """The 0x519C2 block lives in exits.treasure_collected; this arm must
         not add a second bump or a "collect six" task would finish in three."""
-        from gauntpy.subsystems import exits
+        from gauntpy.game.subsystems import secret_rooms
 
-        state = _trick_state(exits.TRICK_NOGREEDY2)
+        state = _trick_state(secret_rooms.TRICK_NOGREEDY2)
         _make_player_active(state, 0)
         self._treasure(state)
         assert state.secret_tricks_flags[0] == 1
 
     def test_six_treasures_take_six_pickups(self):
-        from gauntpy.subsystems import exits
+        from gauntpy.game.subsystems import secret_rooms
 
         state = _trick_state(0x50)
         _make_player_active(state, 0)
         for _ in range(6):
             self._treasure(state)
         assert state.secret_tricks_flags[0] == 6
-        assert exits.secret_trick_check is not None
+        assert secret_rooms.secret_trick_check is not None
 
     def test_food_and_treasure_do_not_cross_report(self, monkeypatch):
         """This arm contributes no objective progress of its own.
@@ -3759,16 +3771,16 @@ class TestFoodAndTreasureObjectiveSites:
         currently reports ``TRICK_NOGREEDY2`` = 0x0D for treasure, so the two
         share a code they should not.)
         """
-        from gauntpy.subsystems import exits
+        from gauntpy.game.subsystems import secret_rooms
 
-        state = _trick_state(gp._TRICK_FOOD)
+        state = _trick_state(player_items._TRICK_FOOD)
         _make_player_active(state, 0)
-        monkeypatch.setattr(exits, "treasure_collected", lambda *a, **k: None)
+        monkeypatch.setattr(secret_rooms, "treasure_collected", lambda *a, **k: None)
         self._treasure(state)
         assert state.secret_tricks_flags[0] == 0
 
     def test_treasure_credit_is_unaffected(self):
-        state = _trick_state(gp._TRICK_FOOD)
+        state = _trick_state(player_items._TRICK_FOOD)
         _make_player_active(state, 0)
         self._treasure(state)
         assert state.player_treascount[0] == 1
@@ -3782,43 +3794,43 @@ class TestFakeExitObjective:
                    obj_type: int = int(MazeObjIds.EXIT)) -> int:
         slot = 39
         state.mobs.create(slot, tile=0,
-                          hpos=gp._FAKE_EXIT_FLAG if fake else 0,
+                          hpos=player_items._FAKE_EXIT_FLAG if fake else 0,
                           vpos=0, obj_type=obj_type)
         return slot
 
     def test_a_fake_exit_does_not_exit(self, monkeypatch):
-        state = _trick_state(gp._TRICK_NOFOOLED)
+        state = _trick_state(player_items._TRICK_NOFOOLED)
         _make_player_active(state, 0)
         called = []
-        monkeypatch.setattr(gp, "player_exit_sequence",
+        monkeypatch.setattr(level_transitions, "player_exit_sequence",
                             lambda *a, **k: called.append(a))
-        gp.player_tile_interact(state, self._exit_slot(state, True), 0)
+        player_items.player_tile_interact(state, self._exit_slot(state, True), 0)
         assert called == [], "0x513EA takes the illusion branch"
 
     def test_a_fake_exit_satisfies_the_objective(self):
-        state = _trick_state(gp._TRICK_NOFOOLED)
+        state = _trick_state(player_items._TRICK_NOFOOLED)
         _make_player_active(state, 0)
-        gp.player_tile_interact(state, self._exit_slot(state, True), 0)
+        player_items.player_tile_interact(state, self._exit_slot(state, True), 0)
         assert state.secret_tricks_flags[0] == 1
 
     def test_the_objective_is_an_assignment(self):
         """0x5141E ``move.b #$1`` -- being fooled twice is still 1."""
-        state = _trick_state(gp._TRICK_NOFOOLED)
+        state = _trick_state(player_items._TRICK_NOFOOLED)
         _make_player_active(state, 0)
         for _ in range(2):
-            gp.player_tile_interact(state, self._exit_slot(state, True), 0)
+            player_items.player_tile_interact(state, self._exit_slot(state, True), 0)
         assert state.secret_tricks_flags[0] == 1
 
     def test_collision_record_is_removed_but_exit_descriptor_remains(self):
-        state = _trick_state(gp._TRICK_NOFOOLED)
+        state = _trick_state(player_items._TRICK_NOFOOLED)
         _make_player_active(state, 0)
         slot = self._exit_slot(state, True)
-        from gauntpy.playfield_vram import (
+        from gauntpy.game.playfield_vram import (
             read_tile_descriptor, write_tile_descriptor,
         )
         exit_descriptor = (0x39E, 0x39F, 6, 6)
         write_tile_descriptor(state, slot, exit_descriptor)
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert state.mobs.obj_type(slot) == 0     # 0x51404
         assert read_tile_descriptor(state, slot) == exit_descriptor, \
             "moblist_remove_and_clear does not call pf_replace"
@@ -3829,28 +3841,28 @@ class TestFakeExitObjective:
         WP-14's ``dialog_first_encounter`` returns without a box when the
         record is NULL, so the observable is the one-shot flag it latches.
         """
-        state = _trick_state(gp._TRICK_NOFOOLED)
+        state = _trick_state(player_items._TRICK_NOFOOLED)
         _make_player_active(state, 0)
-        gp.player_tile_interact(state, self._exit_slot(state, True), 0)
-        assert state.dialog_first_encounter_flags & gp._DIALOG_FAKE_EXIT
+        player_items.player_tile_interact(state, self._exit_slot(state, True), 0)
+        assert state.dialog_first_encounter_flags & player_items._DIALOG_FAKE_EXIT
 
     def test_a_real_exit_still_exits(self, monkeypatch):
-        state = _trick_state(gp._TRICK_NOFOOLED)
+        state = _trick_state(player_items._TRICK_NOFOOLED)
         _make_player_active(state, 0)
         called = []
-        monkeypatch.setattr(gp, "player_exit_sequence",
+        monkeypatch.setattr(level_transitions, "player_exit_sequence",
                             lambda *a, **k: called.append(a))
-        gp.player_tile_interact(state, self._exit_slot(state, False), 0)
+        player_items.player_tile_interact(state, self._exit_slot(state, False), 0)
         assert len(called) == 1
         assert state.secret_tricks_flags[0] == 0
 
     def test_exitto6_takes_the_same_branch(self, monkeypatch):
         """0x511EC dispatches types 0x10 and 0x11 to the one arm."""
-        state = _trick_state(gp._TRICK_NOFOOLED)
+        state = _trick_state(player_items._TRICK_NOFOOLED)
         _make_player_active(state, 0)
-        monkeypatch.setattr(gp, "player_exit_sequence", lambda *a, **k: None)
+        monkeypatch.setattr(level_transitions, "player_exit_sequence", lambda *a, **k: None)
         slot = self._exit_slot(state, True, int(MazeObjIds.EXITTO6))
-        gp.player_tile_interact(state, slot, 0)
+        player_items.player_tile_interact(state, slot, 0)
         assert state.secret_tricks_flags[0] == 1
 
 
@@ -3869,9 +3881,9 @@ class TestTransporterObjectiveSites:
 
     def test_both_pads_are_recorded(self):
         """0x5027E marks the source, 0x509E4 the destination."""
-        state, source, dest = self._world(gp._TRICK_VISIT_TPORTS)
-        gp.player_tport(state, 0, source)
-        pads = gp._tport_pos_table(state)
+        state, source, dest = self._world(player_transport._TRICK_VISIT_TPORTS)
+        player_transport.player_tport(state, 0, source)
+        pads = player_transport._tport_pos_table(state)
         expected = (
             (1 << (pads.index(source) + 1))
             | (1 << (pads.index(dest) + 1))
@@ -3879,48 +3891,48 @@ class TestTransporterObjectiveSites:
         assert state.secret_tricks_flags[0] == expected
 
     def test_the_mask_accumulates_rather_than_counting(self):
-        state, source, _ = self._world(gp._TRICK_VISIT_TPORTS)
-        gp.player_tport(state, 0, source)
+        state, source, _ = self._world(player_transport._TRICK_VISIT_TPORTS)
+        player_transport.player_tport(state, 0, source)
         first = state.secret_tricks_flags[0]
         state.player_tport_phase[0] = -1
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         assert state.secret_tricks_flags[0] == first, "OR, not add"
 
     def test_a_different_objective_leaves_the_mask_alone(self):
-        state, source, _ = self._world(gp._TRICK_NOGREEDY1)
-        gp.player_tport(state, 0, source)
+        state, source, _ = self._world(player_items._TRICK_NOGREEDY1)
+        player_transport.player_tport(state, 0, source)
         assert state.secret_tricks_flags[0] == 0
 
     def _land_beside(self, trick_id: int, monster_type: int):
         state, source, dest = self._world(trick_id)
-        neighbour = gp._direction_neighbor(dest, 0)
+        neighbour = player_movement._direction_neighbor(dest, 0)
         state.mobs.create(neighbour, tile=0x2000, hpos=0, vpos=0,
                           obj_type=monster_type)
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         return state
 
     def test_transported_beside_acid_wins_trick_one(self):
-        state = self._land_beside(gp._TRICK_TRANSPORT1,
+        state = self._land_beside(player_transport._TRICK_TRANSPORT1,
                                   int(MazeObjIds.MONST_ACID))
         assert state.secret_player == 0        # 0x50C52
 
     def test_transported_beside_death_wins_trick_two(self):
-        state = self._land_beside(gp._TRICK_TRANSPORT2,
+        state = self._land_beside(player_transport._TRICK_TRANSPORT2,
                                   int(MazeObjIds.MONST_DEATH))
         assert state.secret_player == 0
 
     def test_the_two_landing_tricks_want_different_monsters(self):
         """0x50C3A wants 0x19 and 0x50C4C wants 0x18 -- not interchangeable."""
-        state = self._land_beside(gp._TRICK_TRANSPORT1,
+        state = self._land_beside(player_transport._TRICK_TRANSPORT1,
                                   int(MazeObjIds.MONST_DEATH))
         assert state.secret_player == -1
-        state = self._land_beside(gp._TRICK_TRANSPORT2,
+        state = self._land_beside(player_transport._TRICK_TRANSPORT2,
                                   int(MazeObjIds.MONST_ACID))
         assert state.secret_player == -1
 
     def test_landing_beside_nothing_wins_nothing(self):
-        state, source, _ = self._world(gp._TRICK_TRANSPORT1)
-        gp.player_tport(state, 0, source)
+        state, source, _ = self._world(player_transport._TRICK_TRANSPORT1)
+        player_transport.player_tport(state, 0, source)
         assert state.secret_player == -1
 
     def test_transporting_into_an_exit_wins_trick_three(self):
@@ -3931,7 +3943,7 @@ class TestTransporterObjectiveSites:
             vpos=native_v(6 * 16) << 7, obj_type=int(MazeObjIds.EXIT),
         )
 
-        gp._move_player_to_slot(state, 0, landing)
+        player_movement._move_player_to_slot(state, 0, landing)
 
         assert state.secret_player == 0
 
@@ -3956,7 +3968,7 @@ class TestTransporterObjectiveSites:
         state.player_tport_type[0] = 0
         state.player_tile_or_tport_dest[0] = landing
 
-        gp.tport_player_move(state, 0)
+        player_transport.tport_player_move(state, 0)
 
         assert state.secret_player == 0
         assert state.mobs.obj_type(landing) == int(MazeObjIds.PLAYERSTART)
@@ -3977,56 +3989,56 @@ class TestTransporterArrivalInteracts:
 
     def test_a_neighbouring_key_is_picked_up(self):
         state, source, dest = self._world()
-        neighbour = gp._direction_neighbor(dest, 2)
+        neighbour = player_movement._direction_neighbor(dest, 2)
         state.mobs.create(neighbour, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.KEY))
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         assert state.players[0].keysnum == 1
 
     def test_all_four_orthogonal_neighbours_are_visited(self):
         state, source, dest = self._world()
         for direction in (0, 2, 4, 6):
-            state.mobs.create(gp._direction_neighbor(dest, direction),
+            state.mobs.create(player_movement._direction_neighbor(dest, direction),
                               tile=0, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.KEY))
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         assert state.players[0].keysnum == 4
 
     def test_diagonals_are_not_visited(self):
         state, source, dest = self._world()
         for direction in (1, 3, 5, 7):
-            state.mobs.create(gp._direction_neighbor(dest, direction),
+            state.mobs.create(player_movement._direction_neighbor(dest, direction),
                               tile=0, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.KEY))
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         assert state.players[0].keysnum == 0
 
     def test_a_mid_cell_mob_is_rejected(self):
         """0x50BF2 -- palette nibble >= 0x0C means it is not settled here."""
         state, source, dest = self._world()
-        neighbour = gp._direction_neighbor(dest, 2)
+        neighbour = player_movement._direction_neighbor(dest, 2)
         state.mobs.create(neighbour, tile=0, hpos=0x0C, vpos=0,
                           obj_type=int(MazeObjIds.KEY))
-        gp.player_tport(state, 0, source)
+        player_transport.player_tport(state, 0, source)
         assert state.players[0].keysnum == 0
 
     def test_placeholder_pictures_are_rejected(self):
         """0x50C02/0x50C16 -- 0x8001 and 0x8000 mean nothing is drawn."""
         for picture in (0x8000, 0x8001):
             state, source, dest = self._world()
-            neighbour = gp._direction_neighbor(dest, 2)
+            neighbour = player_movement._direction_neighbor(dest, 2)
             state.mobs.create(neighbour, tile=picture, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.KEY))
-            gp.player_tport(state, 0, source)
+            player_transport.player_tport(state, 0, source)
             assert state.players[0].keysnum == 0, hex(picture)
 
     def test_the_transition_still_arms(self):
         """The scan runs at arm time and must not commit the move (0x5060A)."""
         state, source, dest = self._world()
-        neighbour = gp._direction_neighbor(dest, 2)
+        neighbour = player_movement._direction_neighbor(dest, 2)
         state.mobs.create(neighbour, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.KEY))
-        assert gp.player_tport(state, 0, source) == -2
+        assert player_transport.player_tport(state, 0, source) == -2
         assert state.player_tport_phase[0] == 0
         assert hpos_x(state.mobs.hpos[30]) == 5 * 16 + 8, "no immediate move"
 
@@ -4043,7 +4055,7 @@ class TestStunDelayGate:
 
     @staticmethod
     def _moving_state(stundelay: int = 0):
-        from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
+        from gauntpy.game.subsystems.input import JOY_IDLE, JOY_RIGHT
 
         state = _active_state()
         p = _make_player_active(state, 0, health=1000)
@@ -4085,7 +4097,7 @@ class TestStunDelayGate:
 
     def test_a_stunned_player_is_still_charged_by_a_forcefield(self):
         """0x4A91C branches *to* the forcefield check, not past it."""
-        from gauntpy.coords import pack_slot
+        from gauntpy.game.coords import pack_slot
 
         state, p = self._moving_state(stundelay=5)
         state.forcefield_color = 1
@@ -4101,7 +4113,7 @@ class TestStunDelayGate:
         assert p.stundelay == 4
         assert p.hurt_cooldown == 0x12
         before = tuple(state.mob_color_ram[192:208])
-        gp.player_hurt_palette_vblank(state)
+        player_lifecycle.player_hurt_palette_vblank(state)
         assert p.hurt_cooldown == 0x0C
         assert tuple(state.mob_color_ram[192:208]) != before
 
@@ -4112,8 +4124,8 @@ class TestForcefieldIsChargedAfterTheMove:
     frame later, as it was when the check ran first."""
 
     def test_arriving_in_a_segment_costs_health_on_the_same_frame(self, monkeypatch):
-        from gauntpy.coords import pack_slot
-        from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
+        from gauntpy.game.coords import pack_slot
+        from gauntpy.game.subsystems.input import JOY_IDLE, JOY_RIGHT
 
         state = _active_state()
         p = _make_player_active(state, 0, health=1000, mob_slot=pack_slot(5, 4))
@@ -4129,7 +4141,7 @@ class TestForcefieldIsChargedAfterTheMove:
             # The real mover writes H/V and migrates the record inside
             # ``player_try_move``, before the forcefield check at 0x4AA42.
             st.mobs.hpos[st.players[index].mob_slot] = (5 * 16) << 7
-            gp.migrate_player_record(st, index)
+            player_movement.migrate_player_record(st, index)
 
         monkeypatch.setattr(gp, "player_try_move", _step)
 
@@ -4148,27 +4160,27 @@ class TestScorePerCoin:
         state = _active_state()
         p = _make_player_active(state, 0)
         p.score, p.coin_count = 9_001, 4
-        assert gp.calc_score_per_coin(state, 0) == 2250
+        assert player_lifecycle.calc_score_per_coin(state, 0) == 2250
         assert p.score_per_coin == 2250
 
     def test_a_coinless_player_does_not_divide_by_zero(self):
         state = _active_state()
         p = _make_player_active(state, 0)
         p.score, p.coin_count = 500, 0
-        assert gp.calc_score_per_coin(state, 0) == 500
+        assert player_lifecycle.calc_score_per_coin(state, 0) == 500
 
 
 class TestHighscoreCheck:
     def test_a_ranking_score_opens_initials_entry(self):
-        from gauntpy.subsystems import score
+        from gauntpy.game.subsystems import score
 
         state = _active_state()
         p = _make_player_active(state, 0, character=Character.WIZARD)
         p.score_per_coin = 1_000_000
-        gp.highscore_check(state, 0)
+        player_names.highscore_check(state, 0)
         assert p.highscore_rank == 0                    # 0x904A4A
         assert p.status == int(PlayerStatus.DYING)      # 0x49DA6
-        assert p.state_timer == gp._NAME_ENTRY_TIMEOUT  # 0x49D88 = 0x0A8C
+        assert p.state_timer == player_names._NAME_ENTRY_TIMEOUT  # 0x49D88 = 0x0A8C
         assert p.name_entry_velocity == 0               # 0x49D98
         assert p.initials_cursor == 0                   # 0x49D9C
         assert p.name_entry_repeat_delay == 0xA0        # 0x49D78
@@ -4180,9 +4192,9 @@ class TestHighscoreCheck:
         p = _make_player_active(state, 0)
         p.score_per_coin = 10
         p.status = int(PlayerStatus.ALIVE_HERE)
-        gp.highscore_check(state, 0)
-        assert p.highscore_rank == gp._HIGHSCORE_NO_RANK == 10
-        assert p.state_timer == gp._GAME_OVER_TIMEOUT   # 0x49DCA = 0x0258
+        player_names.highscore_check(state, 0)
+        assert p.highscore_rank == player_names._HIGHSCORE_NO_RANK == 10
+        assert p.state_timer == player_names._GAME_OVER_TIMEOUT   # 0x49DCA = 0x0258
         assert p.status == int(PlayerStatus.ALIVE_HERE), "0x49DC0 skips the status"
 
     def test_the_rank_is_the_score_per_coin_not_the_raw_score(self):
@@ -4190,9 +4202,9 @@ class TestHighscoreCheck:
         state = _active_state()
         p = _make_player_active(state, 0)
         p.score, p.coin_count = 8_400, 4          # 2100 per coin: nowhere near
-        gp.calc_score_per_coin(state, 0)
-        gp.highscore_check(state, 0)
-        assert p.highscore_rank == gp._HIGHSCORE_NO_RANK
+        player_lifecycle.calc_score_per_coin(state, 0)
+        player_names.highscore_check(state, 0)
+        assert p.highscore_rank == player_names._HIGHSCORE_NO_RANK
 
 
 class TestDeathFlow:
@@ -4234,13 +4246,13 @@ class TestDeathFlow:
         assert p.score_per_coin == 20_000        # 0x46A18
         assert p.highscore_rank == 0             # 0x46AC4 -> 0x49D0E
         assert p.status == int(PlayerStatus.DYING)
-        assert p.state_timer == gp._NAME_ENTRY_TIMEOUT
+        assert p.state_timer == player_names._NAME_ENTRY_TIMEOUT
 
     def test_an_ordinary_death_gets_the_game_over_dwell(self):
         state = self._kill(score=100)
         p = state.players[0]
-        assert p.highscore_rank == gp._HIGHSCORE_NO_RANK
-        assert p.state_timer == gp._GAME_OVER_TIMEOUT
+        assert p.highscore_rank == player_names._HIGHSCORE_NO_RANK
+        assert p.state_timer == player_names._GAME_OVER_TIMEOUT
         assert p.status == int(PlayerStatus.REMOVED)
 
     def test_death_drops_the_it_player_and_the_active_count(self):
@@ -4274,12 +4286,12 @@ class TestNameEntry:
 
     @staticmethod
     def _entering(state=None) -> GameState:
-        from gauntpy.subsystems.input import JOY_IDLE
+        from gauntpy.game.subsystems.input import JOY_IDLE
 
         state = state or _active_state()
         p = _make_player_active(state, 0, character=Character.VALKYRIE)
         p.score_per_coin = 1_000_000
-        gp.highscore_check(state, 0)
+        player_names.highscore_check(state, 0)
         state.player_input_raw[0] = JOY_IDLE
         state.debounce_shift_magic[0] = 0xFFFF
         state.debounce_shift_fire[0] = 0xFFFF
@@ -4287,13 +4299,13 @@ class TestNameEntry:
 
     @staticmethod
     def _hold(state: GameState, mask: int) -> None:
-        from gauntpy.subsystems.input import JOY_IDLE
+        from gauntpy.game.subsystems.input import JOY_IDLE
 
         state.player_input_raw[0] = JOY_IDLE & ~mask
 
     def test_the_ring_is_backspace_space_a_to_z(self):
         """0x55440: 8 -> space -> 'A'..'Z' -> 8, and back the other way."""
-        step = gp.name_entry_step_char
+        step = player_names.name_entry_step_char
         assert step(0x08, +1, True) == 0x20
         assert step(0x20, +1, True) == ord("A")
         assert step(ord("A"), +1, True) == ord("B")
@@ -4305,7 +4317,7 @@ class TestNameEntry:
         assert step(ord("A"), -1, True) == 0x20
 
     def test_up_walks_the_letter_forward_on_the_repeat_cadence(self):
-        from gauntpy.subsystems.input import JOY_UP
+        from gauntpy.game.subsystems.input import JOY_UP
 
         state = self._entering()
         p = state.players[0]
@@ -4316,13 +4328,13 @@ class TestNameEntry:
         assert p.initials[0] == ord("B"), "one step once the delay expires"
         assert p.name_entry_velocity == 0xA0, "the accumulator clamps at 0xA0"
         # At full velocity the reload is the minimum, 8 frames.
-        assert p.name_entry_repeat_delay == gp._NAME_ENTRY_REPEAT_BASE
-        for _ in range(gp._NAME_ENTRY_REPEAT_BASE):
+        assert p.name_entry_repeat_delay == player_names._NAME_ENTRY_REPEAT_BASE
+        for _ in range(player_names._NAME_ENTRY_REPEAT_BASE):
             gp.main_move_players(state)
         assert p.initials[0] == ord("C")
 
     def test_down_walks_it_backward(self):
-        from gauntpy.subsystems.input import JOY_DOWN
+        from gauntpy.game.subsystems.input import JOY_DOWN
 
         state = self._entering()
         p = state.players[0]
@@ -4333,7 +4345,7 @@ class TestNameEntry:
         assert p.name_entry_velocity == -1
 
     def test_releasing_the_stick_zeroes_the_accumulator(self):
-        from gauntpy.subsystems.input import JOY_IDLE, JOY_UP
+        from gauntpy.game.subsystems.input import JOY_IDLE, JOY_UP
 
         state = self._entering()
         p = state.players[0]
@@ -4352,7 +4364,7 @@ class TestNameEntry:
         state.debounce_shift_magic[0] = 0x0C        # 0x49F7E
         gp.main_move_players(state)
         assert p.initials_cursor == 1               # 0x4A008
-        assert p.state_timer == gp._NAME_ENTRY_STEP_TIMEOUT   # 0x4A00E
+        assert p.state_timer == player_names._NAME_ENTRY_STEP_TIMEOUT   # 0x4A00E
 
     def test_the_first_frames_ignore_the_button(self):
         """0x49FAA: the press that killed the hero must not commit an initial."""
@@ -4367,13 +4379,13 @@ class TestNameEntry:
         p = state.players[0]
         p.state_timer = 0x900
         p.initials_cursor = 1
-        p.initials[1] = gp._NAME_ENTRY_BACKSPACE
+        p.initials[1] = player_names._NAME_ENTRY_BACKSPACE
         state.debounce_shift_fire[0] = 0x0C         # 0x49F9E: Fire commits too
         gp.main_move_players(state)
         assert p.initials_cursor == 0               # 0x4A016
 
     def test_three_committed_initials_write_the_record(self):
-        from gauntpy.subsystems import score
+        from gauntpy.game.subsystems import score
 
         state = self._entering()
         p = state.players[0]
@@ -4390,18 +4402,18 @@ class TestNameEntry:
         ladder = score.high_scores(state)[int(Character.VALKYRIE)]
         assert ladder[0] == (1_000_000, "ABC")      # OS 0x1B4 at 0x4A0CA
         assert len(ladder) == score.HIGHSCORE_RANKS, "the tenth record falls off"
-        assert p.state_timer == gp._GAME_OVER_TIMEOUT          # 0x4A0FE
+        assert p.state_timer == player_names._GAME_OVER_TIMEOUT          # 0x4A0FE
         assert state.debounce_shift_magic[0] == 0              # 0x4A0F6
         assert state.debounce_shift_fire[0] == 0               # 0x4A0F2
         assert p.status == int(PlayerStatus.REMOVED)
 
     def test_the_countdown_expiring_also_writes_the_record(self):
         """0x4A068: zero on the clock ends the dwell wherever the cursor is."""
-        from gauntpy.subsystems import score
+        from gauntpy.game.subsystems import score
 
         state = self._entering()
         p = state.players[0]
-        p.initials = [ord("Z"), 0x20, gp._NAME_ENTRY_BACKSPACE]
+        p.initials = [ord("Z"), 0x20, player_names._NAME_ENTRY_BACKSPACE]
         p.state_timer = 1
         gp.main_move_players(state)
         ladder = score.high_scores(state)[int(Character.VALKYRIE)]
@@ -4412,7 +4424,7 @@ class TestNameEntry:
         state = _active_state()
         p = _make_player_active(state, 0)
         p.status = int(PlayerStatus.DYING)
-        p.highscore_rank = gp._HIGHSCORE_NO_RANK
+        p.highscore_rank = player_names._HIGHSCORE_NO_RANK
         p.state_timer = 2
         p.initials = [ord("A")] * 3
         state.debounce_shift_magic[0] = 0x0C
@@ -4424,7 +4436,7 @@ class TestNameEntry:
     def test_ranked_entry_writes_prompt_score_rank_and_large_initials(self):
         state = self._entering()
         p = state.players[0]
-        gp.setup_infopanel(state, 0)
+        player_lifecycle.setup_infopanel(state, 0)
 
         row = 7
         assert "".join(
@@ -4438,7 +4450,7 @@ class TestNameEntry:
     def test_the_whole_death_to_removal_lifecycle_runs(self):
         """End to end: a ranked hero dies, enters initials, commits them, plays
         the death animation and leaves the level."""
-        from gauntpy.subsystems import score
+        from gauntpy.game.subsystems import score
 
         state = _active_state()
         p = _make_player_active(state, 0, character=Character.ELF, health=1)
@@ -4488,15 +4500,15 @@ class TestExitingIsNotRespawnWait:
         state.player_death_anim_frame[0] = 4
         state.level_players_active = 1
 
-        from gauntpy.subsystems import exits
+        from gauntpy.game.subsystems import treasure_rooms
 
-        original = exits.show_level_end_bonus_screen
-        exits.show_level_end_bonus_screen = lambda st: ended.append(st)
+        original = treasure_rooms.show_level_end_bonus_screen
+        treasure_rooms.show_level_end_bonus_screen = lambda st: ended.append(st)
         try:
             for _ in range(gp._RESPAWN_WAIT_LIMIT + 8):
                 gp.main_move_players(state)
         finally:
-            exits.show_level_end_bonus_screen = original
+            treasure_rooms.show_level_end_bonus_screen = original
 
         assert p.status == int(PlayerStatus.REMOVED)
         assert ended == [], "a death is not an exit"
@@ -4542,19 +4554,19 @@ class TestExitingIsNotRespawnWait:
             if picture and (not seen or seen[-1] != picture):
                 seen.append(picture)
 
-        expected = gp._PLAYER_EXIT_PICTURE[3 * 8: 3 * 8 + 8]
+        expected = player_animation._PLAYER_EXIT_PICTURE[3 * 8: 3 * 8 + 8]
         assert seen == [expected[i] for i in range(1, 8)], (
             "one frame per four counter steps, 0x5870A"
         )
 
     def test_the_exit_table_is_the_rom_block(self):
-        assert len(gp._PLAYER_EXIT_PICTURE) == 32
-        assert gp._PLAYER_EXIT_PICTURE[:8] == [
+        assert len(player_animation._PLAYER_EXIT_PICTURE) == 32
+        assert player_animation._PLAYER_EXIT_PICTURE[:8] == [
             0x0C3F, 0x1087, 0x1090, 0x1099, 0x10A2, 0x10AB, 0x10B4, 0x10BD,
         ]
-        assert gp._PLAYER_EXIT_PICTURE[8] == 0x1148
-        assert gp._PLAYER_EXIT_PICTURE[16] == 0x13A2
-        assert gp._PLAYER_EXIT_PICTURE[24] == 0x1548
+        assert player_animation._PLAYER_EXIT_PICTURE[8] == 0x1148
+        assert player_animation._PLAYER_EXIT_PICTURE[16] == 0x13A2
+        assert player_animation._PLAYER_EXIT_PICTURE[24] == 0x1548
 
 
 # =============================================================================
@@ -4585,16 +4597,16 @@ class TestHeroPictures:
         return player
 
     def test_literal_animation_tables_match_the_rom_dimensions_and_sentinels(self):
-        assert len(gp._ANIM_TABLE_IDLE) == 4 * 8
-        assert len(gp._ANIM_TABLE_WALKING) == 4 * 8 * 4
-        assert len(gp._ANIM_TABLE_FIGHTING) == 4 * 8 * 8
-        assert len(gp._ANIM_TABLE_SHOOTING) == 4 * 8 * 4
-        assert gp._ANIM_TABLE_WALKING[:4] == (0x0BCF, 0x0BD8, 0x0BE1, 0x0BD8)
-        assert gp._ANIM_TABLE_FIGHTING[128:136] == (
+        assert len(player_animation._ANIM_TABLE_IDLE) == 4 * 8
+        assert len(player_animation._ANIM_TABLE_WALKING) == 4 * 8 * 4
+        assert len(player_animation._ANIM_TABLE_FIGHTING) == 4 * 8 * 8
+        assert len(player_animation._ANIM_TABLE_SHOOTING) == 4 * 8 * 4
+        assert player_animation._ANIM_TABLE_WALKING[:4] == (0x0BCF, 0x0BD8, 0x0BE1, 0x0BD8)
+        assert player_animation._ANIM_TABLE_FIGHTING[128:136] == (
             0x1412, 0x14C6, 0x14C6, 0x14CF,
             0x14CF, 0x14C6, 0x14C6, 0x1412,
         )
-        assert gp._ANIM_TABLE_SHOOTING[96:100] == (
+        assert player_animation._ANIM_TABLE_SHOOTING[96:100] == (
             0x156C, 0x1524, 0x1524, 0x1524,
         )
 
@@ -4604,27 +4616,27 @@ class TestHeroPictures:
 
         gp.main_move_players(state)
 
-        rom_direction = gp._PORT_DIR_TO_ROM_DIR[player.direction]
-        assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_IDLE[
+        rom_direction = player_animation._PORT_DIR_TO_ROM_DIR[player.direction]
+        assert state.mobs.picture[player.mob_slot] == player_animation._ANIM_TABLE_IDLE[
             int(Character.WIZARD) * 8 + rom_direction
         ]
         assert player.anim_counter == 0
 
     def test_full_headless_tick_replaces_the_playerstart_picture(self):
-        from gauntpy.mainloop import tick
+        from gauntpy.game.mainloop import tick
 
         state = _active_state()
         player = self._hero(state, 0, Character.VALKYRIE, 0x80, direction=2)
 
         tick(state)
 
-        rom_direction = gp._PORT_DIR_TO_ROM_DIR[player.direction]
-        assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_IDLE[
+        rom_direction = player_animation._PORT_DIR_TO_ROM_DIR[player.direction]
+        assert state.mobs.picture[player.mob_slot] == player_animation._ANIM_TABLE_IDLE[
             int(Character.VALKYRIE) * 8 + rom_direction
         ]
 
     def test_core_updates_all_four_active_heroes_on_a_multiplayer_walk_tick(self):
-        from gauntpy.subsystems.input import JOY_RIGHT
+        from gauntpy.game.subsystems.input import JOY_RIGHT
 
         state = _active_state()
         heroes = [
@@ -4635,16 +4647,16 @@ class TestHeroPictures:
 
         gp.main_move_players(state)
 
-        right = gp._PORT_DIR_TO_ROM_DIR[0]
+        right = player_animation._PORT_DIR_TO_ROM_DIR[0]
         for character, player in enumerate(heroes):
-            assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_WALKING[
+            assert state.mobs.picture[player.mob_slot] == player_animation._ANIM_TABLE_WALKING[
                 character * 32 + right * 4
             ]
             assert state.mobs.picture[player.mob_slot] != self._PLAYERSTART_PICTURE
             assert player.anim_counter == 1
 
     def test_shooting_uses_the_rom_player_table_before_spawning_the_shot(self):
-        from gauntpy.subsystems.input import JOY_FIRE_BIT
+        from gauntpy.game.subsystems.input import JOY_FIRE_BIT
 
         state = _active_state()
         player = self._hero(state, 0, Character.WIZARD, 0x80, direction=0)
@@ -4652,9 +4664,9 @@ class TestHeroPictures:
 
         gp.main_move_players(state)
 
-        right = gp._PORT_DIR_TO_ROM_DIR[player.direction]
+        right = player_animation._PORT_DIR_TO_ROM_DIR[player.direction]
         assert state.player_shooting[0] == -1
-        assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_SHOOTING[
+        assert state.mobs.picture[player.mob_slot] == player_animation._ANIM_TABLE_SHOOTING[
             int(Character.WIZARD) * 32 + right * 4
         ]
         assert player.anim_counter == 1
@@ -4666,9 +4678,9 @@ class TestHeroPictures:
         ]
 
     def test_wall_contact_does_not_hide_the_held_fire_animation(self):
-        from gauntpy.mainloop import tick
-        from gauntpy.coords import pack_slot
-        from gauntpy.subsystems.input import JOY_FIRE_BIT, JOY_RIGHT
+        from gauntpy.game.mainloop import tick
+        from gauntpy.game.coords import pack_slot
+        from gauntpy.game.subsystems.input import JOY_FIRE_BIT, JOY_RIGHT
 
         state = _active_state()
         slot = pack_slot(10, 10)
@@ -4686,11 +4698,11 @@ class TestHeroPictures:
             tick(state)
             pictures.append(state.mobs.picture[player.mob_slot])
 
-        right = gp._PORT_DIR_TO_ROM_DIR[player.direction]
+        right = player_animation._PORT_DIR_TO_ROM_DIR[player.direction]
         row = int(Character.ELF) * 32 + right * 4
         assert set(pictures) >= {
-            gp._ANIM_TABLE_SHOOTING[row],
-            gp._ANIM_TABLE_SHOOTING[row + 1],
+            player_animation._ANIM_TABLE_SHOOTING[row],
+            player_animation._ANIM_TABLE_SHOOTING[row + 1],
         }
 
     def test_fighting_selects_its_eight_frame_table(self):
@@ -4699,10 +4711,10 @@ class TestHeroPictures:
         state.player_fighting_dir[0] = 1
         player.anim_counter = 14
 
-        gp.update_player_sprite(state, 0)
+        player_animation.update_player_sprite(state, 0)
 
-        rom_direction = gp._PORT_DIR_TO_ROM_DIR[player.direction]
-        assert state.mobs.picture[player.mob_slot] == gp._ANIM_TABLE_FIGHTING[
+        rom_direction = player_animation._PORT_DIR_TO_ROM_DIR[player.direction]
+        assert state.mobs.picture[player.mob_slot] == player_animation._ANIM_TABLE_FIGHTING[
             int(Character.ELF) * 64 + rom_direction * 8 + 7
         ]
 
@@ -4714,7 +4726,7 @@ class TestHeroPictures:
 
         state = _active_state()
         player = self._hero(state, 0, Character.WIZARD, 0x80)
-        gp.update_player_sprite(state, 0)
+        player_animation.update_player_sprite(state, 0)
 
         picture = state.mobs.picture[player.mob_slot]
         assert sprite_kind(state, player.mob_slot) == "wizard"
@@ -4724,11 +4736,11 @@ class TestHeroPictures:
         state = _active_state()
         player = self._hero(state, 0, Character.VALKYRIE, 0x80)
         state.player_tport_phase[0] = 0
-        state.mobs.picture[player.mob_slot] = gp._PLAYER_INVISIBLE_PICTURE
+        state.mobs.picture[player.mob_slot] = player_animation._PLAYER_INVISIBLE_PICTURE
 
-        gp.update_player_sprites(state)
+        player_animation.update_player_sprites(state)
 
-        assert state.mobs.picture[player.mob_slot] == gp._PLAYER_INVISIBLE_PICTURE
+        assert state.mobs.picture[player.mob_slot] == player_animation._PLAYER_INVISIBLE_PICTURE
 
 
 # =============================================================================
@@ -4755,7 +4767,7 @@ class TestPostLoopIsNormalPlayOnly:
         return p
 
     def _normal_hero(self, state: GameState) -> Player:
-        from gauntpy.subsystems.input import JOY_IDLE, JOY_RIGHT
+        from gauntpy.game.subsystems.input import JOY_IDLE, JOY_RIGHT
 
         p = _make_player_active(state, 1, health=500, mob_slot=40)
         state.mobs.hpos[40] = (8 * 16 - 4) << 7
@@ -4826,7 +4838,7 @@ class TestPostLoopIsNormalPlayOnly:
         state = _demo_state([[], [40, 0xF3], [], []])
         self._demo_hero(state)
         wall = 300
-        state.mobs.create(wall, tile=gp._WALL_PICTURE, hpos=0, vpos=0,
+        state.mobs.create(wall, tile=player_data._WALL_PICTURE, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.WALL_REGULAR))
         state.escape_timer = gp._ESCAPE_TIMER_LIMIT - 1
         state.sound_log.clear()
@@ -4860,7 +4872,7 @@ class TestPostLoopIsNormalPlayOnly:
         state = _active_state()
         self._normal_hero(state)
         wall = 300
-        state.mobs.create(wall, tile=gp._WALL_PICTURE, hpos=0, vpos=0,
+        state.mobs.create(wall, tile=player_data._WALL_PICTURE, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.WALL_REGULAR))
         state.escape_timer = gp._ESCAPE_TIMER_LIMIT - 1
         gp.main_move_players(state)

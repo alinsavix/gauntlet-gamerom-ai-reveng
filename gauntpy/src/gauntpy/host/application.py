@@ -247,7 +247,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
             ),
         )
     else:
-        from ..game.maze import MazeError
+        from ..maze_rom import MazeError
         try:
             state = build_state(
                 level, character, keys=keys, potions=potions, powers=powers,

@@ -13,10 +13,10 @@ Reference: doc/04_game_subsystems.md §10.4-10.5, §14, §25; PLAN.md §6 WP-14.
 
 from __future__ import annotations
 
-from gauntpy.constants import GameMode, PlayerStatus
-from gauntpy.mainloop import tick
-from gauntpy.state import GameState, InfoPanel, PanelField
-from gauntpy.subsystems.score import (
+from gauntpy.game.constants import GameMode, PlayerStatus
+from gauntpy.game.mainloop import tick
+from gauntpy.game.state import GameState, InfoPanel, PanelField
+from gauntpy.game.subsystems.score import (
     DIALOG_MESSAGES,
     DIALOG_MESSAGES_SHORT,
     DIALOG_SPEECH_IDS,
@@ -39,7 +39,7 @@ from gauntpy.subsystems.score import (
     rank_high_score,
     write_high_score_entry,
 )
-from gauntpy.subsystems import score as score_mod
+from gauntpy.game.subsystems import score as score_mod
 
 
 # ---------------------------------------------------------------------------
@@ -859,7 +859,7 @@ def test_thief_transition_restamps_fixed_animation_slot_at_destination() -> None
 
 
 def test_thief_transition_cleanup_reprograms_the_route() -> None:
-    from gauntpy.subsystems.thief import THIEF_ESCAPE
+    from gauntpy.game.subsystems.thief import THIEF_ESCAPE
 
     state = _normal_state()
     state.thief_current_pos = 0x140
@@ -1010,7 +1010,7 @@ def test_monster_impact_effect_runs_its_own_four_frame_cycle() -> None:
 def test_records_eight_to_fifteen_share_the_numeric_line() -> None:
     """0x4C642 compares the record's *second* string pointer against 0x59D80;
     every damage record points at that one line."""
-    from gauntpy.subsystems.score import DIALOG_NUMERIC_LINE
+    from gauntpy.game.subsystems.score import DIALOG_NUMERIC_LINE
 
     assert DIALOG_NUMERIC_LINE == "  PLAYER LOSES    HEALTH  "
     for index in range(8, 16):

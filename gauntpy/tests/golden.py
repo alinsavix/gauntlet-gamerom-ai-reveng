@@ -26,9 +26,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from gauntpy.mainloop import tick
-from gauntpy.rng import GameRandom
-from gauntpy.state import NUM_PLAYERS, GameState
+from gauntpy.game.mainloop import tick
+from gauntpy.game.rng import GameRandom
+from gauntpy.game.state import NUM_PLAYERS, GameState
 
 GOLDENS_DIR = Path(__file__).resolve().parent / "goldens"
 
@@ -55,7 +55,7 @@ SCRIPTED_RUN_FRAMES = 30
 
 def build_scripted_state() -> GameState:
     """A fresh, explicitly-seeded ``GameState`` for a scripted run."""
-    from gauntpy.constants import GameMode
+    from gauntpy.game.constants import GameMode
 
     return GameState(game_mode=GameMode.NORMAL, rng=GameRandom(seed=GOLDEN_SEED))
 

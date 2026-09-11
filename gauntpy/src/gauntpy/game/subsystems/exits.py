@@ -1,4 +1,4 @@
-"""Exit scanning/movement and shared level predicates -- WP-15.
+"""Exit scanning/movement and public level-routine compatibility exports.
 
 Transition, treasure-room, and secret-room routines have separate owners;
 explicit imports retain their established entry points.
@@ -9,55 +9,26 @@ Reference: ``doc/04_game_subsystems.md`` §12, §16, §10.6;
 
 from __future__ import annotations
 
-from .. import romtext
-from ..constants import (
-    FIRST_PLAYABLE_SLOT,
-    SLOT_EXIT_ANIMS,
-    GameMode,
-    MazeObjIds,
-    PlayerStatus,
-)
-from ..coords import position_field, unpack_slot
+from ..constants import FIRST_PLAYABLE_SLOT, MazeObjIds, PlayerStatus
+from ..coords import unpack_slot
 from ..playfield_vram import (
     EXIT_ANIM_FRAMES,
     EXIT_SETTLED_DESC,
     exit_descriptor,
     write_tile_descriptor,
 )
-from ..state import NUM_PLAYERS, GameState
-from .display import (
-    alpha_word,
-    fill_alpha_rect,
-    write_alpha_decimal,
-    write_alpha_large_text,
-    write_alpha_text,
-)
-from .sound import sound_play, sound_speech_play
+from ..state import GameState
+from .sound import sound_play
 
 
 # Compatibility exports; each routine and table has a single game-side owner.
-from .level_data import (
-    _LFLAG3_EXIT_MOVES as _LFLAG3_EXIT_MOVES,
-    _SECRET_MAZE_FIRST as _SECRET_MAZE_FIRST,
-    _TREASURE_MAZE_FIRST as _TREASURE_MAZE_FIRST,
+from .level_data import _LFLAG3_EXIT_MOVES
+from .level_state import (
+    in_bonus_room as in_bonus_room,
+    in_secret_room as in_secret_room,
+    player_activecount as player_activecount,
 )
 from .level_transitions import (
-    _LFLAG1_INVIS_TRAPWALLS as _LFLAG1_INVIS_TRAPWALLS,
-    _LFLAG2_INVIS_ALLWALLS as _LFLAG2_INVIS_ALLWALLS,
-    _LFLAG4_PLAYER_OFFSCREEN as _LFLAG4_PLAYER_OFFSCREEN,
-    _LFLAG4_SHOTS_HURT as _LFLAG4_SHOTS_HURT,
-    _LFLAG4_SHOTS_STUN as _LFLAG4_SHOTS_STUN,
-    _MAZE_ROTATION_HINGE as _MAZE_ROTATION_HINGE,
-    _MAZE_ROTATION_TOP as _MAZE_ROTATION_TOP,
-    _TREASURE_MAZE_LAST as _TREASURE_MAZE_LAST,
-    _TREASURE_ROOM_DURATION as _TREASURE_ROOM_DURATION,
-    _finish_level_end as _finish_level_end,
-    _load_next_level as _load_next_level,
-    _players_exiting as _players_exiting,
-    _players_still_here as _players_still_here,
-    _spawn_level_players as _spawn_level_players,
-    _write_level_flag_hint as _write_level_flag_hint,
-    _write_level_splash_details as _write_level_splash_details,
     advance_level_countdowns as advance_level_countdowns,
     compute_next_level as compute_next_level,
     maze_checknum as maze_checknum,
@@ -82,34 +53,6 @@ from .secret_rooms import (
     TRICK_SAVESUPERSHOTS as TRICK_SAVESUPERSHOTS,
     TRICK_WATCHSHOOT1 as TRICK_WATCHSHOOT1,
     TRICK_WATCHSHOOT2 as TRICK_WATCHSHOOT2,
-    _CHALLENGE_ALWAYS as _CHALLENGE_ALWAYS,
-    _CHALLENGE_CLEAR_MONSTERS as _CHALLENGE_CLEAR_MONSTERS,
-    _CHALLENGE_MAZE_SPLIT as _CHALLENGE_MAZE_SPLIT,
-    _CHALLENGE_POTIONS as _CHALLENGE_POTIONS,
-    _CHALLENGE_POTIONS_TARGET as _CHALLENGE_POTIONS_TARGET,
-    _CHALLENGE_REMOVE_TREASURE as _CHALLENGE_REMOVE_TREASURE,
-    _CHALLENGE_REMOVE_TREASURE_TARGET as _CHALLENGE_REMOVE_TREASURE_TARGET,
-    _CHALLENGE_TIMER_BASE as _CHALLENGE_TIMER_BASE,
-    _CHALLENGE_TIMER_RANDOM_MINUTES as _CHALLENGE_TIMER_RANDOM_MINUTES,
-    _CHALLENGE_TRANSPORTERS as _CHALLENGE_TRANSPORTERS,
-    _CHALLENGE_TRANSPORTERS_TARGET as _CHALLENGE_TRANSPORTERS_TARGET,
-    _CHALLENGE_TREASURES as _CHALLENGE_TREASURES,
-    _CHALLENGE_TREASURES_TARGET as _CHALLENGE_TREASURES_TARGET,
-    _CHALLENGE_WALLS as _CHALLENGE_WALLS,
-    _CHALLENGE_WALLS_TARGET as _CHALLENGE_WALLS_TARGET,
-    _CHALLENGE_WHILE_IT as _CHALLENGE_WHILE_IT,
-    _SAVESUPERSHOTS_TARGET as _SAVESUPERSHOTS_TARGET,
-    _SECRET_ROOM_BONUS as _SECRET_ROOM_BONUS,
-    _SECRET_START_MAX as _SECRET_START_MAX,
-    _SECRET_START_MIN as _SECRET_START_MIN,
-    _SECRET_START_MISS_PENALTY as _SECRET_START_MISS_PENALTY,
-    _SECRET_START_WIN_BONUS as _SECRET_START_WIN_BONUS,
-    _TRICK_NOGETHIT_MIN_LEVEL as _TRICK_NOGETHIT_MIN_LEVEL,
-    _enter_secret_room as _enter_secret_room,
-    _maze_secret_for_hint as _maze_secret_for_hint,
-    _secret_room_payout as _secret_room_payout,
-    _write_secret_hint as _write_secret_hint,
-    _write_secret_room_start as _write_secret_room_start,
     secret_check as secret_check,
     secret_check_winner as secret_check_winner,
     secret_new_level_setup as secret_new_level_setup,
@@ -120,22 +63,6 @@ from .secret_rooms import (
     treasure_collected as treasure_collected,
 )
 from .treasure_rooms import (
-    _BONUS_DISPLAY_FRAMES as _BONUS_DISPLAY_FRAMES,
-    _FAKE_COUNTDOWN_MIN_LEVEL as _FAKE_COUNTDOWN_MIN_LEVEL,
-    _FAKE_COUNTDOWN_ODDS as _FAKE_COUNTDOWN_ODDS,
-    _GSETTING_SPEECH_DISABLE as _GSETTING_SPEECH_DISABLE,
-    _TREASURE_FAKEOUT_SPEECH as _TREASURE_FAKEOUT_SPEECH,
-    _TREASURE_FAKE_COUNTDOWN_SEQUENCES as _TREASURE_FAKE_COUNTDOWN_SEQUENCES,
-    _TREASURE_SECONDS_SPEECH as _TREASURE_SECONDS_SPEECH,
-    _TREASURE_TIMEOUT_SPEECH as _TREASURE_TIMEOUT_SPEECH,
-    _TREASURE_WARNING_DELAY as _TREASURE_WARNING_DELAY,
-    _TREASURE_WARNING_SPEECH as _TREASURE_WARNING_SPEECH,
-    _WARNING_ODDS as _WARNING_ODDS,
-    _bonus_recipients as _bonus_recipients,
-    _countdown_speech as _countdown_speech,
-    _exiting_or_here as _exiting_or_here,
-    _treasure_shares as _treasure_shares,
-    _write_bonus_alpha as _write_bonus_alpha,
     main_treasure_timer as main_treasure_timer,
     show_level_end_bonus_screen as show_level_end_bonus_screen,
 )
@@ -194,40 +121,6 @@ _TRICK_MULTIPLAYER_LAST = 0x11
 
 
 # ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-def player_activecount(state: GameState) -> int:
-    """0x4D900 ``player_activecount`` -- players with status 1, 2, 8 or 0x10.
-
-    Reference: doc/04_game_subsystems.md §16; PlayerStatus values 1/2/8/0x10
-    = ALIVE_HERE / ALIVE_NEXT / RESPAWN_WAIT / SELECTING.
-    """
-    active_statuses = (
-        int(PlayerStatus.ALIVE_HERE),
-        int(PlayerStatus.ALIVE_NEXT),
-        int(PlayerStatus.RESPAWN_WAIT),
-        int(PlayerStatus.SELECTING),
-    )
-    return sum(1 for p in state.players if p.status in active_statuses)
-
-
-def in_bonus_room(state: GameState) -> bool:
-    """True in any bonus room -- treasure (104-114) or secret (115/116).
-
-    This is the ROM's own test, ``cmpi.w #0x68,mazenum_current`` followed by a
-    carry-clear branch, used at 0x4D2D0, 0x4A756, 0x52DBA and 0x52E56.
-    """
-    return state.mazenum_current >= _TREASURE_MAZE_FIRST
-
-
-def in_secret_room(state: GameState) -> bool:
-    """True in a secret room (maze 115 or 116) -- ``cmpi.w #0x73`` at 0x48232,
-    0x43916, 0x4D496, 0x4D544 and 0x4D8CA."""
-    return state.mazenum_current >= _SECRET_MAZE_FIRST
-
-
-# ---------------------------------------------------------------------------
 # main_exit_move (0x5287C) -- the moving exit
 # ---------------------------------------------------------------------------
 
@@ -244,10 +137,10 @@ def exit_scan_level(state: GameState) -> None:
       * the ExitMoves flag then either arms ``exit_move_timer`` with 0x12C or clears
         ``exit_open_id`` (0x43B7E-0x43B9A).
 
-    WP-3's ``load_level`` does not build the list, so WP-15 recovers it from the
-    MOB table -- a slot number *is* its cell address, so the scan is exact. It
-    starts at ``FIRST_PLAYABLE_SLOT`` because the ROM's own scan starts at slot
-    0x20 (``moveq #$20,d3`` at 0x43DA6) and row 0 is the reserved wall fill.
+    Game-side level setup calls this after placement and before the secret-maze
+    transformation. The port scans live markers in packed-slot order, starting
+    at ``FIRST_PLAYABLE_SLOT``: the ROM scan starts at slot 0x20
+    (``moveq #$20,d3`` at 0x43DA6), and row 0 is reserved.
 
     Safe to call twice for the same maze, which matters while the common
     level-load path and this module's own transition path may both call it: the

@@ -198,7 +198,7 @@ def highscore_check(state: GameState, player_index: int) -> None:
     Either way the player's panel column is rebuilt (0x49DD6).
     """
     from . import score
-    from .players import setup_infopanel
+    from .player_lifecycle import setup_infopanel
 
     player = state.players[player_index]
     rank = score.rank_high_score(
@@ -275,7 +275,7 @@ def _name_entry_finish(state: GameState, player_index: int) -> None:
     (0x4A0FE), rebuilds the panel and shows the continue prompt (0x4A110).
     """
     from . import score
-    from .players import setup_infopanel, show_continue_prompt
+    from .player_lifecycle import setup_infopanel, show_continue_prompt
 
     player = state.players[player_index]
     if 0 <= player.highscore_rank < _HIGHSCORE_NO_RANK:

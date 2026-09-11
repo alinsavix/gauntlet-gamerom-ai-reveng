@@ -367,7 +367,7 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
         select_forcefield_delay_profile,
         maze_doors_setup,
     )
-    from .game.subsystems.players import setup_infopanel
+    from .game.subsystems.player_lifecycle import setup_infopanel
     from .game.subsystems.eeprom import GAME_DEFAULT_SETTINGS
 
     state = GameState(

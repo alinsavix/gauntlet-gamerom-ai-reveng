@@ -10,10 +10,10 @@ The ring is the fallback for a busy latch or a nonzero holdoff, and
 
 from __future__ import annotations
 
-from gauntpy.constants import GameMode
-from gauntpy.mainloop import tick
-from gauntpy.state import GameState
-from gauntpy.subsystems import sound
+from gauntpy.game.constants import GameMode
+from gauntpy.game.mainloop import tick
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems import sound
 
 
 def _busy_latch(monkeypatch):

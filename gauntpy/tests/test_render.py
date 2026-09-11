@@ -25,8 +25,8 @@ import time
 
 import pytest
 
-from gauntpy import coords
-from gauntpy.constants import GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game import coords
+from gauntpy.game.constants import GameMode, MazeObjIds, PlayerStatus
 from gauntpy.render.compositor import (
     HUD_PANEL,
     PLAYFIELD_VIEWPORT,
@@ -43,14 +43,14 @@ from gauntpy.render.hud import (
 )
 from gauntpy.render.mobs import draw_mob_layer, iter_visible_mobs, strength_tier
 from gauntpy.render import playfield, romtext
-from gauntpy.state import GameState
-from gauntpy.subsystems import score
-from gauntpy.subsystems.score import (
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems import score
+from gauntpy.game.subsystems.score import (
     dialog_first_encounter,
     main_msgbox_countdown,
     main_score_display,
 )
-from gauntpy.subsystems.display import init_alpha_color_ram
+from gauntpy.game.subsystems.display import init_alpha_color_ram
 
 
 def _alpha_text(state, column: int, row: int, width: int) -> str:
@@ -369,7 +369,7 @@ class TestMobDrawOrder:
 
         top_x, top_y = coords.slot_to_pixels(top_slot)
         top_y -= 16  # 4x4 MOB: two extra tile rows draw above the cell
-        from gauntpy.subsystems.display import _irgb_rgba
+        from gauntpy.game.subsystems.display import _irgb_rgba
         assert fb.get_pixel(top_x + 4, top_y + 4) == _irgb_rgba(0xF0F0)
 
 
@@ -583,7 +583,7 @@ class TestSpriteKind:
     guessed from the picture number -- ``render.mobs.sprite_kind``."""
 
     def test_a_players_slot_reports_the_class_they_picked(self):
-        from gauntpy.constants import Character
+        from gauntpy.game.constants import Character
         from gauntpy.render.mobs import sprite_kind
 
         for character, name in enumerate(("warrior", "valkyrie", "wizard", "elf")):
@@ -647,7 +647,7 @@ class TestSpriteKind:
         assert sprite_kind(state, slot) is None
 
     def test_the_kind_reaches_the_asset_store(self):
-        from gauntpy.constants import Character
+        from gauntpy.game.constants import Character
 
         state = GameState()
         slot = _place(state.mobs, row=6, col=6, picture=0x1E0D,
@@ -875,8 +875,8 @@ class TestHud:
     def _state() -> GameState:
         """main_score_display skips TITLE/SCORES (§14.2), so HUD latch tests
         need a gameplay mode."""
-        from gauntpy.subsystems.display import init_alpha_color_ram
-        from gauntpy.subsystems.players import setup_infopanel
+        from gauntpy.game.subsystems.display import init_alpha_color_ram
+        from gauntpy.game.subsystems.player_lifecycle import setup_infopanel
 
         state = GameState(game_mode=GameMode.NORMAL)
         for player in state.players:
@@ -902,7 +902,7 @@ class TestHud:
     def test_active_player_row_is_not_left_blank(self):
         state = self._state()
         state.players[0].status = PlayerStatus.ALIVE_HERE
-        from gauntpy.subsystems.players import setup_infopanel
+        from gauntpy.game.subsystems.player_lifecycle import setup_infopanel
         setup_infopanel(state, 0)
         state.players[0].score = 1234
         state.players[0].health = 500
@@ -947,7 +947,7 @@ class TestHud:
         assert self._ink_in_rows(fb, HUD_PANEL, score.LEVEL_ROW, score.LEVEL_ROW)
 
     def test_player_sections_resolve_rom_alpha_color_ram(self):
-        from gauntpy.subsystems.display import alpha_color_rgba
+        from gauntpy.game.subsystems.display import alpha_color_rgba
 
         state = self._state()
         fb = Framebuffer(336, 240)
@@ -968,7 +968,7 @@ class TestHud:
             )
 
     def test_live_alpha_color_ram_write_changes_the_panel_background(self):
-        from gauntpy.subsystems.display import alpha_color_rgba
+        from gauntpy.game.subsystems.display import alpha_color_rgba
 
         state = self._state()
         attribute = score.PLAYER_TEXT_PALETTE_WORDS[0]
@@ -985,7 +985,7 @@ class TestHud:
     def test_multicolor_name_glyphs_use_all_live_alpha_palette_shades(self):
         state = self._state()
         state.players[0].status = PlayerStatus.ALIVE_HERE
-        from gauntpy.subsystems.players import setup_infopanel
+        from gauntpy.game.subsystems.player_lifecycle import setup_infopanel
         setup_infopanel(state, 0)
         before = Framebuffer(336, 240)
         draw_hud(before, state, HUD_PANEL)
@@ -1170,7 +1170,7 @@ class TestPanelGeometryMatchesTheRom:
         assert cell_xy(HUD_PANEL, score.HEALTH_COLUMN, 14) == (296, 112)
 
     def test_inventory_keys_use_the_dedicated_gold_alpha_palette(self):
-        from gauntpy.subsystems.display import (
+        from gauntpy.game.subsystems.display import (
             alpha_palette_words, init_alpha_color_ram,
         )
 
@@ -1266,8 +1266,8 @@ class TestRomText:
 
 class TestTitleMobs:
     def test_title_motion_matches_rom_landmarks(self):
-        from gauntpy.coords import sprite_top_y
-        from gauntpy.subsystems.attract import (
+        from gauntpy.game.coords import sprite_top_y
+        from gauntpy.game.subsystems.attract import (
             _init_title_logo_mobs, _update_title_logo_motion,
         )
 
@@ -1295,7 +1295,7 @@ class TestTitleMobs:
             _update_title_logo_motion(state)
 
     def test_title_init_populates_the_hardware_mob_range(self):
-        from gauntpy.subsystems.attract import _init_title_logo_mobs
+        from gauntpy.game.subsystems.attract import _init_title_logo_mobs
 
         state = GameState(game_mode=GameMode.TITLE)
         _init_title_logo_mobs(state)
@@ -1308,7 +1308,7 @@ class TestTitleMobs:
 
     def test_scores_and_legend_draw(self):
         from gauntpy.render.alpha import draw_alpha_layer
-        from gauntpy.subsystems.attract import start_attract_screen
+        from gauntpy.game.subsystems.attract import start_attract_screen
 
         for mode in (GameMode.SCORES, GameMode.LEGEND):
             state = GameState()
@@ -1344,7 +1344,7 @@ class TestTitleMobs:
 
     def test_character_select_draws_before_the_game_starts(self):
         from gauntpy.render.alpha import draw_alpha_layer
-        from gauntpy.subsystems.session import _write_character_select_alpha
+        from gauntpy.game.subsystems.session import _write_character_select_alpha
 
         state = GameState()
         init_alpha_color_ram(state)
@@ -1360,14 +1360,14 @@ class TestFrontEndTextIsRomData:
     """Front-end routines put ROM copy into alpha VRAM, not render calls."""
 
     def test_title_leaves_alpha_ram_clear_for_its_playfield_and_mobs(self):
-        from gauntpy.subsystems.attract import start_attract_screen
+        from gauntpy.game.subsystems.attract import start_attract_screen
 
         state = GameState()
         start_attract_screen(state, int(GameMode.TITLE))
         assert not any(state.alpha_ram)
 
     def test_scores_screen_is_the_rom_four_way_split(self):
-        from gauntpy.subsystems.display import (
+        from gauntpy.game.subsystems.display import (
             _LARGE_GLYPH_INDEX_MAP,
             _LARGE_GLYPH_QUADS,
         )
@@ -1412,7 +1412,7 @@ class TestFrontEndTextIsRomData:
         assert _alpha_text(state, 11, 3, 7) == " 123456"
 
     def test_character_select_uses_the_rom_instruction_chain(self):
-        from gauntpy.subsystems.session import _write_character_select_alpha
+        from gauntpy.game.subsystems.session import _write_character_select_alpha
 
         state = GameState()
         state.game_mode = GameMode.NORMAL
@@ -1434,7 +1434,7 @@ class TestFrontEndTextIsRomData:
         ) == romtext.TEXT_SELECT_HERO
 
     def test_legend_uses_the_rom_descriptor_text(self):
-        from gauntpy.subsystems.attract import start_attract_screen
+        from gauntpy.game.subsystems.attract import start_attract_screen
 
         state = GameState()
         start_attract_screen(state, int(GameMode.LEGEND))
@@ -1443,7 +1443,7 @@ class TestFrontEndTextIsRomData:
         assert _alpha_text(state, 8, 0, 6) == "LEGEND"
 
     def test_legend_rules_reveals_the_rom_rectangles_without_erasing_the_panel(self):
-        from gauntpy.subsystems.attract import start_attract_screen
+        from gauntpy.game.subsystems.attract import start_attract_screen
 
         state = GameState()
         start_attract_screen(state, int(GameMode.LEGEND))
@@ -1458,12 +1458,12 @@ class TestFrontEndTextIsRomData:
         ] & 0x8000
 
     def test_monster_legend_writes_the_rom_capability_table(self):
-        from gauntpy.subsystems.attract import start_attract_screen
+        from gauntpy.game.subsystems.attract import start_attract_screen
 
         state = GameState()
         start_attract_screen(state, int(GameMode.LEGEND))
         state.attract_legend = 1
-        from gauntpy.subsystems.attract import load_legend_page
+        from gauntpy.game.subsystems.attract import load_legend_page
         load_legend_page(state)
 
         assert _alpha_text(state, 6, 0, 8) == "MONSTERS"
@@ -1518,7 +1518,7 @@ class TestBonusScreenUsesThePerPlayerTally:
         return state
 
     def test_one_row_per_player_who_collected_treasure(self):
-        from gauntpy.subsystems.exits import show_level_end_bonus_screen
+        from gauntpy.game.subsystems.treasure_rooms import show_level_end_bonus_screen
 
         state = self._bonus_state()
         state.player_treascount = [3, 0, 0, 0]
@@ -1533,7 +1533,7 @@ class TestBonusScreenUsesThePerPlayerTally:
         assert _alpha_text(state, 23, 9, 4) == "   3"
 
     def test_the_total_award_is_the_settled_bonus_amount(self):
-        from gauntpy.subsystems.exits import show_level_end_bonus_screen
+        from gauntpy.game.subsystems.treasure_rooms import show_level_end_bonus_screen
 
         state = self._bonus_state()
         state.player_treascount = [2, 0, 0, 0]
@@ -1545,7 +1545,7 @@ class TestBonusScreenUsesThePerPlayerTally:
 
 
     def test_no_bonus_when_nobody_collected_anything(self):
-        from gauntpy.subsystems.exits import show_level_end_bonus_screen
+        from gauntpy.game.subsystems.treasure_rooms import show_level_end_bonus_screen
 
         state = self._bonus_state()
         state.player_treascount = [0, 0, 0, 0]
@@ -1725,7 +1725,7 @@ class TestRenderFrame:
         assert fb.get_pixel(450, 0) == VIEWPORT_BOX_COLOR
 
     def test_full_playfield_frame_places_the_existing_hud_beside_the_world(self):
-        from gauntpy.subsystems.display import init_alpha_color_ram
+        from gauntpy.game.subsystems.display import init_alpha_color_ram
 
         state = GameState()
         init_alpha_color_ram(state)
@@ -1815,7 +1815,7 @@ class TestTheLayerNoLongerDropsEffectsAndDissolves:
         palette nibble in ``mob_hpos``.
         """
         source = coords.pack_slot(*cls._SOURCE_CELL)
-        from gauntpy.subsystems.display import init_mob_color_ram
+        from gauntpy.game.subsystems.display import init_mob_color_ram
         if not any(state.mob_color_ram):
             init_mob_color_ram(state)
         x, y = coords.slot_to_pixels(source)
@@ -1835,7 +1835,7 @@ class TestTheLayerNoLongerDropsEffectsAndDissolves:
         return assets, fb
 
     def test_treasure_bag_pickup_popup_reaches_the_visible_mob_walk(self):
-        from gauntpy.subsystems.players import player_tile_interact
+        from gauntpy.game.subsystems.player_items import player_tile_interact
 
         state = GameState()
         state.level_players_active = 1
@@ -1879,7 +1879,7 @@ class TestTheLayerNoLongerDropsEffectsAndDissolves:
         step through the 0x578F2 cycle -- one slot per player plus the thief's.
         """
         from gauntpy.assets import TPORT_TRANSITION_PICTURES
-        from gauntpy.constants import SLOT_TPORT_ANIMS
+        from gauntpy.game.constants import SLOT_TPORT_ANIMS
 
         state = GameState()
         for offset, slot in enumerate(SLOT_TPORT_ANIMS):
@@ -1900,7 +1900,7 @@ class TestTheLayerNoLongerDropsEffectsAndDissolves:
         tiles wide for a score value, two for a bonus -- and the effect index
         has to keep them apart or the sprite is stamped from the wrong tiles.
         """
-        from gauntpy.subsystems.shots import _SCORE_POPUP_PICTURE_TABLE
+        from gauntpy.game.subsystems.shot_effects import _SCORE_POPUP_PICTURE_TABLE
 
         for index, picture in enumerate(_SCORE_POPUP_PICTURE_TABLE):
             expected_width = 3 if index < 0x0A else 2
@@ -1925,10 +1925,10 @@ class TestTheHeroDissolveIsDrawnToTheEnd:
     @staticmethod
     def _hero_state(character: int, picture: int):
         from gauntpy.assets import HERO_NAMES
-        from gauntpy.constants import Character
+        from gauntpy.game.constants import Character
 
         state = GameState()
-        from gauntpy.subsystems.display import (
+        from gauntpy.game.subsystems.display import (
             init_mob_color_ram, init_player_mob_palette,
         )
         init_mob_color_ram(state)
@@ -1953,7 +1953,7 @@ class TestTheHeroDissolveIsDrawnToTheEnd:
         return assets, fb, name
 
     def test_all_four_classes_dissolve_all_eight_frames(self):
-        from gauntpy.subsystems.players import _PLAYER_EXIT_PICTURE
+        from gauntpy.game.subsystems.player_animation import _PLAYER_EXIT_PICTURE
 
         assert len(_PLAYER_EXIT_PICTURE) == 32
         for character in range(4):
@@ -1971,7 +1971,7 @@ class TestTheHeroDissolveIsDrawnToTheEnd:
         """``_ANIM_TABLE_IDLE`` is ``anim_table_idle`` and every frame of
         it is in gex's hero data -- pinned so that stays true rather than
         quietly starting to depend on the fallback."""
-        from gauntpy.subsystems.players import _ANIM_TABLE_IDLE
+        from gauntpy.game.subsystems.player_animation import _ANIM_TABLE_IDLE
 
         for character in range(4):
             for frame in range(8):
@@ -1985,7 +1985,7 @@ class TestTheHeroDissolveIsDrawnToTheEnd:
     def test_without_the_size_word_the_dissolve_is_dropped_as_before(self):
         """The regression guard: the same frame, drawn by a provider that
         throws the MOB's size away, is skipped and leaves an empty screen."""
-        from gauntpy.subsystems.players import _PLAYER_EXIT_PICTURE
+        from gauntpy.game.subsystems.player_animation import _PLAYER_EXIT_PICTURE
 
         picture = _PLAYER_EXIT_PICTURE[2]          # Warrior dissolve frame 2
         assets, fb, _name = self._draw(0, picture, assets=_SizeBlindAssets())
@@ -2004,7 +2004,7 @@ class TestTheHeroDissolveIsDrawnToTheEnd:
         artwork -- a hero who turns into a block of garbage while teleporting
         would be worse than one who disappears.
         """
-        from gauntpy.subsystems.players import _PLAYER_INVISIBLE_PICTURE
+        from gauntpy.game.subsystems.player_animation import _PLAYER_INVISIBLE_PICTURE
 
         for character in range(4):
             assets, fb, _name = self._draw(character, _PLAYER_INVISIBLE_PICTURE)
@@ -2031,10 +2031,10 @@ class TestAWizardRendersAsAWizard:
     def _hero_state(character):
         from gex.heroes import HEROES
         from gauntpy.assets import HERO_NAMES
-        from gauntpy.constants import Character
+        from gauntpy.game.constants import Character
 
         state = GameState()
-        from gauntpy.subsystems.display import (
+        from gauntpy.game.subsystems.display import (
             init_mob_color_ram, init_player_mob_palette,
         )
         init_mob_color_ram(state)
@@ -2056,9 +2056,9 @@ class TestAWizardRendersAsAWizard:
         """The player-owned ROM selector, not a gex host hook, supplies the
         shared Wizard/Sorcerer tile before the MOB layer picks its palette."""
         from gauntpy.assets import AssetStore
-        from gauntpy.constants import Character
+        from gauntpy.game.constants import Character
         from gauntpy.render.mobs import sprite_kind
-        from gauntpy.subsystems.players import (
+        from gauntpy.game.subsystems.player_animation import (
             _ANIM_TABLE_IDLE,
             _PORT_DIR_TO_ROM_DIR,
             update_player_sprite,
@@ -2079,7 +2079,7 @@ class TestAWizardRendersAsAWizard:
 
     def test_the_drawn_hero_is_the_wizard_stamp_pixel_for_pixel(self):
         from gauntpy.assets import AssetStore
-        from gauntpy.constants import Character
+        from gauntpy.game.constants import Character
 
         store = AssetStore()
         state, slot, tile = self._hero_state(Character.WIZARD)
@@ -2093,7 +2093,7 @@ class TestAWizardRendersAsAWizard:
         expected = Framebuffer(240, 240)
         stamp = store.sprite(tile, kind="wizard", palette=0)
         assert (stamp.ptype, stamp.pnum) == ("wizard", 0)
-        from gauntpy.subsystems.display import mob_palette_rgba
+        from gauntpy.game.subsystems.display import mob_palette_rgba
         palette_rgba = mob_palette_rgba(
             state, state.mobs.hpos[slot] & 0x0F,
         )
@@ -2111,7 +2111,7 @@ class TestAWizardRendersAsAWizard:
 
     def test_shared_artwork_still_uses_the_live_wizard_palette(self):
         from gauntpy.assets import AssetStore
-        from gauntpy.constants import Character
+        from gauntpy.game.constants import Character
 
         store = AssetStore()
         state, _slot, tile = self._hero_state(Character.WIZARD)
@@ -2136,7 +2136,7 @@ class TestAWizardRendersAsAWizard:
     def test_the_other_three_classes_get_their_own_banks_too(self):
         from gex.heroes import HEROES
         from gauntpy.assets import HERO_NAMES, AssetStore
-        from gauntpy.constants import Character
+        from gauntpy.game.constants import Character
 
         store = AssetStore()
         for character in Character:
@@ -2371,7 +2371,7 @@ class TestHostShellInput:
 
     def test_gamepad_maps_stick_dpad_and_buttons_to_cabinet_word(self):
         from gauntpy.host.shell import HostShell
-        from gauntpy.subsystems.input import (
+        from gauntpy.game.subsystems.input import (
             JOY_DOWN, JOY_FIRE_BIT, JOY_LEFT, JOY_MAGIC_BIT,
         )
 

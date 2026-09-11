@@ -181,7 +181,8 @@ def _close_combat_state() -> GameState:
 
 
 def _shots_step(state: GameState, _frame: int) -> None:
-    from .game.subsystems.shots import resolve_shot_hit, shot_mob_collision
+    from .game.subsystems.shot_damage import resolve_shot_hit
+    from .game.subsystems.shot_collision import shot_mob_collision
 
     target = shot_mob_collision(state, pack_slot(10, 10), 0)
     if target >= 0:

@@ -1,15 +1,15 @@
-"""ROM-family ownership and compatibility without wrapper implementations."""
+"""ROM-family ownership, identity exports, and the legacy exit adapter."""
 
 import ast
 import inspect
 
 import pytest
 
-from gauntpy import playfield
-from gauntpy.constants import Character, PlayerStatus
-from gauntpy.state import GameState
+from gauntpy.game import playfield
+from gauntpy.game.constants import Character, MazeObjIds, PlayerStatus
+from gauntpy.game.state import GameState
 from gauntpy.game.subsystems import (
-    player_animation, player_names, player_transport, players, shots,
+    level_transitions, player_animation, player_names, player_transport, players, shots,
 )
 
 
@@ -19,17 +19,14 @@ from gauntpy.game.subsystems import (
         (
             player_names, players,
             (
-                "_secret_crc16", "secret_code_for", "secret_code_build",
+                "secret_code_for", "secret_code_build",
                 "secret_getname", "secret_name_entry_update", "highscore_check",
-                "name_entry_step_char", "_name_entry_initials",
-                "_name_entry_commit_pressed", "_name_entry_finish",
-                "player_death_sequence", "_name_entry_edit",
+                "name_entry_step_char", "player_death_sequence",
             ),
         ),
         (
             player_animation, players,
             (
-                "_rom_picture_table", "_player_animation_action",
                 "update_player_sprite", "update_player_sprites",
             ),
         ),
@@ -48,6 +45,26 @@ def test_compatibility_exports_are_the_owned_functions(owner, facade, names):
         assert name not in definitions, "a facade must not duplicate the ROM body"
 
 
+@pytest.mark.parametrize("arguments", ((), (0x123,), (0x123, 0x44)))
+def test_legacy_player_exit_adapter_preserves_optional_arguments(monkeypatch, arguments):
+    routine = level_transitions.player_exit_sequence
+    assert players.player_exit_sequence is not routine
+    for name in ("exit_mob_slot", "exit_type"):
+        assert inspect.signature(routine).parameters[name].default is inspect.Parameter.empty
+
+    calls = []
+    monkeypatch.setattr(
+        level_transitions, "player_exit_sequence",
+        lambda *args: calls.append(args),
+    )
+    state = GameState()
+    players.player_exit_sequence(state, 2, *arguments)
+
+    slot = arguments[0] if arguments else 0
+    exit_type = arguments[1] if len(arguments) == 2 else int(MazeObjIds.EXIT)
+    assert calls == [(state, 2, slot, exit_type)]
+
+
 @pytest.mark.parametrize(
     "name",
     (
@@ -57,10 +74,16 @@ def test_compatibility_exports_are_the_owned_functions(owner, facade, names):
     ),
 )
 def test_animation_tables_have_one_owner(name):
-    assert getattr(players, name) is getattr(player_animation, name)
     assert player_animation.update_player_sprite.__globals__[name] is getattr(
         player_animation, name,
     )
+    copied_tables = {
+        target.id
+        for node in ast.parse(inspect.getsource(players)).body
+        if isinstance(node, ast.Assign)
+        for target in node.targets if isinstance(target, ast.Name)
+    }
+    assert name not in copied_tables
 
 
 @pytest.mark.parametrize("module", (player_names, player_animation, playfield))

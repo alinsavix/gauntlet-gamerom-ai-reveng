@@ -117,11 +117,10 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     expected to be right on the very next rendered frame rather than on that
     player's turn in ``main_score_display``'s four-frame rotation.
 
-    So it drives WP-14's real latch: ``score``'s two draw routines write the
-    ``PanelField`` the renderer reads, and the ``player_redraw`` bits (0x904908)
-    are cleared because the draw the bits were asking for has just happened --
-    the ROM clears them in ``draw_player_score``/``draw_player_health`` for the
-    same reason.
+    ``score``'s draw routines write alpha RAM and update the ``PanelField``
+    shadow used by the port's redraw logic. Rendering reads alpha RAM, not that
+    shadow. The score/health redraw latches model ``player_redraw`` (0x904908)
+    and are cleared after the requested draw has happened.
     """
     from . import score
 

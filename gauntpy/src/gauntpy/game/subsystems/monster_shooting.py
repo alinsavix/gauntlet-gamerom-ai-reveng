@@ -5,10 +5,17 @@ from __future__ import annotations
 from ..constants import SLOT_DEMON_SHOTS, SLOT_LOBBER_SHOTS, MazeObjIds, PlayerPower
 from ..coords import POS_SHIFT, position_field
 from ..state import GameState
+from .shot_state import lobber_accumulator_seed, shot_cell, shot_picture, shot_velocity
 from .sound import sound_play as _sound_play
 from .monster_data import (
-    _DIR_DELTAS as _DIR_DELTAS,
-    _HPOS_FLAG_ATTACK as _HPOS_FLAG_ATTACK,
+    _DIR_DELTAS,
+    _HPOS_FLAG_ATTACK,
+)
+from .monster_state import (
+    _aim_direction,
+    _delta_units,
+    _monster_index,
+    _set_direction,
 )
 
 # Lobber-throw sound (§3.5).
@@ -71,14 +78,6 @@ def monster_find_and_shoot(state: GameState, slot: int, obj_type: int) -> None:
     (``eori #4`` at 0x41876/0x41AE2) -- except that demons and lobbers still
     take their shot first.
     """
-    from .monsters import (
-        _aim_direction as _aim_direction,
-        _delta_units as _delta_units,
-        _monster_index as _monster_index,
-        _oddangle_override as _oddangle_override,
-        _set_direction as _set_direction,
-    )
-
     index = _monster_index(obj_type)
     target = _find_target_player(state, slot)
     if target < 0:
@@ -113,10 +112,6 @@ def _lobber_throw(state: GameState, slot: int, direction: int,
     box, it just stands and faces.  A thrown rock is given the lead arc of
     0x419E4, not a straight direction step.
     """
-    from .monsters import (
-        monster_shooter_in_view as monster_shooter_in_view,
-    )
-
     adx, adv = abs(dx), abs(dv)
     if adx < _LOBBER_MIN_RANGE and adv < _LOBBER_MIN_RANGE:
         return direction ^ 4            # too close: turn away (0x41876)
@@ -141,10 +136,6 @@ def _demon_shoot(state: GameState, slot: int, direction: int,
     deltas within ``_DEMON_DIAG_SKEW`` of each other, so the demon only fires
     down a real 45-degree line.
     """
-    from .monsters import (
-        monster_shooter_in_view as monster_shooter_in_view,
-    )
-
     if not monster_shooter_in_view(state, slot):
         return False
     shot_slot = find_unused_shot(state, SLOT_DEMON_SHOTS)
@@ -203,10 +194,6 @@ def _find_target_player(state: GameState, slot: int) -> int:
     strictly closer one, so an exact tie is won by the **higher** player index;
     scanning forwards with ``<=`` is the same rule.
     """
-    from .monsters import (
-        _delta_units as _delta_units,
-    )
-
     it = state.player_it
     if (it != 0xFFFF and 0 <= it < len(state.players)
             and state.players[it].active
@@ -306,7 +293,7 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
                         shot_slot: int, lead: tuple[int, int] | None = None) -> None:
     """0x490DC -- arm a projectile in one of the fixed monster channels.
 
-    Seeds everything WP-7's mover reads: the channel cadence timer, the
+    Seeds everything the projectile mover reads: the channel cadence timer, the
     animation/lifetime counter, the owner cell, the ROM-compass direction, the
     spawn position with its per-direction muzzle offset, the projectile's
     opening frame and its place in the depth chain.  ``lead`` carries the
@@ -319,8 +306,6 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
     packed sprite size, not a pixel offset.  The muzzle offsets are position
     words in the hardware's own axes, so they simply add.
     """
-    from .shots import lobber_accumulator_seed, shot_velocity
-
     channel = shot_slot - 1                    # shooter id, ROM's shot slot - 1
     rom_dir = (direction + 2) & 0x07
 
@@ -328,8 +313,8 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
     state.mobs.hpos[slot] |= _HPOS_FLAG_ATTACK          # 0x4910E
     state.shot_anim_lifetime_counter[channel] = _SHOT_COUNTER_RELOAD[channel]
     state.shot_lifetime[shot_slot] = _SHOT_COUNTER_RELOAD[channel]
-    # 0x4915C stores the direction WP-7 reads back out of ``shot_direction``,
-    # and everything that module indexes with it -- ``shot_velocity_x/y``
+    # 0x4915C stores the direction the projectile mover reads from ``shot_direction``,
+    # and everything the shot helpers index with it -- ``shot_velocity_x/y``
     # (0x576E2/0x57792), the projectile picture tables and ``_direction_of``'s
     # own recovery -- is on the ROM compass, not gauntpy's.
     state.shot_direction[channel] = rom_dir
@@ -361,9 +346,9 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
         vec_h, vec_v = lead
         state.lobber_shot_vec_h[shot_slot - 9] = vec_h
         state.lobber_shot_vec_v[shot_slot - 9] = vec_v
-        # 0x49216/0x4922A -- WP-7 owns the accumulator/MOB-word relationship.
+        # 0x49216/0x4922A -- shot_state owns the accumulator/MOB-word relationship.
         lobber_accumulator_seed(state, channel)
-        # WP-7 moves shots by whole pixels, so round rather than truncate: a
+        # The pixel deltas round rather than truncate, so a
         # lob that leads by 1.5 px/frame otherwise degenerates to 1.
         state.shot_dx[shot_slot] = _round_div(vec_h, 128)
         state.shot_dy[shot_slot] = _round_div(vec_v, 128)
@@ -379,8 +364,6 @@ def _depth_place_shot(state: GameState, shot_slot: int) -> None:
     from cell 0 -- the top-left corner of the maze -- and destroys the shot on
     the frame after it was fired.
     """
-    from .shots import shot_cell     # WP-7 owns the shot cell geometry
-
     state.mobs.unlink(shot_slot)
     state.mobs.insert(shot_slot, depth_key=shot_cell(state, shot_slot))
 
@@ -401,7 +384,7 @@ def _spawn_shot_picture(state: GameState, channel: int) -> int:
     freshly stored reload -- and neither consults the shot's strength tier,
     which the H word written just above has in any case cleared.
     """
-    from .shots import shot_picture   # WP-7 owns the three ROM picture tables
+
 
     counter = (_SHOT_COUNTER_RELOAD[channel]
                if channel + 1 in SLOT_LOBBER_SHOTS else 0)
@@ -420,9 +403,7 @@ def _lobber_lead(state: GameState, slot: int, direction: int, target: int,
     the separation, less the muzzle offset -- so a lobber leads a running hero
     and drops the rock where they are heading.
     """
-    from .monster_movement import (
-        _s16 as _s16,
-    )
+    from .monster_state import _s16
 
     p = state.players[target]
     speed_row = ((p.character & 0x03)
@@ -442,3 +423,59 @@ def _lobber_lead(state: GameState, slot: int, direction: int, target: int,
     vec_h -= (_LOBBER_SHOT_SPAWN_H[rom_dir] >> 8) * _LEAD_SPAWN_SCALE
     vec_v -= (_LOBBER_SHOT_SPAWN_V[rom_dir] >> 8) * _LEAD_SPAWN_SCALE
     return _s16(vec_h), _s16(vec_v)
+
+
+# monster_shooter_in_view compares the *high bytes*, i.e. 2-pixel units, and
+# rejects the outer margin of that same box.
+_VIEW_H_MIN, _VIEW_H_MAX = 0x06, 0x79
+_VIEW_V_MIN, _VIEW_V_MAX = 0x08, 0x7F
+
+# monster_level_flag_overrides (0x40E02) -- seven longwords, one per family
+# slot, of which only the high byte is used: monsters_everything copies it over
+# the high byte of that family's speed longword for every set bit of
+# ``level_flags & 0x73`` (0x40F34-0x40F58).  The byte is *not* a speed; it
+# selects the aiming routine at 0x41810, which is why the LFLAG1 bits are named
+# ODDANGLE_* -- every non-zero value restricts the creature to diagonals.
+#   0x80  quadrant-with-threshold picker (0x418EA)
+#   0xA0  round the cardinal clockwise to a diagonal (0x418B8)
+#   0xC0  round the cardinal counter-clockwise to a diagonal (0x41882)
+# Demons (bit 2) and lobbers (bit 3) are masked out of 0x73 and their table
+# entries are zero, so they can never be odd-angled.
+_ODDANGLE_LEVEL_FLAG_MASK = 0x73
+_ODDANGLE_OVERRIDE = {
+    int(MazeObjIds.MONST_GHOST): (0x01, 0x80),        # 0x40E02
+    int(MazeObjIds.MONST_GRUNT): (0x02, 0xC0),        # 0x40E06
+    int(MazeObjIds.MONST_DEMON): (0x04, 0x00),        # 0x40E0A (masked out)
+    int(MazeObjIds.MONST_LOBBER): (0x08, 0x00),       # 0x40E0E (masked out)
+    int(MazeObjIds.MONST_SORC): (0x10, 0xA0),         # 0x40E12
+    int(MazeObjIds.MONST_AUX_GRUNT): (0x20, 0xA0),    # 0x40E16
+    int(MazeObjIds.MONST_DEATH): (0x40, 0x80),        # 0x40E1A
+}
+
+def _oddangle_override(state: GameState, obj_type: int) -> int:
+    """The family's override byte, or 0 when its ODDANGLE flag is clear.
+
+    ``monsters_everything`` copies ``monster_level_flag_overrides[family]`` over
+    the family's speed longword for every set bit of ``level_flags & 0x73``
+    (0x40F34-0x40F58); ``monster_find_and_shoot`` then reads it back at 0x41814.
+    """
+    entry = _ODDANGLE_OVERRIDE.get(obj_type)
+    if entry is None:
+        return 0
+    bit, value = entry
+    if not (state.level_flags & _ODDANGLE_LEVEL_FLAG_MASK & bit):
+        return 0
+    return value
+
+
+def monster_shooter_in_view(state: GameState, slot: int) -> bool:
+    """``monster_shooter_in_view`` (0x41B52) -- the tighter shooting box.
+
+    Byte comparisons against the same origins, so the units are 2 pixels and
+    the arithmetic wraps once per 512-pixel maze.
+    """
+    du = ((state.mobs.hpos[slot] >> 8) - (state.monster_cull_h_origin >> 8)) & 0xFF
+    if du <= _VIEW_H_MIN or du >= _VIEW_H_MAX:
+        return False
+    dv = ((state.mobs.vpos[slot] >> 8) - (state.monster_cull_v_origin >> 8)) & 0xFF
+    return not (dv <= _VIEW_V_MIN or dv >= _VIEW_V_MAX)

@@ -123,7 +123,7 @@ def test_a_full_crosscheck_would_activate_here():
     """Once tests/goldens/mame_trace.csv exists (a real export, forced to
     GOLDEN_SEED per PLAN.md §21), this replays the same scripted run our
     golden trace uses and diffs every frame against MAME."""
-    from gauntpy.mainloop import tick
+    from gauntpy.game.mainloop import tick
 
     state = build_scripted_state()
     assert state.rng.seed == GOLDEN_SEED

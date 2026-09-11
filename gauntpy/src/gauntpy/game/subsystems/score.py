@@ -980,7 +980,7 @@ def _advance_thief_transition(state: GameState) -> None:
     elif step == _TRANSITION_MOVE:
         # 0x47218: re-stamp the fixed thief animation channel (25 + 4) at the
         # destination through the one implementation of handle_tport.
-        from .players import handle_tport
+        from .player_transport import handle_tport
         handle_tport(state, state.thief_tport_dest, 4)
     elif step == _TRANSITION_RESTORE:
         # 0x47236: put the saved picture back at the new position.
@@ -1040,7 +1040,7 @@ def _advance_player_transition(state: GameState, player_index: int) -> None:
         panel_saved[player_index] = state.mobs.picture[player.mob_slot]
         state.mobs.picture[player.mob_slot] = 0x1709
     elif step == _TRANSITION_MOVE:
-        from .players import tport_player_move
+        from .player_transport import tport_player_move
         tport_player_move(state, player_index)
     elif step == _TRANSITION_RESTORE:
         state.mobs.picture[player.mob_slot] = panel_saved[player_index]
@@ -1102,18 +1102,15 @@ def main_score_display(state: GameState) -> None:
 
     Called every frame.  Skips TITLE (0xFFFE) and SCORES (0xFFFF) screens.
     Updates one player per frame (``frame_counter & 3``), redrawing only the
-    fields whose update conditions are met, and latches each redraw into the
-    ``InfoPanel`` the renderer reads.
+    fields whose update conditions are met. Draws write alpha RAM and update
+    the ``InfoPanel`` shadow; rendering consumes alpha RAM directly.
 
     **The redraw condition.** The ROM's own condition is ``player_redraw``
-    (0x904908) bit 0 for score and bit 1 for health. ``setup_infopanel``
-    (0x452D0, in ``players.py``) already sets both, but the individual value
-    writers (``player_add_score`` and the coin/health paths) do not yet, so the
-    flags are honoured *and* the latched value is compared against the live
-    one. The flag being set and the value having changed are the same condition
-    on real hardware, and the comparison keeps the panel truthful either way.
-    It does not weaken the ROM cadence -- a change is still only picked up on
-    this player's own turn in the four-frame rotation.
+    (0x904908) bit 0 for score and bit 1 for health. The port also compares
+    latched values because not every producer writes those latches yet
+    (ISSUES S-133). ``setup_infopanel`` performs a synchronous draw and clears
+    the serviced latches. The fallback preserves the four-frame redraw cadence,
+    but is a compatibility compensation, not evidence of the ROM's condition.
     """
     # Gate: TITLE and SCORES attract screens do not show the in-game HUD.
     if state.game_mode in (GameMode.TITLE, GameMode.SCORES):

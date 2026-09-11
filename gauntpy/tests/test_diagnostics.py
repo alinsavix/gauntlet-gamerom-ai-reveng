@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from gauntpy.constants import Character, GameMode, MazeObjIds, PlayerStatus
-from gauntpy.coords import encode_hpos, encode_vpos_at_y, pack_slot
+from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
+from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.host.diagnostics import (
     DEBUG_PAGES,
     DEBUG_FONT_SIZE,
@@ -18,7 +18,7 @@ from gauntpy.host.diagnostics import (
     derive_debug_events,
     render_debug_panel,
 )
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 
 
 def _diagnostic_state() -> GameState:

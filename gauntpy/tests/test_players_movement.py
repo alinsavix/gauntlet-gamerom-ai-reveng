@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from gauntpy.constants import (
+from gauntpy.game.constants import (
     FIRST_PLAYABLE_SLOT,
     Character,
     GameMode,
@@ -22,21 +22,24 @@ from gauntpy.constants import (
     PlayerPower,
     PlayerStatus,
 )
-from gauntpy.coords import encode_vpos_at_y, hpos_x, native_v, vpos_y
-from gauntpy.state import GameState, Player
-from gauntpy.subsystems import players as gp
-from gauntpy.subsystems.players import (
+from gauntpy.game.coords import encode_vpos_at_y, hpos_x, native_v, vpos_y
+from gauntpy.game.state import GameState, Player
+from gauntpy.game.subsystems import player_items, player_movement, player_transport
+from gauntpy.game.subsystems import players as gp
+from gauntpy.game.subsystems.player_data import (
     _NO_MOVE,
     _VERTICAL_BOUNDARY,
     _WALL_PICTURE,
-    corner_squeeze_geometry,
+)
+from gauntpy.game.subsystems.player_transport import corner_squeeze_geometry
+from gauntpy.game.subsystems.mob_probes import (
     mob_probe_down,
     mob_probe_left,
     mob_probe_right,
     mob_probe_up,
-    player_try_move,
 )
-from gauntpy.subsystems import input as gin
+from gauntpy.game.subsystems.player_movement import player_try_move
+from gauntpy.game.subsystems import input as gin
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -97,8 +100,8 @@ def test_pushing_a_movable_wall_into_an_exit_wins_trick_ten():
         obj_type=int(MazeObjIds.EXIT),
     )
 
-    assert gp._push_movable_wall(
-        state, 2, wall, gp._JOY_RIGHT, vertical=False,
+    assert player_movement._push_movable_wall(
+        state, 2, wall, player_movement._JOY_RIGHT, vertical=False,
     )
     assert state.secret_player == 2
     assert state.mobs.picture[wall] == 0
@@ -123,8 +126,8 @@ def test_pushing_a_movable_wall_into_a_transporter_dissolves_it():
         obj_type=int(MazeObjIds.TRANSPORTER),
     )
 
-    assert gp._push_movable_wall(
-        state, 0, wall, gp._JOY_RIGHT, vertical=False,
+    assert player_movement._push_movable_wall(
+        state, 0, wall, player_movement._JOY_RIGHT, vertical=False,
     )
     assert state.mobs.picture[wall] == 0
     assert state.secret_player == -1
@@ -359,7 +362,7 @@ class TestPlayerTryMoveWallCollision:
         ) == 0xF0
 
     def test_movable_wall_pushes_one_pixel_with_the_player(self):
-        from gauntpy.constants import MazeObjIds
+        from gauntpy.game.constants import MazeObjIds
         state, pi = self._player_at_slot((5 << 5) | 5)
         slot = (5 << 5) | 6
         state.mobs.create(slot, tile=0x20F6, hpos=92 << 7,
@@ -720,9 +723,9 @@ class TestCharacterFightTables:
     """mob_collision_test 0x521AE-0x52438 table selection."""
 
     def test_fight_tables_match_the_rom(self):
-        assert gp._HAND_POWER == (2, 2, 1, 1, 3, 3, 2, 2)
-        assert gp._HAND_RANDOM == (0, 0, 0, 2)
-        assert gp._GENERATOR_FIGHT_POWER == (3, 2, 0, 0, 4, 3, 0, 1)
+        assert player_movement._HAND_POWER == (2, 2, 1, 1, 3, 3, 2, 2)
+        assert player_movement._HAND_RANDOM == (0, 0, 0, 2)
+        assert player_movement._GENERATOR_FIGHT_POWER == (3, 2, 0, 0, 4, 3, 0, 1)
 
     def test_extra_fight_power_selects_the_second_character_row(self):
         for character, powered, expected_damage in (
@@ -749,7 +752,7 @@ class TestCharacterFightTables:
                 "getrandom": staticmethod(lambda _bound: 0),
             })()
 
-            gp._player_fight_collision(state, 0, slot)
+            player_movement._player_fight_collision(state, 0, slot)
 
             remaining = (0x0B - expected_damage) & 0x0F
             if remaining < 9:
@@ -846,7 +849,7 @@ class TestFloorTriggers:
             (4, 9): int(MazeObjIds.TILE_TRAP1),
         })
 
-        assert gp.player_tile_interact(state, trigger, 0) == -1
+        assert player_items.player_tile_interact(state, trigger, 0) == -1
 
         assert player.stundelay == 0
         assert all(state.mobs.picture[slot] == 0 for slot in (
@@ -872,7 +875,7 @@ class TestFloorTriggers:
             obj_type=int(MazeObjIds.TILE_STUN), link_into_chain=False,
         )
 
-        assert gp.player_tile_interact(state, tile, 0) == -1
+        assert player_items.player_tile_interact(state, tile, 0) == -1
 
         assert player.stundelay == delay
         assert state.death_touch_timer[0] == -delay
@@ -933,7 +936,7 @@ class TestMobCollisionDispatch:
         )
         state.player_fighting_dir[0] = 1
 
-        assert gp._player_fight_collision(state, 0, slot) == 0
+        assert player_movement._player_fight_collision(state, 0, slot) == 0
         assert state.mobs.picture[slot] != 0
         assert state.players[0].score == 0
 
@@ -946,7 +949,7 @@ class TestMobCollisionDispatch:
             vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_SUPERSORC),
         )
 
-        assert gp._player_fight_collision(state, 0, slot) == 0
+        assert player_movement._player_fight_collision(state, 0, slot) == 0
         assert state.mobs.picture[slot] != 0
         assert state.mobs.hpos[slot] & 0x30 == 0x20
 
@@ -960,7 +963,7 @@ class TestMobCollisionDispatch:
         )
         state.player_fighting_dir[0] = 1
 
-        assert gp._player_fight_collision(state, 0, slot) == 1
+        assert player_movement._player_fight_collision(state, 0, slot) == 1
         assert state.mobs.hpos[slot] & 0x0F == 0x0B
         assert not state.mobs.hpos[slot] & 0x10
         assert state.players[0].score == 0
@@ -976,7 +979,7 @@ class TestMobCollisionDispatch:
         state.player_fighting_dir[0] = 1
         seed_before = state.rng.seed
 
-        gp._player_fight_collision(state, 0, slot)
+        player_movement._player_fight_collision(state, 0, slot)
 
         assert state.rng.seed != seed_before
 
@@ -991,7 +994,7 @@ class TestMobCollisionDispatch:
             vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_GRUNT),
         )
 
-        assert gp._player_fight_collision(state, 0, slot) == 1
+        assert player_movement._player_fight_collision(state, 0, slot) == 1
         assert state.player_fighting_dir[0] != 0
 
     def test_two_pixel_frame_latches_acid_only_once(self):
@@ -1013,7 +1016,7 @@ class TestMobCollisionDispatch:
         assert player.stundelay == 0x20
         assert state.mobs.picture[acid] != 0
         assert player.mob_slot == (5 << 5) | 5
-        assert gp._player_record_cell(state, 0) == player.mob_slot
+        assert player_movement._player_record_cell(state, 0) == player.mob_slot
 
     def test_diagonal_does_not_invent_horizontal_flank_contact(self):
         state = GameState(game_mode=GameMode.NORMAL)
@@ -1048,7 +1051,7 @@ class TestMobCollisionDispatch:
         state.thief_current_pos = slot
         state.player_fighting_dir[0] = 1
 
-        assert gp._player_fight_collision(state, 0, slot) == -1
+        assert player_movement._player_fight_collision(state, 0, slot) == -1
         assert state.mobs.obj_type(slot) != int(MazeObjIds.PLAYERSTART)
         assert state.thief_mob_slot == 0
         assert state.players[0].score == 500
@@ -1140,7 +1143,7 @@ class TestCornerSqueezeGeometry:
         assert state.player_tport_type[0] == 0
         assert state.player_tile_or_tport_dest[0] == landing
 
-        gp.tport_player_move(state, 0)
+        player_transport.tport_player_move(state, 0)
 
         assert player.mob_slot == landing
         assert state.mobs.picture[first] == _WALL_PICTURE
@@ -1181,7 +1184,7 @@ class TestCornerSqueezeGeometry:
         state.movement_type = 2
 
         player_try_move(state, 0, gin.JOY_RIGHT, 0)
-        gp.tport_player_move(state, 0)
+        player_transport.tport_player_move(state, 0)
 
         assert player.mob_slot == key
         assert player.keysnum == 1
@@ -1252,7 +1255,7 @@ class TestCornerSqueezeGeometry:
 
 class TestThiefRouteTracking:
     def test_crossing_cell_records_victim_route(self):
-        from gauntpy.subsystems.thief import path_grid_get_direction
+        from gauntpy.game.subsystems.thief import path_grid_get_direction
 
         state = GameState()
         start = (10 << 5) | 10
@@ -1493,7 +1496,7 @@ class TestPerCharacterSpeed:
     """ROM 0x80/0x100 are 1 and 2 px in the native position words."""
 
     def _step_right(self, character: int, powers: int = 0) -> int:
-        from gauntpy.constants import Character  # noqa: F401
+        from gauntpy.game.constants import Character  # noqa: F401
         state = GameState()
         player = _active_player_at(state, 0, (10 << 5) | 10)
         player.character = character
@@ -1520,10 +1523,10 @@ class TestPlayerSpeedTables:
     """main_move_players 0x4A920-0x4A962 builds D3 from two parallel tables."""
 
     def test_tables_match_the_rom_image(self):
-        assert gp._PLAYER_SPEED_NORMAL == [
+        assert player_movement._PLAYER_SPEED_NORMAL == [
             0x80, 0x80, 0x80, 0x100, 0x100, 0x100, 0x100, 0x100,
         ]
-        assert gp._PLAYER_ANIM_RATE == [1, 3, 1, 0, 0, 0, 0, 1]
+        assert player_movement._PLAYER_ANIM_RATE == [1, 3, 1, 0, 0, 0, 0, 1]
 
     def test_warrior_boosts_on_odd_frames(self):
         """anim_rate 1 & frame_counter -> +0x80 on every odd frame."""
@@ -1531,9 +1534,9 @@ class TestPlayerSpeedTables:
         p = state.players[0]
         p.character = int(Character.WARRIOR)
         state.frame_counter = 0
-        assert gp._player_speed_units(state, p) == 0x80
+        assert player_movement._player_speed_units(state, p) == 0x80
         state.frame_counter = 1
-        assert gp._player_speed_units(state, p) == 0x100
+        assert player_movement._player_speed_units(state, p) == 0x100
 
     def test_valkyrie_boosts_on_three_frames_in_four(self):
         state = GameState()
@@ -1542,7 +1545,7 @@ class TestPlayerSpeedTables:
         boosted = 0
         for frame in range(4):
             state.frame_counter = frame
-            if gp._player_speed_units(state, p) == 0x100:
+            if player_movement._player_speed_units(state, p) == 0x100:
                 boosted += 1
         assert boosted == 3          # anim_rate 3 masks frames 1, 2, 3
 
@@ -1552,26 +1555,26 @@ class TestPlayerSpeedTables:
         p.character = int(Character.ELF)
         for frame in range(8):
             state.frame_counter = frame
-            assert gp._player_speed_units(state, p) == 0x100
+            assert player_movement._player_speed_units(state, p) == 0x100
 
     def test_speed_power_swaps_the_halves(self):
         """With POWER_SPEED only the Elf keeps a non-zero anim rate."""
         state = GameState()
         p = state.players[0]
-        p.powers = gp._POWER_SPEED
+        p.powers = player_movement._POWER_SPEED
         state.frame_counter = 1
         p.character = int(Character.WARRIOR)
-        assert gp._player_speed_units(state, p) == 0x100
+        assert player_movement._player_speed_units(state, p) == 0x100
         p.character = int(Character.ELF)
-        assert gp._player_speed_units(state, p) == 0x180
+        assert player_movement._player_speed_units(state, p) == 0x180
 
     def test_special_mazes_run_everyone_at_converted_0x100(self):
         state = GameState()
-        state.mazenum_current = gp._SPECIAL_MAZE_FIRST
+        state.mazenum_current = player_movement._SPECIAL_MAZE_FIRST
         p = state.players[0]
         p.character = int(Character.WARRIOR)
         state.frame_counter = 1
-        assert gp._player_speed_units(state, p) == 0x100
+        assert player_movement._player_speed_units(state, p) == 0x100
 
     def test_two_pixel_step_cannot_stop_inside_a_wall_and_block_sliding(self):
         state = GameState(game_mode=GameMode.NORMAL)

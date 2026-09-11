@@ -80,8 +80,12 @@ these same names. `ROM_FUNCTION_AUDIT.csv` points each direct Python port at
 the selected symbol.
 
 Canonical implementation paths are now under `gauntpy.game`; routine-family
-extraction changes ownership, not ROM names. The older paths alias those
-modules or reexport the same functions. The crosswalk names the actual owner,
+extraction changes ownership, not ROM names. Larger game subsystem modules
+retain explicitly listed public identity reexports, but private helpers are
+not compatibility APIs and the old module-path aliases are removed.
+Internal imports name the defining owner even when calls cross subsystem
+families; extracted families do not import their old facade.
+The crosswalk names the actual owner,
 including `score.player_add_score_with_mult` and
 `player_transport.tport_find_id`, rather than their former duplicate bodies.
 

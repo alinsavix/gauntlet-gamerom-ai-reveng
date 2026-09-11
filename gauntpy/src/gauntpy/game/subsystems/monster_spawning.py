@@ -6,13 +6,29 @@ from ..constants import SLOT_DEMON_SHOTS, MazeObjIds
 from ..coords import POS_SHIFT, encode_hpos, encode_vpos_at_y, native_v, replace_position
 from ..state import GameState
 from .monster_data import (
-    _BLANK_PICTURE as _BLANK_PICTURE,
-    _DIR_DELTAS as _DIR_DELTAS,
-    _HPOS_FLAG_ATTACK as _HPOS_FLAG_ATTACK,
-    _HPOS_FLAG_MOVING as _HPOS_FLAG_MOVING,
-    _MAZEOBJ_HSIZE_TIER_TBL as _MAZEOBJ_HSIZE_TIER_TBL,
-    _OVERLAP as _OVERLAP,
-    _SOFTWARE_MOB_BIAS as _SOFTWARE_MOB_BIAS,
+    _BLANK_PICTURE,
+    _DIR_DELTAS,
+    _HPOS_FLAG_ATTACK,
+    _HPOS_FLAG_MOVING,
+    _MAZEOBJ_HSIZE_TIER_TBL,
+    _OVERLAP,
+    _SOFTWARE_MOB_BIAS,
+)
+from .monster_shooting import (
+    _find_target_player,
+    find_unused_shot,
+    monster_create_shot,
+)
+from .monster_state import (
+    _aim_direction,
+    _anim_add_high,
+    _anim_advance,
+    _delta_units,
+    _get_direction,
+    _s16,
+    _set_direction,
+    _signed_byte,
+    monster_update_anim_tile,
 )
 
 # Spawn probability out of 32 (§3.4).  ``monster_spawn_probability_table``
@@ -212,10 +228,6 @@ def _spawn_probability(state: GameState) -> int:
     the signed ``monster_spawn_probability_bonus`` byte and capped at twice the
     level number on every level but 1 (0x40F82-0x40F9E).
     """
-    from .monsters import (
-        _signed_byte as _signed_byte,
-    )
-
     if state.frame_overflow:
         return 0
     idx = ((state.game_settings & 0xE0) >> 3) + state.level_players_active - 1
@@ -331,10 +343,6 @@ def tile_occupancy_test(state: GameState, slot: int) -> bool:
     words span exactly one maze in 16 bits, so the subtraction wraps at the
     seam on its own.
     """
-    from .monster_movement import (
-        _s16 as _s16,
-    )
-
     if not _OCCUPANCY_MIN_SLOT < slot < _OCCUPANCY_MAX_SLOT:
         return False
     if _rendered_occupant(state, slot)[1]:
@@ -431,12 +439,6 @@ def _supersorc_dispatch(state: GameState, slot: int, frame_word: int) -> None:
     down a demon shot channel, each phase released by a wrap of the same
     animation counter every other family uses.
     """
-    from .monsters import (
-        _anim_add_high as _anim_add_high,
-        _anim_advance as _anim_advance,
-        monster_update_anim_tile as monster_update_anim_tile,
-    )
-
     hpos = state.mobs.hpos[slot]
     moving = hpos & _HPOS_FLAG_MOVING
     attack = hpos & _HPOS_FLAG_ATTACK
@@ -481,15 +483,6 @@ def _supersorc_dispatch(state: GameState, slot: int, frame_word: int) -> None:
 
 def _supersorc_shoot(state: GameState, slot: int) -> None:
     """0x41142 -- the Super Sorcerer borrows a demon channel for its bolt."""
-    from .monster_shooting import (
-        find_unused_shot as find_unused_shot,
-        monster_create_shot as monster_create_shot,
-    )
-    from .monsters import (
-        _anim_add_high as _anim_add_high,
-        _get_direction as _get_direction,
-    )
-
     shot_slot = find_unused_shot(state, SLOT_DEMON_SHOTS)
     if shot_slot is None:
         _anim_add_high(state, slot, 0x80)       # 0x4114C: try again sooner
@@ -512,15 +505,6 @@ def supersorc_place(state: GameState, slot: int) -> int | None:
     the player and returns its new slot; otherwise it stays put and returns
     None.
     """
-    from .monster_shooting import (
-        _find_target_player as _find_target_player,
-    )
-    from .monsters import (
-        _aim_direction as _aim_direction,
-        _delta_units as _delta_units,
-        _set_direction as _set_direction,
-    )
-
     start = state.getrandom(4)
     for i in range(4):
         pi = (start + i) & 3
@@ -562,10 +546,6 @@ def _supersorc_candidate(state: GameState, slot: int, prow: int, pcol: int,
     The column wraps (``andi #0x1F`` at 0x5FE60) while the row is a hard bound:
     the slot has to stay in [0x20, 0x400).
     """
-    from .monsters import (
-        _cell_blocked as _cell_blocked,
-    )
-
     step_x, step_y = _DIR_DELTAS[direction]
     r, c = prow, pcol
     for _ in range(run):
@@ -587,10 +567,9 @@ def _supersorc_candidate(state: GameState, slot: int, prow: int, pcol: int,
 def _supersorc_too_crowded(state: GameState, dest: int, self_slot: int) -> bool:
     """True if another MOB sits within the proximity box of ``dest``.
 
-    The ROM walks the eight neighbouring cells (``spawn_candidate_*_delta``,
-    0x578A2/0x578B2) and tests whichever of them hold a picture; every MOB
-    close enough to matter is in one of those cells, so the depth-chain scan
-    here reaches the same set.
+    Walk the eight neighbouring cells (``spawn_candidate_*_delta``,
+    0x578A2/0x578B2) and test whichever of them hold a picture, excluding the
+    relocating creature's own record.
     """
     dest_h = (((dest & 0x1F) * 16 - 4) << POS_SHIFT) & 0xFFFF
     dest_v = native_v((dest >> 5) * 16) << POS_SHIFT
@@ -620,10 +599,6 @@ def _supersorc_relocate(state: GameState, slot: int, dest: int,
     0x5FF2C keeps the low six bits of both position words -- the flags and
     palette/tier or size fields -- and only rewrites the cell part.
     """
-    from .monsters import (
-        _set_direction as _set_direction,
-    )
-
     if dest == slot:
         _set_direction(state, slot, direction)
         return
@@ -642,3 +617,12 @@ def _supersorc_relocate(state: GameState, slot: int, dest: int,
         low_v, encode_vpos_at_y(y),
     )
     _set_direction(state, dest, direction)
+
+
+#: 0x44A76 -- ``attract_demo_init`` loads ``monster_generation_retry_timer``.
+GENERATOR_RETRY_RELOAD = 4
+
+
+def _cell_blocked(state: GameState, slot: int) -> bool:
+    """True when a cell already holds a wall, object, or another MOB."""
+    return state.mobs.is_occupied(slot)

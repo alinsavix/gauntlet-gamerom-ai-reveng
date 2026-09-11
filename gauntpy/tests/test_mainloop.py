@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from gauntpy import mainloop
-from gauntpy.constants import GameMode
-from gauntpy.mainloop import check_frame_overflow, game_frame, tick
-from gauntpy.state import GameState
+from gauntpy.game import mainloop
+from gauntpy.game.constants import GameMode
+from gauntpy.game.mainloop import check_frame_overflow, game_frame, tick
+from gauntpy.game.state import GameState
 
 CONTRACTS = Path(__file__).resolve().parents[2] / "doc" / "generated" / "main_loop_contracts.csv"
 

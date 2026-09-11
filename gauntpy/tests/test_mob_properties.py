@@ -19,11 +19,11 @@ import random
 
 import pytest
 
-from gauntpy import coords
-from gauntpy.constants import NULL_SLOT, NUM_MOB_SLOTS, GameMode, MazeObjIds
-from gauntpy.mob import MobTable
-from gauntpy.state import GameState, Player
-from gauntpy.subsystems.session import coincheck
+from gauntpy.game import coords
+from gauntpy.game.constants import NULL_SLOT, NUM_MOB_SLOTS, GameMode, MazeObjIds
+from gauntpy.game.mob import MobTable
+from gauntpy.game.state import GameState, Player
+from gauntpy.game.subsystems.session import coincheck
 
 SEEDS = [1, 2, 3, 17, 12345]
 

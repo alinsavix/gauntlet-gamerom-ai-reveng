@@ -13,10 +13,10 @@ from collections import deque
 
 import pytest
 
-from gauntpy import maze as gm
-from gauntpy.constants import FIRST_PLAYABLE_SLOT, GameMode, MazeObjIds
-from gauntpy.coords import POS_SHIFT, decode_hpos, decode_vpos_at_y, pack_slot
-from gauntpy.state import GameState
+from gauntpy.game import maze as gm
+from gauntpy.game.constants import FIRST_PLAYABLE_SLOT, GameMode, MazeObjIds
+from gauntpy.game.coords import POS_SHIFT, decode_hpos, decode_vpos_at_y, pack_slot
+from gauntpy.game.state import GameState
 
 from gex.constants import LFLAG3_EXIT_MOVES, MAX_MAZE_NUM
 from gex.roms import SLAPSTIC_ROMS, _rom_dir
@@ -41,10 +41,11 @@ requires_roms = pytest.mark.skipif(
 
 @requires_roms
 def test_first_level_ordinary_food_heals_and_is_not_poison():
-    from gauntpy.constants import GameMode, PlayerStatus
-    from gauntpy.state import GameState
-    from gauntpy.subsystems.players import (
-        _POISONED_FOOD_PICTURE, player_tile_interact,
+    from gauntpy.game.constants import GameMode, PlayerStatus
+    from gauntpy.game.state import GameState
+    from gauntpy.game.subsystems.player_items import (
+        _POISONED_FOOD_PICTURE,
+        player_tile_interact,
     )
 
     state = GameState(game_mode=GameMode.NORMAL, levelnum_current=1)
@@ -165,7 +166,7 @@ class TestPostDecodeSetup:
     def test_trapslocal_limits_setup_removal_to_near_screen_cells(
         self, monkeypatch,
     ):
-        from gauntpy.subsystems import dragon
+        from gauntpy.game.subsystems import dragon
 
         state = self._trap_group_state()
         state.level_flags_3 = 0x10
@@ -1000,7 +1001,7 @@ class TestLoadLevel:
         run of seeds every one of the four mirror combinations shows up. If
         placement ever stopped consulting them this would collapse to one.
         """
-        from gauntpy.rng import GameRandom
+        from gauntpy.game.rng import GameRandom
 
         combinations = set()
         for seed in range(40):
@@ -1074,7 +1075,7 @@ class TestLoadLevelExitScan:
                 state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
                 for slot in exits
             )
-            from gauntpy.playfield_vram import EXIT_SETTLED_DESC, read_tile_descriptor
+            from gauntpy.game.playfield_vram import EXIT_SETTLED_DESC, read_tile_descriptor
 
             for slot in exits:
                 row, col = divmod(slot, 32)
@@ -1134,7 +1135,7 @@ class TestLoadLevelExitScan:
     def test_the_open_exit_actually_moves_once_the_timer_runs_out(self):
         """The whole point of the scan: drive ``main_exit_move`` past its
         332-frame period and the open exit is somewhere else."""
-        from gauntpy.subsystems.exits import main_exit_move
+        from gauntpy.game.subsystems.exits import main_exit_move
 
         number = self._first_maze_with_moving_exits()
         state = GameState(game_mode=GameMode.NORMAL)
@@ -1153,7 +1154,7 @@ class TestLoadLevelExitScan:
         after reloading, so the two calls now meet. The scan's guard has to
         recognise an already-picked table -- otherwise the re-scan would see
         only the surviving exits and disarm the level."""
-        from gauntpy.subsystems.exits import exit_scan_level
+        from gauntpy.game.subsystems.exits import exit_scan_level
 
         number = self._first_maze_with_moving_exits()
         state = GameState(game_mode=GameMode.NORMAL)

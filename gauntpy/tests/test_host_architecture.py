@@ -23,7 +23,7 @@ from gauntpy.host.state_dump import (
     game_state_from_payload,
     state_dump_payload,
 )
-from gauntpy.state import GameState
+from gauntpy.game.state import GameState
 
 
 @pytest.mark.parametrize(
@@ -101,7 +101,7 @@ def test_session_is_caller_owned_without_changing_the_modeled_field_schema():
 
 
 def test_cold_boot_seeds_once_before_the_real_boot_entry(monkeypatch):
-    from gauntpy.subsystems import boot
+    from gauntpy.game.subsystems import boot
 
     seen = []
 
@@ -119,8 +119,9 @@ def test_cold_boot_seeds_once_before_the_real_boot_entry(monkeypatch):
 
 
 def test_resume_reconstructs_runtime_without_any_game_initialization(monkeypatch):
-    from gauntpy import custom_scenario, maze
-    from gauntpy.subsystems import boot, display
+    from gauntpy import custom_scenario
+    from gauntpy.game import maze
+    from gauntpy.game.subsystems import boot, display
 
     state = GameState(eeprom_persistence_enabled=False)
     state.frame_counter = 123
@@ -166,9 +167,9 @@ def test_resume_reconstructs_runtime_without_any_game_initialization(monkeypatch
 def test_resumed_application_skips_boot_and_honors_pause(
     monkeypatch, tmp_path, paused, benchmark_frames,
 ):
-    from gauntpy.eeprom_device import EepromImage, MemoryEepromStorage
+    from gauntpy.game.eeprom_device import EepromImage, MemoryEepromStorage
     from gauntpy.host import shell
-    from gauntpy.subsystems import boot
+    from gauntpy.game.subsystems import boot
 
     state = GameState(eeprom_persistence_enabled=False)
     device_image = EepromImage(0x2345)
@@ -229,7 +230,7 @@ def test_resumed_application_skips_boot_and_honors_pause(
 @pytest.mark.parametrize("read_only", [False, True])
 def test_cold_boot_binds_host_storage_before_game_initialization(monkeypatch, read_only):
     from gauntpy.host.eeprom import FileEepromStorage, PersistencePolicy
-    from gauntpy.subsystems import boot
+    from gauntpy.game.subsystems import boot
 
     policy = PersistencePolicy.READ_ONLY if read_only else PersistencePolicy.READ_WRITE
     seen = []
@@ -244,9 +245,9 @@ def test_cold_boot_binds_host_storage_before_game_initialization(monkeypatch, re
 
 
 def test_isolated_cold_boot_starts_with_an_unprogrammed_device(monkeypatch):
-    from gauntpy.eeprom_device import MemoryEepromStorage
+    from gauntpy.game.eeprom_device import MemoryEepromStorage
     from gauntpy.host.eeprom import FileEepromStorage, PersistencePolicy
-    from gauntpy.subsystems.eeprom import game_difficulty
+    from gauntpy.game.subsystems.eeprom import game_difficulty
 
     def forbidden(*_args):
         pytest.fail("isolated cold boot accessed an external EEPROM image")

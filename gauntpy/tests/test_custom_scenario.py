@@ -20,9 +20,9 @@ from gauntpy.custom_scenario import (
     synthetic_runtime_for,
     _input_word,
 )
-from gauntpy.coords import hpos_x, vpos_y
-from gauntpy.constants import GENERATOR_TYPES, MONSTER_TYPES, MazeObjIds
-from gauntpy.mainloop import tick
+from gauntpy.game.coords import hpos_x, vpos_y
+from gauntpy.game.constants import GENERATOR_TYPES, MONSTER_TYPES, MazeObjIds
+from gauntpy.game.mainloop import tick
 from gauntpy.performance_workloads import (
     WORKLOAD_BY_NAME,
     prepare_workload_state,
@@ -38,11 +38,11 @@ from gauntpy.host.diagnostics import (
     capture_debug_snapshot,
     debug_page_lines,
 )
-from gauntpy.state import GameState
-from gauntpy.subsystems.thief import THIEF_IS_MUGGER
-from gauntpy.subsystems.thief import path_grid_get_direction
-from gauntpy.subsystems.input import JOY_FIRE_BIT, JOY_IDLE, JOY_MAGIC_BIT, JOY_RIGHT
-from gauntpy.subsystems.monsters import tile_on_screen_d4
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems.thief import THIEF_IS_MUGGER
+from gauntpy.game.subsystems.thief import path_grid_get_direction
+from gauntpy.game.subsystems.input import JOY_FIRE_BIT, JOY_IDLE, JOY_MAGIC_BIT, JOY_RIGHT
+from gauntpy.game.subsystems.monster_spawning import tile_on_screen_d4
 
 from gex.roms import SLAPSTIC_ROMS, TILE_ROMS, _rom_dir
 

@@ -212,7 +212,7 @@ class TestSpriteByPictureNumber:
 
     def test_software_flag_bit_is_masked_off(self):
         """Bit 15 of mob_picture is a software flag, not part of the tile
-        number (gauntpy/src/gauntpy/mob.py docstring) -- a picture value
+        number (gauntpy/src/gauntpy/game/mob.py docstring) -- a picture value
         with that bit set must resolve to the same sprite.
         """
         store = AssetStore()
@@ -404,8 +404,8 @@ class TestEffectPictureIndex:
         """``subsystems/score.py`` transcribes the same ROM table (as the full
         symmetric twelve-word cycle) and ``players.handle_tport`` installs its
         first frame. Two transcriptions of one table must not drift."""
-        from gauntpy.subsystems.players import _TPORT_ARRIVAL_PICTURE
-        from gauntpy.subsystems.score import _TPORT_TRANSITION_PICTURES
+        from gauntpy.game.subsystems.player_transport import _TPORT_ARRIVAL_PICTURE
+        from gauntpy.game.subsystems.score import _TPORT_TRANSITION_PICTURES
 
         assert set(TPORT_TRANSITION_PICTURES) == set(_TPORT_TRANSITION_PICTURES)
         assert len(_TPORT_TRANSITION_PICTURES) == 12, "the ROM cycle is symmetric"
@@ -434,14 +434,14 @@ class TestEffectPictureIndex:
         assert popups[11] - popups[10] == 2, "the bonus half strides two"
 
     def test_the_popup_table_matches_the_shot_subsystems_transcription(self):
-        from gauntpy.subsystems.shots import _SCORE_POPUP_PICTURE_TABLE
+        from gauntpy.game.subsystems.shot_effects import _SCORE_POPUP_PICTURE_TABLE
 
         assert tuple(EFFECT_TABLES["score_popup"]) == _SCORE_POPUP_PICTURE_TABLE
 
     def test_the_fx_tables_match_the_score_subsystems_transcription(self):
         """``score._advance_effect`` steps these same cycles; they are the two
         impact bursts (player-fired and monster-fired) and are 2x2."""
-        from gauntpy.subsystems.score import (
+        from gauntpy.game.subsystems.score import (
             _MONSTER_IMPACT_PICTURES,
             _PLAYER_IMPACT_PICTURES,
             _TPORT_EFFECT_PICTURES,
@@ -572,7 +572,7 @@ _HERO_DISSOLVE_SIZE = (3, 3)
 
 def _exit_pictures() -> list[list[int]]:
     """``players._PLAYER_EXIT_PICTURE`` as four rows of eight."""
-    from gauntpy.subsystems.players import _PLAYER_EXIT_PICTURE
+    from gauntpy.game.subsystems.player_animation import _PLAYER_EXIT_PICTURE
 
     return [list(_PLAYER_EXIT_PICTURE[c * 8:c * 8 + 8]) for c in range(4)]
 
@@ -737,8 +737,8 @@ class TestSizedBlockContract:
         fallback now decodes it instead of skipping it, so it had better be
         genuinely empty artwork rather than garbage.
         """
-        from gauntpy.subsystems.monsters import _BLANK_PICTURE
-        from gauntpy.subsystems.players import _PLAYER_INVISIBLE_PICTURE
+        from gauntpy.game.subsystems.monster_data import _BLANK_PICTURE
+        from gauntpy.game.subsystems.player_animation import _PLAYER_INVISIBLE_PICTURE
 
         assert _BLANK_PICTURE == _PLAYER_INVISIBLE_PICTURE == 0x1709
         store = AssetStore()
@@ -816,7 +816,7 @@ from gex.heroes import HEROES  # noqa: E402
 from gex.monsters import MONSTERS  # noqa: E402
 from gex.npcs import NPCS  # noqa: E402
 
-from gauntpy.constants import Character  # noqa: E402
+from gauntpy.game.constants import Character  # noqa: E402
 
 _ENTITY_GROUPS = (("hero", HEROES), ("monster", MONSTERS), ("npc", NPCS))
 

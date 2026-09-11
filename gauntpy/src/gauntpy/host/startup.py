@@ -13,7 +13,7 @@ from ..game.rng import GameRandom
 from ..game.state import GameState
 from ..game.subsystems.camera import snap_camera
 from ..game.subsystems.player_animation import update_player_sprite
-from ..game.subsystems.players import player_join
+from ..game.subsystems.player_lifecycle import player_join
 from ..game.subsystems.session import configured_start_health
 from .eeprom import PersistencePolicy, bind_eeprom_storage
 
@@ -99,7 +99,7 @@ def build_state(
     )
     init_alpha_color_ram(state)
     if maze_number is None and level > 5:
-        from ..game.subsystems.exits import compute_next_level
+        from ..game.subsystems.level_transitions import compute_next_level
 
         state.levelnum_current = 5
         state.mazenum_current = 4
@@ -112,11 +112,14 @@ def build_state(
         state, level, maze_number=maze_number,
     )                                       # places objects with their pictures
     spawn_player(state, character)
-    from ..game.subsystems.exits import update_monster_spawn_bonus_from_score_per_coin
+    from ..game.subsystems.level_transitions import (
+        update_monster_spawn_bonus_from_score_per_coin,
+    )
 
     update_monster_spawn_bonus_from_score_per_coin(state)
     maze.maze_addrandompickups(state, True)
-    from ..game.subsystems.players import initialize_player_temporary_power, setup_infopanel
+    from ..game.subsystems.player_items import initialize_player_temporary_power
+    from ..game.subsystems.player_lifecycle import setup_infopanel
     player = state.players[0]
     player.keysnum = keys
     player.potionsnum = potions

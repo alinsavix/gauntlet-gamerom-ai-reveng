@@ -126,7 +126,7 @@ _DRAGON_HEAD_PICS = (
 # The special-shot family at ROM 0x58EDE is the *monster* projectile table;
 # the dragon's own artwork comes from ``special_projectile_picture_table``
 # (0x58E3E) for the breath and ``projectile_picture_table`` (0x58B8A) for the
-# long-range fireball, both picked by ``shots.shot_picture``.
+# long-range fireball, both picked by ``shot_state.shot_picture``.
 
 
 def dragon_setup_segments(state: GameState, primary_slot: int) -> None:
@@ -463,7 +463,7 @@ def dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     Position is taken from ``dragon_seg_mob_ids[0]`` (0x547DC/0x547EE), even
     though the *owner* recorded for the shot is the pose-selected segment.
     """
-    from .shots import shot_cell, shot_picture, shot_velocity
+    from .shot_state import shot_cell, shot_picture, shot_velocity
 
     channel = shot_slot - 1
     segments = _segments(state)
@@ -487,7 +487,7 @@ def dragon_fire_setup(state: GameState, shot_slot: int) -> None:
         off_v = _FIRE_V_BY_FACING[facing >> 1] + _FIRE_V_BY_POSE[pose]
         hpos_low, vpos_low = _BREATH_HPOS_LOW, _BREATH_VPOS_LOW
     else:
-        from .shots import _SHOT_COUNTER_RELOAD
+        from .shot_state import _SHOT_COUNTER_RELOAD
 
         counter = _SHOT_COUNTER_RELOAD[channel]
         off_h = _FIRE_H_BY_POSE[pose]
@@ -589,7 +589,7 @@ def _dragon_die(state: GameState, shooter_id: int) -> None:
     loot_b_h = (0, -16, 0, 16)
     loot_b_v = (16, 0, -16, 0)
 
-    from .shots import tport_cycle_start
+    from .shot_effects import tport_cycle_start
 
     original_hpos = state.mobs.hpos[primary]
     original_vpos = state.mobs.vpos[primary]
@@ -639,7 +639,7 @@ def _dragon_die(state: GameState, shooter_id: int) -> None:
         return
     if state.secret_tricks_flags[shooter_id] == 1:
         return
-    from .exits import TRICK_NOGETHIT, secret_trick_set
+    from .secret_rooms import TRICK_NOGETHIT, secret_trick_set
 
     secret_trick_set(state, shooter_id, TRICK_NOGETHIT, 2)
 

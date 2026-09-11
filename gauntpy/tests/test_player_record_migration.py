@@ -10,14 +10,14 @@ band window -- simply reads the cell.
 
 from __future__ import annotations
 
-from gauntpy.constants import (
+from gauntpy.game.constants import (
     FIRST_PLAYABLE_SLOT,
     SLOT_EXIT_ANIMS,
     GameMode,
     MazeObjIds,
     PlayerStatus,
 )
-from gauntpy.coords import (
+from gauntpy.game.coords import (
     encode_hpos,
     encode_vpos_at_y,
     hpos_x,
@@ -27,10 +27,13 @@ from gauntpy.coords import (
     vpos_y,
 )
 from gauntpy.render import mobs as render_mobs
-from gauntpy.state import GameState
-from gauntpy.subsystems import players as gp
-from gauntpy.subsystems.input import JOY_DOWN, JOY_IDLE, JOY_RIGHT
-from gauntpy.subsystems.players import migrate_player_record, player_try_move
+from gauntpy.game.state import GameState
+from gauntpy.game.subsystems import players as gp
+from gauntpy.game.subsystems.input import JOY_DOWN, JOY_IDLE, JOY_RIGHT
+from gauntpy.game.subsystems.player_movement import (
+    migrate_player_record,
+    player_try_move,
+)
 
 _HERO_PICTURE = 0x1E0D
 
@@ -301,7 +304,8 @@ class TestTwoPlayersDoNotOverwriteOneAnother:
 
 class TestShotsFindTheMigratedRecord:
     def test_a_monster_shot_hits_the_hero_in_its_new_cell(self):
-        from gauntpy.subsystems.shots import resolve_shot_hit, shot_mob_collision
+        from gauntpy.game.subsystems.shot_damage import resolve_shot_hit
+        from gauntpy.game.subsystems.shot_collision import shot_mob_collision
 
         state = GameState(game_mode=GameMode.NORMAL)
         start = pack_slot(10, 10)
@@ -322,7 +326,7 @@ class TestShotsFindTheMigratedRecord:
         assert player.health < before, "damage is charged to the record's owner"
 
     def test_the_probe_needs_no_player_overlay(self):
-        from gauntpy.subsystems import shots
+        from gauntpy.game.subsystems import shots
 
         state = GameState(game_mode=GameMode.NORMAL)
         record_slot = pack_slot(10, 10)
@@ -340,7 +344,7 @@ class TestShotsFindTheMigratedRecord:
 
 class TestMonsterContactFindsTheMigratedRecord:
     def test_a_creature_cannot_step_into_the_cell_the_hero_owns(self):
-        from gauntpy.subsystems.monsters import _cell_player_index
+        from gauntpy.game.subsystems.monster_movement import _cell_player_index
 
         state = GameState(game_mode=GameMode.NORMAL)
         start = pack_slot(10, 10)
@@ -352,7 +356,7 @@ class TestMonsterContactFindsTheMigratedRecord:
         assert state.mobs.is_occupied(player.mob_slot)
 
     def test_the_fixed_record_fallback_is_gone(self):
-        from gauntpy.subsystems import monsters
+        from gauntpy.game.subsystems import monsters
 
         assert not hasattr(monsters, "_player_in_cell")
 
@@ -382,7 +386,7 @@ class TestTheRendererUsesTheCurrentBand:
 
 class TestCameraAndTilePositionAgree:
     def test_the_tracking_arrays_name_the_record(self):
-        from gauntpy.subsystems.camera import _camera_target
+        from gauntpy.game.subsystems.camera import _camera_target
 
         state = GameState(game_mode=GameMode.NORMAL)
         start = pack_slot(10, 10)
@@ -543,7 +547,7 @@ class TestTheTransporterStillRelocatesTheRecord:
 
 class TestTheExitStillTakesTheRecordOutOfTheMaze:
     def test_reaching_an_exit_vacates_the_cell_and_claims_the_anim_slot(self):
-        from gauntpy.subsystems.exits import player_exit_sequence
+        from gauntpy.game.subsystems.level_transitions import player_exit_sequence
 
         state = GameState(game_mode=GameMode.NORMAL)
         start = pack_slot(10, 10)
@@ -647,7 +651,7 @@ def test_a_record_that_never_leaves_its_cell_is_not_touched():
 
 def test_the_record_cell_matches_the_creature_rule():
     """One rule serves both movers -- 0x41358 for a monster, 0x424CA for a hero."""
-    from gauntpy.subsystems.monsters import _destination_cell
+    from gauntpy.game.subsystems.monster_movement import _destination_cell
 
     for row in (0, 7, 31):
         for col in (0, 13, 31):
