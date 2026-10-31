@@ -29,6 +29,7 @@ from .score import highscore_table_init
 _SOUND_RESET_HOLDOFF = 0xB4
 
 
+# ROM: direct game:0x4327A | Named one-time boot boundary with extracted state setup and typed-device services; hardware/DIP and full OS initialization are not claimed.
 def one_time_init(state: GameState) -> None:
     """0x4327A -- full game initialization before the first frame (§5).
 
@@ -47,6 +48,7 @@ def one_time_init(state: GameState) -> None:
     _start_attract_title(state)
 
 
+# ROM: part game:0x42DC8,game:0x4ADAE | Boot-only subset of sound_system_reset plus inlined queue clearing; omits fault-report/hardware reset details and adds idle-timer setup.
 def _sound_system_reset(state: GameState) -> None:
     """Flush the sound ring and arm the recovery holdoff (§5 step 1, §11.3)."""
     state.sound_queue.clear()
@@ -55,6 +57,7 @@ def _sound_system_reset(state: GameState) -> None:
     state.sound_retry_count = 0
 
 
+# ROM: part game:0x4327A | Extracted one_time_init frame/overflow/semaphore bookkeeping clear with Python dialog initialization.
 def _clear_game_state(state: GameState) -> None:
     """Zero the frame/overflow bookkeeping (§5 step 2)."""
     state.frame_counter = 0
@@ -63,6 +66,7 @@ def _clear_game_state(state: GameState) -> None:
     state.dialog_timer = 0
 
 
+# ROM: part game:0x4327A | Extracted one_time_init timer/default-character assignments; additional Python state fields are initialized alongside them.
 def _init_ram_variables(state: GameState) -> None:
     """Timers, cleared state, and default character types {0,1,2,3} (§5 step 7)."""
     for i in range(NUM_PLAYERS):
@@ -85,6 +89,7 @@ def _init_ram_variables(state: GameState) -> None:
     state.level_next_potion = 0
 
 
+# ROM: part game:0x4327A | Extracted final start_attract_screen(-2) call site from one_time_init, not another implementation of the callee.
 def _start_attract_title(state: GameState) -> None:
     """Hand off to TITLE attract (§5 step 8: start_attract_screen(-2)).
 

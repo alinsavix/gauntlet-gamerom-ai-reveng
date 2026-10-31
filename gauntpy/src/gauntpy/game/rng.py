@@ -62,6 +62,7 @@ SEED_BIAS = 0x8000
 MAX_SAFE_BOUND = 0x7FFF
 
 
+# ROM: helper | Python signed-word reinterpretation supporting hardware-width arithmetic.
 def _signed16(value: int) -> int:
     """Reinterpret the low 16 bits of ``value`` as a signed word."""
     value &= 0xFFFF
@@ -73,13 +74,18 @@ class GameRandom:
 
     __slots__ = ("seed",)
 
+    # ROM: helper | Explicit deterministic Python seed initialization; the original global seed free-runs and has no corresponding initializer here.
     def __init__(self, seed: int = 0) -> None:
         self.seed = seed & 0xFFFF
 
+    # ROM: part game:0x5FC2C | LCG state-update portion of random_core only; bound scaling remains in getrandom.
     def _advance(self) -> int:
         self.seed = (self.seed * MULTIPLIER + INCREMENT) & 0xFFFF
         return self.seed
 
+    # ROM: direct game:0x5FC4E | Public bounded draw using the instance's global-stream analogue; returns the signed high-word result and advances even for bound zero.
+    # ROM: part game:0x5FC2C | Inlines random_core's signed bound scaling while its seed-update portion is extracted to _advance.
+    # ROM: adapter game:0x5FC26,game:0x5FC46 | The inherited-stack core and register global-seed wrapper share this operation. random_word is an assignment alias, not an additional FunctionDef; exits.py no longer defines getrandom.
     def getrandom(self, bound: int) -> int:
         """``getrandom(bound)`` (0x5FC4E) -- uniform in [0, bound).
 
@@ -101,6 +107,7 @@ class GameRandom:
     # Alias matching the ROM's register veneer at 0x5FC46.
     random_word = getrandom
 
+    # ROM: adapter game:0x5FC22 | Caller-supplied-seed interface delegates through a scratch instance and returns a tuple instead of mutating a supplied seed pointer.
     def random_seeded(self, bound: int, seed: int) -> tuple[int, int]:
         """``random_seeded`` (0x5FC22): draw from a caller-supplied seed.
 

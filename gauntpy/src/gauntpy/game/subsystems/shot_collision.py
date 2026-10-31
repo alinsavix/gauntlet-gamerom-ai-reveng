@@ -69,6 +69,7 @@ _MAXTIER_PASS_TBL = [
 _SOUND_REFLECT = 0x2C
 
 
+# ROM: direct game:0x4AEA0 | Door-direction and recorded-separation predicate despite its broad legacy onscreen name.
 def shot_onscreen_check(state: GameState, target: int,
                         h_limit: int, v_limit: int) -> int:
     """0x4AEA0 -- does the door at ``target`` face the shot that just hit it?
@@ -96,6 +97,7 @@ def shot_onscreen_check(state: GameState, target: int,
 # shot_mob_collision (0x40906) and its candidate core (0x40A78)
 # =============================================================================
 
+# ROM: direct game:0x40A78 | Represents the BSR candidate evaluator including wrapped/tagged cells and collision-distance outputs.
 def shot_collision_candidate_core(state: GameState, index: int, shooter_id: int,
                     width: int, span: int, shot_h: int, shot_v: int,
                     self_index: int, maxtier: bool) -> int | None:
@@ -172,6 +174,7 @@ def shot_collision_candidate_core(state: GameState, index: int, shooter_id: int,
     return slot
 
 
+# ROM: part game:0x40A78 | Extracts the vertical probe-wrap gate at 0x40A88-0x40A8A.
 def _wrap_allowed(state: GameState, shooter_id: int) -> bool:
     """The vertical window at 0x40A88/0x40A8A gates the probe's maze wrap.
 
@@ -186,6 +189,7 @@ def _wrap_allowed(state: GameState, shooter_id: int) -> bool:
     return 0x8000 <= vpos <= 0xF3FF
 
 
+# ROM: direct game:0x40906 | Projectile collision-probe entry; candidate evaluation and dragon adjustment are delegated.
 def shot_mob_collision(state: GameState, cell: int, shooter_id: int) -> int:
     """0x40906 -- the first MOB this shot overlaps, or -1.
 
@@ -242,6 +246,8 @@ def shot_mob_collision(state: GameState, cell: int, shooter_id: int) -> int:
     return -1
 
 
+# ROM: direct game:0x54B68 | Implements moving-head overlap/tagging, not merely the legacy width/span constants; ROM timer resets are not certified here.
+# ROM: part game:0x40906 | Also contains the caller's dragon-type and tighter-hitbox setup at 0x40A3E; that address is not the leaf entry.
 def _dragon_hitbox_retry(state: GameState, slot: int, shooter_id: int,
                          shot_h: int, shot_v: int, self_index: int,
                          maxtier: bool) -> int:
@@ -277,6 +283,7 @@ def _dragon_hitbox_retry(state: GameState, slot: int, shooter_id: int,
     return slot | 0x0800
 
 
+# ROM: helper | Reads shot ownership through the Python player and monster-owner representations.
 def _shot_owner(state: GameState, shooter_id: int) -> int:
     """``active_mob_ids[shooter]`` (0x9048C8) -- the MOB that fired."""
     if shooter_id < 4:
@@ -305,6 +312,7 @@ _REFLECT_BANDS = {
 }
 
 
+# ROM: direct game:0x53818 | Represents the reflection callable; computed corner cases and common finish are extracted.
 def shot_reflect_calc(state: GameState, target: int, shooter_id: int) -> int:
     """0x53818 -- the direction a reflected shot leaves the wall with.
 
@@ -363,6 +371,7 @@ _REFLECT_CORNERS = {
 }
 
 
+# ROM: part game:0x53818 | Combines internal reflection dispatch cases at 0x5399C-0x53C98; these are not separate inventoried callables.
 def _reflect_corner(state: GameState, target: int, shooter_id: int,
                     direction: int, band: str) -> tuple[int, int]:
     """0x5399C / 0x53A50 / 0x53AFC / 0x53BA6 and their three dispatchers."""
@@ -421,6 +430,7 @@ def _reflect_corner(state: GameState, target: int, shooter_id: int,
     return direction, _REFLECT_XOR6 if nearer else _REFLECT_XOR2
 
 
+# ROM: part game:0x53818 | Extracts reflected direction, bounce-count, sound and last-wall updates at 0x53CB0-0x53D02.
 def _reflect_finish(state: GameState, target: int, shooter_id: int,
                     direction: int, outcome: int) -> int:
     """0x53CB0-0x53D02 -- apply the outcome, spend a bounce, remember the wall."""

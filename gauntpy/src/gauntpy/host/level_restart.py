@@ -9,6 +9,7 @@ from ..game.eeprom_device import MemoryEepromStorage
 from ..game.state import GameState
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _isolated_copy(state: GameState) -> GameState:
     # Never copy a file-backed device: a rewind must not roll external EEPROM
     # back. Copy its actual image, not the potentially different working RAM.
@@ -24,11 +25,13 @@ class LevelRestart:
     lifecycle without adding a host generation counter to GameState.
     """
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def __init__(self, state: GameState, *, resumed: bool = False) -> None:
         self._mobs = state.mobs
         self._snapshot: GameState | None = None
         self._awaiting_setup = not resumed
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def observe(self, state: GameState) -> bool:
         """Capture at startup or after a complete tick, never inside setup."""
         if state.mobs is not self._mobs:
@@ -44,6 +47,7 @@ class LevelRestart:
         self._awaiting_setup = False
         return True
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @staticmethod
     def _ready(state: GameState) -> bool:
         return (
@@ -56,6 +60,7 @@ class LevelRestart:
             and any(player.active and player.mob_slot for player in state.players)
         )
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def restore(self, state: GameState) -> GameState | None:
         """Return a fresh copy; neither live mutations nor resets alter the save."""
         if (

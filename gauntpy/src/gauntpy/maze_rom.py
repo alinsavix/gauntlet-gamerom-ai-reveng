@@ -40,6 +40,7 @@ class MazeLocation(NamedTuple):
     addr: int
 
 
+# ROM: adapter game:0x40C78 | Delegates bank/address lookup to gex and returns MazeLocation; no Slapstic bus switching, shared-stack ABI or ptr_maze_data write.
 def find_maze(maze_number: int) -> MazeLocation:
     """Resolve the ROM's maze identity, not its dungeon level."""
     if not (0 <= maze_number <= MAX_MAZE_NUM):
@@ -52,6 +53,7 @@ def find_maze(maze_number: int) -> MazeLocation:
     return MazeLocation(bank, addr)
 
 
+# ROM: adapter game:0x4C1BC | ROM acquisition and delegated maze-decode adapter returning a gex Maze; not the complete maze_setupnew body at 0x44AC2, which additionally places MOBs and initializes game state.
 def decode_maze(maze_number: int) -> Maze:
     """Acquire and decode a record; maze 116 has no trailing delimiter."""
     if not (0 <= maze_number <= MAX_MAZE_NUM):
@@ -71,6 +73,7 @@ _RANDOM_MAZE_FLAGS_COUNT = 13
 _random_maze_flags_table: tuple[int, ...] | None = None
 
 
+# ROM: infrastructure | Cached acquisition of the literal invulnerable-food picture table; 0x58F20 is data, not an entry.
 def food_invuln_pictures_read() -> tuple[int, ...]:
     """Read the literal three-word invulnerable-food picture table (0x58F20)."""
     global _food_invuln_pictures
@@ -82,6 +85,7 @@ def food_invuln_pictures_read() -> tuple[int, ...]:
     return _food_invuln_pictures
 
 
+# ROM: infrastructure | Cached acquisition of all random-maze flag records; does not perform get_random_maze_flags selection or RNG work.
 def random_maze_flags_table_read() -> tuple[int, ...]:
     """Read all thirteen flag records (0x57012), without selecting one."""
     global _random_maze_flags_table

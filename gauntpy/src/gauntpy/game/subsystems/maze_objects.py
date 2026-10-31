@@ -83,10 +83,12 @@ _FORCEFIELD_BLOCKERS = frozenset((
 _POWER_TRANSPORT = 0x0800
 
 
+# ROM: helper | Python state-to-MobTable convenience for the port's synthetic-slot membership test.
 def _slot_is_linked(state: GameState, slot: int) -> bool:
     return state.mobs.is_linked(slot)
 
 
+# ROM: helper | Python combined terrain/MOB cleanup with synthetic-slot safety and whole-door redraw; constituent callees do not establish a separate ROM entry.
 def _clear_slot(state: GameState, slot: int) -> None:
     """Clear a dynamic MOB without corrupting synthetic, unlinked test tiles."""
     from ..maze import clear_cell_descriptor
@@ -105,6 +107,7 @@ def _clear_slot(state: GameState, slot: int) -> None:
         maze_doors_setup(state)
 
 
+# ROM: adapter game:0x5DDDA | Door-specialized delegated MOB removal with unlinked-test-tile handling and logical terrain synchronization, deliberately preserving the floor descriptor.
 def _remove_door_slot(state: GameState, slot: int) -> None:
     """Remove one door MOB without touching its existing floor descriptor."""
     if _slot_is_linked(state, slot):
@@ -121,6 +124,7 @@ def _remove_door_slot(state: GameState, slot: int) -> None:
         data[(col, row)] = int(MazeObjIds.TILE_FLOOR)
 
 
+# ROM: part game:0x44AC2 | Level-indexed delay-pointer selection belongs to maze_setupnew at 0x44C00/0x44C06 per generated consumers; added cache resets are Python state. game_start only installs profile zero, so legacy 0x4014C ownership is not exact.
 def select_forcefield_delay_profile(state: GameState) -> None:
     """Install the exact ROM delay row selected by ``levelnum_current & 3``."""
     state.forcefield_step_durations = list(
@@ -137,6 +141,7 @@ def select_forcefield_delay_profile(state: GameState) -> None:
     state.tport_secret_event_keys = [-1] * len(state.tport_secret_event_keys)
 
 
+# ROM: part game:0x40528 | Extracted even/odd forcefield color selection; source uses frame_counter while doc/07 names pf_vscroll_hi for color-index bits, so this is provenance rather than fidelity certification.
 def _update_forcefield_color(state: GameState) -> None:
     if state.forcefield_step & 1:
         state.forcefield_color = 0
@@ -145,6 +150,7 @@ def _update_forcefield_color(state: GameState) -> None:
         state.forcefield_color = state.forcefield_colors_table[color_index]
 
 
+# ROM: part game:0x44AC2 | Palette-offset tables are consumed by maze_setupnew at 0x44BBE/0x44BDA; this port resolves their indices on demand instead of retaining hardware pointers.
 def _palette_color_indices(state: GameState) -> tuple[int, int, int]:
     floorpattern = int(getattr(state.maze, "floorpattern", 0) or 0)
     floorpattern %= len(SPECIAL_COLOR_INDEX_1)
@@ -155,6 +161,7 @@ def _palette_color_indices(state: GameState) -> tuple[int, int, int]:
     )
 
 
+# ROM: part game:0x4017E | Extracted repeated live playfield-color writes from game_vblank, expressed through Python palette indices.
 def _write_live_color(
     state: GameState, palette: int, word: int,
 ) -> None:
@@ -162,6 +169,7 @@ def _write_live_color(
         write_playfield_color(state, palette * 16 + index, word)
 
 
+# ROM: part game:0x4017E | Transporter palette copy at 0x40456-0x40476; those interior interrupt sites are not independent callables.
 def _write_transporter_colors_vblank(state: GameState) -> None:
     """game_vblank 0x40456-0x40476: palette 4 entries 8-13."""
     write_playfield_colors(
@@ -170,11 +178,14 @@ def _write_transporter_colors_vblank(state: GameState) -> None:
     )
 
 
+# ROM: helper | Generic wrapped packed-cell offset used by the door predicates and renderer.
 def _door_neighbor(slot: int, dx: int, dy: int) -> int:
     row, col = slot >> 5, slot & 0x1F
     return (((row + dy) & 0x1F) << 5) | ((col + dx) & 0x1F)
 
 
+# ROM: direct game:0x5F77A | Door picture-class predicate and reserved-row guard, with coordinates packed into one Python argument.
+# ROM: adapter game:0x5F772 | Alternate stack wrapper shares this predicate; no separate Python implementation.
 def pf_isdoor(state: GameState, slot: int) -> int:
     """0x5F77A -- picture class, with wrapped X/Y represented as one slot."""
     slot &= 0x3FF
@@ -190,6 +201,8 @@ def pf_isdoor(state: GameState, slot: int) -> int:
     return 0
 
 
+# ROM: direct game:0x5EA2E | Row-zero short circuit or picture/type predicate; Python bool replaces the ROM -1/0 result. doc/07 corrects the older catalog's column wording.
+# ROM: adapter game:0x5EA26 | Unreferenced stack wrapper falls into the same predicate; not a second body.
 def pf_isblankfloor(state: GameState, slot: int) -> bool:
     """Exact pf_isblankfloor marker/type predicate at 0x5EA2E."""
     if (slot >> 5) == 0:
@@ -200,6 +213,7 @@ def pf_isblankfloor(state: GameState, slot: int) -> bool:
     )
 
 
+# ROM: part game:0x5F880 | Extracted isolated-door orientation selector at 0x5F9EE within the shared door-drawing body, not an entry at that internal address.
 def _door_orientation_index(
     state: GameState, slot: int, *, vertical: bool,
 ) -> int:
@@ -232,6 +246,8 @@ def _door_orientation_index(
     return negative + positive
 
 
+# ROM: direct game:0x5F876 | Door redraw boundary with orientation selection extracted; Python derives the door class instead of accepting its original register argument.
+# ROM: adapter game:0x5F880 | Normal-stack entry shares this drawing body; legacy attribution to maze_doors_setup confused a caller with the implementation.
 def pf_door_draw_xy(state: GameState, slot: int) -> None:
     """pf_door_draw_xy 0x5F876 for one already-classified door."""
     row, col = slot >> 5, slot & 0x1F
@@ -282,6 +298,8 @@ def pf_door_draw_xy(state: GameState, slot: int) -> None:
         state.mobs.set_state(slot, 5)
 
 
+# ROM: direct game:0x5F7F0 | Four-neighbor door redraw traversal in ROM order, using a packed-cell argument.
+# ROM: adapter game:0x5F7FA | Normal-stack variant enters the same four-neighbor redraw body; ABI alias rather than a merged independent algorithm.
 def pf_door_update_surrounding_xy(state: GameState, slot: int) -> None:
     """pf_door_update_surrounding_xy 0x5F7F0, including ROM visit order."""
     for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
@@ -290,6 +308,7 @@ def pf_door_update_surrounding_xy(state: GameState, slot: int) -> None:
             pf_door_draw_xy(state, neighbour)
 
 
+# ROM: direct game:0x5F7C0 | Initial live-door scan and redraw; pf_door_draw remains a callee, not another implementation owned by this function.
 def maze_doors_setup(state: GameState) -> None:
     """maze_doors_setup 0x5F7C0 -- draw the initial complete door set."""
     for slot in range(FIRST_PLAYABLE_SLOT, NUM_MOB_SLOTS):
@@ -297,6 +316,7 @@ def maze_doors_setup(state: GameState) -> None:
             pf_door_draw_xy(state, slot)
 
 
+# ROM: part game:0x50224,game:0x50662 | Shared task-0x56 source/destination progress hooks from player_tport at 0x5025C and tport_player_move at 0x509E4, expressed as one parameterized event.
 def record_transporter_secret_progress(
     state: GameState,
     player_index: int,
@@ -331,6 +351,7 @@ def record_transporter_secret_progress(
         state.tport_secret_pad_masks[player_index] = mask
         secret_trick_set(state, player_index, 0x56, mask)
 
+# ROM: adapter game:0x50224,game:0x50662 | Python phase-to-event bridge with deduplication keys for extracted transporter hooks; not a separate ROM polling routine.
 def _record_inflight_transporter_secret_progress(state: GameState) -> None:
     """Bridge the player-owned transition producer to WP-11's ROM hooks."""
     for player_index, phase in enumerate(state.player_tport_phase):
@@ -355,6 +376,7 @@ def _record_inflight_transporter_secret_progress(state: GameState) -> None:
         )
 
 
+# ROM: direct game:0x40528 | Transporter bounce and forcefield timer boundary; adds lazy segment setup/event bridging, with color selection extracted and its documented source-field caveat retained.
 def main_cycle_tport_and_ffield(state: GameState) -> None:
     """0x40528 -- advance the transporter and forcefield palette cycles.
 
@@ -383,6 +405,7 @@ def main_cycle_tport_and_ffield(state: GameState) -> None:
     _update_forcefield_color(state)
 
 
+# ROM: part game:0x4017E | Playfield-only palette interrupt work at 0x40392-0x40476; does not implement the hardware interrupt entry or all game_vblank effects.
 def playfield_palette_vblank(state: GameState) -> None:
     """0x40392-0x40476 -- perform all live playfield color-RAM writes."""
     if int(state.game_mode) == int(GameMode.TITLE):
@@ -423,6 +446,7 @@ def playfield_palette_vblank(state: GameState) -> None:
 # Door opening
 # ---------------------------------------------------------------------------
 
+# ROM: part game:0x45C00 | Extracted door-front picture acceptance and left-turn selection from main_open_doors.
 def _door_picture_matches(picture: int, direction: int) -> tuple[bool, int | None]:
     """Return whether a front consumes ``picture`` and its optional turn."""
     if direction in (0, 2):
@@ -438,6 +462,7 @@ def _door_picture_matches(picture: int, direction: int) -> tuple[bool, int | Non
     return False, None
 
 
+# ROM: part game:0x45C00 | Extracted directional door-front step and boundary conditions; None is the Python failure representation.
 def _next_door_slot(slot: int, direction: int) -> int | None:
     if direction == 0:
         return slot - 0x20 if slot >= 0x40 else None
@@ -451,6 +476,7 @@ def _next_door_slot(slot: int, direction: int) -> int | None:
     return None
 
 
+# ROM: direct game:0x45C00 | Eight-front door animation consumer; step and picture decisions are extracted, and idle-timer ownership remains outside this routine.
 def main_open_doors(state: GameState) -> None:
     """0x45C00 -- advance up to eight door-opening fronts by one cell.
 
@@ -482,6 +508,7 @@ def main_open_doors(state: GameState) -> None:
             state.door_endpoint_dir[channel] = turn
 
 
+# ROM: direct game:0x47FAC | Unconditional complete door removal and one Doors Open sound when needed; timer expiry is the caller's concern.
 def open_timed_doors(state: GameState) -> None:
     """0x47FAC -- remove every door and queue ``Doors Open`` once if any exist."""
     removed_any = False
@@ -499,6 +526,7 @@ def open_timed_doors(state: GameState) -> None:
 # Cyclic walls and their shared color-spare setup
 # ---------------------------------------------------------------------------
 
+# ROM: direct game:0x52FBE | Consumes type-7/8/9 markers and returns their 1/2/3 code; adds logical-shadow updates and unlinked-slot safety.
 def consume_forcefield_code(state: GameState, marker_slot: int) -> int:
     """0x52FBE -- consume a type-7/8/9 marker and return its 1/2/3 code."""
     object_type = state.mobs.obj_type(marker_slot)
@@ -519,6 +547,7 @@ def consume_forcefield_code(state: GameState, marker_slot: int) -> int:
     return object_type - int(MazeObjIds.WALL_TRAPCYC1) + 1
 
 
+# ROM: direct game:0x52F26 | Packs four cyclic-wall codes per byte and disables the feature when empty, with Python setup latches.
 def maze_forcefield_setup(state: GameState) -> None:
     """0x52F26 -- pack type-7/8/9 cycle codes into color-spare storage."""
     assignments = [0] * 256
@@ -539,6 +568,7 @@ def maze_forcefield_setup(state: GameState) -> None:
         state.level_flags_3 &= ~0x08
 
 
+# ROM: direct game:0x5E62A | Cyclic-wall phase transition and map scan; Python collects redraw work into lists rather than the original chained-cell representation.
 def main_walls_cyclic_move(state: GameState) -> None:
     """0x5E62A -- remove the old cycle phase and place the next one."""
     if not (state.level_flags_3 & 0x08):
@@ -614,6 +644,7 @@ def main_walls_cyclic_move(state: GameState) -> None:
 # Random walls
 # ---------------------------------------------------------------------------
 
+# ROM: part game:0x438AE | Random-wall cursor initialization extracted from maze_new_level_setup; generated RAM consumers identify the setup writes, while ready flags are Python state.
 def setup_random_walls(state: GameState) -> None:
     """Initialize the 0x9048A0--A6 cursor state from type-6 maze objects."""
     slots = [
@@ -636,6 +667,7 @@ def setup_random_walls(state: GameState) -> None:
     state.random_wall_setup_ready = True
 
 
+# ROM: part game:0x5E41A | Extracted ordinary/demo timer reload and low-water cursor reset.
 def _restart_random_wall_cycle(state: GameState) -> None:
     state.random_wall_timer = (
         0x3C if state.game_mode < 0 else 0x78
@@ -643,6 +675,7 @@ def _restart_random_wall_cycle(state: GameState) -> None:
     state.random_wall_current = state.random_wall_low_mark - 1
 
 
+# ROM: direct game:0x5E41A | Timer-gated random-wall cursor walk and toggle; setup and cycle reset are extracted, with lazy initialization added for Python callers.
 def main_walls_random_move(state: GameState) -> None:
     """0x5E41A -- process one random-wall marker per frame.
 
@@ -709,6 +742,7 @@ def main_walls_random_move(state: GameState) -> None:
 # Forcefield segment table
 # ---------------------------------------------------------------------------
 
+# ROM: part game:0x53398 | Extracted directional scan-coordinate and wrapping calculation for hub-to-hub segment construction.
 def _forcefield_candidate(
     hub: int, distance: int, horizontal: bool, wraps: bool
 ) -> tuple[int, bool] | None:
@@ -731,6 +765,7 @@ def _forcefield_candidate(
     return (next_row << 5) | col, wrapped
 
 
+# ROM: direct game:0x53398 | Hub scan, beam construction and graphics updates using a Python list instead of a zero-terminated RAM table; hub graphic-state reconstruction is split out.
 def forcefield_segments_setup(state: GameState) -> None:
     """0x53398 -- build the packed, zero-terminated forcefield segment view."""
     hubs = {
@@ -784,6 +819,8 @@ def forcefield_segments_setup(state: GameState) -> None:
             )
 
 
+# ROM: direct game:0x5FC5E | Actual body walks packed forcefield segments and tests their spans: this is pf_isff, not the VRAM-word test suggested by the Python function name.
+# ROM: adapter game:0x53346,game:0x5FC56 | Substitutes a segment query for check_forcefield_collision's 0x3000 playfield-palette test; also serves the pf_isff register wrapper. These are not two merged collision bodies.
 def check_forcefield_collision(state: GameState, packed_maze_pos: int) -> bool:
     """0x53346/0x5FC5E -- test a packed cell against forcefield beam segments."""
     query = packed_maze_pos & 0x3FF

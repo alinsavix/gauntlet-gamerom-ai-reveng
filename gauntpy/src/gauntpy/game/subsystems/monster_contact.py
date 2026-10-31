@@ -116,6 +116,7 @@ _TRICK_TASK_WHILE_IT = 0x5C     # secret_rooms._CHALLENGE_WHILE_IT; passes on an
 # Player contact (0x495A6)
 # =============================================================================
 
+# ROM: part game:0x495A6 | Extracted character, armor and live-tier contact-damage table selection.
 def _contact_damage(p, row: int) -> int:  # noqa: ANN001
     """``monster_contact_damage_table[row*4 + character (+0x20 armored)]``.
 
@@ -130,6 +131,7 @@ def _contact_damage(p, row: int) -> int:  # noqa: ANN001
     return _MONSTER_CONTACT_DAMAGE_TABLE[row * 4 + (p.character & 0x03) + armored]
 
 
+# ROM: direct game:0x495A6 | Monster-to-player contact entry; type branches and damage side effects are extracted below.
 def monster_playerhit(state: GameState, player_index: int,
                       monster_slot: int) -> None:
     """0x495A6 -- resolve a monster walking into a player (§3.7).
@@ -186,6 +188,7 @@ def monster_playerhit(state: GameState, player_index: int,
     _contact_apply(state, player_index, monster_slot, obj_type, row)
 
 
+# ROM: part game:0x495A6 | Extracts the common contact damage, immunity, encounter, removal and timer tail at 0x4977E-0x498EA.
 def _contact_apply(state: GameState, player_index: int, monster_slot: int,
                    obj_type: int, row: int) -> None:
     """0x4977E-0x498EA -- charge the hit and run its side effects."""
@@ -238,6 +241,7 @@ def _contact_apply(state: GameState, player_index: int, monster_slot: int,
         state.idle_timer = 0
 
 
+# ROM: direct game:0x49A98 | Ticks the hurt-voice timer and performs the expiry random draws and sound selection.
 def player_hurt_speech_timer(state: GameState, player_index: int) -> None:
     """0x49A98 -- tick and, on expiry, announce one hurt voice.
 
@@ -264,6 +268,7 @@ def player_hurt_speech_timer(state: GameState, player_index: int) -> None:
     _sound_play(state, sounds[state.getrandom(len(sounds))])
 
 
+# ROM: part game:0x495A6 | Extracted acid contact windup and immediate attract-mode damage branch at 0x49922.
 def _acid_windup(state: GameState, player_index: int, monster_slot: int,
                  row: int) -> None:
     """0x49922 -- the frame a puddle latches onto a player.
@@ -298,6 +303,7 @@ def _acid_windup(state: GameState, player_index: int, monster_slot: int,
         _sound_play(state, _SOUND_ACID_SLIME)   # 0x36
 
 
+# ROM: part game:0x495A6 | Extracts the death-touch sound-timer setup and refresh at 0x49712-0x49752.
 def _death_touch_update(state: GameState, player_index: int) -> None:
     """0x49712-0x49752 -- arm/refresh the looping death-touch sound timer."""
     p = state.players[player_index]
@@ -310,6 +316,7 @@ def _death_touch_update(state: GameState, player_index: int) -> None:
         state.death_touch_timer[player_index] = _DEATH_TOUCH_REFRESH
 
 
+# ROM: part game:0x495A6 | Extracted IT transfer branch at 0x4967A; score-label and dialog services remain callees.
 def _it_tag(state: GameState, player_index: int, monster_slot: int) -> None:
     """0x4967A -- touching IT transfers the curse instead of dealing damage.
 

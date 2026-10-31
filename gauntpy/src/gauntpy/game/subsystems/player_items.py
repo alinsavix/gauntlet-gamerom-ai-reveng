@@ -44,6 +44,7 @@ _SUPERSHOT_CHARGES = 0x0B
 _INVULN_TIMER_LOAD = 0x384
 
 
+# ROM: part game:0x511AC | Extracted temporary-power timer/charge writes from pickup arms at 0x517BA-0x518B0; also exposed for direct test-game setup.
 def initialize_player_temporary_power(
     state: GameState, player_index: int, obj_type: int,
 ) -> None:
@@ -145,6 +146,7 @@ _DIZZY_TIMER_LOAD = 0x4B0
 _GAME_SETTINGS_REDUCE_TEXT = 0x0400
 
 
+# ROM: adapter game:0x4C440 | Delegation boundary for dialog_first_encounter; the implementing body is score.dialog_first_encounter.
 def _dialog(state: GameState, player_index: int, mask: int,
             value: int = 0) -> None:
     """``dialog_first_encounter`` (0x4C440) -- WP-14's real message box.
@@ -158,6 +160,7 @@ def _dialog(state: GameState, player_index: int, mask: int,
     score.dialog_first_encounter(state, player_index, mask, value)
 
 
+# ROM: part game:0x511AC | Coalesces poison-food and poison-potion arms within the same tile-interaction entry; not a merger of separate callables.
 def _poisoned(state: GameState, player_index: int) -> None:
     """0x51C40-0x51CB4 (food) and 0x51644-0x516C8 (potion) -- the bad variant.
 
@@ -176,6 +179,7 @@ def _poisoned(state: GameState, player_index: int) -> None:
     _dialog(state, player_index, _DIALOG_POISONED, _POISON_DAMAGE)
 
 
+# ROM: helper | Python delegation shim to the parameterized secret-task progress helper; no separate ROM progress callable.
 def _secret_trick_progress(state: GameState, player_index: int,
                            trick_id: int, amount: int = 1) -> None:
     """WP-15's ``secret_rooms.secret_trick_progress`` -- the ``addq.b #1`` hook shape.
@@ -189,6 +193,7 @@ def _secret_trick_progress(state: GameState, player_index: int,
     secret_trick_progress(state, player_index, trick_id, amount)
 
 
+# ROM: helper | Python delegation shim to the parameterized secret-task assignment helper; no separate ROM setter callable.
 def _secret_trick_set(state: GameState, player_index: int,
                       trick_id: int, value: int) -> None:
     """WP-15's ``secret_rooms.secret_trick_set`` -- the ``move.b #n`` hook shape."""
@@ -197,6 +202,7 @@ def _secret_trick_set(state: GameState, player_index: int,
     secret_trick_set(state, player_index, trick_id, value)
 
 
+# ROM: part game:0x511AC | Delegated treasure-credit/progress arm at 0x519C2-0x519F8; the extracted counter writes are owned by secret_rooms.treasure_collected.
 def _treasure_collected(state: GameState, player_index: int) -> None:
     """0x519F0-0x519F8 -- credit one treasure to the player who took it.
 
@@ -220,6 +226,7 @@ def _treasure_collected(state: GameState, player_index: int) -> None:
     treasure_collected(state, player_index)
 
 
+# ROM: direct game:0x5E80C | Wall-marker sweep and exit conversion boundary; MOB placement remains a callee.
 def maze_convert_walls_to_exits(state: GameState) -> int:
     """0x5E80C -- the escape timeout's all-walls-become-exits conversion.
 
@@ -261,6 +268,7 @@ def maze_convert_walls_to_exits(state: GameState) -> int:
 # Door helper (only call site: main_move_players at 0x4ACFC)
 # =============================================================================
 
+# ROM: adapter game:0x47FAC | Compatibility delegation to maze_objects.open_timed_doors, which now owns the actual sweep body.
 def open_timed_doors(state: GameState) -> None:
     """0x47FAC -- remove every DOOR_HORIZ/DOOR_VERT and play sound 0x12.
 
@@ -280,6 +288,7 @@ def open_timed_doors(state: GameState) -> None:
     _open_timed_doors(state)
 
 
+# ROM: merged game:0x51E80,game:0x51FAE,game:0x5207C | Door-front initializer includes both immediate vertical/horizontal endpoint scanners inline; main_open_doors remains an ordinary callee.
 def door_open_start(state: GameState, door_slot: int, player_index: int) -> None:
     """0x51E80 -- start the two opening fronts for a door a key just unlocked.
 
@@ -339,6 +348,7 @@ def door_open_start(state: GameState, door_slot: int, player_index: int) -> None
     main_open_doors(state)       # 0x51F9E
 
 
+# ROM: part game:0x511AC | Extracted key-spending door arm at 0x51DAE-0x51DE4 plus touched-MOB removal tail; not a door_traverse ray-march entry.
 def _door_unlock(state: GameState, door_slot: int, player_index: int) -> None:
     """The shared body of the ROM's key-opens-a-door path (0x51DAE-0x51DE4).
 
@@ -364,6 +374,7 @@ def _door_unlock(state: GameState, door_slot: int, player_index: int) -> None:
     _sound_play(state, 0x12)                        # 0x51DDE: "Doors Open"
 
 
+# ROM: direct game:0x511AC | Tile-type pickup/door/transport/exit dispatch boundary, with several arms extracted into helpers; correspondence does not assert complete behavioral fidelity.
 def player_tile_interact(state: GameState, tile_mob_slot: int,
                           player_index: int) -> int:
     """0x511AC -- dispatch on tile type and apply effect (§4.6).
@@ -679,6 +690,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     return 0  # unhandled tile type
 
 
+# ROM: helper | Synchronizes Python logical floor descriptors with MOB deletion for consumed markers; not a separate ROM callable.
 def _clear_floor_marker(state: GameState, slot: int) -> None:
     from ..maze import clear_cell_descriptor
 
@@ -686,6 +698,7 @@ def _clear_floor_marker(state: GameState, slot: int) -> None:
     state.mobs.unlink_and_clear(slot)
 
 
+# ROM: adapter game:0x5E7A6 | Delegates the trap-family replacement boundary to maze.maze_place_object_types.
 def _drop_trap_walls(state: GameState, trap_type: int) -> bool:
     """0x5E7A6 -- replace this trap's remaining triggers and wall group."""
     from ..maze import maze_place_object_types
@@ -693,6 +706,7 @@ def _drop_trap_walls(state: GameState, trap_type: int) -> bool:
     return maze_place_object_types(state, trap_type)
 
 
+# ROM: part game:0x511AC | Shared trap/stun return-arm bookkeeping: clear escape/positive idle timers and notify the dragon; the dragon routine is a callee.
 def _tile_contact_progress(state: GameState, player_index: int) -> None:
     state.escape_timer = 0
     if state.idle_timer > 0:
@@ -702,6 +716,7 @@ def _tile_contact_progress(state: GameState, player_index: int) -> None:
     dragon_player_proximity(state, state.players[player_index].mob_slot)
 
 
+# ROM: adapter game:0x4C72A | Converts Python object types to the ROM item-index argument and delegates to _player_give_item_id.
 def _player_give_item(state: GameState, player_index: int, obj_type: int) -> bool:
     """0x4C72A ``player_give_item_with_message`` -- OR one power bit in.
 
@@ -721,6 +736,7 @@ def _player_give_item(state: GameState, player_index: int, obj_type: int) -> boo
     return _player_give_item_id(state, player_index, item_id)
 
 
+# ROM: direct game:0x4C72A | Current defining power-grant body: owned-bit guard, power OR, one-shot latch and speech; legacy players.player_give_item_with_message does not exist.
 def _player_give_item_id(
     state: GameState, player_index: int, item_id: int,
 ) -> bool:
@@ -746,6 +762,7 @@ def _player_give_item_id(
     return True
 
 
+# ROM: part game:0x511AC | Treasure-room gate and multiplayer bonus redistribution at 0x519FE-0x51AAE, before the ordinary score-award call.
 def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
     """0x51A16-0x51AAE -- the treasure arm's bonus-multiplier redistribution.
 

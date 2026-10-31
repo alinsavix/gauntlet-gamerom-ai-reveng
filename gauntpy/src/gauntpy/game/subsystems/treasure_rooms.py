@@ -62,6 +62,7 @@ _WARNING_ODDS = 4
 # main_treasure_timer (0x4D29E) -- countdown, speech, timeout
 # ---------------------------------------------------------------------------
 
+# ROM: part game:0x4D29E | Once-per-second countdown, fakeout, warning and timeout speech branch; instruction range 0x4D2FC-0x4D456 is internal to the timer routine.
 def _countdown_speech(state: GameState, seconds_remaining: int) -> None:
     """The once-per-second announcement block, 0x4D2FC-0x4D456 (§16).
 
@@ -109,6 +110,7 @@ def _countdown_speech(state: GameState, seconds_remaining: int) -> None:
         sound_play(state, _TREASURE_SECONDS_SPEECH[seconds_remaining])
 
 
+# ROM: direct game:0x4D29E | Countdown gates, seconds display and expiry transition; speech is extracted and the shared UI timer is only tested here, not decremented.
 def main_treasure_timer(state: GameState) -> None:
     """0x4D29E -- treasure-room countdown, speech, and timeout.
 
@@ -163,6 +165,7 @@ def main_treasure_timer(state: GameState) -> None:
 _BONUS_DISPLAY_FRAMES = 0x12C
 
 
+# ROM: part game:0x4D476 | Extracted small-alpha ordinary/secret bonus tally writes using precomputed Python rows; does not own OS text-rendering bodies.
 def _write_bonus_alpha(
     state: GameState, *,
     ordinary_rows: dict[int, tuple[int, int, int, int]],
@@ -200,6 +203,7 @@ def _write_bonus_alpha(
         write_alpha_decimal(state, 21, row + 2, bonus, 6, attribute)
 
 
+# ROM: helper | Python survivor-index list for deferred level loading; not the narrower ROM bonus-recipient predicate.
 def _exiting_or_here(state: GameState) -> list[int]:
     """Players who go on to the next level: still on it, or in the exit."""
     return [
@@ -208,6 +212,7 @@ def _exiting_or_here(state: GameState) -> list[int]:
     ]
 
 
+# ROM: part game:0x4D476 | Status-2/status-8 recipient filter extracted from comparisons at 0x4D552/0x4D55E.
 def _bonus_recipients(state: GameState) -> list[int]:
     """Players the tally pays -- status 2 or 8 exactly (0x4D552/0x4D55E).
 
@@ -221,6 +226,7 @@ def _bonus_recipients(state: GameState) -> list[int]:
     ]
 
 
+# ROM: helper | Python tally compatibility helper credits unattributed level-total pickups to the first recipient; this historical fallback is not documented ROM behavior.
 def _treasure_shares(state: GameState, recipients: list[int]) -> dict[int, int]:
     """Per-player treasure counts for the tally, with unattributed pickups.
 
@@ -237,6 +243,7 @@ def _treasure_shares(state: GameState, recipients: list[int]) -> dict[int, int]:
     return shares
 
 
+# ROM: direct game:0x4D476 | Bonus/tally and committed next-position boundary with extracted payout/text arms; synthetic coin/count fallbacks and deferred Python continuation remain caveats. Its docstring's timer-owner statement is stale.
 def show_level_end_bonus_screen(state: GameState) -> None:
     """0x4D476 -- end the level: award the treasure bonus, show the tally, then
     (after the hold) load the saved next maze.

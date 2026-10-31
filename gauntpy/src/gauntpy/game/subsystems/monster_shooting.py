@@ -65,6 +65,7 @@ _DEMON_SHOT_PASSABLE = frozenset({
 # Find and shoot (0x41750)
 # =============================================================================
 
+# ROM: direct game:0x41750 | Shared-stack find, aim and shoot entry; targeting and shooter-specific branches are extracted.
 def monster_find_and_shoot(state: GameState, slot: int, obj_type: int) -> None:
     """0x41750 -- face a player and, for shooter classes, launch a shot.
 
@@ -103,6 +104,7 @@ def monster_find_and_shoot(state: GameState, slot: int, obj_type: int) -> None:
     _set_direction(state, slot, direction)
 
 
+# ROM: part game:0x41750 | Extracted lobber range, view, channel and throw branch beginning at 0x41946.
 def _lobber_throw(state: GameState, slot: int, direction: int,
                   dx: int, dv: int, target: int) -> int:
     """0x41946 -- range-gated rock throw; returns the direction to face.
@@ -128,6 +130,7 @@ def _lobber_throw(state: GameState, slot: int, direction: int,
     return direction
 
 
+# ROM: part game:0x41750 | Extracted demon shooting branch beginning at 0x41A2E; the view check is a callee.
 def _demon_shoot(state: GameState, slot: int, direction: int,
                  dx: int, dv: int) -> bool:
     """0x41A2E -- fireball if in view, in range, and the muzzle cell is clear.
@@ -158,6 +161,7 @@ def _demon_shoot(state: GameState, slot: int, direction: int,
     return True
 
 
+# ROM: part game:0x41750 | Extracts the wrapped demon muzzle-cell step at 0x41A5A, generalized with an additional bounded Python mode.
 def _neighbor_slot(slot: int, direction: int, wrap: bool = False) -> int | None:
     """The neighbouring cell one step along ``direction``.
 
@@ -175,6 +179,7 @@ def _neighbor_slot(slot: int, direction: int, wrap: bool = False) -> int | None:
     return (nr << 5) | nc
 
 
+# ROM: part game:0x41750 | Extracts demon muzzle-cell type and occupancy checks at 0x41A42-0x41AAE.
 def _demon_muzzle_clear(state: GameState, slot: int, direction: int) -> bool:
     """0x41A42-0x41AAE -- the cell the shot is launched into must be passable."""
     dest = _neighbor_slot(slot, direction, wrap=True)
@@ -185,6 +190,7 @@ def _demon_muzzle_clear(state: GameState, slot: int, direction: int) -> bool:
     return state.mobs.obj_type(dest) in _DEMON_SHOT_PASSABLE
 
 
+# ROM: part game:0x41750 | Extracts IT-first, invisibility-aware nearest-player selection and byte-scale wrapped distances.
 def _find_target_player(state: GameState, slot: int) -> int:
     """Nearest active player by |dH| + |dV|, IT evaluated first.
 
@@ -214,6 +220,7 @@ def _find_target_player(state: GameState, slot: int) -> int:
     return best
 
 
+# ROM: direct game:0x41B16 | Represents the register-entry shot channel scan including the adjacent RAM-word gate.
 def find_unused_shot(state: GameState, shot_slots: range) -> int | None:
     """``find_unused_shot`` (0x41B16) -- a channel is free when its picture is
     clear *and* the word beside it reads zero.
@@ -232,6 +239,7 @@ def find_unused_shot(state: GameState, shot_slots: range) -> int | None:
     return None
 
 
+# ROM: helper | Models the aliased RAM gate word across Python shot-timer and popup-timer arrays.
 def _shot_gate_word(state: GameState, slot: int) -> int:
     """The 0x904926-based word ``find_unused_shot`` tests for ``slot``."""
     index = slot - 2                    # (0x904926 + slot*2 - 0x90492A) // 2
@@ -289,6 +297,7 @@ _LEAD_DELTA_SCALE = 4                        # 0x419BC/0x419C6
 _LEAD_SPAWN_SCALE = 4                        # 0x419F4/0x41A0C
 
 
+# ROM: direct game:0x490DC | Monster projectile creator; lead vectors and pixel-delta compatibility fields use Python representations.
 def monster_create_shot(state: GameState, slot: int, direction: int,
                         shot_slot: int, lead: tuple[int, int] | None = None) -> None:
     """0x490DC -- arm a projectile in one of the fixed monster channels.
@@ -354,6 +363,7 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
         state.shot_dy[shot_slot] = _round_div(vec_v, 128)
 
 
+# ROM: part game:0x490DC | Extracted projectile cell/depth placement tail at 0x49274-0x492B6, not the list-sort callee.
 def _depth_place_shot(state: GameState, shot_slot: int) -> None:
     """0x49274-0x492B6 -- key the new channel into the depth chain at its cell.
 
@@ -368,6 +378,7 @@ def _depth_place_shot(state: GameState, shot_slot: int) -> None:
     state.mobs.insert(shot_slot, depth_key=shot_cell(state, shot_slot))
 
 
+# ROM: part game:0x490DC | Extracts demon/lobber initial-picture counter selection at 0x491D2 and 0x49238.
 def _spawn_shot_picture(state: GameState, channel: int) -> int:
     """The frame 0x491D2 (demon) / 0x49238 (lobber) arms a channel with.
 
@@ -391,10 +402,12 @@ def _spawn_shot_picture(state: GameState, channel: int) -> int:
     return shot_picture(state, channel, counter)
 
 
+# ROM: helper | Rounded division for Python compatibility pixel deltas; no identified ROM callable.
 def _round_div(value: int, divisor: int) -> int:
     return -((-value + divisor // 2) // divisor) if value < 0 else (value + divisor // 2) // divisor
 
 
+# ROM: part game:0x41750 | Extracts target-velocity lead and muzzle-offset compensation at 0x41978-0x41A10.
 def _lobber_lead(state: GameState, slot: int, direction: int, target: int,
                  dx: int, dv: int) -> tuple[int, int]:
     """0x41978-0x41A10 -- where the rock is thrown, not where the player is.
@@ -452,6 +465,7 @@ _ODDANGLE_OVERRIDE = {
     int(MazeObjIds.MONST_DEATH): (0x40, 0x80),        # 0x40E1A
 }
 
+# ROM: part game:0x40E6A | Recomputes the family override setup at 0x40F34-0x40F58 instead of keeping ROM stack-local configuration.
 def _oddangle_override(state: GameState, obj_type: int) -> int:
     """The family's override byte, or 0 when its ODDANGLE flag is clear.
 
@@ -468,6 +482,7 @@ def _oddangle_override(state: GameState, obj_type: int) -> int:
     return value
 
 
+# ROM: direct game:0x41B52 | Represents the BSR-only tighter viewport predicate using high-byte positions.
 def monster_shooter_in_view(state: GameState, slot: int) -> bool:
     """``monster_shooter_in_view`` (0x41B52) -- the tighter shooting box.
 

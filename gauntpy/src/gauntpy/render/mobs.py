@@ -105,6 +105,7 @@ MAX_MOB_PIXELS = MAX_MOB_TILES * 8
 #: sprite wider than its cell. One whole cell is the bound on that gap.
 BAND_SLACK_PIXELS = MAX_MOB_PIXELS - CELL_PIXELS
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def strength_tier(state: GameState, slot: int) -> int:
     """The sprite/palette tier of the creature in ``slot`` -- the default
     ``tier_for`` (see ``draw_mob_layer``).
@@ -145,6 +146,7 @@ class MobDrawInfo(NamedTuple):
     palette: int     # mob_hpos bits 3-0 -- see draw_mob_layer's tier note
     kind: str | None = None   # gex entity name -- see sprite_kind()
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     @property
     def size_tiles(self) -> tuple[int, int]:
         """``(width, height)`` in 8x8 tiles -- the MOB's own ``mob_vpos`` size
@@ -166,6 +168,7 @@ class SpriteSource(Protocol):
     ``tests/test_render.py``'s ``_FakeAssets``.
     """
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def sprite(
         self,
         picture: int,
@@ -177,6 +180,7 @@ class SpriteSource(Protocol):
     ): ...
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def sprite_kind(state: GameState, slot: int) -> str | None:
     """Which ``gex`` entity the MOB in ``slot`` is -- ``AssetStore.sprite()``'s
     ``kind``, or ``None`` when the slot is not a creature the layer can name.
@@ -209,6 +213,7 @@ def sprite_kind(state: GameState, slot: int) -> str | None:
     return _MONSTER_ENTITY.get(state.mobs.obj_type(slot))
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def _chain_band_window(state: GameState, scroll_y: int, viewport_h: int) -> tuple[int, int]:
     """The SLIP band range the chain walk has to cover for a viewport at
     ``scroll_y``, per ``doc/01_hardware.md`` §8.4 (one band per 8 playfield
@@ -238,6 +243,7 @@ def _chain_band_window(state: GameState, scroll_y: int, viewport_h: int) -> tupl
     return first, max(first, last)
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def iter_visible_mobs(
     state: GameState, scroll_x: int, scroll_y: int, viewport_w: int, viewport_h: int
 ) -> Iterator[MobDrawInfo]:
@@ -315,6 +321,7 @@ def iter_visible_mobs(
         )
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_mob_layer(
     fb,
     state: GameState,

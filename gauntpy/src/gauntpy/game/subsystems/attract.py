@@ -108,12 +108,14 @@ _TITLE_MOB_FIRST = 0x20
 _TITLE_MOB_LAST = 0xBE
 
 
+# ROM: helper | Convenience wrapper for constructing one modeled title MOB; no separate title-record callable identified.
 def _title_mob_record(
     state: GameState, slot: int, picture: int, hpos: int, vpos: int,
 ) -> None:
     state.mobs.create(slot, tile=picture, hpos=hpos, vpos=vpos, obj_type=0)
 
 
+# ROM: part game:0x4DA3E | MOB construction and initial motion state extracted from title_logo_init; colors and full/short selection are elsewhere, and no title_logo_init Python function exists.
 def _init_title_logo_mobs(state: GameState) -> None:
     """Port title_logo_init 0x4DA9A-0x4DCB8 into the four MOB arrays."""
     slot = _TITLE_MOB_FIRST
@@ -189,6 +191,7 @@ def _init_title_logo_mobs(state: GameState) -> None:
     state.logo_scroll_timer = 0
 
 
+# ROM: direct game:0x4D956 | Renamed scroll_apply boundary over title MOB groups; Boolean result and zero-delta no-op differ from the documented sentinel/anchor-reset branch.
 def _scroll_title_mobs(
     state: GameState, body_delta: int, ii_delta: int,
 ) -> bool:
@@ -204,6 +207,7 @@ def _scroll_title_mobs(
     return True
 
 
+# ROM: part game:0x4DCBA | Extracted title motion-script/timer portion of main_logo_updcolors; scroll_apply remains a delegated callable.
 def _update_title_logo_motion(state: GameState) -> None:
     program = _LOGO_MOTION_PROGRAM_FULL if state.title_logo_full_program else _TITLE_MOTION_SHORT
     while True:
@@ -230,6 +234,7 @@ def _update_title_logo_motion(state: GameState) -> None:
             return
 
 
+# ROM: part game:0x4CD1C,game:0x4CDB8,game:0x4CFAE,game:0x4CFDA | Combines the legend curtain and three page text/reveal portions; monster/rules MOB adjustments and scroll state are split into other functions.
 def _write_legend_alpha(state: GameState) -> None:
     """load_legend_page's opaque 29-column curtain and ROM text page."""
     fill_alpha_rect(state, 0, 0, 29, 30, alpha_word(0x8000))
@@ -273,6 +278,7 @@ def _write_legend_alpha(state: GameState) -> None:
         write_alpha_text(state, column, row, text, attribute)
 
 
+# ROM: part game:0x4CFDA | Decorative MOB picture/position writes extracted from draw_legend_rules_page.
 def _adjust_legend_rules_mobs(state: GameState) -> None:
     """Port draw_legend_rules_page's decorative MOB writes at 0x4CFF8."""
     for slot, picture in (
@@ -288,6 +294,7 @@ def _adjust_legend_rules_mobs(state: GameState) -> None:
         state.mobs.vpos[slot] = (state.mobs.vpos[slot] + delta) & 0xFFFF
 
 
+# ROM: part game:0x4CDB8 | Fourteen MOB position adjustments extracted from draw_legend_monsters_page.
 def _adjust_legend_monster_mobs(state: GameState) -> None:
     """Port draw_legend_monsters_page's fourteen position adjustments."""
     for array, slot, delta in (
@@ -309,6 +316,8 @@ def _adjust_legend_monster_mobs(state: GameState) -> None:
         array[slot] = (array[slot] + delta) & 0xFFFF
 
 
+# ROM: direct game:0x4CD1C | Legend maze/palette reload and page dispatch boundary; page bodies are mostly extracted.
+# ROM: part game:0x4CDB8,game:0x4CFDA | Inlines the selected monster/rules page scroll-register assignments before calling their extracted drawing portions.
 def load_legend_page(state: GameState) -> None:
     """Port load_legend_page 0x4CD1C, including its maze/palette reload."""
     from .. import maze
@@ -374,6 +383,7 @@ _DIRECTION_BITS = 0xF0
 # main_logo_updcolors (0x4DCBA)
 # =============================================================================
 
+# ROM: merged game:0x4DCBA,game:0x4DE76 | Main logo update boundary delegates title sub-bodies but inlines score_screen_color_cycle's SCORES palette rotation; diagnostic timer is Python bookkeeping.
 def main_logo_updcolors(state: GameState) -> None:
     """0x4DCBA -- palette-driven colour animation and title logo effects.
 
@@ -399,6 +409,7 @@ def main_logo_updcolors(state: GameState) -> None:
 # main_attract (0x44562)
 # =============================================================================
 
+# ROM: helper | Python signed-16-bit representation helper; no ROM callable.
 def _signed_word(value: int) -> int:
     """Read a GameState counter the way the ROM reads its 16-bit RAM word.
 
@@ -410,6 +421,7 @@ def _signed_word(value: int) -> int:
     return value - 0x10000 if value & 0x8000 else value
 
 
+# ROM: part game:0x44562 | Extracted NORMAL-mode out/selecting-player gate from main_attract.
 def _select_phase_idle(state: GameState) -> bool:
     """0x4457C-0x445CE -- in NORMAL, is every player either out or selecting?
 
@@ -424,6 +436,7 @@ def _select_phase_idle(state: GameState) -> bool:
     )
 
 
+# ROM: direct game:0x44562 | Attract state-machine boundary; idle, interruption and expiry blocks are split into named Python functions.
 def main_attract(state: GameState) -> None:
     """0x44562 -- the attract state machine (§6).
 
@@ -475,6 +488,7 @@ def main_attract(state: GameState) -> None:
     _attract_timer_expired(state, mode)
 
 
+# ROM: part game:0x44562 | Extracted screen-expiry and legend/session rotation paths inside main_attract; 0x44860 is not an entry.
 def _attract_timer_expired(state: GameState, mode: int) -> None:
     """0x44860-0x4491A -- what happens when the screen timer runs out."""
     state.logo_color_timer = 0                     # 0x44866 logo_cycle_timer
@@ -515,6 +529,7 @@ def _attract_timer_expired(state: GameState, mode: int) -> None:
     start_attract_screen(state, int(state.game_mode))   # 0x4490E
 
 
+# ROM: part game:0x44414 | Extracted every-thirteenth-TITLE settings refresh from start_attract_screen; delegates to a broader typed EEPROM restore.
 def _refresh_operator_settings(state: GameState) -> None:
     """0x444A4-0x444C2 -- re-read the operator configuration every 13th TITLE.
 
@@ -529,6 +544,8 @@ def _refresh_operator_settings(state: GameState) -> None:
     eeprom_load_settings(state)
 
 
+# ROM: direct game:0x44414 | Attract screen transition/dispatch boundary; display, legend and demo callees are not additional whole-body mappings.
+# ROM: part game:0x4DA3E | Owns title_logo_init's full/short motion-program selection, with its palette and MOB construction split into separate helpers.
 def start_attract_screen(state: GameState, mode: int) -> None:
     """0x44414 -- switch to an attract screen and load its timer (§6.1).
 
@@ -606,6 +623,7 @@ def start_attract_screen(state: GameState, mode: int) -> None:
         attract_highscores(state)              # attract_highscores 0x4450C
 
 
+# ROM: direct game:0x449D4 | Recorded demo initialization boundary; maze acquisition has an explicit ROM-less fallback and gameplay callees remain delegated.
 def attract_demo_init(state: GameState) -> None:
     """0x449D4 -- set up demo playback on the demo level (§6.3).
 
@@ -664,6 +682,7 @@ def attract_demo_init(state: GameState) -> None:
 # Interruption test blocks (§6.4)
 # =============================================================================
 
+# ROM: part game:0x44562 | Extracted five attract input-interruption blocks; includes a host-specific position-zero next-screen shortcut and reordered legend paging.
 def _check_attract_interrupt(state: GameState, mode: int) -> bool:
     """Run the five interruption tests; restart a screen on the first match.
 
@@ -722,6 +741,7 @@ def _check_attract_interrupt(state: GameState, mode: int) -> bool:
     return False
 
 
+# ROM: part game:0x44562 | Extracted raw FIRE/paid-MAGIC predicates used by the main_attract interruption blocks.
 def _button_pressed(state: GameState, position: int) -> bool:
     """FIRE (paid: or MAGIC) held at a raw-input position (active low; §6.4)."""
     raw = state.player_input_raw[position]
@@ -729,6 +749,7 @@ def _button_pressed(state: GameState, position: int) -> bool:
     return (raw & mask) != mask
 
 
+# ROM: part game:0x44562 | Extracted raw directional predicate from main_attract's screen-interruption blocks.
 def _direction_pressed(state: GameState, position: int) -> bool:
     """Any joystick direction held at a raw-input position (active low)."""
     raw = state.player_input_raw[position]

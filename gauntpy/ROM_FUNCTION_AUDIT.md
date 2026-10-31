@@ -1,5 +1,12 @@
 # Game-ROM function coverage audit
 
+For the current **bidirectional function-boundary inventory**, including OS
+entries and Python-only functions, see [FUNCTION_CROSSWALK.md](FUNCTION_CROSSWALK.md).
+That report is generated from metadata attached to actual Python definitions.
+This older audit records assessed game-behavior coverage: its "complete" label
+does not imply a one-to-one Python function, and its prose owner descriptions
+are not the authoritative structural mapping.
+
 This report compares gauntpy with the callable-entry inventory generated from
 the shipped game ROM. The source inventory is
 [`../doc/generated/callable_contract_coverage.csv`](../doc/generated/callable_contract_coverage.csv).

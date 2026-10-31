@@ -21,14 +21,17 @@ class RunPolicy:
     uncapped: bool = False
     sound_enabled: bool = False
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @property
     def performance_mode(self) -> bool:
         return self.benchmark_frames is not None or self.stress_seconds is not None
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @property
     def accelerated(self) -> bool:
         return self.uncapped or self.performance_mode
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @property
     def playback_enabled(self) -> bool:
         return self.sound_enabled and not self.accelerated
@@ -44,15 +47,18 @@ class BenchmarkRun:
     recorder: BenchmarkRecorder = field(init=False)
     warmup_remaining: int = field(init=False)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def __post_init__(self) -> None:
         self.reset_recording()
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @property
     def label(self) -> str:
         if self.workloads:
             return self.workloads[self.workload_index].name
         return "selected-state"
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def reset_recording(self) -> None:
         """Begin accounting only after the selected state's setup is complete."""
         from ..performance import BenchmarkRecorder
@@ -60,6 +66,7 @@ class BenchmarkRun:
         self.recorder = BenchmarkRecorder()
         self.warmup_remaining = min(30, self.target_frames)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def should_record(self, *, frame_updated: bool) -> bool:
         if not frame_updated:
             return False
@@ -68,10 +75,12 @@ class BenchmarkRun:
             return False
         return True
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @property
     def complete(self) -> bool:
         return self.recorder.frames >= self.target_frames
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def report(self, *, scale: int) -> str:
         from ..performance import format_benchmark_report
 
@@ -80,6 +89,7 @@ class BenchmarkRun:
             workload=self.label if self.workloads else None,
         )
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def advance_workload(self) -> PerformanceWorkload | None:
         """Select the next recipe; the caller builds it before resetting timing."""
         if self.workload_index + 1 >= len(self.workloads):
@@ -101,18 +111,22 @@ class StressRun:
     phase_seconds: float = field(init=False)
     next_phase_at: float = field(init=False)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def __post_init__(self) -> None:
         self.phase_seconds = min(2.0, self.seconds / len(self.workloads))
         self.next_phase_at = self.phase_seconds
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @property
     def phase_index(self) -> int:
         return self.phase_indices[self.phase]
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @property
     def label(self) -> str:
         return self.workloads[self.phase].name
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def advance_if_due(self, elapsed: float) -> bool:
         if elapsed >= self.next_phase_at:
             self.phase = (self.phase + 1) % len(self.workloads)
@@ -120,6 +134,7 @@ class StressRun:
             return True
         return False
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def completion_report(self, elapsed: float) -> str:
         return (
             f"gauntpy stress test complete: {self.frames} frames "

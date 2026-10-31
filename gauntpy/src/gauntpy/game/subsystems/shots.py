@@ -94,6 +94,7 @@ _SCREEN_NEG = 0xC000
 # main_handle_shots (0x474F6)
 # =============================================================================
 
+# ROM: part game:0x46F56 | Recomputes the scroll-origin arithmetic written by set_scroll_pos rather than treating RAM origin addresses as entries.
 def _screen_origins(state: GameState) -> tuple[int, int]:
     """The ROM's ``scroll_hpos_origin``/``scroll_vpos_origin`` (0x904AC2/4).
 
@@ -105,6 +106,7 @@ def _screen_origins(state: GameState) -> tuple[int, int]:
     return origin_h, origin_v
 
 
+# ROM: part game:0x474F6 | Extracts direction-sensitive return-to-window tests at 0x47748-0x477B6.
 def _heads_back(direction: int, axis: str, negative: bool) -> bool:
     """0x47748-0x477B6 -- is the shot travelling back toward the window?"""
     if axis == "h":
@@ -112,6 +114,7 @@ def _heads_back(direction: int, axis: str, negative: bool) -> bool:
     return direction in ((7, 0, 1) if negative else (3, 4, 5))
 
 
+# ROM: part game:0x474F6 | Extracted projectile disposal-window branch at 0x47716-0x477B6.
 def _offscreen(state: GameState, shooter_id: int, direction: int) -> bool:
     """0x47716-0x477B6 -- whether this shot has left the playfield window."""
     slot = _shot_slot(shooter_id)
@@ -132,6 +135,7 @@ def _offscreen(state: GameState, shooter_id: int, direction: int) -> bool:
     return False
 
 
+# ROM: part game:0x474F6 | Extracts shot removal and position clearing at 0x477B8.
 def _remove_shot(state: GameState, shooter_id: int) -> None:
     """0x477B8 -- drop the shot channel, clearing H/V as well."""
     slot = _shot_slot(shooter_id)
@@ -141,6 +145,7 @@ def _remove_shot(state: GameState, shooter_id: int) -> None:
     state.shot_lifetime[slot] = 0
 
 
+# ROM: part game:0x474F6 | Extracts projectile animation/lifetime decrement and reload at 0x475D0-0x47620.
 def _advance_counter(state: GameState, shooter_id: int) -> int:
     """0x475D0-0x47620 -- predecrement, reload from ``shot_counter_reload``."""
     counter = _s16(state.shot_anim_lifetime_counter[shooter_id] - 1)
@@ -155,6 +160,7 @@ def _advance_counter(state: GameState, shooter_id: int) -> int:
     return counter
 
 
+# ROM: part game:0x474F6 | Extracts the projectile picture publication phase at 0x47622-0x47716.
 def _advance_picture(state: GameState, shooter_id: int, counter: int) -> None:
     """0x47622-0x47716 -- the class-specific projectile animation."""
     state.mobs.picture[_shot_slot(shooter_id)] = shot_picture(
@@ -162,6 +168,7 @@ def _advance_picture(state: GameState, shooter_id: int, counter: int) -> None:
     )
 
 
+# ROM: part game:0x474F6 | Extracted lobber vector/accumulator motion branch at 0x479C2-0x47A58.
 def _advance_lobber(state: GameState, shooter_id: int) -> None:
     """0x479C2-0x47A58 -- the lobbed-rock channels 8-11.
 
@@ -202,6 +209,7 @@ def _advance_lobber(state: GameState, shooter_id: int) -> None:
     state.mobs.vpos[slot] = replace_position(state.mobs.vpos[slot], accum_v)
 
 
+# ROM: part game:0x474F6 | Extracts per-class projectile position advance at 0x47830-0x47A58.
 def _advance_position(state: GameState, shooter_id: int, direction: int) -> None:
     """0x47830-0x47A58 -- apply this frame's velocity to the shot MOB.
 
@@ -226,6 +234,7 @@ def _advance_position(state: GameState, shooter_id: int, direction: int) -> None
     state.shot_dy[slot] = dv >> POS_SHIFT
 
 
+# ROM: part game:0x474F6 | Extracts cell-change depth rekeying and last-reflection-wall tracking at 0x47A7E-0x47B12.
 def _reposition_in_chain(state: GameState, shooter_id: int, cell: int) -> None:
     """0x47A7E-0x47B12 -- re-key the shot when it changes maze cell."""
     slot = _shot_slot(shooter_id)
@@ -246,6 +255,7 @@ def _reposition_in_chain(state: GameState, shooter_id: int, cell: int) -> None:
     state.mobs.insert(slot, depth_key=cell)
 
 
+# ROM: direct game:0x474F6 | Twelve-channel projectile frame service; picture, motion, disposal and player input phases are split into helpers.
 def main_handle_shots(state: GameState) -> None:
     """0x474F6 -- advance the twelve projectile channels.
 

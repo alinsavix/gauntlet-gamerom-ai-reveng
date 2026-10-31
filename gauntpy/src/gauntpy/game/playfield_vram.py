@@ -41,11 +41,13 @@ EXIT_DESC_TILE_BASE = 0x03A2
 EXIT_DESC_RECORD = (0, 0, 1, 2, 3, 4, 5, 6, 6, 6, 5, 4, 3, 2, 1, 0)
 
 
+# ROM: helper | Generic masked column-first tile index used by several Python display paths.
 def playfield_index(column: int, row: int) -> int:
     """Index one 8x8 tile in the hardware's column-first 64x64 table."""
     return (column & 0x3F) * PF_TILE_ROWS + (row & 0x3F)
 
 
+# ROM: part game:0x5E542 | Extracted packed-cell to four quadrant-address calculation; returns Python word indices instead of byte addresses.
 def descriptor_indices(slot: int) -> tuple[int, int, int, int]:
     """VRAM indices for a maze cell's TL, TR, BL and BR descriptor words."""
     row = (slot >> 5) & 0x1F
@@ -60,10 +62,13 @@ def descriptor_indices(slot: int) -> tuple[int, int, int, int]:
     )
 
 
+# ROM: helper | Python descriptor readback convenience over modeled VRAM.
 def read_tile_descriptor(state, slot: int) -> tuple[int, int, int, int]:  # noqa: ANN001
     return tuple(state.playfield_ram[index] for index in descriptor_indices(slot))
 
 
+# ROM: direct game:0x5E536 | Normal-stack pf_stamp_update boundary represented by a Python iterable; changed-result/cache generation and descriptor-length validation are port additions. Legacy pf_stamp_update Python name is stale.
+# ROM: part game:0x5E542 | Contains the shared register body's four additive word stores, with address calculation extracted to descriptor_indices.
 def write_tile_descriptor(
     state, slot: int, descriptor: Iterable[int], addend: int = 0,  # noqa: ANN001
 ) -> bool:
@@ -86,6 +91,7 @@ def write_tile_descriptor(
     return changed
 
 
+# ROM: helper | Modeled color-RAM write with bounds checking and cache invalidation; 0x910500 names RAM, not a ROM service.
 def write_playfield_color(state, index: int, word: int) -> bool:  # noqa: ANN001
     """Write one word of normal playfield color RAM (0x910500)."""
     if not 0 <= index < 128:
@@ -98,6 +104,7 @@ def write_playfield_color(state, index: int, word: int) -> bool:  # noqa: ANN001
     return True
 
 
+# ROM: helper | Python contiguous color-RAM update and one-shot cache invalidation.
 def write_playfield_colors(
     state, first: int, words: Iterable[int],  # noqa: ANN001
 ) -> bool:
@@ -116,6 +123,7 @@ def write_playfield_colors(
     return changed
 
 
+# ROM: part game:0x5287C | Extracted exit-animation descriptor selection expressed as numeric tile arithmetic over decoded script stages, not an entry at the script table.
 def exit_descriptor(floorpattern: int, record_entry: int) -> tuple[int, int, int, int]:
     stage = EXIT_DESC_RECORD[record_entry & 0x0F]
     first = EXIT_DESC_TILE_BASE + 4 * (

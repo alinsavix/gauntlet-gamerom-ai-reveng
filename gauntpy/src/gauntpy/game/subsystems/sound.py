@@ -89,6 +89,7 @@ SOUND_NO_RESPONSE = 0xFFFF
 # documented busy/failure ladders are real code rather than commentary.
 # ---------------------------------------------------------------------------
 
+# ROM: adapter os:0x41CC | Substitutable OS latch-send seam that currently always accepts; no latch, interrupt-mask or hardware-write body. Public veneer 0x242 resolves here.
 def try_send_sound_command(state: GameState, command: int) -> bool:
     """OS ``try_send_sound_command`` (0x242) -- offer one byte to the sound
     board's command latch. ``True`` = accepted, ``False`` = the latch is busy.
@@ -98,6 +99,7 @@ def try_send_sound_command(state: GameState, command: int) -> bool:
     return True
 
 
+# ROM: adapter os:0x4184 | Fixed diagnostic-command/direct-response API seam that always succeeds; not the OS submission implementation. Public veneer 0x172 resolves here.
 def send_status_query(state: GameState) -> bool:
     """OS 0x172 -- send the diagnostic status query (command
     ``SOUND_DIAGNOSTIC_QUERY``) with a one-byte reply directed at 0x9049F1.
@@ -108,6 +110,7 @@ def send_status_query(state: GameState) -> bool:
     return True
 
 
+# ROM: direct game:0x4ADD6 | Seven-usable-slot sound-ring enqueue/drop boundary expressed with a Python queue.
 def enqueue_sound(state: GameState, sound_id: int) -> None:
     """0x4ADD6 -- the ring fallback: append if there is room, otherwise drop
     the byte silently. Usable capacity is 7 (§11.1-11.2).
@@ -117,6 +120,7 @@ def enqueue_sound(state: GameState, sound_id: int) -> None:
     # else: ring full, command dropped without complaint (§11.2)
 
 
+# ROM: direct game:0x4AD76 | Immediate-send versus queue fallback boundary; sound_log replaces board output and the OS service is a separate adapter.
 def sound_play(state: GameState, sound_id: int) -> None:
     """0x4AD76 -- play a sound command. Called from all over the game.
 
@@ -137,6 +141,7 @@ def sound_play(state: GameState, sound_id: int) -> None:
     enqueue_sound(state, sound_id)
 
 
+# ROM: direct game:0x4AD4E | Operator speech-disable gate boundary delegating accepted speech to sound_play.
 def sound_speech_play(state: GameState, speech_id: int) -> None:
     """0x4AD4E -- play a speech command. See §11.4.
 
@@ -148,6 +153,7 @@ def sound_speech_play(state: GameState, speech_id: int) -> None:
         sound_play(state, speech_id)
 
 
+# ROM: merged game:0x42DC8,game:0x4ADAE | Game recovery reset inlines sound_queue_reset as queue.clear; OS sound-CPU hardware reset is omitted. Legacy sound_queue_reset Python function is absent.
 def sound_system_reset(state: GameState) -> None:
     """0x42DC8 -- reset the sound engine after a dead or unexpected board.
 
@@ -163,6 +169,8 @@ def sound_system_reset(state: GameState) -> None:
     state.sound_retry_count = 0
 
 
+# ROM: direct game:0x42D0A | Game sound-response/recovery/diagnostic retry boundary; incoming data and status sends are modeled seams.
+# ROM: adapter os:0x42C8 | Inlined Python incoming-list pop substitutes for OS read_sound_data's 15-byte ring and empty result; no separate OS ring body is claimed.
 def sound_response(state: GameState) -> None:
     """0x42D0A -- process replies from the sound board. See §11.3.
 
@@ -218,6 +226,7 @@ def sound_response(state: GameState) -> None:
         sound_system_reset(state)
 
 
+# ROM: direct game:0x4AE20 | Outgoing ring drain boundary with overflow/holdoff gates and eight-attempt retry budget.
 def main_update_sound(state: GameState) -> None:
     """0x4AE20 -- drain the outgoing sound command queue. See §11.2.
 

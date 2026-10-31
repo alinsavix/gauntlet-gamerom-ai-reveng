@@ -43,6 +43,7 @@ _JOY_FIRE_BIT = 0x02                # input.JOY_FIRE_BIT
 _JOY_DIRECTIONS = 0xF0              # input.JOY_DIRECTIONS
 
 
+# ROM: helper | Reconstructs a ROM-style word from Python demo stream/cursor storage with bounds guards; 0x506B6 is a load instruction, not its entry.
 def demo_record_word(state: GameState, player_index: int) -> int:
     """The 16-bit word the ROM reads at ``demo_ptr[player]`` (0x506B6).
 
@@ -67,6 +68,7 @@ def demo_record_word(state: GameState, player_index: int) -> int:
     return ((stream[pos] & 0xFF) << 8) | (stream[pos + 1] & 0xFF)
 
 
+# ROM: helper | Python recording-tail predicate used by demo synchronization exceptions; no ROM callable provenance is claimed.
 def _demo_final_move_record(state: GameState, player_index: int) -> bool:
     """Whether the active recording is on its last non-sentinel input pair."""
     if (
@@ -82,6 +84,7 @@ def _demo_final_move_record(state: GameState, player_index: int) -> bool:
     )
 
 
+# ROM: part game:0x50662,game:0x4A53A | Extracted hardware-versus-recorded input selection seen at 0x50690-0x506B8 and 0x4A8A2-0x4A908; Python restricts replay selection to DEMO.
 def player_joystick_word(state: GameState, player_index: int) -> int:
     """The joystick word a consumer should read, per 0x50690-0x506B8.
 
@@ -94,6 +97,7 @@ def player_joystick_word(state: GameState, player_index: int) -> int:
     return state.player_input_raw[player_index]
 
 
+# ROM: helper | Python input-interface helper combining replay selection with active-high direction masking.
 def _joystick_direction_bits(state: GameState, player_index: int) -> int:
     """``input.direction_bits`` over ``player_joystick_word`` (active high)."""
     if state.game_mode == int(GameMode.DEMO):
@@ -101,6 +105,7 @@ def _joystick_direction_bits(state: GameState, player_index: int) -> int:
     return direction_bits(state, player_index)
 
 
+# ROM: helper | Python input-interface helper combining replay selection with the active-low Fire predicate.
 def _joystick_fire_held(state: GameState, player_index: int) -> bool:
     """``input.fire_held`` over ``player_joystick_word`` (active low bit 1)."""
     if state.game_mode == int(GameMode.DEMO):
@@ -108,6 +113,7 @@ def _joystick_fire_held(state: GameState, player_index: int) -> bool:
     return fire_held(state, player_index)
 
 
+# ROM: part game:0x449D4 | Recorded-stream pointer and timer initialization extracted from attract_demo_init at 0x44A38-0x44A48.
 def demo_playback_start(state: GameState, player_index: int) -> None:
     """0x44A38-0x44A48 -- arm one slot's recorded stream.
 
@@ -124,6 +130,7 @@ def demo_playback_start(state: GameState, player_index: int) -> None:
     state.demo_timers[player_index] = stream[0] & 0xFF if stream else 0
 
 
+# ROM: part game:0x4A53A | FE-record character/join/cursor arm at 0x4A5B2-0x4A5DE; player_join remains a callee, not the implementing entry.
 def _demo_join_record(state: GameState, payload: int) -> None:
     """0x4A5B2-0x4A5DE -- the ``FE nn`` record joins a slot mid-demo.
 
@@ -148,6 +155,7 @@ def _demo_join_record(state: GameState, payload: int) -> None:
     state.demo_stream_pos[joined] = 0                      # 0x4A5DE
 
 
+# ROM: part game:0x4A53A | Demo timer and caption/join-record traversal at 0x4A560-0x4A5F0, with Python stream-exhaustion guards and deferred initialization.
 def _demo_playback(state: GameState) -> None:
     """0x4A560-0x4A5F0 -- advance every slot's demo record cursor.
 

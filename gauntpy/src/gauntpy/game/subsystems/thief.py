@@ -133,12 +133,14 @@ _MUGGER_COMPACT_ANIM = (
     0x2400, 0x2409, 0x2412, 0x2409, 0x2436, 0x243F, 0x2448, 0x243F,
     0x2490, 0x2499, 0x24A2, 0x2499, 0x24C6, 0x24CF, 0x24D8, 0x24CF,
 )
+# ROM: part game:0x50FD2,game:0x51000,game:0x5103E | Extracts the shared 44-column, 128-byte-row path-grid address calculation with a Python bounds guard.
 def _path_grid_offset(grid_index: int) -> int:
     if not 0 <= grid_index <= _PATH_GRID_MAX_CELL:
         raise ValueError(f"path-grid cell out of range: {grid_index:#x}")
     return (grid_index // _PATH_GRID_COLUMNS) * _PATH_GRID_ROW_STRIDE + grid_index % _PATH_GRID_COLUMNS
 
 
+# ROM: direct game:0x5103E | Reads pursuit or escape route nibble and returns direction 8 for an unset route.
 def path_grid_get_direction(state: GameState, grid_index: int) -> int:
     """0x5103E -- return the selected nibble, or eight when it is unset."""
     packed = state.path_direction_grid[_path_grid_offset(grid_index)]
@@ -148,6 +150,7 @@ def path_grid_get_direction(state: GameState, grid_index: int) -> int:
     return direction if 0 <= direction <= 7 else 8
 
 
+# ROM: direct game:0x50FD2 | Writes direction-plus-one to the pursuit route nibble.
 def path_grid_set_low_direction(state: GameState, grid_index: int, direction: int) -> None:
     """0x50FD2 -- replace the pursuit (low-nibble) route direction."""
     offset = _path_grid_offset(grid_index)
@@ -157,6 +160,7 @@ def path_grid_set_low_direction(state: GameState, grid_index: int, direction: in
     )
 
 
+# ROM: direct game:0x51000 | Writes the reverse route nibble once, outside escape mode.
 def path_grid_set_high_direction_if_empty(state: GameState, grid_index: int, direction: int) -> None:
     """0x51000 -- write a reverse escape route only once, outside escape mode."""
     if state.thief_mode & THIEF_ESCAPE:
@@ -169,6 +173,7 @@ def path_grid_set_high_direction_if_empty(state: GameState, grid_index: int, dir
         )
 
 
+# ROM: direct game:0x510FC | Direction between packed cells with per-axis level-wrap flags.
 def calc_direction(state: GameState, from_slot: int, to_slot: int) -> int:
     """0x510FC -- direction between packed cells, including level wrapping."""
     from_col, to_col = from_slot & 0x1F, to_slot & 0x1F
@@ -199,6 +204,7 @@ def calc_direction(state: GameState, from_slot: int, to_slot: int) -> int:
     return 8 if col_delta == 0 and row_delta == 0 else direction
 
 
+# ROM: helper | Reconstructs the Python ordered transporter positions from current MOB types.
 def _tport_positions(state: GameState) -> list[int]:
     return [
         slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
@@ -206,6 +212,8 @@ def _tport_positions(state: GameState) -> list[int]:
     ]
 
 
+# ROM: direct game:0x4E684 | Route construction entry using flattened Python forward/reverse arrays.
+# ROM: part game:0x510BC,game:0x5107A | Inlines paired route-word reads and writes; padded addressing and packed-return ABI are not standalone Python bodies.
 def tport_route_connect(
     state: GameState, source_pos: int, destination_pos: int, landing_pos: int,
 ) -> None:
@@ -229,6 +237,8 @@ def tport_route_connect(
     state.tport_route_reverse[destination_id] = reverse
 
 
+# ROM: direct game:0x4E73A | Conditional source approach-direction update.
+# ROM: part game:0x510BC,game:0x5107A | Inlines the used forward-half read/write while leaving reverse state unchanged; not a direct read-pair implementation.
 def tport_route_connect_if_empty(
     state: GameState, source_pos: int, destination_pos: int, approach_pos: int,
 ) -> None:
@@ -246,6 +256,7 @@ def tport_route_connect_if_empty(
     ) & 0x0F
 
 
+# ROM: part game:0x4F912 | Extracts next-route-cell calculation using the row/column direction tables.
 def _advance_route_cell(packed_pos: int, direction: int) -> int:
     return (
         ((packed_pos & 0x3E0) + _ROUTE_ROW_DELTAS[direction])
@@ -253,10 +264,12 @@ def _advance_route_cell(packed_pos: int, direction: int) -> int:
     ) & 0xFFFF
 
 
+# ROM: helper | Python object-type traversability-table accessor reused by routing and deployment.
 def _route_cell_is_traversable(state: GameState, packed_pos: int) -> bool:
     return bool(_MAZE_OBJECT_TRAVERSABILITY_FLAGS[state.mobs.obj_type(packed_pos)])
 
 
+# ROM: direct game:0x4E630 | Records the selected victim's departure direction and updates its packed position.
 def thief_track_victim_move(state: GameState, new_packed_pos: int, player_index: int) -> None:
     """0x4E630 -- write the target's departure direction to the low route nibble."""
     new_packed_pos &= 0xFFFF
@@ -270,6 +283,7 @@ def thief_track_victim_move(state: GameState, new_packed_pos: int, player_index:
     state.thief_victim_pos = new_packed_pos
 
 
+# ROM: direct game:0x4F912 | Computes the next recorded-route cell and diagonal corner shortcuts.
 def thief_compute_path(state: GameState) -> None:
     """0x4F912 -- choose the following route cell and recover diagonal corners."""
     old_direction = state.thief_path_direction & 0xFF
@@ -311,16 +325,19 @@ def thief_compute_path(state: GameState) -> None:
     state.thief_next_pos = diagonal_pos
 
 
+# ROM: helper | Python authoritative player MOB-slot accessor.
 def _player_packed_cell(state: GameState, player_index: int) -> int:
     """The cell a hero occupies -- its migrating record names it directly."""
     return state.players[player_index].mob_slot
 
 
+# ROM: helper | Reusable Python active/living/placed player-state predicate.
 def _player_is_targetable(state: GameState, player_index: int) -> bool:
     player = state.players[player_index]
     return bool(player.active and player.health > 0 and player.mob_slot)
 
 
+# ROM: part game:0x4DFF6 | Extracts the power, potion, multiplier and key weighted-value calculation used to select a victim.
 def _player_wealth(player: object) -> int:
     powers = player.powers
     return (
@@ -336,6 +353,7 @@ def _player_wealth(player: object) -> int:
     )
 
 
+# ROM: direct game:0x4DFF6 | Represents victim selection by weighted player possessions.
 def thief_target_calc(state: GameState) -> None:
     """0x4DFF6 -- select the richest active, living player."""
     state.thief_victim = -1
@@ -349,6 +367,7 @@ def thief_target_calc(state: GameState) -> None:
             best_wealth = wealth
 
 
+# ROM: direct game:0x4E432 | Level thief-state reset and appearance/victim setup, with additional Python setup bookkeeping.
 def thief_setup(state: GameState) -> None:
     """0x4E432 -- reset this level's thief state and roll its appearance."""
     state.thief_level_setup_done = True
@@ -379,6 +398,7 @@ def thief_setup(state: GameState) -> None:
     thief_timer_set(state)
 
 
+# ROM: part game:0x4E4D8 | Extracts target score-per-coin, maze/level and random arrival-delay arithmetic at 0x4E568-0x4E620.
 def _thief_delay_frames(state: GameState) -> int:
     """The target-score delay arithmetic at 0x4E568-0x4E620."""
     player = state.players[state.thief_victim]
@@ -397,6 +417,7 @@ def _thief_delay_frames(state: GameState) -> int:
     return ((base - wealth) + state.getrandom(max(1, span))) * 60
 
 
+# ROM: direct game:0x4E4D8 | Selects the remaining thief/mugger variant and schedules its arrival.
 def thief_timer_set(state: GameState) -> None:
     """0x4E4D8 -- choose the variant and schedule the next arrival."""
     state.thief_current_pos = 0
@@ -421,10 +442,12 @@ def thief_timer_set(state: GameState) -> None:
     state.thief_enter_time = _thief_delay_frames(state)
 
 
+# ROM: part game:0x4DEB8 | Extracts the deployment branch's thief-versus-mugger initial picture selection.
 def _spawn_picture(state: GameState) -> int:
     return 0x2400 if state.thief_mode & THIEF_IS_MUGGER else 0x0DEA
 
 
+# ROM: part game:0x4DEB8 | Extracted arrival deployment transaction at 0x4DEDC-0x4DFDE, with Python victim-repair fallback.
 def _thief_deploy(state: GameState) -> None:
     """0x4DEDC-0x4DFDE -- create the thief after its arrival timer expires."""
     if state.thief_victim < 0 or not _player_is_targetable(state, state.thief_victim):
@@ -465,6 +488,7 @@ def _thief_deploy(state: GameState) -> None:
     _sound_play(state, 0x2D if state.thief_mode & THIEF_IS_MUGGER else 0x29)
 
 
+# ROM: direct game:0x4DEB8 | Thief arrival timer and deployment entry; includes a development-load setup fallback.
 def main_start_thief(state: GameState) -> None:
     """0x4DEB8 -- schedule/deploy bookkeeping and the arrival pause."""
     if state.thief_enter_time < 0:
@@ -482,6 +506,7 @@ def main_start_thief(state: GameState) -> None:
     _thief_deploy(state)
 
 
+# ROM: part game:0x4E122,game:0x4E172,game:0x4E1B8 | Factors the shared route-repair tail after exit, dodge-end and dodge-begin mode changes.
 def _repair_route_after_mode_toggle(state: GameState) -> None:
     if state.thief_previous_pos == state.thief_current_pos:
         thief_compute_path(state)
@@ -489,6 +514,7 @@ def _repair_route_after_mode_toggle(state: GameState) -> None:
         state.thief_next_pos = state.thief_previous_pos
 
 
+# ROM: direct game:0x4E122 | Changes pursuit to retraced-route escape.
 def thief_exit(state: GameState) -> None:
     """0x4E122 -- change an active thief from pursuit to route-retracing escape."""
     if not state.thief_current_pos:
@@ -500,6 +526,7 @@ def thief_exit(state: GameState) -> None:
     _repair_route_after_mode_toggle(state)
 
 
+# ROM: direct game:0x4E1B8 | Sets dodge, toggles pursuit/escape and repairs the route.
 def thief_begin_dodge(state: GameState) -> None:
     """0x4E1B8 -- flip pursuit/escape while setting the dodge bit."""
     if not state.thief_current_pos or state.thief_mode & THIEF_DODGE:
@@ -509,6 +536,7 @@ def thief_begin_dodge(state: GameState) -> None:
     _repair_route_after_mode_toggle(state)
 
 
+# ROM: direct game:0x4E172 | Clears dodge, restores route polarity and repairs the route.
 def thief_end_dodge(state: GameState) -> None:
     """0x4E172 -- clear the dodge bit and restore the previous route polarity."""
     if not state.thief_current_pos or not state.thief_mode & THIEF_DODGE:
@@ -518,6 +546,7 @@ def thief_end_dodge(state: GameState) -> None:
     _repair_route_after_mode_toggle(state)
 
 
+# ROM: part game:0x4E1FE | Extracts weighted potion/multiplier/key theft selection and tie fallbacks.
 def _resource_to_steal(player: object) -> int:
     potions = player.potionsnum * 3
     multiplier = player.bonusmult
@@ -537,6 +566,7 @@ def _resource_to_steal(player: object) -> int:
     return int(MazeObjIds.TREASURE_BAG)
 
 
+# ROM: direct game:0x4E1FE | Theft/mugging transaction with item selection extracted.
 def thief_steal_from_player(state: GameState, player_index: int) -> int:
     """0x4E1FE -- steal the ROM-selected item, or mug 100 health."""
     if state.thief_mode & THIEF_ESCAPE:
@@ -583,6 +613,7 @@ def thief_steal_from_player(state: GameState, player_index: int) -> int:
     return 1
 
 
+# ROM: direct game:0x4F5C8 | Thief removal, bounty, transporter cleanup, carried-item recreation and rescheduling entry.
 def thief_remove_and_drop_loot(
     state: GameState,
     score_player_or_minus1: int,
@@ -661,14 +692,17 @@ def thief_remove_and_drop_loot(
     thief_timer_set(state)
 
 
+# ROM: helper | Resolves duplicate Python thief slot/current-position fields.
 def _slot_for_thief(state: GameState) -> int:
     return state.thief_mob_slot or state.thief_current_pos
 
 
+# ROM: helper | Generic Python world-coordinate clamping/wrapping utility.
 def _clamp_or_wrap(value: int, wraps: bool) -> int:
     return value % _WORLD_PIXELS if wraps else max(0, min(_WORLD_PIXELS - 1, value))
 
 
+# ROM: helper | Python live-player identity lookup for a packed cell.
 def _player_at_cell(state: GameState, cell: int) -> int:
     for index in range(len(state.players)):
         if _player_is_targetable(state, index) and _player_packed_cell(state, index) == cell:
@@ -676,6 +710,7 @@ def _player_at_cell(state: GameState, cell: int) -> int:
     return -1
 
 
+# ROM: helper | Python active-player identity lookup replacing ROM palette/state decoding.
 def _fixed_player_at_slot(state: GameState, slot: int) -> int:
     for index in range(len(state.players)):
         if state.players[index].active and state.players[index].mob_slot == slot:
@@ -683,6 +718,7 @@ def _fixed_player_at_slot(state: GameState, slot: int) -> int:
     return -1
 
 
+# ROM: part game:0x4F742 | Extracts the escape-contact damage table, redraw, hurt timer and sound branch.
 def _damage_player_from_escape_contact(state: GameState, player_index: int) -> None:
     player = state.players[player_index]
     protected = 4 if player.powers & 0x02 else 0
@@ -697,6 +733,7 @@ def _damage_player_from_escape_contact(state: GameState, player_index: int) -> N
         _sound_play(state, 0x1E)
 
 
+# ROM: part game:0x4F742 | Extracts the player-contact fight latch and sixteen-frame damage dwell.
 def _handle_escape_player_contact(state: GameState, player_index: int) -> None:
     if not state.thief_collision_direction_code:
         state.thief_collision_direction_code = state.thief_direction + 1
@@ -707,6 +744,7 @@ def _handle_escape_player_contact(state: GameState, player_index: int) -> None:
         state.thief_collision_direction_code = 0
 
 
+# ROM: direct game:0x4F742 | Prospective-cell interaction and fight entry; player contact branches are extracted.
 def thief_handle_tile_collision(state: GameState, candidate_mob_slot: int) -> int:
     """0x4F742 -- handle a prospective cell; -1 means this frame is blocked."""
     if not 0 <= candidate_mob_slot <= _PATH_GRID_MAX_CELL:
@@ -748,6 +786,7 @@ def thief_handle_tile_collision(state: GameState, candidate_mob_slot: int) -> in
     return 0
 
 
+# ROM: direct game:0x4E7FC | Transporter-route and corner-recovery test for a proposed cell.
 def thief_test_move_tile(
     state: GameState, candidate_pos: int, object_type: int,
 ) -> int:
@@ -785,6 +824,7 @@ def thief_test_move_tile(
     return _thief_corner_squeeze_geometry(state, direction)
 
 
+# ROM: part game:0x4FEB2 | Extracts corner_squeeze_geometry's player-index-4 thief arm at 0x4FFB6-0x50218.
 def _thief_corner_squeeze_geometry(
     state: GameState, direction: int,
 ) -> int:
@@ -812,6 +852,7 @@ def _thief_corner_squeeze_geometry(
     return -2
 
 
+# ROM: direct game:0x4FBFC | Starts shared transporter animation and creates the thief destination placeholder.
 def thief_start_tport_anim(state: GameState, destination_pos: int) -> None:
     """0x4FBFC -- arm the shared transition and destination placeholder."""
     from .player_transport import handle_tport
@@ -843,6 +884,8 @@ def thief_start_tport_anim(state: GameState, destination_pos: int) -> None:
     _sound_play(state, 0x28)
 
 
+# ROM: direct game:0x4FAD4 | Follows learned transporter routes, checks the landing and starts transition.
+# ROM: part game:0x510BC | Inlines the selected forward/reverse route-word reads through flattened Python arrays.
 def thief_enter_tport(state: GameState, transporter_pos: int) -> int:
     """0x4FAD4 -- follow a learned transporter route, or return clear."""
     route_id = tport_find_id(state, transporter_pos)
@@ -881,6 +924,7 @@ def thief_enter_tport(state: GameState, transporter_pos: int) -> int:
     return -1
 
 
+# ROM: helper | Python inverse lookup from movement flags to the cached thief direction.
 def _direction_from_move_flags(move_flags: int) -> int:
     try:
         return _THIEF_DIRECTION_STEP_SIZE.index(move_flags & 0xFF)
@@ -888,6 +932,7 @@ def _direction_from_move_flags(move_flags: int) -> int:
         return 8
 
 
+# ROM: part game:0x4EE7A | Extracts horizontal/vertical direction-bit decoding from the thief movement engine.
 def _axis_delta(move_flags: int, horizontal_speed: int, vertical_speed: int) -> tuple[int, int]:
     dx = 0 if (move_flags & 0x30) == 0x30 else (
         -horizontal_speed if move_flags & 0x10 else horizontal_speed
@@ -899,6 +944,7 @@ def _axis_delta(move_flags: int, horizontal_speed: int, vertical_speed: int) -> 
     return dx, dy
 
 
+# ROM: part game:0x4EE7A,game:0x4EE0A | Recombines directional probe, wall response, theft and relocation fragments; not a direct port of the narrower callback/correction leaf.
 def _move_thief_axis(
     state: GameState, dx: int, dy: int, move_flags: int,
     *, allow_wall_response: bool = True,
@@ -989,6 +1035,7 @@ def _move_thief_axis(
     return True, False
 
 
+# ROM: direct game:0x4EE7A | Thief movement entry with axis bodies extracted; Python tuple/flag representation differs.
 def thief_move_engine(
     state: GameState,
     move_flags: int,
@@ -1027,6 +1074,7 @@ def thief_move_engine(
     return state.thief_collision_direction_code + int(blocked)
 
 
+# ROM: helper | Python fallback direction reconstruction when a shot was armed without its normal direction field.
 def _shot_direction(state: GameState, player_index: int) -> int:
     direction = state.shot_direction[player_index]
     if 0 <= direction <= 7:
@@ -1043,6 +1091,7 @@ def _shot_direction(state: GameState, player_index: int) -> int:
     return 7 if dy < 0 else 5
 
 
+# ROM: helper | Generic Python shortest wrapped-axis delta utility.
 def _wrapped_axis_delta(value: int, wraps: bool) -> int:
     if wraps:
         if value > _WORLD_PIXELS // 2:
@@ -1052,10 +1101,12 @@ def _wrapped_axis_delta(value: int, wraps: bool) -> int:
     return value
 
 
+# ROM: helper | Python division primitive truncating signed values toward zero.
 def _trunc_div(value: int, divisor: int) -> int:
     return value // divisor if value >= 0 else -((-value) // divisor)
 
 
+# ROM: part game:0x4FCF0 | Extracts the eight exact axis/diagonal shot-ray predicates used by the dodge scan.
 def _shot_ray_matches(direction: int, dx: int, dy: int) -> bool:
     if direction == 0:
         return dx == 0 and dy < 0
@@ -1074,6 +1125,7 @@ def _shot_ray_matches(direction: int, dx: int, dy: int) -> bool:
     return direction == 7 and dx < 0 and dx == dy
 
 
+# ROM: direct game:0x4FCF0 | Represents the opposing-direction player-shot ray scan; helper arithmetic is not independently callable in ROM.
 def thief_find_aligned_shooter(state: GameState) -> int:
     """0x4FCF0 -- return the first player shot that is exactly on the thief's ray."""
     slot = _slot_for_thief(state)
@@ -1097,6 +1149,7 @@ def thief_find_aligned_shooter(state: GameState) -> int:
     return -1
 
 
+# ROM: part game:0x4E8DC | Extracts the post-theft pause, jump animation and taunt at 0x4E90C-0x4E99C.
 def _escape_animation(state: GameState) -> bool:
     """Advance the post-theft pause at 0x4E90C-0x4E99C."""
     if not state.thief_mode & THIEF_JUMPJUMP:
@@ -1114,6 +1167,7 @@ def _escape_animation(state: GameState) -> bool:
     return True
 
 
+# ROM: part game:0x4E8DC | Extracts return-to-start escape completion, next-level carried-item handoff and rescheduling.
 def _finish_escape_at_start(state: GameState) -> bool:
     if not state.thief_mode & THIEF_ESCAPE:
         return False
@@ -1137,6 +1191,7 @@ def _finish_escape_at_start(state: GameState) -> bool:
     return True
 
 
+# ROM: part game:0x4E8DC | Extracts dodge acquisition and tracked-shot disappearance/direction-change handling.
 def _update_dodge(state: GameState) -> None:
     if state.thief_mode & THIEF_IS_MUGGER:
         return
@@ -1159,6 +1214,7 @@ def _update_dodge(state: GameState) -> None:
     state.thief_direction_change_pos = 0
 
 
+# ROM: part game:0x4E8DC | Extracts fight, compact movement and idle animation selection from the frame-service tail.
 def _set_thief_animation(state: GameState, movement_result: int) -> None:
     slot = _slot_for_thief(state)
     if not slot:
@@ -1181,6 +1237,7 @@ def _set_thief_animation(state: GameState, movement_result: int) -> None:
         state.mobs.picture[slot] = table[min(direction, 8)]
 
 
+# ROM: direct game:0x4E8DC | Thief frame-service entry with escape, dodge and animation branches extracted.
 def main_thief_anim(state: GameState) -> None:
     """0x4E8DC -- thief state graph, dodge latches, movement and animation."""
     if not state.thief_current_pos or state.thief_enter_time >= 0:

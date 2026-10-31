@@ -30,6 +30,7 @@ _TRICK_VISIT_TPORTS = 0x56
 # Transporters (§4.6, §7.2) -- player_tport and its three screening leaves
 # =============================================================================
 
+# ROM: helper | Reconstructs the transporter-position table from Python MOB records; 0x910700 and 0x904B84 are storage locations, not ROM callables.
 def _tport_pos_table(state: GameState) -> list[int]:
     """``tport_pos_table`` (0x910700) / ``level_tport_count`` (0x904B84).
 
@@ -43,6 +44,7 @@ def _tport_pos_table(state: GameState) -> list[int]:
     ]
 
 
+# ROM: direct game:0x4E7C0 | One-based transporter-table lookup boundary, including count-plus-one when absent.
 def tport_find_id(state: GameState, packed_pos: int) -> int:
     """0x4E7C0 -- return a word position's one-based ID, or count + 1.
 
@@ -56,6 +58,7 @@ def tport_find_id(state: GameState, packed_pos: int) -> int:
         return len(pads) + 1
 
 
+# ROM: direct game:0x5E584 | Packed-cell viewport predicate represented in whole pixels and Python booleans.
 def tile_on_screen_test(state: GameState, slot: int) -> bool:
     """0x5E584 ``tile_on_screen_test`` -- is a maze slot inside the viewport?
 
@@ -78,6 +81,7 @@ def tile_on_screen_test(state: GameState, slot: int) -> bool:
     return dy <= 0xE0
 
 
+# ROM: direct game:0x50ADE | Transport landing-cell blocker predicate over picture, palette, wall types and key ownership.
 def tport_check_dest(state: GameState, destination_slot: int,
                      player_index: int) -> int:
     """0x50ADE -- 1 for a blocked landing cell, 0 for a usable one (§7.2).
@@ -107,6 +111,7 @@ def tport_check_dest(state: GameState, destination_slot: int,
     return 0
 
 
+# ROM: direct game:0x50D14 | Eight-neighbor rendered-distance clearance boundary with own-player exclusion.
 def nearby_mob_clearance_test(state: GameState, slot: int,
                               player_index: int) -> bool:
     """0x50D14 -- True when no *other* player is standing next to ``slot``.
@@ -145,6 +150,7 @@ def nearby_mob_clearance_test(state: GameState, slot: int,
     return True
 
 
+# ROM: direct game:0x47CFE | Per-channel arrival-sparkle initialization; 0x5DF8E is its insertion callee, and the shared plus-0x19 slot arithmetic does not establish a merged body.
 def handle_tport(state: GameState, source_slot: int, player_index: int) -> None:
     """0x47CFE -- put the transporter arrival sparkle on the player's channel.
 
@@ -172,6 +178,8 @@ def handle_tport(state: GameState, source_slot: int, player_index: int) -> None:
     state.mobs.insert(effect_slot, depth_key=source_slot)  # 0x47D9E
 
 
+# ROM: direct game:0x50224 | Pad destination/landing selection and transition producer boundary; Python deterministically selects landing cells instead of reproducing uninitialized ROM registers.
+# ROM: part game:0x50662 | Also moves destination-visit and surrounding-interaction sequencing from tport_player_move at 0x509E4-0x50A66 into the producer.
 def player_tport(state: GameState, player_index: int,
                  tile_mob_slot: int) -> int:
     """0x50224 -- a player steps onto a transporter (§4.6, §7.2).
@@ -318,6 +326,7 @@ def player_tport(state: GameState, player_index: int,
     return -2                                                     # 0x5060A
 
 
+# ROM: part game:0x50224,game:0x50662 | Source/destination visit-every-transporter objective bitmask writes at 0x5027E and 0x509E4 onward; ID lookup is delegated.
 def _tport_visit_pad(state: GameState, player_index: int, pad_slot: int) -> None:
     """0x5027E / 0x509E4 -- mark one transporter pad as visited.
 
@@ -334,6 +343,8 @@ def _tport_visit_pad(state: GameState, player_index: int, pad_slot: int) -> None
         flags[player_index] |= 1 << pad_id
 
 
+# ROM: direct game:0x50BB8 | Transport-neighbor interaction boundary modeled as an immediate-cell sweep rather than the ROM repeated callback loop; full removable-object cleanup is not preserved here.
+# ROM: part game:0x50662 | The four-direction loop absorbs tport_player_move's four calls at 0x50A1E/0x50A36/0x50A4E/0x50A66.
 def scan_move_path_interactions(state: GameState, dest_slot: int,
                            player_index: int) -> None:
     """0x50BB8 -- interact with the four cells around the destination pad.
@@ -374,6 +385,7 @@ def scan_move_path_interactions(state: GameState, dest_slot: int,
         player_tile_interact(state, cell, player_index)          # 0x50C96
 
 
+# ROM: part game:0x50BB8 | Try-transportability objective checks for nearby acid/Death at 0x50C30-0x50C52.
 def _tport_landing_trick(state: GameState, player_index: int,
                          slot: int) -> None:
     """0x50C30-0x50C52 -- the two "try transportability" objectives.
@@ -392,6 +404,7 @@ def _tport_landing_trick(state: GameState, player_index: int,
         state.secret_player = player_index
 
 
+# ROM: part game:0x4FEB2 | Player branch of the corner-transport entry; the ROM also has a thief-selector branch, which this Python function does not own.
 def corner_squeeze_geometry(state: GameState, packed_slot: int,
                             player_index: int, delta: int) -> int:
     """0x4FEB2 -- resolve the player branch of corner-squeeze geometry.
@@ -455,6 +468,7 @@ def corner_squeeze_geometry(state: GameState, packed_slot: int,
     return -2
 
 
+# ROM: part game:0x50224,game:0x4FEB2 | Shared transition phase/type/destination writes extracted from pad-transport and corner-transport producer arms; handle_tport remains a callee.
 def tport_transition_arm(state: GameState, player_index: int,
                          destination_pad: int, landing_cell: int) -> None:
     """Start one player's transporter transition -- the *producer* half.
@@ -487,6 +501,7 @@ def tport_transition_arm(state: GameState, player_index: int,
     handle_tport(state, state.players[player_index].mob_slot, player_index)
 
 
+# ROM: direct game:0x50662 | Transport relocation milestone boundary; position commit is extracted and destination-visit/neighbor scanning are partly rescheduled to player_tport.
 def tport_player_move(state: GameState, player_index: int) -> None:
     """0x50662 -- the move milestone of the transition (step 0x0B).
 
@@ -574,6 +589,7 @@ def tport_player_move(state: GameState, player_index: int) -> None:
         handle_tport(state, landing, player_index)
 
 
+# ROM: direct game:0x42744 | Transport-power, recursive-pass and candidate-type gate before corner_squeeze_geometry.
 def squeeze_through_check(state: GameState, candidate_slot: int,
                           current_slot: int, player_index: int,
                           delta: int) -> int:

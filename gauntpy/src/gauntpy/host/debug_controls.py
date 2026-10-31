@@ -6,6 +6,7 @@ from ..game.constants import GameMode, MazeObjIds, PlayerStatus
 from ..game.state import GameState
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def debug_add_key(state: GameState, player_index: int) -> bool:
     """Give one active player a key and refresh the modeled inventory panel."""
     if not 0 <= player_index < len(state.players):
@@ -20,6 +21,7 @@ def debug_add_key(state: GameState, player_index: int) -> bool:
     return True
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def debug_add_potion(state: GameState, player_index: int) -> bool:
     """Give one active player a potion and refresh the modeled inventory panel."""
     if not 0 <= player_index < len(state.players):
@@ -34,6 +36,7 @@ def debug_add_potion(state: GameState, player_index: int) -> bool:
     return True
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def debug_enable_secret_room(state: GameState) -> bool:
     """Arm the current ordinary maze's ROM objective for normal exit checking."""
     if state.game_mode != int(GameMode.NORMAL):
@@ -64,6 +67,7 @@ def debug_enable_secret_room(state: GameState) -> bool:
     return True
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def debug_force_secret_room(state: GameState, player_index: int) -> bool:
     """Select one live player for the normal secret-room exit handoff."""
     if state.game_mode != int(GameMode.NORMAL):
@@ -89,6 +93,7 @@ def debug_force_secret_room(state: GameState, player_index: int) -> bool:
     return True
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def debug_skip_level(state: GameState) -> bool:
     """Enter the next rotation level's ordinary splash, preserving survivors."""
     if state.game_mode != int(GameMode.NORMAL):

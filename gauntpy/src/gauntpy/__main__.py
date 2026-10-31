@@ -15,6 +15,7 @@ from .game.mainloop import check_frame_overflow, game_frame, tick
 from .game.state import GameState
 
 
+# ROM: infrastructure | Headless Python runner, not a ROM callable.
 def _loop_calls() -> list[str]:
     """The names ``game_frame`` calls, in source order."""
     import ast
@@ -29,6 +30,7 @@ def _loop_calls() -> list[str]:
     return [n.func.id for n in calls]
 
 
+# ROM: infrastructure | Headless Python runner, not a ROM callable.
 def main() -> None:
     state = GameState(game_mode=GameMode.NORMAL)
     names = _loop_calls()

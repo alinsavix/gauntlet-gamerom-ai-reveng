@@ -103,6 +103,7 @@ class GameMode(IntEnum):
     DEMO = -3           # 0xFFFD
     LEGEND = -4         # 0xFFFC
 
+    # ROM: helper | Python enum sign-test property for the shared attract-mode convention; no separately identified ROM callable.
     @property
     def is_attract(self) -> bool:
         return self < 0

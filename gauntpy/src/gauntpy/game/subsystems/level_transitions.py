@@ -27,11 +27,13 @@ _TREASURE_MAZE_LAST = 0x72    # 114
 _TREASURE_ROOM_DURATION = [0x04B0, 0x05A0, 0x05DC, 0x0618]  # 1200/1440/1500/1560
 
 
+# ROM: helper | Python keyed notice-table lookup and text-write plumbing; gameplay notice decisions remain in the level_splash correspondence.
 def _write_level_flag_hint(state: GameState, key: str) -> None:
     text, column, row, attribute = romtext.LEVEL_FLAG_HINTS[key]
     write_alpha_text(state, column, row, text, attribute)
 
 
+# ROM: direct game:0x4BE24 | level_splash notice, speech and gameplay-tip boundary, with secret-hint arm extracted; not a merged alias merely because show_level_start_screen calls it.
 def _write_level_splash_details(state: GameState) -> None:
     """0x4BE24-0x4C1B2 -- write flag notices and the lower gameplay hint."""
     from .level_state import in_bonus_room
@@ -112,6 +114,7 @@ _MAZE_ROTATION_TOP = 101
 _MAZE_ROTATION_HINGE = 5
 
 
+# ROM: direct game:0x52ECA | Resume hinge and live-range wrap with forced EEPROM-save timer; relies on the established live maze table rather than reproducing slapstic validation.
 def maze_checknum(state: GameState) -> None:
     """0x52ECA -- validate/wrap the candidate ``maze_next`` (doc/06 §3.2).
 
@@ -132,6 +135,7 @@ def maze_checknum(state: GameState) -> None:
         state.eeprom_write_timer = 1        # force a save next tick (0x904012)
 
 
+# ROM: part game:0x52B40 | Exit-type and cabinet-rotation tail at 0x52DB2-0x52E56; maze_checknum is an ordinary callee, not a merged body.
 def compute_next_level(state: GameState, exit_type: int) -> None:
     """The ``player_exit_sequence`` tail (0x52DB2-0x52E56): pick the next level
     and maze from the current position, ``exit_type``, and cabinet rotation
@@ -177,11 +181,13 @@ def compute_next_level(state: GameState, exit_type: int) -> None:
     state.level_next = level_next
 
 
+# ROM: part game:0x52B40 | Extracted all-players-gone predicate for the bonus-room timer-stop tail at 0x52E56-0x52E88.
 def _players_still_here(state: GameState) -> bool:
     """True while any player is still ALIVE_HERE (has not yet reached the exit)."""
     return any(p.status == int(PlayerStatus.ALIVE_HERE) for p in state.players)
 
 
+# ROM: helper | Python convenience query over next-level/exit-animation statuses; status-producer instruction addresses do not establish this as their bodies.
 def _players_exiting(state: GameState) -> bool:
     """True once at least one player has left the level through an exit.
 
@@ -194,6 +200,8 @@ def _players_exiting(state: GameState) -> bool:
     )
 
 
+# ROM: direct game:0x52B40 | Player exit commitment and animation setup with secret qualification/rotation extracted; ordinary sprite removal here is not remove_dying_player_sprites at 0x489B8.
+# ROM: part game:0x5DF80 | Inlines exit_create_player_anim's channel-to-physical-slot bias before delegating depth insertion; legacy exits.py exit_create_player_anim FunctionDef no longer exists.
 def player_exit_sequence(state: GameState, player_index: int,
                          exit_mob_slot: int, exit_type: int) -> None:
     """0x52B40 -- one player reaches an exit and starts the exit animation.
@@ -272,6 +280,7 @@ def player_exit_sequence(state: GameState, player_index: int,
     state.level_flags_3 &= ~_LFLAG3_EXIT_MOVES     # 0x52EB4 clears LFLAG bit 14
 
 
+# ROM: part game:0x4A53A | End-of-level availability/potion/treasure countdown tail at 0x4A748-0x4A788, with a Python boolean continuation result and historical-state guard.
 def advance_level_countdowns(state: GameState) -> bool:
     """The end-of-level bookkeeping at main_move_players 0x4A748-0x4A788.
 
@@ -306,6 +315,8 @@ def advance_level_countdowns(state: GameState) -> bool:
     return False
 
 
+# ROM: direct game:0x44DB4 | Secret/treasure substitution and level-start display boundary; secret invitation and entry arms are extracted and the subsequent splash routine is an ordinary callee.
+# ROM: part game:0x438AE | Also performs the relocated level-six treasure-countdown seed from 0x438E4-0x438FC before Python maze loading.
 def show_level_start_screen(state: GameState) -> None:
     """0x44DB4 -- interleave a secret room or a treasure room into the level.
 
@@ -393,6 +404,7 @@ def show_level_start_screen(state: GameState) -> None:
     )
 
 
+# ROM: part game:0x4800C | main_start_game handoff at 0x480F2-0x48156, split for deferred loading and splash timing; neither cited interior address is its own function.
 def _finish_level_end(state: GameState) -> None:
     """Prepare the next maze and level splash when the prior display ends.
 
@@ -422,6 +434,7 @@ def _finish_level_end(state: GameState) -> None:
     state.game_mode = GameMode.NORMAL
 
 
+# ROM: direct game:0x48B58 | Party score/coin aggregation and byte spawn-bonus update; coinless parties safely return rather than taking the ROM divide trap, and secret inventory aliases are synchronized.
 def update_monster_spawn_bonus_from_score_per_coin(state: GameState) -> None:
     """0x48B58 -- make the generators harder for a rich party.
 
@@ -458,6 +471,7 @@ def update_monster_spawn_bonus_from_score_per_coin(state: GameState) -> None:
         state.secret_saved_keys = state.monster_spawn_probability_bonus
 
 
+# ROM: adapter game:0x4800C | Python acquisition/failure and optional-spawn bridge for the startup handoff; leaves the old maze on acquisition failure rather than representing a new ROM callable.
 def _load_next_level(
     state: GameState, level: int, survivors: list[int], *,
     spawn_players: bool = True,
@@ -488,6 +502,7 @@ def _load_next_level(
     return True
 
 
+# ROM: part game:0x4800C | Post-splash survivor/secret spawn and common score/pickup/thief/speech tail; extracted objective setup is delegated rather than counted as another inlined body.
 def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     """Run main_start_game's post-splash player placement on the loaded maze."""
     from .level_state import in_secret_room, player_activecount

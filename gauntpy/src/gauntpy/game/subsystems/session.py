@@ -34,6 +34,7 @@ _HEALTH_PER_COIN_TABLE: list[int] = [
 _COIN_SLOT_SOUND: list[int] = [0x22, 0x23, 0x24, 0x25]
 
 
+# ROM: part game:0x44204 | Extracted portrait-name/instruction drawing portion of start_attract_to_game.
 def _write_character_select_alpha(state: GameState) -> None:
     """start_attract_to_game's portrait names and ROM instruction chain."""
     clear_alpha_visible(state)
@@ -50,18 +51,21 @@ def _write_character_select_alpha(state: GameState) -> None:
 # Module-private helpers
 # ---------------------------------------------------------------------------
 
+# ROM: helper | Python signed-byte representation helper for the spawn bonus.
 def _signed_byte(value: int) -> int:
     """``monster_spawn_probability_bonus`` (0x90405F) is a signed byte."""
     value &= 0xFF
     return value - 0x100 if value & 0x80 else value
 
 
+# ROM: helper | Python signed-longword wrap helper for health storage.
 def _signed_long(value: int) -> int:
     """Store a wrapped 68000 longword in the port's signed-health convention."""
     value &= 0xFFFF_FFFF
     return value - 0x1_0000_0000 if value & 0x8000_0000 else value
 
 
+# ROM: part game:0x4800C | Extracted settled Magic pattern test from main_start_game at 0x48402-0x48416; no separate ROM input predicate entry.
 def _magic_press_edge(state: GameState, player_index: int) -> bool:
     """Return True on a settled Magic press edge.
 
@@ -74,6 +78,8 @@ def _magic_press_edge(state: GameState, player_index: int) -> bool:
     return (state.debounce_shift_magic[player_index] & 0x1F) == 0x1C
 
 
+# ROM: direct game:0x44204 | Attract-to-session boundary with extracted character-select display and typed maze loading; does not reproduce every original blocking display phase.
+# ROM: part game:0x44DB4,game:0x4800C | Inlines show_level_start_screen's mixer command and main_start_game's fresh-session welcome-counter reset instead of merely invoking those bodies.
 def start_attract_to_game(state: GameState) -> None:
     """0x44204 -- begin a new session, leaving attract for gameplay (§6.4).
 
@@ -140,6 +146,7 @@ def start_attract_to_game(state: GameState) -> None:
 _FREE_PLAY_START_HEALTH = 0x7D0     # 2000
 
 
+# ROM: part game:0x488CA | Extracted free-play/paid-health choice from player_coindrop; the health table itself is data.
 def configured_start_health(state: GameState) -> int:
     """The full health assigned when a player starts or continues."""
     if not state.two_player_mode:
@@ -147,6 +154,7 @@ def configured_start_health(state: GameState) -> int:
     return _HEALTH_PER_COIN_TABLE[state.game_settings & 0x1F]
 
 
+# ROM: direct game:0x488CA | Coin-credit/select initialization boundary; source's additional 0x4895C label is an interior location, not a second callable. Includes a Python stale-multiplier guard.
 def player_coindrop(state: GameState, player_index: int) -> None:
     """0x488CA + ``player_coindrop`` (0x4895C) -- credit a player into select.
 
@@ -185,6 +193,7 @@ def player_coindrop(state: GameState, player_index: int) -> None:
 # Main-loop calls (WP-16)
 # ---------------------------------------------------------------------------
 
+# ROM: direct game:0x42B6A | Game-side packed coin-counter detection and player-health/credit handling; not the separate OS process_coins pricing body.
 def coincheck(state: GameState) -> None:
     """0x42B6A -- coin detection, credit accounting, and coin-for-health.
 
@@ -262,6 +271,7 @@ def coincheck(state: GameState) -> None:
             player_coindrop(state, i)
 
 
+# ROM: direct game:0x42DF4 | Per-player character-selection input boundary with active-low direction priority and panel redraw.
 def character_select_input_update(state: GameState) -> None:
     """0x42DF4 -- character selection input. See §22.
 
@@ -306,6 +316,7 @@ def character_select_input_update(state: GameState) -> None:
             setup_infopanel(state, i)                    # 0x42E7E
 
 
+# ROM: part game:0x4800C | Extracted multiplayer-only challenge cancellation inside main_start_game at 0x48294-0x482B2.
 def _cancel_solo_only_trick(state: GameState) -> None:
     """0x48294-0x482B2 -- drop a multiplayer-only secret trick in solo play.
 
@@ -322,6 +333,7 @@ def _cancel_solo_only_trick(state: GameState) -> None:
         state.secret_trick_id = TRICK_NONE
 
 
+# ROM: direct game:0x4800C | Game start/join/transition boundary; extracted helpers and ROM-less join fallback do not create additional ROM entries.
 def main_start_game(state: GameState) -> None:
     """0x4800C -- turn a credited player into a hero in the maze.
 

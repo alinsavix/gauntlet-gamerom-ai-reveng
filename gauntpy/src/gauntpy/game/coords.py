@@ -51,11 +51,13 @@ WORLD_PIXELS = 512
 
 # --- packed slot <-> maze cell ------------------------------------------------
 
+# ROM: helper | Generic masked row/column packing for Python APIs; no separately identified ROM callable.
 def pack_slot(row: int, col: int) -> int:
     """(row, col) -> packed slot. Bits 9-5 row, bits 4-0 column."""
     return ((row & 0x1F) << 5) | (col & 0x1F)
 
 
+# ROM: helper | Generic packed-slot field extraction for Python APIs.
 def unpack_slot(slot: int) -> tuple[int, int]:
     """packed slot -> (row, col)."""
     return (slot >> 5) & 0x1F, slot & 0x1F
@@ -63,6 +65,7 @@ def unpack_slot(slot: int) -> tuple[int, int]:
 
 # --- packed slot <-> world pixels ---------------------------------------------
 
+# ROM: helper | Converts a packed cell to its downward-screen pixel origin, excluding object-specific placement corrections.
 def slot_to_pixels(slot: int) -> tuple[int, int]:
     """packed slot -> (pixel_x, pixel_y), the cell's unadjusted origin.
 
@@ -76,11 +79,13 @@ def slot_to_pixels(slot: int) -> tuple[int, int]:
     return col * CELL_PIXELS, row * CELL_PIXELS
 
 
+# ROM: helper | Generic screen-pixel to containing-cell conversion.
 def pixels_to_slot(x: int, y: int) -> int:
     """(pixel_x, pixel_y) -> packed slot, truncating to the containing cell."""
     return pack_slot(y // CELL_PIXELS, x // CELL_PIXELS)
 
 
+# ROM: helper | Parameterized Python screen-coordinate bias and cell-packing convenience.
 def biased_pixels_to_slot(
     x: int, y: int, *, x_bias: int = 0, y_bias: int = 0,
 ) -> int:
@@ -121,16 +126,19 @@ HPOS_FLAG_ATTACK = 0x10   # bit 4
 V_ANCHOR_BIAS = WORLD_PIXELS - CELL_PIXELS  # 496
 
 
+# ROM: helper | Boundary conversion from downward-screen Y to upward native V.
 def native_v(y: int) -> int:
     """Downward screen pixel Y -> the hardware's upward V pixel."""
     return (V_ANCHOR_BIAS - y) % WORLD_PIXELS
 
 
+# ROM: helper | Boundary conversion from upward native V to downward-screen Y.
 def screen_y(v: int) -> int:
     """Hardware upward V pixel -> downward screen pixel Y. Its own inverse."""
     return (V_ANCHOR_BIAS - v) % WORLD_PIXELS
 
 
+# ROM: helper | Python representation of the hardware sprite-height anchor for rendering/UI consumers; not a game or OS callable.
 def sprite_top_y(v: int, height_px: int) -> int:
     """Downward screen Y of the *top* row a sprite of ``height_px`` covers.
 
@@ -140,16 +148,19 @@ def sprite_top_y(v: int, height_px: int) -> int:
     return (WORLD_PIXELS - v - height_px) % WORLD_PIXELS
 
 
+# ROM: helper | General-purpose packed H-word constructor for Python callers.
 def encode_hpos(x: int, palette: int = 0, flags: int = 0) -> int:
     """Build an H word from a screen pixel X plus its low field."""
     return ((x & POS_VALUE_MASK) << POS_SHIFT) | (flags & 0x30) | (palette & 0x0F)
 
 
+# ROM: helper | General-purpose packed H-word field decoder.
 def decode_hpos(word: int) -> tuple[int, int, int]:
     """-> (x, flags, palette). ``x`` is a screen pixel."""
     return (word >> POS_SHIFT) & POS_VALUE_MASK, word & 0x30, word & 0x0F
 
 
+# ROM: helper | General-purpose native V-word position and size-field constructor.
 def encode_vpos(v: int, width: int = 1, height: int = 1) -> int:
     """Build a V word from a **native upward** V pixel plus the packed size."""
     return (
@@ -159,6 +170,7 @@ def encode_vpos(v: int, width: int = 1, height: int = 1) -> int:
     )
 
 
+# ROM: helper | General-purpose native V-word position and size-field decoder.
 def decode_vpos(word: int) -> tuple[int, int, int]:
     """-> (v, width, height). ``v`` is the **native upward** V pixel."""
     return (
@@ -168,57 +180,68 @@ def decode_vpos(word: int) -> tuple[int, int, int]:
     )
 
 
+# ROM: helper | Screen-coordinate convenience wrapper around the native V-word constructor.
 def encode_vpos_at_y(y: int, width: int = 1, height: int = 1) -> int:
     """``encode_vpos`` for callers holding a downward screen Y."""
     return encode_vpos(native_v(y), width, height)
 
 
+# ROM: helper | Screen-coordinate convenience wrapper around the native V-word decoder.
 def decode_vpos_at_y(word: int) -> tuple[int, int, int]:
     """``decode_vpos`` with the position converted to a downward screen Y."""
     v, width, height = decode_vpos(word)
     return screen_y(v), width, height
 
 
+# ROM: helper | Packed H position accessor.
 def hpos_x(word: int) -> int:
     """Screen pixel X of an H word."""
     return (word >> POS_SHIFT) & POS_VALUE_MASK
 
 
+# ROM: helper | Native-word mask helper; reproducing a common instruction does not identify a separate callable.
 def position_field(word: int) -> int:
     """The native position field with all low software bits clear."""
     return word & POS_FIELD_MASK
 
 
+# ROM: helper | Native-word software/size-field mask helper.
 def low_field(word: int) -> int:
     """The seven non-position bits preserved by MOB position updates."""
     return word & POS_LOW_MASK
 
 
+# ROM: helper | Generic packed-position replacement preserving low fields.
 def replace_position(word: int, position_word: int) -> int:
     """Replace only ``word``'s position field from another native word."""
     return position_field(position_word) | low_field(word)
 
 
+# ROM: helper | Generic wrapped native-position arithmetic preserving low fields.
 def add_position(word: int, delta: int) -> int:
     """Add a native position delta while preserving the low seven bits."""
     return ((position_field(word) + delta) & POS_FIELD_MASK) | low_field(word)
 
 
+# ROM: helper | Generic unsigned native-word separation, not a distinct ROM callable.
 def position_delta(target_word: int, source_word: int) -> int:
     """Unsigned native-word separation, matching the ROM's ``sub.w``."""
     return (position_field(target_word) - position_field(source_word)) & 0xFFFF
 
 
+# ROM: helper | Packed native V position accessor.
 def vpos_v(word: int) -> int:
     """Native upward V pixel of a V word."""
     return (word >> POS_SHIFT) & POS_VALUE_MASK
 
 
+# ROM: helper | Native V to downward-screen Y accessor for Python consumers.
 def vpos_y(word: int) -> int:
     """Downward screen Y of a V word -- the rendering/UI boundary conversion."""
     return screen_y(vpos_v(word))
 
 
+# ROM: helper | Parameterized Python conversion through screen-coordinate biases; distinct from the specifically extracted mover rule.
 def mob_words_to_slot(
     hpos: int, vpos: int, *, x_bias: int = 0, y_bias: int = 0,
 ) -> int:
@@ -238,6 +261,7 @@ CELL_BIAS_H = 0x600
 CELL_BIAS_V = 0x400
 
 
+# ROM: part game:0x40FAE,game:0x41C30 | Shared cell-handoff arithmetic from monster_loop_core at 0x41358-0x41374 and player_try_move_core at 0x424CA-0x424E4; interior sites are not the entries.
 def mob_cell_of(hpos: int, vpos: int) -> int:
     """Packed cell a live MOB record belongs in, from its H/V words alone.
 
@@ -260,6 +284,7 @@ def mob_cell_of(hpos: int, vpos: int) -> int:
 
 # --- packed slot -> playfield tile RAM ------------------------------------------
 
+# ROM: part game:0x5E542 | Extracted column-first descriptor address calculation returned as a word index instead of a hardware pointer.
 def slot_to_pf_index(slot: int) -> int:
     """packed slot -> word index of the top-left 8x8 tile of its 2x2 block.
 
@@ -271,6 +296,7 @@ def slot_to_pf_index(slot: int) -> int:
     return (col * 2) * PF_ROW_STRIDE + (row * 2)
 
 
+# ROM: part game:0x5E542 | Extracted four-quadrant address layout as Python word indices; return order is TL, BL, TR, BR rather than the ROM's store sequence.
 def pf_quad_indices(slot: int) -> tuple[int, int, int, int]:
     """The four word indices covering one maze cell's 2x2 tile block."""
     base = slot_to_pf_index(slot)

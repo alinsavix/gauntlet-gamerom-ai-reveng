@@ -52,6 +52,7 @@ from .display import (
 from .sound import sound_play, sound_speech_play
 
 
+# ROM: direct game:0x5214C | Named unsigned score/multiplier accumulation boundary with longword wrap and redraw latch.
 def player_add_score_with_mult(
     state: GameState, player_index: int, base_score: int,
 ) -> None:
@@ -87,10 +88,12 @@ _TPORT_TRANSITION_PICTURES = (
 )
 
 
+# ROM: part game:0x4715E | Extracted shared-effect expiry removal from main_score_update's third loop; no separate effect-removal entry identified.
 def _remove_effect(state: GameState, channel: int) -> None:
     state.mobs.unlink_and_clear(0x0D + channel)
 
 
+# ROM: part game:0x4715E | Extracted per-channel effect-aging third loop of main_score_update.
 def _advance_effect(state: GameState, channel: int) -> None:
     """Loop 3 of 0x4715E -- age one occupied shared effect channel."""
     slot = 0x0D + channel
@@ -196,6 +199,7 @@ ATTR_LOW_HEALTH_SHIFT = -0x1000
 ATTR_ACID_SHIFT = -0x2000
 
 
+# ROM: part os:0x2ABE | OS format_decimal's space-padded field behavior expressed as a Python string; no zero-padding option, unsigned ABI or NUL destination buffer.
 def format_field(value: int, width: int) -> str:
     """OS ``format_decimal`` (0x2ABE) with padding mode 1: right-aligned in
     ``width`` columns, padded with **spaces**, not zeroes (doc/02_os_rom.md
@@ -206,6 +210,7 @@ def format_field(value: int, width: int) -> str:
     return text[-width:].rjust(width)
 
 
+# ROM: helper | Accessor for the Python diagnostic information-panel shadow; not a ROM service.
 def info_panel(state: GameState):
     """The info-panel shadow (``state.info_panel``, VRAM 0x905000).
 
@@ -216,6 +221,7 @@ def info_panel(state: GameState):
     return state.info_panel
 
 
+# ROM: part game:0x452D0 | Extracted opaque per-player background cells from setup_infopanel.
 def write_player_panel_background(state: GameState, player_index: int) -> None:
     """Write setup_infopanel's opaque player-colored space cells to alpha RAM."""
     attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
@@ -232,6 +238,7 @@ def write_player_panel_background(state: GameState, player_index: int) -> None:
         ] * PANEL_WIDTH
 
 
+# ROM: part game:0x452D0 | Extracted four-row per-player clearing portion of setup_infopanel.
 def clear_player_panel_content(state: GameState, player_index: int) -> None:
     """Blank every content cell in a removed player's four-row panel block."""
     attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
@@ -242,6 +249,7 @@ def clear_player_panel_content(state: GameState, player_index: int) -> None:
     )
 
 
+# ROM: part game:0x452D0 | Extracted ordinary-level versus bonus-room header branch of setup_infopanel.
 def write_info_panel_header(state: GameState) -> None:
     """Write setup_infopanel's ordinary or bonus-room header."""
     fill_alpha_rect(
@@ -264,6 +272,7 @@ def write_info_panel_header(state: GameState) -> None:
         write_alpha_text(state, 34, 1, romtext.TEXT_TIME, 0x8000)
 
 
+# ROM: direct game:0x4529A | Maze-hide alpha rewrite boundary; reuses the maze-show clear operation and fills the information-panel region.
 def maze_hide(state: GameState) -> None:
     """Port maze_hide's complete alpha-RAM rewrite at 0x4529A-0x452CA."""
     _clear_alpha_outside_panel(state)
@@ -272,6 +281,7 @@ def maze_hide(state: GameState) -> None:
     )
 
 
+# ROM: part game:0x452D0 | Extracted player identity and SCORE/HEALTH label writes from setup_infopanel.
 def write_player_panel_static(state: GameState, player_index: int) -> None:
     """Write one setup_infopanel identity/label block into alpha VRAM."""
     write_player_panel_background(state, player_index)
@@ -290,6 +300,7 @@ def write_player_panel_static(state: GameState, player_index: int) -> None:
     )
 
 
+# ROM: direct game:0x45ACA | Renamed player_inv_update boundary for inventory/power glyphs; the current body lacks the documented demo-mode inventory suppression.
 def write_player_inventory(state: GameState, player_index: int) -> None:
     """player_inv_update's key/potion row and six power-up icon cells."""
     player = state.players[player_index]
@@ -313,6 +324,7 @@ def write_player_inventory(state: GameState, player_index: int) -> None:
         )
 
 
+# ROM: part game:0x452D0 | Extracted status-dependent text branches from setup_infopanel.
 def write_player_panel_status(state: GameState, player_index: int) -> None:
     """Write the status string selected by setup_infopanel's ROM branches."""
     player = state.players[player_index]
@@ -342,6 +354,7 @@ def write_player_panel_status(state: GameState, player_index: int) -> None:
         )
 
 
+# ROM: part game:0x45866,game:0x4590E | Combines only the IT-label set/clear glyph portions across players; omits player_it_label_set's announcement/sound body, so not two whole-callable implementations.
 def write_it_labels(state: GameState) -> None:
     """Synchronize player_it_label_set's two literal glyph cells."""
     for player_index in range(NUM_PLAYERS):
@@ -396,6 +409,7 @@ FACTORY_HIGHSCORE_RECORDS: tuple[tuple[tuple[int, str], ...], ...] = (
 HIGHSCORE_RANKS = 10
 
 
+# ROM: direct game:0x49BD0 | Factory high-score bank initialization boundary using Python ladders; physical EEPROM reads are outside this body.
 def highscore_table_init(state: GameState) -> None:
     """0x49BD0 -- seed the high-score banks from the ROM factory lists.
 
@@ -413,6 +427,7 @@ def highscore_table_init(state: GameState) -> None:
             ]
 
 
+# ROM: helper | Lazily initialized Python ladder accessor; does not implement OS read_high_score_entry's indexed packed-record expansion.
 def high_scores(state: GameState) -> list[list[tuple[int, str]]]:
     """The live per-class high-score ladders, seeded on first use.
 
@@ -424,6 +439,7 @@ def high_scores(state: GameState) -> list[list[tuple[int, str]]]:
     return state.high_scores
 
 
+# ROM: direct game:0x4A124 | High-score attract-page drawing boundary; delegates number/string primitives.
 def attract_highscores(state: GameState) -> None:
     """attract_highscores (0x4A124): populate its complete alpha page."""
     clear_alpha_visible(state)
@@ -456,6 +472,7 @@ def attract_highscores(state: GameState) -> None:
             )
 
 
+# ROM: direct game:0x4A2CA | Per-player score/rank/initials display boundary; large-character drawing is delegated, not a body of the separate small-character routine.
 def draw_player_initials_entry(state: GameState, player_index: int) -> None:
     """Port draw_player_initials_entry 0x4A2CA into alpha RAM."""
     player = state.players[player_index]
@@ -481,6 +498,7 @@ def draw_player_initials_entry(state: GameState, player_index: int) -> None:
         )
 
 
+# ROM: part game:0x54EC6 | Prompt and editable-buffer drawing extracted from secret_getname; no input/session orchestration or small-character control routine.
 def write_secret_name_entry(state: GameState, player_index: int) -> None:
     """Write secret_getname's prompt and 29-character editable buffer."""
     row = player_index * 5 + 7
@@ -494,6 +512,7 @@ def write_secret_name_entry(state: GameState, player_index: int) -> None:
         write_alpha_glyphs(state, offset, row, (code,), attribute)
 
 
+# ROM: part game:0x54FE8 | Result-page drawing portion of secret_name_entry_update, not its full editing/contest workflow.
 def write_secret_code_result(state: GameState, player_index: int) -> None:
     """Write secret_name_entry_update's contest-code result page."""
     row = player_index * 5 + 7
@@ -514,6 +533,7 @@ def write_secret_code_result(state: GameState, player_index: int) -> None:
         )
 
 
+# ROM: direct os:0x3F68 | OS rank_high_score boundary on typed ladders; omits the documented out-of-24-bit error path. Public veneer is 0x1C6, not a second implementation.
 def rank_high_score(state: GameState, character: int, value: int) -> int:
     """OS ``rank_high_score`` (0x1C6) -- where ``value`` would place in that
     class's ladder: rank 0-9, or ``HIGHSCORE_RANKS`` when it does not rank.
@@ -528,6 +548,7 @@ def rank_high_score(state: GameState, character: int, value: int) -> int:
     return HIGHSCORE_RANKS
 
 
+# ROM: part os:0x3A7E | Only expanded-ladder insertion/shift portion of the OS writer; base-40 encoding, physical record storage, region queuing and error returns are not here.
 def write_high_score_entry(
     state: GameState, character: int, rank: int, value: int, initials: str
 ) -> None:
@@ -545,6 +566,7 @@ def write_high_score_entry(
 # and synchronously write the same words to alpha VRAM.
 # ---------------------------------------------------------------------------
 
+# ROM: direct game:0x45940 | Score-field display boundary; also updates a Python diagnostic shadow, while the caller clears the redraw latch.
 def draw_player_score(state: GameState, player_index: int) -> None:
     """``draw_player_score`` (0x45940) -- 7-digit score via OS 0x260.
 
@@ -562,6 +584,7 @@ def draw_player_score(state: GameState, player_index: int) -> None:
     )
 
 
+# ROM: part game:0x459A2 | Extracted low-health/acid palette selection inside draw_player_health; cited 0x45A32 is an interior site.
 def _health_attribute(state: GameState, player_index: int) -> int:
     """The attribute word ``draw_player_health`` passes to OS 0x260.
 
@@ -585,6 +608,7 @@ def _health_attribute(state: GameState, player_index: int) -> int:
     return attr
 
 
+# ROM: direct game:0x459A2 | Health/multiplier field display boundary; palette selection is extracted and the caller clears its redraw latch.
 def draw_player_health(state: GameState, player_index: int) -> None:
     """``draw_player_health`` (0x459A2) -- bonus multiplier + 5-digit health.
 
@@ -720,6 +744,7 @@ SOUND_MESSAGE_APPEARS = 0x1C
 DIALOG_BOX_BASE_ROWS = 3
 
 
+# ROM: part game:0x4CCBC | Extracted expired-box rectangle erasure from main_msgbox_countdown; unlike 0x4C70A, this clears alpha cells rather than filling a string buffer.
 def _clear_dialog_alpha(state: GameState) -> None:
     if state.dialog_box_column < 0 or state.dialog_box_row < 0:
         return
@@ -729,6 +754,7 @@ def _clear_dialog_alpha(state: GameState) -> None:
     )
 
 
+# ROM: part game:0x4C440,game:0x4C9A2 | Shared extraction of first-encounter/demo box background and line drawing; these are portions of the two dialog entries.
 def _write_dialog_alpha(state: GameState) -> None:
     """Write the positioned first-encounter/demo box synchronously."""
     if state.dialog_box_column < 0 or state.dialog_box_row < 0:
@@ -749,6 +775,8 @@ def _write_dialog_alpha(state: GameState) -> None:
         )
 
 
+# ROM: adapter game:0x4C70A | Replaces the fixed space-filled/NUL-terminated dialog buffer with an empty Python message list; the original takes a last-character index.
+# ROM: part game:0x4CCBC | Also owns the high-level box-retirement path through _clear_dialog_alpha; resetting all Python dialog metadata is broader than the ROM buffer filler.
 def dialog_clear_message(state: GameState) -> None:
     """0x4C70A -- blank the message buffer at 0x904AA4.
 
@@ -765,6 +793,7 @@ def dialog_clear_message(state: GameState) -> None:
     state.dialog_box_row = -1
 
 
+# ROM: direct game:0x4CB50 | Player-relative or centered box-positioning boundary using modeled MOB/scroll coordinates.
 def dialog_position_box(state: GameState, player_index: int) -> None:
     """0x4CB50 -- choose an alpha-cell origin near the owning player."""
     column, row = 14, 15
@@ -794,6 +823,7 @@ def dialog_position_box(state: GameState, player_index: int) -> None:
     state.dialog_box_row = row
 
 
+# ROM: direct game:0x4C9A2 | Recorded demo-tip display boundary; box drawing and positioning are extracted helpers.
 def demo_message_show(state: GameState, player_index: int,
                       message_index: int) -> None:
     """0x4C9A2 -- display one recorded attract-demo tip."""
@@ -818,6 +848,7 @@ def demo_message_show(state: GameState, player_index: int,
     )
 
 
+# ROM: part game:0x4C440 | Numeric-field splice extracted from dialog_first_encounter at 0x4C63C-0x4C67A; those locations are not callable entries.
 def _dialog_line(line: str, numeric_value: int) -> str:
     """0x4C63C-0x4C67A -- splice the numeric field into the shared line.
 
@@ -837,6 +868,7 @@ def _dialog_line(line: str, numeric_value: int) -> str:
     return line[:start] + field + line[start + DIALOG_NUMERIC_WIDTH:]
 
 
+# ROM: direct game:0x4C440 | First-encounter dialog boundary with once flags, message selection, optional numeric field and speech result.
 def dialog_first_encounter(
     state: GameState, player_index: int, encounter_mask: int, numeric_value: int = 0
 ) -> int:
@@ -912,6 +944,7 @@ def dialog_first_encounter(
 # Main-loop calls (WP-14 owns these three addresses)
 # ---------------------------------------------------------------------------
 
+# ROM: direct game:0x4CCBC | Timer/expiry boundary; rectangle erasure is split into _clear_dialog_alpha through the broader Python cleanup wrapper.
 def main_msgbox_countdown(state: GameState) -> None:
     """0x4CCBC -- decrement ``dialog_timer`` and erase the box at zero.
 
@@ -941,6 +974,7 @@ _TRANSITION_LAST = 0x16          # "> 0x16" is the cleanup branch
 _TRANSITION_IDLE = -1            # the ROM stores 0xFFFF
 
 
+# ROM: part game:0x4715E | Extracted two-pass sparkle-table indexing from main_score_update; 0x578F2 is data, not a callable entry.
 def _transition_picture(step: int) -> int | None:
     """The sparkle frame for milestone ``step`` -- table 0x578F2 indexed by
     ``step`` below 0x0B and by ``step - 0x0B`` from 0x0B to 0x16 (0x47296 and
@@ -952,6 +986,7 @@ def _transition_picture(step: int) -> int | None:
     return None
 
 
+# ROM: part game:0x4715E | Extracted thief transition pass inside main_score_update; transporter/path calls are ordinary callees and not additional body correspondences.
 def _advance_thief_transition(state: GameState) -> None:
     """Loop 1b (0x471BA-0x472C6) -- the thief's transporter dissolve.
 
@@ -1012,6 +1047,8 @@ def _advance_thief_transition(state: GameState) -> None:
         state.mobs.picture[_THIEF_ANIM_SLOT] = picture
 
 
+# ROM: part game:0x4715E | Extracted per-player transporter milestone loop from main_score_update.
+# ROM: merged game:0x50616,game:0x50B88 | Inlines tport_player_flash's save/0x1709 replacement and tport_restore_player_picture's restore; Python also clears the saved slot. Legacy state.py restore owner does not exist.
 def _advance_player_transition(state: GameState, player_index: int) -> None:
     """Loop 2 (0x472CA-0x473C0) -- one player's transporter transition.
 
@@ -1057,6 +1094,7 @@ def _advance_player_transition(state: GameState, player_index: int) -> None:
     if picture is not None:
         state.mobs.picture[anim_slot] = picture
 
+# ROM: direct game:0x4715E | Main popup/effect/transport update boundary; individual loops are extracted and transporter save/restore bodies live in _advance_player_transition.
 def main_score_update(state: GameState) -> None:
     """0x4715E -- three indexed loops plus the thief/effect transition pass.
 
@@ -1097,6 +1135,7 @@ def main_score_update(state: GameState) -> None:
         _advance_effect(state, i)
 
 
+# ROM: direct game:0x457C0 | Round-robin HUD update boundary; retains explicit Python latched-value fallback conditions in addition to ROM redraw flags.
 def main_score_display(state: GameState) -> None:
     """0x457C0 -- render scores and the info panel. See §14.
 

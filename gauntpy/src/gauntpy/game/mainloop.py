@@ -61,6 +61,7 @@ from .subsystems.thief import main_start_thief, main_thief_anim
 from .subsystems.treasure_rooms import main_treasure_timer
 
 
+# ROM: part game:0x42A66 | Extracted per-frame dispatch band of g2mainloop; initialization, VBLANK wait and overflow tail are separate; host pause can omit the treasure timer.
 def game_frame(state: GameState, *, treasure_timer_paused: bool = False) -> None:
     """Advance the world; optionally omit only the host-paused bonus timer."""
 
@@ -110,6 +111,7 @@ def game_frame(state: GameState, *, treasure_timer_paused: bool = False) -> None
     main_update_sound(state)                # 0x4AE20
 
 
+# ROM: part game:0x42A66 | Extracted semaphore/overflow tail of g2mainloop, not an independently identified ROM callable.
 def check_frame_overflow(state: GameState) -> None:
     """The loop's most self-aware moment.
 
@@ -128,6 +130,7 @@ def check_frame_overflow(state: GameState) -> None:
         state.frame_overflow >>= 1
 
 
+# ROM: part game:0x42A66,game:0x4017E | One-frame host stepping combines loop semaphore consumption with interrupt-side frame-counter publication; palette hooks are delegated and the full interrupt body is not modeled.
 def tick(state: GameState, *, treasure_timer_paused: bool = False) -> None:
     """Consume one VBLANK and run one frame.
 
@@ -149,6 +152,7 @@ def tick(state: GameState, *, treasure_timer_paused: bool = False) -> None:
     check_frame_overflow(state)
 
 
+# ROM: direct game:0x42A66 | Named non-returning loop boundary; host wait/present and tick replace the beam wait and extracted frame body, without claiming hardware equivalence.
 def g2mainloop(state: GameState, host) -> None:  # noqa: ANN001
     """Run forever, locked to the beam. Never returns; the original never does.
 

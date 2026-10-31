@@ -185,6 +185,7 @@ _PLAYER_SHOT_PICTURE = [
     0x1C74, 0x1C78, 0x1C7C, 0x1C80, 0x1C84, 0x1C8B, 0x1C8F, 0x1C93,
 ]
 
+# ROM: part game:0x474F6 | One player's vacant-shot-channel held-Fire arming arm from main_handle_shots; Python adds idempotent standalone-frame support.
 def _player_shooting_input_update_one(state: GameState,
                                       player_index: int) -> None:
     """Arm one held-Fire action; the call is idempotent during its throw."""
@@ -210,6 +211,7 @@ def _player_shooting_input_update_one(state: GameState,
     state.player_walking[player_index] = 0
 
 
+# ROM: part game:0x474F6 | Extracted four-player Fire arming pass at 0x47B72-0x47BF6; that span is inside main_handle_shots, not a callable boundary.
 def player_shooting_input_update(state: GameState) -> None:
     """0x47B72-0x47BF6 -- arm held-Fire shooting actions for all players.
 
@@ -222,6 +224,7 @@ def player_shooting_input_update(state: GameState) -> None:
         _player_shooting_input_update_one(state, player_index)
 
 
+# ROM: part game:0x4A53A | Counter/action half of the player animation tail at 0x4AB08-0x4AC0E; picture selection and shot creation are delegated.
 def _advance_player_sprite(state: GameState, player_index: int, *,
                            walking: bool, fire_held: bool) -> None:
     """Run the counter/action half of 0x4AB08-0x4AC0E for one hero."""
@@ -272,6 +275,7 @@ _DIZZY_DIRECTION_REMAP = (
 )
 
 
+# ROM: adapter game:0x52B40 | Legacy optional-argument adapter to the actual level_transitions.player_exit_sequence body.
 def player_exit_sequence(state: GameState, player_index: int,
                          exit_mob_slot: int = 0,
                          exit_type: int = int(MazeObjIds.EXIT)) -> None:
@@ -284,6 +288,7 @@ def player_exit_sequence(state: GameState, player_index: int,
     _exit_sequence(state, player_index, exit_mob_slot, exit_type)
 
 
+# ROM: direct game:0x53666 | Fixed player-channel shot spawn, picture/position, sound and supershot-charge boundary; host velocity shadow setup is additional.
 def player_create_shot(state: GameState, player_index: int) -> None:
     """0x53666 -- spawn a player shot in the player's fixed channel (§26, N-02).
 
@@ -344,6 +349,7 @@ def player_create_shot(state: GameState, player_index: int) -> None:
 # Player frame helpers and main-loop routine
 # =============================================================================
 
+# ROM: adapter game:0x53346 | Player-index adapter to maze_objects.check_forcefield_collision with lazy segment setup; 0x4AA68 is the caller's JSR site, not an entry.
 def _check_forcefield_collision(state: GameState, player_index: int) -> bool:
     """0x4AA68 -- True when the player overlaps a live forcefield beam.
 
@@ -373,6 +379,7 @@ def _check_forcefield_collision(state: GameState, player_index: int) -> bool:
     )
 
 
+# ROM: part game:0x4A53A | Invisibility, repulsion, acid damage/expiry and dizzy countdown arms at 0x4A7FE-0x4A89E.
 def _power_timers_tick(state: GameState, player_index: int) -> None:
     """0x4A7FE-0x4A890 -- run down the three timed powers.
 
@@ -421,6 +428,7 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
         state.player_dizzy_timer[player_index] -= 1                  # 0x4A89E
 
 
+# ROM: part game:0x4A53A | Extracted dizzy-direction remapping within the live-input arm; 0x4A4FA is the remap table, not this function's entry.
 def _player_movement_direction_bits(
     state: GameState, player_index: int,
 ) -> int:
@@ -435,6 +443,8 @@ def _player_movement_direction_bits(
     return (~_DIZZY_DIRECTION_REMAP[index]) & _JOY_DIRECTIONS
 
 
+# ROM: part game:0x4A53A | Status-8 exit-animation cleanup and end-of-level countdown arm at 0x4A6AA onward; Python's alternative death-animation tail is additional.
+# ROM: part game:0x4800C | Also pulls secret-check and current-level/current-maze commit sequencing from main_start_game at 0x480EC-0x4810A.
 def _status8_complete(state: GameState, player_index: int) -> None:
     """0x4A6AA-0x4A6E6 -- the status-0x08 animation has finished.
 
@@ -497,6 +507,9 @@ def _status8_complete(state: GameState, player_index: int) -> None:
         show_continue_prompt(state)
 
 
+# ROM: direct game:0x4A53A | Player frame-service/status-dispatch boundary; retains Python synthetic-record cleanup, demo accommodations and extracted helper calls.
+# ROM: part game:0x466F6 | Contains the relocated health-zero death/reset/high-score/continue block from main_health_countdown at 0x467E0-0x46B7E.
+# ROM: part game:0x41C30 | Contains the movement core's occupied-destination tile-interaction/rollback/migration tail at 0x424EC-0x42588, rescheduled after player_try_move.
 def main_move_players(state: GameState) -> None:
     """0x4A53A -- per-frame processing for all four player slots (§4.1).
 

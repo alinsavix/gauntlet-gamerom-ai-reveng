@@ -30,6 +30,7 @@ class PersistencePolicy(Enum):
     ISOLATED = "isolated"
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _high_scores(data: object) -> HighScoreImage:
     if not isinstance(data, list) or len(data) != HIGHSCORE_CLASSES:
         raise ValueError("high_scores must contain four ladders")
@@ -49,6 +50,7 @@ def _high_scores(data: object) -> HighScoreImage:
     return tuple(result)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _rotation(data: object) -> EepromRotation:
     if not isinstance(data, dict):
         raise ValueError("rotation must be an object")
@@ -61,6 +63,7 @@ def _rotation(data: object) -> EepromRotation:
     return EepromRotation(**values)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def serialize_eeprom_snapshot(image: EepromImage | None) -> dict[str, object]:
     """Capture the device separately from working RAM, including a blank part."""
     data = None
@@ -77,6 +80,7 @@ def serialize_eeprom_snapshot(image: EepromImage | None) -> dict[str, object]:
     return {"schema": 1, "image": data}
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def parse_eeprom_snapshot(payload: object) -> EepromImage | None:
     """Strict snapshot parsing; unlike an operator file, damage is fatal."""
     if not isinstance(payload, dict) or set(payload) != {"schema", "image"}:
@@ -105,6 +109,7 @@ def parse_eeprom_snapshot(payload: object) -> EepromImage | None:
 class FileEepromStorage:
     """Re-read live edits, or retain accepted writes in a protected overlay."""
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def __init__(self, path: str | Path, *, policy: PersistencePolicy) -> None:
         if policy is PersistencePolicy.ISOLATED:
             raise ValueError("isolated EEPROM storage must use MemoryEepromStorage")
@@ -112,6 +117,7 @@ class FileEepromStorage:
         self.policy = policy
         self._overlay: EepromImage | None = None
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def read(self) -> EepromImage | None:
         if self._overlay is not None:
             return self._overlay
@@ -146,6 +152,7 @@ class FileEepromStorage:
                 _LOG.warning("Ignoring corrupt EEPROM rotation in %s: %s", self.path, exc)
         return EepromImage(settings, pricing, scores, rotation)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def write(self, image: EepromImage) -> None:
         if self.policy is PersistencePolicy.READ_ONLY:
             self._overlay = image
@@ -179,6 +186,7 @@ class FileEepromStorage:
             raise
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def bind_eeprom_storage(
     state: GameState, *, policy: PersistencePolicy | None = None,
 ) -> GameState:

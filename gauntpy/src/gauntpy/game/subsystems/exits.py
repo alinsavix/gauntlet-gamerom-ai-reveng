@@ -124,6 +124,7 @@ _TRICK_MULTIPLAYER_LAST = 0x11
 # main_exit_move (0x5287C) -- the moving exit
 # ---------------------------------------------------------------------------
 
+# ROM: part game:0x438AE | Exit table and moving-exit timer portion of maze_new_level_setup, with a Python rescan guard; the legacy full-function name/ownership is stale.
 def exit_scan_level(state: GameState) -> None:
     """Rebuild the level's exit table -- ``maze_new_level_setup``'s exit work.
 
@@ -174,6 +175,7 @@ def exit_scan_level(state: GameState) -> None:
         state.exit_open_id = 0                            # 0x43B9A
 
 
+# ROM: part game:0x43D8C,game:0x438AE | Only scanner mode zero, plus its caller's ExitMoves/Exit1of gate; food-removal and player-start modes are in maze.py.
 def maze_pick_one_exit(state: GameState) -> None:
     """0x43D8C called with 0 -- pick the one real exit out of the level's exits.
 
@@ -216,6 +218,7 @@ def maze_pick_one_exit(state: GameState) -> None:
             state.mobs.unlink_and_clear(slot)             # 0x43EBC mob_remove
 
 
+# ROM: direct game:0x52B06 | Zero-based exit-table search returning table length on a miss.
 def exit_get_id(state: GameState, slot: int) -> int:
     """0x52B06 ``exit_get_id`` -- index of *slot* in ``exit_slots``.
 
@@ -228,6 +231,7 @@ def exit_get_id(state: GameState, slot: int) -> int:
     return len(state.exit_slots)
 
 
+# ROM: direct game:0x5287C | Moving-exit timer and dispatch boundary; relocation and negative-timer animation are extracted, not maze_randomplace calls.
 def main_exit_move(state: GameState) -> None:
     """0x5287C -- relocate the open exit while the ExitMoves flag is set.
 
@@ -268,6 +272,7 @@ def main_exit_move(state: GameState) -> None:
     _exit_move_animate(state)                   # 0x52A5C
 
 
+# ROM: part game:0x5287C | Open/close descriptor animation and settled-floor reload at 0x52A5C-0x52AF8; 0x52A5C is not an inventory entry.
 def _exit_move_animate(state: GameState) -> None:
     """0x52A5C-0x52AF8 -- the 32-frame open/close animation, then the reload.
 
@@ -312,6 +317,7 @@ def _exit_move_animate(state: GameState) -> None:
         )
 
 
+# ROM: part game:0x5287C | Exit stride, destination interactions and marker recreation at 0x528C2-0x52A58, with Python logical terrain updates and degenerate-state guards.
 def _exit_relocate(state: GameState) -> None:
     """Move the open exit one stride along ``exit_slots`` (0x528C2-0x52A58)."""
     old_slot = state.exit_open_id

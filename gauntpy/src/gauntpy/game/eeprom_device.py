@@ -27,8 +27,10 @@ class EepromImage:
 class EepromStorage(Protocol):
     """Read the current device image; ``None`` denotes an unprogrammed part."""
 
+    # ROM: infrastructure | Abstract typed device-image protocol; not OS eeprom_read_block, which uses redundant blocks, syndromes and queue semantics.
     def read(self) -> EepromImage | None: ...
 
+    # ROM: infrastructure | Abstract typed device-image protocol; not OS queued EEPROM request/process bodies.
     def write(self, image: EepromImage) -> None: ...
 
 
@@ -38,8 +40,10 @@ class MemoryEepromStorage:
 
     image: EepromImage | None = None
 
+    # ROM: infrastructure | Reads the isolated Python device image; no OS block decoding, hardware access or asynchronous read implementation.
     def read(self) -> EepromImage | None:
         return self.image
 
+    # ROM: infrastructure | Replaces the isolated Python device image; no OS byte-write state machine, unlock register or EEPROM queue implementation.
     def write(self, image: EepromImage) -> None:
         self.image = image

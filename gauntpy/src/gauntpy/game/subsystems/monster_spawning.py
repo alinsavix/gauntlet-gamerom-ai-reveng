@@ -204,6 +204,7 @@ _SPAWN_CANDIDATE_ROW_DELTA = (0, 0, -0x20, 0x20, -0x20, 0x20, 0x20, -0x20)
 # Generators (§3.4)
 # =============================================================================
 
+# ROM: part game:0x40FAE | Extracts the generator cadence and probability gate at 0x41026 from the monster-loop core.
 def _handle_generator(state: GameState, slot: int, obj_type: int,
                       frame_word: int) -> None:
     """0x41026 -- turn-staggered generator: one spawn attempt per 16 frames.
@@ -220,6 +221,7 @@ def _handle_generator(state: GameState, slot: int, obj_type: int,
     handle_generate(state, slot, obj_type, probability)
 
 
+# ROM: part game:0x40E6A | Extracts frame-overflow, settings, active-player and level-cap spawn probability setup.
 def _spawn_probability(state: GameState) -> int:
     """Spawn probability out of 32 (§3.4); zero while frame_overflow is set.
 
@@ -239,6 +241,7 @@ def _spawn_probability(state: GameState) -> int:
     return max(0, prob)
 
 
+# ROM: direct game:0x492C0 | Generator spawn-attempt entry with attract retry and ordinary random branches.
 def handle_generate(state: GameState, gen_slot: int, gen_type: int,
                     probability: int) -> None:
     """0x492C0 -- one generator spawn attempt.
@@ -286,6 +289,7 @@ def handle_generate(state: GameState, gen_slot: int, gen_type: int,
         return
 
 
+# ROM: part game:0x414A4 | Extracts the frame-zero walk-picture table selection with a Python-to-ROM compass conversion.
 def monster_walk_picture(monster_type: int, direction: int) -> int:
     """The walk-table frame a creature of ``monster_type`` faces ``direction``
     with -- 0x414A4-0x414B8's lookup at animation frame 0.
@@ -298,6 +302,7 @@ def monster_walk_picture(monster_type: int, direction: int) -> int:
     return row[(direction + 2) & 0x07]
 
 
+# ROM: part game:0x492C0 | Extracts the wrapped generator candidate-cell arithmetic at 0x49326-0x49354.
 def generator_candidate_slot(gen_slot: int, index: int) -> int:
     """0x49326-0x49354 -- the ``index``-th candidate cell around a generator.
 
@@ -312,11 +317,13 @@ def generator_candidate_slot(gen_slot: int, index: int) -> int:
     return row + col
 
 
+# ROM: helper | Python tuple accessor for a cell's current record and picture.
 def _rendered_occupant(state: GameState, cell: int) -> tuple[int, int]:
     """``(record slot, picture)`` of whatever is drawn in ``cell``."""
     return cell, state.mobs.picture[cell]
 
 
+# ROM: direct game:0x48F12 | Placement occupancy and eight-neighbor proximity predicate, with Python boolean return.
 def tile_occupancy_test(state: GameState, slot: int) -> bool:
     """``tile_occupancy_test`` (0x48F12) -- may something be placed in ``slot``?
 
@@ -369,6 +376,7 @@ def tile_occupancy_test(state: GameState, slot: int) -> bool:
     return True
 
 
+# ROM: part game:0x492C0 | Extracts generated-monster picture, tier, geometry and direction argument construction at 0x4936A-0x49424.
 def _spawn_monster(state: GameState, slot: int, monster_type: int,
                    gen_type: int, rom_direction: int) -> None:
     """0x4936A-0x49424 -- ``mob_create`` the new creature.
@@ -423,6 +431,7 @@ _ONSCREEN_H_SPAN = 0x6C00 >> POS_SHIFT
 _ONSCREEN_V_SPAN = 0x7000 >> POS_SHIFT
 
 
+# ROM: direct game:0x5E57E | Represents the D4 visibility entry; 0x5E584 is its alternative stack ABI, not another Python body.
 def tile_on_screen_d4(state: GameState, slot: int) -> bool:
     """``tile_on_screen_d4`` (0x5E57E) -- is this cell inside the viewport?"""
     dx = ((slot & 0x1F) * 16 - state.scroll_x) & 0x1FF
@@ -432,6 +441,7 @@ def tile_on_screen_d4(state: GameState, slot: int) -> bool:
     return dy <= _ONSCREEN_V_SPAN
 
 
+# ROM: part game:0x40FAE | Extracted Super Sorcerer branch at 0x4106A, before the ordinary monster handler entry.
 def _supersorc_dispatch(state: GameState, slot: int, frame_word: int) -> None:
     """0x4106A -- the Super Sorcerer's four-phase cycle.
 
@@ -481,6 +491,7 @@ def _supersorc_dispatch(state: GameState, slot: int, frame_word: int) -> None:
     _supersorc_shoot(state, slot)
 
 
+# ROM: part game:0x40FAE | Extracts Super Sorcerer shot-channel, retry and animation bookkeeping at 0x41142.
 def _supersorc_shoot(state: GameState, slot: int) -> None:
     """0x41142 -- the Super Sorcerer borrows a demon channel for its bolt."""
     shot_slot = find_unused_shot(state, SLOT_DEMON_SHOTS)
@@ -494,6 +505,7 @@ def _supersorc_shoot(state: GameState, slot: int) -> None:
     state.mobs.hpos[slot] &= ~_HPOS_FLAG_ATTACK
 
 
+# ROM: direct game:0x5FDE0 | Represents the register-body placement search; the separate 0x5FDB8 ABI wrapper has no standalone Python definition.
 def supersorc_place(state: GameState, slot: int) -> int | None:
     """Relocate the Super Sorcerer behind a player (§3.3, 0x5FDE0).
 
@@ -538,6 +550,7 @@ def supersorc_place(state: GameState, slot: int) -> int | None:
     return None                              # 0x5FF8C: nowhere to go
 
 
+# ROM: part game:0x5FDE0 | Extracts a behind-player clear-run candidate test; correspondence does not certify viewport-test polarity.
 def _supersorc_candidate(state: GameState, slot: int, prow: int, pcol: int,
                          direction: int, run: int) -> int | None:
     """The cell ``run`` steps from (prow, pcol) along ``direction`` if the whole
@@ -564,6 +577,7 @@ def _supersorc_candidate(state: GameState, slot: int, prow: int, pcol: int,
     return dest
 
 
+# ROM: part game:0x5FDE0 | Extracts the eight-neighbor destination proximity rejection at 0x5FF06-0x5FF1C.
 def _supersorc_too_crowded(state: GameState, dest: int, self_slot: int) -> bool:
     """True if another MOB sits within the proximity box of ``dest``.
 
@@ -592,6 +606,7 @@ def _supersorc_too_crowded(state: GameState, dest: int, self_slot: int) -> bool:
     return False
 
 
+# ROM: part game:0x5FDE0,game:0x40FAE | Extracts placement position/facing writes at 0x5FF2C and caller iteration-marker repair at 0x410A6.
 def _supersorc_relocate(state: GameState, slot: int, dest: int,
                         direction: int) -> None:
     """Move the Super Sorcerer's record to ``dest`` and face ``direction``.
@@ -623,6 +638,7 @@ def _supersorc_relocate(state: GameState, slot: int, dest: int,
 GENERATOR_RETRY_RELOAD = 4
 
 
+# ROM: helper | Python MOB occupancy accessor used by the placement search.
 def _cell_blocked(state: GameState, slot: int) -> bool:
     """True when a cell already holds a wall, object, or another MOB."""
     return state.mobs.is_occupied(slot)

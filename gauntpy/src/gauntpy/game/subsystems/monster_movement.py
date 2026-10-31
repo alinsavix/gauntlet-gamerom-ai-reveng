@@ -39,11 +39,13 @@ _PROBE_LEFT = (0, -1)
 _PROBE_RIGHT = (0, 1)
 
 
+# ROM: helper | Reusable Python packed-cell arithmetic with row and column masking.
 def _cell_at(row: int, col: int) -> int:
     """Slot of a maze cell; the column wraps inside its row (``andi #0x3E``)."""
     return ((row & 0x1F) << 5) | (col & 0x1F)
 
 
+# ROM: part game:0x5E10C,game:0x5E1D8,game:0x5E2A2,game:0x5E35E | Extracts the repeated empty-picture, software-MOB bias and position-overlap checks from the four ray marches.
 def _march_cell_blocks(state: GameState, cell: int, h: int, v: int) -> bool:
     """One cell of a ray march: does its occupant overlap the probe position?
 
@@ -69,6 +71,7 @@ def _march_cell_blocks(state: GameState, cell: int, h: int, v: int) -> bool:
     return abs(_s16(v - state.mobs.vpos[cell])) < _OVERLAP
 
 
+# ROM: merged game:0x5E10C,game:0x5E1D8,game:0x5E2A2,game:0x5E35E | Parameterizes the four directional ray-march bodies, preserving their distinct edge and neighboring-cell branches.
 def _ray_march(state: GameState, slot: int, probe: tuple[int, int],
                h: int, v: int) -> int | None:
     """The four ray marches -- returns the blocking cell, or None when clear.
@@ -105,6 +108,7 @@ def _ray_march(state: GameState, slot: int, probe: tuple[int, int],
     return None
 
 
+# ROM: part game:0x4119A | Extracts the four rotating direction probes at 0x41272-0x41336 from the shared monster handler.
 def _probe_phase(state: GameState, slot: int, step: int,
                  ) -> tuple[int, int, int, bool, int | None]:
     """0x41272-0x41336 -- the four axis probes.
@@ -174,11 +178,13 @@ def _probe_phase(state: GameState, slot: int, step: int,
     return h, v, d6, clear, None
 
 
+# ROM: part game:0x4119A | Extracted player-contact branch predicate at 0x4129E, using live Python identity instead of the ROM palette nibble.
 def _is_player_cell(state: GameState, cell: int) -> bool:
     """0x4129E -- the palette nibble the ROM reads a hero sprite by."""
     return _cell_player_index(state, cell) is not None
 
 
+# ROM: part game:0x4119A | Extracted movement phase beginning at 0x4126A; that interior address is not a separate inventoried callable.
 def _monster_move_engine(state: GameState, slot: int, obj_type: int, index: int,
                          frame_word: int, acted: bool = False) -> None:
     """0x4126A -- probe, slide, relocate, and animate.
@@ -197,6 +203,7 @@ def _monster_move_engine(state: GameState, slot: int, obj_type: int, index: int,
     _commit_move(state, slot, index, d6, h, v, clear, frame_word, acted)
 
 
+# ROM: part game:0x4119A | Extracts blocked-probe player contact and post-hit direction handling at 0x413B0.
 def _march_hit_player(state: GameState, slot: int, blocker: int) -> None:
     """0x4129A/0x413B0 -- a blocked probe that ran into a player is contact.
 
@@ -218,6 +225,7 @@ def _march_hit_player(state: GameState, slot: int, blocker: int) -> None:
     apply_direction_from_delta(state, slot, blocker)  # 0x413CC
 
 
+# ROM: helper | Resolves a live Python player identity from its migrating MOB slot rather than interpreting a palette nibble.
 def _cell_player_index(state: GameState, cell: int) -> int | None:
     """Which player, if any, the given cell counts as.
 
@@ -234,6 +242,7 @@ def _cell_player_index(state: GameState, cell: int) -> int | None:
     return None
 
 
+# ROM: direct game:0x41B7E | Represents the register-entry direction update from current and target MOB positions.
 def apply_direction_from_delta(state: GameState, slot: int, victim_cell: int) -> None:
     """``apply_direction_from_delta`` (0x41B7E) -- turn towards what was hit.
 
@@ -249,11 +258,13 @@ def apply_direction_from_delta(state: GameState, slot: int, victim_cell: int) ->
     _set_direction(state, slot, _aim_direction(dx, dv, 0, 4))
 
 
+# ROM: part game:0x4119A | Extracts the post-probe direction write at 0x4133E with Python compass conversion.
 def _write_direction(state: GameState, slot: int, d6: int) -> None:
     """0x4133E -- store the ROM-compass direction field back into the state."""
     _set_direction(state, slot, ((d6 >> 10) - 2) & 0x07)
 
 
+# ROM: part game:0x4119A | Extracted relocation-cell calculation at 0x41358-0x41374, delegated to the shared coordinate implementation.
 def _destination_cell(h: int, v: int) -> int:
     """0x41358-0x41374 -- which cell a position belongs to, sprite bias and all.
 
@@ -266,6 +277,7 @@ def _destination_cell(h: int, v: int) -> int:
     return mob_cell_of(h, v)
 
 
+# ROM: part game:0x4119A | Extracts direction commit, movement-flag clearing, relocation and occupied-destination contact.
 def _commit_move(state: GameState, slot: int, index: int, d6: int, h: int,
                  v: int, clear: bool, frame_word: int, acted: bool) -> None:
     """0x4133E-0x413AE -- store the heading, then relocate if a probe was clear."""
@@ -310,6 +322,7 @@ def _commit_move(state: GameState, slot: int, index: int, d6: int, h: int,
         _move_tail(state, slot, index, frame_word, moved=False, acted=acted)
 
 
+# ROM: part game:0x4119A | Extracts the moved/refused animation and blink tails at 0x4142E and 0x41454.
 def _move_tail(state: GameState, slot: int, index: int, frame_word: int,
                moved: bool, acted: bool) -> None:
     """0x41454 (moved) and 0x4142E (refused) -- the shared animation tail.
@@ -371,6 +384,7 @@ _FAST_FAMILY_BIT = {
 }
 
 
+# ROM: part game:0x40E6A | Extracts per-family speed setup from 0x40EEE-0x40F34; the ODDANGLE data table is not an entry.
 def _monster_speed(state: GameState, obj_type: int, frame_word: int) -> int:
     """Base 0x80 (1 px); a family raised to 0x100 (2 px) on frames where bit 1 of
     the frame word is set, averaging ~1.5x (§3.3).
@@ -390,6 +404,7 @@ def _monster_speed(state: GameState, obj_type: int, frame_word: int) -> int:
     return _MONSTER_SPEED_BASE
 
 
+# ROM: part game:0x40E6A | Extracts removed-creature iteration-marker repair from the outer walk tail at 0x414FE.
 def _iter_ptr_forget(state: GameState, slot: int) -> None:
     """0x414FE -- a creature that removed itself hands the marker back."""
     if state.monster_iter_ptr != slot:

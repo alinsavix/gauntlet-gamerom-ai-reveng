@@ -92,6 +92,7 @@ _SECRET_ROOM_BONUS = 0x1388
 # Secret rooms (§10.6): the level's trick, who wins it, and the challenge room
 # ---------------------------------------------------------------------------
 
+# ROM: part game:0x438AE | Secret objective and winner initialization block at 0x43916-0x4395C, invoked later by the Python spawn bridge.
 def secret_new_level_setup(state: GameState) -> None:
     """0x43916-0x4395C -- give the freshly loaded maze its secret objective.
 
@@ -114,6 +115,7 @@ def secret_new_level_setup(state: GameState) -> None:
         state.secret_trick_id = TRICK_NONE       # 0x43958
 
 
+# ROM: part game:0x511AC | Parameterized active-objective gate and byte increment extracted from item-interaction progress hooks; shared event callers do not make this a standalone ROM counter routine.
 def secret_trick_progress(state: GameState, player_index: int, trick_id: int,
                           amount: int = 1) -> None:
     """The ``addq.b #1,secret_tricks_flags[player]`` hook shape (§10.6).
@@ -130,6 +132,7 @@ def secret_trick_progress(state: GameState, player_index: int, trick_id: int,
     flags[player_index] = (flags[player_index] + amount) & 0xFF
 
 
+# ROM: part game:0x511AC,game:0x495A6 | Parameterized assignment-shaped objective hooks, documented at 0x518C2 and 0x498A4 inside player_tile_interact and monster_playerhit.
 def secret_trick_set(state: GameState, player_index: int, trick_id: int,
                      value: int) -> None:
     """The ``move.b #n``/``clr.b`` progress sites (0x518C2, 0x498A4)."""
@@ -138,6 +141,7 @@ def secret_trick_set(state: GameState, player_index: int, trick_id: int,
     state.secret_tricks_flags[player_index] = value & 0xFF
 
 
+# ROM: part game:0x52B40 | Exit-time trick qualification and winner assignment at 0x52B60-0x52C4E, not secret_check_winner's challenge boundary.
 def secret_trick_check(state: GameState, player_index: int) -> None:
     """0x52B60-0x52C4E -- did this exiting player satisfy the level's trick?
 
@@ -183,6 +187,7 @@ def secret_trick_check(state: GameState, player_index: int) -> None:
         state.secret_player = player_index                       # 0x52C46
 
 
+# ROM: direct game:0x486FE | Adaptive secret-room availability pacing and previous-maze recording.
 def secret_check(state: GameState) -> None:
     """0x486FE -- adapt how often a secret room is offered.
 
@@ -207,6 +212,7 @@ def secret_check(state: GameState) -> None:
     state.secret_possible_counter = state.secret_possible_start  # 0x4874A
 
 
+# ROM: direct game:0x4D1A4 | Challenge-specific progress/MOB tests; Python bool represents the ROM -1/0 result and an invalid winner safely fails.
 def secret_check_winner(state: GameState) -> bool:
     """0x4D1A4 -- was the secret room's challenge task completed?
 
@@ -243,6 +249,7 @@ def secret_check_winner(state: GameState) -> bool:
     return False
 
 
+# ROM: part game:0x44DB4 | Winner eligibility, challenge selection, maze substitution and duration arm at 0x44DD6-0x44E8E.
 def _enter_secret_room(state: GameState) -> bool:
     """0x44DD6-0x44E8E -- swap the level for the winner's challenge room.
 
@@ -275,6 +282,7 @@ def _enter_secret_room(state: GameState) -> bool:
     return True
 
 
+# ROM: adapter game:0x4BE24 | Selected-header-byte access from the level_splash hint arm is replaced by decoded-ROM acquisition with an existing-maze fallback; not a full splash or decoder implementation.
 def _maze_secret_for_hint(state: GameState) -> int:
     """Read the selected maze header byte that level_splash sees at 0x4C084."""
     from ...maze_rom import MazeError, decode_maze
@@ -285,6 +293,7 @@ def _maze_secret_for_hint(state: GameState) -> int:
         return int(getattr(state.maze, "secret", TRICK_NONE) or TRICK_NONE)
 
 
+# ROM: part game:0x4BE24 | Secret-hint eligibility, fallback draw, text and latch consumption at 0x4C04E-0x4C108.
 def _write_secret_hint(state: GameState) -> None:
     """0x4C04E-0x4C108 -- consume secret_need_hint into alpha RAM."""
     from .level_state import in_bonus_room
@@ -311,6 +320,7 @@ def _write_secret_hint(state: GameState) -> None:
     state.secret_need_hint = 0
 
 
+# ROM: part game:0x44DB4 | Secret challenge invitation and timer display at 0x44F7E-0x450F8; OS text writers are ordinary callees.
 def _write_secret_room_start(state: GameState) -> None:
     """0x44F7E-0x450F8 -- write the complete secret challenge invitation."""
     winner = state.secret_player
@@ -342,6 +352,7 @@ def _write_secret_room_start(state: GameState) -> None:
     write_alpha_large_text(state, 34, 2, f"{seconds:>2}", 0x8000)
 
 
+# ROM: part game:0x4800C | Winner-only spawn and inventory stash arm at 0x482BC-0x4834E, with Python inventory-shadow synchronization.
 def secret_room_spawn(state: GameState) -> None:
     """0x482BC-0x4834E -- only the winner goes in, and they go in empty-handed.
 
@@ -372,6 +383,7 @@ def secret_room_spawn(state: GameState) -> None:
     setup_infopanel(state, winner)
 
 
+# ROM: part game:0x4D476 | Secret winner bonus and inventory return at 0x4D720-0x4D8A0; Python boolean requests later name entry and the coin floor accommodates synthetic players.
 def _secret_room_payout(state: GameState, completed: bool) -> bool:
     """0x4D720-0x4D8A0 -- pay the winner, hand their inventory back, stand down.
 
@@ -411,6 +423,7 @@ def _secret_room_payout(state: GameState, completed: bool) -> bool:
     return open_name_entry
 
 
+# ROM: part game:0x511AC | Treasure-interaction progress and per-player count arm at 0x519C2-0x519F8, plus the Python level-total shadow.
 def treasure_collected(state: GameState, player_index: int) -> None:
     """A treasure pickup, with everything the ROM's treasure arm counts.
 

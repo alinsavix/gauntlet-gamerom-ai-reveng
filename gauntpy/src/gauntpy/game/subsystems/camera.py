@@ -26,6 +26,7 @@ _SCROLL_Y_MIN = 0x001
 _SCROLL_Y_MAX = 0x118
 
 
+# ROM: part game:0x46CAA | Party extent/wrap/outlier target calculation extracted from main_scroll_playfield; include_camera=False is a Python extension.
 def _camera_target(
     state: GameState, *, include_camera: bool = True,
 ) -> tuple[int, int] | None:
@@ -107,6 +108,7 @@ def _camera_target(
     return target_x, target_y
 
 
+# ROM: direct game:0x46CAA | Shared camera update boundary with extracted target calculation and delegated scroll clamp.
 def main_scroll_playfield(state: GameState) -> None:
     """0x46CAA -- move the shared camera toward the party.
 
@@ -152,6 +154,7 @@ def main_scroll_playfield(state: GameState) -> None:
     set_scroll_pos(state)
 
 
+# ROM: helper | Python level-start framing policy reusing the ROM-derived target without smoothing; no separate ROM snap-camera callable identified.
 def snap_camera(state: GameState) -> None:
     """Jump the camera straight to its target, no smoothing -- for framing the
     party immediately at level start (so the view does not pan in from 0,0).
@@ -164,6 +167,7 @@ def snap_camera(state: GameState) -> None:
     set_scroll_pos(state)
 
 
+# ROM: direct game:0x46C5E | Packed-maze-cell camera centering boundary followed by the shared clamp.
 def scroll_to_slot(state: GameState, packed_slot: int) -> None:
     """0x46C5E -- center the hardware scroll on one packed maze cell."""
     packed_slot &= 0x03FF
@@ -173,6 +177,7 @@ def scroll_to_slot(state: GameState, packed_slot: int) -> None:
     set_scroll_pos(state)
 
 
+# ROM: direct game:0x46F56 | Scroll clamp/mask boundary; Python reads and writes state fields instead of receiving two register-value arguments.
 def set_scroll_pos(state: GameState) -> None:
     """0x46F56 -- clamp scroll registers to the legal playfield range.
 
@@ -190,6 +195,7 @@ def set_scroll_pos(state: GameState) -> None:
     state.scroll_y &= 0x1FF
 
 
+# ROM: infrastructure | Host-renderer interpretation of modeled scroll registers, with compatibility viewport arguments ignored.
 def viewport_scroll(state: GameState, viewport_w: int, viewport_h: int) -> tuple[int, int]:
     """Return the world origin represented by the hardware scroll registers.
 

@@ -65,6 +65,23 @@ inputs, and RNG seed.
 
 ## Resolved issues
 
+### S-186 · callable coverage did not describe Python function boundaries
+
+The older game-only audit classified caller-visible behavior but did not inventory
+Python-only definitions or distinguish exact boundaries from merged and extracted
+bodies. Several prose owner descriptions also retained pre-extraction names.
+Source-local `# ROM:` comments now record the correspondence at each named Python
+definition, with explicit helper, infrastructure, and unresolved classifications
+instead of guessed addresses. `FUNCTION_CROSSWALK.md` and its two CSV views cover
+the documented game and OS callable inventories in both directions, keeping host
+infrastructure separate. The generator rejects missing annotations, unknown
+callable addresses, duplicate references, and stale reports. This inventory does
+not change routine bodies or promote structural matches to fidelity claims.
+
+Ten old `complete` entries have no established source-local mapping in this pass;
+the generated report lists those claims separately for reconciliation rather than
+silently counting them as exact matches or declaring their behavior absent.
+
 ### S-185 · divergent implementations of shared ROM leaves
 
 `player_add_score_with_mult` (0x5214C) had separate player and projectile

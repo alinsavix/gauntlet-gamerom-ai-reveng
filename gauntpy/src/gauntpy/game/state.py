@@ -66,6 +66,7 @@ class Player:
     #: exit animation apart from this port's death animation (see PlayerStatus).
     exit_pending: int = 0
 
+    # ROM: helper | Python ALIVE_HERE bit predicate; not the ROM's four-status active-party count.
     @property
     def active(self) -> bool:
         """On the level right now and taking input."""
@@ -127,6 +128,7 @@ class GameState:
     snapshots preserve their contents separately, never their filesystem policy.
     """
 
+    # ROM: helper | Binds a Python EEPROM device object outside the RAM-shaped dataclass fields.
     def __post_init__(self) -> None:
         # A device binding is not working RAM or part of dataclass snapshots.
         self.eeprom_storage: EepromStorage = MemoryEepromStorage()
@@ -894,14 +896,17 @@ class GameState:
 
     # --- convenience ----------------------------------------------------------
 
+    # ROM: helper | Python filtered list of active player objects, not player_activecount.
     @property
     def active_players(self) -> list[Player]:
         return [p for p in self.players if p.active]
 
+    # ROM: helper | Length of the Python ALIVE_HERE view; deliberately not mapped to 0x4D900, which counts statuses 1, 2, 8 and 0x10.
     @property
     def players_active_count(self) -> int:
         return len(self.active_players)
 
+    # ROM: adapter game:0x5FC4E | Delegates to the state's GameRandom instance; not a second RNG implementation. Legacy state.py tport_restore_player_picture ownership is absent.
     def getrandom(self, bound: int) -> int:
         """Shorthand for the game's ``getrandom(bound)``."""
         return self.rng.getrandom(bound)

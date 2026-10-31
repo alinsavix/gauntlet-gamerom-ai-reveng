@@ -69,6 +69,7 @@ _DIRECTION_COLUMN_DELTA = [0, 1, 1, 1, 0, -1, -1, -1, 0]
 _DIRECTION_ROW_DELTA = [-0x20, -0x20, 0, 0x20, 0x20, 0x20, 0, -0x20, 0]
 
 
+# ROM: part game:0x4A53A | Character/power/frame-mask speed selector extracted from main_move_players at 0x4A920-0x4A962.
 def _player_speed_units(state: GameState, player) -> int:  # noqa: ANN001
     """The native position units main_move_players loads into D3 (0x4A920-0x4A962).
 
@@ -86,6 +87,7 @@ def _player_speed_units(state: GameState, player) -> int:  # noqa: ANN001
     return units
 
 
+# ROM: helper | State-free Python convenience exposing only base pixels per frame; omits the ROM frame-dependent boost and special-maze selection.
 def _player_speed(player) -> int:  # noqa: ANN001
     """Base pixels/frame for a player, without the animation-rate boost.
 
@@ -101,6 +103,7 @@ def _player_speed(player) -> int:  # noqa: ANN001
 # Slot/pixel helpers (§23)
 # ---------------------------------------------------------------------------
 
+# ROM: helper | Python sprite-origin/body-cell conversion used by compatibility collision logic; deliberately differs from native record-cell migration.
 def _pixel_to_slot(x: int, y: int) -> int:
     """Convert a hero MOB origin to the cell its *body* is probing from (§23).
 
@@ -120,12 +123,14 @@ def _pixel_to_slot(x: int, y: int) -> int:
     return (row << 5) | col
 
 
+# ROM: helper | Bridges Python active-high directions to the ROM direction-table representation; 0x580FC is a data table, not a routine.
 def _direction_from_input(delta: int) -> int:
     """Translate gauntpy's active-high direction bits through ROM 0x580FC."""
     raw_nibble = (~(delta >> 4)) & 0x0F
     return _JOYSTICK_NIBBLE_TO_DIRECTION[raw_nibble]
 
 
+# ROM: part game:0x4FEB2,game:0x50224,game:0x50662 | Extracted wrapped row/column neighbor arithmetic shared by corner transport, pad selection and landing-direction selection.
 def _direction_neighbor(slot: int, direction: int) -> int:
     """Apply the ROM's independently wrapped row/column direction tables."""
     col = (slot + _DIRECTION_COLUMN_DELTA[direction]) & 0x1F
@@ -133,6 +138,7 @@ def _direction_neighbor(slot: int, direction: int) -> int:
     return row | col
 
 
+# ROM: part game:0x41C30 | Record-cell calculation from the movement-core tail at 0x424CA-0x424E4, delegated to the shared coordinate representation.
 def _player_record_cell(state: GameState, player_index: int) -> int:
     """0x424CA-0x424E4 -- the cell this player's live record belongs in.
 
@@ -144,6 +150,7 @@ def _player_record_cell(state: GameState, player_index: int) -> int:
     return mob_cell_of(state.mobs.hpos[slot], state.mobs.vpos[slot])
 
 
+# ROM: part game:0x41C30 | Movement-core empty-destination migration tail at 0x424E6-0x42524; move_mob_slot is a callee, not this function's implementing entry.
 def migrate_player_record(state: GameState, player_index: int) -> bool:
     """0x424E6-0x42524 -- relocate a hero's MOB record into the cell it entered.
 
@@ -187,6 +194,7 @@ def migrate_player_record(state: GameState, player_index: int) -> bool:
     return True
 
 
+# ROM: part game:0x50662,game:0x50C7A | Extracted transporter relocation at 0x508BA onward with inlined occupant cleanup and flattened thief retry; not the whole resolve_move_tile_interaction callable.
 def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool:
     """Commit the transporter move milestone, including landing replacement."""
     from .player_items import (
@@ -261,6 +269,7 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool
     return True
 
 
+# ROM: adapter game:0x4E630 | Argument-order/import adapter to thief.thief_track_victim_move; route-grid implementation remains there.
 def _track_thief_victim_move(state: GameState, player_index: int,
                              packed_slot: int) -> None:
     """Feed player cell changes into the thief's private low-nibble route grid."""
@@ -289,6 +298,7 @@ _SCREEN_H_SPAN = 0x7000
 _SCREEN_V_SPAN = 0x7400
 
 
+# ROM: helper | Python coarse picture/type blocking predicate; not the position-aware mob_probe_candidate or tile_lookup_core boundary.
 def _slot_is_blocking(state: GameState, slot: int) -> bool:
     """True when slot physically blocks movement (§4.2).
 
@@ -306,6 +316,7 @@ def _slot_is_blocking(state: GameState, slot: int) -> bool:
     return state.mobs.obj_type(slot) in _BLOCKING_OBJ_TYPES
 
 
+# ROM: adapter game:0x47DAE | Delegated contact-burst boundary to shot_effects.shot_impact_spawn.
 def _fight_effect(state: GameState, slot: int, player_index: int) -> None:
     """The contact burst shared by hand-to-hand monster/generator hits."""
     from .shot_effects import shot_impact_spawn
@@ -313,6 +324,8 @@ def _fight_effect(state: GameState, slot: int, player_index: int) -> None:
     shot_impact_spawn(state, slot, player_index)
 
 
+# ROM: direct game:0x52192 | Current defining mob_collision_test combat dispatch body, with Python result conventions and demo exceptions; legacy players.mob_collision_test does not exist.
+# ROM: part game:0x41C30 | Also contains the movement core's IT transfer/player-contact arm at 0x41DAC-0x41DEC, rather than an ordinary combat callee.
 def _player_fight_collision(
     state: GameState, player_index: int, slot: int,
 ) -> int | None:
@@ -538,6 +551,7 @@ def _player_fight_collision(
     return 1
 
 
+# ROM: merged game:0x4280E,game:0x428A4,game:0x4293A,game:0x429D0,game:0x427B4 | Unifies four directional movable-wall arms and the inlined failed_door_post migration tail; ray-march entries remain callees and ROM zero-status interpretation is inferred.
 def _push_movable_wall(
     state: GameState, player_index: int, slot: int, delta: int,
     vertical: bool,
@@ -592,6 +606,7 @@ def _push_movable_wall(
     return True
 
 
+# ROM: part game:0x425D0,game:0x4260C | Shared three-candidate traversal extracted from private up/down probes; their distinct edge gates remain in the named wrappers.
 def _player_probe_vertical(
     state: GameState,
     mob_slot: int,
@@ -620,6 +635,7 @@ def _player_probe_vertical(
     return -1
 
 
+# ROM: merged game:0x426D4,game:0x4270C | Common private left/right single-cell probe body parameterized by target column; not either public three-cell probe.
 def _player_probe_horizontal(
     state: GameState,
     mob_slot: int,
@@ -646,6 +662,7 @@ def _player_probe_horizontal(
     return -1
 
 
+# ROM: direct game:0x425D0 | Private upward movement probe boundary with row-one coordinate gate and an extracted common triplet traversal.
 def _player_probe_up(
     state: GameState, mob_slot: int, *, hpos: int, vpos: int,
 ) -> int:
@@ -657,6 +674,7 @@ def _player_probe_up(
     )
 
 
+# ROM: direct game:0x4260C | Private downward movement probe boundary with signed bottom gate and an extracted common triplet traversal.
 def _player_probe_down(
     state: GameState, mob_slot: int, *, hpos: int, vpos: int,
 ) -> int:
@@ -668,6 +686,7 @@ def _player_probe_down(
     )
 
 
+# ROM: part game:0x41C30 | Movement-core blocked-axis one-pixel retry and perpendicular nudge arms, including 0x41CD2/0x41F0A and 0x42112/0x42346.
 def _wall_collision_response(
     state: GameState,
     result: int,
@@ -786,6 +805,7 @@ def _wall_collision_response(
 # Called when a probe returns a door slot and the player has a key.
 # Consume the key, clear the door, return True (traversable).
 
+# ROM: part game:0x511AC | Door-type/key gate into the extracted pickup unlock arm; despite the source section title it is not a movable-wall door_traverse entry.
 def _door_try_traverse(state: GameState, player_index: int,
                        probe_slot: int) -> bool:
     """Try to open a door blocking movement.  Consumes a key on success.
@@ -811,10 +831,12 @@ def _door_try_traverse(state: GameState, player_index: int,
     return True
 
 
+# ROM: helper | Python masking utility for native unsigned position words.
 def _u16_pos(value: int) -> int:
     return value & 0xFFFF
 
 
+# ROM: part game:0x41C30 | Extracted horizontal/vertical offscreen gates, including 0x41C52-0x41C6A and 0x42092-0x420AA; Python demo bypass is additional.
 def _inside_player_screen_window(
     state: GameState, hpos: int, vpos: int,
 ) -> tuple[bool, bool]:
@@ -849,6 +871,7 @@ _PROBE_PUSHED = "pushed"
 _PROBE_FIGHTING = "fighting"
 
 
+# ROM: part game:0x41C30 | Extracts movement-core probe outcome/squeeze/push/combat dispatch into Python named outcomes; does not implement the D1-preserving ABI wrappers.
 def _resolve_probe(state: GameState, player_index: int, result: int,
                    cur_slot: int, delta: int, vertical: bool) -> str:
     """Turn one ``mob_probe_*`` return into a movement outcome (§4.2).
@@ -886,6 +909,7 @@ def _resolve_probe(state: GameState, player_index: int, result: int,
     return _PROBE_BLOCKED
 
 
+# ROM: merged game:0x41BF0,game:0x41C30 | Combines the public movement wrapper's setup with its internal register-state core; several collision and migration portions remain extracted.
 def player_try_move(
     state: GameState,
     player_index: int,
@@ -943,6 +967,7 @@ def player_try_move(
     fight_contact = False
     collision_response = False
 
+    # ROM: helper | Nested Python closure forwarding captured movement context to _resolve_probe; no independent ROM callable.
     def resolve(result: int, *, vertical: bool) -> str:
         return _resolve_probe(
             state, player_index, result, cur_slot, delta, vertical,

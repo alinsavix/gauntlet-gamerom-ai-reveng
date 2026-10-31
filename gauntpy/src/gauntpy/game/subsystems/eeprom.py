@@ -97,6 +97,7 @@ HIGHSCORE_INITIALS = 3
 HIGHSCORE_ALPHABET_BASE = 40
 
 
+# ROM: part os:0x3A7E | Base-40 initials encoding loop extracted from write_high_score_entry at 0x3AEC-0x3B40; not the complete record/queue writer.
 def encode_initials(text: str) -> int:
     """Three initials -> the packed word ``write_high_score_entry`` stores.
 
@@ -130,6 +131,7 @@ def encode_initials(text: str) -> int:
     return packed & 0xFFFF
 
 
+# ROM: part os:0x39B0 | Base-40 initials expansion extracted from read_high_score_entry at 0x3A2C-0x3A74; no rank lookup or packed-score read.
 def decode_initials(packed: int) -> str:
     """The packed word -> three ASCII initials (ROM 0x3A2C-0x3A74).
 
@@ -151,6 +153,7 @@ def decode_initials(packed: int) -> str:
     return "".join(reversed(chars))
 
 
+# ROM: adapter os:0x3A7E,os:0x39B0 | Typed record normalization substitutes a score/initials round trip for OS packed-record write/read representation; does not implement their lookup, queue or error paths.
 def _stored_record(score: int, initials: str) -> list:
     """One ladder entry as the EEPROM would hold it.
 
@@ -164,6 +167,7 @@ def _stored_record(score: int, initials: str) -> list:
     return [clamped, decode_initials(encode_initials(str(initials)))]
 
 
+# ROM: helper | Lazy import accessor for transcribed factory data; 0x57EBA is not callable.
 def _factory_records() -> tuple:
     """WP-14's ``factory_highscore_records`` (ROM 0x57EBA).
 
@@ -175,6 +179,7 @@ def _factory_records() -> tuple:
     return FACTORY_HIGHSCORE_RECORDS
 
 
+# ROM: helper | Normalizes Python ladders into a persistable comparison image; factory fallback and codec calls are reused, not separate ROM bodies.
 def _high_score_image(ladders) -> list:
     """The persistable form of the four ladders.
 
@@ -236,11 +241,13 @@ _ROTATION_FIELDS = (
 )
 
 
+# ROM: part game:0x42F86 | Maze-number validation extracted from eeprom_load_config; Python uses numeric bounds instead of the ROM pointer-table lookup.
 def _valid_maze_number(value: int) -> int:
     """0x43002-0x4301C: below 5, or naming no maze record, resets to 5."""
     return int(value) if MAZE_NUMBER_MIN <= value <= MAZE_NUMBER_MAX else MAZE_NUMBER_DEFAULT
 
 
+# ROM: part game:0x42F86 | Treasure-maze range/default check extracted from eeprom_load_config.
 def _valid_treasure_maze(value: int) -> int:
     """0x4303E-0x43054: outside the eleven treasure mazes resets to the first."""
     return (
@@ -249,6 +256,7 @@ def _valid_treasure_maze(value: int) -> int:
     )
 
 
+# ROM: part game:0x42F86 | Four rotation-field validation branches from eeprom_load_config; omits its EEPROM transport, version and statistics handling.
 def eeprom_validate_rotation(state: GameState) -> None:
     """``eeprom_load_config``'s range checks on the four rotation values.
 
@@ -265,6 +273,7 @@ def eeprom_validate_rotation(state: GameState) -> None:
     state.treas_mazerand_adder &= TREASURE_STRIDE_MASK
 
 
+# ROM: part game:0x43192 | Four rotation-field packing portion of eeprom_write expressed as a normalized dictionary; not the full six-value buffer or flush.
 def _rotation_image(state: GameState) -> dict:
     """The four rotation values as they would sit in the EEPROM's config block.
 
@@ -281,6 +290,7 @@ def _rotation_image(state: GameState) -> dict:
     }
 
 
+# ROM: part game:0x42F86 | Extracted default four-byte rotation block built inside eeprom_load_config.
 def _factory_rotation() -> dict:
     """A fresh cabinet's config block (ROM 0x42FC4-0x42FC8 builds it inline)."""
     return {
@@ -291,6 +301,7 @@ def _factory_rotation() -> dict:
     }
 
 
+# ROM: helper | Accessor for one cached game_settings bitfield; not the OS descriptor-driven configuration reader or its separate difficulty item.
 def game_difficulty(state: GameState) -> int:
     """Operator "Game Difficulty", 0-7 -- bits 5-7 of ``game_settings``.
 
@@ -301,6 +312,7 @@ def game_difficulty(state: GameState) -> int:
     return (state.game_settings & GSETTING_DIFFICULTY_MASK) >> GSETTING_DIFFICULTY_SHIFT
 
 
+# ROM: helper | Accessor/display normalization for a cached two-bit game option; no separately identified callable.
 def coins_to_start(state: GameState) -> int:
     """Operator "Coins to Start", displayed as 1-4 -- bits 8-9 of ``game_settings``.
 
@@ -312,6 +324,7 @@ def coins_to_start(state: GameState) -> int:
     return raw + 1
 
 
+# ROM: helper | Python cached-option bitfield setter; does not implement OS packed configuration storage or queued EEPROM writes.
 def set_game_difficulty(state: GameState, difficulty: int) -> None:
     """Set bits 5-7 of ``game_settings`` to ``difficulty`` (0-7), other bits untouched."""
     difficulty &= 0x7
@@ -321,6 +334,7 @@ def set_game_difficulty(state: GameState, difficulty: int) -> None:
     ) & 0xFFFF
 
 
+# ROM: helper | Python cached-option bitfield setter; no separately identified ROM callable.
 def set_coins_to_start(state: GameState, coins: int) -> None:
     """Set bits 8-9 of ``game_settings`` from a displayed 1-4 value, other bits untouched."""
     raw = (coins - 1) & 0x3
@@ -330,6 +344,8 @@ def set_coins_to_start(state: GameState, coins: int) -> None:
     ) & 0xFFFF
 
 
+# ROM: adapter os:0x44E8,game:0x42F86 | Typed-device snapshot restore replaces OS eeprom_init image acquisition and game eeprom_load_config effects; no redundant-block decoder, OS stack allocation, repair queue or statistics body.
+# ROM: part game:0x4327A | Also owns one_time_init's settings-bit-12 factory-default branch, with the actual default installation extracted below. Legacy eeprom_load_config Python name is absent.
 def eeprom_load_settings(state: GameState) -> None:
     """Restore the current image from the cabinet's bound EEPROM device.
 
@@ -396,6 +412,7 @@ def eeprom_load_settings(state: GameState) -> None:
     eeprom_validate_rotation(state)
 
 
+# ROM: part game:0x4327A | Factory settings/cache assignment extracted from one_time_init at 0x432E0-0x432FA; does not implement the OS configuration writer it replaces.
 def _install_factory_settings(state: GameState) -> None:
     """0x432E0-0x432FA -- the ROM word, minus bit 12, written back and cached.
 
@@ -408,6 +425,7 @@ def _install_factory_settings(state: GameState) -> None:
     state.eeprom_settings_cache = state.game_settings
 
 
+# ROM: helper | Builds an immutable typed-device snapshot from modeled state; no ROM callable boundary.
 def eeprom_image(state: GameState) -> EepromImage:
     """Snapshot the ROM-normalized records without changing working RAM."""
     return EepromImage(
@@ -421,6 +439,7 @@ def eeprom_image(state: GameState) -> EepromImage:
     )
 
 
+# ROM: adapter game:0x43192 | Typed synchronous device write substitutes for eeprom_write's buffered service interaction; not an implementation of OS eeprom_process/eeprom_read_block. Legacy Python eeprom_write name is absent.
 def eeprom_save_settings(state: GameState) -> None:
     """Write the current EEPROM image through the cabinet's bound device.
 
@@ -433,6 +452,7 @@ def eeprom_save_settings(state: GameState) -> None:
     state.eeprom_storage.write(eeprom_image(state))
 
 
+# ROM: helper | Reads/normalizes the typed storage image for Python change detection; does not model EEPROM busy, physical verification or region queues.
 def _stored_image(state: GameState) -> tuple[int | None, int | None, list, dict]:
     """What the device holds: ``(settings, pricing, ladders, rotation)``.
 
@@ -460,6 +480,7 @@ def _stored_image(state: GameState) -> tuple[int | None, int | None, list, dict]
     return image.game_settings & 0xFFFF, pricing, ladders, rotation
 
 
+# ROM: direct game:0x431EE | Game countdown/change-detection boundary; snapshot comparisons replace some ROM shadow/queue behavior and the statistics-triggered flush remains unmodeled.
 def eeprom_periodic_write(state: GameState) -> None:
     """0x431EE -- periodic write timer for the EEPROM shadow.
 

@@ -129,6 +129,7 @@ _DRAGON_HEAD_PICS = (
 # long-range fireball, both picked by ``shot_state.shot_picture``.
 
 
+# ROM: direct game:0x5496E | Initializes the four footprint slots and dragon state; Python also publishes an initial head pose.
 def dragon_setup_segments(state: GameState, primary_slot: int) -> None:
     """0x5496E -- initialize the four-slot 2×2 dragon footprint."""
     row = primary_slot & 0x3E0
@@ -148,6 +149,7 @@ def dragon_setup_segments(state: GameState, primary_slot: int) -> None:
     dragon_head_pose_update(state, primary_slot)
 
 
+# ROM: helper | Synchronizes the Python primary-slot alias and reconstructs missing segments for legacy setup.
 def _segments(state: GameState) -> list[int]:
     """Return the ROM segment array, deriving it for legacy level setup."""
     segments = state.dragon_seg_mob_ids
@@ -167,6 +169,7 @@ def _segments(state: GameState) -> list[int]:
     return segments
 
 
+# ROM: helper | Finds and repairs Python dragon identity for legacy or hand-built level state.
 def _dragon_slot(state: GameState) -> int | None:
     if (
         state.dragon_seg_mob_ids[0] == 0
@@ -189,11 +192,13 @@ def _dragon_slot(state: GameState) -> int | None:
     return None
 
 
+# ROM: part game:0x53D10,game:0x54112,game:0x54454,game:0x545FA,game:0x54748 | Shared extraction of path-program lookup by program number and counter phase; not a separate ROM callable.
 def _current_path_byte(state: GameState) -> int:
     program = _DRAGON_PATH_PROGRAMS[state.dragon_path_num % len(_DRAGON_PATH_PROGRAMS)]
     return program[(state.dragon_anim_ctr & 0x7F) >> 3]
 
 
+# ROM: part game:0x53D10,game:0x54748 | Extracts the halved path-byte plus facing index used by muzzle alignment and projectile setup.
 def _pose_index(state: GameState) -> int:
     """0x53D5C-0x53D70 / 0x54790-0x5479E -- ``(byte >> 1) + facing * 2``.
 
@@ -206,6 +211,7 @@ def _pose_index(state: GameState) -> int:
     return pose + ((state.dragon_facing & 0x06) << 1)
 
 
+# ROM: part game:0x545FA | Extracts the unhalved path-byte plus facing index for the 32-entry head tables.
 def _head_index(state: GameState) -> int:
     """0x54616-0x54626 -- ``raw path byte + facing * 4``.
 
@@ -218,6 +224,7 @@ def _head_index(state: GameState) -> int:
     return _current_path_byte(state) + (state.dragon_facing & 0x06) * 4
 
 
+# ROM: direct game:0x545FA | Represents the register-state head-picture and hitbox-origin entry, not the separately named 0x53D10 routine.
 def dragon_head_pose_update(state: GameState, head_slot: int) -> None:
     """0x545FA--0x546A4 -- publish the current head picture and hitbox origin.
 
@@ -238,6 +245,7 @@ def dragon_head_pose_update(state: GameState, head_slot: int) -> None:
     state.dragon_head_vpos = position_field(state.dragon_head_vpos)
 
 
+# ROM: helper | Python player-position-to-cell convenience; no independently identified ROM callable.
 def _player_cell(state: GameState, player_index: int) -> tuple[int, int]:
     player = state.players[player_index]
     x = hpos_x(state.mobs.hpos[player.mob_slot])
@@ -245,6 +253,7 @@ def _player_cell(state: GameState, player_index: int) -> tuple[int, int]:
     return y >> 4, x >> 4
 
 
+# ROM: direct game:0x5E5D8 | Represents the wider stack-entry visibility predicate; the D4 entry at 0x5E5D2 shares its body.
 def tile_near_screen_test(state: GameState, slot: int) -> bool:
     """tile_near_screen_test 0x5E5D8, including its unsigned edge tests."""
     h_delta = (
@@ -260,6 +269,7 @@ def tile_near_screen_test(state: GameState, slot: int) -> bool:
     return ((native_v - v_origin + 0x0380) & 0xFFFF) < 0x7F80
 
 
+# ROM: direct game:0x54AF8 | Checks the four stored segment cells through the wider visibility predicate.
 def dragon_any_segment_near_screen(state: GameState) -> bool:
     """0x54AF8 -- test all four packed dragon segment cells."""
     segments = state.dragon_seg_mob_ids
@@ -268,10 +278,12 @@ def dragon_any_segment_near_screen(state: GameState) -> bool:
     return any(tile_near_screen_test(state, slot) for slot in segments)
 
 
+# ROM: part game:0x54112,game:0x54454 | Extracts the path-program reroll used after hits and completed transitions.
 def _select_new_path(state: GameState) -> None:
     state.dragon_path_num = state.getrandom(len(_DRAGON_PATH_PROGRAMS))
 
 
+# ROM: part game:0x54454 | Extracted wake and turn transition branches; correspondence does not certify omitted transition-picture behavior.
 def _advance_wake_or_turn(state: GameState, head_slot: int) -> bool:
     """Run a transition frame and return whether normal path execution is blocked."""
     if state.dragon_state & _ST_WAKING:
@@ -294,6 +306,7 @@ def _advance_wake_or_turn(state: GameState, head_slot: int) -> bool:
     return False
 
 
+# ROM: part game:0x53E4A | Extracted two-cell leading-footprint test from the movement-direction chooser.
 def _dragon_probe_open(state: GameState, head_slot: int, direction: int) -> bool:
     """Test the two leading footprint cells used by 0x53E4A."""
     slots = []
@@ -310,6 +323,7 @@ def _dragon_probe_open(state: GameState, head_slot: int, direction: int) -> bool
     )
 
 
+# ROM: direct game:0x53E4A | Represents dragon_choose_move_direction: selects a player, packed distance and facing, then starts a turn.
 def _choose_move_direction(state: GameState, head_slot: int) -> None:
     """Pack the closest legal player, facing, and distance exactly as 0x53E4A."""
     dragon_x = hpos_x(state.mobs.hpos[head_slot]) + 16
@@ -375,6 +389,8 @@ def _choose_move_direction(state: GameState, head_slot: int) -> None:
     state.dragon_state |= _ST_TURNING
 
 
+# ROM: direct game:0x53D10 | Static ROM body 0x53D10-0x53E48 tests muzzle alignment and toggles state bit 3; catalog name dragon_update_segments is misleading.
+# ROM: part game:0x54454 | Also folds in the caller's player, range and facing gates at 0x546F8-0x5473A.
 def _update_fire_lock(state: GameState, head_slot: int) -> None:
     """Hold a close firing pose while its selected player stays on the line."""
     player_index = state.dragon_move_state & 0x0F
@@ -417,6 +433,7 @@ def _update_fire_lock(state: GameState, head_slot: int) -> None:
         state.dragon_state &= ~_ST_LOCKED
 
 
+# ROM: direct game:0x540E8 | Scans physical shot slots 8 through 5; Python returns a physical slot or None instead of the ROM subslot or zero.
 def dragon_find_free_shot_slot(state: GameState) -> int | None:
     """0x540E8 -- scan the demon projectile channels, MOB slot 8 down to 5.
 
@@ -430,6 +447,7 @@ def dragon_find_free_shot_slot(state: GameState) -> int | None:
     return None
 
 
+# ROM: part game:0x54454 | Extracts the signed distance-to-breath-variant test at 0x546D6-0x546E2, moved into the Python creator.
 def _breathing(state: GameState) -> bool:
     """0x546D6-0x546E2 -- close-range breath, or the long-range fireball?
 
@@ -441,6 +459,7 @@ def _breathing(state: GameState) -> bool:
     return (high >> 8) <= _BREATH_RANGE_CELLS
 
 
+# ROM: direct game:0x54748 | Arms the selected demon channel; Python derives the ROM caller-supplied breath variant internally.
 def dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     """0x54748 -- arm one demon channel with the dragon's projectile.
 
@@ -521,6 +540,7 @@ def dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     state.shot_lifetime[shot_slot] = 0      # port-side frame count, no ROM word
 
 
+# ROM: part game:0x54454 | Extracted active path-counter, head-pose, firing and movement-selection branch; 0x53D10 is a delegated callee.
 def _run_active_path(state: GameState, head_slot: int) -> None:
     path_byte = _current_path_byte(state)
     held_fire_phase = (
@@ -549,6 +569,7 @@ def _run_active_path(state: GameState, head_slot: int) -> None:
     _update_fire_lock(state, head_slot)
 
 
+# ROM: direct game:0x54454 | Per-frame dragon state-machine entry with transition and active branches extracted.
 def main_handle_dragon(state: GameState) -> None:
     """0x54454 -- advance the dragon's transition, path pose, and fire gates."""
     head_slot = _dragon_slot(state)
@@ -565,6 +586,7 @@ def main_handle_dragon(state: GameState) -> None:
     _run_active_path(state, head_slot)
 
 
+# ROM: part game:0x54112 | Extracts pose-matched path reroll and fast-forward at 0x5419A-0x541E8.
 def _switch_path_matching_byte(state: GameState, old_byte: int) -> None:
     """0x5419A--0x541E8 -- randomize then fast-forward to the same path byte."""
     _select_new_path(state)
@@ -579,6 +601,7 @@ def _switch_path_matching_byte(state: GameState, old_byte: int) -> None:
         state.dragon_path_num = (state.dragon_path_num + 1) % len(_DRAGON_PATH_PROGRAMS)
 
 
+# ROM: part game:0x54112 | Extracted ninth-hit cleanup, two loot creations, bonus and secret-objective branch.
 def _dragon_die(state: GameState, shooter_id: int) -> None:
     primary = _segments(state)[0]
     dragon_x = hpos_x(state.mobs.hpos[primary])
@@ -613,6 +636,7 @@ def _dragon_die(state: GameState, shooter_id: int) -> None:
 
     from ..maze import placement_base_picture, placement_geometry
 
+    # ROM: part game:0x54112 | Nested extraction of the two death-loot placement argument builds; mob_create is its callee, not its entry.
     def spawn_loot(obj_type: MazeObjIds, x: int, y: int, picture: int) -> None:
         slot = pack_slot(((y + 8) >> 4) & 0x1F, ((x + 8) >> 4) & 0x1F)
         hpos, vpos = placement_geometry(int(obj_type), slot)
@@ -644,6 +668,7 @@ def _dragon_die(state: GameState, shooter_id: int) -> None:
     secret_trick_set(state, shooter_id, TRICK_NOGETHIT, 2)
 
 
+# ROM: direct game:0x54112 | Dragon hit entry with death and path-switch branches extracted; boundary mapping is not a fidelity certification.
 def dragon_shot_hit(state: GameState, target_slot: int, shooter_id: int) -> None:
     """0x54112 -- apply a player shot only to an exposed, active dragon head."""
     if target_slot < 0x400:

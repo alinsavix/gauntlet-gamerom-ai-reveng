@@ -61,6 +61,7 @@ _RANDOM_ITEM_GROUP_VALUES = (
 _DIALOG_LOW_HEALTH = 0x00000004     # record 2, 0x4677E / 0x50EB0
 
 
+# ROM: part game:0x466F6,game:0x511AC | Extracted character-group random voice selection from health-zero death and poison pickup arms; ROM pointer/count tables are data.
 def _play_random_character_voice(state: GameState, character: int) -> None:
     group = _RANDOM_ITEM_GROUP_VALUES[character & 0x03]
     _sound_play(state, group[state.getrandom(len(group))])
@@ -74,6 +75,7 @@ def _play_random_character_voice(state: GameState, character: int) -> None:
 # RAM-visible half the ROM performs and routes the rest through the state the
 # owning package already reads.
 
+# ROM: direct game:0x44C7E | Continue-prompt gate, text/sound and title-state boundary; OS drawing services are callees, not this routine's provenance.
 def show_continue_prompt(state: GameState) -> None:
     """0x44C7E -- the five-line PRESS START continue prompt (§10.5).
 
@@ -105,6 +107,7 @@ def show_continue_prompt(state: GameState) -> None:
     state.title_intro_state = 1
 
 
+# ROM: direct game:0x452D0 | Whole-panel or selected-player HUD rebuild boundary; rendering subroutines remain delegated.
 def setup_infopanel(state: GameState, player_selector: int) -> None:
     """0x452D0 -- redraw the info panel (§14.1).
 
@@ -167,6 +170,7 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     score.write_it_labels(state)
 
 
+# ROM: direct game:0x48754 | Welcome lead-in, elapsed-frame gate, character phrase and timer reload boundary.
 def speech_welcome(state: GameState, player_index: int) -> None:
     """0x48754 -- "Welcome, <character>" join speech (§4.4).
 
@@ -196,6 +200,7 @@ def speech_welcome(state: GameState, player_index: int) -> None:
     state.welcome_elapsed_frames = _WELCOME_DELAY
 
 
+# ROM: adapter game:0x45ACA | Inventory-update entry delegates the actual key/potion/icon writes to score.write_player_inventory and adds a Python health refresh.
 def player_inv_update(state: GameState, player_index: int) -> None:
     """0x45ACA -- redraw one player's key/potion row and power-up icons.
 
@@ -216,6 +221,7 @@ def player_inv_update(state: GameState, player_index: int) -> None:
         score.write_player_inventory(state, player_index)
 
 
+# ROM: direct game:0x487CA | Contextual spoken low-health warning boundary, distinct from the heartbeat cadence in main_health_countdown.
 def player_lowhealth(state: GameState, player_index: int) -> None:
     """0x487CA -- the spoken low-health warning (§4.3).
 
@@ -266,6 +272,7 @@ def player_lowhealth(state: GameState, player_index: int) -> None:
     state.player_respawn_speech_timer[player_index] = _LOWHEALTH_SPEECH_TIMEOUT
 
 
+# ROM: direct game:0x50E34 | Signed damage-sample window, low-health warning and commentary cooldown boundary.
 def player_damage_sample_update(state: GameState, player_index: int) -> None:
     """0x50E34 -- advance the signed damage sample/commentary window."""
     from .player_items import (
@@ -317,6 +324,7 @@ def player_damage_sample_update(state: GameState, player_index: int) -> None:
     player.pending_damage = 0
 
 
+# ROM: direct game:0x43360 | Per-player counters/inventory/powers/status reset boundary; Python-only cached action state is also cleared.
 def player_resetcounters(state: GameState, player_index: int) -> None:
     """0x43360 -- clear one player's whole per-slot record.
 
@@ -353,6 +361,7 @@ def player_resetcounters(state: GameState, player_index: int) -> None:
     player.exit_pending = 0
 
 
+# ROM: part game:0x4017E | Delegates only the game_vblank player palette subsection at 0x401DE-0x40304 to display.player_palette_vblank, not the full interrupt entry.
 def player_hurt_palette_vblank(state: GameState) -> None:
     """0x401DE-0x40304 -- perform the live player MOB-palette writes."""
     from .display import player_palette_vblank
@@ -360,6 +369,7 @@ def player_hurt_palette_vblank(state: GameState) -> None:
     player_palette_vblank(state)
 
 
+# ROM: direct game:0x4341E | Four-slot reset, score/health clearing and default-character assignment boundary.
 def player_resetall(state: GameState) -> None:
     """0x4341E -- reset all four players for a fresh session.
 
@@ -381,6 +391,8 @@ def player_resetall(state: GameState) -> None:
         state.players[player_index].character = Character(player_index)
 
 
+# ROM: direct game:0x40628 | Unsigned score/coin division callable represented with Python arithmetic and a coinless-player guard rather than the ROM two-stage divide.
+# ROM: part game:0x466F6 | Also absorbs its health-countdown caller's player-field argument selection and score_per_coin result store at 0x46A18-0x46A48.
 def calc_score_per_coin(state: GameState, player_index: int) -> int:
     """0x40628 as main_health_countdown calls it at 0x46A18-0x46A48.
 
@@ -397,6 +409,7 @@ def calc_score_per_coin(state: GameState, player_index: int) -> int:
     return player.score_per_coin
 
 
+# ROM: direct game:0x48BEC | Spawn-position selection and live player-MOB initialization boundary; includes Python synthetic-maze/camera accommodations.
 def player_start_inner(state: GameState, player_index: int) -> int:
     """0x48BEC -- find a spawn tile and turn it into the player MOB (§4.4).
 
@@ -535,6 +548,8 @@ def player_start_inner(state: GameState, player_index: int) -> int:
     return 0  # no usable spawn position
 
 
+# ROM: direct game:0x48A36 | Join finalization boundary, including active status, join sound, welcome and panel refresh.
+# ROM: part game:0x488CA | Reapplies the coin-drop low-health/speech-timer resets from 0x48972-0x4898E inline; player_coindrop is otherwise delegated.
 def player_join_finalize(state: GameState, player_index: int) -> None:
     """0x48A36 -- set active status, play join sound, redraw HUD (§4.4).
 
@@ -572,6 +587,7 @@ def player_join_finalize(state: GameState, player_index: int) -> None:
     update_player_sprite(state, player_index)
 
 
+# ROM: direct game:0x48BB6 | ROM's own successful-placement wrapper: call player_start_inner and finalize only on success.
 def player_join(state: GameState, player_index: int) -> None:
     """0x48BB6 -- outer wrapper: place player in world if possible (§4.4).
 
@@ -582,6 +598,7 @@ def player_join(state: GameState, player_index: int) -> None:
         player_join_finalize(state, player_index)
 
 
+# ROM: direct game:0x466F6 | Health-drain and heartbeat frame-service boundary; its health-zero death block has been relocated to players.main_move_players.
 def main_health_countdown(state: GameState) -> None:
     """0x466F6 -- flat health drain and low-health warning cadence (§4.3).
 
@@ -662,6 +679,7 @@ def main_health_countdown(state: GameState) -> None:
             _sound_play(state, _HEARTBEAT_SOUND_TABLE[player_index])     # 0x46BEE
 
 
+# ROM: direct game:0x4664C | Per-player forcefield/Death looping-sound timer service, not the name-entry/death-animation handler.
 def main_handle_death(state: GameState) -> None:
     """0x4664C -- forcefield and death sound timers (§21).
 

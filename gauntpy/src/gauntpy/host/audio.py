@@ -121,6 +121,7 @@ class _Type7Playback:
     members: dict[int, int]
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _speech_priority(command: int) -> int:
     if command in _HIGH_PRIORITY_SPEECH:
         return 0x40
@@ -137,6 +138,7 @@ class StaticSoundPlayer:
     channels represent the sound board's concurrent sequence slots.
     """
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def __init__(self, mixer, sound_dir: str | Path) -> None:
         self._mixer = mixer
         self._sound_dir = Path(sound_dir)
@@ -156,10 +158,12 @@ class StaticSoundPlayer:
         self._effect_volume = 1.0
         self._consumed_count = 0
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @property
     def command_descriptions(self) -> Mapping[int, str]:
         return SOUND_COMMAND_DESCRIPTIONS
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _index_library(self) -> dict[int, Path]:
         paths: dict[int, Path] = {}
         for path in self._sound_dir.glob("*.wav"):
@@ -174,16 +178,19 @@ class StaticSoundPlayer:
             paths[command] = path
         return paths
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def skip_existing(self, commands: Sequence[int]) -> None:
         """Begin after an existing persistent log, as when loading a snapshot."""
         self._consumed_count = len(commands)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def reset(self, commands: Sequence[int]) -> None:
         """Abandon playback and skip historical commands after a host rewind."""
         self._dispatch(0x00)
         self._next_effect_channel = 1
         self.skip_existing(commands)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def consume(self, commands: Sequence[int]) -> None:
         """Play every command appended since the previous host update."""
         if self._consumed_count > len(commands):
@@ -196,12 +203,14 @@ class StaticSoundPlayer:
             self._dispatch(command & 0xFF)
         self._advance_speech()
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def close(self) -> None:
         self._mixer.stop()
         self._speech_queue.clear()
         self._playing.clear()
         self._type7_playbacks.clear()
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _dispatch(self, command: int) -> None:
         if command == 0x00:
             self.close()
@@ -237,6 +246,7 @@ class StaticSoundPlayer:
             return
         self._play_effect(command)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _sound(self, command: int):
         sound = self._sounds.get(command)
         if sound is not None:
@@ -251,6 +261,7 @@ class StaticSoundPlayer:
         self._sounds[command] = sound
         return sound
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _play_effect(self, command: int) -> None:
         if command not in _TYPE7_CHANNEL_PRIORITIES:
             raise SoundLibraryError(
@@ -274,6 +285,7 @@ class StaticSoundPlayer:
         )
         self._refresh_volumes()
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _admit_type7_members(self, command: int) -> dict[int, int]:
         accepted: dict[int, int] = {}
         for hardware_channel, priority in _TYPE7_CHANNEL_PRIORITIES[command]:
@@ -301,11 +313,13 @@ class StaticSoundPlayer:
             accepted[hardware_channel] = priority
         return accepted
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _logical_member_count(self) -> int:
         return sum(
             len(playback.members) for playback in self._type7_playbacks
         )
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _remove_logical_member(
         self, playback: _Type7Playback, hardware_channel: int,
     ) -> None:
@@ -314,6 +328,7 @@ class StaticSoundPlayer:
             playback.channel.stop()
             self._remove_type7_playback(playback)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _allocate_effect_channel(self):
         for _ in range(31):
             index = self._next_effect_channel
@@ -323,6 +338,7 @@ class StaticSoundPlayer:
                 return channel
         return self._mixer.Channel(self._next_effect_channel)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _detach_channel(self, channel) -> None:
         for playback in tuple(self._type7_playbacks):
             if playback.channel == channel:
@@ -334,6 +350,7 @@ class StaticSoundPlayer:
             else:
                 del self._playing[command]
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _queue_speech(self, command: int) -> None:
         if self._filter_high:
             return
@@ -349,6 +366,7 @@ class StaticSoundPlayer:
             self._speech_queue.clear()
         self._speech_queue.append((command, priority))
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _advance_speech(self) -> None:
         if self._speech_channel.get_busy():
             return
@@ -356,11 +374,13 @@ class StaticSoundPlayer:
         if self._speech_queue:
             self._start_speech(*self._speech_queue.popleft())
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _start_speech(self, command: int, priority: int) -> None:
         self._current_speech_priority = priority
         self._speech_channel.set_volume(0.0 if self._filter_high else 1.0)
         self._speech_channel.play(self._sound(command))
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _stop_command(self, command: int) -> None:
         for playback in tuple(self._type7_playbacks):
             if playback.command == command:
@@ -370,11 +390,13 @@ class StaticSoundPlayer:
             channel.stop()
         self._refresh_volumes()
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _fade_commands(self, commands) -> None:
         for command in commands:
             for channel in self._playing.get(command, ()):
                 channel.fadeout(_FADE_MILLISECONDS)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _retire_finished_channels(self) -> None:
         for playback in tuple(self._type7_playbacks):
             if not playback.channel.get_busy():
@@ -387,6 +409,7 @@ class StaticSoundPlayer:
                 del self._playing[command]
         self._refresh_volumes()
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _remove_type7_playback(self, playback: _Type7Playback) -> None:
         if playback in self._type7_playbacks:
             self._type7_playbacks.remove(playback)
@@ -397,6 +420,7 @@ class StaticSoundPlayer:
         else:
             self._playing.pop(playback.command, None)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _type7_playback_is_audible(self, playback: _Type7Playback) -> bool:
         for hardware_channel, priority in playback.members.items():
             winner = max(
@@ -410,11 +434,13 @@ class StaticSoundPlayer:
                 return True
         return False
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _volume_for(self, command: int) -> float:
         if self._filter_high and command not in _FILTER_SURVIVORS:
             return 0.0
         return 1.0 if command in _MUSIC_COMMANDS else self._effect_volume
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _refresh_volumes(self) -> None:
         type7_channels = {
             playback.channel for playback in self._type7_playbacks

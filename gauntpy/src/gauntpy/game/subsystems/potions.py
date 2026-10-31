@@ -145,6 +145,7 @@ _POTION_EFFECT_MATRIX: dict[int, list[int]] = {
 # Top-level main-loop call
 # =============================================================================
 
+# ROM: direct game:0x46FEA | Per-player potion-input and consumption entry; blast processing is a separate extracted monster-walk branch.
 def main_handle_potions(state: GameState) -> None:
     """0x46FEA -- potion use and blast resolution.
 
@@ -183,6 +184,7 @@ def main_handle_potions(state: GameState) -> None:
         _apply_dragon_potion(state)
 
 
+# ROM: adapter game:0x4C440 | Lazy-import delegation to the dialog implementation, not another copy of its ROM body.
 def _dialog_first_encounter(
     state: GameState, player_index: int, encounter_mask: int
 ) -> int:
@@ -192,6 +194,7 @@ def _dialog_first_encounter(
     return dialog_first_encounter(state, player_index, encounter_mask)
 
 
+# ROM: part game:0x46FEA | Extracts normal debounce and demo-record Magic tests at 0x47020-0x47048.
 def _magic_press_edge(state: GameState, player_index: int) -> bool:
     if state.game_mode != GameMode.NORMAL:
         # 0x4702E-0x47048 reads bit 0 directly from the current demo record.
@@ -203,6 +206,7 @@ def _magic_press_edge(state: GameState, player_index: int) -> bool:
     return (reg & _MAGIC_EDGE_MASK) == _MAGIC_EDGE_VALUE
 
 
+# ROM: part game:0x46FEA | Extracts dragon potion transitions at 0x470D2-0x47128; the visibility predicate is a callee.
 def _apply_dragon_potion(state: GameState) -> None:
     """0x470D2-0x47128 -- apply the dragon's private potion transition."""
     from .dragon import (
@@ -232,6 +236,7 @@ def _apply_dragon_potion(state: GameState) -> None:
 # Blast resolution (the 0x4153E-0x41728 MOB scan)
 # =============================================================================
 
+# ROM: part game:0x40E6A | Extracted alternate monster-walk potion scan at 0x41532-0x41728, not a body of main_handle_potions.
 def potion_blast(state: GameState, player_index: int, *,
                  shot_triggered: bool = False) -> None:
     """Scan every on-screen monster/generator MOB and apply the effect (§4.6).
@@ -269,6 +274,8 @@ def potion_blast(state: GameState, player_index: int, *,
         )
 
 
+# ROM: part game:0x40E6A | Extracts per-target potion matrix, reveal, destruction and generator-demotion branches.
+# ROM: part game:0x49446 | Inlines Death popup selection and returned-score lookup; legacy audit names only the two data tables rather than this executable owner.
 def _apply_potion_effect(state: GameState, slot: int, obj_type: int,
                          trigger: int, player_index: int) -> None:
     if obj_type == int(MazeObjIds.MONST_SUPERSORC):

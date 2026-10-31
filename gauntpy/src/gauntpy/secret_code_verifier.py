@@ -7,6 +7,7 @@ import argparse
 from .game.subsystems.player_names import _SECRET_CODE_ALPHABET, secret_code_for
 
 
+# ROM: infrastructure | Host verification of submitted codes; distinct from the game's code-generation routine.
 def verify_secret_code(name: str, code: str) -> tuple[bool, int, int, int]:
     """Validate the name-bound symbols and decode the embedded game state."""
     code = code.strip().upper()
@@ -28,6 +29,7 @@ def verify_secret_code(name: str, code: str) -> tuple[bool, int, int, int]:
     return valid, previous_maze, previous_trick, challenge
 
 
+# ROM: infrastructure | Host verification of submitted codes; distinct from the game's code-generation routine.
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("name", help="name entered at the cabinet")

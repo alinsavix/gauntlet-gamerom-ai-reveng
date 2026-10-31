@@ -29,11 +29,13 @@ _PLAYER_IMPACT_PICTURE = 0x0EFC
 _MONSTER_IMPACT_PICTURE = 0x1C5C
 
 
+# ROM: adapter game:0x4AD76 | Lazy-import delegation to sound_play; no independent sound body in this file.
 def _sound(state: GameState, sound_id: int) -> None:
     from .sound import sound_play
     sound_play(state, sound_id)
 
 
+# ROM: adapter game:0x4AD4E | Lazy-import delegation to sound_speech_play; no independent speech body in this file.
 def _speech(state: GameState, speech_id: int) -> None:
     from .sound import sound_speech_play
     sound_speech_play(state, speech_id)
@@ -43,6 +45,7 @@ def _speech(state: GameState, speech_id: int) -> None:
 # Effect pool (0x47C0E / 0x47DAE)
 # =============================================================================
 
+# ROM: part game:0x47C0E,game:0x47DAE | Factors the effect-pool free-slot/fallback branches of dissolve and impact creation, including impact's dissolve preservation.
 def _claim_effect_slot(state: GameState, fallback_channel: int,
                        preserve_tport: bool) -> int | None:
     """Claim one of the four shared effect MOBs used by ROM 0x47C0E/0x47DAE."""
@@ -58,6 +61,7 @@ def _claim_effect_slot(state: GameState, fallback_channel: int,
     return slot
 
 
+# ROM: part game:0x47C0E,game:0x47DAE | Factors effect picture, position, animation counter and depth-placement writes from the two creators.
 def _place_effect(state: GameState, effect_slot: int, source_slot: int,
                   picture: int, vpos_add: int, counter: int, *,
                   hpos_add: int = 0, depth_key: int | None = None) -> None:
@@ -75,6 +79,7 @@ def _place_effect(state: GameState, effect_slot: int, source_slot: int,
     state.mob_effect_anim_counter[effect_slot - 0x0D] = counter & 0xFF
 
 
+# ROM: part game:0x47DAE | Extracts impact source-position and tagged-cell depth geometry at 0x47E6A-0x47F7E.
 def _impact_geometry(
     state: GameState, target: int, shooter: int,
 ) -> tuple[int, int, int]:
@@ -101,6 +106,7 @@ def _impact_geometry(
     return source_slot, hpos_add, target
 
 
+# ROM: direct game:0x47DAE | Projectile impact creator with pool allocation, geometry and placement extracted.
 def shot_impact_spawn(state: GameState, target: int, shooter: int) -> None:
     """0x47DAE -- spawn a sparkle explosion for a MOB or tagged tile hit.
 
@@ -124,6 +130,7 @@ def shot_impact_spawn(state: GameState, target: int, shooter: int) -> None:
     )
 
 
+# ROM: direct game:0x47C0E | Transporter dissolve creator using the shared four-effect pool.
 def tport_cycle_start(state: GameState, slot: int,
                       animation_channel: int = 0) -> None:
     """0x47C0E -- start a transporter-cycle dissolve effect on ``slot``.
@@ -152,6 +159,7 @@ _SCORE_POPUP_SLOT = 0x11         # 0x494DC, the first popup MOB slot
 _SCORE_POPUP_FRAMES = 0x3C       # 0x494D2
 
 
+# ROM: direct game:0x49498 | Allocates and places a timed floating-score MOB.
 def playfield_showscore(state: GameState, slot: int, popup: int) -> None:
     """``playfield_showscore`` (0x49498) -- float a score sprite over ``slot``.
 
@@ -187,6 +195,7 @@ def playfield_showscore(state: GameState, slot: int, popup: int) -> None:
 _playfield_showscore = playfield_showscore
 
 
+# ROM: part game:0x4AF50 | Extracts only the shot-potion color-latch write at 0x4BA6A-0x4BA82; the name does not mean it performs the blast.
 def _potion_blast(state: GameState, shooter_id: int) -> None:
     """Set the shot-triggered potion's playfield flash latch."""
     from .display import ALPHA_PALETTE_INIT
@@ -196,6 +205,7 @@ def _potion_blast(state: GameState, shooter_id: int) -> None:
     state.playfield_color_latch = ALPHA_PALETTE_INIT[shooter_id * 4 + 7]
 
 
+# ROM: part game:0x4AF50 | Extracts secret-wall prize geometry and creation argument construction at 0x4B5FC-0x4B664; 0x5DC58 is a callee.
 def _spawn_maze_object(state: GameState, slot: int, obj_type: int,
                        picture: int) -> None:
     """``mob_create`` (0x5DC58) at the revealed cell (0x4B5FC-0x4B664).
@@ -213,6 +223,7 @@ def _spawn_maze_object(state: GameState, slot: int, obj_type: int,
     state.mobs.create(slot, picture, hpos, vpos, obj_type, 0)
 
 
+# ROM: direct game:0x5303A | Destructible-wall damage entry using Python stage bookkeeping to represent ROM descriptor/palette state.
 def wall_crumble(state: GameState, slot: int, damage: int) -> int:
     """0x5303A -- apply shot damage to a destructible wall.
 
@@ -276,12 +287,14 @@ def wall_crumble(state: GameState, slot: int, damage: int) -> int:
     return 0
 
 
+# ROM: part game:0x5303A | Extracted common floor-replacement destruction tail at 0x530FE.
 def _wall_destroy(state: GameState, slot: int) -> None:
     """0x530FE -- the crumble ladders' shared "wall is gone" tail."""
     state.destructible_wall_stage.pop(slot, None)
     pf_replace(state, slot, int(MazeObjIds.TILE_FLOOR))
 
 
+# ROM: part game:0x5303A | Extracts damaged-shrub descriptor selection, represented through the Python wall-stage dictionary.
 def wall_crumble_descriptor(state: GameState, slot: int) -> tuple[int, ...] | None:
     """The shrub descriptor ``wall_crumble`` writes to playfield VRAM.
 
@@ -296,11 +309,13 @@ def wall_crumble_descriptor(state: GameState, slot: int) -> tuple[int, ...] | No
     return _WALL_CRUMBLE_DESCS[min(stage, len(_WALL_CRUMBLE_DESCS) - 1)]
 
 
+# ROM: part game:0x5303A | Extracts the surviving wall palette value at 0x53120 using Python accumulated-stage bookkeeping.
 def wall_crumble_palette(state: GameState, slot: int) -> int:
     """The palette nibble ``wall_crumble`` writes to playfield VRAM (0x53120)."""
     return 7 - state.destructible_wall_stage.get(slot, 0)
 
 
+# ROM: helper | Python maze wall-pattern accessor with a missing-maze fallback.
 def _wallpattern(state: GameState) -> int:
     """``wallpattern`` (0x904B5E) -- the level's wall tile set."""
     return int(getattr(state.maze, "wallpattern", 0) or 0)

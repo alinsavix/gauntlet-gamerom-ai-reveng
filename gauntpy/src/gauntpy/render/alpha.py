@@ -16,6 +16,7 @@ from .text import GLYPH_H, GLYPH_W, draw_alpha_glyph
 __all__ = ["draw_alpha_layer"]
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_alpha_layer(
     fb,
     state: GameState,

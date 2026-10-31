@@ -136,6 +136,7 @@ class DebugSnapshot:
     paused: bool = False
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _name(enum_type, value: int) -> str:  # noqa: ANN001
     try:
         return enum_type(value).name
@@ -143,6 +144,7 @@ def _name(enum_type, value: int) -> str:  # noqa: ANN001
         return str(value)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _pressed_input_names(raw: int) -> str:
     names = (
         (0x80, "U"), (0x40, "D"), (0x20, "L"), (0x10, "R"),
@@ -152,6 +154,7 @@ def _pressed_input_names(raw: int) -> str:
     return "+".join(pressed) if pressed else "idle"
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _player_page_rows(
     state: GameState, players: tuple[PlayerDebugSnapshot, ...],
 ) -> tuple[tuple[str, str], ...]:
@@ -191,6 +194,7 @@ def _player_page_rows(
     return tuple(rows)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _demo_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     rows: list[tuple[str, str]] = [
         ("ACTIVE", f"P{state.demo_active_player + 1}"),
@@ -212,6 +216,7 @@ def _demo_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return tuple(rows)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     transporters = sum(
         state.mobs.obj_type(slot) == int(MazeObjIds.TRANSPORTER)
@@ -253,11 +258,13 @@ def _level_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _enabled(value: int, entries: tuple[tuple[int, str], ...]) -> str:
     names = [name for mask, name in entries if value & mask]
     return " ".join(names) if names else "-"
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _flags_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     flag1 = int(state.level_flags)
     flag2 = int(state.level_flags_2)
@@ -288,6 +295,7 @@ def _flags_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _level_gate_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     """Project the ROM's direct level-number gates for the current level."""
     level = int(state.levelnum_current)
@@ -356,6 +364,7 @@ def _level_gate_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _actor_counts(state: GameState) -> tuple[tuple[int, int], ...]:
     counts: dict[int, int] = {}
     for slot in range(32, len(state.mobs.picture)):
@@ -366,6 +375,7 @@ def _actor_counts(state: GameState) -> tuple[tuple[int, int], ...]:
     return tuple(sorted(counts.items()))
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _actor_page_rows(
     state: GameState, selected_mob: int,
 ) -> tuple[tuple[str, str], ...]:
@@ -395,6 +405,7 @@ def _actor_page_rows(
     return tuple(rows)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _ai_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return (
         ("IT TARGET", "none" if state.player_it == 0xFFFF else f"P{state.player_it + 1}"),
@@ -420,6 +431,7 @@ def _ai_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _display_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     nonzero_slips = sum(bool(slot) for slot in state.mobs.slip_heads)
     try:
@@ -444,6 +456,7 @@ def _display_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _route_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return (
         ("GRID", "LOW PURSUIT / HIGH ESCAPE"),
@@ -452,6 +465,7 @@ def _route_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     )
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _audio_page_rows(
     state: GameState, descriptions: Mapping[int, str],
 ) -> tuple[tuple[str, str], ...]:
@@ -472,6 +486,7 @@ def _audio_page_rows(
     return tuple(rows)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _scenario_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     from ..custom_scenario import synthetic_runtime_for
 
@@ -511,6 +526,7 @@ def _scenario_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
     return tuple(rows)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def capture_debug_snapshot(
     state: GameState, *, paused: bool = False, selected_mob: int = 0,
     render_time_ms: float = 0.0,
@@ -617,6 +633,7 @@ def capture_debug_snapshot(
     )
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 @lru_cache(maxsize=4)
 def _host_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     """Load a platform monospace font, with Pillow's scalable font as fallback."""
@@ -628,6 +645,7 @@ def _host_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default(size=size)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def debug_snapshot_lines(snapshot: DebugSnapshot) -> tuple[tuple[str, str], ...]:
     """Format one snapshot as stable label/value rows for any host UI."""
     mode = _name(GameMode, snapshot.mode)
@@ -680,6 +698,7 @@ def debug_snapshot_lines(snapshot: DebugSnapshot) -> tuple[tuple[str, str], ...]
     return tuple(rows)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def derive_debug_events(
     previous: DebugSnapshot | None, current: DebugSnapshot,
 ) -> tuple[str, ...]:
@@ -729,6 +748,7 @@ def derive_debug_events(
     return tuple(events)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def debug_page_lines(
     snapshot: DebugSnapshot,
     page: int,
@@ -761,6 +781,7 @@ def debug_page_lines(
     return dict(snapshot.page_rows).get(name, ())
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _performance_graph_scale(
     history: tuple[float, ...],
 ) -> tuple[float, tuple[float, float, float]]:
@@ -786,6 +807,7 @@ _ROUTE_MARKER_COLORS = (
 )
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _route_direction(grid: bytes, slot: int, *, escape: bool) -> int:
     """Read one ROM path nibble through its 44-byte/128-byte-stride view."""
     if not 0 <= slot <= 0x3FF:
@@ -796,6 +818,7 @@ def _route_direction(grid: bytes, slot: int, *, escape: bool) -> int:
     return direction if 0 <= direction <= 7 else 8
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _draw_route_grids(
     draw: ImageDraw.ImageDraw, snapshot: DebugSnapshot, font: ImageFont.ImageFont,
 ) -> None:
@@ -857,6 +880,7 @@ def _draw_route_grids(
         x += 36
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def render_debug_panel(
     snapshot: DebugSnapshot,
     *,

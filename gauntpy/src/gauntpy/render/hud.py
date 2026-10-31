@@ -15,22 +15,26 @@ __all__ = [
 CELL = GLYPH_W
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def cell_xy(panel: tuple[int, int, int, int], column: int, row: int) -> tuple[int, int]:
     """Framebuffer pixel for an absolute alpha cell inside the panel clip."""
     px, py, _pw, _ph = panel
     return px + (column - score.PANEL_COLUMN) * CELL, py + row * CELL
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_hud(fb, state: GameState, panel: tuple[int, int, int, int]) -> None:
     """Compatibility wrapper: render the panel cells from alpha VRAM."""
     draw_alpha_layer(fb, state, clip=panel)
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_message_box(fb, state: GameState, viewport: tuple[int, int, int, int]) -> None:
     """Compatibility wrapper: render playfield alpha cells from alpha VRAM."""
     draw_alpha_layer(fb, state, clip=viewport)
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_pause_indicator(
     fb, panel: tuple[int, int, int, int], *,
     paused: bool = False,

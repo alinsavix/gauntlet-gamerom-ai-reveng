@@ -62,6 +62,7 @@ class Framebuffer:
 
     __slots__ = ("width", "height", "image", "_pixels")
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def __init__(self, width: int, height: int, background: tuple[int, int, int, int] = (0, 0, 0, 255)) -> None:
         self.width = width
         self.height = height
@@ -70,6 +71,7 @@ class Framebuffer:
 
     # -- inspection ----------------------------------------------------------
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def get_pixel(self, x: int, y: int) -> tuple[int, int, int, int] | None:
         """RGBA at (x, y), or ``None`` if out of bounds (never raises --
         callers doing boundary-adjacent assertions don't need a try/except).
@@ -78,15 +80,18 @@ class Framebuffer:
             return self._pixels[x, y]
         return None
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def set_pixel(self, x: int, y: int, rgba: tuple[int, int, int, int]) -> None:
         if 0 <= x < self.width and 0 <= y < self.height:
             self._pixels[x, y] = rgba
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def to_pil_image(self) -> Image.Image:
         """A copy of the current raster (mutating the copy never affects
         this framebuffer)."""
         return self.image.copy()
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def save_png(self, path: str) -> None:
         """Golden-image export, per PLAN.md §6 WP-2's request for a PNG dump
         path."""
@@ -94,22 +99,26 @@ class Framebuffer:
 
     # -- clearing --------------------------------------------------------------
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def clear(self, rgba: tuple[int, int, int, int] = (0, 0, 0, 255)) -> None:
         self.image.paste(rgba, (0, 0, self.width, self.height))
         self._pixels = self.image.load()
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def blit_alpha_glyph(
         self, x: int, y: int, code: int, palette, *, opaque: bool,
         renderer,
     ) -> None:
         renderer(self.image, x, y, code, palette, opaque=opaque)
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def blit_alpha_glyphs(self, glyphs, *, renderer) -> None:
         for x, y, code, palette, opaque in glyphs:
             self.blit_alpha_glyph(
                 x, y, code, palette, opaque=opaque, renderer=renderer,
             )
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def draw_pause_indicator(
         self, panel: tuple[int, int, int, int], text: str,
     ) -> None:
@@ -126,6 +135,7 @@ class Framebuffer:
 
     # -- blit primitives ---------------------------------------------------
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def paste_region(self, source: Image.Image, box: tuple[int, int, int, int], dest_xy: tuple[int, int]) -> None:
         """Copy ``source.crop(box)`` to ``dest_xy``. Used by the playfield
         layer to blit the scrolled window out of the cached world raster --
@@ -137,6 +147,7 @@ class Framebuffer:
         self.image.paste(region, dest_xy)
         self._pixels = self.image.load()
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def blit_indexed_tile(
         self,
         tile: list[list[int]],
@@ -216,6 +227,7 @@ class Framebuffer:
                     continue
                 px[pxx, py] = palette_rgba[idx]
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def _blit_disjoint_indexed_tiles(
         self,
         tiles,
@@ -248,6 +260,7 @@ class PygameFramebuffer:
         "_shadow_image", "_shadow_surface", "_shadow_tile",
     )
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def __init__(
         self, pygame, width: int, height: int,
         background: tuple[int, int, int, int] = (0, 0, 0, 255),
@@ -269,15 +282,18 @@ class PygameFramebuffer:
         ).convert_alpha()
         self.clear(background)
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def get_pixel(self, x: int, y: int) -> tuple[int, int, int, int] | None:
         if not 0 <= x < self.width or not 0 <= y < self.height:
             return None
         return tuple(self.surface.get_at((x, y)))
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def set_pixel(self, x: int, y: int, rgba: tuple[int, int, int, int]) -> None:
         if 0 <= x < self.width and 0 <= y < self.height:
             self.surface.set_at((x, y), rgba)
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def to_pil_image(self):
         from PIL import Image
 
@@ -286,19 +302,23 @@ class PygameFramebuffer:
             self._pygame.image.tobytes(self.surface, "RGBA"),
         )
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def save_png(self, path: str) -> None:
         self.to_pil_image().save(path, "PNG")
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def clear(
         self, rgba: tuple[int, int, int, int] = (0, 0, 0, 255),
     ) -> None:
         self.surface.fill(rgba)
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def _surface_from_pil(self, image):
         return self._pygame.image.frombytes(
             image.tobytes(), image.size, image.mode,
         ).convert_alpha()
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def paste_region(self, source, box: tuple[int, int, int, int], dest_xy) -> None:
         if source is not self._source_image:
             self._source_image = source
@@ -310,6 +330,7 @@ class PygameFramebuffer:
             ),
         )
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def blit_alpha_glyph(
         self, x: int, y: int, code: int, palette, *, opaque: bool,
         renderer,
@@ -335,6 +356,7 @@ class PygameFramebuffer:
         )
         self.surface.blit(surface, (x, y))
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def _alpha_glyph_surface(
         self, code: int, palette, *, opaque: bool, renderer,
     ):
@@ -348,6 +370,7 @@ class PygameFramebuffer:
             self._alpha_cache[key] = surface
         return surface
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def blit_alpha_glyphs(self, glyphs, *, renderer) -> None:
         from .text import rom_font_available
 
@@ -370,6 +393,7 @@ class PygameFramebuffer:
         if pending:
             self.surface.blits(pending, doreturn=0)
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def draw_pause_indicator(
         self, panel: tuple[int, int, int, int], text: str,
     ) -> None:
@@ -387,6 +411,7 @@ class PygameFramebuffer:
         )
         self.surface.blit(self._surface_from_pil(image), (0, 0))
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def _sprite_tile(self, tile, palette_rgba, trans0, shadow_index):
         key = (id(tile), tuple(palette_rgba), trans0, shadow_index)
         cached = self._sprite_cache.get(key)
@@ -421,6 +446,7 @@ class PygameFramebuffer:
         self._sprite_cache[key] = (tile, *result)
         return result
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def _exact_shadow_tile(self, shadow_src, mask, x: int, y: int):
         if shadow_src.image is not self._shadow_image:
             self._shadow_image = shadow_src.image
@@ -451,6 +477,7 @@ class PygameFramebuffer:
         tile.blit(mask, (0, 0), special_flags=self._pygame.BLEND_RGBA_MULT)
         return tile
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def blit_indexed_tile(
         self,
         tile,
@@ -473,6 +500,7 @@ class PygameFramebuffer:
             clip=clip,
         )
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def _blit_disjoint_indexed_tiles(
         self,
         tiles,

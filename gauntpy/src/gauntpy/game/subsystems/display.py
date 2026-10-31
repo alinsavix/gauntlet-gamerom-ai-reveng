@@ -44,6 +44,7 @@ _LARGE_GLYPH_QUADS = (
 )
 
 
+# ROM: helper | Parses transcribed hexadecimal palette literals into Python tuples; no ROM callable.
 def _rom_words(words: str) -> tuple[int, ...]:
     return tuple(int(word, 16) for word in words.split())
 
@@ -203,6 +204,7 @@ F800 F900 FA00 FB00 FC00 FD00 FE00 FF00
 """)
 
 
+# ROM: part game:0x43486 | Extracted two-bank alpha-palette copy from init_display; does not perform the complete display initialization.
 def restore_alpha_color_ram(state: GameState) -> None:
     """Copy init_display's two alpha palette banks without touching alpha RAM."""
     state.alpha_color_ram[:] = [0] * 256
@@ -210,6 +212,7 @@ def restore_alpha_color_ram(state: GameState) -> None:
     state.alpha_color_ram[128:192] = ALPHA_PALETTE_INIT[64:128]
 
 
+# ROM: part game:0x43486 | Alpha clear/copy and optional MOB-copy portion of init_display; selector-dependent playfield work and synchronization are elsewhere.
 def init_alpha_color_ram(
     state: GameState, *, initialize_mobs: bool = True,
 ) -> None:
@@ -225,17 +228,20 @@ def init_alpha_color_ram(
         init_mob_color_ram(state)
 
 
+# ROM: part game:0x43486 | Extracted init_display MOB-palette copy sequence at 0x435F2-0x43614; those interior addresses are not entries.
 def init_mob_color_ram(state: GameState) -> None:
     """Port init_display 0x435F2-0x43614 in its exact copy order."""
     state.mob_color_ram[:] = MOB_PALETTE_EXTENDED
     state.mob_color_ram[192:256] = CHARACTER_MOB_PALETTES[2]
 
 
+# ROM: part game:0x5FCCE | Only the MOB color-RAM clear inside pf_palette_clear, not its other palette banks.
 def clear_mob_color_ram(state: GameState) -> None:
     """pf_palette_clear 0x5FCEA-0x5FCF4: clear all 0x80 longwords."""
     state.mob_color_ram[:] = [0] * 256
 
 
+# ROM: merged game:0x5FCCE,game:0x5FD14 | Combines palette-bank clearing with display-state/VRAM clearing; reconstructs the Python MOB table instead of clearing the hardware lists in place.
 def clear_attract_display_memory(state: GameState) -> None:
     """Port pf_palette_clear/display_state_clear at 0x5FCCE/0x5FD14."""
     state.playfield_color_latch = 0
@@ -253,6 +259,7 @@ def clear_attract_display_memory(state: GameState) -> None:
     state.scroll_y = 0
 
 
+# ROM: part game:0x48BEC | Extracted player_start_inner palette installation and per-class hurt/power source offsets; not a separate player-start entry.
 def init_player_mob_palette(
     state: GameState, player_index: int, character: int,
 ) -> None:
@@ -282,6 +289,8 @@ _PLAYER_POWER_DESTINATIONS = (
 )
 
 
+# ROM: part game:0x4017E | Extracted game_vblank hurt-timer/power-cycle selection and player-palette dispatch.
+# ROM: merged game:0x404A0,game:0x404AE,game:0x404BC,game:0x404D0,game:0x404E4,game:0x404F8,game:0x4050C,game:0x4051A | Inlines the eight class-specific power/hurt palette leaf copy bodies using source/destination tables, rather than merely calling them.
 def player_palette_vblank(state: GameState) -> None:
     """game_vblank 0x401DE-0x40304 live player hurt/power color writes."""
     for player_index, player in enumerate(state.players):
@@ -316,6 +325,7 @@ def player_palette_vblank(state: GameState) -> None:
             ]
 
 
+# ROM: part game:0x4017E | Extracted game_vblank publication of the potion/floor color latch; 0x401D4 is an interior site.
 def potion_flash_vblank(state: GameState) -> None:
     """game_vblank 0x401D4: publish the live potion/floor color latch."""
     from ..playfield_vram import write_playfield_color
@@ -323,6 +333,7 @@ def potion_flash_vblank(state: GameState) -> None:
     write_playfield_color(state, 8, state.playfield_color_latch)
 
 
+# ROM: part game:0x4017E | Extracted logo-gradient and IT-label alpha-color writes from game_vblank; not the whole interrupt.
 def alpha_palette_vblank(state: GameState) -> None:
     """Port game_vblank's live alpha-color writes at 0x40304-0x4037A."""
     phase = state.frame_counter & 0xFC
@@ -344,6 +355,7 @@ def alpha_palette_vblank(state: GameState) -> None:
             state.alpha_color_ram[base + color] = ALPHA_PALETTE_INIT[source]
 
 
+# ROM: part game:0x4DA3E | Color/brightness state portion of title_logo_init; MOB construction and motion initialization are split elsewhere.
 def init_title_logo_colors(state: GameState) -> None:
     """title_logo_init 0x4DA46-0x4DA98 and 0x4DC72 color state."""
     state.logo_color_index = 0
@@ -357,6 +369,7 @@ def init_title_logo_colors(state: GameState) -> None:
     state.logo_cycle_timer = LOGO_OUTER_TIMER_INIT
 
 
+# ROM: part game:0x4DCBA | Extracted title palette/brightness timer body; score-screen dispatch and logo motion remain in attract.py.
 def update_title_logo_colors(state: GameState) -> None:
     """main_logo_updcolors 0x4DCEE-0x4DDE8 live MOB-color writes."""
     if state.logo_cycle_timer & 0x8000:
@@ -398,18 +411,21 @@ def update_title_logo_colors(state: GameState) -> None:
     ) & 0xFFFF
 
 
+# ROM: infrastructure | Reads modeled MOB color RAM for host rendering; no game/OS callable is implemented.
 def mob_palette_words(state: GameState, palette: int) -> tuple[int, ...]:
     """Resolve a MOB hpos palette nibble to sixteen live color-RAM entries."""
     base = (palette & 0x0F) * 16
     return tuple(state.mob_color_ram[base:base + 16])
 
 
+# ROM: infrastructure | Host renderer conversion of a modeled MOB palette to RGBA.
 def mob_palette_rgba(
     state: GameState, palette: int,
 ) -> tuple[tuple[int, int, int, int], ...]:
     return tuple(_irgb_rgba(word) for word in mob_palette_words(state, palette))
 
 
+# ROM: part game:0x5FD80 | Single-word subtract/underflow operation extracted from palette_fade_copy; omits its count-controlled source/destination copy loop.
 def palette_fade_word(word: int, delta: int) -> int:
     """palette_fade_copy (0x5FD80), including its 12-bit underflow encoding."""
     value = (int(word) & 0xFFFF) - int(delta)
@@ -418,6 +434,7 @@ def palette_fade_word(word: int, delta: int) -> int:
     return ((value & 0x0FFF) | 0x1000) & 0xFFFF
 
 
+# ROM: part game:0x43486 | Level-facing palette construction from init_display with preselected source palettes; palette selection and synchronization are not this function's body.
 def init_playfield_color_ram(
     state: GameState,
     main_palette: list[int] | tuple[int, ...],
@@ -471,6 +488,7 @@ def init_playfield_color_ram(
         state.playfield_color_generation += 1
 
 
+# ROM: part game:0x43486 | Fixed-palette and shadow-bank branch of init_display; consumes already acquired palette words.
 def init_fixed_playfield_color_ram(
     state: GameState, palette_words: tuple[int, ...],
 ) -> None:
@@ -486,6 +504,7 @@ def init_fixed_playfield_color_ram(
     state.playfield_color_generation += 1
 
 
+# ROM: infrastructure | Host-renderer lookup of four colors from modeled alpha color RAM.
 def alpha_palette_words(state: GameState, attribute: int) -> tuple[int, ...]:
     """Resolve an alpha attribute word to its four live color-RAM entries."""
     bank = (attribute >> 14) & 1
@@ -494,25 +513,30 @@ def alpha_palette_words(state: GameState, attribute: int) -> tuple[int, ...]:
     return tuple(state.alpha_color_ram[base:base + 4])
 
 
+# ROM: infrastructure | Host-renderer RGBA conversion of an alpha palette.
 def alpha_palette_rgba(state: GameState, attribute: int) -> tuple[tuple[int, int, int, int], ...]:
     return tuple(_irgb_rgba(word) for word in alpha_palette_words(state, attribute))
 
 
+# ROM: infrastructure | Host-renderer pixel-color lookup; no ROM callable boundary.
 def alpha_color_rgba(
     state: GameState, attribute: int, pixel: int,
 ) -> tuple[int, int, int, int]:
     return alpha_palette_rgba(state, attribute)[pixel & 3]
 
 
+# ROM: helper | Composes hardware glyph/attribute bitfields; legacy attribution to ascii_to_alpha_glyph is incorrect because this performs no ASCII/control-character conversion.
 def alpha_word(attribute: int, glyph: int = 0) -> int:
     """Compose the hardware's attribute and ten-bit alpha glyph fields."""
     return (attribute & ALPHA_ATTRIBUTE_MASK) | (glyph & ALPHA_GLYPH_MASK)
 
 
+# ROM: adapter os:0x2CE4 | Standard-orientation alpha addressing represented as a Python word index; calc_alpha_address returns an absolute byte address and also supports rotated orientation.
 def alpha_index(column: int, row: int) -> int:
     return row * ALPHA_COLUMNS + column
 
 
+# ROM: part os:0x2F04 | Normal-style horizontal glyph-write/space-substitution portion of draw_string; clipped iterable input replaces NUL strings, style modes, orientation and consumed-byte return.
 def write_alpha_glyphs(
     state: GameState, column: int, row: int, glyphs, attribute: int,
 ) -> None:
@@ -543,11 +567,13 @@ _LARGE_GLYPH_INDEX_MAP = bytes.fromhex("""
 """)
 
 
+# ROM: part os:0x31D2 | ASCII-to-index table lookup extracted from OS display_large_text; the cited source is OS table 0x34A2, not a separately established game ascii_to_alpha_glyph implementation.
 def _large_glyph_index(character: str) -> int:
     code = ord(character)
     return _LARGE_GLYPH_INDEX_MAP[code] if code < len(_LARGE_GLYPH_INDEX_MAP) else 0
 
 
+# ROM: part os:0x31D2 | Single-string, standard-orientation portion of display_large_text; omits descriptor chaining/repetition and returns accumulated alpha-cell advance.
 def write_alpha_large_text(
     state: GameState, column: int, row: int, text: str, attribute: int,
 ) -> int:
@@ -560,6 +586,7 @@ def write_alpha_large_text(
     return cursor - column
 
 
+# ROM: part os:0x31D2,os:0x324E | Combines OS text's ASCII map with the standard-orientation tile-quad renderer portion; clips host coordinates and omits rotated/control branches. Not game name_entry_draw_large_char.
 def write_alpha_large_char(
     state: GameState, column: int, row: int, character: str, attribute: int,
 ) -> int:
@@ -580,6 +607,7 @@ def write_alpha_large_char(
     return width
 
 
+# ROM: direct game:0x4A44A | Actual game name-entry large-character boundary, including backspace/dash controls; replaces the stale legacy owner write_alpha_large_char.
 def write_alpha_name_entry_large_char(
     state: GameState, column: int, row: int, character: str, attribute: int,
 ) -> int:
@@ -604,12 +632,15 @@ def write_alpha_name_entry_large_char(
     return 2
 
 
+# ROM: adapter os:0x2F04 | Python-string facade over the extracted draw_string glyph writer; no NUL terminator, style/orientation ABI or consumed-byte result.
 def write_alpha_text(
     state: GameState, column: int, row: int, text: str, attribute: int,
 ) -> None:
     write_alpha_glyphs(state, column, row, (ord(ch) for ch in text), attribute)
 
 
+# ROM: adapter os:0x2EB4 | Space-padded decimal-display service adapted to Python values and direct alpha writes instead of the OS temporary descriptor ABI.
+# ROM: part os:0x2ABE | Inlines the nonzero-padding decimal field operation; clamps negatives and does not expose zero-padding or NUL-buffer behavior.
 def write_alpha_decimal(
     state: GameState, column: int, row: int, value: int, width: int,
     attribute: int,
@@ -618,6 +649,7 @@ def write_alpha_decimal(
     write_alpha_text(state, column, row, text, attribute)
 
 
+# ROM: adapter game:0x4D12E | Generalizes alpha_clear_rect to a clipped rectangle with an arbitrary fill word; the ROM boundary clears zero words with its own argument order.
 def fill_alpha_rect(
     state: GameState, column: int, row: int, width: int, height: int,
     word: int,
@@ -633,16 +665,19 @@ def fill_alpha_rect(
         fill_alpha_words(state, alpha_index(left, y), right - left, word)
 
 
+# ROM: part os:0x3522 | Visible standard-orientation alpha-surface clear from init_alpha_display; does not select orientation or reset the OS text-effect state.
 def clear_alpha_visible(state: GameState) -> None:
     fill_alpha_rect(state, 0, 0, ALPHA_VISIBLE_COLUMNS, ALPHA_ROWS, 0)
 
 
+# ROM: direct game:0x4526A | Maze reveal boundary clearing alpha outside the information panel.
 def maze_show(state: GameState) -> None:
     """Port maze_show 0x4526A: reveal the maze while preserving its info panel."""
     fill_alpha_rect(state, 0, 0, 29, ALPHA_ROWS, 0)
     fill_alpha_rect(state, 42, 0, ALPHA_COLUMNS - 42, ALPHA_ROWS, 0)
 
 
+# ROM: infrastructure | MAME-style host rasterizer IRGB-to-RGBA conversion; not game/OS ROM logic.
 def _irgb_rgba(word: int) -> tuple[int, int, int, int]:
     """MAME's 4-bit intensity × channel conversion, with 8-bit truncation."""
     intensity = ((word >> 12) & 0x0F) * 17

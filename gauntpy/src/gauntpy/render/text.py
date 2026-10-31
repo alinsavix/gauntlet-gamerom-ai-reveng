@@ -33,6 +33,7 @@ _raw_glyph_fn = None
 _glyph_checked = False
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def _rom_glyphs():
     """The gex ``ascii_glyph`` callable, or ``None`` if the ROM is absent.
 
@@ -52,16 +53,19 @@ def _rom_glyphs():
     return _glyph_fn
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def rom_font_available() -> bool:
     """True when the ROM alpha font is in use (False = PIL fallback)."""
     return _rom_glyphs() is not None
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def text_width(text: str, *, scale: int = 1) -> int:
     """Rendered width in pixels of ``text`` at ``scale`` (monospace 8px cells)."""
     return len(text) * GLYPH_W * scale
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_text(
     image, x, y, text: str, rgba, *, scale: int = 1, palette=None,
     opaque: bool = False,
@@ -102,6 +106,7 @@ def draw_text(
     return cx - int(x)
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_glyph_run(
     image, x, y, codes, rgba, *, fallback: str = "", scale: int = 1,
     palette=None,
@@ -130,6 +135,7 @@ def draw_glyph_run(
     return cx - int(x)
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_alpha_glyph(image, x: int, y: int, code: int, palette, *,
                      opaque: bool) -> None:
     """Draw one hardware alpha cell, with a PIL-only ROM-free fallback."""
@@ -163,6 +169,7 @@ def draw_alpha_glyph(image, x: int, y: int, code: int, palette, *,
     _draw_text_pil(image, x, y, fallback, palette[3], 1)
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 @lru_cache(maxsize=4096)
 def _alpha_rom_tile(code: int, palette: tuple, opaque: bool):
     """Colorize one ROM alpha cell once, then reuse its immutable raster."""
@@ -180,6 +187,7 @@ def _alpha_rom_tile(code: int, palette: tuple, opaque: bool):
     return tile
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 @lru_cache(maxsize=1)
 def _hud_fallback_text() -> dict[int, str]:
     from ..game import romtext
@@ -204,6 +212,7 @@ def _hud_fallback_text() -> dict[int, str]:
     return result
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 @lru_cache(maxsize=1)
 def _large_fallback_tiles() -> dict[int, object]:
     """Build readable PIL substitutes for OS large-font quadrant glyphs."""
@@ -231,11 +240,13 @@ def _large_fallback_tiles() -> dict[int, object]:
     return result
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def glyph_run_width(codes, *, scale: int = 1) -> int:
     """Rendered width in pixels of a glyph run (one 8px cell per code)."""
     return len(tuple(codes)) * GLYPH_W * scale
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def _blit_glyph(image, gl, x: int, y: int, rgba, scale: int, *,
                 palette=None, opaque: bool = False) -> None:
     """Blit one decoded 8x8 2-bit glyph, clipped to ``image``."""
@@ -267,12 +278,14 @@ def _blit_glyph(image, gl, x: int, y: int, rgba, scale: int, *,
                         px[xx, yy] = col
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_text_centered(image, cx, y, text: str, rgba, *, scale: int = 1) -> None:
     """Draw ``text`` horizontally centred on ``cx``."""
     x = cx - text_width(text, scale=scale) / 2
     draw_text(image, x, y, text, rgba, scale=scale)
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def _draw_text_pil(image, x, y, text: str, rgba, scale: int) -> None:
     from PIL import ImageDraw, ImageFont
 

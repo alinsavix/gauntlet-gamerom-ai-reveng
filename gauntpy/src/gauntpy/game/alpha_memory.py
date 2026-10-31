@@ -15,6 +15,7 @@ ROUTE_ROW_BYTES = 0x80
 ROUTE_BASE_OFFSET = 0x54
 
 
+# ROM: direct os:0x3586 | Indexed raw-word alpha write matches the OS implementation contract and doc/02; additionally synchronizes the Python route-byte alias. API 0x021E targets this body and is not counted separately.
 def write_alpha_word(state: GameState, index: int, word: int) -> None:
     """Publish a complete alpha word and both live route bytes, if aliased."""
     word &= 0xFFFF
@@ -26,6 +27,7 @@ def write_alpha_word(state: GameState, index: int, word: int) -> None:
         state.path_direction_grid[offset + 1] = word & 0xFF
 
 
+# ROM: helper | Python clipped-row bulk write plus route-byte shadow synchronization; not a separately identified OS fill or text routine.
 def fill_alpha_words(state: GameState, start: int, count: int, word: int) -> None:
     """Fill a single clipped row, retaining the efficient visible-word slice."""
     word &= 0xFFFF
@@ -38,6 +40,7 @@ def fill_alpha_words(state: GameState, start: int, count: int, word: int) -> Non
             state.path_direction_grid[offset + 1] = word & 0xFF
 
 
+# ROM: helper | Python byte/word alias-maintenance primitive, not the route-selection algorithms that call it.
 def write_path_grid_byte(state: GameState, offset: int, value: int) -> None:
     """Publish a route byte without changing its neighboring alpha byte."""
     value &= 0xFF

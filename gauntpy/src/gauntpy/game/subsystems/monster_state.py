@@ -203,22 +203,26 @@ _MONSTER_MOVING_ANIMS = {
 # Small helpers on the MOB record
 # =============================================================================
 
+# ROM: helper | Reads the direction field from the Python packed MOB state.
 def _get_direction(state: GameState, slot: int) -> int:
     """Monster facing, stored in the low 3 bits of the MOB state field."""
     return state.mobs.state(slot) & 0x07
 
 
+# ROM: helper | Updates the direction field while preserving other Python MOB state bits.
 def _set_direction(state: GameState, slot: int, direction: int) -> None:
     upper = state.mobs.state(slot) & ~0x07
     state.mobs.set_state(slot, upper | (direction & 0x07))
 
 
+# ROM: helper | Converts the Python compass representation to the ROM animation-table index.
 def _monster_animation_index(state: GameState, slot: int) -> int:
     """Translate gauntpy's compass in the six-bit state to a ROM table index."""
     packed = state.mobs.state(slot) & 0x3F
     return (packed & 0x38) | (((packed & 0x07) + 2) & 0x07)
 
 
+# ROM: direct game:0x414A4 | Represents the shared animation-picture entry with Python bank selection around its table lookup.
 def monster_update_anim_tile(
     state: GameState, slot: int, obj_type: int,
 ) -> None:
@@ -253,21 +257,25 @@ def monster_update_anim_tile(
     state.mobs.picture[slot] = table[_monster_animation_index(state, slot)]
 
 
+# ROM: helper | Python signed-byte arithmetic primitive.
 def _signed_byte(value: int) -> int:
     value &= 0xFF
     return value - 0x100 if value & 0x80 else value
 
 
+# ROM: helper | Python signed-word arithmetic primitive.
 def _s16(value: int) -> int:
     value &= 0xFFFF
     return value - 0x10000 if value & 0x8000 else value
 
 
+# ROM: helper | Converts object type to the Python zero-based monster-family index.
 def _monster_index(obj_type: int) -> int:
     """``D6 / 4`` in the original: 0-9 for the ten creature types."""
     return obj_type - int(MazeObjIds.MONST_GHOST)
 
 
+# ROM: part game:0x41750 | Extracts the wrapped signed high-byte position difference at 0x4177A-0x41796.
 def _delta_units(target_word: int, source_word: int) -> int:
     """Signed axis delta in 2-pixel units, exactly as ``monster_find_and_shoot``
     computes it (0x4177A-0x41796): high byte of each position word, subtracted
@@ -277,6 +285,7 @@ def _delta_units(target_word: int, source_word: int) -> int:
     return _signed_byte((target_word >> 8) - (source_word >> 8))
 
 
+# ROM: part game:0x41750,game:0x41B7E | Shared extraction of direction selection; shooter override branches are at 0x41810-0x4192C.
 def _aim_direction(u: int, v: int, override: int = 0, threshold: int = 0) -> int:
     """Direction to face along (``u``, ``v``), 0x41810-0x4192C.
 
@@ -344,6 +353,7 @@ def _aim_direction(u: int, v: int, override: int = 0, threshold: int = 0) -> int
 _ANIM_STEP = 0x2000
 
 
+# ROM: helper | Emulates a packed-state word add and carry result for several animation branches.
 def _anim_advance(state: GameState, slot: int) -> bool:
     """``addi.w #0x2000,(a6,d2.w)`` -- True when the counter wraps (carry)."""
     value = state.mobs.state_link[slot] + _ANIM_STEP
@@ -351,6 +361,7 @@ def _anim_advance(state: GameState, slot: int) -> bool:
     return value > 0xFFFF
 
 
+# ROM: helper | Emulates a byte add into the high byte of a packed state word.
 def _anim_add_high(state: GameState, slot: int, delta: int) -> None:
     """``add.b d0,(a6,d2.w)`` -- byte add into the state word's high byte."""
     if not delta:

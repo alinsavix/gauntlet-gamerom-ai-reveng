@@ -126,12 +126,14 @@ _CULL_WIDTH = 0x7F80        # 255 px across
 _CULL_HEIGHT = 0x8380       # 263 px down: a screen-sized box on the camera
 
 
+# ROM: part game:0x49034 | Extracts camera-derived culling origins at 0x49052-0x49076.
 def _update_cull_rect(state: GameState) -> None:
     """0x49052-0x49076 -- re-anchor the culling rectangle on the camera."""
     state.monster_cull_h_origin = ((state.scroll_x - _CULL_H_BIAS) << POS_SHIFT) & 0xFFFF
     state.monster_cull_v_origin = ((_CULL_V_BIAS - state.scroll_y) << POS_SHIFT) & 0xFFFF
 
 
+# ROM: part game:0x40FAE,game:0x40E6A | Shares the ordinary core culling test at 0x40FF6 and alternate potion-scan test at 0x41560.
 def _in_cull_rect(state: GameState, slot: int) -> bool:
     """0x40FF6-0x4101A -- whether a creature is processed at all this frame."""
     if ((state.mobs.hpos[slot] - state.monster_cull_h_origin) & 0xFFFF) >= _CULL_WIDTH:
@@ -143,6 +145,8 @@ def _in_cull_rect(state: GameState, slot: int) -> bool:
 # Top-level main-loop call
 # =============================================================================
 
+# ROM: direct game:0x49034 | Camera-bounded per-frame dispatch entry.
+# ROM: part game:0x40E6A | Also contains the potion diversion and slow-motion timer/gate moved out of monsters_everything.
 def main_move_monsters(state: GameState) -> None:
     """0x49034 -- advance monsters and generators in the camera-bounded arc.
 
@@ -190,6 +194,7 @@ def main_move_monsters(state: GameState) -> None:
     monsters_everything(state, _frame_word(state, slowmo), start_slot)
 
 
+# ROM: part game:0x40E6A | Extracts the slow-motion-dependent cadence-word preparation at 0x40EE0-0x40EEC.
 def _frame_word(state: GameState, slowmo: bool) -> int:
     """``d6`` -- the cadence word every stagger in the pass is taken against.
 
@@ -202,6 +207,8 @@ def _frame_word(state: GameState, slowmo: bool) -> int:
     return (state.frame_counter * 2) & 0xFFFF
 
 
+# ROM: direct game:0x40E6A | Represents the monster-walk entry; setup, alternate potion processing and family bodies are split across helpers.
+# ROM: part game:0x40FAE | Retains the shared core's iteration and continuation behavior; not a second independent Python callable.
 def monsters_everything(state: GameState, frame_word: int | None = None,
                         start_slot: int | None = None) -> None:
     """0x40E6A -- walk the on-screen arc of the depth chain.
@@ -241,6 +248,7 @@ def monsters_everything(state: GameState, frame_word: int | None = None,
     raise RuntimeError("cycle detected in the monster walk")
 
 
+# ROM: part game:0x40FAE | Extracts core type decode, culling and family routing at 0x40FB4-0x4105E.
 def _dispatch_chain_entry(state: GameState, slot: int, frame_word: int) -> None:
     """0x40FB4-0x4105E -- type decode, culling, then the family dispatch."""
     obj_type = state.mobs.obj_type(slot)
@@ -272,6 +280,7 @@ _CAM_MID_OFFSET = 0x88          # midpoint of ROM's scroll-8 .. scroll+280 arc
 _SLIP_BAND_PIXELS = 8
 
 
+# ROM: part game:0x49034 | Extracts SLIP start/stop selection using Python playfield-relative bucket representation.
 def _walk_band_head(state: GameState, offset: int) -> int:
     """The chain entry ``offset`` pixels from the camera midpoint."""
     mid_y = state.scroll_y + _CAM_MID_OFFSET
@@ -288,6 +297,7 @@ def _walk_band_head(state: GameState, offset: int) -> int:
     return heads[band] or state.mobs.depth_list_head
 
 
+# ROM: direct game:0x4119A | Represents monster_special_handler, the shared moving, attack and idle branch entry.
 def _dispatch_monster(state: GameState, slot: int, obj_type: int,
                       frame_word: int) -> None:
     """One shared handler with per-state and per-family branches (§3.3)."""
@@ -340,6 +350,7 @@ def _dispatch_monster(state: GameState, slot: int, obj_type: int,
     _post_action(state, slot, obj_type, index, frame_word)
 
 
+# ROM: part game:0x4119A | Extracts gated acid/IT attack-completion tails at 0x413E6-0x4141C.
 def _anim_finish_attack(state: GameState, slot: int, index: int, mask: int,
                         frame_word: int) -> None:
     """0x413E6/0x413F0/0x4141C -- gated wind-up that ends by dropping the
@@ -352,6 +363,7 @@ def _anim_finish_attack(state: GameState, slot: int, index: int, mask: int,
     _anim_add_high(state, slot, _MONSTER_ODDANGLE_TABLE[index][2])
 
 
+# ROM: part game:0x4119A | Extracts the attack-versus-walk continuation at 0x41256.
 def _post_action(state: GameState, slot: int, obj_type: int, index: int,
                  frame_word: int) -> None:
     """0x41256 -- a creature that just acted animates its attack or walks."""

@@ -39,6 +39,7 @@ class StateDumpError(ValueError):
     """A saved-state file cannot be reconstructed safely."""
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _json_value(value: object, seen: set[int]) -> Any:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
@@ -104,6 +105,7 @@ def _json_value(value: object, seen: set[int]) -> Any:
         seen.remove(identity)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def state_dump_payload(state: GameState) -> dict[str, object]:
     """Return every modeled GameState field in a complete JSON-safe shape."""
     payload = {
@@ -121,12 +123,14 @@ def state_dump_payload(state: GameState) -> dict[str, object]:
     return payload
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _mapping_key(value: object) -> object:
     if isinstance(value, list):
         return tuple(_mapping_key(item) for item in value)
     return value
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _mapping(value: object, *, tuple_values: bool = False) -> dict:
     if isinstance(value, dict):
         return dict(value)
@@ -143,6 +147,7 @@ def _mapping(value: object, *, tuple_values: bool = False) -> dict:
     return result
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _restore_bytearray(value: object) -> bytearray:
     if (
         isinstance(value, dict)
@@ -172,6 +177,7 @@ def _restore_bytearray(value: object) -> bytearray:
     raise StateDumpError("invalid path_direction_grid")
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _restore_dataclass(target: object, payload: object) -> None:
     if not isinstance(payload, dict):
         raise StateDumpError(f"expected an object for {type(target).__name__}")
@@ -200,6 +206,7 @@ def _restore_dataclass(target: object, payload: object) -> None:
             setattr(target, field.name, value)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _restore_mobs(payload: object) -> MobTable:
     if not isinstance(payload, dict):
         raise StateDumpError("expected an object for MobTable")
@@ -221,6 +228,7 @@ def _restore_mobs(payload: object) -> MobTable:
     return mobs
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _restore_maze(payload: object) -> object | None:
     if payload is None:
         return None
@@ -244,6 +252,7 @@ def _restore_maze(payload: object) -> object | None:
     return maze
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def game_state_from_payload(payload: object) -> GameState:
     """Reconstruct a runnable ``GameState`` from a schema-1 dump payload."""
     if not isinstance(payload, dict):
@@ -362,6 +371,7 @@ def game_state_from_payload(payload: object) -> GameState:
     return state
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def load_game_state(path: str | Path) -> GameState:
     """Load a complete state dump without running boot or level setup."""
     source = Path(path)
@@ -379,6 +389,7 @@ def load_game_state(path: str | Path) -> GameState:
         raise StateDumpError(f"invalid saved-state value: {exc}") from exc
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def dump_game_state(
     state: GameState, output_dir: str | Path = DEFAULT_STATE_DUMP_DIR,
 ) -> Path:

@@ -10,6 +10,7 @@ from typing import Mapping
 __all__ = ["SOUND_COMMAND_DESCRIPTIONS"]
 
 
+# ROM: infrastructure | Host sound-board command metadata; outside the game/OS 68010 callable inventory.
 def _load_command_descriptions() -> Mapping[int, str]:
     catalog = files("gauntpy").joinpath("data/soundcmds.csv")
     with catalog.open("r", encoding="utf-8", newline="") as source:

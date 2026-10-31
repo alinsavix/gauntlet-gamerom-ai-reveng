@@ -121,11 +121,13 @@ class SyntheticScenarioRuntime:
         default_factory=lambda: [None, None, None]
     )
 
+    # ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
     def __post_init__(self) -> None:
         if self.current_input is None:
             self.current_input = self.scenario.initial_input
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def _integer(value: str, name: str, minimum: int, maximum: int) -> int:
     try:
         result = int(value, 0)
@@ -138,6 +140,7 @@ def _integer(value: str, name: str, minimum: int, maximum: int) -> int:
     return result
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def _object_type(value: str) -> int:
     try:
         return int(MazeObjIds[value.upper()])
@@ -145,6 +148,7 @@ def _object_type(value: str) -> int:
         return _integer(value, "legend object", 0, 63)
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def _input_word(value: str) -> int | None:
     controls = value.lower().split("+")
     if "live" in controls:
@@ -176,6 +180,7 @@ def _input_word(value: str) -> int | None:
     return word
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def _input_event_target(args: tuple[str, ...]) -> tuple[int, str]:
     """Decode ``input controls`` or ``input p1..p4 controls``."""
     if len(args) == 1:
@@ -188,6 +193,7 @@ def _input_event_target(args: tuple[str, ...]) -> tuple[int, str]:
     return int(player_token[1]) - 1, args[1]
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def parse_synthetic_scenario(
     text: str, *, source_name: str | None = None,
 ) -> SyntheticScenario:
@@ -311,6 +317,7 @@ def parse_synthetic_scenario(
     )
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def load_synthetic_scenario(path: str | Path) -> SyntheticScenario:
     source = Path(path)
     try:
@@ -322,6 +329,7 @@ def load_synthetic_scenario(path: str | Path) -> SyntheticScenario:
     return parse_synthetic_scenario(text, source_name=source.name)
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def override_synthetic_seed(
     scenario: SyntheticScenario, seed: int,
 ) -> SyntheticScenario:
@@ -342,17 +350,20 @@ def override_synthetic_seed(
     )
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def attach_synthetic_runtime(
     state: GameState, runtime: SyntheticScenarioRuntime,
 ) -> None:
     setattr(state, _RUNTIME_ATTRIBUTE, runtime)
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def synthetic_runtime_for(state: GameState) -> SyntheticScenarioRuntime | None:
     runtime = getattr(state, _RUNTIME_ATTRIBUTE, None)
     return runtime if isinstance(runtime, SyntheticScenarioRuntime) else None
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
     """Build a playable state through the ordinary game-side memory writers."""
     from gex.mazedecode import Maze
@@ -430,6 +441,7 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
     return state
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def _prepare_thief(
     state: GameState, target_frame: int, row_text: str, column_text: str,
     variant: str = "thief",
@@ -462,6 +474,7 @@ def _prepare_thief(
     state.thief_level_setup_done = True
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def _seed_synthetic_thief_route(
     state: GameState, start: int, target: int,
 ) -> None:
@@ -514,6 +527,7 @@ def _seed_synthetic_thief_route(
         thief.path_grid_set_low_direction(state, cell, direction)
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def apply_synthetic_events(state: GameState) -> None:
     """Apply this frame's bounded host events before the ordinary game tick."""
     runtime = synthetic_runtime_for(state)
@@ -541,6 +555,7 @@ def apply_synthetic_events(state: GameState) -> None:
             state.player_input_raw[player_index] = input_word
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def synthetic_runtime_payload(state: GameState) -> dict[str, object] | None:
     runtime = synthetic_runtime_for(state)
     if runtime is None:
@@ -558,6 +573,7 @@ def synthetic_runtime_payload(state: GameState) -> dict[str, object] | None:
     }
 
 
+# ROM: infrastructure | Synthetic fixture parsing, setup or replay infrastructure; not original-game evidence.
 def restore_synthetic_runtime(
     state: GameState, payload: object,
 ) -> None:

@@ -17,6 +17,7 @@ class TimingSummary:
     maximum_ms: float
 
 
+# ROM: infrastructure | Host measurement and benchmark reporting, not modeled arcade time.
 def summarize_timings(samples: list[float]) -> TimingSummary:
     """Summarize one named interval using a nearest-rank 95th percentile."""
     if not samples:
@@ -43,6 +44,7 @@ class BenchmarkRecorder:
     display_flip_ms: list[float] = field(default_factory=list)
     complete_loop_ms: list[float] = field(default_factory=list)
 
+    # ROM: infrastructure | Host measurement and benchmark reporting, not modeled arcade time.
     def add(
         self,
         *,
@@ -58,11 +60,13 @@ class BenchmarkRecorder:
         self.display_flip_ms.append(display_flip_ms)
         self.complete_loop_ms.append(complete_loop_ms)
 
+    # ROM: infrastructure | Host measurement and benchmark reporting, not modeled arcade time.
     @property
     def frames(self) -> int:
         return len(self.complete_loop_ms)
 
 
+# ROM: infrastructure | Host measurement and benchmark reporting, not modeled arcade time.
 def format_benchmark_report(
     recorder: BenchmarkRecorder, *, scale: int, workload: str | None = None,
 ) -> str:
@@ -91,6 +95,7 @@ def format_benchmark_report(
     return "\n".join(lines)
 
 
+# ROM: infrastructure | Host measurement and benchmark reporting, not modeled arcade time.
 def stress_phase_index(
     elapsed_seconds: float, total_seconds: float, phase_count: int,
 ) -> int:

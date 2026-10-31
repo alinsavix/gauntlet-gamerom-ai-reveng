@@ -45,6 +45,7 @@ _PLAYER_EXIT_PICTURE = [
 # animation metadata.  The port direction is right, down-right, ... up-right;
 # ``_PORT_DIR_TO_ROM_DIR`` below maps that onto these ROM-order tables
 # (up, up-right, ... up-left).
+# ROM: helper | Parses embedded hexadecimal picture data into Python tuples; animation-table addresses are data, not callables.
 def _rom_picture_table(words: str) -> tuple[int, ...]:
     return tuple(int(word, 16) for word in words.split())
 
@@ -140,6 +141,7 @@ _INVISIBILITY_FLASH_MASKS = (
 )
 
 
+# ROM: part game:0x4A53A | Extracted fight/walk/shoot/idle branch selection from main_move_players' animation tail.
 def _player_animation_action(state: GameState, player_index: int,
                              walking: bool | None = None) -> str:
     """Return main_move_players' picture-table branch for one active hero."""
@@ -154,6 +156,7 @@ def _player_animation_action(state: GameState, player_index: int,
     return "idle"
 
 
+# ROM: part game:0x4A53A | Picture-selection and invisibility-blink portion at 0x4AB08-0x4AC7A; counter/action advancement remains elsewhere.
 def update_player_sprite(state: GameState, player_index: int,
                          *, walking: bool | None = None) -> None:
     """Write one hero's current ROM animation picture without advancing time.
@@ -205,6 +208,7 @@ def update_player_sprite(state: GameState, player_index: int,
     state.mobs.picture[player.mob_slot] = picture
 
 
+# ROM: helper | Python batch refresh of extracted sprite presentation without advancing gameplay counters; not a complete frame routine.
 def update_player_sprites(state: GameState) -> None:
     """Refresh all active hero MOB pictures without changing their counters."""
     for player_index in range(NUM_PLAYERS):

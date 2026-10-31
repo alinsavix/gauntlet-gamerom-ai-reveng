@@ -55,6 +55,29 @@ For a custom host, call `host.eeprom.bind_eeprom_storage(state)` after choosing
 `state.eeprom_save_path` and before booting or stepping; changing legacy path or
 enable fields later requires rebinding the device.
 
+## ROM/Python function crosswalk
+
+[FUNCTION_CROSSWALK.md](FUNCTION_CROSSWALK.md) lists the correspondence in both
+directions: one-to-one routine matches, split/merged/adapted mappings, Python-only
+helpers, unresolved provenance, and ROM entries without an identified Python
+definition. Host, renderer, and harness infrastructure has a separate list.
+The inputs are the documented game and OS callable inventories, not a new
+disassembly of every possible entry point.
+
+Every named function under `src/gauntpy` carries a structured `# ROM:` comment
+immediately before its definition or first decorator. Mapped comments identify
+the ROM image and callable address; Python-only and unresolved functions say so
+instead of inventing an address. Correspondence is not a claim of behavioral
+equivalence. The existing [coverage audit](ROM_FUNCTION_AUDIT.md) answers that
+different, historically assessed question.
+
+After editing annotations, regenerate the readable report and both CSV views:
+
+```powershell
+python tools\rom_crosswalk.py --write
+python tools\rom_crosswalk.py --check
+```
+
 ## Play it
 
 With [uv](https://docs.astral.sh/uv/) (recommended — it resolves the local

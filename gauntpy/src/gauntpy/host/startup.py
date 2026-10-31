@@ -18,6 +18,7 @@ from ..game.subsystems.session import configured_start_health
 from .eeprom import PersistencePolicy, bind_eeprom_storage
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def build_cold_boot_state(
     rng_seed: int = 0, *,
     persistence_policy: PersistencePolicy = PersistencePolicy.READ_WRITE,
@@ -32,6 +33,7 @@ def build_cold_boot_state(
     return state
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def spawn_player(state: GameState, character: int) -> int:
     """Drop player 0 into the loaded maze at a PLAYERSTART and return its slot.
 
@@ -71,6 +73,7 @@ def spawn_player(state: GameState, character: int) -> int:
     return p.mob_slot
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def build_state(
     level: int,
     character: int,

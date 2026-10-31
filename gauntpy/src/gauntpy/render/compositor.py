@@ -89,6 +89,7 @@ class RenderCache:
     playfield: PlayfieldCache | None = None
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def render_frame(
     state: GameState,
     assets: SpriteSource,
@@ -143,6 +144,7 @@ def render_frame(
     return fb, cache
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def _draw_wrapped_viewport_box(
     fb,
     scroll_x: int,
@@ -167,6 +169,7 @@ def _draw_wrapped_viewport_box(
         fb.set_pixel(right, y, color)
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def render_full_playfield_frame(
     state: GameState,
     assets: SpriteSource,

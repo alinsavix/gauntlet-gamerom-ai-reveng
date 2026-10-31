@@ -159,6 +159,7 @@ class HostShell:
     pygame; only drawing a frame needs ROMs).
     """
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def __init__(
         self,
         *,
@@ -257,6 +258,7 @@ class HostShell:
         )
         self._restart_level_key = getattr(pygame, DEFAULT_RESTART_LEVEL_KEY)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _set_window_mode(self):
         game_width = self.render_width * self.scale
         panel_width = DEBUG_PANEL_WIDTH if self.diagnostics_visible else 0
@@ -264,6 +266,7 @@ class HostShell:
             (game_width + panel_width, self.render_height * self.scale)
         )
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _connect_gamepad(self, device_index: int) -> None:
         if self._gamepad is not None:
             return
@@ -271,12 +274,14 @@ class HostShell:
         gamepad.init()
         self._gamepad = gamepad
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _toggle_pause(self) -> None:
         self.paused = not self.paused
         self._pygame.display.set_caption(
             f"{self._title} [PAUSED]" if self.paused else self._title
         )
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _event_is_current_gamepad(self, event) -> bool:
         return (
             self._gamepad is not None
@@ -285,6 +290,7 @@ class HostShell:
 
     # -- the g2mainloop interface --------------------------------------------
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def wait_for_vblank(self, state: GameState) -> None:
         """Pump the event queue, sample the keyboard into
         ``state.player_input_raw``, and block until the next 60Hz tick
@@ -414,11 +420,13 @@ class HostShell:
         self._sample_input(state)
         self._limit_frame_rate()
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _limit_frame_rate(self) -> None:
         """Wait for 60 Hz unless the host-only uncapped mode was requested."""
         if not self.uncapped:
             self.clock.tick(FRAMES_PER_SECOND)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _insert_coin(self, state: GameState) -> None:
         """Bump this host player's 2-bit coin counter (0x904FEC layout).
 
@@ -431,6 +439,7 @@ class HostShell:
             (state.coin_counters & ~(3 << shift)) | (((current + 1) & 3) << shift)
         )
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _step_diagnostics_mob(self, state: GameState, delta: int) -> None:
         occupied = [
             slot for slot in range(1, len(state.mobs.picture))
@@ -445,6 +454,7 @@ class HostShell:
         index = occupied.index(self.diagnostics_selected_mob)
         self.diagnostics_selected_mob = occupied[(index + delta) % len(occupied)]
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def present(self, state: GameState) -> None:
         """Render the current state and flip it to the window."""
         if self._audio_player is not None:
@@ -508,11 +518,13 @@ class HostShell:
             (perf_counter() - flip_started) * 1000.0, 9,
         )
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def skip_existing_audio(self, state: GameState) -> None:
         """Do not replay the historical sound log in a loaded state dump."""
         if self._audio_player is not None:
             self._audio_player.skip_existing(state.sound_log)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def state_restored(self, state: GameState) -> None:
         """Discard host history belonging to the abandoned timeline."""
         if self._audio_player is not None:
@@ -528,6 +540,7 @@ class HostShell:
 
     # -- input ---------------------------------------------------------------
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _sample_input(self, state: GameState) -> None:
         """Compose held keyboard and gamepad controls into one active-low word.
 
@@ -568,6 +581,7 @@ class HostShell:
 
     # -- lifecycle -------------------------------------------------------------
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def close(self) -> None:
         if self._audio_player is not None:
             self._audio_player.close()

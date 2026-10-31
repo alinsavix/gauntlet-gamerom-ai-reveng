@@ -85,6 +85,7 @@ class AssetError(Exception):
 # ROM availability check
 # ---------------------------------------------------------------------------
 
+# ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
 def _roms_available() -> bool:
     """Mirrors the check gex's own test suite uses (e.g.
     ``python-gex/tests/test_golden_images.py``): the resolved ROM directory
@@ -96,6 +97,7 @@ def _roms_available() -> bool:
     return rom_dir.is_dir() and (rom_dir / TILE_ROMS[0][0]).is_file()
 
 
+# ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
 def _require_roms() -> None:
     if _roms_available():
         return
@@ -136,6 +138,7 @@ class SpriteFrame(NamedTuple):
     frame_index: int      # index into that direction's frame list
 
 
+# ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
 def _index_entities(entities: dict) -> dict[int, SpriteFrame]:
     """Reverse ``{name: entity}`` into a picture-number -> frame map.
 
@@ -160,6 +163,7 @@ def _index_entities(entities: dict) -> dict[int, SpriteFrame]:
     return index
 
 
+# ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
 def _build_picture_index() -> dict[int, SpriteFrame]:
     """Build the picture-number -> sprite-frame map from gex's own monster
     animation data (``gex.monsters.MONSTERS``, loaded from
@@ -208,6 +212,7 @@ def _build_picture_index() -> dict[int, SpriteFrame]:
 _ACTION_PRECEDENCE = ("walk", "fight", "shoot", "idle")
 
 
+# ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
 def _action_rank(action: str) -> int:
     """Sort key: known actions by precedence, unknown actions last (stable)."""
     try:
@@ -237,6 +242,7 @@ NPC_KIND = "npc"
 HERO_NAMES: tuple[str, ...] = ("warrior", "valkyrie", "wizard", "elf")
 
 
+# ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
 def _projectile_palette_bank(
     kind: str | None, palette: int | None,
 ) -> tuple[str, int]:
@@ -260,6 +266,7 @@ _FAMILIES: dict[str, dict] = {
 #: slot momentarily holding a non-hero picture (the death-animation frames of
 #: ``player_animation._ANIM_TABLE_IDLE``, the bonus-screen icon ``score`` parks in
 #: the player's slot) still resolves exactly as it did before.
+# ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
 def _build_scoped_indexes() -> dict[str, dict[int, SpriteFrame]]:
     scoped: dict[str, dict[int, SpriteFrame]] = {}
     for family, members in _FAMILIES.items():
@@ -396,6 +403,7 @@ _KNOWN_EFFECT_TABLES = frozenset(
 )
 
 
+# ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
 def _build_effect_blocks() -> dict[int, TileBlock]:
     """Masked picture number -> tile block, for every effect picture gex's
     ``effects.jsonc`` carries plus the transporter transition cycle.
@@ -415,6 +423,7 @@ def _build_effect_blocks() -> dict[int, TileBlock]:
 
     blocks: dict[int, TileBlock] = {}
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def claim(word: int, block: TileBlock) -> None:
         blocks.setdefault(word & PICTURE_TILE_MASK, block)
 
@@ -441,6 +450,7 @@ def _build_effect_blocks() -> dict[int, TileBlock]:
 EFFECT_PICTURES: dict[int, TileBlock] = _build_effect_blocks()
 
 
+# ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
 def _entity_default_pnum(name: str, entity, tier: int) -> int:
     """The palette entry an entity is drawn through when the caller has no
     live ``mob_hpos`` nibble. Heroes and NPCs use their own index directly;
@@ -465,6 +475,7 @@ class AssetStore:
     with no dependency on ``GameState``.
     """
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def __init__(self) -> None:
         _require_roms()
         # gex's own get_parsed_tile() is already process-wide cached
@@ -478,6 +489,7 @@ class AssetStore:
 
     # -- tiles ---------------------------------------------------------
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def tile(self, number: int) -> TileData:
         """Decoded 8x8 tile: 8 rows of 8 palette-index pixels (0-15). Combine
         with ``palette()`` to get colors. The returned list is shared with
@@ -490,6 +502,7 @@ class AssetStore:
 
     # -- multi-tile sprites ---------------------------------------------
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def stamp(
         self,
         numbers: Sequence[int],
@@ -518,6 +531,7 @@ class AssetStore:
 
     # -- palettes --------------------------------------------------------
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def palette(self, kind: str, index: int) -> Palette:
         """A 16-entry ``Palette`` (list of ``IRGB``) by kind
         (``"base"``/``"floor"``/``"wall"``/character names/etc. -- see
@@ -539,6 +553,7 @@ class AssetStore:
 
     # -- sprite lookup by MOB picture number ------------------------------
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     @staticmethod
     def _frame_for(masked: int, kind: str | None) -> SpriteFrame | None:
         """The sprite frame for an already-masked tile number, preferring the
@@ -563,6 +578,7 @@ class AssetStore:
                 return frame
         return _PICTURE_INDEX.get(masked)
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def sprite_frame(self, picture: int, *, kind: str | None = None) -> SpriteFrame:
         """Identify which sprite frame a raw MOB picture number names,
         without building a Stamp. Raises ``AssetError`` if the picture
@@ -586,6 +602,7 @@ class AssetStore:
             raise AssetError(self._no_sprite_message(picture, masked))
         return frame
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     @staticmethod
     def _no_sprite_message(picture: int, masked: int) -> str:
         if picture in MARKER_PICTURES:
@@ -606,6 +623,7 @@ class AssetStore:
             "and pass sprite(size=...) for artwork no table names at all."
         )
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def sprite(
         self,
         picture: int,
@@ -722,6 +740,7 @@ class AssetStore:
         # Nothing matched -- sprite_frame() raises the descriptive AssetError.
         raise self._no_sprite_error(picture)
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     @staticmethod
     def _bank_index(ptype: str, default_pnum: int, palette: int | None) -> int:
         """The palette entry to use inside bank ``ptype``: the live
@@ -737,6 +756,7 @@ class AssetStore:
             return pal_num
         return default_pnum
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def _sized_block(
         self,
         picture: int,
@@ -802,12 +822,14 @@ class AssetStore:
                 f"do not hold: {exc}"
             ) from exc
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def _block_stamp(
         self, tile: int, xsize: int, ysize: int, ptype: str, pnum: int
     ) -> Stamp:
         """A cached ``xsize x ysize`` block of consecutive tiles from ``tile``."""
         return self.stamp(tuple(range(tile, tile + xsize * ysize)), xsize, ptype, pnum)
 
+    # ROM: infrastructure | Host ROM-graphics acquisition and raster asset interpretation, not a game/OS CPU routine.
     def _no_sprite_error(self, picture: int) -> AssetError:
         try:
             self.sprite_frame(picture)

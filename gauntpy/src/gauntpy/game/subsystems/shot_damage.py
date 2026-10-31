@@ -154,6 +154,7 @@ _PRIZE_HIDDENPOT_BASE = 0xA728
 _GAME_MODE_SECRET = -3           # 0xFFFD, the secret-room game mode
 
 
+# ROM: part game:0x4AF50 | Extracts player health-redraw writes from the player and monster projectile damage arms.
 def _hurt_latch(state: GameState, victim_index: int) -> None:
     """``ori.b #2, player_redraw[victim]`` -- WP-14's ``health_dirty`` latch.
 
@@ -164,6 +165,7 @@ def _hurt_latch(state: GameState, victim_index: int) -> None:
     state.health_dirty[victim_index] = 1
 
 
+# ROM: part game:0x4AF50 | Extracts signed-byte secret-objective progress handling at 0x4B694, 0x4B852 and 0x4B90E.
 def _trick_bump(state: GameState, player_index: int, trick_id: int) -> None:
     """0x4B694 / 0x4B852 / 0x4B90E -- the signed-byte secret-room progress bump.
 
@@ -180,6 +182,7 @@ def _trick_bump(state: GameState, player_index: int, trick_id: int) -> None:
         secret_trick_progress(state, player_index, trick_id)
 
 
+# ROM: part game:0x4AF50 | Extracts objective set/clear sites at 0x4B052 and 0x4B312 through the shared Python objective writer.
 def _trick_set(state: GameState, player_index: int, trick_id: int,
                value: int) -> None:
     """0x4B052 / 0x4B312 -- the ``move.b #n`` and ``clr.b`` progress sites."""
@@ -195,6 +198,7 @@ _TASK_SHOOT_SECRET_B = 0x5B
 _TASK_SHOOT_TREASURE = 0x5A
 
 
+# ROM: part game:0x4AF50 | Extracts common escape and idle timer reset sites at 0x4B754 and 0x4BB24.
 def _kill_bookkeeping(state: GameState) -> None:
     """0x4B754/0x4BB24: a destroyed object resets the escape and idle timers."""
     state.escape_timer = 0
@@ -217,6 +221,7 @@ _DIALOG_PLAYER_SHOT = 18       # 0x4B178 shot by another player
 _DIALOG_WALL_SHOT = 22         # 0x4B6F8 destructible wall
 
 
+# ROM: adapter game:0x4C440 | Converts a dialog record index to a mask and delegates to the dialog owner; not a direct dialog body.
 def _dialog(state: GameState, player_index: int, record: int,
             value: int = 0) -> int:
     """``dialog_first_encounter`` (0x4C440) -- WP-14 owns the dialog records.
@@ -235,6 +240,7 @@ def _dialog(state: GameState, player_index: int, record: int,
     return dialog_first_encounter(state, player_index, 1 << record, value)
 
 
+# ROM: direct game:0x49A3C | Accumulates per-player Death damage and dissolves/removes the target above the threshold.
 def death_damage_accumulate(state: GameState, player_index: int,
                             death_slot: int, damage: int) -> None:
     """0x49A3C -- add damage to per-player Death-damage counter; dismiss when > 200.
@@ -258,6 +264,7 @@ def death_damage_accumulate(state: GameState, player_index: int,
 # Damage
 # =============================================================================
 
+# ROM: part game:0x4AF50 | Extracts shot damage class, power, randomness and supershot selection at 0x4AFA6-0x4B00E.
 def _shot_damage(state: GameState, shooter_id: int) -> int:
     """0x4AFA6-0x4B00E -- the damage this shot carries.
 
@@ -282,6 +289,7 @@ def _shot_damage(state: GameState, shooter_id: int) -> int:
     return damage
 
 
+# ROM: part game:0x4AF50 | Extracts victim character/armor and projectile-tier damage indexing at 0x4B1AC-0x4B238.
 def _monstshot_damage_index(state: GameState, victim, shooter_id: int) -> int:  # noqa: ANN001
     """Exact ``monstshot_damage_tbl`` index (0x4B1AC-0x4B238).
 
@@ -304,16 +312,19 @@ def _monstshot_damage_index(state: GameState, victim, shooter_id: int) -> int:  
     return index
 
 
+# ROM: helper | Python player-channel supershot flag accessor.
 def _supershot(state: GameState, shooter_id: int) -> bool:
     return shooter_id < 4 and bool(state.players[shooter_id].supershot)
 
 
+# ROM: part game:0x4AF50 | Extracts the unconditional consumed-projectile tail at 0x4B6CE.
 def _consume(state: GameState, shooter_id: int) -> int:
     """0x4B6CE -- unconditional "shot used up" tail."""
     _channel_clear(state, shooter_id)
     return CONSUMED
 
 
+# ROM: part game:0x4AF50 | Extracts the max-tier piercing or impact-and-consume finish at 0x4BDB4.
 def _finish(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4BDB4 -- the shared tail: a max-tier shot bores straight through.
 
@@ -330,6 +341,7 @@ def _finish(state: GameState, slot: int, shooter_id: int) -> int:
 # resolve_shot_hit -- object handlers
 # =============================================================================
 
+# ROM: part game:0x4AF50 | Extracted player-victim branch at 0x4B02C including player-versus-player damage and stun.
 def _handle_player_victim(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B02C-0x4B316 -- the target MOB is a player."""
     mobs = state.mobs
@@ -370,6 +382,7 @@ def _handle_player_victim(state: GameState, slot: int, shooter_id: int) -> int:
     return _finish(state, slot, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted monster and dragon projectile damage-to-player branch at 0x4B1AC.
 def _monster_shot_on_player(state: GameState, slot: int, shooter_id: int,
                             victim_index: int, victim) -> int:  # noqa: ANN001
     """0x4B1AC -- a monster/dragon shot landing on a player."""
@@ -402,6 +415,7 @@ def _monster_shot_on_player(state: GameState, slot: int, shooter_id: int,
     return _finish(state, slot, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted ordinary monster live-tier subtraction and survival branch at 0x4BB36.
 def _handle_monster(state: GameState, slot: int, shooter_id: int, damage: int,
                     obj_type: int, multiplier: int) -> int:
     """0x4BB36 -- subtract the damage from the target's own hpos tier nibble."""
@@ -415,6 +429,7 @@ def _handle_monster(state: GameState, slot: int, shooter_id: int, damage: int,
     return _destroy_target(state, slot, shooter_id, damage, obj_type, multiplier)
 
 
+# ROM: part game:0x4AF50 | Extracted target destruction permission, impact and score continuation at 0x4BCB8.
 def _destroy_target(state: GameState, slot: int, shooter_id: int, damage: int,
                     obj_type: int, multiplier: int) -> int:
     """0x4BCB8 -- sparkle, then remove when this shooter is allowed to."""
@@ -429,6 +444,7 @@ def _destroy_target(state: GameState, slot: int, shooter_id: int, damage: int,
     return _score_tail(state, slot, shooter_id, damage, obj_type, multiplier)
 
 
+# ROM: part game:0x4AF50 | Extracted player scoring, dragon proximity and supershot piercing tail at 0x4BD66.
 def _score_tail(state: GameState, slot: int, shooter_id: int, damage: int,
                 obj_type: int, multiplier: int) -> int:
     """0x4BD66 -- award the score, then pierce unless the target is Death/IT."""
@@ -449,6 +465,7 @@ def _score_tail(state: GameState, slot: int, shooter_id: int, damage: int,
     return _finish(state, slot, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted phased sorcerer and supershot handling at 0x4BB70.
 def _handle_sorcerer(state: GameState, slot: int, shooter_id: int,
                      damage: int, obj_type: int) -> int:
     """0x4BB70 -- a Sorcerer phased out (hpos bit 4) is untouchable."""
@@ -463,6 +480,7 @@ def _handle_sorcerer(state: GameState, slot: int, shooter_id: int,
     )
 
 
+# ROM: part game:0x4AF50 | Extracted Super Sorcerer hit, popup and score branch at 0x4BBA2.
 def _handle_supersorc(state: GameState, slot: int, shooter_id: int,
                       damage: int, obj_type: int) -> int:
     """0x4BBA2 -- the Super Sorcerer dies to one ordinary player shot.
@@ -486,6 +504,7 @@ def _handle_supersorc(state: GameState, slot: int, shooter_id: int,
     )
 
 
+# ROM: part game:0x4AF50 | Extracted Death hit counter and supershot damage call at 0x4BC12; damage accumulation remains a callee.
 def _handle_death(state: GameState, slot: int, shooter_id: int,
                   damage: int, obj_type: int) -> int:
     """0x4BC12 -- Death: count the hit, and only a supershot really hurts."""
@@ -498,6 +517,7 @@ def _handle_death(state: GameState, slot: int, shooter_id: int,
     )
 
 
+# ROM: part game:0x4AF50 | Extracted IT state folding and phasing branch at 0x4BC48.
 def _handle_it(state: GameState, slot: int, shooter_id: int,
                damage: int, obj_type: int) -> int:
     """0x4BC48 -- shooting IT folds its state field down and phases it out."""
@@ -514,6 +534,7 @@ def _handle_it(state: GameState, slot: int, shooter_id: int,
     )
 
 
+# ROM: part game:0x4AF50 | Extracted generator tier destruction/demotion cases at 0x4BCB0-0x4BD22.
 def _handle_generator(state: GameState, slot: int, shooter_id: int,
                       damage: int, obj_type: int) -> int:
     """0x4BCB0/0x4BD04/0x4BD14 -- tier 1 always dies, 2 and 3 need the damage."""
@@ -533,6 +554,7 @@ def _handle_generator(state: GameState, slot: int, shooter_id: int,
     )
 
 
+# ROM: part game:0x4AF50 | Extracted movable-wall hit accumulation and generic wall routing at 0x4B448.
 def _handle_wall(state: GameState, raw_target: int, slot: int,
                  shooter_id: int, obj_type: int) -> int:
     """0x4B448 -- movable walls first, then the shared wall/tile path."""
@@ -554,6 +576,7 @@ def _handle_wall(state: GameState, raw_target: int, slot: int,
     return _handle_generic_wall(state, raw_target, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted reflect-or-impact branch at 0x4B49A; shot_reflect_calc remains its callee.
 def _handle_generic_wall(state: GameState, raw_target: int,
                          shooter_id: int) -> int:
     """0x4B49A -- reflect if the shooter can, else sparkle and stop.
@@ -577,6 +600,7 @@ def _handle_generic_wall(state: GameState, raw_target: int,
     return _consume(state, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted secret-wall reveal, prize roll and objective bookkeeping at 0x4B528.
 def _handle_secret_wall(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B528 -- reveal the wall, roll a prize, credit the trick."""
     mobs = state.mobs
@@ -627,6 +651,7 @@ def _handle_secret_wall(state: GameState, slot: int, shooter_id: int) -> int:
     return _consume(state, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted destructible-wall branch at 0x4B6F2; wall_crumble is the delegated callable.
 def _handle_destructible_wall(state: GameState, raw_target: int, slot: int,
                               shooter_id: int, damage: int) -> int:
     """0x4B6F2 -- crumble it, and let a supershot carry on through."""
@@ -649,6 +674,7 @@ def _handle_destructible_wall(state: GameState, raw_target: int, slot: int,
     return _handle_wall_tail(state, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracts the common wall max-tier survival or consumption tail at 0x4B502.
 def _handle_wall_tail(state: GameState, shooter_id: int) -> int:
     """0x4B502 -- the wall paths' shared close: max-tier keeps going."""
     if _is_maxtier(state, shooter_id):
@@ -656,6 +682,7 @@ def _handle_wall_tail(state: GameState, shooter_id: int) -> int:
     return _consume(state, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted door collision gate and impact branch at 0x4B416; 0x4AEA0 is a callee.
 def _handle_door(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B416 -- doors only notice a shot inside the 0x2C0 box."""
     from .shot_collision import (
@@ -667,6 +694,7 @@ def _handle_door(state: GameState, slot: int, shooter_id: int) -> int:
     return _consume(state, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted thief/mugger projectile-hit branch at 0x4B784, not the thief removal callable.
 def _handle_playerstart(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B784 -- shooting the thief either slows it or kills it.
 
@@ -691,6 +719,7 @@ def _handle_playerstart(state: GameState, slot: int, shooter_id: int) -> int:
     return _consume(state, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted supershot-only treasure and invulnerable-item destruction branch at 0x4B80E.
 def _handle_treasure(state: GameState, slot: int, shooter_id: int,
                      obj_type: int) -> int:
     """0x4B80E -- treasure and the invulnerable food/potion: supershot only."""
@@ -711,6 +740,7 @@ def _handle_treasure(state: GameState, slot: int, shooter_id: int,
     return SURVIVES     # 0x4B746: a supershot always carries on
 
 
+# ROM: part game:0x4AF50 | Extracted destructible food, slow-motion, objective and speech branch at 0x4B894.
 def _handle_food(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B894 -- destructible food, with the slow-motion picture special case."""
     mobs = state.mobs
@@ -753,6 +783,7 @@ def _handle_food(state: GameState, slot: int, shooter_id: int) -> int:
     return _finish(state, slot, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted shot-potion and slow-motion branch at 0x4B9CE; current code arms a flash latch, not an immediate blast scan.
 def _handle_potion(state: GameState, slot: int, shooter_id: int) -> int:
     """0x4B9CE -- a shot potion detonates; some pictures start slow motion."""
     mobs = state.mobs
@@ -803,6 +834,7 @@ def _handle_potion(state: GameState, slot: int, shooter_id: int) -> int:
     return _finish(state, slot, shooter_id)
 
 
+# ROM: part game:0x4AF50 | Extracted dragon projectile dispatch at 0x4B3B4; dragon_shot_hit is its callee.
 def _handle_dragon(state: GameState, raw_target: int, slot: int,
                    shooter_id: int) -> int:
     """0x4B3B4 -- player shots go to the dragon handler, monster shots die."""
@@ -839,6 +871,7 @@ _SHOT_FOOD_SPEECH = [
 ]
 
 
+# ROM: direct game:0x4AF50 | Main target-type hit resolver; internal computed-dispatch arms are split into named Python functions.
 def resolve_shot_hit(state: GameState, target: int, shooter_id: int) -> int:
     """0x4AF50 -- shot to target hit resolution.
 
@@ -921,6 +954,7 @@ _DRAGON_BOX_WIDTH = 10           # inclusive offsets -4..+5
 _DRAGON_BOX_HEIGHT = 10          # inclusive offsets -5..+4
 
 
+# ROM: direct game:0x549EA | Represents previous/current-cell dragon proximity reaction; Python argument order and defaults differ.
 def dragon_player_proximity(
     state: GameState, cell: int, previous_cell: int = 0,
 ) -> None:
@@ -937,6 +971,7 @@ def dragon_player_proximity(
     start_col = ((head & 0x1F) - 4) & 0x1F
     start_row = (((head >> 5) & 0x1F) - 5) & 0x1F
 
+    # ROM: part game:0x549EA | Nested extraction of the wrapped proximity-rectangle membership test.
     def inside(value: int) -> bool:
         col = value & 0x1F
         row = (value >> 5) & 0x1F

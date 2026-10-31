@@ -25,12 +25,15 @@ class HostSession:
     restart_enabled: bool = True
     level_restart: LevelRestart = field(init=False)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def __post_init__(self) -> None:
         self.level_restart = LevelRestart(self.state, resumed=self.resumed)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def capture_level_start(self) -> bool:
         return self.restart_enabled and self.level_restart.observe(self.state)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def restart_level(self) -> bool:
         if not self.restart_enabled:
             return False
@@ -40,12 +43,14 @@ class HostSession:
         self.state = restored
         return True
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     @property
     def synthetic(self) -> SyntheticScenarioRuntime | None:
         from ..custom_scenario import synthetic_runtime_for
 
         return synthetic_runtime_for(self.state)
 
+    # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def apply_events(self) -> None:
         """Compose fixture inputs before the normal game tick, never on pause."""
         from ..custom_scenario import apply_synthetic_events

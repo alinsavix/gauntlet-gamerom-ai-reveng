@@ -41,7 +41,9 @@ class Scenario:
     step: Step
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _tick_with_input(script: Callable[[int], int]) -> Step:
+    # ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
     def step(state: GameState, frame: int) -> None:
         state.player_input_raw[0] = script(frame) & 0xFFFF
         tick(state)
@@ -49,16 +51,19 @@ def _tick_with_input(script: Callable[[int], int]) -> Step:
     return step
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _idle(_frame: int) -> int:
     return JOY_IDLE
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _level1_state() -> GameState:
     from .host.startup import build_state
 
     return build_state(1, Character.WARRIOR)
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _level1_input(frame: int) -> int:
     if frame < 60:
         return JOY_IDLE & ~JOY_RIGHT
@@ -67,16 +72,19 @@ def _level1_input(frame: int) -> int:
     return JOY_IDLE
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _level7_state() -> GameState:
     from .host.startup import build_state
 
     return build_state(7, Character.WARRIOR)
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _level7_input(frame: int) -> int:
     return JOY_IDLE & ~JOY_LEFT if frame < 220 else JOY_IDLE
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _forcefield_state() -> GameState:
     from .game.maze import maze_place_object
 
@@ -101,6 +109,7 @@ def _forcefield_state() -> GameState:
     return state
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _dragon_state() -> GameState:
     from .game.subsystems.dragon import dragon_setup_segments
 
@@ -137,6 +146,7 @@ def _dragon_state() -> GameState:
     return state
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _dragon_step(state: GameState, _frame: int) -> None:
     from .game.subsystems.dragon import main_handle_dragon
 
@@ -144,6 +154,7 @@ def _dragon_step(state: GameState, _frame: int) -> None:
     state.frame_counter = (state.frame_counter + 1) & 0xFFFF
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _demo_state() -> GameState:
     from .game.subsystems.attract import start_attract_screen
 
@@ -152,6 +163,7 @@ def _demo_state() -> GameState:
     return state
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _close_combat_state() -> GameState:
     from .game.subsystems.players import player_create_shot
 
@@ -180,6 +192,7 @@ def _close_combat_state() -> GameState:
     return state
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _shots_step(state: GameState, _frame: int) -> None:
     from .game.subsystems.shot_damage import resolve_shot_hit
     from .game.subsystems.shot_collision import shot_mob_collision
@@ -239,6 +252,7 @@ SCENARIOS: dict[str, Scenario] = {
 }
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def digest_state(state: GameState) -> dict:
     """Compact JSON-safe trace row for the recurring fidelity scenarios."""
     creature_counts = Counter(
@@ -307,6 +321,7 @@ def digest_state(state: GameState) -> dict:
     }
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def run_scenario(name: str, frames: int | None = None, every: int = 1) -> list[dict]:
     scenario = SCENARIOS[name]
     frame_count = scenario.default_frames if frames is None else frames
@@ -323,6 +338,7 @@ def run_scenario(name: str, frames: int | None = None, every: int = 1) -> list[d
     return trace
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def run_synthetic_scenario(
     path: str | Path, frames: int | None = None, every: int = 1,
 ) -> tuple[object, list[dict]]:
@@ -350,6 +366,7 @@ def run_synthetic_scenario(
     return scenario, trace
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def _write_trace(payload: object, output: str | None) -> None:
     text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if output:
@@ -360,6 +377,7 @@ def _write_trace(payload: object, output: str | None) -> None:
         print(text, end="")
 
 
+# ROM: infrastructure | Host scenario/probe construction and trace tooling, not a ROM callable.
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="gauntpy-scenario")
     subparsers = parser.add_subparsers(dest="command", required=True)

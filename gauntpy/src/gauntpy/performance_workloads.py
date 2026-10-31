@@ -120,6 +120,7 @@ WORKLOADS = (
 WORKLOAD_BY_NAME = {workload.name: workload for workload in WORKLOADS}
 
 
+# ROM: infrastructure | Host benchmark/stress setup, not a ROM routine.
 def scenario_path(workload: PerformanceWorkload) -> Path:
     """Return a packaged synthetic workload's declarative fixture path."""
     if workload.scenario_filename is None:
@@ -127,6 +128,7 @@ def scenario_path(workload: PerformanceWorkload) -> Path:
     return Path(__file__).resolve().parents[2] / "scenarios" / workload.scenario_filename
 
 
+# ROM: infrastructure | Host benchmark/stress setup, not a ROM routine.
 def selected_workloads(name: str | None) -> tuple[PerformanceWorkload, ...]:
     """Resolve a CLI selection, with ``None`` and ``all`` selecting the suite."""
     if name is None or name == "all":
@@ -134,6 +136,7 @@ def selected_workloads(name: str | None) -> tuple[PerformanceWorkload, ...]:
     return (WORKLOAD_BY_NAME[name],)
 
 
+# ROM: infrastructure | Host benchmark/stress setup, not a ROM routine.
 def format_workload_catalog() -> str:
     """Return a stable terminal listing for workload discovery."""
     width = max(len(workload.name) for workload in WORKLOADS)
@@ -142,6 +145,7 @@ def format_workload_catalog() -> str:
     )
 
 
+# ROM: infrastructure | Host benchmark/stress setup, not a ROM routine.
 def prepare_workload_state(
     state: GameState, workload: PerformanceWorkload,
 ) -> None:
@@ -156,6 +160,7 @@ def prepare_workload_state(
         raise ValueError(f"unknown workload setup {workload.setup!r}")
 
 
+# ROM: infrastructure | Host benchmark/stress setup, not a ROM routine.
 def build_workload_state(
     workload: PerformanceWorkload, rng_seed: int,
 ) -> GameState:
@@ -196,6 +201,7 @@ def build_workload_state(
     return bind_eeprom_storage(state, policy=PersistencePolicy.ISOLATED)
 
 
+# ROM: infrastructure | Host benchmark/stress setup, not a ROM routine.
 def _join_four_players(state: GameState) -> None:
     from .game.constants import SLOT_PLAYER_SHOTS
     from .game.subsystems.player_lifecycle import player_join
@@ -215,6 +221,7 @@ def _join_four_players(state: GameState) -> None:
             )
 
 
+# ROM: infrastructure | Host benchmark/stress setup, not a ROM routine.
 def _fill_projectile_channels(state: GameState) -> None:
     from .game.constants import MazeObjIds, SLOT_DEMON_SHOTS, SLOT_LOBBER_SHOTS
     from .game.subsystems.monster_shooting import monster_create_shot
@@ -252,6 +259,7 @@ class HarnessInvariantError(RuntimeError):
     """A host workload observed an internally inconsistent modeled state."""
 
 
+# ROM: infrastructure | Host benchmark/stress setup, not a ROM routine.
 def validate_runtime_invariants(
     state: GameState, *, workload: str, frame: int,
 ) -> None:

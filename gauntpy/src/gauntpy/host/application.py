@@ -65,6 +65,7 @@ _TEMPORARY_POWERS = {
 }
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _positive_level(value: str) -> int:
     level = int(value)
     if level < 1:
@@ -72,6 +73,7 @@ def _positive_level(value: str) -> int:
     return level
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _maze_number(value: str) -> int:
     maze_number = int(value)
     if not 0 <= maze_number <= MAX_MAZE_NUM:
@@ -81,6 +83,7 @@ def _maze_number(value: str) -> int:
     return maze_number
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _positive_scale(value: str) -> int:
     scale = int(value)
     if scale < 1:
@@ -88,6 +91,7 @@ def _positive_scale(value: str) -> int:
     return scale
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _inventory_count(value: str) -> int:
     count = int(value)
     if not 0 <= count <= 255:
@@ -95,6 +99,7 @@ def _inventory_count(value: str) -> int:
     return count
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _positive_frame_count(value: str) -> int:
     count = int(value)
     if count < 1:
@@ -102,6 +107,7 @@ def _positive_frame_count(value: str) -> int:
     return count
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _positive_seconds(value: str) -> float:
     seconds = float(value)
     if seconds <= 0:
@@ -109,6 +115,7 @@ def _positive_seconds(value: str) -> float:
     return seconds
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _ensure_rom_dir() -> None:
     """Point gex at the repo's ROMs/ directory unless the user set GEX_ROM_DIR."""
     if os.environ.get("GEX_ROM_DIR"):
@@ -118,6 +125,7 @@ def _ensure_rom_dir() -> None:
         os.environ["GEX_ROM_DIR"] = str(repo_roms)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _sound_dir() -> Path:
     configured = os.environ.get("GAUNTPY_SOUND_DIR")
     if configured:
@@ -125,6 +133,7 @@ def _sound_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "sounds"
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _enabled_sound_dir(enabled: bool) -> Path | None:
     """Resolve the local recording library only when playback was requested."""
     if not enabled:
@@ -140,6 +149,7 @@ def _enabled_sound_dir(enabled: bool) -> Path | None:
     return None
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _apply_operator_overrides(state: GameState, *, reduce_text: bool) -> None:
     if reduce_text:
         from ..game.subsystems.score import GAME_SETTINGS_REDUCE_TEXT
@@ -147,6 +157,7 @@ def _apply_operator_overrides(state: GameState, *, reduce_text: bool) -> None:
         state.game_settings |= GAME_SETTINGS_REDUCE_TEXT
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _seed_value(value: str) -> int | str:
     """Parse an explicit 16-bit seed or the host-random sentinel."""
     if value.lower() == "random":
@@ -167,6 +178,7 @@ def _seed_value(value: str) -> int | str:
 _STRESS_PHASES = WORKLOADS
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _build_stress_state(phase_index: int, rng_seed: int) -> GameState:
     """Construct one named workload through its ordinary setup routine."""
     workload = _STRESS_PHASES[phase_index]
@@ -176,6 +188,7 @@ def _build_stress_state(phase_index: int, rng_seed: int) -> GameState:
     return state
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
         from_attract: bool = False,
         reduce_text: bool = False,
@@ -317,6 +330,7 @@ def run(level: int = 1, character: int = Character.ELF, scale: int = 4,
     )
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _restore_requested_level(host: HostShell, session: HostSession) -> bool:
     """Consume F11 before a tick; presentation remains the loop's responsibility."""
     if not getattr(host, "restart_level_requested", False):
@@ -335,6 +349,7 @@ def _restore_requested_level(host: HostShell, session: HostSession) -> bool:
     return True
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _run_loop(
     host: HostShell,
     session: HostSession,
@@ -426,6 +441,7 @@ def _run_loop(
         host.close()
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="gauntpy-play", description="Walk a hero around a Gauntlet II maze."
@@ -601,6 +617,7 @@ def _main(argv: list[str] | None = None) -> None:
         workload_name=args.workload)
 
 
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def main(argv: list[str] | None = None) -> None:
     """Run the graphical CLI, translating Ctrl-C into a quiet shell exit."""
     try:

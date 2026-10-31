@@ -81,6 +81,7 @@ class MobTable:
         "depth_list_head", "slip_heads", "depth_key",
     )
 
+    # ROM: helper | Allocates Python parallel-array/list state and a head cache; the ROM's similarly named global cache is a tail, not this constructor.
     def __init__(self) -> None:
         n = NUM_MOB_SLOTS
         self.picture = [0] * n
@@ -99,38 +100,48 @@ class MobTable:
 
     # --- packed field accessors -------------------------------------------------
 
+    # ROM: helper | Packed upper-link object-type accessor; no separately identified ROM callable.
     def obj_type(self, slot: int) -> int:
         return (self.link[slot] >> UPPER_SHIFT) & UPPER_MASK
 
+    # ROM: helper | Packed object-type setter preserving the next-slot bits.
     def set_obj_type(self, slot: int, obj_type: int) -> None:
         self.link[slot] = (self.link[slot] & LINK_MASK) | ((obj_type & UPPER_MASK) << UPPER_SHIFT)
 
+    # ROM: helper | Python accessor for the packed next-slot field.
     def next_slot(self, slot: int) -> int:
         return self.link[slot] & LINK_MASK
 
+    # ROM: helper | Python next-slot setter preserving upper type bits.
     def set_next(self, slot: int, nxt: int) -> None:
         self.link[slot] = (self.link[slot] & ~LINK_MASK) | (nxt & LINK_MASK)
 
+    # ROM: helper | Python accessor for the packed object-state field.
     def state(self, slot: int) -> int:
         return (self.state_link[slot] >> UPPER_SHIFT) & UPPER_MASK
 
+    # ROM: helper | Python object-state setter preserving previous-slot bits.
     def set_state(self, slot: int, value: int) -> None:
         self.state_link[slot] = (
             (self.state_link[slot] & LINK_MASK) | ((value & UPPER_MASK) << UPPER_SHIFT)
         )
 
+    # ROM: helper | Python accessor for the packed previous-slot field.
     def prev_slot(self, slot: int) -> int:
         return self.state_link[slot] & LINK_MASK
 
+    # ROM: helper | Python previous-slot setter preserving upper state bits.
     def set_prev(self, slot: int, prev: int) -> None:
         self.state_link[slot] = (self.state_link[slot] & ~LINK_MASK) | (prev & LINK_MASK)
 
     # --- geometry ----------------------------------------------------------------
 
+    # ROM: helper | Convenience conversion of native MOB words to downward-screen pixel coordinates.
     def position(self, slot: int) -> tuple[int, int]:
         """World pixel (x, y) of a slot, converted to downward screen Y."""
         return coords.hpos_x(self.hpos[slot]), coords.vpos_y(self.vpos[slot])
 
+    # ROM: part game:0x5DCBC,game:0x5DFA6 | Extracted dynamic-slot versus managed-depth-key rule; 0x5DCFE and 0x5DFE6 in the docstring are interior sites, not entries.
     def sort_key(self, slot: int) -> int:
         """The chain's ordering key for ``slot`` (0x5DCFE / 0x5DFE6).
 
@@ -144,6 +155,7 @@ class MobTable:
             return self.depth_key[slot]
         return slot
 
+    # ROM: part game:0x5DCBC,game:0x5DFA6 | Extracted SLIP-band derivation from depth-key row; Python uses its documented shifted band convention rather than claiming identical hardware indices.
     def band_of(self, slot: int) -> int:
         """SLIP band index for a slot.
 
@@ -155,6 +167,7 @@ class MobTable:
         band = (self.sort_key(slot) >> 5) * BANDS_PER_ROW
         return min(band, NUM_SLIP_BANDS - 1)
 
+    # ROM: helper | Python slot-occupancy predicate over the parallel arrays.
     def is_occupied(self, slot: int) -> bool:
         """Whether a slot currently holds an object.
 
@@ -163,6 +176,7 @@ class MobTable:
         """
         return self.link[slot] != 0 or self.picture[slot] != 0
 
+    # ROM: helper | Python head/next/previous membership test used for synthetic-marker safety; not a ROM entry.
     def is_linked(self, slot: int) -> bool:
         """Whether ``slot`` is currently a member of the depth chain.
 
@@ -178,6 +192,7 @@ class MobTable:
 
     # --- chain traversal ----------------------------------------------------------
 
+    # ROM: helper | Python forward iterator with cycle detection, starting at the port's head cache rather than a ROM tail cache.
     def iter_chain(self, start: int | None = None) -> Iterator[int]:
         """Walk the depth chain from ``start`` (default: the global head).
 
@@ -193,12 +208,14 @@ class MobTable:
             if seen > NUM_MOB_SLOTS:
                 raise RuntimeError("cycle detected in MOB depth chain")
 
+    # ROM: helper | Python iterator convenience entering through a cumulative SLIP bookmark.
     def iter_from_band(self, band: int) -> Iterator[int]:
         """Enter the chain at a SLIP band -- the hardware's traversal."""
         return self.iter_chain(self.slip_heads[band])
 
     # --- chain mutation -----------------------------------------------------------
 
+    # ROM: merged game:0x5DCBC,game:0x5DFA6 | Unifies dynamic and managed-slot ordering bodies; stores a head instead of ROM tail and rebuilds SLIPs wholesale. It accepts resolved physical slots, so slot-bias wrappers are not all direct mappings here.
     def insert(self, slot: int, depth_key: int | None = None) -> None:
         """Insert ``slot`` into the depth chain -- ``moblist_insert`` (0x5DCBC).
 
@@ -243,6 +260,7 @@ class MobTable:
 
         self.rebuild_slips()
 
+    # ROM: adapter game:0x5DCBC | Preserves the existing-picture guard then delegates to merged insert; adds a boolean result and uses the port's head/SLIP representation.
     def moblist_insert(self, slot: int) -> bool:
         """``moblist_insert`` (0x5DCBC) proper: insert unless the slot is live.
 
@@ -263,6 +281,7 @@ class MobTable:
         self.insert(slot)
         return True
 
+    # ROM: adapter game:0x5DDA8,game:0x5DED4 | Unifies unlink wrapper/register operation; adds an unlinked-slot guard, maintains Python head rather than ROM tail and rebuilds all SLIPs.
     def unlink(self, slot: int) -> None:
         """``moblist_remove`` (0x5DDA8): repair links and heads, preserve the record.
 
@@ -293,6 +312,7 @@ class MobTable:
         self.set_prev(slot, NULL_SLOT)
         self.rebuild_slips()
 
+    # ROM: adapter game:0x5DDDA,game:0x5DE44 | Shared wrapper/register unlink-and-zero operation through Python unlink; inherits synthetic-slot safety and head/SLIP differences.
     def unlink_and_clear(self, slot: int) -> None:
         """``moblist_remove_and_clear``: unlink, then zero all five words."""
         self.unlink(slot)
@@ -302,6 +322,7 @@ class MobTable:
         self.link[slot] = 0
         self.state_link[slot] = 0
 
+    # ROM: adapter game:0x5E064 | Preserves physical-slot-minus-one convention and retained picture/H/V fields, but delegates unlinking to the guarded head-based Python representation.
     def depth_remove(self, physical_slot_minus_one: int) -> None:
         """``mob_depth_remove`` (0x5E064) for temporary depth-placed MOBs.
 
@@ -316,6 +337,7 @@ class MobTable:
         self.link[slot] = 0
         self.state_link[slot] = 0
 
+    # ROM: adapter game:0x5DE0A,game:0x5DD72 | Relocation body and its normal-stack wrapper share this source/destination API; preserves destination-first linking while using the merged Python chain implementation.
     def move_slot(self, src: int, dst: int) -> None:
         """``move_mob_slot`` (0x5DE0A): relocate a record to a new cell.
 
@@ -340,6 +362,7 @@ class MobTable:
 
     # --- SLIP maintenance ----------------------------------------------------------
 
+    # ROM: adapter game:0x5DCBC,game:0x5DFA6,game:0x5DED4,game:0x5E064 | Wholesale cumulative-SLIP recomputation replaces incremental insertion/removal loops, including the documented raw-slot removal-band quirk; not an exact ROM routine.
     def rebuild_slips(self) -> None:
         """Recompute the 64 cumulative band entry points from the chain.
 
@@ -368,6 +391,7 @@ class MobTable:
 
     # --- construction ---------------------------------------------------------------
 
+    # ROM: adapter game:0x5DC58 | Record-construction boundary with precomputed old-picture guard, optional unlinked marker path and Python slot return; actual insertion follows writes and uses head-based lists, so not instruction-order equivalence.
     def create(
         self,
         slot: int,
@@ -407,5 +431,6 @@ class MobTable:
 
     # --- internals -------------------------------------------------------------------
 
+    # ROM: helper | Python collection length computed through the guarded iterator.
     def __len__(self) -> int:
         return sum(1 for _ in self.iter_chain())

@@ -17,6 +17,7 @@ from .player_data import (
 _MAZE_COLS = 32
 
 
+# ROM: helper | Python signed-16-bit distance utility shared by collision readers; no independent ROM callable.
 def _wrapped_position_delta(a: int, b: int) -> int:
     """Absolute signed distance in the one-maze 16-bit position word space."""
     value = (a - b) & 0xFFFF
@@ -25,6 +26,7 @@ def _wrapped_position_delta(a: int, b: int) -> int:
     return abs(value)
 
 
+# ROM: part game:0x407A6,game:0x42648 | Extracts both candidate routines' high-picture-bit H/V rounding arms; the zero-position synthetic-record fallback is Python-only.
 def _probe_candidate_anchor(state: GameState, candidate: int) -> tuple[int, int]:
     """Return tile_lookup_core's live/rounded collision anchor."""
     candidate_h = state.mobs.hpos[candidate]
@@ -41,6 +43,7 @@ def _probe_candidate_anchor(state: GameState, candidate: int) -> tuple[int, int]
     return candidate_h, candidate_v
 
 
+# ROM: merged game:0x407A6,game:0x42648 | Common implementation of public mob_probe_candidate and private tile_lookup_core: optional proposed coordinates replace register inputs; Python self/demo/interaction guards are additional.
 def _probe_candidate_blocks(
     state: GameState,
     mover_slot: int,
@@ -122,6 +125,7 @@ def _probe_candidate_blocks(
 # ahead plus its two flanking neighbours, which covers everything a 24-pixel
 # body can overlap while crossing a 16-pixel cell").
 
+# ROM: direct game:0x406B6 | Public three-candidate upward probe boundary, including its vertical sentinel; distinct from private probe_up.
 def mob_probe_up(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
@@ -156,6 +160,7 @@ def mob_probe_up(
     return -1
 
 
+# ROM: direct game:0x40732 | Public three-candidate downward probe boundary, including its vertical sentinel; distinct from private probe_down.
 def mob_probe_down(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
@@ -187,6 +192,7 @@ def mob_probe_down(
     return -1
 
 
+# ROM: direct game:0x4083A | Public left-and-flanks probe boundary; retains a Python demo-specific upper-flank exception.
 def mob_probe_left(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
@@ -228,6 +234,7 @@ def mob_probe_left(
     return -1
 
 
+# ROM: direct game:0x408A0 | Public right-and-flanks probe boundary; retains a Python demo-specific upper-flank exception.
 def mob_probe_right(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,

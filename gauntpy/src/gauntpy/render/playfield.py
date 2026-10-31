@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def irgb_to_shadow(irgb: int) -> int:
     """Apply ``palette_fade_copy(..., 0x7000)`` to one IRGB word."""
     if irgb >= 0x7000:
@@ -47,6 +48,7 @@ class PlayfieldCache:
     state: object | None = None
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def _vram_palette(state, number: int, *, shadow: bool = False):  # noqa: ANN001
     ram = (
         state.playfield_shadow_color_ram
@@ -56,6 +58,7 @@ def _vram_palette(state, number: int, *, shadow: bool = False):  # noqa: ANN001
     return [_irgb_rgba(word) for word in ram[base:base + 16]]
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def _build_vram_indices(
     state, decoded_tiles: dict[int, object] | None = None,  # noqa: ANN001
 ):
@@ -91,6 +94,7 @@ def _build_vram_indices(
     return indexed, decoded_tiles
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def _update_vram_indices(
     state, indexed, decoded_tiles: dict[int, object],  # noqa: ANN001
     previous: tuple[int, ...], current: tuple[int, ...],
@@ -126,6 +130,7 @@ def _update_vram_indices(
     return updated
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def _colorize_indexed(indexed, state, *, shadow: bool = False):  # noqa: ANN001
     """Resolve one indexed world through live color RAM without tile decoding."""
     palette = []
@@ -138,6 +143,7 @@ def _colorize_indexed(indexed, state, *, shadow: bool = False):  # noqa: ANN001
     return colored.convert("RGBA")
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def playfield_cache_for_state(
     state, cache: PlayfieldCache | None,  # noqa: ANN001
 ) -> PlayfieldCache:
@@ -197,6 +203,7 @@ class ShadowSource:
 
     __slots__ = ("image", "_px", "_w", "_h", "_ox", "_oy")
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def __init__(
         self, shadow_image, scroll_x: int, scroll_y: int,
         dest_x: int, dest_y: int,
@@ -207,14 +214,17 @@ class ShadowSource:
         self._ox = scroll_x - dest_x
         self._oy = scroll_y - dest_y
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def at(self, fx: int, fy: int):
         wx, wy = self.source_xy(fx, fy)
         return self._px[wx, wy]
 
+    # ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
     def source_xy(self, fx: int, fy: int) -> tuple[int, int]:
         return (fx + self._ox) % self._w, (fy + self._oy) % self._h
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def shadow_source_for(
     cache: PlayfieldCache,
     scroll_x: int,
@@ -227,6 +237,7 @@ def shadow_source_for(
     )
 
 
+# ROM: infrastructure | Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 def draw_playfield(
     fb,
     cache: PlayfieldCache,

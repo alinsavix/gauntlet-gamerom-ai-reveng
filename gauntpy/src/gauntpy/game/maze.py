@@ -98,6 +98,7 @@ _ATTRACT_RUN_CONTROL_SIZE = 125
 _ATTRACT_FIXED_PALETTE_ADDR = 0x5AC5E
 
 
+# ROM: direct game:0x4438E | Attract tile stream and palette-run loader; missing-ROM escape and cache generation are Python additions. Not the full game_playfield_init at 0x44A82.
 def load_attract_display_tilemap(state: GameState) -> None:
     """Port ``load_attract_display_tilemap`` 0x4438E into playfield VRAM."""
     count = _ATTRACT_TILE_COLUMNS * _ATTRACT_TILE_ROWS
@@ -130,6 +131,7 @@ def load_attract_display_tilemap(state: GameState) -> None:
     state.playfield_generation += 1
 
 
+# ROM: infrastructure | Acquires and unpacks the fixed TITLE palette asset; 0x5AC5E is data, not a callable, and this does not implement init_display.
 def load_attract_fixed_palette() -> tuple[int, ...] | None:
     """Read init_display's fixed 128-word TITLE palette at ROM 0x5AC5E."""
     try:
@@ -140,6 +142,8 @@ def load_attract_fixed_palette() -> tuple[int, ...] | None:
 
 
 
+# ROM: direct game:0x5F5A0 | Refresh dispatcher with extracted descriptor selection and shared neighbor-redraw epilogue; also synchronizes Python logical cells. Not a separate implementation of the unreferenced legacy entry.
+# ROM: adapter game:0x5F598 | The normal-stack refresh veneer reaches the same dispatcher; Python has no separate stack/register entry.
 def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
     """Update a logical cell and perform the ROM-equivalent local restamps."""
     slot &= 0x3FF
@@ -198,11 +202,14 @@ def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
     )
 
 
+# ROM: adapter game:0x5F5A0 | Fixed-floor specialization delegating to set_cell_descriptor; not a new ROM callable or the complete MOB replacement operation.
 def clear_cell_descriptor(state: GameState, slot: int) -> None:
     """Replace one living-maze descriptor with floor."""
     set_cell_descriptor(state, slot, int(MazeObjIds.TILE_FLOOR))
 
 
+# ROM: part game:0x5E892 | Only the ordinary center-floor branch and stamp, with descriptor selection extracted; the full floor renderer also handles exits, transporters and hubs.
+# ROM: adapter game:0x5E888 | Used for ordinary-floor calls through the alternate register wrapper; this does not supply its other type-dispatch branches.
 def write_floor_descriptor(state: GameState, slot: int) -> None:
     """Run one centre-only ``pf_floor_update`` ordinary-floor write."""
     write_tile_descriptor(state, slot, _fresh_floor_descriptor(state, slot))
@@ -237,6 +244,7 @@ _WALL_ADJ8 = (
 _FLOOR_ADJ3 = ((-1, 0, 4), (0, 1, 16), (-1, 1, 8))
 
 
+# ROM: helper | Python logical-maze dictionary lookup with wrapping and missing-maze default; no independently identified ROM callable.
 def _logical_cell_type(state: GameState, col: int, row: int) -> int:
     data = getattr(state.maze, "data", None)
     if data is None:
@@ -244,6 +252,7 @@ def _logical_cell_type(state: GameState, col: int, row: int) -> int:
     return int(data.get((col & 0x1F, row & 0x1F), MazeObjIds.TILE_FLOOR))
 
 
+# ROM: part game:0x5F5A0 | Extracted neighbor-wall refresh decision, expressed using logical types and Python destructible-stage state rather than a standalone ROM predicate.
 def _wall_needs_refresh(
     state: GameState, slot: int, object_type: int,
 ) -> bool:
@@ -263,6 +272,7 @@ def _wall_needs_refresh(
     return True
 
 
+# ROM: part game:0x5F2C0,game:0x5EAB8 | Shared extracted wall visibility gates, including the level sentinel; not the whole initialization pass or wall renderer.
 def _wall_is_visible(state: GameState, object_type: int) -> bool:
     """Apply maze_init_walls/pf_wall_draw's two invisibility gates."""
     if state.levelnum_current == LEVEL_SENTINEL:
@@ -274,6 +284,7 @@ def _wall_is_visible(state: GameState, object_type: int) -> bool:
     )
 
 
+# ROM: part game:0x5EAB8 | Eight-neighbor connectivity-mask portion of the wall renderer; consumes the Python logical/live-MOB views.
 def _wall_adjacency(state: GameState, slot: int) -> int:
     row, col = coords.unpack_slot(slot)
     return sum(
@@ -290,6 +301,7 @@ def _wall_adjacency(state: GameState, slot: int) -> int:
     )
 
 
+# ROM: part game:0x5E892,game:0x5EA66 | Floor-neighbor accumulation with an inlined connectability predicate; not a complete pf_floor_update or an exact standalone pf_is_connectable_floor_xy boundary.
 def _floor_adjacency(state: GameState, slot: int) -> int:
     if state.playfield_wallpattern >= 11:
         return 0
@@ -315,6 +327,7 @@ def _floor_adjacency(state: GameState, slot: int) -> int:
     )
 
 
+# ROM: direct game:0x5F024 | Center-only cyclic-wall connectivity, descriptor selection and stamp; uses gex descriptors and a logical shadow, with missing-data exits.
 def write_cyclic_wall_descriptor(
     state: GameState, slot: int, object_type: int,
 ) -> None:
@@ -348,6 +361,7 @@ def write_cyclic_wall_descriptor(
     write_tile_descriptor(state, slot, _descriptor_words(stamp, 7))
 
 
+# ROM: adapter game:0x53398,game:0x5E892 | Reconstructs hub graphic connectivity from Python segment records instead of the mob_state_link graphic state produced by setup and consumed by floor rendering.
 def _forcefield_adjacency(state: GameState, slot: int) -> int:
     result = 0
     for segment in state.forcefield_segment_table:
@@ -367,6 +381,7 @@ def _forcefield_adjacency(state: GameState, slot: int) -> int:
     return result
 
 
+# ROM: merged game:0x5E892,game:0x5EAB8 | Combines floor special-type dispatch and wall descriptor selection; returns cached/provider descriptors instead of implementing either complete VRAM-writing boundary.
 def _descriptor_for_cell(
     state: GameState, slot: int, object_type: int,
 ) -> tuple[int, int, int, int]:
@@ -440,6 +455,7 @@ def _descriptor_for_cell(
     return _fresh_floor_descriptor(state, slot)
 
 
+# ROM: part game:0x5E892 | Per-cell fixed/special/ordinary-floor dispatch. Despite its docstring shorthand, these decisions belong to the floor renderer, not the 0x5EA00 iteration-only wrapper.
 def _initial_floor_descriptor(
     state: GameState, slot: int, object_type: int,
 ) -> tuple[int, int, int, int]:
@@ -463,6 +479,7 @@ def _initial_floor_descriptor(
     return _fresh_floor_descriptor(state, slot)
 
 
+# ROM: helper | Reconciles live MOB types with decoded Python terrain and consumed cyclic markers for initialization.
 def _initial_object_type(
     state: GameState, maze: Maze, slot: int, col: int, row: int,
 ) -> int:
@@ -478,13 +495,16 @@ def _initial_object_type(
 class _StateRandom:
     """gex stamp-provider adapter over the game's single live RNG stream."""
 
+    # ROM: helper | Stores the state binding for the gex random-provider protocol.
     def __init__(self, state: GameState) -> None:
         self.state = state
 
+    # ROM: adapter game:0x5FC4E | gex intn protocol delegation to the shared game RNG, not another RNG body.
     def intn(self, bound: int) -> int:
         return self.state.getrandom(bound)
 
 
+# ROM: part game:0x5E892 | Extracted ordinary-floor random variant, adjacency and palette decision; adds Python descriptor caches and leaves stamping to the caller.
 def _fresh_floor_descriptor(
     state: GameState, slot: int, *, palette: int | None = None,
 ) -> tuple[int, int, int, int]:
@@ -517,6 +537,7 @@ def _fresh_floor_descriptor(
     return descriptor
 
 
+# ROM: helper | Converts a provider stamp object to four numeric descriptor words with a palette field.
 def _descriptor_words(stamp, palette: int) -> tuple[int, int, int, int]:  # noqa: ANN001
     return tuple(
         (int(word) & 0x0FFF) | ((palette & 7) << 12)
@@ -524,10 +545,12 @@ def _descriptor_words(stamp, palette: int) -> tuple[int, int, int, int]:  # noqa
     )
 
 
+# ROM: helper | Converts provider color objects to 16-bit palette words.
 def _palette_words(palette) -> list[int]:  # noqa: ANN001
     return [int(color.irgb) & 0xFFFF for color in palette]
 
 
+# ROM: part game:0x43486 | Decoded-maze palette selection and shrub substitutions for the init_display palette path; the live color writer is delegated and the full display initializer is elsewhere.
 def initialize_maze_color_ram(
     state: GameState, maze: Maze, *, floorcolor: int | None = None,
 ) -> None:
@@ -557,6 +580,7 @@ def initialize_maze_color_ram(
     )
 
 
+# ROM: merged game:0x5EA00,game:0x5F2C0 | Contains the separate full floor and wall initialization sweeps, plus Python catalog/cache construction; ordinary called palette/render helpers are not additional merged entries.
 def initialize_playfield_ram(state: GameState, maze: Maze) -> None:
     """Commit one level's randomly selected 64x64 descriptor table.
 
@@ -643,6 +667,7 @@ def initialize_playfield_ram(state: GameState, maze: Maze) -> None:
 # Level -> maze selection -- the opening act only (see "Scope note" above)
 # ---------------------------------------------------------------------------
 
+# ROM: helper | Python query exposing only the fixed opening-level rule; returns None beyond level five and is not find_maze or the cabinet rotation routine.
 def maze_for_level(level_number: int) -> int | None:
     """The one *fixed* level -> maze rule: levels 1-5 always play mazes 0-4,
     in that order (doc/06 section 3.1; ``book/09_mazes_and_slapstic.md``).
@@ -684,6 +709,7 @@ MIRROR_V_FLAG = 1 << 27   # LFLAG1 bit 3
 LEVEL_SENTINEL = 9999
 
 
+# ROM: helper | Reassembles four Python state bytes into the ROM-shaped flags longword; 0x90491C is RAM, not an entry.
 def level_flags_long(state: GameState) -> int:
     """The four level-flags bytes as the one longword at 0x90491C."""
     return _join_flags(
@@ -691,6 +717,7 @@ def level_flags_long(state: GameState) -> int:
     )
 
 
+# ROM: part game:0x45E40 | Extracted placement mirror block at 0x45F3E-0x45FD0, including wrap and sentinel gates; those interior addresses are not callable entries.
 def mirror_slot(state: GameState, slot: int) -> int:
     """Apply the level's mirror flags to a packed slot (ROM 0x45F3E-0x45FD0).
 
@@ -720,6 +747,7 @@ def mirror_slot(state: GameState, slot: int) -> int:
     return slot
 
 
+# ROM: part game:0x45E40 | Placement mirroring and dragon-anchor correction extracted from the object-placement body.
 def _placement_slot(state: GameState, slot: int, object_type: int) -> int:
     """Mirror one placement and correct a dragon's 2x2 anchor."""
     slot = mirror_slot(state, slot)
@@ -733,6 +761,7 @@ def _placement_slot(state: GameState, slot: int, object_type: int) -> int:
     return slot
 
 
+# ROM: adapter game:0x4631C | Mirrored Python terrain view substitutes for mirrored decode-time tile writes; does not implement maze_tile_write_at's upward span walk or complete marker/MOB behavior.
 def mirror_maze(state: GameState, maze: Maze) -> Maze:
     """A copy of ``maze`` with ``data`` moved through ``mirror_slot``.
 
@@ -836,6 +865,7 @@ _TRAP_TYPE_COUNT = 3
 _ADAPTIVE_FOOD_PICTURE = 0x277B
 
 
+# ROM: part game:0x45E40 | Extracted early-level dragon suppression gate at 0x45E6A-0x45E8A.
 def _dragon_suppressed(state: GameState, object_type: int) -> bool:
     """Dragons never spawn from maze data before level 12 of a normal game.
 
@@ -852,6 +882,7 @@ def _dragon_suppressed(state: GameState, object_type: int) -> bool:
     )
 
 
+# ROM: direct game:0x45E40 | Consecutive-placement boundary and unmirrored cursor return; mirror, marker, geometry and generic-construction bodies are split into helpers.
 def maze_place_object(state: GameState, start_slot: int, object_type: int, count: int) -> int:
     """``maze_place_object`` (0x45E40): create ``count`` MOBs of
     ``object_type`` at consecutive slots starting at ``start_slot``,
@@ -883,6 +914,7 @@ def maze_place_object(state: GameState, start_slot: int, object_type: int, count
     return start_slot + count
 
 
+# ROM: part game:0x45E40 | Single-cell marker-versus-sprite dispatcher after mirroring; reused by replacement callers, not a separate mob_place_tile implementation.
 def _place_one(state: GameState, slot: int, object_type: int) -> None:
     """Write one object at an already-mirrored slot."""
     if object_type in _SOLID_WALL_MARKERS:
@@ -893,6 +925,7 @@ def _place_one(state: GameState, slot: int, object_type: int) -> None:
         _create_generic(state, slot, object_type)
 
 
+# ROM: direct game:0x42E9A | Random starting cell, deterministic empty-cell walk and pickup creation, including the hidden-potion picture draw.
 def maze_randomplace(state: GameState, object_type: int) -> int:
     """0x42E9A -- place one pickup in the ROM's deterministic empty-cell walk."""
     object_type = int(object_type)
@@ -907,6 +940,7 @@ def maze_randomplace(state: GameState, object_type: int) -> int:
     return slot
 
 
+# ROM: part game:0x43F68 | Deferred thief/mugger loot arm at 0x44166-0x441A6; returned slot list is a Python diagnostic addition.
 def place_deferred_thief_pickups(state: GameState) -> list[int]:
     """0x44166-0x441A6 -- restore loot carried off on the previous level."""
     placed: list[int] = []
@@ -923,6 +957,7 @@ def place_deferred_thief_pickups(state: GameState) -> list[int]:
     return placed
 
 
+# ROM: part game:0x43D8C | Positive-count food-removal mode only, retaining the monotonic selection cursor; the exit and player-start modes have different Python owners.
 def _remove_random_food(state: GameState, count: int) -> list[int]:
     """maze_scan_objects(count), 0x43D8C -- remove up to count food MOBs."""
     removed: list[int] = []
@@ -952,6 +987,7 @@ def _remove_random_food(state: GameState, count: int) -> list[int]:
     return removed
 
 
+# ROM: direct game:0x43F68 | Random pickup orchestration, difficulty and spawn-bonus adjustments; deferred loot is an extracted arm and the returned list/setup latch are Python additions.
 def maze_addrandompickups(
     state: GameState, enable_random_pickups: bool,
 ) -> list[int]:
@@ -1042,6 +1078,7 @@ def maze_addrandompickups(
     return placed
 
 
+# ROM: part game:0x45E40 | Marker-array writes from 0x46012-0x46100, with shared Python unlink safety for replacement callers; not mob_create.
 def _write_marker(state: GameState, slot: int, object_type: int, picture: int) -> None:
     """Stamp a marker straight into the five arrays (ROM 0x46012-0x460B4).
 
@@ -1061,6 +1098,7 @@ def _write_marker(state: GameState, slot: int, object_type: int, picture: int) -
     mobs.set_state(slot, 0)
 
 
+# ROM: part game:0x45E40 | Object picture selection, including the invulnerable-food draw at 0x46150; table addresses are data and missing-ROM fallback is Python policy.
 def placement_picture(state: GameState, object_type: int) -> int:
     """The ``mob_picture`` a decoded object of ``object_type`` is created with.
 
@@ -1086,11 +1124,13 @@ def placement_picture(state: GameState, object_type: int) -> int:
     return 0 if pic == PICTURE_MARKER else pic
 
 
+# ROM: helper | Thin accessor for literal object-picture table data without placement RNG; no separately identified ROM routine.
 def placement_base_picture(object_type: int) -> int:
     """The literal mazeobj_base_picture_tbl entry, without placement RNG."""
     return base_picture(object_type)
 
 
+# ROM: part game:0x45E40 | Native H/V construction and per-type corrections from 0x4617C-0x461CC; returns Python words rather than writing a complete object.
 def placement_geometry(object_type: int, slot: int) -> tuple[int, int]:
     """``(hpos, vpos)`` words for a decoded object -- ROM 0x4617C-0x461CC.
 
@@ -1134,6 +1174,7 @@ def placement_geometry(object_type: int, slot: int) -> tuple[int, int]:
     return hpos, coords.encode_vpos_at_y(y, width, height)
 
 
+# ROM: merged game:0x45E40,game:0x462AE | Generic placement arm plus inlined dragon-footprint reservation writes; mob_create and dragon_setup_segments remain ordinary callees, not this function's entries.
 def _create_generic(state: GameState, slot: int, object_type: int) -> None:
     """``mob_create`` one decoded object: picture, geometry, type (ROM 0x46260).
 
@@ -1190,6 +1231,7 @@ def _create_generic(state: GameState, slot: int, object_type: int) -> None:
         dragon_setup_segments(state, slot)
 
 
+# ROM: part game:0x438AE | Secret-maze actor replacement and generated-exit arm at 0x43C20-0x43D10.
 def _prepare_secret_challenge(state: GameState) -> None:
     """0x43C20-0x43D10 -- replace secret-maze actors and create its exits."""
     if state.mazenum_current < _SECRET_MAZE_FIRST:
@@ -1227,6 +1269,7 @@ def _prepare_secret_challenge(state: GameState) -> None:
         set_cell_descriptor(state, slot, replacement)
 
 
+# ROM: part game:0x438AE | Trap-identity rotation block at 0x439B0-0x43A8E, with Python logical-maze synchronization.
 def _randomize_trap_types(state: GameState) -> None:
     """0x439B0-0x43A8E -- rotate type-10/11/12 trap identities together."""
     if not state.level_flags_4 & _LFLAG4_TRAPS_RANDOM:
@@ -1246,6 +1289,7 @@ def _randomize_trap_types(state: GameState) -> None:
             data[(col, row)] = randomized
 
 
+# ROM: part game:0x438AE | Authored-food selection and adaptive-food conversion at 0x43AF0-0x43B5A.
 def _mark_adaptive_food(state: GameState) -> None:
     """0x43AF0-0x43B5A -- choose one authored food for adaptive healing."""
     if state.mazenum_current >= _SECRET_MAZE_FIRST or state.levelnum_current <= 6:
@@ -1269,6 +1313,7 @@ def _mark_adaptive_food(state: GameState) -> None:
         data[(col, row)] = int(MazeObjIds.FOOD_DESTRUCTABLE)
 
 
+# ROM: direct game:0x5E7A6 | Trap-trigger and matching wall-family removal with TrapsLocal visibility gate; Python bool corresponds to the wall-family result.
 def maze_place_object_types(state: GameState, trap_type: int) -> bool:
     """0x5E7A6 -- replace one trap trigger and its matching wall group."""
     wall_type = trap_type - 3
@@ -1288,6 +1333,7 @@ def maze_place_object_types(state: GameState, trap_type: int) -> bool:
     return removed_wall
 
 
+# ROM: part game:0x438AE | Flag-selected one/two trap-wall-group deletion block at 0x43BA0-0x43C1A; called replacement routines are not merged bodies.
 def _remove_deletable_trap_walls(state: GameState) -> None:
     """0x43BA0-0x43C1A -- remove one or two randomly selected trap-wall groups."""
     if state.level_flags_3 & _LFLAG3_WALLS_DELETABLE1:
@@ -1302,6 +1348,7 @@ def _remove_deletable_trap_walls(state: GameState) -> None:
         )
 
 
+# ROM: part game:0x438AE | Orchestrates extracted trap, random-wall and adaptive-food setup; only the shared post-playfield portion of maze_new_level_setup.
 def postdecode_level_setup(state: GameState) -> None:
     """Apply the shared post-playfield portion of maze_new_level_setup."""
     _randomize_trap_types(state)
@@ -1311,6 +1358,7 @@ def postdecode_level_setup(state: GameState) -> None:
     _mark_adaptive_food(state)
 
 
+# ROM: adapter game:0x4C1BC | Replays an already-decoded Python cell dictionary in slot order and excludes row zero; it is the decoder-to-placement bridge, not the ROM compressed-token decoder.
 def place_decoded_objects(state: GameState, maze: Maze) -> None:
     """Populate ``MobTable`` from gex's decoded ``Maze.data``: slot number
     is the packed cell address, so placement is arithmetic, not a search
@@ -1345,6 +1393,7 @@ def place_decoded_objects(state: GameState, maze: Maze) -> None:
         maze_place_object(state, slot, object_type, 1)
 
 
+# ROM: part game:0x43D8C | Scan mode -1 only: choose a player start and process losing starts; not the full multi-mode scanner.
 def select_player_start_slot(state: GameState) -> None:
     """Port maze_scan_objects(-1): select a start and process every loser."""
     starts = [
@@ -1371,6 +1420,7 @@ def select_player_start_slot(state: GameState) -> None:
 # maze_load_pickup_config (0x436FE) -- level flags load & randomization
 # ---------------------------------------------------------------------------
 
+# ROM: helper | Python flags-word to four-byte representation conversion.
 def _split_flags(longword: int) -> tuple[int, int, int, int]:
     """32-bit level-flags longword -> its 4 big-endian bytes (LFLAG1..4)."""
     longword &= 0xFFFFFFFF
@@ -1382,6 +1432,7 @@ def _split_flags(longword: int) -> tuple[int, int, int, int]:
     )
 
 
+# ROM: helper | Python four-byte to flags-word representation conversion.
 def _join_flags(b1: int, b2: int, b3: int, b4: int) -> int:
     """Inverse of ``_split_flags``."""
     return ((b1 & 0xFF) << 24) | ((b2 & 0xFF) << 16) | ((b3 & 0xFF) << 8) | (b4 & 0xFF)
@@ -1393,6 +1444,7 @@ def _join_flags(b1: int, b2: int, b3: int, b4: int) -> int:
 _RANDOM_MAZE_FLAGS_COUNT = 13
 
 
+# ROM: direct game:0x436CC | Selects one of thirteen flag words and applies the TrapsLocal override; 0x57012 is its data table, not its entry.
 def get_random_maze_flags(state: GameState) -> int:
     """``get_random_maze_flags`` (0x436CC): selects a random entry from the
     13-entry ROM table at 0x57012 via ``getrandom(13)``. If LFLAG4 bit 2
@@ -1410,6 +1462,7 @@ def get_random_maze_flags(state: GameState) -> int:
     return result
 
 
+# ROM: direct game:0x436FE | Header flag load and documented ordinary/treasure randomization tiers, using a decoded header instead of a ROM pointer; structural correspondence only.
 def maze_load_pickup_config(state: GameState, maze: Maze) -> None:
     """``maze_load_pickup_config`` (0x436FE): assemble the maze header's
     four level-flags bytes into the level-flags longword, then randomize
@@ -1490,6 +1543,7 @@ def maze_load_pickup_config(state: GameState, maze: Maze) -> None:
 # load_level -- the public entry point
 # ---------------------------------------------------------------------------
 
+# ROM: helper | Python explicit-maze override and fixed-opening-level selection for loading APIs.
 def _level_maze_number(
     state: GameState, level_number: int, maze_number: int | None,
 ) -> int:
@@ -1499,6 +1553,7 @@ def _level_maze_number(
     return state.mazenum_current if opening_maze is None else opening_maze
 
 
+# ROM: adapter game:0x438AE,game:0x44AC2 | Acquisition-first Python entry delegating setup to _setup_decoded_level; consolidates original call phases and is not itself either complete ROM body.
 def load_level(state: GameState, level_number: int, maze_number: int | None = None) -> None:
     """Load and set up the maze for ``level_number`` (PLAN.md sec 6 WP-3).
 
@@ -1529,6 +1584,7 @@ def load_level(state: GameState, level_number: int, maze_number: int | None = No
     _setup_decoded_level(state, level_number, mazenum, decoded)
 
 
+# ROM: merged game:0x438AE,game:0x44AC2 | Combines new-level resets/postprocessing with setupnew placement, row-zero fill and display setup; decoding is delegated, pickup-config scheduling is consolidated, and secret objective/countdown pieces live elsewhere.
 def _setup_decoded_level(
     state: GameState, level_number: int, mazenum: int, maze: Maze,
 ) -> None:
@@ -1582,6 +1638,7 @@ def _setup_decoded_level(
     _remove_deletable_trap_walls(state)                 # 0x43BA0-0x43C1A
     _prepare_secret_challenge(state)
 
+# ROM: adapter game:0x438AE,game:0x44AC2 | Atomic acquisition-before-reset bridge with fresh MobTable and boolean failure result; preserves old Python state on missing ROMs rather than adding a ROM callable.
 def reset_and_load_level(
     state: GameState, level_number: int, maze_number: int | None = None
 ) -> bool:

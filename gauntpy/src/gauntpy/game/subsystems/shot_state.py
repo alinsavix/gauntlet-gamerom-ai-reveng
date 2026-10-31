@@ -89,34 +89,41 @@ _SHOT_TIER_MASK = 0x30
 # Small shared helpers
 # =============================================================================
 
+# ROM: helper | Python unsigned-word arithmetic primitive.
 def _u16(value: int) -> int:
     return value & 0xFFFF
 
 
+# ROM: helper | Python position-word wrap primitive; no independent ROM callable.
 def _maze_position(value: int) -> int:
     """Unsigned position arithmetic: one 512 px maze is exactly one 16-bit word."""
     return value & 0xFFFF
 
 
+# ROM: helper | Python signed-word arithmetic primitive.
 def _s16(value: int) -> int:
     value &= 0xFFFF
     return value - 0x10000 if value >= 0x8000 else value
 
 
+# ROM: helper | Converts the Python shooter/channel ID to its physical projectile MOB slot.
 def _shot_slot(shooter_id: int) -> int:
     """The MOB slot a shooter id owns.  The ROM writes ``shooter + 1``."""
     return shooter_id + 1
 
 
+# ROM: helper | Python accessor for the projectile H-word strength field.
 def _shot_tier(state: GameState, shooter_id: int) -> int:
     """hpos bits 4-5 of the shot MOB: its strength band."""
     return state.mobs.hpos[_shot_slot(shooter_id)] & _SHOT_TIER_MASK
 
 
+# ROM: helper | Python predicate over the projectile strength field.
 def _is_maxtier(state: GameState, shooter_id: int) -> bool:
     return _shot_tier(state, shooter_id) == _SHOT_TIER_MASK
 
 
+# ROM: part game:0x474F6,game:0x490DC | Shared extraction of projectile cell rounding at 0x47A5A-0x47A7C and 0x49280-0x492A2.
 def _cell_of(px: int, py: int) -> int:
     """Packed maze cell of a world pixel position (0x47A5A-0x47A7C).
 
@@ -129,6 +136,7 @@ def _cell_of(px: int, py: int) -> int:
     return (row << 5) | col
 
 
+# ROM: part game:0x474F6,game:0x490DC | Extracts projectile MOB-word to depth-cell conversion through Python coordinate decoding.
 def shot_cell(state: GameState, slot: int) -> int:
     """The maze cell a projectile MOB's pixel position belongs to.
 
@@ -140,10 +148,12 @@ def shot_cell(state: GameState, slot: int) -> int:
     return _cell_of(hpos_x(mobs.hpos[slot]), vpos_y(mobs.vpos[slot]))
 
 
+# ROM: helper | Compatibility forwarding function for shot_cell, with no additional ROM body.
 def _shot_cell(state: GameState, slot: int) -> int:
     return shot_cell(state, slot)
 
 
+# ROM: helper | Recovers a ROM-compass direction from Python compatibility velocity fields.
 def _direction_of(dx: int, dv: int) -> int:
     """Shot direction code from a per-frame pixel delta.
 
@@ -160,6 +170,7 @@ def _direction_of(dx: int, dv: int) -> int:
     return 7 if dv > 0 else 5
 
 
+# ROM: helper | Repairs unset direction fields for hand-armed Python channels; normal ROM creators already initialize them.
 def _live_direction(state: GameState, shooter_id: int) -> int:
     """``shot_direction[shooter]`` (0x9049C4), recovered when unset.
 
@@ -178,10 +189,12 @@ def _live_direction(state: GameState, shooter_id: int) -> int:
     return direction
 
 
+# ROM: helper | Python unsigned-longword arithmetic primitive.
 def _u32(value: int) -> int:
     return value & 0xFFFF_FFFF
 
 
+# ROM: part game:0x474F6 | Extracts class-specific projectile picture table selection at 0x47622-0x47716 for reuse by creators.
 def shot_picture(state: GameState, shooter_id: int, counter: int) -> int:
     """The projectile picture channel ``shooter_id`` shows at ``counter``.
 
@@ -215,6 +228,7 @@ def shot_picture(state: GameState, shooter_id: int, counter: int) -> int:
     return table[counter % len(table)]
 
 
+# ROM: part game:0x474F6 | Extracts straight-channel velocity table indexing at 0x47846 and 0x478B8.
 def _velocity_row(state: GameState, shooter_id: int, direction: int) -> int:
     """0x47846 / 0x478B8 -- which velocity row this channel uses.
 
@@ -234,6 +248,7 @@ def _velocity_row(state: GameState, shooter_id: int, direction: int) -> int:
     return direction + _VEL_MONSTER_BASE
 
 
+# ROM: part game:0x474F6 | Extracts the straight-projectile velocity-table reads for reuse by Python creators.
 def shot_velocity(state: GameState, shooter_id: int,
                   direction: int) -> tuple[int, int]:
     """This frame's signed H/V word delta for a straight channel (0-7).
@@ -246,6 +261,7 @@ def shot_velocity(state: GameState, shooter_id: int,
     return _SHOT_VELOCITY_X[row], _SHOT_VELOCITY_Y[row]
 
 
+# ROM: part game:0x490DC | Extracts lobber position-accumulator initialization at 0x49216 and 0x4922A.
 def lobber_accumulator_seed(state: GameState, shooter_id: int) -> None:
     """0x49216/0x4922A -- point a lobber channel's accumulators at its MOB.
 
@@ -266,6 +282,7 @@ def lobber_accumulator_seed(state: GameState, shooter_id: int) -> None:
 # Channel retirement shared by hit resolution and off-screen disposal
 # =============================================================================
 
+# ROM: part game:0x474F6,game:0x4AF50 | Factors common projectile retirement and picture clearing; additional Python ownership/velocity fields are reset here.
 def _channel_clear(state: GameState, shooter_id: int) -> None:
     """``mob_depth_remove(shooter)`` + ``mob_picture[shooter+1] = 0``.
 

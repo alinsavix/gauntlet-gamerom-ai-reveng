@@ -48,6 +48,7 @@ _SECRET_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTUWXYZ"  # ROM 0x54CA6
 _SECRET_NAME_LENGTH = 29
 
 
+# ROM: part game:0x54BE0 | Secret-code name hash loop at 0x54BE4-0x54C12; Python computes CRC-table values instead of reading the ROM table.
 def _secret_crc16(name: list[int]) -> int:
     """Port secret_code_build's table-driven CRC-CCITT update."""
     crc = 0
@@ -65,6 +66,7 @@ def _secret_crc16(name: list[int]) -> int:
     return crc
 
 
+# ROM: part game:0x54BE0 | Extracted field packing, hash-symbol interleaving and alphabet encoding, exposed with explicit Python arguments rather than ROM globals.
 def secret_code_for(
     name: str, previous_maze: int, previous_trick: int, challenge: int,
 ) -> str:
@@ -86,6 +88,7 @@ def secret_code_for(
     )
 
 
+# ROM: adapter game:0x54BE0 | State/string interface to the split secret-code computation; delegates to secret_code_for and stores the Python result.
 def secret_code_build(state: GameState) -> str:
     """Port secret_code_build 0x54BE0 and return its ``XXX-XXX`` result."""
     name = bytes(state.secret_name_buffer).split(b"\0", 1)[0].decode("ascii")
@@ -97,6 +100,7 @@ def secret_code_build(state: GameState) -> str:
     return code
 
 
+# ROM: direct game:0x54EC6 | Secret-winner name-entry initialization and disabled-feature completion boundary; alpha rendering is delegated.
 def secret_getname(state: GameState) -> None:
     """Port secret_getname 0x54EC6, including its alpha-RAM setup."""
     winner = state.secret_player
@@ -119,6 +123,7 @@ def secret_getname(state: GameState) -> None:
     write_secret_name_entry(state, winner)
 
 
+# ROM: direct game:0x54FE8 | Secret-winner editor frame boundary, including velocity/repeat, commit, code build and completion state.
 def secret_name_entry_update(state: GameState) -> None:
     """Port the 29-character secret winner editor at 0x54FE8."""
     winner = state.secret_player
@@ -181,6 +186,7 @@ def secret_name_entry_update(state: GameState) -> None:
     state.global_delay_timer = 0x02D1
 
 
+# ROM: direct game:0x49D0E | Game high-score qualification and editor setup; OS rank_high_score veneer 0x01C6 targets 0x3F68 and is only a callee.
 def highscore_check(state: GameState, player_index: int) -> None:
     """0x49D0E -- rank the dead player and open initials entry (§10.3).
 
@@ -219,6 +225,7 @@ def highscore_check(state: GameState, player_index: int) -> None:
     setup_infopanel(state, player_index)                     # 0x49DD6
 
 
+# ROM: direct game:0x55440 | Live character-ring stepping boundary; byte-identical unreferenced ROM copy 0x5554E is not an independently merged implementation here.
 def name_entry_step_char(current: int, direction: int, allow_backspace: bool) -> int:
     """0x55440 -- step one initials character round its ring.
 
@@ -244,6 +251,7 @@ def name_entry_step_char(current: int, direction: int, allow_backspace: bool) ->
     return value
 
 
+# ROM: helper | Converts editable Python character codes to a three-character score string; does not implement the OS packed base-40 record codec.
 def _name_entry_initials(player) -> str:  # noqa: ANN001
     """The three editable codes as the string ``write_high_score_entry`` stores.
 
@@ -257,6 +265,7 @@ def _name_entry_initials(player) -> str:  # noqa: ANN001
     )
 
 
+# ROM: part game:0x49DE6,game:0x54FE8 | Extracted two-frame Magic/Fire settled-press tests shared by the initials and secret-name editors.
 def _name_entry_commit_pressed(state: GameState, player_index: int) -> bool:
     """0x49F6E-0x49FA2: Magic or Fire settled over two frames."""
     for shift in (state.debounce_shift_magic, state.debounce_shift_fire):
@@ -265,6 +274,7 @@ def _name_entry_commit_pressed(state: GameState, player_index: int) -> bool:
     return False
 
 
+# ROM: part game:0x49DE6 | Initials commit and dwell-completion arm at 0x4A07A-0x4A116; OS write_high_score_entry veneer 0x01B4 targets 0x3A7E and remains a callee.
 def _name_entry_finish(state: GameState, player_index: int) -> None:
     """0x4A07A-0x4A116 -- insert the record and end the dwell.
 
@@ -295,6 +305,7 @@ def _name_entry_finish(state: GameState, player_index: int) -> None:
     show_continue_prompt(state)                              # 0x4A110
 
 
+# ROM: direct game:0x49DE6 | Status-4 countdown/editor boundary with extracted edit/finish arms; Python's additional unranked status-8 death animation is not a separate ROM routine.
 def player_death_sequence(state: GameState, player_index: int) -> None:
     """0x49DE6 -- the status-0x04 per-frame handler (§4.1, player lifecycle).
 
@@ -358,6 +369,7 @@ def player_death_sequence(state: GameState, player_index: int) -> None:
     ]
 
 
+# ROM: part game:0x49DE6 | Initials editor velocity, repeat and cursor-commit arm at 0x49E20-0x4A066.
 def _name_entry_edit(state: GameState, player_index: int) -> None:
     """0x49E20-0x4A066 -- one frame of the initials editor."""
     player = state.players[player_index]

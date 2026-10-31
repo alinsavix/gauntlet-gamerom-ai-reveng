@@ -10,6 +10,8 @@ from .constants import MazeObjIds
 from .state import GameState
 
 
+# ROM: direct game:0x5F31E | Logical/MOB/playfield replacement boundary with extracted placement and refresh helpers; no independent behavioral-fidelity proof is implied.
+# ROM: adapter game:0x5F310 | mob_place_tile is the alternate register wrapper to this shared replacement body, not a currently defined maze.py function.
 def pf_replace(state: GameState, slot: int, obj_type: int) -> None:
     """``pf_replace`` (0x5F31E) -- retile a maze cell in place.
 

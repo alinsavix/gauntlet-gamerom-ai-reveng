@@ -51,6 +51,7 @@ PRESS_PATTERN = 0x1C
 PRESS_MASK = 0x1F
 
 
+# ROM: helper | Accessor for host-populated raw input words; hardware register addresses do not identify a ROM callable.
 def read_ports(state: GameState) -> list[int]:
     """Sample the four hardware input words (0x803000 + player*2).
 
@@ -61,6 +62,7 @@ def read_ports(state: GameState) -> list[int]:
     return state.player_input_raw
 
 
+# ROM: direct game:0x40644 | Four-player input sampling/debounce boundary; host state substitutes for physical port reads.
 def input_debounce(state: GameState) -> None:
     """Sample all four players' controls and update their shift registers."""
     raw_words = read_ports(state)
@@ -88,21 +90,25 @@ def input_debounce(state: GameState) -> None:
 # is debounced, but shooting and steering read the raw word. Atari debounced
 # the input that must fire exactly once and left the held inputs raw.
 
+# ROM: part game:0x4800C | Extracted settled Magic predicate documented inside main_start_game, also reusable by other consumers.
 def magic_press_edge(state: GameState, player: int) -> bool:
     """A settled Magic press edge, exactly as ``main_start_game`` tests it."""
     return (state.debounce_shift_magic[player] & PRESS_MASK) == PRESS_PATTERN
 
 
+# ROM: helper | Active-low raw Magic accessor; no specific extracted ROM body established.
 def magic_held(state: GameState, player: int) -> bool:
     """Magic held right now (active low: bit clear means pressed)."""
     return not (state.player_input_raw[player] & JOY_MAGIC_BIT)
 
 
+# ROM: part game:0x4A53A | Extracted raw Fire predicate documented at main_move_players interior site 0x4A9DE; that callsite is not an entry.
 def fire_held(state: GameState, player: int) -> bool:
     """Fire is gated on the raw bit, not the settled pattern (0x4A9DE)."""
     return not (state.player_input_raw[player] & JOY_FIRE_BIT)
 
 
+# ROM: helper | Python representation conversion from active-low hardware bits to active-high direction bits.
 def direction_bits(state: GameState, player: int) -> int:
     """Pressed direction bits, normalized to active *high* for our callers.
 
@@ -112,5 +118,6 @@ def direction_bits(state: GameState, player: int) -> int:
     return ~state.player_input_raw[player] & JOY_DIRECTIONS
 
 
+# ROM: helper | Boolean wrapper over the Python normalized direction representation.
 def any_direction(state: GameState, player: int) -> bool:
     return bool(direction_bits(state, player))
