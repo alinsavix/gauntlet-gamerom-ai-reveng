@@ -37,15 +37,52 @@ start).
 
 ## Open issues
 
-### S-133 · non-ROM compatibility compensations remain
+### S-191 · monster pictures refresh after every walked dispatch
 
-The callable audit records four non-ROM game-side compensations. DEMO can ignore
-random walls, delete Grunts on its final input record, and retain a row-zero
-flank in the public generic probe family, while score display compares host
-latches because some producers omit dirty-bit writes. These remain open
-root-cause work; a passing attract recording must not be mistaken for state
-equivalence. S-137 removed the primary player mover's one-pixel integration and
-reserved-row exception.
+`_dispatch_chain_entry` calls `monster_update_anim_tile` after every monster or
+Super Sorcerer dispatch. The ROM reaches 0x414A4 only from particular branches
+of `monster_special_handler`; many paths continue at 0x414BE and leave the old
+picture. In the MAME demo capture 55 creatures show 613 frames of picture-only
+difference. Positions, states and RNG are unaffected, so this is display
+fidelity, but the extra refresh should be replaced by the ROM's branch-local
+calls.
+
+### S-190 · reserved row zero holds wall pictures
+
+`load_level` stamps slots 0-31 with `maze_place_object(0, WALL_REGULAR, 0x20)`
+and leaves picture 0x8000 in every slot nothing else occupies. On the arcade
+those slots read picture 0 with link type 2 (only slot 0 keeps 0x8000) once
+the demo starts. Any probe or ray march that reaches row zero sees a wall here
+and empty space there. The ROM step that leaves them clear has not been
+identified.
+
+### S-189 · doors block at the full probe overlap
+
+`mob_collision_test` (0x522D8) treats a door as a door only inside a tighter
+0x5C0 x 0x4C0 box (0x4AEA0); outside it the hero passes and keeps closing on
+the door until the cell tail interacts with it. `_door_try_traverse` blocks at
+the ordinary 0x7C0 probe overlap, so a keyless hero stops short of where the
+arcade lets it stand. Found by executing ROM 0x41BF0 under Unicorn on
+`test_door_blocked_without_key`.
+
+### S-188 · treasure-room treasure plays sound and scores
+
+In mazes 0x68-0x72 the treasure arm branches from 0x51A12 to 0x51E36, skipping
+the multiplier, sound 0x26, the score award and the redraw bit; the bonus
+screen pays instead. `_treasure_bonus_multiplier` honours the branch, but the
+TREASURE and TREASURE_BAG arms still play the sound and call
+`player_add_score_with_mult`.
+
+### S-187 · movement-core arms not yet ported
+
+Three `player_try_move_core` paths still differ from the ROM: a successful
+movable-wall push continues into the wall arm at 0x42346 (even-pixel retry and
+nudge), which `_PROBE_PUSHED` skips; a shoved hero entering an occupied cell
+should run the core's tile tail rather than being refused by
+`migrate_player_record`; and the public `mob_probe_*` family used by the thief
+still skips pass-through objects instead of stopping at the first overlap as
+0x407A6 does. `player_in_maze` is no longer read by the camera and can be
+retired.
 
 ### S-126 · live-only downward block at level 17 / maze 16 `(396,176)`
 
@@ -64,6 +101,73 @@ camera origins, maze state, path grids, all modeled video/color RAM, timers,
 inputs, and RNG seed.
 
 ## Resolved issues
+
+### S-133 · demo workarounds and the HUD latch hid fourteen ROM differences
+
+The callable audit listed four non-ROM compensations; the source had three more
+demo-only branches (generator pass-through, the offscreen gate bypass and the
+locked-treasure reward). A fresh MAME 0.289 capture of the attract demo
+(`traces/mame/demo-state/20261031`: every MOB word, the RNG seed, random-wall
+cursors and SLIP heads per frame, plus a seed-write tap naming each RNG
+caller) was compared with gauntpy iteration by iteration. The arcade demo
+starts with seed 0xBFE6, transporter cycle 4/1/2 and forcefield timer/step
+5/6, which the ROM never reinitializes; with those seeded, Python's demo init
+makes exactly the ROM's 1022 RNG draws.
+
+Each first divergence was traced to the ROM and fixed:
+
+- `main_walls_random_move` (0x5E41A) skips the frame its timer expires, and
+  its missing-wall and low-mark arms differ; now transcribed.
+- The idle acid roll at 0x4123A is a ROM-compass heading; Python stored it
+  unconverted.
+- The camera target (0x46CAA) widens a current-camera extent with each
+  transporter destination while `player_tport_phase` is not negative, gates the
+  live pass on `active_mob_ids`, and averages before inverting V. The old
+  screen-space version lagged a pixel, which moved the monster culling edge.
+- The monster walk shimmers treasure (0x40FBA).
+- Food and poison share the 0x51D06 tail: low-health reset, redraw bit, a
+  `getrandom(0x20)` roll that can speak a character line (0x5B7C0/0x5B7D0)
+  and an escape-timer clear.
+- Fire is armed only in `main_handle_shots`; the extra pass in
+  `main_move_players` armed a new demo record a frame early.
+- `player_try_move` returns the core's result word: an axis clears its bit
+  only when its probe resolves clear, passing an object leftward does not
+  (0x41F9A), and a squeeze returns the word rather than zero.
+- `player_tile_interact` returns -2 for a started teleport, and the tail at
+  0x42570 then keeps the pre-move words.
+- The private horizontal probes (0x426D4/0x4270C) test three cells, centre
+  then upper flank (row 2 or lower) then lower flank, and every private probe
+  stops at the first overlapping record even when it is a pass-through object.
+- Walking into another hero shoves it one pixel through a recursive core call
+  (0x41DF6, 0x41FFE, 0x42232, 0x4243E), with the class table at 0x41BD0 and
+  `player_deferred_move_flags` (0x9048B4).
+- A wall arm always keeps the even-pixel retry; once it tries a nudge it skips
+  the remaining axis and keeps the nudge only if it is clear.
+- `apply_direction_from_delta` (0x41B7E) uses full position words and an
+  eight-pixel alignment window, not the aim picker's high-byte units.
+- The acid wind-up seeds the animation counter (0x49960-0x49988), so a second
+  contact in the same frame does nothing.
+
+With those fixes all five demo-only branches were removed; the locked-treasure
+bag is genuine ROM behavior (0x52688) and now cites it. Gauntpy matches the
+capture for the whole demo: seed, cursors, demo pointer, IT, potions and every
+playfield MOB's position, type and state through iteration 7167.
+`test_demo_follows_the_mame_capture` pins milestones at each former divergence.
+
+The HUD fallback was independent. `main_score_display` (0x457C0) reads only
+`player_redraw`: 0x904007 bit 2 is `frame_counter` bit 2, not a display enable,
+so a score bit is honoured in alternate four-frame windows, a score draw ends
+the call, and health draws on its bit or below 0xC8. The draw routines clear
+their own bits. Every producer was checked against the 20 ROM writers of
+0x904908: the treasure collector's bit (0x51ACE) was missing and is added; the
+thief and secret-room score bits had no ROM counterpart and are removed; and
+`player_inv_update` no longer redraws health, which hid the missing bit.
+
+ROM 0x41BF0 was also executed under Unicorn on every `player_try_move` call in
+the movement and migration tests; all calls whose fixtures the ROM can
+represent agree. This supersedes two S-137 statements: the private horizontal
+probes do test both flanks, and a blocked axis is not all-or-nothing when a
+wall arm applies its even-pixel retry.
 
 ### S-186 · callable coverage did not describe Python function boundaries
 
@@ -1216,7 +1320,9 @@ endpoint, and either retains or rolls back that whole axis before processing
 the next one. Its only `D6=0x80` moves are explicit recursive collision-response
 calls with separately constructed direction flags.
 
-The workaround also concealed a probe-family conflation. The private
+*Corrected by S-133: 0x426D4/0x4270C test the adjacent cell and both vertical
+flanks, and wall arms keep an even-pixel retry.* The workaround also concealed
+a probe-family conflation. The private
 `probe_left`/`probe_right` at 0x426D4/0x4270C inspect one adjacent cell, while
 private `probe_up`/`probe_down` inspect a three-cell forward row. They share
 `tile_lookup_core` geometry with, but are not aliases of, the public generic
@@ -1564,8 +1670,9 @@ is not evidence of a separate L/R seam defect at this coordinate.
 - **S-107:** maze 17 at player pixel `(268,15)` reproduced a Python-only
   lateral block against the reserved row-zero wall. The original repair
   suppressed the generic probe's upper flank near rows 0–1. **Superseded by
-  S-137:** the private player horizontal probe has no vertical flanks at all and
-  retains the live record slot as its origin.
+  S-137 and S-133:** the private player horizontal probe applies the same
+  row-2 upper-flank threshold as the public family and retains the live record
+  slot as its origin.
 - **S-108:** the same investigation found the narrow-passage boundary mismatch:
   `player_try_move_core` keeps `active_mob_ids[player]` in D2, while the port's
   one-pixel integration re-quantized the corrected sprite origin into reserved

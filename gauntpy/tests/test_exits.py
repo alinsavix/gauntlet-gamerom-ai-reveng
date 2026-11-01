@@ -1652,10 +1652,13 @@ class TestSecretRoomPayout:
     def test_a_completed_task_pays_5000_per_coin(self):
         state = self._in_room()
         state.players[0].coin_count = 2
+        state.score_dirty[0] = 0
         show_level_end_bonus_screen(state)
         assert state.bonus_amount == _SECRET_ROOM_BONUS * 2
         assert state.players[0].score == _SECRET_ROOM_BONUS * 2
-        assert state.score_dirty[0] == 1
+        # 0x4D788 adds directly and prints the award via OS 0x260; it does
+        # not set player_redraw.
+        assert state.score_dirty[0] == 0
 
     def test_a_missed_task_pays_nothing(self):
         state = self._in_room(task=0x50)          # needs 6 treasures

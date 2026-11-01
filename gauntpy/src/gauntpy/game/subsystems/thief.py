@@ -607,8 +607,6 @@ def thief_steal_from_player(state: GameState, player_index: int) -> int:
 
     setup_infopanel(state, player_index)                         # 0x4E3F8
     state.thief_mode |= THIEF_ENTER_OK
-    if hasattr(state, "score_dirty"):
-        state.score_dirty[player_index] = 1
     _sound_play(state, 0x26)
     return 1
 

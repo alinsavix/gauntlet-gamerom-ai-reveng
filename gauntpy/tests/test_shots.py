@@ -2267,7 +2267,7 @@ class TestHudLatches:
 
         state = _make_state()
         state.players[0].character = Character.ELF
-        state.frame_counter = 0
+        state.frame_counter = 4                   # player 0, score window
         main_score_display(state)                 # settle player 0's panel
         _clear_latches(state)
         drawn = info_panel(state).players[0].score

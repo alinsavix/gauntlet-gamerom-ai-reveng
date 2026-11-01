@@ -245,22 +245,34 @@ def test_score_display_skips_scores_mode() -> None:
 def test_score_display_runs_in_normal_mode() -> None:
     """main_score_display processes a player in NORMAL mode."""
     state = _normal_state()
-    state.frame_counter = 0
+    state.frame_counter = 4
     state.score_dirty[0] = 1
     main_score_display(state)
     # Flag should be cleared, confirming the function ran.
     assert state.score_dirty[0] == 0
 
 
-def test_score_display_skips_when_gate_disabled() -> None:
-    """master score_display_enabled=0 suppresses all redraw."""
+def test_score_bit_waits_for_frame_counter_bit_2() -> None:
+    """0x4580C tests frame_counter bit 2 (low byte 0x904007) before the score
+    bit; with it clear, the call falls through to the health test."""
     state = _normal_state()
-    state.score_display_enabled = 0
+    state.frame_counter = 0
     state.score_dirty = [1, 1, 1, 1]
     state.health_dirty = [1, 1, 1, 1]
     main_score_display(state)
     assert state.score_dirty == [1, 1, 1, 1]
-    assert state.health_dirty == [1, 1, 1, 1]
+    assert state.health_dirty == [0, 1, 1, 1]
+
+
+def test_a_score_draw_ends_the_call() -> None:
+    """0x45830 branches to the exit after draw_player_score."""
+    state = _normal_state()
+    state.frame_counter = 4
+    state.score_dirty[0] = 1
+    state.health_dirty[0] = 1
+    main_score_display(state)
+    assert state.score_dirty[0] == 0
+    assert state.health_dirty[0] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +281,7 @@ def test_score_display_skips_when_gate_disabled() -> None:
 
 def test_score_display_selects_player_by_frame_counter() -> None:
     """player_index = frame_counter & 3; only that player's flags are cleared."""
-    for frame in range(8):  # two full rotations through all four slots
+    for frame in range(4, 8):  # one rotation in a score-eligible window
         state = _normal_state()
         state.frame_counter = frame
         # All score flags dirty; health flags clear so only score_dirty tracks.
@@ -294,7 +306,7 @@ def test_score_display_selects_player_by_frame_counter() -> None:
 def test_score_display_clears_score_dirty_flag() -> None:
     """Score draw clears the per-player score_dirty flag."""
     state = _normal_state()
-    state.frame_counter = 2
+    state.frame_counter = 6
     state.score_dirty[2] = 1
     state.health_dirty[2] = 0
     main_score_display(state)
@@ -348,7 +360,9 @@ def test_the_draw_hooks_latch_the_values_they_drew() -> None:
     state.players[0].health = 700
     state.players[0].bonusmult = 3
 
-    main_score_display(state)
+    main_score_display(state)            # bit 2 clear: health
+    state.frame_counter = 4
+    main_score_display(state)            # bit 2 set: score
 
     field = info_panel(state).players[0]
     assert field.score_drawn and field.health_drawn
@@ -375,18 +389,20 @@ def test_the_latch_only_moves_on_that_players_own_frame() -> None:
     assert info_panel(state).players[1].score == 999
 
 
-def test_a_score_change_alone_is_enough_to_redraw() -> None:
-    """The ROM's update bit is set by whoever changed the value; nothing in the
-    landed packages sets score_dirty, so main_score_display also compares the
-    latched value (see its docstring)."""
+def test_only_the_redraw_bit_requests_a_score_draw() -> None:
+    """main_score_display has no value comparison: the producer's
+    player_redraw bit 0 is the only request (0x4581E)."""
     state = _normal_state()
-    state.frame_counter = 0
+    state.frame_counter = 4
     main_score_display(state)
-    state.score_dirty[0] = 0
+    assert state.score_dirty[0] == 0
 
     state.players[0].score = 4321
     main_score_display(state)
+    assert info_panel(state).players[0].score != 4321
 
+    state.score_dirty[0] = 1
+    main_score_display(state)
     assert info_panel(state).players[0].score == 4321
 
 
@@ -395,7 +411,7 @@ def test_the_score_attribute_is_the_players_rom_palette_word() -> None:
     assert PLAYER_TEXT_PALETTE_WORDS == (0xD000, 0xD400, 0xD800, 0xDC00)
     state = _normal_state()
     for i in range(4):
-        state.frame_counter = i
+        state.frame_counter = 4 + i
         main_score_display(state)
         assert info_panel(state).players[i].score_attr == PLAYER_TEXT_PALETTE_WORDS[i]
 

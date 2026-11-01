@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ..constants import GameMode, MazeObjIds
 from ..coords import POS_SHIFT, hpos_x, native_v, vpos_y
 from ..state import GameState
 from .player_data import (
@@ -43,7 +42,7 @@ def _probe_candidate_anchor(state: GameState, candidate: int) -> tuple[int, int]
     return candidate_h, candidate_v
 
 
-# ROM: merged game:0x407A6,game:0x42648 | Common implementation of public mob_probe_candidate and private tile_lookup_core: optional proposed coordinates replace register inputs; Python self/demo/interaction guards are additional.
+# ROM: merged game:0x407A6,game:0x42648 | Common implementation of public mob_probe_candidate and private tile_lookup_core: optional proposed coordinates replace register inputs; Python self/interaction guards are additional.
 def _probe_candidate_blocks(
     state: GameState,
     mover_slot: int,
@@ -73,19 +72,38 @@ def _probe_candidate_blocks(
         _pixel_to_slot as _pixel_to_slot,
     )
 
-    if candidate == mover_slot or state.mobs.picture[candidate] == 0:
-        return False
-    if candidate == self_slot:
-        return False
-    if (
-        state.game_mode == int(GameMode.DEMO)
-        and state.mobs.obj_type(candidate) == int(MazeObjIds.WALL_RANDOM)
-    ):
-        # The recorded route is timed to the cabinet's random-wall phases. Host
-        # timing differences must not let a transient phase permanently derail
-        # the attract demonstration near its final exit.
-        return False
-    if defer_interactions and state.mobs.obj_type(candidate) in _FIGHT_PASS_TYPES:
+    if not defer_interactions:
+        return _probe_candidate_overlaps(
+            state, mover_slot, candidate, hpos=hpos, vpos=vpos,
+            self_slot=self_slot,
+        )
+    return (
+        _probe_candidate_overlaps(
+            state, mover_slot, candidate, hpos=hpos, vpos=vpos,
+            self_slot=self_slot,
+        )
+        and not _probe_candidate_deferred(
+            state, mover_slot, candidate, self_slot=self_slot,
+        )
+    )
+
+
+# ROM: helper | Python deferral of pass-through objects and hero-sharing cells that ordinary movement resolves after the probe.
+def _probe_candidate_deferred(
+    state: GameState, mover_slot: int, candidate: int, *,
+    self_slot: int | None,
+) -> bool:
+    """Whether an overlapping candidate lets ordinary movement through.
+
+    The ROM's probe reports any overlapping record; ``mob_collision_test``
+    then passes the hero through pickups and similar objects, which the cell
+    tail interacts with after the move. This predicate is that pass result.
+    """
+    from .player_movement import (
+        _pixel_to_slot as _pixel_to_slot,
+    )
+
+    if state.mobs.obj_type(candidate) in _FIGHT_PASS_TYPES:
         transporting = any(
             player.active
             and player.mob_slot == self_slot
@@ -96,17 +114,33 @@ def _probe_candidate_blocks(
             # Ordinary movement resolves these after entering their cell. With
             # transportability, squeeze_through_check runs first and teleports
             # past them instead (0x42744 precedes mob_collision_test).
-            return False
-    if defer_interactions:
-        for player in state.players:
-            if not player.active or candidate != player.mob_slot:
-                continue
-            player_x = hpos_x(state.mobs.hpos[player.mob_slot])
-            player_y = vpos_y(state.mobs.vpos[player.mob_slot])
-            if _pixel_to_slot(player_x, player_y) == mover_slot:
-                # Two heroes sharing one cell do not block each other out of it.
-                return False
+            return True
+    for player in state.players:
+        if not player.active or candidate != player.mob_slot:
+            continue
+        player_x = hpos_x(state.mobs.hpos[player.mob_slot])
+        player_y = vpos_y(state.mobs.vpos[player.mob_slot])
+        if _pixel_to_slot(player_x, player_y) == mover_slot:
+            # Two heroes sharing one cell do not block each other out of it.
+            return True
+    return False
 
+
+# ROM: part game:0x407A6,game:0x42648 | Shared nonzero-picture and anchor-overlap test of mob_probe_candidate/tile_lookup_core.
+def _probe_candidate_overlaps(
+    state: GameState,
+    mover_slot: int,
+    candidate: int,
+    *,
+    hpos: int | None = None,
+    vpos: int | None = None,
+    self_slot: int | None = None,
+) -> bool:
+    """Whether ``candidate`` holds a record overlapping the mover."""
+    if candidate == mover_slot or state.mobs.picture[candidate] == 0:
+        return False
+    if candidate == self_slot:
+        return False
     mover_h = state.mobs.hpos[mover_slot] if hpos is None else hpos
     mover_v = state.mobs.vpos[mover_slot] if vpos is None else vpos
     candidate_h, candidate_v = _probe_candidate_anchor(state, candidate)
@@ -192,7 +226,7 @@ def mob_probe_down(
     return -1
 
 
-# ROM: direct game:0x4083A | Public left-and-flanks probe boundary; retains a Python demo-specific upper-flank exception.
+# ROM: direct game:0x4083A | Public left-and-flanks probe boundary.
 def mob_probe_left(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
@@ -212,10 +246,7 @@ def mob_probe_left(
     else:
         target_col = col - 1
     flank_rows = [0]
-    if row >= 2 or state.game_mode == int(GameMode.DEMO):
-        # The live game uses the ROM threshold. The port's recorded-demo actor
-        # still needs its established row-zero flank to stay synchronized with
-        # the retained MAME route through maze 102.
+    if row >= 2:                     # 0x4086E: doubled slot >= 0x80
         flank_rows.append(-1)
     if row < _MAZE_ROWS - 1:         # 0x40880: doubled slot < 0x7C0
         flank_rows.append(1)
@@ -234,7 +265,7 @@ def mob_probe_left(
     return -1
 
 
-# ROM: direct game:0x408A0 | Public right-and-flanks probe boundary; retains a Python demo-specific upper-flank exception.
+# ROM: direct game:0x408A0 | Public right-and-flanks probe boundary.
 def mob_probe_right(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
@@ -253,7 +284,7 @@ def mob_probe_right(
     else:
         target_col = col + 1
     flank_rows = [0]
-    if row >= 2 or state.game_mode == int(GameMode.DEMO):
+    if row >= 2:                     # 0x408D4: doubled slot >= 0x80
         flank_rows.append(-1)
     if row < _MAZE_ROWS - 1:         # 0x408E6: doubled slot < 0x7C0
         flank_rows.append(1)

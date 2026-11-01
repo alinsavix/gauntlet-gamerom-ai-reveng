@@ -566,13 +566,15 @@ def write_high_score_entry(
 # and synchronously write the same words to alpha VRAM.
 # ---------------------------------------------------------------------------
 
-# ROM: direct game:0x45940 | Score-field display boundary; also updates a Python diagnostic shadow, while the caller clears the redraw latch.
+# ROM: direct game:0x45940 | Score-field display boundary; also updates a Python diagnostic shadow.
 def draw_player_score(state: GameState, player_index: int) -> None:
     """``draw_player_score`` (0x45940) -- 7-digit score via OS 0x260.
 
     Column 0x1D, row ``player_index * 5 + 9``, field width 7, padding mode 1,
-    attribute ``player_text_palette_words[player_index]``.
+    attribute ``player_text_palette_words[player_index]``. Clears
+    ``player_redraw`` bit 0 (0x45992).
     """
+    state.score_dirty[player_index] = 0
     field = info_panel(state).players[player_index]
     field.score = state.players[player_index].score
     field.score_attr = PLAYER_TEXT_PALETTE_WORDS[player_index]
@@ -608,15 +610,17 @@ def _health_attribute(state: GameState, player_index: int) -> int:
     return attr
 
 
-# ROM: direct game:0x459A2 | Health/multiplier field display boundary; palette selection is extracted and the caller clears its redraw latch.
+# ROM: direct game:0x459A2 | Health/multiplier field display boundary; palette selection is extracted.
 def draw_player_health(state: GameState, player_index: int) -> None:
     """``draw_player_health`` (0x459A2) -- bonus multiplier + 5-digit health.
 
     The multiplier occupies alpha columns 31-32 of row ``p*5+8`` and is only
     written when it is greater than one (otherwise those two cells are blanked
     with the player's own attribute word); the health field is column 0x25,
-    row ``p*5+9``, width 5, padding mode 1.
+    row ``p*5+9``, width 5, padding mode 1. Clears ``player_redraw`` bit 1
+    (0x45ABA).
     """
+    state.health_dirty[player_index] = 0
     player = state.players[player_index]
     field = info_panel(state).players[player_index]
     field.health = player.health
@@ -1135,53 +1139,37 @@ def main_score_update(state: GameState) -> None:
         _advance_effect(state, i)
 
 
-# ROM: direct game:0x457C0 | Round-robin HUD update boundary; retains explicit Python latched-value fallback conditions in addition to ROM redraw flags.
+# ROM: direct game:0x457C0 | Round-robin HUD update boundary driven only by the player_redraw bits, frame-counter phase and low-health pulse.
 def main_score_display(state: GameState) -> None:
-    """0x457C0 -- render scores and the info panel. See §14.
+    """0x457C0 -- redraw at most one HUD field for one player. See §14.
 
     Called every frame.  Skips TITLE (0xFFFE) and SCORES (0xFFFF) screens.
-    Updates one player per frame (``frame_counter & 3``), redrawing only the
-    fields whose update conditions are met. Draws write alpha RAM and update
-    the ``InfoPanel`` shadow; rendering consumes alpha RAM directly.
+    Services player ``frame_counter & 3`` unless that player is dying or has
+    no health. The only change detection is ``player_redraw`` (0x904908),
+    which each producer sets and the draw routines clear: bit 0 for the score,
+    bit 1 for health and the bonus multiplier.
 
-    **The redraw condition.** The ROM's own condition is ``player_redraw``
-    (0x904908) bit 0 for score and bit 1 for health. The port also compares
-    latched values because not every producer writes those latches yet
-    (ISSUES S-133). ``setup_infopanel`` performs a synchronous draw and clears
-    the serviced latches. The fallback preserves the four-frame redraw cadence,
-    but is a compatibility compensation, not evidence of the ROM's condition.
+    0x45814 tests ``frame_counter`` bit 2 (the low byte at 0x904007) before
+    the score bit, so a player's score is eligible only in alternate
+    four-frame windows. A score draw ends the call; otherwise the health bit,
+    or health below 0xC8 for the warning pulse, draws the health field.
     """
     # Gate: TITLE and SCORES attract screens do not show the in-game HUD.
     if state.game_mode in (GameMode.TITLE, GameMode.SCORES):
         return
 
-    # Master display gate (0x904007 bit 2).
-    if not state.score_display_enabled:
-        return
-
     # One player per frame, round-robin over the four slots.
     player_index = state.frame_counter & 3
     player = state.players[player_index]
-    field = info_panel(state).players[player_index]
     if player.status == PlayerStatus.DYING or player.health == 0:
         return
 
-    # Score redraw: update bit 0 (see the docstring on change detection).
-    if (
-        state.score_dirty[player_index]
-        or not field.score_drawn
-        or field.score != player.score
-    ):
-        draw_player_score(state, player_index)
-        state.score_dirty[player_index] = 0
+    if state.frame_counter & 0x04 and state.score_dirty[player_index]:
+        draw_player_score(state, player_index)              # 0x4582A
+        return
 
-    # Health redraw: update bit 1 OR health below 0xC8 (the warning pulse).
     if (
         state.health_dirty[player_index]
         or player.health < HEALTH_PULSE_THRESHOLD
-        or not field.health_drawn
-        or field.health != player.health
-        or field.bonusmult != player.bonusmult
     ):
-        draw_player_health(state, player_index)
-        state.health_dirty[player_index] = 0
+        draw_player_health(state, player_index)             # 0x4585C

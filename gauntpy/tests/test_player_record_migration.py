@@ -267,6 +267,8 @@ class TestMigrationRefusesTheCellsItMust:
 
 class TestTwoPlayersDoNotOverwriteOneAnother:
     def test_a_hero_cannot_migrate_onto_another_heros_record(self):
+        """Walking into another hero shoves it a pixel per frame (0x41E46);
+        the mover only enters a cell once the shoved record has left it."""
         state = GameState(game_mode=GameMode.NORMAL)
         first = pack_slot(10, 11)
         second = pack_slot(10, 10)
@@ -275,12 +277,12 @@ class TestTwoPlayersDoNotOverwriteOneAnother:
 
         _walk(state, 1, JOY_RIGHT)
 
-        assert held.mob_slot == first
-        assert state.mobs.state(first) == 0
-        assert mover.mob_slot == second
-        assert state.mobs.state(second) == 1
+        assert held.mob_slot == pack_slot(10, 12)
+        assert state.mobs.state(held.mob_slot) == 0
+        assert mover.mob_slot == first
+        assert state.mobs.state(first) == 1
+        assert state.mobs.picture[held.mob_slot] == _HERO_PICTURE
         assert state.mobs.picture[first] == _HERO_PICTURE
-        assert state.mobs.picture[second] == _HERO_PICTURE
 
     def test_both_records_keep_their_own_palette_and_identity(self):
         state = GameState(game_mode=GameMode.NORMAL)

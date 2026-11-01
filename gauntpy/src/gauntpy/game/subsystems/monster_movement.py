@@ -14,10 +14,8 @@ from .monster_data import (
     _SOFTWARE_MOB_BIAS,
 )
 from .monster_state import (
-    _aim_direction,
     _anim_add_high,
     _anim_advance,
-    _delta_units,
     _get_direction,
     _s16,
     _set_direction,
@@ -246,16 +244,27 @@ def _cell_player_index(state: GameState, cell: int) -> int | None:
 def apply_direction_from_delta(state: GameState, slot: int, victim_cell: int) -> None:
     """``apply_direction_from_delta`` (0x41B7E) -- turn towards what was hit.
 
-    Same picker as the idle aim with the fixed 0x400-position-unit threshold,
-    which is 8 pixels, i.e. 4 of the 2-pixel units the picker counts in.
+    Full position-word deltas, not the aim picker's high-byte units: an axis
+    closer than 0x400 (8 pixels) counts as aligned, the vertical test winning
+    when both are, and the signs then fold the up/up-right/right choice into
+    the other quadrants (``0x20 - d3`` for left, ``0x30 - d3`` for below).
     """
     victim = _cell_player_index(state, victim_cell)
     target_slot = (
         state.players[victim].mob_slot if victim is not None else victim_cell
     )
-    dx = _delta_units(state.mobs.hpos[target_slot], state.mobs.hpos[slot])
-    dv = _delta_units(state.mobs.vpos[target_slot], state.mobs.vpos[slot])
-    _set_direction(state, slot, _aim_direction(dx, dv, 0, 4))
+    dh = (state.mobs.hpos[target_slot] - state.mobs.hpos[slot]) & 0xFFFF
+    dv = (state.mobs.vpos[target_slot] - state.mobs.vpos[slot]) & 0xFFFF
+    rom_dir = 1                                             # 0x41B96
+    if min(dh, 0x10000 - dh) < 0x400:
+        rom_dir = 0
+    if min(dv, 0x10000 - dv) < 0x400:
+        rom_dir = 2
+    if dh & 0x8000:                                         # 0x41BAC
+        rom_dir = (8 - rom_dir) & 0x07
+    if dv & 0x8000:                                         # 0x41BBA
+        rom_dir = (12 - rom_dir) & 0x07
+    _set_direction(state, slot, (rom_dir - 2) & 0x07)
 
 
 # ROM: part game:0x4119A | Extracts the post-probe direction write at 0x4133E with Python compass conversion.

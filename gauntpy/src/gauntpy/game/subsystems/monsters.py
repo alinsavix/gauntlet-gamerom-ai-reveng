@@ -113,6 +113,11 @@ _SOUND_SLOWMO_END = 0x39        # fires as the timer reaches 0
 # Acid acts once every 32 frames: (frame_word & 0x1E) == 0 (0x413E6).
 _ACID_RATE_MASK = 0x1E
 
+# Treasure shimmer (0x40FCC-0x40FDA): picture + 9, wrapping 0x999 -> 0x987.
+_TREASURE_SHIMMER_FIRST = 0x987
+_TREASURE_SHIMMER_STEP = 9
+_TREASURE_SHIMMER_END = 0x99A
+
 # =============================================================================
 # Culling rectangle (0x49052 origins, 0x40FF6 test, 0x41B52 shooter box)
 # =============================================================================
@@ -252,6 +257,16 @@ def monsters_everything(state: GameState, frame_word: int | None = None,
 def _dispatch_chain_entry(state: GameState, slot: int, frame_word: int) -> None:
     """0x40FB4-0x4105E -- type decode, culling, then the family dispatch."""
     obj_type = state.mobs.obj_type(slot)
+    if obj_type == int(MazeObjIds.TREASURE):
+        # 0x40FBA-0x40FE2: treasure in the walked arc shimmers through its
+        # three pictures every fourth frame, before the culling test.
+        if frame_word & 6:
+            return
+        picture = (state.mobs.picture[slot] + _TREASURE_SHIMMER_STEP) & 0xFFFF
+        if picture >= _TREASURE_SHIMMER_END:
+            picture = _TREASURE_SHIMMER_FIRST
+        state.mobs.picture[slot] = picture
+        return
     if obj_type not in GENERATOR_TYPES and obj_type not in MONSTER_TYPES:
         return
     if not _in_cull_rect(state, slot):
@@ -344,7 +359,9 @@ def _dispatch_monster(state: GameState, slot: int, obj_type: int,
         _monster_move_engine(state, slot, obj_type, index, frame_word)
         return
     if obj_type == int(MazeObjIds.MONST_ACID):                     # 0x4123A
-        _set_direction(state, slot, state.getrandom(8))
+        # 0x41242-0x4124C store the roll in the ROM compass (0 = up); the
+        # state field holds gauntpy's compass, two steps round.
+        _set_direction(state, slot, (state.getrandom(8) - 2) & 0x07)
     else:
         monster_find_and_shoot(state, slot, obj_type)
     _post_action(state, slot, obj_type, index, frame_word)

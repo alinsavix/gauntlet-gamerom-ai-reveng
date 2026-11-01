@@ -179,6 +179,9 @@ class GameState:
     # Switches are active low, so "nothing pressed" is all bits set. Defaulting
     # these to 0 would mean every button held on frame one.
     player_input_raw: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)  # 0x904920
+    # 0x9048B4, active-high directions another hero's shove cancelled for this
+    # player's next player_try_move call; the wrapper folds and clears them.
+    player_deferred_move_flags: list[int] = field(default_factory=lambda: [0] * NUM_PLAYERS)
     debounce_shift_magic: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)  # 0x905F58
     debounce_shift_fire: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)   # 0x905F60
 
@@ -592,8 +595,6 @@ class GameState:
     # 0x90497C: 4 effect animation counters (shared documentation name
     # ``mob_effect_anim_counter``; WP-8 did not add this field so WP-14 owns it).
     mob_effect_anim_counter: list[int] = field(default_factory=lambda: [0] * 4)
-    # 0x904007 bit 2: master score-display gate (1 = enabled).
-    score_display_enabled: int = 1
     # Diagnostic shadow of what draw_player_score / draw_player_health last
     # wrote. Rendering reads alpha_ram itself, not this convenience latch.
     info_panel: InfoPanel = field(default_factory=InfoPanel)

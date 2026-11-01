@@ -68,22 +68,6 @@ def demo_record_word(state: GameState, player_index: int) -> int:
     return ((stream[pos] & 0xFF) << 8) | (stream[pos + 1] & 0xFF)
 
 
-# ROM: helper | Python recording-tail predicate used by demo synchronization exceptions; no ROM callable provenance is claimed.
-def _demo_final_move_record(state: GameState, player_index: int) -> bool:
-    """Whether the active recording is on its last non-sentinel input pair."""
-    if (
-        state.game_mode != int(GameMode.DEMO)
-        or player_index != state.demo_active_player
-    ):
-        return False
-    stream = state.demo_streams[player_index]
-    return (
-        len(stream) >= 4
-        and state.demo_stream_pos[player_index] == len(stream) - 4
-        and stream[-2] == 0
-    )
-
-
 # ROM: part game:0x50662,game:0x4A53A | Extracted hardware-versus-recorded input selection seen at 0x50690-0x506B8 and 0x4A8A2-0x4A908; Python restricts replay selection to DEMO.
 def player_joystick_word(state: GameState, player_index: int) -> int:
     """The joystick word a consumer should read, per 0x50690-0x506B8.

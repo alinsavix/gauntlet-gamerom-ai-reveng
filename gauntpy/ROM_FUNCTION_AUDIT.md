@@ -130,23 +130,14 @@ The largest merged families are:
 
 ## Non-ROM compatibility corrections
 
-The source audit also found explicit behavior that is not present in the ROM.
-These are not ordinary Python representation choices; they alter game-side
-decisions to keep the current port synchronized or compensate for incomplete
-upstream behavior.
-
-| Python location | Correction |
-|---|---|
-| `mob_probes._probe_candidate_blocks` | In DEMO, every random-wall candidate is treated as nonblocking so host timing cannot derail the recorded route. |
-| `player_movement._player_fight_collision` | On the final active demo record, colliding Grunt/Aux-Grunt records are deleted because Python's earlier monster evolution put them across the route. |
-| `mob_probes.mob_probe_left/right` | DEMO retains an upper flank from maze row one where the normal ROM threshold suppresses it. |
-| `score.main_score_display` | Live score/health values are compared with host latches to force redraws because some Python producers do not set the ROM dirty bits. |
+None remain. The four corrections this audit listed (demo random walls,
+final-record Grunt deletion, the demo row-one flank and the HUD's latched-value
+fallback), and three further demo branches found in the source, were removed
+after their underlying divergences were traced against a full MAME capture of
+the attract demo; see ISSUES S-133. The demo now matches that capture for its
+whole run with no demo-specific game code beyond the ROM's own `game_mode`
+tests.
 
 Host-only controls, diagnostics, ROM-free glyph fallbacks, and the
-single-keyboard attract shortcut are excluded from this table because they do
-not pretend to be arcade game behavior.
-
-The demo corrections are the highest-risk shortcuts: they make a retained
-trace pass by changing collision outcomes rather than by reproducing the
-earlier RNG, wall, monster, or movement state that made the ROM recording pass.
-They should be removed only after the underlying divergence is traced.
+single-keyboard attract shortcut are not counted here because they do not
+pretend to be arcade game behavior.

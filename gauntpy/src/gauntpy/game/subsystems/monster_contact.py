@@ -9,7 +9,6 @@ from .score import dialog_first_encounter, player_add_score_with_mult
 from .shot_damage import death_damage_accumulate
 from .sound import sound_play as _sound_play
 from .monster_data import _HPOS_FLAG_MOVING, _MAZEOBJ_HSIZE_TIER_TBL
-from .monster_state import _aim_direction, _delta_units, _set_direction
 
 # Contact-hurt feedback, from monster_playerhit (0x49876-0x4988A / 0x4967A).
 _SOUND_MONSTER_HIT = 0x1E       # "Monster Hits Player"
@@ -278,8 +277,10 @@ def _acid_windup(state: GameState, player_index: int, monster_slot: int,
     (0x499BC).  In play it stuns for 0x20 frames, turns to face the victim and
     starts its splash animation with sound 0x36 (0x4993E).
 
-    Later acid contact is gated by the live state word's animation bits in
-    ``monster_playerhit``. This wind-up routine does not seed those bits.
+    0x49960-0x49988 rewrite the state word as ``calc_direction << 10`` plus
+    the back-link plus 0x2000, so the animation counter is already running.
+    That is what makes ``monster_playerhit`` ignore a second contact on the
+    same frame (0x49914).
     """
     p = state.players[player_index]
     if state.game_mode < 0:
@@ -295,10 +296,15 @@ def _acid_windup(state: GameState, player_index: int, monster_slot: int,
             )
         return
 
-    p.stundelay = 0x20
-    dx = _delta_units(state.mobs.hpos[p.mob_slot], state.mobs.hpos[monster_slot])
-    dv = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[monster_slot])
-    _set_direction(state, monster_slot, _aim_direction(dx, dv, 0, 4))
+    from .thief import calc_direction
+
+    rom_field = ((calc_direction(state, monster_slot, p.mob_slot) << 10)
+                 + 0x2000) >> 10 & 0x3F
+    field = (rom_field & 0x38) | (((rom_field & 0x07) - 2) & 0x07)
+    state.mobs.state_link[monster_slot] = (
+        (field << 10) | (state.mobs.state_link[monster_slot] & 0x3FF)
+    )
+    p.stundelay = 0x20                                  # 0x49996
     if p.acid_timer == 0:
         _sound_play(state, _SOUND_ACID_SLIME)   # 0x36
 

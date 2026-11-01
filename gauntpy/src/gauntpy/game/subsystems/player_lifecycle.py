@@ -165,8 +165,6 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
             field.bonusmult = state.players[i].bonusmult
         if not initials_entry and state.players[i].status != int(PlayerStatus.SECRET_NAME_ENTRY):
             score.write_player_panel_status(state, i)
-        state.score_dirty[i] = 0               # player_redraw bit 0, serviced
-        state.health_dirty[i] = 0              # player_redraw bit 1, serviced
     score.write_it_labels(state)
 
 
@@ -200,7 +198,7 @@ def speech_welcome(state: GameState, player_index: int) -> None:
     state.welcome_elapsed_frames = _WELCOME_DELAY
 
 
-# ROM: adapter game:0x45ACA | Inventory-update entry delegates the actual key/potion/icon writes to score.write_player_inventory and adds a Python health refresh.
+# ROM: adapter game:0x45ACA | Inventory-update entry delegates the actual key/potion/icon writes to score.write_player_inventory.
 def player_inv_update(state: GameState, player_index: int) -> None:
     """0x45ACA -- redraw one player's key/potion row and power-up icons.
 
@@ -208,16 +206,13 @@ def player_inv_update(state: GameState, player_index: int) -> None:
     it (0x515E4-0x51E0E), ``setup_infopanel`` calls it as part of the panel
     rebuild (0x45522), and loop 3 of ``main_score_update`` calls it every frame
     (0x470BA).  It is a pure draw: the ROM never touches ``player_redraw`` here,
-    because it is not asking for a redraw later -- it is doing one now.
-
-    ``PanelField`` latches score and health, while the compositor reads inventory
-    counts from the same player record when it draws the alpha inventory row.
-    Re-latching health here keeps the shared multiplier row current immediately.
+    because it is not asking for a redraw later -- it is doing one now. It does
+    not draw the health or multiplier field; producers of those raise
+    ``player_redraw`` bit 1 for ``main_score_display``.
     """
     from . import score
 
     if 0 <= player_index < NUM_PLAYERS:
-        score.draw_player_health(state, player_index)
         score.write_player_inventory(state, player_index)
 
 

@@ -1485,28 +1485,44 @@ class TestHudHooks:
         player_lifecycle.setup_infopanel(state, 9)
         assert not self._field(state, 0).score_drawn
 
-    def test_player_inv_update_relatches_the_panel_row(self):
+    @staticmethod
+    def _inventory_glyphs(state: GameState, player_index: int) -> list[int]:
+        from gauntpy.game.subsystems import score
+
+        row = player_index * score.PLAYER_BLOCK_STRIDE + score.PLAYER_INV_ROW
+        start = row * score.ALPHA_ROW_STRIDE + score.INVENTORY_COLUMN
+        return [
+            word & 0x03FF
+            for word in state.alpha_ram[start:start + score.INVENTORY_CELLS]
+        ]
+
+    def test_player_inv_update_draws_inventory_but_not_health(self):
+        """0x45ACA draws the key/potion row and power icons only; the health
+        and multiplier field waits for player_redraw bit 1."""
+        from gauntpy.game import romtext
+
         state = _active_state()
         p = _make_player_active(state, 1, health=250)
+        p.keysnum = 2
         p.bonusmult = 4
 
         player_lifecycle.player_inv_update(state, 1)
 
-        field = self._field(state, 1)
-        assert field.health_drawn
-        assert field.health == 250
-        assert field.bonusmult == 4
+        assert self._inventory_glyphs(state, 1)[:2] == [romtext.GLYPH_KEY] * 2
+        assert not self._field(state, 1).health_drawn
 
     def test_key_pickup_refreshes_the_panel_immediately(self):
         state = _active_state()
         p = _make_player_active(state, 0, health=175)
         slot = _make_key_slot(state)
 
+        from gauntpy.game import romtext
+
         player_items.player_tile_interact(state, slot, 0)
 
         assert p.keysnum == 1
-        assert self._field(state, 0).health_drawn, (
-            "a pickup must re-latch the panel row, not wait four frames"
+        assert self._inventory_glyphs(state, 0)[0] == romtext.GLYPH_KEY, (
+            "a pickup redraws the inventory row immediately"
         )
 
     def test_potion_pickup_refreshes_the_panel(self):
@@ -1516,10 +1532,12 @@ class TestHudHooks:
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POT_DESTRUCTABLE))
 
+        from gauntpy.game import romtext
+
         player_items.player_tile_interact(state, slot, 3)
 
         assert p.potionsnum == 1
-        assert self._field(state, 3).health_drawn
+        assert self._inventory_glyphs(state, 3)[-1] == romtext.GLYPH_POTION
         assert 0x26 in state.sound_log
         assert 0x0E not in state.sound_log
 
@@ -1558,9 +1576,15 @@ class TestHudHooks:
         state.mobs.create(slot, tile=0, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_INVULN))
 
+        from gauntpy.game.subsystems import score
+
+        row = score.PLAYER_INV_ROW
+        start = row * score.ALPHA_ROW_STRIDE + score.INVENTORY_COLUMN
+        state.alpha_ram[start] = 0xFFFF          # stale cell
+
         player_items.player_tile_interact(state, slot, 0)
 
-        assert self._field(state, 0).health_drawn
+        assert state.alpha_ram[start] != 0xFFFF, "player_inv_update ran"
 
 
 class TestRedrawBitsOnEveryValueChange:
@@ -2041,8 +2065,11 @@ class TestPlayerTport:
         assert player_items.player_tile_interact(state, source, 0) == 0
 
     def test_tile_interact_reports_a_completed_teleport(self):
+        """0x513CE returns player_tport's -2; the movement tail keys on it."""
         state, source = self._world()
-        assert player_items.player_tile_interact(state, source, 0) == -1
+        assert player_items.player_tile_interact(state, source, 0) == (
+            player_items.TILE_TELEPORTED
+        )
 
 
 # =============================================================================
@@ -2594,12 +2621,18 @@ class TestDemoDrivesMovementAndFire:
 
     def test_recorded_fire_plays_the_throw_before_creating_a_shot(self):
         # 0xF1: bit 1 (FIRE) clear -> fire held.
+        from gauntpy.game.subsystems.player_input import demo_playback_start
+
         state = _demo_state([[], [40, 0xF1], [], []])
         self._elf(state)
+        demo_playback_start(state, 1)                # attract_demo_init 0x44A38
+        # main_handle_shots arms the throw (0x47B72) before main_move_players.
+        gp.player_shooting_input_update(state)
         gp.main_move_players(state)
         assert state.player_shooting[1]
         assert state.mobs.picture[2] == 0
         for _ in range(3):
+            gp.player_shooting_input_update(state)
             gp.main_move_players(state)
         assert state.mobs.picture[2] != 0, "player 1's shot channel is slot 2"
 
@@ -4662,6 +4695,8 @@ class TestHeroPictures:
         player = self._hero(state, 0, Character.WIZARD, 0x80, direction=0)
         state.player_input_raw[0] = 0xFFFF & ~JOY_FIRE_BIT
 
+        # main_handle_shots arms the throw (0x47B72) before main_move_players.
+        gp.player_shooting_input_update(state)
         gp.main_move_players(state)
 
         right = player_animation._PORT_DIR_TO_ROM_DIR[player.direction]
@@ -4672,6 +4707,7 @@ class TestHeroPictures:
         assert player.anim_counter == 1
 
         for _ in range(3):
+            gp.player_shooting_input_update(state)
             gp.main_move_players(state)
         assert state.mobs.picture[1] == gp._PLAYER_SHOT_PICTURE[
             int(Character.WIZARD) * 8 + right

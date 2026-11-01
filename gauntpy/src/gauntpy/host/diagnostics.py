@@ -452,7 +452,6 @@ def _display_page_rows(state: GameState) -> tuple[tuple[str, str], ...]:
         ("FF TIMER", str(state.forcefield_step_timer)),
         ("FF SEGMENTS", str(len(state.forcefield_segment_table))),
         ("PALETTE A/B", f"{state.palette_pulse_dir_a}/{state.palette_pulse_dir_b}"),
-        ("DISPLAY ENABLE", str(state.score_display_enabled)),
     )
 
 

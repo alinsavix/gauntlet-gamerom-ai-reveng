@@ -633,6 +633,76 @@ class TestDemoInit:
         assert state.dialog_first_encounter_flags & 0x01000000
 
 
+# Captured from MAME 0.289 (traces/mame/demo-state/20261031): the arcade demo
+# entered with seed 0xBFE6, transporter cycle 4/1/2 and forcefield timer/step
+# 5/6, none of which the ROM reinitializes. Each row is the state after that
+# many game-loop iterations (``frame_counter``): seed, Elf slot, H, V,
+# demo stream offset, demo timer, ``player_it`` and Elf potions. The rows sit
+# where a once-divergent mechanism first acts.
+_MAME_DEMO_MILESTONES = (
+    (154, 0xC8E1, 65, 0x060D, 0xEB12, 4, 4, 0xFFFF, 0),       # forcefield RNG draw
+    (309, 0x935A, 65, 0x060D, 0xE712, 8, 142, 0xFFFF, 0),     # acid heading roll
+    (820, 0xEA03, 323, 0x160D, 0xA812, 16, 7, 0xFFFF, 0),     # camera cull edge
+    (1032, 0x145E, 385, 0x070D, 0x9812, 26, 16, 0xFFFF, 0),   # treasure shimmer
+    (1248, 0x844E, 393, 0x420D, 0x9812, 38, 5, 0xFFFF, 0),    # food speech roll
+    (1459, 0x8DB4, 201, 0x460D, 0xC812, 44, 27, 0xFFFF, 0),   # throw arming frame
+    (1969, 0xEE7E, 198, 0x2F8D, 0xC812, 52, 24, 0xFFFF, 0),   # nudge is not a step
+    (2756, 0x8251, 492, 0x5A0D, 0x8012, 74, 46, 0xFFFF, 1),   # teleport keeps words
+    (5643, 0xB037, 794, 0xCE0D, 0x3812, 134, 54, 0x0000, 1),  # random-wall flank
+    (5659, 0x15B5, 794, 0xCE0D, 0x3792, 134, 38, 0x0001, 1),  # hero shove
+    (5841, 0x863E, 794, 0xCE0D, 0x3792, 134, 5, 0x0001, 1),   # even-pixel wall retry
+    (6539, 0x1A10, 378, 0xCE0D, 0x9F92, 142, 161, 0x0001, 1), # contact heading
+)
+
+
+@requires_roms
+def test_demo_follows_the_mame_capture(tmp_path):
+    """The attract demo, seeded like the cabinet, tracks MAME frame for frame.
+
+    No demo-only branch is involved: random walls block, monsters keep their
+    own step order, and every hero uses the ordinary movement core.
+    """
+    from gauntpy.game.mainloop import tick
+    from gauntpy.game.rng import GameRandom
+
+    state = GameState(rng=GameRandom(0xBFE6))
+    state.eeprom_save_path = str(tmp_path / "demo-eeprom.json")
+    state.tport_cycle_pos, state.tport_cycle_dir, state.tport_cycle_divider = 4, 1, 2
+    state.forcefield_step_timer, state.forcefield_step = 5, 6
+    start_attract_screen(state, int(GameMode.DEMO))
+    assert state.rng.seed == 0x30C4, "attract_demo_init makes 1022 draws"
+
+    elf = state.players[1]
+    rows = {row[0]: row[1:] for row in _MAME_DEMO_MILESTONES}
+    for iteration in range(1, 7168):
+        tick(state)
+        if iteration in rows:
+            seed, slot, h, v, offset, timer, it, potions = rows[iteration]
+            assert (
+                state.rng.seed, elf.mob_slot,
+                state.mobs.hpos[slot] & 0xFFFF, state.mobs.vpos[slot] & 0xFFFF,
+                state.demo_stream_pos[1], state.demo_timers[1],
+                state.player_it & 0xFFFF, elf.potionsnum,
+            ) == (seed, slot, h, v, offset, timer, it, potions), iteration
+        if iteration == 309:
+            # MONST_ACID turned to ROM direction 6 (gauntpy 4).
+            assert (state.mobs.hpos[68], state.mobs.vpos[68]) == (0x1E01, 0xEA92)
+            assert state.mobs.state(68) & 7 == 4
+        if iteration == 1032:
+            assert state.mobs.picture[682] == 0x990
+        if iteration == 5643:
+            assert (state.mobs.hpos[922], state.mobs.vpos[922]) == (0xCE0F, 0x1812)
+        if iteration == 5841:
+            assert (state.mobs.hpos[792], state.mobs.vpos[792]) == (0xBD8C, 0x3812)
+        if iteration == 6539:
+            # MONST_AUX_GRUNT faced ROM direction 2 (gauntpy 0) after contact.
+            assert state.mobs.state(343) & 7 == 0
+
+    assert (state.rng.seed, state.demo_stream_pos[1], state.player_it & 0xFFFF) == (
+        0xD90F, 148, 0xFFFF,
+    )
+
+
 class TestLogoColors:
     def test_cadence_counter_advances(self):
         state = GameState()

@@ -122,6 +122,17 @@ _TASK_HIDDENPOT_B = 0x5D
 #: A key is worth 100 before the bonus multiplier (0x514F4 ``pea $64``).
 _KEY_SCORE = 0x64
 
+#: player_tile_interact's transporter result: the teleport has started.
+TILE_TELEPORTED = -2
+
+#: Per-character food speech, ROM pointer/count tables 0x5B7C0/0x5B7D0.
+_FOOD_SPEECH_IDS = (
+    (0x88, 0x82, 0x81),     # Warrior
+    (0x8A, 0xA9),           # Valkyrie
+    (0x69, 0x6F, 0x71),     # Wizard
+    (0x77, 0x76),           # Elf
+)
+
 #: Food pictures and effects verified against 0x51ADC-0x51CFE.
 _RANDOM_FOOD_PICTURE = 0x277B
 _POISONED_FOOD_PICTURE = 0x25ED
@@ -425,19 +436,27 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             player.health += health_gain
             state.player_dizzy_timer[player_index] = 0  # 0x51CDA
             _dialog(state, player_index, _DIALOG_FOOD)  # 0x51CDE, record 0
-            _sound_play(state, 0x0D)
-            # 0x51D06-0x51D32: once the meal has carried the player back to 200
-            # the low-health machinery is stood down -- the cadence timer takes
-            # its disabled sentinel and the spoken-warning latch is re-armed.
-            # This is where §4.3's "reset to 0xFFFF" lives; main_health_countdown
-            # itself never writes it.
-            if player.health >= _LOW_HEALTH_THRESHOLD:
-                player.state_timer = _STATE_TIMER_DISABLED
-                state.player_lowhealth_spoken[player_index] = 0
         # 0x51CEE (wholesome) and 0x51C0C (poisoned) both bump the same byte
         # right after their dialog call, so eating *any* food counts.
         _secret_trick_progress(state, player_index, _TRICK_FOOD)
-        state.health_dirty[player_index] = 1             # player_redraw bit 1
+        # 0x51D06 is the shared tail; poison joins it at 0x51CBE.
+        # 0x51D06-0x51D32: once the player is back at 200 or more the
+        # low-health machinery is stood down -- the cadence timer takes its
+        # disabled sentinel and the spoken-warning latch is re-armed. This is
+        # where §4.3's "reset to 0xFFFF" lives; main_health_countdown itself
+        # never writes it.
+        if player.health >= _LOW_HEALTH_THRESHOLD:
+            player.state_timer = _STATE_TIMER_DISABLED
+            state.player_lowhealth_spoken[player_index] = 0
+        state.health_dirty[player_index] = 1             # 0x51D3E
+        # 0x51D44-0x51D92: a roll above 29 speaks one of the character's food
+        # lines instead of the eating sound.
+        if state.getrandom(0x20) > 0x1D:
+            lines = _FOOD_SPEECH_IDS[player.character & 0x03]
+            _sound_play(state, lines[state.getrandom(len(lines))])
+        else:
+            _sound_play(state, 0x0D)
+        state.escape_timer = 0                           # 0x51D96: clr.w (a3)
         # "Non-destructible" means shots cannot destroy it; collect() deletes
         # both food types after a successful pickup.
         state.mobs.unlink_and_clear(tile_mob_slot)
@@ -560,10 +579,13 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
 
     # ── Transporter ───────────────────────────────────────────────────────────
     if obj_type == int(MazeObjIds.TRANSPORTER):
-        # 0x513CE consumes player_tport's D0: -2 means the teleport happened,
-        # 0 means it was aborted for too few clear landing cells, in which case
-        # the tile has not been handled.
-        return -1 if player_tport(state, player_index, tile_mob_slot) else 0
+        # 0x513CE returns player_tport's D0 unchanged: -2 means the teleport
+        # happened, 0 means it was aborted for too few clear landing cells, in
+        # which case the tile has not been handled. The movement tail at
+        # 0x42570 keys on the -2.
+        if player_tport(state, player_index, tile_mob_slot):
+            return TILE_TELEPORTED
+        return 0
 
     # ── Exit ──────────────────────────────────────────────────────────────────
     if obj_type in (int(MazeObjIds.EXIT), int(MazeObjIds.EXITTO6)):
@@ -781,12 +803,9 @@ def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
          its panel redraw bit raised (0x51AA2).
 
     Called before the score award, because ``player_add_score_with_mult`` at
-    0x51AC4 multiplies by the value this leaves behind.
+    0x51AC4 multiplies by the value this leaves behind. The collector's own
+    redraw bit is raised after that award (0x51ACE), on the same shared tail.
     """
-    from .player_lifecycle import (
-        player_inv_update as player_inv_update,
-    )
-
     if state.mazenum_current in _TREASURE_ROOM_MAZES:
         # 0x519FE-0x51A12: the treasure-room band branches away before the
         # multiplier block and pays out on the bonus screen instead.
@@ -794,16 +813,13 @@ def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
 
     player = state.players[player_index]
     active = state.level_players_active
-    changed = set()
 
     if active != 1:                                        # 0x51A16
         player.bonusmult = (player.bonusmult + 2) & 0xFFFF  # 0x51A2A
-        changed.add(player_index)
 
     cap = (active * 2) & 0xFFFF                            # 0x51A46
     if player.bonusmult > cap:                             # 0x51A48, unsigned
         player.bonusmult = cap                             # 0x51A60
-        changed.add(player_index)
 
     for other in range(NUM_PLAYERS):                       # 0x51A64
         if other == player_index:                          # 0x51A66
@@ -815,9 +831,7 @@ def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
             continue
         victim.bonusmult = (victim.bonusmult - 1) & 0xFFFF  # 0x51A96
         state.health_dirty[other] = 1                      # 0x51AA2
-        changed.add(other)
-    for changed_player in sorted(changed):
-        player_inv_update(state, changed_player)
+    state.health_dirty[player_index] = 1                   # 0x51ACE
 
 # Movable-wall base picture (§18); maze_convert_walls_to_exits recognises it
 # alongside the 0x8000 marker (ROM 0x5E832).

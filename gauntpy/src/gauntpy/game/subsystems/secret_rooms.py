@@ -403,7 +403,6 @@ def _secret_room_payout(state: GameState, completed: bool) -> bool:
             open_name_entry = True
             bonus = _SECRET_ROOM_BONUS * max(1, player.coin_count)   # 0x4D778
             player.score += bonus                                # 0x4D788
-            state.score_dirty[winner] = 1
             state.bonus_amount = bonus
         player.status = int(PlayerStatus.ALIVE_NEXT)             # 0x4D85C
         player.keysnum = (

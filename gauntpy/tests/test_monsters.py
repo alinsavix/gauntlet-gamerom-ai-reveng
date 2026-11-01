@@ -1059,7 +1059,9 @@ class TestSpecialCases:
         state.frame_counter = _stagger_frame(slot)
         main_move_monsters(state)
         moved = _monster_slot(state, MazeObjIds.MONST_ACID)
-        assert state.mobs.state(moved) & 7 == 3
+        # 0x41242-0x4124C store the roll in the ROM compass; the state field
+        # holds gauntpy's, two steps round.
+        assert state.mobs.state(moved) & 7 == (3 - 2) & 7
 
     def test_acid_keeps_its_heading_off_turn(self):
         state = GameState()

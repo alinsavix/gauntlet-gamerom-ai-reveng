@@ -494,7 +494,9 @@ class TestPlayerTryMoveWallCollision:
         assert player_try_move(state, pi, gin.JOY_RIGHT, 0) != _NO_MOVE
         assert hpos_x(state.mobs.hpos[state.players[pi].mob_slot]) > before
 
-    def test_blocked_two_pixel_horizontal_axis_rolls_back_completely(self):
+    def test_blocked_two_pixel_horizontal_axis_rounds_to_the_even_pixel(self):
+        """0x41CD0-0x41CD6: a wall reverts the step, then retries to the next
+        even pixel (``addi #$80; andi #$FF7F``) without reporting a step."""
         state, pi = self._player_at_slot((5 << 5) | 5)
         player = state.players[pi]
         player.character = Character.WARRIOR
@@ -511,9 +513,10 @@ class TestPlayerTryMoveWallCollision:
         )
 
         assert player_try_move(state, pi, gin.JOY_RIGHT, 0) == _NO_MOVE
-        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 75
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) == 76
 
-    def test_blocked_two_pixel_vertical_axis_rolls_back_completely(self):
+    def test_blocked_two_pixel_vertical_axis_rounds_to_the_even_pixel(self):
+        """0x42110-0x42112: the down-axis wall arm keeps the even pixel."""
         state, pi = self._player_at_slot((5 << 5) | 5)
         player = state.players[pi]
         player.character = Character.WARRIOR
@@ -530,7 +533,7 @@ class TestPlayerTryMoveWallCollision:
         )
 
         assert player_try_move(state, pi, gin.JOY_DOWN, 0) == _NO_MOVE
-        assert vpos_y(state.mobs.vpos[player.mob_slot]) == 79
+        assert vpos_y(state.mobs.vpos[player.mob_slot]) == 80
 
     def test_maze16_narrow_wall_lane_auto_centers_under_held_input(self):
         """Regression for the frame-10310 live-state report at (41, 288)."""
@@ -553,7 +556,8 @@ class TestPlayerTryMoveWallCollision:
 
         for expected_x in (42, 43, 44):
             state.movement_type = 2
-            assert player_try_move(state, 0, gin.JOY_UP, 0) != _NO_MOVE
+            # A wall nudge moves the hero but reports no step (0x42346).
+            assert player_try_move(state, 0, gin.JOY_UP, 0) == _NO_MOVE
             assert hpos_x(state.mobs.hpos[player.mob_slot]) == expected_x
             assert vpos_y(state.mobs.vpos[player.mob_slot]) == 288
             state.frame_counter += 1
@@ -608,7 +612,8 @@ class TestPlayerTryMoveWallCollision:
 
         state, player = captured_state()
         state.movement_type = 2
-        assert player_try_move(state, 0, vertical, 0) != _NO_MOVE
+        # The aligning nudge reports no step; entering the lane does.
+        assert player_try_move(state, 0, vertical, 0) == _NO_MOVE
         assert (
             hpos_x(state.mobs.hpos[player.mob_slot]),
             vpos_y(state.mobs.vpos[player.mob_slot]),
@@ -639,7 +644,7 @@ class TestPlayerTryMoveWallCollision:
         )
         state.movement_type = 2
 
-        assert player_try_move(state, 0, gin.JOY_DOWN, 0) != _NO_MOVE
+        assert player_try_move(state, 0, gin.JOY_DOWN, 0) == _NO_MOVE
         assert hpos_x(state.mobs.hpos[player.mob_slot]) == 492
         assert vpos_y(state.mobs.vpos[player.mob_slot]) == 320
 
@@ -1018,7 +1023,10 @@ class TestMobCollisionDispatch:
         assert player.mob_slot == (5 << 5) | 5
         assert player_movement._player_record_cell(state, 0) == player.mob_slot
 
-    def test_diagonal_does_not_invent_horizontal_flank_contact(self):
+    def test_diagonal_flank_contact_only_starts_the_acid_windup(self):
+        """The right probe's lower flank (0x4270C) touches the puddle, which
+        winds up with its animation counter running (0x49988); the down
+        probe's second contact that frame is then ignored (0x49914)."""
         state = GameState(game_mode=GameMode.NORMAL)
         player = _active_player_at(state, 0, (5 << 5) | 5)
         player.health = 1000
@@ -1056,7 +1064,9 @@ class TestMobCollisionDispatch:
         assert state.thief_mob_slot == 0
         assert state.players[0].score == 500
 
-    def test_private_horizontal_probe_does_not_test_vertical_flanks(self):
+    def test_private_horizontal_probe_stops_at_a_pass_through_center(self):
+        """0x4270C tests the center first; an overlapping key there ends the
+        probe, so the lower-flank wall is never examined."""
         state = GameState(game_mode=GameMode.NORMAL)
         player = _active_player_at(state, 0, (5 << 5) | 5)
         player.health = 500
@@ -1074,7 +1084,7 @@ class TestMobCollisionDispatch:
         )
         state.movement_type = 2
 
-        assert player_try_move(state, 0, gin.JOY_RIGHT, 0) != _NO_MOVE
+        assert player_try_move(state, 0, gin.JOY_RIGHT, 0) == 0xE0
         assert hpos_x(state.mobs.hpos[player.mob_slot]) == 82
 
 
@@ -1099,7 +1109,8 @@ class TestCornerSqueezeGeometry:
 
         result = player_try_move(state, 0, gin.JOY_UP, 0)
 
-        assert result != _NO_MOVE
+        # 0x42560-0x42580 return the untouched result word after a squeeze.
+        assert result == _NO_MOVE
         # corner_squeeze_geometry receives active_mob_ids (row 10, col 10),
         # not the sprite-biased probe cell. The empty cell directly above is
         # therefore the landing selected by 0x4FEB2.

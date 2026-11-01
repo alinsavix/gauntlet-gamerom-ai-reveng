@@ -6,17 +6,14 @@ Reference: ``doc/04_game_subsystems.md`` §17; ``book/03_four_players.md``.
 from __future__ import annotations
 
 from ..constants import GameMode
-from ..coords import WORLD_PIXELS, hpos_x, vpos_y
+from ..coords import POS_SHIFT, WORLD_PIXELS
 from ..state import GameState
 
 
-#: The camera writes the ROM's hardware scroll registers. MOB V words count up
-#: from the playfield floor, so the party extent is taken in ordinary downward
-#: screen pixels (``coords.vpos_y``). Applying that conversion to
-#: ``0x1E8 - rom_midY - 0x6C`` yields ``world_midY - 0x74``.
-#: The renderer's exact world origin is therefore ``(scroll_x - 8, scroll_y)``.
+#: The camera writes the ROM's hardware scroll registers. The party extent is
+#: taken in MOB coordinates, whose V pixels count up from the playfield floor;
+#: the vertical target is ``0x1E8 - midV - 0x6C``.
 CAM_X_SHIFT = 0x68              # 104: midX = scroll_x + CAM_X_SHIFT
-CAM_Y_SHIFT = 0x74              # 116: midY = scroll_y + CAM_Y_SHIFT
 
 # ``scroll_set_position`` (0x46F56) has asymmetric, display-geometry-specific
 # limits.  They are register limits, not generic 512px world limits.
@@ -31,80 +28,100 @@ def _camera_target(
     state: GameState, *, include_camera: bool = True,
 ) -> tuple[int, int] | None:
     """The scroll target (hardware-register form) the party wants this frame,
-    or ``None`` when there is nothing to track. Steps 1-2 of §17 (extent with
-    wrap + rubber band, then the offset/inverted target); the smoothing and
-    clamp are the caller's.
+    or ``None`` when there is nothing to track.
+
+    0x46CDE-0x46EF8 work in MOB coordinates: H pixels, and V pixels that grow
+    up the screen. The extent starts at the current camera centre, so the
+    camera approaches the party at half rate. Each player then contributes in
+    two passes:
+
+    * 0x46D2A: while ``player_tport_phase`` is not negative, the cell in
+      ``player_tile_or_tport_dest`` -- the transporter destination -- widens
+      the extent directly;
+    * 0x46DC6: the live MOB position widens it subject to the 0x140 rubber
+      band, which pulls an outlier 0xC8 pixels back toward the party.
+
+    The midpoint is averaged before the V axis is inverted (0x46EE8), which
+    fixes the rounding of an odd extent.
     """
-    # The current camera centre participates in the extent. Besides giving the
-    # original's half-rate approach, this is the reference frame that makes
-    # seam folding stable when the 9-bit scroll register is near 0/511.
-    min_x = max_x = state.scroll_x + CAM_X_SHIFT
-    min_y = max_y = state.scroll_y + CAM_Y_SHIFT
-    if not include_camera:
-        min_x = max_x = None
-        min_y = max_y = None
+    left = state.scroll_x - 0x98                     # 0x46CDE
+    v_top = 0x27C - state.scroll_y                   # 0x46CEE
+    if include_camera:
+        min_x = max_x = state.scroll_x + CAM_X_SHIFT    # 0x46D0A
+        min_v = max_v = 0x17C - state.scroll_y          # 0x46D16
+    else:
+        min_x = max_x = min_v = max_v = None
     tracked = False
-    window_left = state.scroll_x - 0x98
-    window_top = state.scroll_y - 0x8C
+
+    # ROM: part game:0x46CAA | Shared one-maze wrap fold of each extent point against the window at 0x46D84-0x46DAC/0x46E16-0x46E3E.
+    def fold(x: int, v: int) -> tuple[int, int]:
+        if include_camera or state.wrap_h:
+            if x < left:
+                x += WORLD_PIXELS
+            elif x >= left + WORLD_PIXELS:
+                x -= WORLD_PIXELS
+        if include_camera or state.wrap_v:
+            if v < v_top - WORLD_PIXELS:
+                v += WORLD_PIXELS
+            elif v >= v_top:
+                v -= WORLD_PIXELS
+        return x, v
 
     for i, player in enumerate(state.players):
-        if state.player_in_maze[i] == 0:
+        slot = player.mob_slot
+        if not slot:
             continue
         tracked = True
 
-        px = hpos_x(state.mobs.hpos[player.mob_slot])
-        py = vpos_y(state.mobs.vpos[player.mob_slot])
+        if state.player_tport_phase[i] >= 0:         # 0x46D36
+            cell = state.player_tile_or_tport_dest[i]
+            x, v = fold(((cell & 0x1F) << 4) - 4,
+                        ((cell & 0x3E0) ^ 0x3E0) >> 1)
+            if min_x is None:
+                min_x = max_x = x
+                min_v = max_v = v
+            else:
+                max_x = max(max_x, x)
+                max_v = max(max_v, v)
+                min_x = min(min_x, x)
+                min_v = min(min_v, v)
 
-        if include_camera or state.wrap_h:
-            if px < window_left:
-                px += WORLD_PIXELS
-            elif px >= window_left + WORLD_PIXELS:
-                px -= WORLD_PIXELS
-        if include_camera or state.wrap_v:
-            if py < window_top:
-                py += WORLD_PIXELS
-            elif py >= window_top + WORLD_PIXELS:
-                py -= WORLD_PIXELS
-
+        x, v = fold((state.mobs.hpos[slot] & 0xFFFF) >> POS_SHIFT,
+                    (state.mobs.vpos[slot] & 0xFFFF) >> POS_SHIFT)
         if min_x is None:
-            min_x = max_x = px
-            min_y = max_y = py
+            min_x = max_x = x
+            min_v = max_v = v
             continue
-
-        if px > max_x:
-            if px - min_x > 0x140:
-                px -= 200
+        if x > max_x:                                # 0x46E40
+            if x - min_x > 0x140:
+                x -= 0xC8
             else:
-                max_x = px
-        if py > max_y:
-            if py - min_y > 0x140:
-                py -= 200
+                max_x = x
+        if v > max_v:                                # 0x46E5E
+            if v - min_v > 0x140:
+                v -= 0xC8
             else:
-                max_y = py
-        if px < min_x:
-            if max_x - px > 0x140:
-                px += 200
-                max_x = max(max_x, px)
+                max_v = v
+        if x < min_x:                                # 0x46E7C
+            if max_x - x > 0x140:
+                x += 0xC8
+                max_x = max(max_x, x)
             else:
-                min_x = px
-        if py < min_y:
-            if max_y - py > 0x140:
-                py += 200
-                max_y = max(max_y, py)
+                min_x = x
+        if v < min_v:                                # 0x46EA0
+            if max_v - v > 0x140:
+                v += 0xC8
+                max_v = max(max_v, v)
             else:
-                min_y = py
+                min_v = v
 
     if not tracked:
-        return  # no players tracked -- nothing to scroll toward
+        return None
     assert min_x is not None and max_x is not None
-    assert min_y is not None and max_y is not None
+    assert min_v is not None and max_v is not None
 
-    # --- Step 2: compute target scroll position ---
-    # Midpoint of the adjusted extent, offset so the maze viewport centres
-    # rather than the full 336x240 screen. The upward MOB V word has already
-    # been converted to downward screen Y, leaving a simple offset.
-    target_x = (min_x + max_x) // 2 - 0x68
-    target_y = (min_y + max_y) // 2 - CAM_Y_SHIFT
+    target_x = ((min_x + max_x) >> 1) - CAM_X_SHIFT           # 0x46ED2/0x46EFC
+    target_y = 0x1E8 - ((min_v + max_v) >> 1) - 0x6C          # 0x46EE0-0x46F1A
     return target_x, target_y
 
 
@@ -124,9 +141,9 @@ def main_scroll_playfield(state: GameState) -> None:
     if state.level_players_active <= 0:
         return
 
-    # ``player_in_maze`` / ``player_tile_or_tport_dest`` (0x904BCE / 0x904BD8) are
-    # maintained by ``main_move_players`` (WP-5/6), which runs earlier in the
-    # frame; the camera only reads them here (§17).
+    # ``player_tport_phase`` / ``player_tile_or_tport_dest`` (0x904BCE /
+    # 0x904BD8) are maintained by ``main_move_players`` (WP-5/6), which runs
+    # earlier in the frame; the camera only reads them here (§17).
     target = _camera_target(state)
     if target is None:
         return

@@ -1009,7 +1009,8 @@ class TestHud:
         draw_hud(baseline, state, HUD_PANEL)
         state.players[2].status = PlayerStatus.ALIVE_HERE
         state.players[2].score = 7654321
-        state.frame_counter = 2
+        state.score_dirty[2] = 1                 # the producer's request
+        state.frame_counter = 6                  # player 2, score window
         main_score_display(state)
 
         fb = Framebuffer(336, 240)
@@ -1039,6 +1040,7 @@ class TestHud:
         main_score_display(state)
 
         state.players[0].score = 999999      # changes mid-frame, not yet drawn
+        state.score_dirty[0] = 1             # player_redraw bit 0
         fb_stale = Framebuffer(336, 240)
         draw_hud(fb_stale, state, HUD_PANEL)
 

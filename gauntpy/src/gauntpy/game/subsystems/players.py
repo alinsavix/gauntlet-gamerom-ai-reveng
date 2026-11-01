@@ -60,6 +60,7 @@ from .mob_probes import (
 )
 from .player_data import _NO_MOVE, _SHOT_PALETTE_BASE
 from .player_items import (
+    TILE_TELEPORTED,
     _dialog,
     door_open_start as door_open_start,
     initialize_player_temporary_power as initialize_player_temporary_power,
@@ -737,11 +738,9 @@ def main_move_players(state: GameState) -> None:
             rom_direction = _direction_from_input(dirn)
             if rom_direction < 8:
                 player.direction = (rom_direction - 2) & 0x07
-        # ``main_handle_shots`` normally performs this input pass earlier in a
-        # complete frame. Repeating the idempotent gate here supports direct
-        # subsystem ticks; it must follow the facing update for a newly loaded
-        # demo SHOOT record.
-        _player_shooting_input_update_one(state, player_index)
+        # Fire is armed only by main_handle_shots (0x47B72), which runs before
+        # this routine advances the demo record: a newly loaded SHOOT record
+        # starts its throw on the following frame.
 
         # 0x4A9C0 keeps a just-armed throw still through its four-count wind-up;
         # a held Fire line otherwise bypasses the movement call at 0x4A9DE.
@@ -775,6 +774,9 @@ def main_move_players(state: GameState) -> None:
                     _player_record_cell(state, player_index) if walking else None
                 )
             else:
+                # 0x4AA1E still calls the wrapper, which folds and clears any
+                # shove-cancelled direction even with the stick centred.
+                state.player_deferred_move_flags[player_index] = 0
                 state.player_fighting_dir[player_index] = 0
 
         # Forcefield contact damage (0x4AA42-0x4AAB8; §4.3 TRAP 5).  It sits
@@ -829,15 +831,20 @@ def main_move_players(state: GameState) -> None:
                 handled = player_tile_interact(
                     state, current_tile_slot, player_index,
                 )
-                if handled:
+                if handled == TILE_TELEPORTED:
+                    # 0x42570-0x42580: a started teleport returns without
+                    # committing this frame's move words.
+                    if movement_origin is not None:
+                        source, old_h, old_v = movement_origin
+                        if player.mob_slot == source:
+                            state.mobs.hpos[source] = old_h
+                            state.mobs.vpos[source] = old_v
+                            movement_destination = source
+                elif handled:
                     migrated = migrate_player_record(
                         state, player_index,
                     )                                       # 0x42588 -> 0x424F2
-                    if (
-                        not migrated
-                        and state.player_tport_phase[player_index] < 0
-                        and movement_origin is not None
-                    ):
+                    if not migrated and movement_origin is not None:
                         source, old_h, old_v = movement_origin
                         if player.mob_slot == source:
                             state.mobs.hpos[source] = old_h

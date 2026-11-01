@@ -2328,11 +2328,13 @@ Called every frame, but skips TITLE (0xFFFE) and SCORES (0xFFFF). It selects
 one player per frame using `frame_counter & 3` and redraws only fields whose
 update conditions require it:
 
-- Score redraw requires bit 2 of 0x904007 and update bit 0, then uses
+- Score redraw requires bit 2 of 0x904007 — the low byte of `frame_counter`,
+  so alternate four-frame windows — and update bit 0, then uses
   `draw_player_score` (0x45940) to render the seven-digit `player_score` at
   0x904990 through OS `display_decimal_value` (0x260), with the flash
-  attribute from table 0x57350. It clears update bit 0 afterward.
-- Health redraw uses update bit 1 or health below 0xC8 and
+  attribute from table 0x57350. It clears update bit 0 afterward, and a score
+  draw ends the call (0x45830).
+- Otherwise health redraw uses update bit 1 or health below 0xC8 and
   `draw_player_health` (0x459A2). It renders the bonus multiplier when greater
   than one and the five-digit health value at 0x904980. During the dim half of
   a low-health pulse it shifts the palette by −0x1000; acid-slowed players use
