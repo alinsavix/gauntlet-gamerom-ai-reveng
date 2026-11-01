@@ -37,7 +37,10 @@ Clearing one cell can make the difference.
 
 Placement comes before the join's final welcome and status updates.
 Successful placement creates the hero, establishes its movement and
-effect state, and increments the active-player count. Only then does the
+effect state, and increments the active-player count. Outside the
+Legend screens it also starts the transporter sparkle on the new hero's
+cell, so the Wizard appears inside a brief flash; a hero who dies of
+lost health leaves the same flash behind. Only then does the
 join wrapper finalize the arrival, redraw the information panel, and send
 the welcome. Credit and character choice alone do not establish a body
 inside the level.
@@ -140,12 +143,19 @@ results, before special responses:
 That axis order gives walls their sliding behavior. Failure on one axis
 does not necessarily cancel success on the other.
 
-The probes themselves are not symmetrical boxes. The player's horizontal
-probe examines the adjacent cell; a vertical probe examines the forward
-cell and its two horizontal flanks. Finding a record in one of those
-cells is only the start of the test. The game compares object anchors,
-the reference positions used to locate their artwork, on both axes.
-Wall markers have an anchor correction before that comparison.
+Each probe examines three cells. A horizontal probe looks at the
+adjacent cell in the hero's row, then the one above it, then the one
+below; a vertical probe looks at the forward cell, then its left and
+right neighbours. (A hero in the second row never looks horizontally
+into the reserved row above.) Finding a record in one of those cells is
+only the start of the test. The game compares object anchors, the
+reference positions used to locate their artwork, on both axes. Wall
+markers have an anchor correction before that comparison.
+
+The first record that passes the anchor test ends the probe, whatever it
+is. If that record is a key, the move is settled by the key: the hero is
+allowed through to collect it, and a wall waiting in a flank cell behind
+it never gets a vote.
 
 This matters because a hero's picture is 24 pixels wide, while maze cells
 are 16 pixels across. Picture overlap and blocked movement are not
@@ -155,26 +165,55 @@ not inspect the outline of the hero's colored pixels.
 
 Suppose the Elf approaches between two walls and is slightly off the
 entry line. The forward cell is empty, but a flank fails the anchor test.
-Special wall responses can retry the blocked axis at one pixel and nudge
-the other axis away from that flank. Continued input toward the passage
-can therefore bring the hero into alignment and then admit the next
-step. This is explicit corner assistance, not a promise that every
-blocked two-pixel proposal will be shortened until something fits.
+A wall never simply refuses. It restores the blocked axis and then moves
+it to the next even pixel toward the wall, so a two-pixel step into a
+one-pixel gap still closes the gap. If the hero overlaps the flank by
+enough, and is not steering toward it, the response also tries a
+one-pixel nudge sideways, away from that flank, and keeps the nudge only
+if that position is clear. Continued input toward the passage can
+therefore bring the hero into alignment and then admit the next step.
+This is explicit corner assistance, not a promise that every blocked
+proposal will be shortened until something fits.
 
-It also is not permission to squeeze through the Warrior. When another
-hero occupies the destination, that occupancy still matters. The movement
-tail distinguishes staying within the same cell from entering a new one.
-A clear destination lets the hero's record migrate there. A collectible
-gets its interaction first; if the interaction cannot handle the occupied
-cell, the proposed entry is abandoned. The game does not overwrite the
-occupant merely because the moving picture seems close enough.
+It also is not permission to walk through the Warrior. A probe that
+finds another hero takes a branch of its own. The Elf's step is
+cancelled; instead the game tries to shove the Warrior, by calling the
+same movement routine on the Warrior's behalf with a one-pixel step in
+the direction the Elf was pushing. If the two overlap substantially from
+the side, the shove also leans away from the Elf's side, so the Warrior
+is eased out of the doorway diagonally rather than pinned against its
+far edge.
 
-The Warrior must make room.
+Whether the shove happens depends on the Warrior. A hero who is not
+pushing back, or who is stunned, always gives way. A hero who is pushing
+back consults a small table indexed by the two characters, and here the
+classes differ sharply:
+
+| Pushed hero, pushing back | Can be shoved by |
+|---------------------------|------------------|
+| Warrior | nobody |
+| Valkyrie | nobody |
+| Wizard | Warrior, Valkyrie, Elf |
+| Elf | Warrior, Valkyrie |
+
+When the table allows it, the shoved hero also loses that pushing-back
+direction for its own next move, so it cannot immediately undo the
+shove. Separately, the movement tail still distinguishes staying within
+a cell from entering a new one: a hero's record migrates only into a
+clear cell, and the game never overwrites an occupant merely because the
+moving picture seems close enough.
+
+The Warrior must make room, or at least stop pushing.
 
 There is one more distinction worth keeping for the next chapter. Facing
-records where the hero is aiming; achieved movement records which axes
-actually succeeded. Facing right against a wall can coexist with zero
-rightward displacement. Poison adds another separation: while dizziness
+records where the hero is aiming; the movement result records which axes
+*stepped*. Facing right against a wall can coexist with zero rightward
+displacement, and the reverse is possible too. The one-pixel wall
+responses move a hero without counting as a step, while a successful
+shove counts as a step for a hero who did not move. The walking
+animation follows that result, not the position: the Elf sliding a pixel
+along a wall shows its standing picture, and the Elf shoving the Warrior
+walks in place. Poison adds another separation: while dizziness
 is active, held Up cycles through Up+Right, Up, Up+Left, and Up, without
 changing the Fire and Magic bits. A stun instead suppresses ordinary
 movement while its timer runs. Those are different reasons for the
@@ -193,23 +232,22 @@ drag the Elf backward.
 
 For the horizontal camera calculation, begin with its current register
 position plus 104 pixels. That center seeds both ends of an extent: the
-minimum and maximum positions the camera is considering. Eligible player
-cell anchors and live positions expand the extent. Its midpoint supplies
-a target, from which the game subtracts 104 to obtain the new horizontal
-scroll target.
+minimum and maximum positions the camera is considering. Each hero's
+live position expands the extent. A hero in the middle of a teleport also
+contributes the destination cell, converted to `column × 16 − 4`, so the
+view starts toward where that hero will reappear. The extent's midpoint
+supplies a target, from which the game subtracts 104 to obtain the new
+horizontal scroll target.
 
 Including the current center changes the answer. Here is a simplified,
-non-wrapping horizontal calculation for our four friends, with matching
-cell and live anchors and no outlier correction. Their zero-based cell
-columns are 15, 16, 17, and 18. The camera converts each column to
-`column × 16 − 4`, giving the four reachable anchors below; assume their
-live positions currently match those anchors.
+non-wrapping horizontal calculation for our four friends, with no
+teleport in progress and no outlier correction.
 
 | Quantity | Pixels |
 |----------|--------|
 | Current horizontal scroll | 100 |
 | Current center used in the extent | 204 |
-| Four hero anchors | 236, 252, 268, 284 |
+| Four hero positions | 236, 252, 268, 284 |
 | Extent including the center | 204 through 284 |
 | Midpoint | 244 |
 | Target scroll, midpoint minus 104 | 140 |
@@ -220,8 +258,11 @@ That is not this algorithm. The old center gives the moving party a
 different target, and smoothing prevents an immediate jump even to 140:
 when the target is at least three pixels away, the camera moves only two
 pixels per axis. It snaps the remaining distance when that distance is
-smaller. Vertical tracking follows corresponding extent arithmetic with
-the game's upward-counting coordinate converted for display.
+smaller. Vertical tracking follows corresponding extent arithmetic in the
+game's upward-counting coordinate, and the midpoint is taken there before
+converting for display. That order decides which way an odd extent rounds,
+and a single pixel of camera position is not cosmetic: the next chapter
+shows the same scroll registers deciding which monsters move at all.
 
 Wrapping mazes require another precaution. Across a 512-pixel seam,
 coordinates 508 and 12 can describe neighbors sixteen pixels apart.
@@ -322,8 +363,10 @@ The curse can be passed by moving into another player. Direction matters:
 the mover must already be IT. The Warrior running into the marked Elf
 does not take the curse by that act alone. When the Elf tags the Warrior,
 the game changes the owner, updates the label and announcement, and gives
-the recipient a 64-frame stun. Recursive corner-assistance retries cannot
-perform another tag.
+the recipient a 64-frame stun. The same bump then shoves the Warrior,
+who is now stunned and so cannot resist. That shove is itself a call to
+the movement routine, but a nested one, and nested calls can neither tag
+nor shove anyone in turn.
 
 That makes the same doorway useful for an entirely different purpose.
 Earlier it restricted enemy access. Now it restricts a friend's escape
@@ -358,6 +401,10 @@ They have fewer decisions to make, but there are many more of them.
   camera, Magic, IT, and player-shot effects. Door-helper zero-return
   semantics remain a strong inference in that reference; this chapter
   does not depend on naming that return as an independently observed event.
+- The arrival flash is `player_start_inner`'s call to `tport_cycle_start`
+  at `0x48E10–0x48E26`, skipped in LEGEND mode; the death flash is the
+  same call in `main_health_countdown` at `0x46906–0x4691C`. A MAME demo
+  capture shows the Elf's arrival flash occupying effect slot 13.
 - Movement patterns were checked against `player_speed_normal` and
   `player_anim_rate`, ROM `0x580A8–0x580C7`, and their consumer at
   `0x4A92C–0x4A95C`. The ordinary-maze qualification excludes the
@@ -369,11 +416,20 @@ They have fewer decisions to make, but there are many more of them.
   `potion_effect_matrix` at `0x5DA98`; see also the
   [data reference](../doc/05_data_reference.md), §§5 and 8.
 - Camera pseudocalculations isolate horizontal behavior. Direct
-  disassembly of `0x46CAA–0x46F54` confirms that both eligible cell
-  anchors and live positions participate, with the current center
-  seeding the extrema. The cell-column conversion is at
-  `0x46D62–0x46D6E`: mask to five bits, multiply by sixteen, subtract
-  four. Movement edge gates are separate branches in `player_try_move_core`.
+  disassembly of `0x46CAA–0x46F54` confirms that live positions
+  participate, that destination cells participate only while
+  `player_tport_phase` is not negative, and that the current center seeds
+  the extrema. The cell-column conversion is at `0x46D62–0x46D6E`: mask to
+  five bits, multiply by sixteen, subtract four. Movement edge gates are
+  separate branches in `player_try_move_core`.
+- The three-cell horizontal probes are `0x426D4`/`0x4270C`; the wall
+  responses and their 0x540 nudge threshold, and the four shove arms with
+  the class table at `0x41BD0` and `player_deferred_move_flags`, are
+  described in [game subsystems](../doc/04_game_subsystems.md) §4.2. The
+  probe and wall-response behavior was confirmed by executing the
+  original `player_try_move` on test positions; the shove is from
+  disassembly and a MAME 0.289 capture of the attract demo, where the
+  Wizard shoves the Elf.
 - All party situations and numerical movement/camera examples here are
   illustrative, not captured original-ROM play. The reconstructed
   [player frame loop](../gauntpy/src/gauntpy/game/subsystems/players.py),

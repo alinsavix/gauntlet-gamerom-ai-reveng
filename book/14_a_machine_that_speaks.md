@@ -85,11 +85,21 @@ automatically repeat the warning. The spoken latch remains a separate
 obstacle.
 
 Eating food that leaves health at 200 or above clears the latch, as well
-as disabling the low-health display timer. Join and death initialization
+as disabling the low-health display timer. Poisoned food passes through
+the same step, so poison that leaves a strong hero above 200 clears it
+too. Join and death initialization
 also clear warning state. Merely waiting at dangerously low health does
 not clear the latch every thirty seconds. If food restores the Elf above
 the threshold and a fight soon knocks the Elf below it again, the latch
 may be clear while the old cooldown still prevents another announcement.
+
+Eating also gives the voice an occasional chance to comment. After any
+food, the game draws a number from zero through thirty-one; thirty or
+thirty-one, one meal in sixteen, replaces the ordinary eating sound with a
+line chosen for the eater's class, from three candidates for the Warrior
+and Wizard and two for the Valkyrie and Elf. Poisoned food makes the same
+draw after its own character groan, so a poisoned hero can occasionally
+remark on the meal as well.
 
 This gives the voice a different rhythm from the heartbeat. The heartbeat
 uses a counter advanced every eligible frame below 200 and a mask selected
@@ -375,7 +385,9 @@ forcefield—and the quarter that may let the Blue Elf continue.
   §4.3; `player_lowhealth` at `0x487CA–0x488C8`, health-drain caller
   `0x46770–0x46794`, cooldown decrement `0x467C2–0x467D8`, and
   food reset `0x51D06–0x51D32`. Tables at `0x5797A`, `0x596F6`,
-  and `0x576A8` supply phrases, identities, and heartbeat masks.
+  and `0x576A8` supply phrases, identities, and heartbeat masks. The
+  meal roll and class food lines follow at `0x51D44–0x51D92`, with banks
+  at `0x5B7C0`/`0x5B7D0`.
 - Game-side transport and recovery: [game subsystems](../doc/04_game_subsystems.md),
   §11, [hardware I/O](../doc/01_hardware.md), §3, and
   [OS sound services](../doc/02_os_rom.md), §§8.7–8.8.

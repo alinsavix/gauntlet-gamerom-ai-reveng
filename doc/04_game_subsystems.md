@@ -85,8 +85,14 @@ by character first:
    `(direction, char_type × 8)`. The counter does not advance.
 
 2. **Walking:** Tile from `anim_table_walking` (0x58A8A), indexed by
-   `(anim_counter/4 & 3, direction, char_type × 32)`. The counter increments
-   after the lookup only when `player_try_move` did move.
+   `(anim_counter/4 & 3, direction, char_type × 32)`. The branch is taken,
+   and the counter increments after the lookup, only when the movement result
+   saved at `-6(A6)` (0x4AA28) differs from 0xF0. That local starts each
+   player at 0xF0 (0x4A7F0) and receives `player_try_move`'s result word,
+   which reports axis *steps* rather than displacement (§4.2). A hero sliding
+   one pixel along a wall, pushing a movable wall, or walking left through a
+   pickup therefore shows the idle or shooting picture while it moves, and a
+   hero shoving another hero walks in place.
 
 3. **Fighting:** A nonzero `player_fighting_dir` selects
    `anim_table_fighting` (0x5884A), indexed by
@@ -99,7 +105,13 @@ by character first:
    held-Fire gate in `main_handle_shots` (0x47B72–0x47BF6) resets the counter
    and arms this state; `main_move_players` increments it and calls
    `player_create_shot` when the prior counter equals that player's
-   `fighting_anim_end` word (the shipped values are all 3).
+   `fighting_anim_end` word (the shipped values are all 3). The branch then
+   ends the throw (0x4ABF4-0x4AC0C): it clears `player_shooting` once the
+   prior counter exceeds 15, or exceeds 8 with Fire released. Because the
+   walking branch has priority, a hero that walks away mid-throw keeps the
+   flag until a later non-walking frame clears it. `main_handle_shots` runs
+   before `main_move_players` advances the demo stream, so a newly loaded
+   recorded Fire starts its throw on the following frame.
 
 **Invisibility flickering:** When the invisibility power-up is active with a short timer remaining, the `invisibility_flash_masks` table (0x58070) ANDs a frame-dependent mask with the frame counter. When the result is zero, the player's MOB picture is set to `0x1709` (blank/invisible) — creating a flickering effect.
 
@@ -147,12 +159,22 @@ predicate and this chain arc must wrap. Clamping either lookup at band 63
 omits the row-zero side of the arc when the camera crosses the vertical seam,
 leaving visible monsters neither moving nor animating.
 
+The walk processes the start entry itself and, on reaching the stop entry,
+processes it too before finishing (0x414CE-0x414FA). Both the culling origins
+and the SLIP lookups read the scroll registers that `main_scroll_playfield`
+has already advanced this frame, so the camera decides which creatures act:
+a one-pixel difference in its target is enough to move a creature across the
+0x8380 culling edge (§17).
+
 ### 3.2 Monster Dispatch
 
 `monsters_everything` does NOT use a jump table. Instead, it uses a single shared handler with conditional branches:
 
 ```
-1. Extract type from mob_link bits 15-10
+0. Is type treasure (0x2E, tested at 0x40FBA before culling)?
+   YES → on frames where (frame_word & 6) == 0, add 9 to the picture,
+         wrapping 0x99A back to 0x987 (the chest shimmer); next entry
+1. Extract type from mob_link bits 15-10; skip types outside 0x12–0x2D
 2. Is type a generator (types 28–45)?
    YES → generator spawning code (0x41026)
 3. Is type a super sorcerer (26)?
@@ -174,7 +196,19 @@ The bit-4 state is an *attack-animation* state rather than a separate pursuit
 mode; both it and the idle state reach `monster_find_and_shoot`, and both fall
 through to the same movement/collision body, which writes the H/V words and
 calls `move_mob_slot` on a clear destination or `monster_playerhit` when the
-destination holds a player (0x41336–0x413C2).
+destination holds a player (0x41336–0x413C2). After the hit,
+`apply_direction_from_delta` (0x41B7E) turns the creature toward the hero.
+It is not the aiming picker: it subtracts full 16-bit position words, starts
+from up-right, treats a horizontal gap under 0x400 (8 pixels) as aligned
+(up), then a vertical gap under 0x400 as aligned (right, which wins when both
+are), and folds the signs arithmetically, `(0x20 - d3) & 0x1C` for a hero to
+the left and `(0x30 - d3) & 0x1C` for one below. A hero seven pixels lower
+is therefore "level" here although the aiming code would face diagonally.
+
+The picture is not refreshed on every path. `monster_update_anim_tile`
+(0x414A4) is reached only from the animation-tail branches; a move into a free
+cell jumps to the tail at 0x41454 with the old picture, and several gated
+arms continue at 0x414BE without touching it.
 
 **The `D6` monster-index offset. Confidence: Verified** by disassembly at
 0x40FAE–0x41022 and 0x411BA–0x41460. Throughout the loop body `D6` is **not**
@@ -232,7 +266,9 @@ Verified** at 0x411D2–0x4121E and 0x413E6–0x41428:
 In the idle (neither bit) state the handler first applies a per-monster turn
 stagger, `((slot | 2) ^ frame) & 0x1E`, and only then calls
 `monster_find_and_shoot`; acid instead rolls a fresh random direction
-(0x41222–0x41250).
+(0x41222–0x41250). The roll is written straight into the state word's
+direction field (`andi.w #$E3FF`, then `add.b` of `random(8) << 2` into the
+high byte), so it is a ROM-compass heading, 0 = up.
 
 **Monster speeds:** **Confidence: Verified** by disassembly at
 0x40EEE–0x40F58. `monsters_everything` builds a seven-longword per-family
@@ -363,6 +399,17 @@ voice bank at 0x57AAE and submit the selected sound through `sound_play`.
 
 Called from monster/player collision dispatch when a monster overlaps a player. It selects contact damage from the 64-word `monster_contact_damage_table` at 0x57A2E, using the contact class and player character and selecting the powered-player half when applicable. It then applies the type-specific collision behavior, including invincibility checks and hurt/low-health audio where appropriate. The `shothit_dist_H/V` words at 0x904028/0x90402A are collision-distance scratch values used by shot and MOB probes; they are not damage tables.
 
+Contact first puts an idle creature into its attack state (0x498EE-0x49926:
+bit 5 of the H word) and deals nothing that frame. An acid puddle does more
+on that first contact. In normal play (0x4993E-0x499B8) it rewrites its own
+state word as `calc_direction(puddle, hero) << 10` plus the back-link plus
+0x2000 -- facing the hero with its animation counter already running -- stuns
+the hero for 0x20 frames and plays 0x36 unless the hero is already slowed. A
+later contact deals acid damage only once those animation bits (`& 0xE000`)
+are zero again (0x49904-0x4991E), so a second contact in the same frame, from
+the other axis of a diagonal move, does nothing. In attract mode the puddle is
+instead removed and its damage charged immediately (0x499BC).
+
 ### 3.8 Monster / Combat Calling Contracts
 
 **Confidence: Verified.** `monsters_everything(uint16 first_mob_offset)` is a
@@ -448,10 +495,28 @@ branch.
 
 The core collision-checked movement function takes three normal stack
 arguments, `uint16 player_index, int16 delta, uint16 movement_flags`, and
-returns its movement result in `D0.w`: `0x00F0` means no movement and every
-other observed value means movement occurred. It is a frameless wrapper, but
-saves `D2-D7/A2-A6` before reading the arguments at their resulting stack
-offsets. It handles:
+returns a result word in `D0.w`. It is a frameless wrapper, but saves
+`D2-D7/A2-A6` before reading the arguments at their resulting stack offsets.
+Before entering the core it ORs `player_deferred_move_flags[player]`
+(0x9048B4) into the active-low joystick and clears that word (0x41C02-0x41C0C);
+a shove by another hero uses it to cancel one direction for one call.
+
+The result word is pushed as 0xF0 at 0x41C46 and each axis clears its own
+active-low bit (0x10 right, 0x20 left, 0x40 down, 0x80 up) at 0x41E7E,
+0x42086, 0x422BA and 0x424C6. It reports *steps*, not displacement:
+
+- a clear probe clears the bit, as does `mob_collision_test` passing the hero
+  through an object on the right, down and up axes;
+- on the left axis that pass branches to 0x4208A, after the clear at 0x42086,
+  so walking left through a pickup or transporter reports no step;
+- shoving another hero clears the bit although the mover stays put;
+- a wall's even-pixel retry or nudge, and a movable-wall push, move the hero
+  without clearing anything;
+- a squeeze (0x42560-0x42580) and a started teleport (0x42570) return the
+  word as it stands, and a refused tile interaction returns 0xF0.
+
+`main_move_players` reads any value other than 0xF0 as walking (§2.2). The
+function handles:
 
 - Orthogonal and diagonal movement with wall collision
 - Door traversal (calls `door_traverse_right/left/up/down`)
@@ -467,11 +532,13 @@ helper receives candidate/current/player offsets in `D1/D2/D5`, returning a
 boolean in `D0.l` with Z set from that result.
 
 The primary move is transactional by axis. The core adds the complete `D6`
-speed word (1–3 pixels) to H once, probes that endpoint, and retains or rolls
-back the whole H delta. It then does the same for V using the resolved H. It
-does not probe ordinary movement one pixel at a time. The `D6=0x80` calls
-inside collision arms are distinct recursive response moves with newly selected
-flags.
+speed word (1–3 pixels) to H once and probes that endpoint. A clear probe keeps
+it; a blocking one reverts it and hands the axis to a collision arm, which may
+keep part of the motion (wall retry) or move someone else (shove). It then does
+the same for V using the resolved H, unless a horizontal wall arm tried a nudge
+and jumped straight to the commit tail. It does not probe ordinary movement one
+pixel at a time. The `D6=0x80` calls inside the player-contact arms are
+recursive core calls for the *other* hero.
 
 The four `mob_probe_*` stack leaves take `uint16 mob_slot` and return the first
 blocking slot in `D0.w`, or `-1` when clear. The up/down probes can instead
@@ -486,14 +553,20 @@ that distance gate turns each three-cell probe into a coarse whole-row/column
 barrier.
 
 The movement core retains the live player record slot from
-`active_mob_ids[player]` in D2 for that complete transaction. Its private probe
-family is asymmetric: `probe_left`/`probe_right` (0x426D4/0x4270C) inspect only
-the one horizontally adjacent cell, while `probe_up`/`probe_down` inspect the
-forward cell and its two horizontal flanks. These are not aliases of the four
-public `mob_probe_*` stack leaves, whose generic three-cell shapes remain useful
-to other actors. Direct ROM execution at maze 17 pixel `(268,15)` moves
-left/right by two pixels because a pixel-derived row-zero flank is never part of
-the private horizontal lookup.
+`active_mob_ids[player]` in D2 for that complete transaction. Its private
+probes test three cells each through `tile_lookup_core` (0x42648):
+`probe_left`/`probe_right` (0x426D4/0x4270C) test the adjacent column in the
+hero's row, then the row above when the doubled slot is at least 0x80 (row 2
+or lower), then the row below unless the hero is in row 31; `probe_up`/
+`probe_down` test the forward row's cell and then its left and right
+neighbours. Each stops at the **first** overlapping record of any kind
+(`bcs`). If that record is a pickup or other pass-through object, the move is
+resolved by `mob_collision_test` and the remaining candidates -- even a wall on
+the flank -- are never examined. These are not aliases of the four public
+`mob_probe_*` stack leaves, though the horizontal pair shares their row-2
+upper-flank threshold. Direct ROM execution at maze 17 pixel `(268,15)` moves
+left/right by two pixels because a hero in row 1 never probes row zero
+horizontally.
 
 The vertical top edge has a separate coordinate gate at
 `probe_up` 0x425D0-0x425DE. When D2 is at most 0x007E -- every doubled row-one
@@ -520,12 +593,29 @@ Down at `(299,463)` between `0x3D2`/`0x3D4`, and Up at `(235,352)` between
 arm of `tile_lookup_core` at 0x42688 rounds the wall's live H word and subtracts
 `0x200` (four pixels) before the strict `< 0x7C0` test. With the flanking wall
 records 32 pixels apart, the only clear hero anchors are therefore X=364, 300,
-and 236, not the uncorrected visual midpoints. Crucially, the blocked-axis wall
-arms at 0x42108-0x421B8 and 0x4233C onward do not merely reject the full-speed
-move. They round that axis to a one-pixel retry and nudge the other axis away
-from the obstructing flank. Holding the vertical direction automatically moves
-the three captured heroes onto X=364, 300, and 236, then enters on the next
-frame; no manual left/right alignment is required.
+and 236, not the uncorrected visual midpoints.
+
+The wall arms (`picture == 0x8000` exactly: right 0x41CC8, left 0x41F00, down
+0x42108, up 0x4233C) do not merely reject the full-speed move:
+
+1. **Even-pixel retry, always.** The arm reverts the step and then rounds that
+   axis to the next even pixel toward the wall (`addi.w #$80` for right/up,
+   then `andi.w #$FF7F`). A two-pixel step into a wall with a one-pixel gap
+   still closes the gap.
+2. **Nudge, sometimes.** Only when the cross-axis overlap from the probe
+   (0x904026 for a horizontal block, 0x904024 for a vertical one) exceeds
+   0x540, the wall is the diagonal flank cell, the stick is not pressing toward
+   that flank, and the nudged coordinate passes the screen-window gate, the arm
+   moves the other axis one pixel away and probes there. It keeps the nudge if
+   the probe is clear or `mob_collision_test` passes the hero, and otherwise
+   takes back only the nudge. Either way it jumps to the commit tail at
+   0x424CA, skipping any remaining axis; without a nudge attempt the rounded
+   position carries on to the next axis.
+
+Holding the vertical direction automatically moves the three captured heroes
+onto X=364, 300, and 236, then enters on the next frame; no manual left/right
+alignment is required. All of these cases were confirmed by executing ROM
+0x41BF0 under Unicorn on the same MOB words.
 
 A fourth capture at level 20 / maze 19 `(491,320)` exercises the same response
 against the non-wrapping right edge. Down finds left flank `0x2BE`; the response
@@ -559,10 +649,37 @@ consumer builds its own index:
 `mob_collision_test` (0x52192) is deliberately tri-state. Collectible and floor
 types return -1 so movement proceeds and `player_tile_interact` handles them only
 after the player record enters the new cell; zero blocks; a live melee branch
-also blocks while it advances the fight animation. Horizontal motion is applied
-before vertical motion, so a diagonal collision slides along the same axis as
-the original. Movable-wall collision advances only the wall on that frame; the
+also blocks while it advances the fight animation. Ghost, acid and IT contact
+calls `monster_playerhit` and then passes. Horizontal motion is applied before
+vertical motion, so a diagonal collision slides along the same axis as the
+original. Movable-wall collision advances only the wall on that frame; the
 hero stays put and retries on later frames.
+
+#### Heroes shove each other
+
+A probe that stops on another hero (palette nibble 0xC-0xF) takes the
+player-contact arm instead (right 0x41D96, left 0x41F9E, down 0x421D2, up
+0x423E4). The mover's step on that axis is reverted. When `movement_type`
+(0x904BF2) is nonzero -- the first pass, not a recursive retry -- an IT mover
+first transfers the curse (§4.5). Then the arm decides whether to shove:
+
+- the target is shoved unconditionally if it is not pressing back toward the
+  mover (its raw `player_input_raw` bit for that direction, 0x904920, is
+  released) or it is stunned (0x904A54);
+- otherwise the word table at 0x41BD0, indexed `[target class][mover class]`,
+  decides. Its rows are Warrior `0,0,0,0`, Valkyrie `0,0,0,0`, Wizard
+  `2,2,0,1` and Elf `1,1,0,0`: a Warrior, Valkyrie or Elf can push an
+  opposing Wizard, a Warrior or Valkyrie an opposing Elf, and nobody an
+  opposing Warrior or Valkyrie. An allowed shove also ORs the opposing
+  direction into the target's `player_deferred_move_flags`, cancelling it for
+  the target's next movement call.
+
+A shove decrements `movement_type` and calls the core for the **target** with
+`D6=0x80` (one pixel) and a synthesized joystick: the push direction, plus a
+sideways component when the cross-axis overlap is at least 0x3C0 and the mover
+is not pressing that way itself -- away from the mover's side. The mover's
+result bit is then cleared (it "walks" in place) and the arm continues at the
+commit tail. A refused shove simply blocks.
 
 This anchor geometry can look like a one- or two-pixel nudge into wall artwork:
 the sprite is 24 pixels wide, while blocking is the strict `< 0x7C0` comparison
@@ -619,9 +736,10 @@ Three outcomes, in the ROM's order:
   and `dragon_player_proximity` are then told about the new cell;
 - **different cell, destination occupied** (0x42542): `player_tile_interact` is
   offered the cell first. A zero return abandons the move entirely and returns
-  `0x00F0` *without* writing the position words; `-2` (a transporter) returns
-  after the thief-route update; anything else falls back into the migration
-  path now that the tile has been consumed.
+  `0x00F0` *without* writing the position words; `-2` (a started teleport)
+  returns the result word after the thief-route update, also without writing
+  them, so the hero teleports from where it stood; anything else falls back
+  into the migration path now that the tile has been consumed.
 
 The same tail exists for a pushed movable wall at `failed_door_post`
 (0x427B4-0x42808), instruction for instruction.
@@ -637,10 +755,10 @@ ROM execution and MAME 0.289 show the same 0/2-pixel hero cadence; smoothing it
 in the renderer or forcing the hero forward on every push frame would change
 the game-side MOB words.
 
-gauntpy implements this in `players.migrate_player_record`, called from
-`_apply_pixel_delta` after the position write and again after the tile pass in
-`main_move_players`, so a consumed pickup lets the record follow the hero into
-the cell it just cleared on the same frame. It never migrates into a managed
+gauntpy implements this in `player_movement.migrate_player_record`, called
+from `player_try_move` after the position write and again after the tile pass
+in `main_move_players`, so a consumed pickup lets the record follow the hero
+into the cell it just cleared on the same frame. It never migrates into a managed
 low slot (0-0x1F) and never overwrites an occupied cell.
 
 Door traversal is a register/shared-stack convention: `D2.w` is the current
@@ -693,7 +811,13 @@ outer wrapper. It calls `player_start_inner(uint16 player_index)` (0x48BEC),
 which finds a usable spawn tile, creates the player MOB, installs the two
 character-specific RAM jump stubs, initializes per-player movement/effect
 state, increments `level_players_active`, and returns -1 on success or 0 when
-no usable spawn position exists. Only after success does the wrapper call
+no usable spawn position exists. After creating the MOB, and after a
+player-status bit test at 0x48DFC–0x48E0E, it calls
+`tport_cycle_start(player_slot, player_index)` unless `game_mode` is LEGEND
+(0x48E10–0x48E26), so an arriving hero appears inside the picture-0x0924
+sparkle in an effect slot (13–16). `main_health_countdown` does the same for
+a dying hero after creating its marker (0x46906–0x4691C). Only after success
+does the wrapper call
 `player_join_finalize(uint16 player_index)` (0x48A36). The finalizer performs
 coin initialization when necessary, persists configuration through OS 0x1CC,
 sets the player's status/on-level state, plays the character join sound,
@@ -760,17 +884,30 @@ There is also a player-to-player transfer inside `player_try_move_core`
 hero: the old label is cleared, the new one is drawn and announced, the global
 word changes to the recipient, sound 0x35 plays, and the recipient receives a
 0x40-frame stun. The whole arm is gated on nonzero `movement_type`, so recursive
-collision retries cannot transfer it. Touching the IT creature is the separate
-first-assignment path.
+collision retries cannot transfer it. The same contact then shoves the new IT
+hero, which is stunned and so always movable (§4.2). Touching the IT creature
+is the separate first-assignment path.
 
 ### 4.6 Tile Interaction (`player_tile_interact` / `tile_occupant_interact`, 0x511AC)
 
 Large dispatch by tile type (from `mob_link >> 10`). Handles:
 - Food: FOOD000/FOOD001-3 add 100, RFOD001 (0x277B) indexes the
   20-entry adaptive-health table and displays its matching +25…+200 popup,
-  and PFOD001 (0x25ED) poisons for 50
+  and PFOD001 (0x25ED) poisons for 50. Both join one tail at 0x51D06: health
+  back at 200 or more disables the low-health pulse and re-arms its spoken
+  warning; `player_redraw` bit 1 is set; `getrandom(0x20)` above 29 speaks one
+  of the character's food lines (counts 0x5B7D0, pointers 0x5B7C0: Warrior
+  0x88/0x82/0x81, Valkyrie 0x8A/0xA9, Wizard 0x69/0x6F/0x71, Elf 0x77/0x76),
+  otherwise the eating sound 0x0D plays; and the escape timer is cleared.
+  Poison therefore also rolls that draw and can speak a food line after its
+  own character voice.
 - Keys (0x13)
-- Treasure (0x26, calls `player_add_score_with_mult`)
+- Treasure (0x26, calls `player_add_score_with_mult`). Outside the treasure
+  rooms (mazes 0x68-0x72, which branch from 0x51A12 to 0x51E36 and pay on the
+  bonus screen instead) the collector's multiplier rises by 2 when more than
+  one hero is on the level, is capped at twice that count, every other living
+  hero above 1 loses one, and the collector's health-redraw bit is set after
+  the award (0x51ACE)
 - Doors (check key count)
 - Transporter (calls `player_tport`)
 - Exit (calls `player_exit_sequence`)
@@ -828,7 +965,10 @@ transporters, and other pickups without touching them.
 **Confidence: Verified.** Its checked contract is
 `player_tile_interact(uint16 tile_mob_slot, uint16 player_index)`. It returns
 D0.l=-1 when the dispatch handled or consumed the interaction and zero when
-the tile is unhandled. Sound calls use a fixed `sound_play` pointer in A2.
+the tile is unhandled, except that the transporter arm returns
+`player_tport`'s D0 unchanged: -2 for a started teleport, which the movement
+tail treats specially (§4.2). Sound calls use a fixed `sound_play` pointer in
+A2.
 
 Locked treasure (type 0x2F) is intentionally unhandled by this function's jump
 table. Its branch belongs to `mob_collision_test` at 0x52606: no key blocks and
@@ -950,13 +1090,17 @@ Called when transitioning to a new level:
     removes the drawn group and the next cyclic group. Each call replaces both
     that trigger type and its corresponding type-7/8/9 wall family with floor,
     subject to the LFLAG4 `TrapsLocal` near-screen gate.
-14. On secret mazes, runs the challenge-target transformation described in §10.6 after the position-table scan, then clears the reserved low MOB pictures used by ordinary play.
+14. On secret mazes, runs the challenge-target transformation described in §10.6 after the position-table scan.
+15. On every path (the ordinary path branches there from 0x43C1C), clears the pictures of the managed MOB slots 1–29 at 0x43D16–0x43D7E: one four-slot group each for player shots (1–4), demon shots (5–8), lobber shots (9–12), effects (13–16), popups (17–20), exit animations (21–24) and transporter animations (25–28), then slot 29 through `clr.w $3A(a3)`. This removes the 0x8000 wall markers that `maze_setupnew`'s row-0 fill (§5.3) left in those slots, so the shot service starts the level with every channel empty. Slot 0 and slots 30–31 keep their markers.
 
 The Python representation initializes random-wall cursors eagerly during this
 setup. It derives the transporter table as an ordered live-MOB scan because the
-stored values are the packed slots themselves. Reachable level loads replace
-the complete `MobTable`, which is equivalent to the secret path's explicit
-reserved-picture clear.
+stored values are the packed slots themselves. Its level load has no equivalent
+of step 15 (gauntpy `ISSUES.md` S-192).
+
+Like the other whole-maze passes, this routine clears the VBLANK semaphore as
+it scans (every 32 slots at 0x439EE, and again at 0x43C58); see §18's note on
+`main_walls_cyclic_move` for the effect on `frame_overflow`.
 
 Dynamic slots 32-1023 cannot contain a standalone picture. ROM MOB creation and
 `move_mob_slot` publish picture, H/V, object identity/state, and depth links as
@@ -976,9 +1120,9 @@ Verified decoder mechanics: header bytes 7/8/9/0xA (HT1/HT2/VT1/VT2) are copied 
 MOB slots 0–31, but the same low slots are reserved at runtime: slot 0 is the
 null link, slots 1–12 are the player/demon/lobber shots, and slots 13–29 hold
 shot explosions, score popups, exit animations, and transporter effects. The
-row-0 wall fill above supplies the initial static-wall markers used to render
-the playfield; those MOB records are subsequently free to be overwritten by
-their reserved effects. The shot collision code therefore cannot use row 0 as
+row-0 wall fill above writes static-wall markers into all 32 records, and
+`maze_new_level_setup` then clears slots 1–29 (§5.2 step 15), leaving slot 0
+and slots 30–31 as wall markers until something reuses them. The shot collision code therefore cannot use row 0 as
 an ordinary MOB collision row. `shot_collision_candidate_core` (0x40A78)
 rejects a doubled candidate offset below 0x40, while its off-maze path folds an
 eligible wrapped probe by one complete 0x800-byte MOB-array span. For the
@@ -1203,6 +1347,24 @@ that input during the dissolve and strands the Elf against the wall below.
 No host option may bypass this game-side timing event. The ROM's Reduce Text
 setting keeps the full pointer bank in negative attract modes, so the timing-
 critical transporter record remains present.
+
+The demo is deterministic only given RAM the ROM never reinitializes. The
+RNG seed (0x904BFC), the forcefield step timer and step (0x904048/0x904049) and
+the transporter bounce (0x904030/32/34) all carry over from the attract screens
+before it. A MAME 0.289 capture entered the demo with seed 0xBFE6, transporter
+cycle 4/1/2 and forcefield 5/6; from there `attract_demo_init` and its maze
+setup make exactly 1022 RNG draws, leaving 0x30C4. The forcefield timer matters
+because `main_cycle_tport_and_ffield` draws `getrandom(8)` whenever it expires,
+interleaving with the random walls' draws. Different carried values give a
+different run; the capture is one execution, and how far the recorded route
+tolerates other values has not been measured.
+
+The whole setup runs inside one loop iteration lasting about 27 fields. The
+frame counter (incremented by the loop on entry, 0x42A86) stands still while
+the vblank semaphore counts up, and the first overflow check afterwards sets
+`frame_overflow` to 8, which decays to zero over the next four iterations.
+Generators in attract mode run off their retry countdown rather than the
+spawn probability, so that throttle has no effect on the demo.
 
 When every recorded actor has finished the status-8 exit animation,
 `level_players_active` reaches zero but the normal level transition is not
@@ -2313,7 +2475,10 @@ central six cells and the following three rows fill all thirteen panel cells.
 `player_inv_update` also writes the six low-byte permanent-power bits on the
 name row. Starting from alpha column 29, the byte offsets at 0x5732E
 `{11,10,3,2,1,0}` select columns `{40,39,32,31,30,29}`; the corresponding
-complete words at 0x57334 are written when bits 0–5 are set.
+complete words at 0x57334 are written when bits 0–5 are set. In DEMO
+(`game_mode == 0xFFFD`, tested at 0x45AD6) the routine skips the twelve-cell
+key/potion row (0x45AE4–0x45B76) and still refreshes the power icons from
+0x45B78, so a demo hero's collected potions never appear in its panel.
 
 The header is conditional. A whole-panel rebuild first fills alpha columns
 29–41, rows 0–6 with opaque spaces (0x452F2–0x45312). For
@@ -2454,14 +2619,28 @@ Computes the ideal scroll position based on all active players' positions, then 
 
 **Algorithm:**
 
-1. **Compute player extent:** Seed min/max with the current camera center
-   (`horiz + 0x68`, converted vertical center `scroll_y + 0x74`). Fold every
-   player into the 512-pixel window centered on the current scroll register,
-   not relative to the first player. While expanding the extrema, a separation
-   greater than `WAYOFFSCREEN = 0x140` shifts the outlier by 200 pixels; it does
-   not clamp the whole extent to 0xC8.
+1. **Compute player extent** in MOB coordinates (H pixels, and V pixels that
+   grow up the screen). Seed min/max with the current camera center:
+   `hscroll + 0x68` and `0x17C - vscroll`. This seed is what gives the camera
+   its half-rate approach. Each player then contributes in two passes, each
+   point first folded by ±0x200 into the 512-pixel window
+   `[hscroll - 0x98, hscroll + 0x168)` horizontally and
+   `[0x7C - vscroll, 0x27C - vscroll)` vertically:
+   - **Transport destination** (0x46D2A-0x46DC4): while
+     `player_tport_phase` is not negative and the player has a record, the
+     cell in `player_tile_or_tport_dest` contributes
+     `(col << 4) - 4` / `((row << 5) ^ 0x3E0) >> 1` directly, with no
+     outlier test, so the camera starts toward a teleport's destination.
+   - **Live position** (0x46DC6-0x46EC2), for every player with a record:
+     `H >> 7` and `V >> 7`. While expanding the extrema, a separation greater
+     than `WAYOFFSCREEN = 0x140` shifts the outlier 200 (0xC8) pixels toward
+     the party; it does not clamp the whole extent.
 
-2. **Compute target scroll:** `target_x = (min_x + max_x) / 2 - 0x68`; `target_y = 0x1E8 - (min_y + max_y)/2 - 0x6C` (Y is inverted for screen coords).
+2. **Compute target scroll:** `target_x = (min_x + max_x)/2 - 0x68` and
+   `target_y = 0x1E8 - (min_v + max_v)/2 - 0x6C`. The average is taken in the
+   upward V coordinate *before* inverting; averaging in downward screen Y
+   rounds an odd extent the other way and puts the camera a pixel off, which
+   is enough to move creatures across the monster culling edge (§3.1).
 
 3. **Smooth scroll:** Compare target vs current (`0x904008` / `0x90400A`). If delta ≥ 3: step left/right by 2. If delta ≤ -3: step the other direction. Otherwise snap to target.
 
@@ -2498,7 +2677,7 @@ Manages walls that cycle through open/closed states on a 120-frame (2-second) ti
 - **Match old phase AND tile has wall (mob_picture = 0x8000):** REMOVE wall — zero all 4 VRAM arrays for this slot.
 - **Match new phase AND tile is empty (mob_picture = 0):** PLACE wall — write wall type code `(6 + phase) << 10` to link array, compute pixel X/Y from tile position.
 
-Every 64th tile: clears VBLANK semaphore at `0x904002` to yield to display system (prevents tearing during long iterations).
+Every 64th tile: clears the VBLANK semaphore at `0x904002` (0x5E6BC). The code gives no reason. The effect is that a field which arrives during the scan is consumed, so the main loop's overflow check after call 28 does not see it and `frame_overflow` is not set. The same periodic clear appears in `maze_place_object_types` (every 64 slots, 0x5E7C6), `maze_convert_walls_to_exits` (every 64 slots, 0x5E828), `forcefield_segments_setup` (every 32, 0x53652) and `maze_new_level_setup` (every 32 slots at 0x439EE, plus 0x43C58). `eeprom_load_config` (0x430DA), `init_display` (0x434B0) and `highscore_table_init` (0x49C1E, 0x49CA4) clear it too. In a MAME 0.289 recording of the attract demo, the trap-triggered `maze_place_object_types` at demo iterations 470 and 1200 each spanned two fields and left `frame_overflow` at zero.
 
 Post-processing: calls `wall_remove_playfield_update` (0x5E888) or `wall_place_playfield_update` (0x5F024) for each modified tile.
 
@@ -2588,18 +2767,38 @@ the four-bit junction table. This redraw belongs to setup/replacement:
 **Confidence: Verified** for scan criteria, RNG threshold, picture toggling,
 and refresh call.
 
-Manages randomly appearing/disappearing walls (WALL_RANDOM type = 6). Each processing cycle, walks the MOB list and randomly toggles visibility of WALL_RANDOM tiles.
+Manages randomly appearing/disappearing walls (WALL_RANDOM type = 6). It runs
+only in normal play and DEMO, and handles at most **one** wall per frame,
+resuming a slot-order scan from a cursor, so a sweep of the level's random
+walls spans as many frames as there are walls.
 
-**Timer (`0x9048A6`):** Negative = disabled. Zero = process. Positive = countdown. After full processing: reset to 0x78 (normal mode) or 0x3C (attract mode).
+**Timer (`0x9048A6`):** Negative = disabled. Otherwise a nonzero timer is
+decremented every frame. On the frame it reaches zero nothing else happens:
+if the scan has finished (`current == target`) the cycle restarts -- timer
+0x78 in normal play, 0x3C when `game_mode` is negative, and `current =
+low - 1` -- and otherwise the routine just returns. On every other frame with
+`current != target` it advances the scan by one wall.
 
-**Toggle logic:** For each WALL_RANDOM tile encountered, calls `random_word(32)`. If result > 15 (50% chance): XOR `0x8000` in `mob_picture[tile]` — if now zero, wall removed; if non-zero, wall appeared. Calls `refresh_tile_visual` (0x5F5A0) to update display.
+**Toggle logic:** The scan steps the cursor through `mob_link` looking for type
+6 (it can examine `target + 1` before stopping). For the wall it finds it calls
+`random(32)`; above 15 (half the time) it XORs `0x8000` into `mob_picture` --
+zero means the wall vanished, nonzero that it appeared -- and calls
+`refresh_tile_visual` (0x5F5A0), whose floor redraw makes further draws. On
+the first wall of a cycle, a found slot above `low` raises `low`. Reaching
+`target` sets `current = target` and restarts at once if the timer is already
+zero. If no type-6 slot remains up to the target, the target shrinks to the
+cursor and the timer is disabled when nothing remains above `low`.
 
 **Tracking state:**
 - `0x9048A2`: random wall target index
 - `0x9048A4`: random wall current index
 - `0x9048A0`: random wall low water mark
 
-Maze setup establishes these bounds while scanning `mob_link`: object type `0x06` is `MAZEOBJ_WALL_RANDOM`, and the first such tile initializes both `0x9048A0` and `0x9048A2`. It is not a player-start or trapped-area marker.
+Maze setup establishes these bounds while scanning `mob_link` (0x439CC-0x43AE4):
+object type `0x06` is `MAZEOBJ_WALL_RANDOM`; the first such slot sets `0x9048A0`,
+every one overwrites `0x9048A2` (leaving the last), and when any exist the timer
+is cleared to zero and the cursor set to `low - 1`. It is not a player-start or
+trapped-area marker.
 
 ---
 
@@ -2888,6 +3087,15 @@ Projectile movement is separate: `main_handle_shots` (0x474F6) is an
 independent top-level main-loop call, not a `main_score_update` sub-function.
 It processes the 12 projectile slots and advances their class-specific motion,
 animation/lifetime, collision, and removal state.
+
+After moving a shot it re-keys the shot's depth-chain cell from the new
+upward pixel words (0x47A54–0x47A7C): `col = ((H + 8) >> 4) & 0x1F` and
+`row = 31 - (((V + 8) >> 4) & 0x1F)`, compared with the cached cell in
+0x904942 before the shot is relinked. A new player shot is already in the chain
+on its first frame (a MAME demo capture shows the Elf's shot linked on the
+frame it appears). gauntpy's `shot_cell` uses `monster_create_shot`'s +12/+8
+screen-space biases instead, and its `player_create_shot` leaves linking to
+the first re-key (`ISSUES.md` S-194).
 
 ---
 

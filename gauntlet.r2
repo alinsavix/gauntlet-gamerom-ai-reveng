@@ -1361,7 +1361,7 @@ fs *
 fs *
 'f update_sprite_tile 1 0x0004a44a
 fs *
-'f stun_direction_remap 64 0x0004a4fa
+'f dizzy_direction_remap 64 0x0004a4fa
 fs *
 'f main_move_players 1 0x0004a53a
 fs *
@@ -1661,9 +1661,9 @@ fs *
 fs *
 'f level_start_message_strings 180 0x0005727a
 fs *
-'f level_start_row_bytes 6 0x0005732e
+'f player_power_icon_column_offsets 6 0x0005732e
 fs *
-'f level_start_attr_words 12 0x00057334
+'f player_power_icon_words 12 0x00057334
 fs *
 'f character_hud_text_ptrs 16 0x00057340
 fs *
@@ -1690,6 +1690,8 @@ fs *
 'f ui_status_strings 90 0x0005751e
 fs *
 'f dip_switch_display_records 188 0x00057578
+fs *
+'f bonus_time_header_desc 14 0x0005758e
 fs *
 'f continue_screen_header 16 0x00057634
 fs *

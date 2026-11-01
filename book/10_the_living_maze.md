@@ -242,8 +242,14 @@ not the recurring cyclic-wall clock.
 Random walls offer a third behavior. Each participating cell gets a
 bounded draw from zero through thirty-one; values above fifteen toggle
 its wall picture. Each test thus has a one-half chance of changing
-that cell. The scan has its own countdown and cursor. There is no
-three-group itinerary to memorize.
+that cell. The scan has its own countdown and cursor, and it tests one
+wall per frame: a level with thirty-six random walls spends thirty-six
+frames on a sweep, then waits for the countdown -- two seconds in play,
+one second in the attract show -- before starting again. There is no
+three-group itinerary to memorize, and no fixed pattern either. Each
+toggle takes the next number from the same random stream that monsters,
+food and forcefields use, so which walls change depends on everything
+that drew a number before them.
 
 Finally, invisible-wall flags hide artwork without removing the
 underlying obstruction. Watch what changes: group membership, current

@@ -244,6 +244,32 @@ decoder can produce that arrangement, or that the original game takes
 the same path from it. A saved Python state is likewise a snapshot of
 the modeled machine, not a MAME save state.
 
+A matched comparison takes some care to set up. The attract demonstration
+is a good subject because its controls are recorded, but it is not
+self-contained: the random seed and two small palette timers continue
+from whatever ran before it, so their values must be read from the
+emulator and given to the reconstruction. The two runs must also share a
+clock. Video fields are the wrong one, because a busy update can span two
+of them; the game's own frame counter, which the main loop increments
+once per update, is the right one. With those settled, the two can be
+compared a whole frame at a time -- every MOB word, the seed, the scan
+cursors -- stopping at the *first* difference, since everything after it
+inherits the error. Small causes travel far. A camera one pixel off moves
+a creature across the culling edge, and from then on that creature's
+later choices diverge as well.
+
+When a difference has to be explained instruction by instruction, a
+second instrument helps: run the original routine itself. A small
+68000 emulator library can map the program ROMs and work RAM, copy in a
+prepared state, call one routine such as `player_try_move`, and read back
+exactly what it wrote. That answers "what does the original do from
+*this* state?" without staging the state in a full game. It has its own
+traps. The routine reads only memory, so an invented test arrangement
+must include everything a real level would: positions for every record,
+the palette nibble that marks a hero, the random seed. Leave one out and
+the original disagrees for reasons that have nothing to do with the
+question.
+
 Generated catalogs help at another boundary. They can check that a
 table has the bytes, length, pointers, and branch destinations claimed
 for it. For example, from the repository root:
@@ -434,6 +460,13 @@ we know which chain to take apart.
   [subsystems](../doc/04_game_subsystems.md), sections 2.2 and 26.
   The instruction excerpts were checked against that image; the proposed
   runtime exercise above is not a new MAME capture.
+- The matched comparison is the MAME 0.289 attract-demo capture described
+  in [game subsystems](../doc/04_game_subsystems.md) §6.3, including its
+  carried seed and timers; the reconstruction's
+  [demo regression test](../gauntpy/tests/test_attract.py)
+  (`test_demo_follows_the_mame_capture`) records milestones from it. The
+  routine-level instrument was the Unicorn emulator library calling
+  `player_try_move` (`0x41BF0`) on prepared states.
 - Inspection setup: [radare2 loader](../doc/gauntlet_loader.r2);
   [generated reference guide](../doc/generated/README.md).
   The maze-boundary example follows the [catalog](../doc/06_maze_catalog.md),

@@ -813,7 +813,7 @@ f player_death_sequence 1 0x00049de6
 f attract_highscores 1 0x0004a124
 f draw_player_initials_entry 1 0x0004a2ca
 f name_entry_draw_large_char 1 0x0004a44a
-f stun_direction_remap 64 0x0004a4fa
+f dizzy_direction_remap 64 0x0004a4fa
 f main_move_players 1 0x0004a53a
 f sound_speech_play 1 0x0004ad4e
 f sound_play 1 0x0004ad76
@@ -963,8 +963,8 @@ f player_color_name_strings 32 0x00057222
 f character_name_ptrs 16 0x00057242
 f character_name_strings 40 0x00057252
 f level_start_message_strings 180 0x0005727a
-f level_start_row_bytes 6 0x0005732e
-f level_start_attr_words 12 0x00057334
+f player_power_icon_column_offsets 6 0x0005732e
+f player_power_icon_words 12 0x00057334
 f character_hud_text_ptrs 16 0x00057340
 f player_text_palette_words 8 0x00057350
 f treasure_room_duration 8 0x00057358
@@ -978,6 +978,7 @@ f challenge_it_text 4 0x000574b4
 f character_glyph_rows 102 0x000574b8
 f ui_status_strings 90 0x0005751e
 f dip_switch_display_records 188 0x00057578
+f bonus_time_header_desc 14 0x0005758e
 f continue_screen_header 16 0x00057634
 f continue_blank_line 20 0x00057644
 f continue_press_start 20 0x00057658

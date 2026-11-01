@@ -237,6 +237,19 @@ When level construction is finished, transparent blanks reveal them.
 Blackness here does not establish that the display has been switched off
 or that all the layers underneath are empty.
 
+Because the panel's numbers are characters, changing a score does not
+change what is shown. Something must rewrite the digits, and the game
+spreads that work thinly. The routine that does it looks after one
+player per frame, cycling through all four. For that player it redraws at
+most one field: the score, if a request flag says the score changed and
+the frame counter is in the half of its eight-frame cycle that allows
+scores, and otherwise the health and multiplier, if their flag is set or
+health is below 200 (where the low-health pulse needs constant
+repainting). Whatever changed the value is responsible for raising the
+flag; drawing clears it. A score can therefore trail the action by a few
+frames, and a change made without its flag waits for some later change
+that does raise it.
+
 ## Resolve one pixel
 
 We can now follow a small composition without pretending it is a captured
@@ -337,6 +350,11 @@ fight remain connected without being the same thing.
   upward MOB coordinates. §23.4 documents door removal leaving existing
   floor descriptors unchanged; the worked four-write example is a wall
   replacement, not a claim that every door opening restamps floor.
+- Panel redraws are `main_score_display` (`0x457C0`): the per-frame player
+  is `frame_counter & 3`, the score gate tests bit 2 of the counter's low
+  byte at `0x904007`, and the request flags are `player_redraw`
+  (`0x904908`), set by twenty producer sites and cleared by the draw
+  routines (§14.2 of [game subsystems](../doc/04_game_subsystems.md)).
 - Shadow arithmetic follows the ROM routine at `0x5FD80`, especially
   `0x5FD94–0x5FDA2`, and the palette setup call at `0x436B8`.
   The borrow branch distinguishes intensity seven from intensities

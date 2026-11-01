@@ -104,9 +104,11 @@ implementation specification.
     Do not represent this progression as a renderer tint.
 27. **Player probes retain the live record identity.** The ROM keeps the current
     `active_mob_ids[player]` slot in D2 for the complete movement transaction.
-    Its private horizontal probes test one adjacent cell; its private vertical
-    probes test the forward triplet. Do not substitute a pixel-derived cell or
-    the public four-way `mob_probe_*` family.
+    Its private horizontal probes test the adjacent cell, then the upper flank
+    (row 2 or lower), then the lower flank; its private vertical probes test
+    the forward triplet. Every one stops at the first overlapping record, even a
+    pass-through pickup. Do not substitute a pixel-derived cell or the public
+    four-way `mob_probe_*` family.
 28. **Special actors may have actor-specific placement anchors.** Super
     Sorcerer placement begins at the target player's live MOB slot and writes
     its destination H position four pixels left of the cell. A generic
@@ -201,10 +203,11 @@ implementation specification.
     window. Between wall anchors 32 pixels apart, only one integer hero H
     position may clear both flanks. High-bit wall markers are rounded and
     corrected four pixels left before that comparison, so the valid hero anchor
-    is likewise four pixels left of the visual midpoint. The collision response
-    automatically keeps a rounded one-pixel move and nudges away from the
-    obstructing flank; holding toward the opening must center the hero without
-    manual lateral input. Port that response instead of widening the lane.
+    is likewise four pixels left of the visual midpoint. A wall arm always keeps
+    the blocked axis's even-pixel retry, and nudges away from the obstructing
+    flank only past the 0x540 overlap and when not pressing toward it; holding
+    toward the opening must center the hero without manual lateral input. Port
+    that response instead of widening the lane.
 48. **A resumed state must bypass initialization.** Host save/load is not an
     arcade routine. A complete snapshot reconstructs the typed modeled RAM,
     decoded maze, MOB links, display memory, path grids, and RNG seed, then
@@ -503,6 +506,17 @@ implementation specification.
      state. The ROM searches a stored ordered position table; the port's existing
      live-MOB-derived representation is not independently validated by sharing
      the lookup implementation.
+102. **The demo is game code, not a script.** The attract demo replays recorded
+     input through the ordinary game. Never add a `game_mode == DEMO` branch the
+     ROM does not have; when a recording stops reproducing, compare against the
+     MAME capture in `traces/mame/demo-state/` with the carried attract state
+     (seed 0xBFE6, transporter cycle 4/1/2, forcefield 5/6) and fix the first
+     divergence. `test_demo_follows_the_mame_capture` pins the result.
+103. **`player_try_move` returns a step word, not a displacement.** Each axis
+     clears its active-low bit only when its probe resolves clear (except a left
+     pass-through, 0x41F9A) or it shoves another hero. Wall retries, nudges and
+     movable-wall pushes move the hero silently, and the walking picture and
+     counter follow the word, not the position.
 
 ## Investigation workflow
 

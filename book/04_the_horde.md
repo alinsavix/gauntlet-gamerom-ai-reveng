@@ -29,6 +29,14 @@ native coordinate tests. The window wraps with the maze. A generator
 elsewhere in the stored level does not keep receiving the same ordinary
 opportunities as one beside the party.
 
+The window is computed from the scroll registers the camera has just
+written, so the camera decides, to the pixel, who is busy. A puddle of
+acid at the very edge can act on one frame and sit idle on the next
+because the view crept one pixel. The same pass also does a small job
+that has nothing to do with monsters: every treasure chest it walks over
+steps through three glinting pictures, one step every fourth frame, so
+only chests near the party sparkle.
+
 Next comes scheduling. Generators do not all roll on every frame. In
 ordinary, non-slow-motion play, each gets a turn once in sixteen frames,
 with its phase derived from its cell number.
@@ -165,7 +173,11 @@ decide when it changes phase.
 The movement attempt is local. It tests the route immediately ahead and
 the destination's occupancy. A clear destination allows the monster's
 record to move into another cell. A player there invokes the contact
-handler. A blocking body or wall prevents the simple advance.
+handler, after which the creature turns to face that hero. That turn uses
+arithmetic of its own: an axis less than eight pixels apart counts as
+level. A hero seven pixels below a grunt is therefore "beside" it, and the
+grunt faces straight across rather than diagonally down. A blocking body
+or wall prevents the simple advance.
 
 At our doorway, three monsters can all want the Warrior without all
 being able to occupy the place beside him. The leading creature reaches
@@ -355,9 +367,12 @@ can be surprised from behind.
 
 Acid is slower and less purposeful. Its idle decision rolls a direction
 rather than picking a hero to chase, and its special phase uses a slow
-rate mask. Initial contact can impose a 32-frame player stun. A puddle
-need not pursue efficiently to obstruct a route on which fast movement
-was essential.
+rate mask. The first contact does no damage. The puddle turns to face the
+hero, starts its splash animation, and imposes a 32-frame stun. While that
+animation is running, further contact deals nothing, so a diagonal step
+that brushes the puddle on both axes in the same frame costs only the
+stun. Damage arrives on a later contact. A puddle need not pursue
+efficiently to obstruct a route on which fast movement was essential.
 
 Magic against idle Acid first puts it into its special active phase;
 other eligible Acid states reach the destructive table entry. As with
@@ -437,13 +452,20 @@ the players are trying to win.
 - Lobber range and prediction were checked at `0x41750–0x41A22`.
   High-byte position differences have two-pixel granularity; the
   direction components at `0x580D8/0x580EA` are zero or ±2.
-  The lead calculation reads the target's achieved-movement word at
-  `0x41986` and selects its direction vector at `0x41994–0x419B0`.
+  The lead calculation reads the target's movement result word at
+  `0x41986`, which records axis steps rather than wall slides, and selects its direction vector at `0x41994–0x419B0`.
   Collision gating is at `0x4755C–0x47584`; fractional flight at
   `0x479C2–0x47A58`.
 - Acid's special rate gate uses the *working* frame byte at
   `0x413FA`, not an unqualified display-frame count. Initial contact's
-  32-frame stun is written at `0x49990–0x49996`. Super Sorcerer
+  facing, animation start and 32-frame stun are written at
+  `0x49960–0x49996`; later contact is ignored while the animation bits are
+  nonzero (`0x49904–0x4991E`). The contact turn is
+  `apply_direction_from_delta` (`0x41B7E`), and the treasure glint is the
+  type-0x2E test at `0x40FBA`. The camera's effect on which creatures act
+  was observed in a MAME 0.289 capture of the attract demo, where a puddle
+  one pixel inside the window on one side of the comparison was culled on
+  the other. Super Sorcerer
   relocation is `0x5FDE0`; potion reveal and subsequent idle behavior
   are separate paths at `0x415AC` and `0x4112C`.
 - The [tier illustration](img/ch11_tier_palettes.png) is rendered from

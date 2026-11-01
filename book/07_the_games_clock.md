@@ -288,6 +288,20 @@ and cancel a monster it already created. The following four timely
 frames see a nonzero overflow value while doing their work. If another
 overrun occurs, the check reloads eight rather than continuing the decay.
 
+The check only catches lateness that is still visible when call 28
+finishes, and some of the longest work hides it. The routines that walk
+every square of the maze clear the VBLANK flag themselves every 32 or
+64 squares: level setup, the forcefield layout, the cyclic-wall pass,
+the scan that removes a wall family when a hero steps on a trap, and
+the pass that turns every wall into an exit. The code does not say
+why. The effect is that a field which arrives during one of those scans
+is consumed there, so it never reaches the overflow check. In a MAME
+recording of the attract demo, the trap scan ran across two fields on
+two occasions and left `frame_overflow` at zero both times. Demo setup,
+which takes about twenty-seven fields, did end late: work after its
+last scan crossed one more field, so the next four frames ran with
+eight, four, two and one.
+
 While overflow is nonzero, the generator probability is forced to zero.
 Even a generator whose turn has arrived and whose neighbors are empty
 cannot pass that probability gate. Existing monsters are not deleted;
@@ -332,6 +346,14 @@ the length of one hero's life.
   `0x4ABD2-0x4ABF2`, and the threshold table at `0x58090`.
   It assumes a stationary eligible hero, uninterrupted gameplay, and
   no pre-existing shot; it is not a captured input-latency measurement.
+- The VBLANK flag (`0x904002`) is cleared inside whole-maze scans by
+  `maze_new_level_setup` (`0x439EE`, `0x43C58`),
+  `forcefield_segments_setup` (`0x53652`), `main_walls_cyclic_move`
+  (`0x5E6BC`), `maze_place_object_types` (`0x5E7C6`), and
+  `maze_convert_walls_to_exits` (`0x5E828`); see
+  [Data reference](../doc/05_data_reference.md), `0x904002` and
+  `0x904916`. The demo timings come from MAME 0.289 write taps on both
+  words during one attract demo: one captured run, not a survey of play.
 - [Python main loop](../gauntpy/src/gauntpy/game/mainloop.py) presents the
   reconstructed order as readable calls. Its host timing is not evidence
   for the original processor's instruction budget.

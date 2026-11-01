@@ -37,6 +37,69 @@ start).
 
 ## Open issues
 
+### S-196 · demo inventory row is drawn
+
+`player_inv_update` (0x45ACA) tests `game_mode == 0xFFFD` at 0x45AD6 and, in
+the demo, skips the twelve-cell key/potion row (0x45AE4-0x45B76) while still
+refreshing the six power-up icons from 0x45B78. `score.write_player_inventory`
+draws the key/potion row in every mode, so the demo Elf's collected potion
+appears in its panel where the arcade shows nothing.
+
+### S-195 · frame_overflow is never set
+
+`check_frame_overflow` tests `vblank_semaphore`, which `tick` always clears
+first, so gauntpy's `frame_overflow` stays zero. The arcade sets it when an
+iteration outlasts a field: the MAME demo capture shows demo setup (one
+iteration of about 27 fields) leave 8, decaying 4/2/1/0 over the next four
+iterations. In ordinary play that value forces the generator spawn
+probability to zero. The demo is unaffected (attract generators use the retry
+countdown), but a level start in normal play probably suppresses spawning for
+about four iterations on the arcade and not in gauntpy. Not every long
+iteration counts: besides the main loop, eight routines clear 0x904002
+(`maze_new_level_setup`, `maze_place_object_types`, `main_walls_cyclic_move`,
+`maze_convert_walls_to_exits` and `forcefield_segments_setup` every 32 or 64
+slots as they scan; `init_display`, `highscore_table_init` and
+`eeprom_load_config` once or twice), so an overrun that ends inside one of
+them is invisible. In the capture the trap-triggered `maze_place_object_types` at
+demo iterations 470 and 1200 spanned two fields each and left the flag at
+zero. Modelling this needs a deterministic rule for which iterations overrun;
+level setup is the clear candidate.
+
+### S-194 · projectile depth links differ from the ROM
+
+Two differences confine themselves to the special slots of the depth chain,
+which otherwise matches the MAME demo capture at every iteration. A new player
+shot is linked when created (the capture shows the Elf's shot linked on its
+first frame), while `player_create_shot` only writes the picture and the shot
+joins the chain at its first re-key a frame later. And the re-key cell differs:
+0x47A54-0x47A7C uses `col = ((H + 8) >> 4) & 0x1F` and
+`row = 31 - (((V + 8) >> 4) & 0x1F)` on the shot's upward pixel words, where
+`shot_cell` applies the +12/+8 screen-space biases of `monster_create_shot`.
+In the capture a demon shot was filed one row lower than on the arcade. Draw
+order changes; so could a SLIP bookmark that lands on a shot.
+
+### S-193 · heroes appear and die without the poof
+
+`player_start_inner` calls `tport_cycle_start` on the new hero's slot unless
+`game_mode` is LEGEND (0x48E10-0x48E26), and `main_health_countdown` does the
+same after creating its marker at 0x46906-0x4691C. gauntpy calls neither, so
+the sparkle (pictures from 0x0924) that marks a hero arriving or dying never
+appears. In the MAME demo capture the Elf's arrival poof occupies effect slot
+13 for its first ~36 iterations, and the two scripted joins at iteration 4284
+show one each.
+
+### S-192 · managed MOB slots keep the row-zero wall fill
+
+At the end of `maze_new_level_setup` (0x43D16-0x43D7E) the ROM clears the
+pictures of managed slots 1-29: player, demon and lobber shots, effects,
+popups and exit/transport animations. `load_level` has no equivalent, so the
+row-zero fill leaves picture 0x8000 in them. `main_handle_shots` then treats
+lobber channels 9-12 as four live shots: in the MAME demo comparison gauntpy
+flies phantom lobber rocks from iteration 1, which strike walls and fill the
+four effect slots with impact pictures (iteration 1 and again at 352) that the
+arcade never shows. This happens on every level load. It also explains the
+row-zero half of S-190.
+
 ### S-191 · monster pictures refresh after every walked dispatch
 
 `_dispatch_chain_entry` calls `monster_update_anim_tile` after every monster or
@@ -51,10 +114,10 @@ calls.
 
 `load_level` stamps slots 0-31 with `maze_place_object(0, WALL_REGULAR, 0x20)`
 and leaves picture 0x8000 in every slot nothing else occupies. On the arcade
-those slots read picture 0 with link type 2 (only slot 0 keeps 0x8000) once
-the demo starts. Any probe or ray march that reaches row zero sees a wall here
-and empty space there. The ROM step that leaves them clear has not been
-identified.
+the same fill happens (0x46054), but `maze_new_level_setup` then clears slots
+1-29 (0x43D16-0x43D7E, see S-192), leaving slot 0 and, until something uses
+them, slots 30-31 as wall markers. Any probe or ray march that reaches those
+slots sees a wall here and empty space there.
 
 ### S-189 · doors block at the full probe overlap
 

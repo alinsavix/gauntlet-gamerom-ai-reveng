@@ -144,7 +144,10 @@ lands at logical slot 486, position `(92,240)`, while `32 D3` is still
 current. After the message pause, enough Left remains to reach slot
 483, position `(44,242)`, before changing records. These are positions
 reported by that original-ROM trace, not coordinates measured from the
-layout illustration above.
+layout illustration above. The step that would carry the Elf into the
+transporter's cell is not taken: the game starts the teleport and keeps
+the position from before that step, so the departure point is one step
+short of the pad.
 
 | Stage | Script side | Display/effect side |
 |-------|-------------|---------------------|
@@ -190,11 +193,17 @@ The seconds axis is a nominal script-time scale, not elapsed viewing
 time; captions and encounter pauses are not drawn to duration.*
 
 The different input users choose their source separately. Movement
-reads recorded directions; firing reads recorded Fire. Potion use
+reads recorded directions; firing reads recorded Fire, but earlier in the
+frame. The shot routine arms a throw before the player routine moves the
+stream on to its next record, so Fire that arrives with a new record is
+seen by the throw one frame after that record's directions take effect. Potion use
 tests Magic in the current demo record rather than requiring the
 debounced physical-button edge used during play. A late `01 F2`
 record supplies that Magic press. The normal potion machinery spends
-the collected inventory and produces its effects and advice.
+the collected inventory and produces its effects and advice. The
+information panel never shows that potion: during the demo the panel
+update skips the key and potion row, though it still draws the
+power-up icons.
 
 The recording also contains long stretches of `F3`, no controls.
 Those are waits, not stopped gameplay. Monsters and effects can act
@@ -232,6 +241,19 @@ record with a monster in different positions. Both ask the Elf to
 walk Left. One may produce unobstructed movement; the other may enter
 combat or fail to move. The recording has not changed, but the state
 read by the next collision test has.
+
+The starting state can be named. Besides the random seed, which nothing
+ever initializes, two small timers keep running from screen to screen:
+the forcefield color cycle and the transporter's bounce. The forcefield
+timer matters more than its name suggests, because each time it expires
+it draws a random number of its own, between the random walls' draws. One
+capture of the original program entered the demo with seed 0xBFE6, the
+transporter cycle at 4 and the forcefield timer at 5. From there, setting
+up the stage took about 27 video fields -- the game's own frame counter
+stood still for all of them -- and drew exactly 1022 random numbers before
+the Elf's first recorded step. Every later draw, from wall toggles to the
+roll that decides whether eating food earns a spoken line, continues
+from wherever those left the stream.
 
 This is why “the demo always does exactly this” needs a starting-state
 qualification. The prepared route is real, and a trace can establish
@@ -387,6 +409,8 @@ collision test, and movable wall can answer to a person.
   The demo loader is `0x449D4`; `main_move_players` advances streams
   at `0x4A56E–0x4A5F0`. The opening pairs above were checked directly
   in `row76.bin` at `0x581C4–0x581D5`; joins are at `0x58234/0x58236`.
+  `player_inv_update` tests for DEMO at `0x45AD6` and skips the
+  key/potion row at `0x45AE4–0x45B76`.
 - [ROM table catalog](../doc/05_data_reference.md#5-rom-data-tables-catalog),
   §§5.3, 5.6–5.8: demo pointer table `0x58098`, caption pointers
   `0x5815C`, motion programs `0x5AC2E/0x5AC4E`, monster cells

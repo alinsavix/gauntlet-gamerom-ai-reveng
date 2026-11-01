@@ -284,6 +284,12 @@ records use slots 30–1023. The four player projectiles use slots 1–4;
 enemy projectile families use 5–12. Later reservations supply impact
 effects, floating scores, exit animations, and transporter animations.
 
+Those same low numbers are also the maze's row zero, and the game
+first fills that row with wall pictures to form the top boundary. Level
+setup then clears slots 1–29 as its last step, so every shot and effect
+channel starts the level empty. Only slot 0 and slots 30–31 keep their
+wall pictures.
+
 The Blue player's arrow stays in slot 2 throughout its flight. Its live
 coordinates change and its depth placement can change, but it does not
 migrate through cells 404, 405, and 406. The Blue hero does migrate.
@@ -370,6 +376,9 @@ requires looking past the picture itself.
   [combat contracts](../doc/generated/monster_combat_contracts.csv).
   The ordinary movement threshold is documented separately in subsystem
   §4.2; it is not presented as the shot routine's universal threshold.
+- The row-zero fill is `maze_place_object(0, 2, 0x20)` at `0x44C18`; the
+  clear of slots 1–29 is the end of `maze_new_level_setup`,
+  `0x43D16–0x43D7E` (subsystem §5.2, step 15).
 - [Hardware reference](../doc/01_hardware.md), §§7–8, covers hardware
   fields and SLIPs. Use subsystem §24's shared-chain account rather than
   reading hardware §8.4's “each band's list” as independent lists.

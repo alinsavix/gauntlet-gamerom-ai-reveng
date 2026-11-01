@@ -58,7 +58,7 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x45C4E,0x4961F,14802,analyzed_code,,,Verified
 0x49620,0x49633,20,named_rom_range,monster_playerhit_jumptbl,"Contradicted and corrected: target/monster class 0x12–0x1B is doubled without subtraction; the backward-biased load base 0x495FC maps it to the actual table at 0x49620–0x49633, also the JMP displacement base. The former 28-entry/0–0x1B description included live instructions before the table.",Verified
 0x49634,0x4A4F9,3782,analyzed_code,,,Verified
-0x4A4FA,0x4A539,64,named_rom_range,stun_direction_remap,stun_direction_remap,Verified
+0x4A4FA,0x4A539,64,named_rom_range,dizzy_direction_remap,dizzy_direction_remap,Verified
 0x4A53A,0x4B337,3582,analyzed_code,,,Verified
 0x4B338,0x4B3B3,124,named_rom_range,resolve_shot_hit_jumptbl,cmpi.w #1,Verified
 0x4B3B4,0x4FE07,19028,analyzed_code,,,Verified
@@ -117,8 +117,8 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x57242,0x57251,16,named_rom_range,character_name_ptrs,character_name_ptrs,Verified
 0x57252,0x57279,40,named_rom_range,character_name_strings,character_name_strings,Verified
 0x5727A,0x5732D,180,named_rom_range,level_start_message_strings,level_start_message_strings,Verified
-0x5732E,0x57333,6,named_rom_range,level_start_row_bytes,level_start_row_bytes,Verified
-0x57334,0x5733F,12,named_rom_range,level_start_attr_words,level_start_attr_words,Verified
+0x5732E,0x57333,6,named_rom_range,player_power_icon_column_offsets,player_power_icon_column_offsets,Verified
+0x57334,0x5733F,12,named_rom_range,player_power_icon_words,player_power_icon_words,Verified
 0x57340,0x5734F,16,named_rom_range,character_hud_text_ptrs,character_hud_text_ptrs,Verified
 0x57350,0x57357,8,named_rom_range,player_text_palette_words,player_text_palette_words,Verified
 0x57358,0x5735F,8,named_rom_range,treasure_room_duration,treasure_room_duration,Verified
@@ -131,7 +131,9 @@ start,end_inclusive,size_bytes,classification,rom_flags,catalog_rows,confidence
 0x574B4,0x574B7,4,named_rom_range,challenge_it_text,challenge_it_text,Verified
 0x574B8,0x5751D,102,named_rom_range,character_glyph_rows,character_glyph_rows,Verified
 0x5751E,0x57577,90,named_rom_range,ui_status_strings,pea.l 0x5751E,Verified
-0x57578,0x57633,188,named_rom_range,dip_switch_display_records,DIP-switch display records; exact range 0x57578–0x57633. The chain's last node begins at 0x57628 with flags 0x0200 and its four-byte back-link 0x0005761C occupies 0x57630–0x57633,Verified
+0x57578,0x5758D,22,named_rom_range,dip_switch_display_records,DIP-switch display records; exact range 0x57578–0x57633. The chain's last node begins at 0x57628 with flags 0x0200 and its four-byte back-link 0x0005761C occupies 0x57630–0x57633,Verified
+0x5758E,0x5759B,14,named_rom_range,bonus_time_header_desc;dip_switch_display_records,DIP-switch display records; exact range 0x57578–0x57633. The chain's last node begins at 0x57628 with flags 0x0200 and its four-byte back-link 0x0005761C occupies 0x57630–0x57633;bonus_time_header_desc,Verified
+0x5759C,0x57633,152,named_rom_range,dip_switch_display_records,DIP-switch display records; exact range 0x57578–0x57633. The chain's last node begins at 0x57628 with flags 0x0200 and its four-byte back-link 0x0005761C occupies 0x57630–0x57633,Verified
 0x57634,0x57643,16,named_rom_range,continue_screen_header,text_desc,Verified
 0x57644,0x57657,20,named_rom_range,continue_blank_line,continue_blank_line,Verified
 0x57658,0x5766B,20,named_rom_range,continue_press_start,continue_press_start,Verified
