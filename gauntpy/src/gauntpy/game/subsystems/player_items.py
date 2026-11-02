@@ -121,6 +121,8 @@ _TASK_HIDDENPOT_B = 0x5D
 
 #: A key is worth 100 before the bonus multiplier (0x514F4 ``pea $64``).
 _KEY_SCORE = 0x64
+_KEY_PICTURE = 0x0AFC           # single key, 0x515A2 and 0x4686E
+_KEY_PILE_PICTURE = 0x1D76      # several keys, 0x46876
 
 #: player_tile_interact's transporter result: the teleport has started.
 TILE_TELEPORTED = -2
@@ -476,10 +478,6 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             state.escape_timer = 0
             state.mobs.unlink_and_clear(tile_mob_slot)
             return -1
-        player.keysnum = (player.keysnum + 1) & 0xFF
-        state.mobs.unlink_and_clear(tile_mob_slot)
-        player_inv_update(state, player_index)          # 0x51610
-        _dialog(state, player_index, _DIALOG_KEYS)      # 0x51620, record 3
         # 0x514D4: a key counts against "don't be greedy" (keys or potions).
         _secret_trick_progress(state, player_index, _TRICK_NOGREEDY1)
         state.escape_timer = 0                          # 0x514EA: clr.w (a3)
@@ -487,6 +485,33 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         # 0x514F4-0x514FE: a key is worth 100, through the same
         # multiplier-aware award the treasure arm uses.
         player_add_score_with_mult(state, player_index, _KEY_SCORE)
+        # 0x51504-0x51516: the record's state is a pile size (a dead hero's
+        # keys); below 2 it is one key.
+        count = state.mobs.state(tile_mob_slot)
+        if count >= 2:
+            room = 12 - player.keysnum - player.potionsnum      # 0x51530
+            if count > room:
+                # 0x51558-0x515FA: take what fits, shrink the pile in place,
+                # and leave the hero blocked by what remains.
+                player.keysnum = (player.keysnum + room) & 0xFF
+                state.mobs.set_state(tile_mob_slot, count - room)
+                if count - room == 1:                            # 0x51590
+                    mobs = state.mobs
+                    mobs.picture[tile_mob_slot] = _KEY_PICTURE
+                    mobs.hpos[tile_mob_slot] = (
+                        mobs.hpos[tile_mob_slot] + 0x200) & 0xFFFF
+                    mobs.vpos[tile_mob_slot] = (
+                        mobs.vpos[tile_mob_slot] & 0xFFC0) | 0x09
+                player_inv_update(state, player_index)          # 0x515E4
+                if state.idle_timer > 0:                        # 0x515EA
+                    state.idle_timer = 0
+                return 0
+            player.keysnum = (player.keysnum + count) & 0xFF    # 0x51606
+        else:
+            player.keysnum = (player.keysnum + 1) & 0xFF        # 0x51528
+        player_inv_update(state, player_index)          # 0x51610
+        _dialog(state, player_index, _DIALOG_KEYS)      # 0x51620, record 3
+        state.mobs.unlink_and_clear(tile_mob_slot)
         return -1
 
     # ── Potions ───────────────────────────────────────────────────────────────

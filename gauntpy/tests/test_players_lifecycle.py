@@ -2204,9 +2204,38 @@ class TestDeathAnimationSeed:
 
         gp.main_move_players(state)
 
+        # 0x467FA-0x46854: a keyless hero leaves the strongest ghost generator
+        # in its own, still-linked slot, at its own position.
         assert p.mob_slot == 0
-        assert not state.mobs.is_occupied(slot)
-        assert not state.mobs.is_linked(slot)
+        assert state.mobs.obj_type(slot) == int(MazeObjIds.GEN_GHOST3)
+        assert state.mobs.picture[slot] == 0x09BD
+        assert state.mobs.hpos[slot] == (160 << 7) | 5
+        assert state.mobs.vpos[slot] == (native_v(160) << 7) | 0x12
+        assert state.mobs.is_linked(slot)
+        assert state.mobs.picture[0x0D] == 0x924, "the death sparkle"
+
+    def test_death_with_keys_leaves_them_as_a_pile(self):
+        """0x4685E-0x46906: a KEY record at the cell, state = key count."""
+        for keys, picture, hpos_low, vsize in ((1, 0x0AFC, 1, 9),
+                                               (5, 0x1D76, 1 - 0x200, 0x11)):
+            state = _active_state()
+            slot = (10 << 5) | 10
+            p = _make_player_active(state, 0, health=0, mob_slot=slot)
+            p.keysnum = keys
+            state.level_players_active = 1
+            state.mobs.create(slot, tile=0x1E0D, hpos=(163 << 7) | 0x0C,
+                              vpos=native_v(158) << 7,
+                              obj_type=int(MazeObjIds.PLAYERSTART))
+            state.mobs.picture[1] = 0x1234            # a live shot in flight
+
+            gp.main_move_players(state)
+
+            assert state.mobs.obj_type(slot) == int(MazeObjIds.KEY)
+            assert state.mobs.state(slot) == keys
+            assert state.mobs.picture[slot] == picture
+            assert state.mobs.hpos[slot] == ((10 << 11) + hpos_low) & 0xFFFF
+            assert state.mobs.vpos[slot] == ((31 - 10) << 11) + vsize
+            assert state.mobs.picture[1] == 0, "0x46922: the shot is released"
 
     def test_player_start_inner_clears_the_death_damage_counter(self):
         state = _active_state()
@@ -2927,6 +2956,44 @@ class TestTreasureAttribution:
         assert player_items.player_tile_interact(state, slot, 0) == -1
         assert p.score == 200
         assert state.escape_timer == 0
+
+    @staticmethod
+    def _pile(state: GameState, slot: int, keys: int) -> int:
+        state.mobs.create(slot, tile=0x1D76, hpos=((slot << 11) - 0x1FF) & 0xFFFF,
+                          vpos=(((slot & 0x3E0) ^ 0x3E0) << 6) + 0x11,
+                          obj_type=int(MazeObjIds.KEY), state=keys)
+        return slot
+
+    def test_a_key_pile_gives_every_key_that_fits(self):
+        """0x51530-0x51606: the whole pile when there is room."""
+        state = _active_state()
+        p = _make_player_active(state, 0)
+        p.keysnum, p.potionsnum = 2, 1
+        slot = self._pile(state, 92, 5)
+        assert player_items.player_tile_interact(state, slot, 0) == -1
+        assert p.keysnum == 7
+        assert not state.mobs.is_occupied(slot)
+
+    def test_a_key_pile_too_big_to_carry_shrinks_and_blocks(self):
+        """0x51558-0x515FA: take what fits; the rest stays and blocks."""
+        state = _active_state()
+        p = _make_player_active(state, 0)
+        p.keysnum, p.potionsnum = 6, 4
+        slot = self._pile(state, 93, 3)
+        h, v = state.mobs.hpos[slot], state.mobs.vpos[slot]
+        assert player_items.player_tile_interact(state, slot, 0) == 0
+        assert p.keysnum == 8
+        assert state.mobs.state(slot) == 1
+        assert state.mobs.picture[slot] == 0x0AFC
+        assert state.mobs.hpos[slot] == (h + 0x200) & 0xFFFF
+        assert state.mobs.vpos[slot] == (v & 0xFFC0) | 0x09
+
+    def test_an_ordinary_key_gives_one(self):
+        state = _active_state()
+        p = _make_player_active(state, 0)
+        slot = self._pile(state, 94, 0)
+        assert player_items.player_tile_interact(state, slot, 0) == -1
+        assert p.keysnum == 1
 
     def test_spawning_starts_the_arrival_sparkle(self):
         """0x48DFC-0x48E26: a join poofs; survivors (status 2) and LEGEND do not."""

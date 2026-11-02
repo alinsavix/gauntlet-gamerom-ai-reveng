@@ -808,11 +808,12 @@ own slot. When the per-frame pass finds health zero (0x467E0), it calls
 - With no keys (`player_keysnum` zero, 0x467F2) it creates type 0x1E, the
   strongest ghost generator, from that type's master-table entries: picture
   0x09BD (0x586C8), H `(hero H & 0xFF80) + 5` (0x5866A) and V
-  `(hero V & 0xFF80) + 0x18` (0x5862A), state 0 (0x467FA-0x46854).
+  `(hero V & 0xFF80) + 0x12` (0x5862A), state 0 (0x467FA-0x46854).
 - With keys it creates a KEY record at the hero's cell with state = the key
   count: picture 0x0AFC and V offset 9 for one key, picture 0x1D76, V offset
   0x11 and H 0x200 further left for several (0x4685E-0x46906). §4.6 describes
-  how such a pile is picked up.
+  how such a pile is picked up. Both drops, and five pile pickups, were
+  checked by executing 0x466F6 and 0x511AC under Unicorn.
 
 It then starts the transporter sparkle on that record (0x4691C), removes the
 hero's live shot (slot 1+p) and transport animation (slot 25+p) through

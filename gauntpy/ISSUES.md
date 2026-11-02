@@ -37,26 +37,6 @@ start).
 
 ## Open issues
 
-### S-197 · dead heroes leave nothing behind, and key piles give one key
-
-When health reaches zero, `main_health_countdown` replaces the hero's record
-with a new object before `player_resetcounters` (0x467E8-0x4690C). With no
-keys it creates type 0x1E, the strongest ghost generator, using that type's
-picture and offsets (0x0009BD from 0x586C8, bytes from 0x5862A/0x5866A) at the
-hero's position. With keys it creates a KEY record at the hero's cell with
-state = the key count and picture 0x0AFC for one key or 0x1D76 for several.
-It then puts the death sparkle on that record and clears the hero's live shot
-(slot 1+p) and transport animation (slot 25+p). gauntpy's death block only
-clears the slot; the sparkle is placed from the hero's live position, which
-matches the generator case but not the cell-aligned key case.
-
-The key arm of `player_tile_interact` (0x51458-0x51626) reads such piles:
-`count = state >> 10`; a count below 2 gives one key, otherwise as many as fit
-under the 12-item cap. A partial take leaves the pile with `state` reduced,
-switches it to the single-key picture (adjusting H by 0x200 and V's low bits
-to 9) when one key remains, and leaves the hero blocked by it. gauntpy always
-gives one key and removes the record.
-
 ### S-196 · demo inventory row is drawn
 
 `player_inv_update` (0x45ACA) tests `game_mode == 0xFFFD` at 0x45AD6 and, in
@@ -120,6 +100,21 @@ still skips pass-through objects instead of stopping at the first overlap as
 retired.
 
 ## Resolved issues
+
+### S-197 · dead heroes left nothing behind, and key piles gave one key
+
+The death block now does what 0x467E8-0x46992 does before
+`player_resetcounters`: `mob_create` rewrites the hero's own slot as the
+strongest ghost generator (type 0x1E, picture 0x09BD, master-table H/V
+addends) at the hero's position when it carried no keys, or as a KEY record at
+its cell with state = the key count (0x0AFC with size code 9 for one key;
+0x1D76, size code 0x11 and H 0x200 less for several). The sparkle starts on
+that record, and the hero's shot (slot 1+p) and transport animation (slot
+25+p) are released. The key arm reads `state` as a pile size
+(0x51504-0x515FA): below 2 one key, otherwise every key that fits; a partial
+take shrinks the pile in place, turns a one-key remainder back into the single
+key picture, clears a positive idle timer and returns 0. Five pickup cases and
+three deaths match ROM 0x511AC and 0x466F6 executed under Unicorn.
 
 ### S-193 · heroes appear and die without the poof
 

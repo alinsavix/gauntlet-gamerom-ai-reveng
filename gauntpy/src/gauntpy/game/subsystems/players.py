@@ -508,6 +508,54 @@ def _status8_complete(state: GameState, player_index: int) -> None:
         show_continue_prompt(state)
 
 
+# ROM: part game:0x466F6 | Health-zero drop at 0x467E8-0x46992: generator or key pile in the hero's slot, its sparkle, and the shot/transport-slot release.
+def _leave_death_drop(state: GameState, player_index: int, slot: int) -> None:
+    """Replace a dead hero's record with what the ROM leaves behind.
+
+    ``mob_create`` rewrites the hero's own slot without relinking it. With no
+    keys it is the strongest ghost generator (type 0x1E) at the hero's
+    position; with keys, a KEY record at the hero's cell whose state is the
+    key count (0x0AFC with size code 9 for one key; 0x1D76, size code 0x11
+    and four pixels further left for several). The sparkle then starts on it,
+    and the hero's shot (slot 1+p)
+    and transport animation (slot 25+p) are released.
+    """
+    from ..maze import hsize_tier, vpos_offset
+    from .player_items import _KEY_PICTURE, _KEY_PILE_PICTURE
+    from .shot_damage import _MAZEOBJ_BASE_PICTURE_TBL
+    from .shot_effects import tport_cycle_start
+
+    mobs = state.mobs
+    keys = state.players[player_index].keysnum & 0xFF
+    if keys == 0:                                                 # 0x467F2
+        generator = int(MazeObjIds.GEN_GHOST3)
+        mobs.create(
+            slot,
+            tile=_MAZEOBJ_BASE_PICTURE_TBL[generator],            # 0x586C8
+            hpos=(position_field(mobs.hpos[slot]) + hsize_tier(generator)) & 0xFFFF,
+            vpos=(position_field(mobs.vpos[slot]) + vpos_offset(generator)) & 0xFFFF,
+            obj_type=generator,
+        )                                                         # 0x46854
+    else:
+        single = keys == 1                                        # 0x46866
+        key = int(MazeObjIds.KEY)
+        mobs.create(
+            slot,
+            tile=_KEY_PICTURE if single else _KEY_PILE_PICTURE,
+            hpos=(((slot << 11) + hsize_tier(key)
+                   - (0 if single else 0x200)) & 0xFFFF),
+            vpos=((((slot & 0x3E0) ^ 0x3E0) << 6)
+                  + (0x09 if single else 0x11)) & 0xFFFF,
+            obj_type=key,
+            state=keys,
+        )                                                         # 0x46906
+    tport_cycle_start(state, slot, player_index)                  # 0x4691C
+    for channel_slot in (1 + player_index, 0x19 + player_index):  # 0x46922-0x46992
+        if mobs.picture[channel_slot]:
+            mobs.depth_remove(channel_slot - 1)
+            mobs.picture[channel_slot] = 0
+
+
 # ROM: direct game:0x4A53A | Player frame-service/status-dispatch boundary; retains Python synthetic-record cleanup, demo accommodations and extracted helper calls.
 # ROM: part game:0x466F6 | Contains the relocated health-zero death/reset/high-score/continue block from main_health_countdown at 0x467E0-0x46B7E.
 # ROM: part game:0x41C30 | Contains the movement core's occupied-destination tile-interaction/rollback/migration tail at 0x424EC-0x42588, rescheduled after player_try_move.
@@ -662,14 +710,7 @@ def main_move_players(state: GameState) -> None:
             # timer and the status; the character and the score survive it, so
             # the ladder and the panel still have something to show.
             if dead_slot:
-                # 0x4690C-0x4691C: the death sparkle on the dead hero's cell.
-                # The ROM anchors it on the marker it has just created there
-                # (ISSUES S-197); the hero's own cell gives the same position
-                # for the ghost-generator marker.
-                from .shot_effects import tport_cycle_start
-
-                tport_cycle_start(state, dead_slot, player_index)
-                state.mobs.unlink_and_clear(dead_slot)
+                _leave_death_drop(state, player_index, dead_slot)
             player_resetcounters(state, player_index)             # 0x4699A
             player.character = character
             player.anim_counter = 0

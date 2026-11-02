@@ -528,6 +528,10 @@ implementation specification.
      fill reaches the shot, effect, popup and animation slots; 0x43D16-0x43D7E
      zeroes their picture words (only) on every level load. Channels test the
      picture, so skipping the clear launches phantom lobber rocks.
+106. **A dead hero's slot becomes an object.** With no keys it is a
+     strongest ghost generator at the hero's position; with keys it is a KEY
+     pile whose state is the count. Never just clear the slot, and read a KEY
+     record's state as a pile size when it is collected.
 
 ## Investigation workflow
 
