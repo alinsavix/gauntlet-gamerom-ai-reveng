@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..coords import hpos_x, position_field, vpos_y
+from ..coords import hpos_x, position_field, vpos_v
 from ..state import GameState
 
 # shot_counter_reload -- ROM 0x578C2, 12 words.  Player channels index it by
@@ -123,29 +123,31 @@ def _is_maxtier(state: GameState, shooter_id: int) -> bool:
     return _shot_tier(state, shooter_id) == _SHOT_TIER_MASK
 
 
-# ROM: part game:0x474F6,game:0x490DC | Shared extraction of projectile cell rounding at 0x47A5A-0x47A7C and 0x49280-0x492A2.
-def _cell_of(px: int, py: int) -> int:
-    """Packed maze cell of a world pixel position (0x47A5A-0x47A7C).
-
-    The ROM rounds each axis to the nearest cell centre (``+8``) before
-    truncating; ``py`` arrives already un-inverted into downward screen pixels
-    by ``coords.vpos_y``, which is that routine's vertical half.
-    """
-    col = ((px + 8) >> 4) & 0x1F
-    row = ((py + 8) >> 4) & 0x1F
+# ROM: helper | Shared arithmetic of the projectile depth keys: 9-bit pixel words, a horizontal bias, +8 vertical, and a row count from the top.
+def _shot_key(hpos: int, vpos: int, h_bias: int) -> int:
+    col = ((hpos_x(hpos) + h_bias) >> 4) & 0x1F
+    row = 31 - (((vpos_v(vpos) + 8) >> 4) & 0x1F)
     return (row << 5) | col
 
 
-# ROM: part game:0x474F6,game:0x490DC | Extracts projectile MOB-word to depth-cell conversion through Python coordinate decoding.
+# ROM: part game:0x474F6,game:0x53666 | Depth key from a shot's own words, as the per-frame re-key (0x47A54-0x47A7C) and player_create_shot (0x5378E-0x537AE) compute it.
 def shot_cell(state: GameState, slot: int) -> int:
-    """The maze cell a projectile MOB's pixel position belongs to.
+    """The depth key of a projectile MOB.
 
-    ``monster_create_shot`` (0x49280-0x492A2) and ``shots``' per-frame re-key use
-    the same +12/+8 px sprite biases, so a channel is depth-placed at creation
-    exactly where the next frame would re-key it.
+    ``col = ((H + 8) >> 4) & 0x1F`` and ``row = 31 - (((V + 8) >> 4) & 0x1F)``
+    on the 9-bit pixel words (``word >> 7``); V counts up the screen, so the
+    row is counted down from the top.
     """
     mobs = state.mobs
-    return _cell_of(hpos_x(mobs.hpos[slot]), vpos_y(mobs.vpos[slot]))
+    return _shot_key(mobs.hpos[slot], mobs.vpos[slot], 8)
+
+
+# ROM: part game:0x490DC,game:0x54748 | Creation depth key of monster_create_shot (0x49280-0x492A2) and dragon_fire_setup (0x5492E-0x54950): H is biased by 12, not 8.
+def shot_create_cell(state: GameState, slot: int) -> int:
+    """The depth key a monster shot or dragon breath is placed with when
+    created; the next re-key uses ``shot_cell``."""
+    mobs = state.mobs
+    return _shot_key(mobs.hpos[slot], mobs.vpos[slot], 12)
 
 
 # ROM: helper | Compatibility forwarding function for shot_cell, with no additional ROM body.

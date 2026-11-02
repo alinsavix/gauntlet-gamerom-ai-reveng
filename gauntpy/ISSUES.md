@@ -57,19 +57,6 @@ demo iterations 470 and 1200 spanned two fields each and left the flag at
 zero. Modelling this needs a deterministic rule for which iterations overrun;
 level setup is the clear candidate.
 
-### S-194 · projectile depth links differ from the ROM
-
-Two differences confine themselves to the special slots of the depth chain,
-which otherwise matches the MAME demo capture at every iteration. A new player
-shot is linked when created (the capture shows the Elf's shot linked on its
-first frame), while `player_create_shot` only writes the picture and the shot
-joins the chain at its first re-key a frame later. And the re-key cell differs:
-0x47A54-0x47A7C uses `col = ((H + 8) >> 4) & 0x1F` and
-`row = 31 - (((V + 8) >> 4) & 0x1F)` on the shot's upward pixel words, where
-`shot_cell` applies the +12/+8 screen-space biases of `monster_create_shot`.
-In the capture a demon shot was filed one row lower than on the arcade. Draw
-order changes; so could a SLIP bookmark that lands on a shot.
-
 ### S-191 · monster pictures refresh after every walked dispatch
 
 `_dispatch_chain_entry` calls `monster_update_anim_tile` after every monster or
@@ -81,6 +68,18 @@ fidelity, but the extra refresh should be replaced by the ROM's branch-local
 calls.
 
 ## Resolved issues
+
+### S-194 · projectile depth links differed from the ROM
+
+`player_create_shot` now links the shot when it creates it, keyed with the
+re-key formula (0x5378E-0x537D0), and records the hero's cell as its last wall
+contact. `shot_cell` computes the ROM key on the shot's own words,
+`col = ((H + 8) >> 4) & 0x1F`, `row = 31 - (((V + 8) >> 4) & 0x1F)`, instead
+of going through downward screen Y, which was a row off whenever the V pixel
+was 8 mod 16. Monster shots and dragon breath are placed with
+`shot_create_cell`, which biases H by 12 as 0x49280 and 0x5492E do. Against
+the MAME demo capture, every live sample of shot slots 1-12 now has the
+arcade's next/previous links (33 of 187 differed before).
 
 ### S-187 · movement-core arms not yet ported
 

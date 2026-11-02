@@ -537,6 +537,10 @@ implementation specification.
      overlapping record is collected or, if unhandled, deleted (0x50BB8,
      0x50C7A). It is positional overlap, not a sweep of the neighbouring
      cells, and it happens at the milestone, not when the transport starts.
+108. **Shot depth keys come from the shot's own words.** The re-key and
+     `player_create_shot` use `((H+8)>>4, 31-((V+8)>>4))`; monster shots and
+     dragon breath are created with H+12. Do not route these through screen Y,
+     and link a player shot when it is created.
 
 ## Investigation workflow
 

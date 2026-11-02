@@ -690,6 +690,12 @@ def test_demo_follows_the_mame_capture(tmp_path):
             assert state.mobs.state(68) & 7 == 4
         if iteration == 1032:
             assert state.mobs.picture[682] == 0x990
+        if iteration == 1454:
+            # The Elf's shot is depth-linked on the frame it appears (0x537D0).
+            assert (state.mobs.link[2] & 0x3FF, state.mobs.state_link[2] & 0x3FF) == (289, 201)
+        if iteration == 3884:
+            # A demon shot keyed by 31 - ((V + 8) >> 4), not via screen Y.
+            assert (state.mobs.link[5] & 0x3FF, state.mobs.state_link[5] & 0x3FF) == (806, 739)
         if iteration == 5643:
             assert (state.mobs.hpos[922], state.mobs.vpos[922]) == (0xCE0F, 0x1812)
         if iteration == 5841:

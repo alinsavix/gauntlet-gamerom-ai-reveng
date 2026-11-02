@@ -3202,11 +3202,15 @@ animation/lifetime, collision, and removal state.
 After moving a shot it re-keys the shot's depth-chain cell from the new
 upward pixel words (0x47A54–0x47A7C): `col = ((H + 8) >> 4) & 0x1F` and
 `row = 31 - (((V + 8) >> 4) & 0x1F)`, compared with the cached cell in
-0x904942 before the shot is relinked. A new player shot is already in the chain
-on its first frame (a MAME demo capture shows the Elf's shot linked on the
-frame it appears). gauntpy's `shot_cell` uses `monster_create_shot`'s +12/+8
-screen-space biases instead, and its `player_create_shot` leaves linking to
-the first re-key (`ISSUES.md` S-194).
+0x904942 before the shot is relinked. Shots are linked when they are created,
+with a key computed from the words just written: `player_create_shot` uses the
+same `+8` formula (0x5378E–0x537AE) and inserts through `mob_place_explosion`
+(0x537D0), after setting `player_shot_last_wall_pos` to the hero's cell;
+`monster_create_shot` (0x49280–0x492A2) and `dragon_fire_setup`
+(0x5492E–0x54950) bias H by 12 instead of 8 and insert through
+`mob_place_shot`. So a monster shot's first re-key can move it one column.
+With these formulas gauntpy's twelve shot slots match the chain links of a
+MAME 0.289 demo capture in every live sample.
 
 ---
 

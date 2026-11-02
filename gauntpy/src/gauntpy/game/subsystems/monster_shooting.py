@@ -5,7 +5,7 @@ from __future__ import annotations
 from ..constants import SLOT_DEMON_SHOTS, SLOT_LOBBER_SHOTS, MazeObjIds, PlayerPower
 from ..coords import POS_SHIFT, position_field
 from ..state import GameState
-from .shot_state import lobber_accumulator_seed, shot_cell, shot_picture, shot_velocity
+from .shot_state import lobber_accumulator_seed, shot_create_cell, shot_picture, shot_velocity
 from .sound import sound_play as _sound_play
 from .monster_data import (
     _DIR_DELTAS,
@@ -375,7 +375,7 @@ def _depth_place_shot(state: GameState, shot_slot: int) -> None:
     the frame after it was fired.
     """
     state.mobs.unlink(shot_slot)
-    state.mobs.insert(shot_slot, depth_key=shot_cell(state, shot_slot))
+    state.mobs.insert(shot_slot, depth_key=shot_create_cell(state, shot_slot))
 
 
 # ROM: part game:0x490DC | Extracts demon/lobber initial-picture counter selection at 0x491D2 and 0x49238.

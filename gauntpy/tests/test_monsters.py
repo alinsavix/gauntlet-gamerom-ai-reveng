@@ -1588,12 +1588,16 @@ class TestShotSpawnGeometry:
         # ROM compass 6 (left) pulls the muzzle back, 0xFE00 = -4 px.
         assert spots[4] == (156, 160)
 
-    def test_the_shot_is_depth_keyed_where_the_next_frame_will_re_key_it(self):
-        from gauntpy.game.subsystems.shot_state import shot_cell
+    def test_the_shot_is_depth_keyed_with_the_creation_bias(self):
+        """0x49280-0x492A2 biases H by 12 where the re-key (0x47A54) uses 8."""
+        from gauntpy.game.coords import hpos_x, vpos_v
 
         for direction in range(8):
             state = self._fire(direction)
-            assert state.mobs.depth_key[5] == shot_cell(state, 5)
+            h, v = state.mobs.hpos[5], state.mobs.vpos[5]
+            col = ((hpos_x(h) + 12) >> 4) & 0x1F
+            row = 31 - (((vpos_v(v) + 8) >> 4) & 0x1F)
+            assert state.mobs.depth_key[5] == (row << 5) | col
 
     @requires_roms
     def test_the_spawn_words_and_constants_are_the_rom_bytes(self):

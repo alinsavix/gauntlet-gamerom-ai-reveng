@@ -290,7 +290,7 @@ def player_exit_sequence(state: GameState, player_index: int,
     _exit_sequence(state, player_index, exit_mob_slot, exit_type)
 
 
-# ROM: direct game:0x53666 | Fixed player-channel shot spawn, picture/position, sound and supershot-charge boundary; host velocity shadow setup is additional.
+# ROM: direct game:0x53666 | Fixed player-channel shot spawn, picture/position, depth placement, sound and supershot-charge boundary; host velocity shadow setup is additional.
 def player_create_shot(state: GameState, player_index: int) -> None:
     """0x53666 -- spawn a player shot in the player's fixed channel (§26, N-02).
 
@@ -342,6 +342,13 @@ def player_create_shot(state: GameState, player_index: int) -> None:
     state.shot_dx[shot_slot] = vx >> POS_SHIFT
     state.shot_dy[shot_slot] = vv >> POS_SHIFT
     state.shot_lifetime[shot_slot] = 0
+    # 0x537B0-0x537D0: the shot starts with the hero's own cell as its last
+    # wall contact and is depth-placed at once, keyed from its new words.
+    from .shot_state import shot_cell
+
+    state.player_shot_last_wall_pos[player_index] = player.mob_slot
+    state.mobs.unlink(shot_slot)
+    state.mobs.insert(shot_slot, depth_key=shot_cell(state, shot_slot))
     _sound_play(state, _SHOT_REFLECT_SOUND_TBL[character])
     if player.supershot > 0:
         player.supershot = (player.supershot - 1) & 0xFF

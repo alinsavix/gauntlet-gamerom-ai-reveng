@@ -482,7 +482,7 @@ def dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     Position is taken from ``dragon_seg_mob_ids[0]`` (0x547DC/0x547EE), even
     though the *owner* recorded for the shot is the pose-selected segment.
     """
-    from .shot_state import shot_cell, shot_picture, shot_velocity
+    from .shot_state import shot_create_cell, shot_picture, shot_velocity
 
     channel = shot_slot - 1
     segments = _segments(state)
@@ -532,7 +532,7 @@ def dragon_fire_setup(state: GameState, shot_slot: int) -> None:
     # written.  Without it the channel keeps a zero depth key and the next
     # ``main_handle_shots`` probes for collisions from the maze's top-left.
     state.mobs.unlink(shot_slot)
-    state.mobs.insert(shot_slot, depth_key=shot_cell(state, shot_slot))
+    state.mobs.insert(shot_slot, depth_key=shot_create_cell(state, shot_slot))
 
     dx, dy = shot_velocity(state, channel, rom_dir)
     state.shot_dx[shot_slot] = dx >> POS_SHIFT
