@@ -100,7 +100,13 @@ from .monster_spawning import (
     tile_occupancy_test as tile_occupancy_test,
     tile_on_screen_d4 as tile_on_screen_d4,
 )
-from .monster_state import monster_update_anim_tile as monster_update_anim_tile
+from .monster_state import (
+    _ANIM_IT_SPECIAL,
+    monster_set_anim_picture,
+    monster_show_attack,
+    monster_show_moving,
+    monster_update_anim_tile as monster_update_anim_tile,
+)
 
 # Slow-motion looping-sound cues (§3.3, refs/soundcmds.csv).  The ROM plays
 # 0x38 as the timer passes 0x1E and 0x39 as it reaches 0 (0x40EC0/0x40ED2);
@@ -275,12 +281,8 @@ def _dispatch_chain_entry(state: GameState, slot: int, frame_word: int) -> None:
         _handle_generator(state, slot, obj_type, frame_word)
     elif obj_type == int(MazeObjIds.MONST_SUPERSORC):
         _supersorc_dispatch(state, slot, frame_word)
-        if state.mobs.obj_type(slot) == obj_type:
-            monster_update_anim_tile(state, slot, obj_type)
     else:
         _dispatch_monster(state, slot, obj_type, frame_word)
-        if state.mobs.obj_type(slot) == obj_type:
-            monster_update_anim_tile(state, slot, obj_type)
 
 
 # 0x49076/0x490AC -- the walk covers the arc of the chain between two SLIP
@@ -325,6 +327,7 @@ def _dispatch_monster(state: GameState, slot: int, obj_type: int,
         if frame_word & 6:
             return
         if not _anim_advance(state, slot):
+            monster_show_moving(state, slot, obj_type)         # 0x411B6
             return
         _anim_add_high(state, slot, _MONSTER_ODDANGLE_TABLE[index][3])
         _monster_move_engine(state, slot, obj_type, index, frame_word)
@@ -335,11 +338,12 @@ def _dispatch_monster(state: GameState, slot: int, obj_type: int,
         # sorcerer skips straight to the mover, everyone else fires when the
         # wind-up animation completes.
         if obj_type == int(MazeObjIds.MONST_IT):                   # 0x413F0
-            _anim_finish_attack(state, slot, index,
+            _anim_finish_attack(state, slot, obj_type, index,
                                 _MONSTER_ODDANGLE_TABLE[index][1], frame_word)
             return
         if obj_type == int(MazeObjIds.MONST_ACID):                 # 0x413E6
-            _anim_finish_attack(state, slot, index, _ACID_RATE_MASK, frame_word)
+            _anim_finish_attack(state, slot, obj_type, index,
+                                _ACID_RATE_MASK, frame_word)
             return
         if obj_type == int(MazeObjIds.MONST_SORC):                 # 0x411E2
             _monster_move_engine(state, slot, obj_type, index, frame_word)
@@ -347,7 +351,8 @@ def _dispatch_monster(state: GameState, slot: int, obj_type: int,
         if frame_word & 6:
             return
         if not _anim_advance(state, slot):
-            return                       # still in the wind-up frames
+            monster_show_attack(state, slot, obj_type)         # 0x41208
+            return
         state.mobs.hpos[slot] &= ~_HPOS_FLAG_ATTACK                # 0x411FE
         monster_find_and_shoot(state, slot, obj_type)              # 0x41252
         _post_action(state, slot, obj_type, index, frame_word)
@@ -368,16 +373,20 @@ def _dispatch_monster(state: GameState, slot: int, obj_type: int,
 
 
 # ROM: part game:0x4119A | Extracts gated acid/IT attack-completion tails at 0x413E6-0x4141C.
-def _anim_finish_attack(state: GameState, slot: int, index: int, mask: int,
-                        frame_word: int) -> None:
+def _anim_finish_attack(state: GameState, slot: int, obj_type: int, index: int,
+                        mask: int, frame_word: int) -> None:
     """0x413E6/0x413F0/0x4141C -- gated wind-up that ends by dropping the
-    attack flag and nudging the animation counter by the family's byte 2."""
+    attack flag and nudging the animation counter by the family's byte 2.
+    IT shows its special bank on the way (0x41412); acid holds its picture."""
     if mask & (frame_word & 0xFF):
         return
     if not _anim_advance(state, slot):
+        if obj_type == int(MazeObjIds.MONST_IT):               # 0x4140A
+            monster_set_anim_picture(state, slot, _ANIM_IT_SPECIAL)
         return
     state.mobs.hpos[slot] &= ~_HPOS_FLAG_ATTACK
     _anim_add_high(state, slot, _MONSTER_ODDANGLE_TABLE[index][2])
+    monster_update_anim_tile(state, slot, obj_type)            # 0x4142C
 
 
 # ROM: part game:0x4119A | Extracts the attack-versus-walk continuation at 0x41256.
@@ -385,5 +394,6 @@ def _post_action(state: GameState, slot: int, obj_type: int, index: int,
                  frame_word: int) -> None:
     """0x41256 -- a creature that just acted animates its attack or walks."""
     if state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK:
+        monster_show_attack(state, slot, obj_type)             # 0x41268 -> 0x41208
         return
     _monster_move_engine(state, slot, obj_type, index, frame_word, acted=True)

@@ -302,7 +302,7 @@ runtime, movement, collision, and path contracts.
 | 0x5E2A2 | `ray_march_left` | Mirror of ray_march_right but column-- |
 | 0x5E1D8 | `ray_march_up` | Scan upward: 3 neighbors (center/left/right) |
 | 0x5E10C | `ray_march_down` | Mirror of ray_march_up but row-- |
-| 0x414A4 | `monster_update_anim_tile` | Inline sub-function in `monsters_everything`: reads direction from high byte of `mob_anim[mob]`, masks to 6-bit counter+direction index, looks up tile from per-type animation table (via pointer at `0x40DB2`), writes to `mob_picture`. Called after every monster move. |
+| 0x414A4 | `monster_update_anim_tile` | Inline sub-function in `monsters_everything`: reads direction from high byte of `mob_anim[mob]`, masks to 6-bit counter+direction index, looks up tile from per-type animation table (via pointer at `0x40DB2`), writes to `mob_picture`. Reached only from particular branches, not after every move (`04_game_subsystems.md` §3.3). |
 | 0x427B4 | `failed_door_post` | Compute tile position and update MOB display after failed door traversal |
 | 0x5DE44 | `moblist_remove_and_clear_regs` | Register-state unlink-and-clear entry: repair both links, the global head, and bucket heads, then zero all five slot words |
 | 0x5DED4 | `moblist_unlink_regs` | Register-state unlink entry used by `moblist_remove`: repair forward/back links and list heads, then preserve the removed slot's upper object-state bits rather than clearing its five array words |

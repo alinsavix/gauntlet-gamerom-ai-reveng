@@ -1154,7 +1154,7 @@ All game-ROM computed JMPs use signed 16-bit PC-relative displacements. The JMP 
 | 0x594B6 | 128 B | `anim_tiles_it_special` — IT chase/special-state animation bank. |
 | 0x59536 | 128 B | `anim_tiles_monster_special_attack` — non-Lobber special-attack direction/phase bank. |
 | 0x595B6 | 128 B | `anim_tiles_lobber_throw` — Lobber throwing-animation bank. |
-| 0x59636 | 128 B | `anim_tiles_monster_special_state` — shared special-state direction/phase bank. |
+| 0x59636 | 128 B | `anim_tiles_monster_special_state` — Super Sorcerer fade/fire direction/phase bank. |
 
 ### 5.4 Scoring / Speech Tables
 
@@ -1530,7 +1530,7 @@ Each animation table has 64 word entries: 8 counter values × 8 directions. Inde
 | 0x594B6 | 128 B | `anim_tiles_it_special` (IT chase state) |
 | 0x595B6 | 128 B | `anim_tiles_lobber_throw` (Lobber throwing animation) |
 | 0x59536 | 128 B | `anim_tiles_monster_special_attack` — 64-word direction/phase table selected by `monster_special_handler` for its non-lobber special attack state. |
-| 0x59636 | 128 B | `anim_tiles_monster_special_state` — 64-word direction/phase table selected by two special-state branches in `monsters_everything`. |
+| 0x59636 | 128 B | `anim_tiles_monster_special_state` — 64-word direction/phase table selected by the Super Sorcerer's fade-out (0x410E4) and fire (0x41190) branches. |
 
 The idle and moving pointer tables at 0x40DB2/0x40DDA each contain ten longwords in monster-index order: Ghost, Grunt, Demon, Lobber, Sorcerer, Auxiliary Grunt, Death, Acid, Super Sorcerer, IT. Idle aliases Sorcerer/Super Sorcerer and Grunt/Auxiliary Grunt. Moving aliases Grunt/Auxiliary Grunt and contains null pointers for Ghost, Lobber, Super Sorcerer, and IT; these zero entries are sentinel “no separate moving bank” values, not missing ROM pointers.
 

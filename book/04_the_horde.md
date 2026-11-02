@@ -332,9 +332,9 @@ guarantees shelter from everything on the other side.
 ## Targets that change the terms of a hit
 
 An ordinary sorcerer complicates the party's reading of movement.
-It can relocate while reusing idle artwork because its moving-animation
-pointer is empty. A picture that does not perform an obvious walking
-cycle is not proof that the actor stayed in place.
+When its animation counter wraps it blinks out, showing a blank picture,
+and it keeps walking unseen until the next wrap brings it back. An empty
+stretch of corridor is not proof that nothing is walking along it.
 
 Its phase matters to damage too. While the hidden phase flag is set,
 ordinary shots do not reduce its strength; a supershot can hit through
@@ -438,6 +438,11 @@ the players are trying to win.
   specialist states, magic, and damage. Relevant routines include
   `monsters_everything` (`0x40E6A`), `handle_generate` (`0x492C0`),
   and `monster_find_and_shoot` (`0x41750`).
+- The sorcerer's blink is `0x41478–0x4148A` (blank picture `0x1709`) and
+  `0x41492` (return); its walk continues through `0x411E6`. Other creatures
+  change picture only at the sites listed in subsystem §3.3. A MAME demo
+  capture matched every monster picture in the seven families it shows;
+  sorcerers, demons and lobbers do not appear in it.
 - The worked schedule follows direct disassembly at `0x40EAA–0x40EEC`
   and `0x41026–0x41036`, including the doubled normal frame and the
   slot's `OR 2`. The probability comparison at `0x49300–0x4930E`

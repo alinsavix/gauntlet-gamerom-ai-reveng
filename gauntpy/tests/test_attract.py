@@ -690,6 +690,11 @@ def test_demo_follows_the_mame_capture(tmp_path):
             assert state.mobs.state(68) & 7 == 4
         if iteration == 1032:
             assert state.mobs.picture[682] == 0x990
+        if iteration == 325:
+            # A move the acid's frame mask gates off keeps the old picture.
+            assert state.mobs.picture[68] == 0x2351
+        if iteration == 357:
+            assert state.mobs.picture[37] == 0x2336
         if iteration == 1454:
             # The Elf's shot is depth-linked on the frame it appears (0x537D0).
             assert (state.mobs.link[2] & 0x3FF, state.mobs.state_link[2] & 0x3FF) == (289, 201)

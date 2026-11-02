@@ -19,6 +19,7 @@ from .monster_state import (
     _get_direction,
     _s16,
     _set_direction,
+    monster_show_moving,
     monster_update_anim_tile,
 )
 
@@ -221,6 +222,11 @@ def _march_hit_player(state: GameState, slot: int, blocker: int) -> None:
         _iter_ptr_forget(state, slot)          # 0x413C4: it removed itself
         return
     apply_direction_from_delta(state, slot, blocker)  # 0x413CC
+    obj_type = state.mobs.obj_type(slot)
+    if state.mobs.hpos[slot] & _HPOS_FLAG_MOVING:     # 0x413D2
+        monster_show_moving(state, slot, obj_type)
+    else:
+        monster_update_anim_tile(state, slot, obj_type)
 
 
 # ROM: helper | Resolves a live Python player identity from its migrating MOB slot rather than interpreting a palette nibble.
@@ -313,22 +319,12 @@ def _commit_move(state: GameState, slot: int, index: int, d6: int, h: int,
         state.mobs.vpos[slot] = v
         state.mobs.move_slot(slot, dest)
         _move_tail(state, dest, index, frame_word, moved=True, acted=acted)
-        monster_update_anim_tile(
-            state, dest, int(MazeObjIds.MONST_GHOST) + index,
-        )
         return
 
-    victim = _cell_player_index(state, dest)    # 0x413A2
-    if victim is None:
+    if _cell_player_index(state, dest) is None:  # 0x413A2
         _move_tail(state, slot, index, frame_word, moved=False, acted=acted)
         return
-    monster_playerhit(state, victim, slot)
-    if state.mobs.picture[slot] == 0:
-        _iter_ptr_forget(state, slot)
-        return
-    apply_direction_from_delta(state, slot, dest)
-    if not (state.mobs.hpos[slot] & _HPOS_FLAG_MOVING):
-        _move_tail(state, slot, index, frame_word, moved=False, acted=acted)
+    _march_hit_player(state, slot, dest)         # 0x413B0
 
 
 # ROM: part game:0x4119A | Extracts the moved/refused animation and blink tails at 0x4142E and 0x41454.
@@ -341,12 +337,19 @@ def _move_tail(state: GameState, slot: int, index: int, frame_word: int,
     "do nothing at all"; a negative one (the two sorcerers) drops the attack
     flag instead.  When the counter wraps, byte 2 either bumps it further or --
     with bit 0 set -- flips the creature into its blink state.
+
+    The idle picture (0x414A4) changes only where this tail lets it: after the
+    frame mask passes on a creature not in its attack state, when an attack or
+    blink ends, and after a refused step that followed an action. A step that
+    the mask gates off keeps the old picture.
     """
     row = _MONSTER_ODDANGLE_TABLE[index]
+    obj_type = int(MazeObjIds.MONST_GHOST) + index
     if moved:
         mask = row[1]
     else:
         if acted:                               # 0x41430: btst #30
+            monster_update_anim_tile(state, slot, obj_type)
             return
         mask = row[0]
         if mask == 0:
@@ -354,23 +357,25 @@ def _move_tail(state: GameState, slot: int, index: int, frame_word: int,
         if mask & 0x80:                         # 0x41442: bmi
             if state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK:
                 state.mobs.hpos[slot] &= ~_HPOS_FLAG_ATTACK
+                monster_update_anim_tile(state, slot, obj_type)
             return
 
     if mask & (frame_word & 0xFF):              # 0x41460
         return
-    if not _anim_advance(state, slot):          # 0x41466
-        return
-
-    delta = row[2]
-    if delta & 0x01:                            # 0x41472: the blink families
-        if state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK:
-            state.mobs.hpos[slot] &= ~_HPOS_FLAG_ATTACK
+    if _anim_advance(state, slot):              # 0x41466
+        delta = row[2]
+        if delta & 0x01:                        # 0x41472: the blink families
+            if state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK:
+                state.mobs.hpos[slot] &= ~_HPOS_FLAG_ATTACK
+                monster_update_anim_tile(state, slot, obj_type)
+                return
+            state.mobs.hpos[slot] |= _HPOS_FLAG_ATTACK
+            _anim_add_high(state, slot, _BLINK_ANIM_BUMP)
+            state.mobs.picture[slot] = _BLANK_PICTURE
             return
-        state.mobs.hpos[slot] |= _HPOS_FLAG_ATTACK
-        _anim_add_high(state, slot, _BLINK_ANIM_BUMP)
-        state.mobs.picture[slot] = _BLANK_PICTURE
-        return
-    _anim_add_high(state, slot, delta)
+        _anim_add_high(state, slot, delta)
+    if not state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK:  # 0x4149E
+        monster_update_anim_tile(state, slot, obj_type)
 
 
 # Base per-step movement in pixels; the ROM's 0x80/0x100 words are one and two

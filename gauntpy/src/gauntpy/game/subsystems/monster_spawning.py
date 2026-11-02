@@ -28,6 +28,8 @@ from .monster_state import (
     _s16,
     _set_direction,
     _signed_byte,
+    _ANIM_SUPERSORC_FADE,
+    monster_set_anim_picture,
     monster_update_anim_tile,
 )
 
@@ -470,6 +472,7 @@ def _supersorc_dispatch(state: GameState, slot: int, frame_word: int) -> None:
         if frame_word & 6:
             return
         if not _anim_advance(state, slot):
+            monster_set_anim_picture(state, slot, _ANIM_SUPERSORC_FADE)  # 0x410EA
             return
         state.mobs.hpos[slot] |= _HPOS_FLAG_ATTACK
         state.mobs.hpos[slot] &= ~_HPOS_FLAG_MOVING
@@ -503,6 +506,7 @@ def _supersorc_shoot(state: GameState, slot: int) -> None:
     _anim_add_high(state, slot, 0x40)                     # 0x4117E
     state.mobs.hpos[slot] |= _HPOS_FLAG_MOVING
     state.mobs.hpos[slot] &= ~_HPOS_FLAG_ATTACK
+    monster_set_anim_picture(state, slot, _ANIM_SUPERSORC_FADE)  # 0x41190
 
 
 # ROM: direct game:0x5FDE0 | Represents the register-body placement search; the separate 0x5FDB8 ABI wrapper has no standalone Python definition.

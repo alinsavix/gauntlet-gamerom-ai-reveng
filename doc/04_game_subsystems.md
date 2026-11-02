@@ -205,10 +205,23 @@ are), and folds the signs arithmetically, `(0x20 - d3) & 0x1C` for a hero to
 the left and `(0x30 - d3) & 0x1C` for one below. A hero seven pixels lower
 is therefore "level" here although the aiming code would face diagonally.
 
-The picture is not refreshed on every path. `monster_update_anim_tile`
-(0x414A4) is reached only from the animation-tail branches; a move into a free
-cell jumps to the tail at 0x41454 with the old picture, and several gated
-arms continue at 0x414BE without touching it.
+The picture is not refreshed on every path. A move into a free cell jumps to
+the tail at 0x41454 with the old picture, and gated arms continue at 0x414BE
+without touching it. Each write names its bank:
+
+| Site | Bank | When |
+|------|------|------|
+| 0x414A4 `monster_update_anim_tile` | Idle, 0x40DB2 | The tail's frame mask passed and the creature is not in its attack state (0x4149E); an attack or blink ended (0x4141C, 0x41492); a refused step after an action (0x41430); contact without the moving flag (0x413D8) |
+| 0x411B0, 0x413DC | Moving, 0x40DDA | A moving-flag frame that did not wrap; contact with the moving flag set |
+| 0x41208 | Throw 0x595B6 for lobbers, otherwise 0x59536 | A wind-up frame that did not wrap, or an action that just set the attack flag (0x41264) |
+| 0x41412 | IT special, 0x594B6 | IT's wind-up frames; acid's wind-up leaves the picture alone |
+| 0x410CA | Idle, 0x58C0A | Super Sorcerer after it teleports |
+| 0x410E4, 0x41190 | Super Sorcerer fade, 0x59636 | Its fade-out frames, and when it fires |
+| 0x4148A, 0x410FA | Blank, 0x1709 | A sorcerer blinks out; the Super Sorcerer finishes fading |
+
+Both contact paths (a blocked probe and an occupied destination) join at 0x413B0
+and end at that write, without running the animation tail. Ghost, lobber,
+Super Sorcerer and IT have null entries at 0x40DDA.
 
 **The `D6` monster-index offset. Confidence: Verified** by disassembly at
 0x40FAE–0x41022 and 0x411BA–0x41460. Throughout the loop body `D6` is **not**

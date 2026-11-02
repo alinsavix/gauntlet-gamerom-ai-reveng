@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from ..constants import MazeObjIds
 from ..state import GameState
-from .monster_data import _BLANK_PICTURE, _HPOS_FLAG_ATTACK, _HPOS_FLAG_MOVING
 
 # Full 64-word animation banks consumed by monster_update_anim_tile (0x414A4).
 # The state field supplies ``frame * 8 + ROM direction``.  These are literal
@@ -178,6 +177,17 @@ _ANIM_LOBBER_THROW = (                                             # 0x595B6
     0x1BD3, 0x1BB1, 0x1B93, 0x1B75, 0x1B57, 0x1C30, 0x1C12, 0x1BF1,
 )
 
+_ANIM_SUPERSORC_FADE = (                                           # 0x59636
+    0x1412, 0x142D, 0x1448, 0x1463, 0x13A2, 0x13BD, 0x13D8, 0x13F3,
+    0x1412, 0x142D, 0x1448, 0x1463, 0x13A2, 0x13BD, 0x13D8, 0x13F3,
+    0x1412, 0x142D, 0x1448, 0x1463, 0x13A2, 0x13BD, 0x13D8, 0x13F3,
+    0x137E, 0x1387, 0x1390, 0x1399, 0x135A, 0x1363, 0x136C, 0x1375,
+    0x137E, 0x1387, 0x1390, 0x1399, 0x135A, 0x1363, 0x136C, 0x1375,
+    0x137E, 0x1387, 0x1390, 0x1399, 0x135A, 0x1363, 0x136C, 0x1375,
+    0x1412, 0x142D, 0x1448, 0x1463, 0x13A2, 0x13BD, 0x13D8, 0x13F3,
+    0x1412, 0x142D, 0x1448, 0x1463, 0x13A2, 0x13BD, 0x13D8, 0x13F3,
+)
+
 _MONSTER_IDLE_ANIMS = {
     int(MazeObjIds.MONST_GHOST): _ANIM_GHOST_IDLE,
     int(MazeObjIds.MONST_GRUNT): _ANIM_GRUNT_IDLE,
@@ -222,39 +232,45 @@ def _monster_animation_index(state: GameState, slot: int) -> int:
     return (packed & 0x38) | (((packed & 0x07) + 2) & 0x07)
 
 
-# ROM: direct game:0x414A4 | Represents the shared animation-picture entry with Python bank selection around its table lookup.
+# ROM: part game:0x414A4 | The table lookup and picture write at 0x414AE-0x414B8, shared by every animation site with its own bank.
+def monster_set_anim_picture(state: GameState, slot: int, table: tuple[int, ...]) -> None:
+    """0x414AE -- show ``table[frame * 8 + ROM direction]``."""
+    state.mobs.picture[slot] = table[_monster_animation_index(state, slot)]
+
+
+# ROM: direct game:0x414A4 | Family idle-bank entry (0x40DB2) into the shared picture write.
 def monster_update_anim_tile(
     state: GameState, slot: int, obj_type: int,
 ) -> None:
-    """``monster_update_anim_tile`` (0x414A4) and its bank selectors.
+    """``monster_update_anim_tile`` (0x414A4) -- show the family's idle bank.
 
-    Select the live picture word from the creature's state, facing, and
-    moving/attack flags. A blinked-out creature retains its blank picture
-    until those flags release it.
+    Only the branches that reach this entry change the picture; the walking,
+    wind-up and fade frames name their own banks at 0x414AA/0x414AE.
     """
-    if state.mobs.picture[slot] == 0:
-        return
+    monster_set_anim_picture(state, slot, _MONSTER_IDLE_ANIMS[obj_type])
 
-    flags = state.mobs.hpos[slot]
-    if (
-        state.mobs.picture[slot] == _BLANK_PICTURE
-        and flags & (_HPOS_FLAG_MOVING | _HPOS_FLAG_ATTACK)
-    ):
-        return
-    table = _MONSTER_IDLE_ANIMS[obj_type]
-    if flags & _HPOS_FLAG_MOVING:
-        table = _MONSTER_MOVING_ANIMS.get(obj_type, table)
-    elif flags & _HPOS_FLAG_ATTACK:
-        if obj_type == int(MazeObjIds.MONST_LOBBER):
-            table = _ANIM_LOBBER_THROW
-        elif obj_type == int(MazeObjIds.MONST_IT):
-            table = _ANIM_IT_SPECIAL
-        elif obj_type == int(MazeObjIds.MONST_DEMON):
-            table = _ANIM_DEMON_SPECIAL
-        elif obj_type == int(MazeObjIds.MONST_SORC):
-            table = _ANIM_SORC_MOVING
 
-    state.mobs.picture[slot] = table[_monster_animation_index(state, slot)]
+# ROM: part game:0x4119A | Walking-frame bank selection (0x40DDA) at 0x411B0 and 0x413DC.
+def monster_show_moving(state: GameState, slot: int, obj_type: int) -> None:
+    """0x411B0/0x413DC -- show the family's moving bank.
+
+    Ghost, lobber, Super Sorcerer and IT have a null entry at 0x40DDA and never
+    carry the moving flag on these paths.
+    """
+    monster_set_anim_picture(
+        state, slot,
+        _MONSTER_MOVING_ANIMS.get(obj_type, _MONSTER_IDLE_ANIMS[obj_type]),
+    )
+
+
+# ROM: part game:0x4119A | Wind-up bank selection at 0x41208-0x41218.
+def monster_show_attack(state: GameState, slot: int, obj_type: int) -> None:
+    """0x41208 -- the throw bank for a lobber, 0x59536 for every other family."""
+    monster_set_anim_picture(
+        state, slot,
+        _ANIM_LOBBER_THROW if obj_type == int(MazeObjIds.MONST_LOBBER)
+        else _ANIM_DEMON_SPECIAL,
+    )
 
 
 # ROM: helper | Python signed-byte arithmetic primitive.

@@ -57,17 +57,20 @@ demo iterations 470 and 1200 spanned two fields each and left the flag at
 zero. Modelling this needs a deterministic rule for which iterations overrun;
 level setup is the clear candidate.
 
-### S-191 · monster pictures refresh after every walked dispatch
-
-`_dispatch_chain_entry` calls `monster_update_anim_tile` after every monster or
-Super Sorcerer dispatch. The ROM reaches 0x414A4 only from particular branches
-of `monster_special_handler`; many paths continue at 0x414BE and leave the old
-picture. In the MAME demo capture 55 creatures show 613 frames of picture-only
-difference. Positions, states and RNG are unaffected, so this is display
-fidelity, but the extra refresh should be replaced by the ROM's branch-local
-calls.
-
 ## Resolved issues
+
+### S-191 · monster pictures refreshed after every walked dispatch
+
+The refresh after each dispatch is gone, and pictures are written only at the
+ROM's sites, each with its own bank (doc/04 §3.3). `monster_update_anim_tile`
+is now just 0x414A4, the idle bank; `monster_show_moving`, `monster_show_attack`
+and IT's special bank cover the other sites, and the Super Sorcerer gained its
+fade bank at 0x59636. Both contact paths now join at 0x413B0 without running
+the animation tail, which the occupied-destination path used to do. Against
+the MAME demo capture, all 27,396 monster picture samples match (613 differed
+in 55 slots). That capture shows acid, Death, IT, Super Sorcerer, ghosts and
+both grunts; ordinary sorcerers, demons and lobbers were ported from the
+disassembly alone.
 
 ### S-194 · projectile depth links differed from the ROM
 

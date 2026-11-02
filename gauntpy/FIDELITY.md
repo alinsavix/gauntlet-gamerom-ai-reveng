@@ -541,6 +541,10 @@ implementation specification.
      `player_create_shot` use `((H+8)>>4, 31-((V+8)>>4))`; monster shots and
      dragon breath are created with H+12. Do not route these through screen Y,
      and link a player shot when it is created.
+109. **A monster's picture changes only at the ROM's write sites.** Many paths
+     keep the old picture, so never refresh after a dispatch. Each site names
+     its bank: `monster_update_anim_tile` is the idle bank alone, whatever
+     flags the creature carries. See doc/04 §3.3.
 
 ## Investigation workflow
 

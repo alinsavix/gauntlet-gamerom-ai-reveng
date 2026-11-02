@@ -2749,6 +2749,8 @@ class TestSpawnPictures:
         assert all(len(table) == 64 for table in _MONSTER_MOVING_ANIMS.values())
 
     def test_picture_refresh_uses_live_facing_and_animation_frame(self):
+        from gauntpy.game.subsystems.monster_state import monster_show_moving
+
         state = GameState()
         slot = pack_slot(8, 8)
         _place_monster(
@@ -2756,9 +2758,7 @@ class TestSpawnPictures:
         )
         state.mobs.set_state(slot, (3 << 3) | 4)
 
-        monster_update_anim_tile(
-            state, slot, int(MazeObjIds.MONST_GRUNT),
-        )
+        monster_show_moving(state, slot, int(MazeObjIds.MONST_GRUNT))
 
         # gauntpy left (4) is ROM direction 6; frame 3 starts at word 24.
         assert state.mobs.picture[slot] == _MONSTER_MOVING_ANIMS[
@@ -2773,12 +2773,69 @@ class TestSpawnPictures:
             state, slot, MazeObjIds.MONST_GRUNT, direction=0, moving=True,
         )
         state.mobs.picture[slot] = 1
-        state.frame_counter = 1
+        state.frame_counter = 4
 
         main_move_monsters(state)
 
         moved = _monster_slot(state, MazeObjIds.MONST_GRUNT)
         assert state.mobs.picture[moved] != 1
+
+    def test_a_gated_frame_keeps_the_old_picture(self):
+        """0x411A6: off the fourth frame the moving branch writes nothing."""
+        state = GameState()
+        slot = pack_slot(8, 8)
+        _arena(state, slot)
+        _place_monster(
+            state, slot, MazeObjIds.MONST_GRUNT, direction=0, moving=True,
+        )
+        state.mobs.picture[slot] = 1
+        state.frame_counter = 1
+
+        main_move_monsters(state)
+
+        assert state.mobs.picture[slot] == 1
+
+    def test_idle_refresh_always_uses_the_idle_bank(self):
+        """0x414A4 loads 0x40DB2 whatever flags the creature carries."""
+        state = GameState()
+        slot = pack_slot(8, 8)
+        _place_monster(
+            state, slot, MazeObjIds.MONST_GRUNT, direction=4, moving=True,
+        )
+        state.mobs.set_state(slot, (3 << 3) | 4)
+
+        monster_update_anim_tile(state, slot, int(MazeObjIds.MONST_GRUNT))
+
+        assert state.mobs.picture[slot] == _MONSTER_IDLE_ANIMS[
+            int(MazeObjIds.MONST_GRUNT)
+        ][24 + 6]
+
+    def test_the_super_sorcerer_fades_through_its_own_bank(self):
+        """0x410E4 selects 0x59636, not the idle bank at 0x58C0A."""
+        from gauntpy.game.subsystems.monster_state import _ANIM_SUPERSORC_FADE
+
+        state = GameState()
+        slot = pack_slot(8, 8)
+        _arena(state, slot)
+        _place_monster(
+            state, slot, MazeObjIds.MONST_SUPERSORC, direction=0, moving=True,
+        )
+        state.mobs.set_state(slot, 3 << 3)
+        state.frame_counter = 4
+
+        main_move_monsters(state)
+
+        assert state.mobs.picture[slot] == _ANIM_SUPERSORC_FADE[(4 << 3) + 2]
+
+    @requires_roms
+    def test_the_super_sorcerer_fade_bank_is_the_rom_bytes(self):
+        from gex.roms import coderom_get_bytes
+        from gauntpy.game.subsystems.monster_state import _ANIM_SUPERSORC_FADE
+
+        raw = coderom_get_bytes(0x59636, 128)
+        assert _ANIM_SUPERSORC_FADE == tuple(
+            int.from_bytes(raw[i:i + 2], "big") for i in range(0, 128, 2)
+        )
 
     def test_the_aliased_families_share_their_tables(self):
         """0x40DB2[5] is the grunt's pointer again and [8] the sorcerer's."""
