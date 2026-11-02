@@ -756,10 +756,30 @@ Three outcomes, in the ROM's order:
   them, so the hero teleports from where it stood; anything else falls back
   into the migration path now that the tile has been consumed.
 
-The same tail exists for a pushed movable wall at `failed_door_post`
-(0x427B4-0x42808), instruction for instruction.
+A shoved hero runs this tail too: the shove arms call the core for the target,
+so a shove that carries a hero into an occupied cell offers that cell to
+`player_tile_interact` (a key is picked up and the record follows; a wall-like
+object refuses the step).
 
-The four movable-wall arms at 0x4280E-0x42A64 advance the wall by exactly
+The same migration exists for a pushed movable wall at `failed_door_post`
+(0x427B4-0x42808), with one difference: the wall's new H/V words are kept even
+when the cell they now name is occupied, and only the record's migration is
+skipped. A migrating wall that is the monster walk's stop slot carries
+`monster_iter_ptr` (0x904A60) with it.
+
+A probe that meets picture 0x20F6 reverts the hero's step and pushes the wall.
+Each axis tries two pushes: first along the move (right 0x4280E, left 0x428A4,
+down 0x4293A, up 0x429D0); if that ray march meets anything other than an exit
+or transporter, a second push across the move, away from the hero (for a
+vertical move right when the wall's H is not left of the hero record's,
+otherwise left; for a horizontal move up when its V is not below, otherwise
+down). A push into an exit or transporter dissolves the wall through
+`tport_cycle_start` and counts as success. Success ends the axis with the hero
+where it was; only when both pushes fail does the core fall into that axis's
+wall arm (0x41CD2, 0x41F0A, 0x42112, 0x42346), with its even-pixel retry and
+nudge.
+
+The four push routines at 0x4280E-0x42A64 advance the wall by exactly
 `0x80`, one native pixel, and return zero to the current movement axis. A base
 Elf's requested step is `0x100`, so while pushing it alternates blocked frames
 that move only the wall with clear frames that move the hero two pixels. Direct
@@ -771,9 +791,11 @@ in the renderer or forcing the hero forward on every push frame would change
 the game-side MOB words.
 
 gauntpy implements this in `player_movement.migrate_player_record`, called
-from `player_try_move` after the position write and again after the tile pass
-in `main_move_players`, so a consumed pickup lets the record follow the hero
-into the cell it just cleared on the same frame. It never migrates into a managed
+from `player_try_move` after the position write and again from
+`resolve_entered_cell`, the occupied-cell tail that `main_move_players` runs
+after the move and `_shove_player` runs after a shove, so a consumed pickup
+lets the record follow the hero into the cell it just cleared on the same
+frame. It never migrates into a managed
 low slot (0-0x1F) and never overwrites an occupied cell.
 
 Door traversal is a register/shared-stack convention: `D2.w` is the current
@@ -1519,9 +1541,25 @@ Transporter position table: `tport_pos_table` at `0x910700` (word array[32]), po
 
 When a player touches a transporter:
 1. `player_tport` (0x50224) → `tport_player_flash` (0x50616): saves player MOB picture, sets picture to 0x1709 (flash frame)
-2. `tport_player_move` (0x50662): rechecks candidates with `tport_check_dest` (0x50ADE), removes the old player record, resolves or clears a permitted occupant at the landing cell, recreates the player there, handles IT/thief route state, and calls `handle_tport` at the destination
+2. `tport_player_move` (0x50662): rechecks candidates with `tport_check_dest` (0x50ADE), handles IT/thief route state, removes the old player record, and resolves a permitted occupant at the landing cell (tricks 1/2/3 win on acid, Death or an exit there, 0x508FA-0x50922; then `resolve_move_tile_interaction`). If that started an exit (status 8) it puts the saved picture on the slot and stops (0x50940-0x50968). Otherwise it recreates the player there unless the cell is an exit, calls `handle_tport` (0x509DE), records the arrival pad for trick 0x56 (0x509E4), and runs `0x50BB8` once per public probe (0x50A18-0x50A66)
 3. `handle_tport` (0x47CFE): copies player position to an animation slot and creates the `tport_create_splodey` effect
 4. `tport_restore_player_picture` (0x50B88), the one-argument completion leaf used when the per-player movement state reaches 0x10, maps the player index through `active_mob_ids` and restores that MOB's picture from `tport_saved_picture[player]`
+
+`resolve_move_tile_interaction(slot, player)` (0x50C7A) offers a record to
+`player_tile_interact` and returns -1 when that handles it or the record is an
+exit (type 0x10, which stays). Otherwise the record is removed: the thief
+(type 0x0F) through `thief_remove_and_drop_loot(player, slot)` (0x4F5C8), with
+its dropped loot resolved in turn, and anything else -- monsters, generators,
+doors without a key -- through `moblist_remove_and_clear` (0x50CFE).
+
+`0x50BB8(probe, hero_slot, player)` repeats one public probe from the landed
+hero's record and resolves the first overlapping record until the probe
+returns nothing, a hero (H palette nibble 0x0C-0x0F, 0x50BF2) or a wall marker
+(0x8000/0x8001). Tricks 1 and 2 (acid, Death) are tested on each record first
+(0x50C30-0x50C52). Because the hero is anchored four pixels left of its cell,
+the reach is the cell to its left plus any live creature within the 0x7C0
+overlap, not the four neighbouring cells: a transporting hero picks up what
+it lands against and deletes monsters it lands on.
 
 `tport_check_dest(destination_mob_slot, player_index)` (0x50ADE) returns 1
 for a blocked destination and 0 for a usable one.  Blocking cases include an
@@ -1934,7 +1972,11 @@ flank `0x130` blocks the full three-pixel mugger step, so 0x4F278-0x4F2C2 moves
 left to X=240. Repeating the requested direction then clears the one-cell lane.
 Stopping after the shared probe leaves the actor permanently compact and idle.
 
-The generic vertical probes keep their ROM boundary tests. `mob_probe_down`
+The public probes return the first record whose anchor overlaps the mover,
+whatever it is; their callers (`thief_move_engine` and the landing scan above)
+decide what it means. Flank columns always wrap within their row
+(`andi.w #$3E`), while flank rows are skipped above slot 0x40 and from slot
+0x3E0. The generic vertical probes keep their ROM boundary tests. `mob_probe_down`
 0x40732 reads the proposed live V word for a row-31 actor and returns clear while
 it is nonnegative, only returning `0x400` after the sign changes.
 `mob_probe_up` 0x406B6 similarly compares the live word with `0xF080` in the

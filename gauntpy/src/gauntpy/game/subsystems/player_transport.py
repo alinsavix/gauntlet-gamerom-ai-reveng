@@ -306,18 +306,6 @@ def player_tport(state: GameState, player_index: int,
     diagonals = [c for c in clear_cells if c in diagonal_cells]
     landing = diagonals[0] if diagonals else clear_cells[0]
 
-    # 0x509E4: the "visit every transporter" objective records *both* ends of
-    # the hop -- the source pad was ORed in at 0x5027E, and the pad just
-    # arrived at goes in here, gated on the same trick and on the destination
-    # actually resolving to a known pad (0x509EC ``tst.w d6``).
-    _tport_visit_pad(state, player_index, destination)
-
-    # 0x50A18-0x50A66: before handing over to the transition, the arriving
-    # player interacts with all four cells around the destination pad -- this is
-    # why a transporter can drop you straight onto a potion, and how the two
-    # transportability objectives are won.
-    scan_move_path_interactions(state, destination, player_index)
-
     # 0x504F2-0x5052A / 0x50606: arm the transition and hand over.  The hero
     # does not move on this frame -- loop 2 dissolves it, this file's
     # tport_player_move relocates it at the move milestone, and loop 2 re-forms
@@ -343,46 +331,69 @@ def _tport_visit_pad(state: GameState, player_index: int, pad_slot: int) -> None
         flags[player_index] |= 1 << pad_id
 
 
-# ROM: direct game:0x50BB8 | Transport-neighbor interaction boundary modeled as an immediate-cell sweep rather than the ROM repeated callback loop; full removable-object cleanup is not preserved here.
-# ROM: part game:0x50662 | The four-direction loop absorbs tport_player_move's four calls at 0x50A1E/0x50A36/0x50A4E/0x50A66.
-def scan_move_path_interactions(state: GameState, dest_slot: int,
-                           player_index: int) -> None:
-    """0x50BB8 -- interact with the four cells around the destination pad.
+# ROM: direct game:0x50C7A | Transport occupant resolution: tile interaction, exit preservation, thief removal with loot retry, and removal of anything left unhandled.
+def resolve_move_tile_interaction(state: GameState, slot: int,
+                                  player_index: int) -> int:
+    """0x50C7A -- deal with a record a transporting hero lands on or against.
 
-    ``player_tport`` calls this four times (0x50A1E/0x50A36/0x50A4E/0x50A66),
-    once per neighbour-fetch callback (0x406B6, 0x40732, 0x4083A, 0x408A0).
-    Each call finds the mob in that cell and, unless it is rejected, runs it
-    through ``player_tile_interact`` (0x50C96) exactly as walking into it
-    would.  Three rejects, in ROM order:
-
-      * no mob there at all (0x50BD8, the callback returned negative);
-      * ``mob_hpos & 0x0F >= 0x0C`` -- mid-cell, so not really in this one
-        (0x50BF2, the same sub-tile gate the movement probes use);
-      * picture 0x8001 or 0x8000 (0x50C02/0x50C16) -- the two placeholder
-        pictures that mean "nothing drawn here".
+    Returns -1 when ``player_tile_interact`` handled it or it is an exit
+    (which stays); otherwise the record goes. The thief (type 0x0F) is removed
+    through ``thief_remove_and_drop_loot`` with its loot left in the slot, and
+    that loot is resolved in turn; anything else -- monsters, generators,
+    doors without a key -- is removed outright.
     """
-    from .player_items import (
-        player_tile_interact as player_tile_interact,
-    )
-    from .player_movement import (
-        _direction_neighbor as _direction_neighbor,
+    from .player_items import player_tile_interact
+
+    if player_tile_interact(state, slot, player_index):          # 0x50C96
+        return -1
+    obj_type = state.mobs.obj_type(slot)
+    if obj_type == int(MazeObjIds.EXIT):                          # 0x50CB6
+        return -1
+    if obj_type == int(MazeObjIds.PLAYERSTART):                   # 0x50CBC
+        from .thief import thief_remove_and_drop_loot
+
+        thief_remove_and_drop_loot(state, player_index, slot)     # 0x50CCE
+        if state.mobs.picture[slot]:                              # 0x50CDE
+            resolve_move_tile_interaction(state, slot, player_index)
+        return 0
+    state.mobs.unlink_and_clear(slot)                             # 0x50CFE
+    return 0
+
+
+# ROM: direct game:0x50BB8 | One probe direction of the post-landing scan, repeated until the probe finds nothing usable.
+# ROM: part game:0x50662 | The four-direction loop absorbs tport_player_move's four calls at 0x50A1E/0x50A36/0x50A4E/0x50A66.
+def scan_move_path_interactions(state: GameState, hero_slot: int,
+                                player_index: int) -> None:
+    """0x50BB8 x4 -- resolve every record overlapping a hero who just landed.
+
+    For each public probe in turn (0x406B6, 0x40732, 0x4083A, 0x408A0) the ROM
+    repeatedly probes from the hero's new record and resolves the first
+    overlapping record, stopping when the probe returns nothing, a hero
+    (H palette nibble 0x0C-0x0F), or a wall marker (0x8000/0x8001). With the
+    hero anchored four pixels left of its cell this reaches whatever is in the
+    cell to its left and any live creature close enough to overlap it.
+    """
+    from .mob_probes import (
+        mob_probe_down, mob_probe_left, mob_probe_right, mob_probe_up,
     )
 
-    for direction in (0, 2, 4, 6):
-        cell = _direction_neighbor(dest_slot, direction)
-        if cell < 0x20 or cell >= 0x400:
-            continue
-        # The ROM's callbacks return a MOB slot and reject a negative one
-        # (0x50BD8); in this port a maze cell *is* its MOB slot, so the
-        # equivalent "nothing there" test is an empty object type.
-        if state.mobs.obj_type(cell) == 0:
-            continue
-        if (state.mobs.hpos[cell] & 0x0F) >= 0x0C:               # 0x50BF2
-            continue
-        if state.mobs.picture[cell] in (0x8000, 0x8001):         # 0x50C02/0x50C16
-            continue
-        _tport_landing_trick(state, player_index, cell)          # 0x50C30
-        player_tile_interact(state, cell, player_index)          # 0x50C96
+    for probe in (mob_probe_up, mob_probe_down, mob_probe_left, mob_probe_right):
+        previous = None
+        while True:
+            candidate = probe(state, hero_slot)                    # 0x50BD2
+            if not 0 <= candidate < 0x400:                         # 0x50BD8
+                break
+            if (state.mobs.hpos[candidate] & 0x0F) >= 0x0C:       # 0x50BF2
+                break
+            if state.mobs.picture[candidate] in (0x8000, 0x8001):  # 0x50C02/0x50C16
+                break
+            if candidate == previous:
+                # Python-only guard: the ROM loop has no exit when a record
+                # survives its own resolution and still overlaps.
+                break
+            previous = candidate
+            _tport_landing_trick(state, player_index, candidate)  # 0x50C30
+            resolve_move_tile_interaction(state, candidate, player_index)
 
 
 # ROM: part game:0x50BB8 | Try-transportability objective checks for nearby acid/Death at 0x50C30-0x50C52.
@@ -501,7 +512,7 @@ def tport_transition_arm(state: GameState, player_index: int,
     handle_tport(state, state.players[player_index].mob_slot, player_index)
 
 
-# ROM: direct game:0x50662 | Transport relocation milestone boundary; position commit is extracted and destination-visit/neighbor scanning are partly rescheduled to player_tport.
+# ROM: direct game:0x50662 | Transport relocation milestone boundary; position commit and landing-occupant resolution are extracted to player_movement._move_player_to_slot.
 def tport_player_move(state: GameState, player_index: int) -> None:
     """0x50662 -- the move milestone of the transition (step 0x0B).
 
@@ -571,7 +582,8 @@ def tport_player_move(state: GameState, player_index: int) -> None:
         pf_replace(state, landing, int(MazeObjIds.TILE_FLOOR))
     if destination_pad:
         _dialog(state, player_index, _DIALOG_TRANSPORTER)  # 0x50840-0x5084C
-    if _move_player_to_slot(state, player_index, landing):
+    arrival = _move_player_to_slot(state, player_index, landing)
+    if arrival:
         source_pad = state.player_tport_route_state[player_index] & 0x3FF
         if (
             player_index == state.thief_victim
@@ -584,9 +596,17 @@ def tport_player_move(state: GameState, player_index: int) -> None:
                 state, source_pad, destination_pad, landing,
             )                                           # 0x5085C-0x5087A
             state.thief_victim_pos = landing           # 0x50880
+    if arrival == 1:
         # 0x509DE creates the arrival sparkle from the newly installed player
         # record. The earlier 0x5050A effect remains at the source for dissolve.
         handle_tport(state, landing, player_index)
+        # 0x509E4: the "visit every transporter" objective records the pad
+        # just arrived at (the source was ORed in at 0x5027E), gated on a
+        # destination pad (``tst.w d6``).
+        if destination_pad:
+            _tport_visit_pad(state, player_index, destination_pad)
+        # 0x50A0C-0x50A66: the landed hero resolves whatever overlaps it.
+        scan_move_path_interactions(state, landing, player_index)
 
 
 # ROM: direct game:0x42744 | Transport-power, recursive-pass and candidate-type gate before corner_squeeze_geometry.

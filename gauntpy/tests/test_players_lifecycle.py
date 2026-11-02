@@ -4031,9 +4031,11 @@ class TestTransporterObjectiveSites:
         return state, _pack(5, 5), _pack(5, 9)
 
     def test_both_pads_are_recorded(self):
-        """0x5027E marks the source, 0x509E4 the destination."""
+        """0x5027E marks the source; 0x509E4, at the move milestone, the
+        destination."""
         state, source, dest = self._world(player_transport._TRICK_VISIT_TPORTS)
         player_transport.player_tport(state, 0, source)
+        player_transport.tport_player_move(state, 0)
         pads = player_transport._tport_pos_table(state)
         expected = (
             (1 << (pads.index(source) + 1))
@@ -4055,11 +4057,14 @@ class TestTransporterObjectiveSites:
         assert state.secret_tricks_flags[0] == 0
 
     def _land_beside(self, trick_id: int, monster_type: int):
+        """The monster stands in the cell left of the landing cell, which the
+        landed hero (anchored four pixels left of its cell) overlaps."""
         state, source, dest = self._world(trick_id)
-        neighbour = player_movement._direction_neighbor(dest, 0)
-        state.mobs.create(neighbour, tile=0x2000, hpos=0, vpos=0,
-                          obj_type=monster_type)
         player_transport.player_tport(state, 0, source)
+        landing = state.player_tile_or_tport_dest[0]
+        state.mobs.create(landing - 1, tile=0x2000, hpos=0, vpos=0,
+                          obj_type=monster_type)
+        player_transport.tport_player_move(state, 0)
         return state
 
     def test_transported_beside_acid_wins_trick_one(self):
@@ -4126,7 +4131,8 @@ class TestTransporterObjectiveSites:
 
 
 class TestTransporterArrivalInteracts:
-    """0x50A18-0x50A66 -- the four cells around the destination are entered."""
+    """0x50A0C-0x50A66 -- after landing, each public probe repeatedly resolves
+    the first record overlapping the hero (0x50BB8 / 0x50C7A)."""
 
     def _world(self):
         state = _active_state()
@@ -4136,61 +4142,66 @@ class TestTransporterArrivalInteracts:
         for row, col in ((5, 5), (5, 9)):
             state.mobs.create(_pack(row, col), tile=0, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.TRANSPORTER))
-        return state, _pack(5, 5), _pack(5, 9)
+        player_transport.player_tport(state, 0, _pack(5, 5))
+        return state, state.player_tile_or_tport_dest[0]
 
-    def test_a_neighbouring_key_is_picked_up(self):
-        state, source, dest = self._world()
-        neighbour = player_movement._direction_neighbor(dest, 2)
-        state.mobs.create(neighbour, tile=0, hpos=0, vpos=0,
+    def test_a_key_the_landed_hero_overlaps_is_picked_up(self):
+        state, landing = self._world()
+        state.mobs.create(landing - 1, tile=0x0AFC, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.KEY))
-        player_transport.player_tport(state, 0, source)
+        player_transport.tport_player_move(state, 0)
         assert state.players[0].keysnum == 1
+        assert not state.mobs.is_occupied(landing - 1)
 
-    def test_all_four_orthogonal_neighbours_are_visited(self):
-        state, source, dest = self._world()
-        for direction in (0, 2, 4, 6):
-            state.mobs.create(player_movement._direction_neighbor(dest, direction),
-                              tile=0, hpos=0, vpos=0,
+    def test_cells_the_hero_does_not_overlap_are_left_alone(self):
+        state, landing = self._world()
+        for cell in (landing - 0x20, landing + 0x20, landing + 1):
+            state.mobs.create(cell, tile=0x0AFC, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.KEY))
-        player_transport.player_tport(state, 0, source)
-        assert state.players[0].keysnum == 4
-
-    def test_diagonals_are_not_visited(self):
-        state, source, dest = self._world()
-        for direction in (1, 3, 5, 7):
-            state.mobs.create(player_movement._direction_neighbor(dest, direction),
-                              tile=0, hpos=0, vpos=0,
-                              obj_type=int(MazeObjIds.KEY))
-        player_transport.player_tport(state, 0, source)
+        player_transport.tport_player_move(state, 0)
         assert state.players[0].keysnum == 0
+
+    def test_an_overlapping_monster_is_removed(self):
+        """0x50CFE: what player_tile_interact leaves unhandled is deleted."""
+        state, landing = self._world()
+        state.mobs.create(landing - 1, tile=0x2000, hpos=0, vpos=0,
+                          obj_type=int(MazeObjIds.MONST_GRUNT))
+        player_transport.tport_player_move(state, 0)
+        assert not state.mobs.is_occupied(landing - 1)
 
     def test_a_mid_cell_mob_is_rejected(self):
-        """0x50BF2 -- palette nibble >= 0x0C means it is not settled here."""
-        state, source, dest = self._world()
-        neighbour = player_movement._direction_neighbor(dest, 2)
-        state.mobs.create(neighbour, tile=0, hpos=0x0C, vpos=0,
-                          obj_type=int(MazeObjIds.KEY))
-        player_transport.player_tport(state, 0, source)
-        assert state.players[0].keysnum == 0
+        """0x50BF2 -- palette nibble >= 0x0C stops the scan."""
+        state, landing = self._world()
+        state.mobs.create(landing - 1, tile=0x2000,
+                          hpos=(((landing - 1) & 0x1F) * 16 << 7) | 0x0C,
+                          vpos=native_v((landing >> 5) * 16) << 7,
+                          obj_type=int(MazeObjIds.MONST_GRUNT))
+        player_transport.tport_player_move(state, 0)
+        assert state.mobs.is_occupied(landing - 1)
 
     def test_placeholder_pictures_are_rejected(self):
-        """0x50C02/0x50C16 -- 0x8001 and 0x8000 mean nothing is drawn."""
+        """0x50C02/0x50C16 -- 0x8001 and 0x8000 stop the scan."""
         for picture in (0x8000, 0x8001):
-            state, source, dest = self._world()
-            neighbour = player_movement._direction_neighbor(dest, 2)
-            state.mobs.create(neighbour, tile=picture, hpos=0, vpos=0,
+            state, landing = self._world()
+            state.mobs.create(landing - 1, tile=picture, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.KEY))
-            player_transport.player_tport(state, 0, source)
+            player_transport.tport_player_move(state, 0)
             assert state.players[0].keysnum == 0, hex(picture)
 
-    def test_the_transition_still_arms(self):
-        """The scan runs at arm time and must not commit the move (0x5060A)."""
-        state, source, dest = self._world()
-        neighbour = player_movement._direction_neighbor(dest, 2)
-        state.mobs.create(neighbour, tile=0, hpos=0, vpos=0,
+    def test_nothing_is_collected_when_the_transition_arms(self):
+        """The scan belongs to the move milestone, not to player_tport."""
+        state = _active_state()
+        _make_player_active(state, 0, mob_slot=30)
+        state.mobs.hpos[30] = (5 * 16 + 8) << 7
+        state.mobs.vpos[30] = native_v(5 * 16 + 8) << 7
+        for row, col in ((5, 5), (5, 9)):
+            state.mobs.create(_pack(row, col), tile=0, hpos=0, vpos=0,
+                              obj_type=int(MazeObjIds.TRANSPORTER))
+        state.mobs.create(_pack(5, 8), tile=0x0AFC, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.KEY))
-        assert player_transport.player_tport(state, 0, source) == -2
+        assert player_transport.player_tport(state, 0, _pack(5, 5)) == -2
         assert state.player_tport_phase[0] == 0
+        assert state.players[0].keysnum == 0
         assert hpos_x(state.mobs.hpos[30]) == 5 * 16 + 8, "no immediate move"
 
 

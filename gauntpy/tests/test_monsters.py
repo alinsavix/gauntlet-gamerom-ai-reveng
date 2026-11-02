@@ -200,7 +200,6 @@ def _place_player(state: GameState, index: int, slot: int) -> None:
                       vpos=encode_vpos_at_y(row * 16),
                       obj_type=int(MazeObjIds.PLAYERSTART), state=0)
     state.level_players_active = max(state.level_players_active, index + 1)
-    state.player_in_maze[index] = 1
 
 
 def _camera_on(state: GameState, slot: int) -> None:

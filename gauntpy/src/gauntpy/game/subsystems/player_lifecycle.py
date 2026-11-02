@@ -525,7 +525,6 @@ def player_start_inner(state: GameState, player_index: int) -> int:
         # credit, so a hero carrying a count from the last level cannot be paid
         # for it twice by show_level_end_bonus_screen (0x4D57E).
         state.player_treascount[player_index] = 0
-        state.player_in_maze[player_index] = 1
         state.player_tile_or_tport_dest[player_index] = slot
         state.level_players_active += 1
         if state.level_players_active == 1:

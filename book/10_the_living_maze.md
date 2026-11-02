@@ -143,6 +143,16 @@ before the final destination check; it preserves forcefield hubs and
 has its own boundary restrictions. It should not be confused with
 ordinary pad travel or generalized into permission to teleport anywhere.
 
+Arrival does not stop at the landing cell. Once the hero is in place,
+the game looks up, down, left and right for anything the new body
+overlaps and deals with it as if the hero had walked into it: a key or
+potion is collected, the thief is knocked out and drops what it
+carried, and a monster or generator that the hero landed on is simply
+deleted. Because a hero stands four pixels left of its cell, that
+usually means the cell on its left and any creature close enough to
+touch, not every neighbouring cell. Other heroes and walls are left
+alone.
+
 Once relocation succeeds, the arrival effect moves to the destination
 and the hero's picture is restored as the transition completes.
 If this hero is the thief's selected victim, the game also records
@@ -264,8 +274,12 @@ occupancy, or only visibility. An apparent opening may be no opening at all.
 
 Some walls respond directly to the player. Pushing a movable wall
 requires a usable destination for the wall, not merely a desire to
-occupy its current position. A successful push relocates the obstacle;
-it can open one passage while blocking another.
+occupy its current position. A successful push relocates the obstacle
+one pixel; it can open one passage while blocking another. When the
+wall cannot go forward, the game tries sliding it sideways instead,
+away from the side the hero is pushing from. Only when neither move is
+possible does the wall behave like an ordinary wall, with the same
+small corner corrections.
 
 Shooting offers a slower alternative. Each player hit adds one count
 to the movable wall's state. At twenty-five hits it dissolves. The
@@ -432,6 +446,16 @@ interaction—and the game can revise each agreement separately.
   rejects picture `0x8000` and picture `0x0001`, not ordinary zero
   pictures; object types `0x2F`, `0x3C`, and `0x3E` are locked
   treasure, dragon, and transporter. Doors require a key.
+- The arrival scan is `tport_player_move`'s four calls to `0x50BB8` at
+  `0x50A18–0x50A66`, each repeating one public probe (`0x406B6`,
+  `0x40732`, `0x4083A`, `0x408A0`) from the landed hero and passing what
+  it finds to `resolve_move_tile_interaction` (`0x50C7A`), which removes
+  whatever `player_tile_interact` leaves unhandled except exits. Read
+  from disassembly; the arrival cases were not captured in MAME.
+- The push order is in the movement core's four arms (`0x41C80`,
+  `0x41EB8`, `0x420C0`, `0x422F4`). Pushes along the move, sideways
+  slides, and the fall-back wall response were checked by running ROM
+  `0x41BF0` under Unicorn (subsystem §4.2).
 - The door's reach is `mob_collision_test`'s door arm at `0x522D8`,
   which calls `shot_onscreen_check` (`0x4AEA0`) with limits `0x5C0`
   along and `0x4C0` across the door's open sides (subsystem §4.2).

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..constants import FIRST_PLAYABLE_SLOT, GENERATOR_TYPES, MONSTER_TYPES, GameMode, MazeObjIds, PlayerPower
+from ..constants import FIRST_PLAYABLE_SLOT, GENERATOR_TYPES, MONSTER_TYPES, GameMode, MazeObjIds, PlayerPower, PlayerStatus
 from ..coords import POS_SHIFT, encode_hpos, encode_vpos, encode_vpos_at_y, hpos_x, mob_cell_of, position_field, replace_position, vpos_v
 from ..state import GameState
 from .sound import sound_play as _sound_play
@@ -194,13 +194,53 @@ def migrate_player_record(state: GameState, player_index: int) -> bool:
     return True
 
 
-# ROM: part game:0x50662,game:0x50C7A | Extracted transporter relocation at 0x508BA onward with inlined occupant cleanup and flattened thief retry; not the whole resolve_move_tile_interaction callable.
-def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool:
-    """Commit the transporter move milestone, including landing replacement."""
-    from .player_items import (
-        player_tile_interact as player_tile_interact,
-    )
+# ROM: part game:0x41C30 | Movement-core occupied-destination tail at 0x424EC-0x42588 (tile interaction, teleport return, rollback or migration), run after the core's position commit.
+def resolve_entered_cell(
+    state: GameState, player_index: int,
+    origin: tuple[int, int, int],
+) -> tuple[int | None, bool]:
+    """Offer an occupied newly entered cell to ``player_tile_interact``.
+
+    ``origin`` is the record's ``(slot, H, V)`` before the move. An empty
+    entered cell needs nothing: ``migrate_player_record`` already moved the
+    record. An occupied one is interacted with once per cell change (Python
+    gates on last frame's ``player_tile_or_tport_dest``): -2 (a started
+    teleport, 0x42570) keeps the pre-move words; a handled tile lets the
+    record migrate (0x42588 -> 0x424F2); anything else refuses the step
+    (0x42556). Returns ``(rolled-back cell or None, refused)``.
+    """
+    from .player_items import TILE_TELEPORTED, player_tile_interact
+
+    player = state.players[player_index]
+    source, old_h, old_v = origin
+    entered = _player_record_cell(state, player_index)
+    if (
+        entered == player.mob_slot
+        or entered == state.player_tile_or_tport_dest[player_index]
+    ):
+        return None, False
+    handled = player_tile_interact(state, entered, player_index)
+    if handled != TILE_TELEPORTED and handled and migrate_player_record(
+        state, player_index,
+    ):
+        return None, False
+    if player.mob_slot != source:
+        return None, False
+    state.mobs.hpos[source] = old_h
+    state.mobs.vpos[source] = old_v
+    return source, handled != TILE_TELEPORTED
+
+
+# ROM: part game:0x50662 | Extracted transporter relocation at 0x508BA-0x509C8: old-record removal, landing-occupant tricks and resolution, the exit early return, and hero creation.
+def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> int:
+    """Commit the transporter move milestone, including landing replacement.
+
+    Returns 0 when the destination is refused, 2 when resolving the landing
+    occupant started an exit (0x50940-0x50968: the saved picture goes back on
+    the slot and the milestone ends), and 1 when the hero has landed.
+    """
     from .player_transport import (
+        resolve_move_tile_interaction as resolve_move_tile_interaction,
         tport_check_dest as tport_check_dest,
     )
 
@@ -208,11 +248,11 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool
     source = player.mob_slot
     if slot < FIRST_PLAYABLE_SLOT:
         state.player_tile_or_tport_dest[player_index] = source
-        return False
+        return 0
 
     if slot != source and tport_check_dest(state, slot, player_index):
         state.player_tile_or_tport_dest[player_index] = source
-        return False
+        return 0
 
     picture = state.mobs.picture[source]
     old_h = state.mobs.hpos[source]
@@ -223,40 +263,36 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool
     y = (slot >> 5) << 4
 
     if slot != source:
-        # 0x508BA removes the old hero before resolving the destination. A
-        # usable occupant is interacted with, then any surviving record is
-        # cleared before mob_create installs the hero at the landing cell.
+        # 0x508BA-0x508D0 removes the old hero record and names the landing
+        # cell before resolving whatever occupies it.
         state.mobs.unlink_and_clear(source)
         player.mob_slot = slot
-        if state.mobs.picture[slot] != 0:
+        if state.mobs.picture[slot] != 0:                         # 0x508DE
+            occupant = state.mobs.obj_type(slot)
+            trick = state.secret_trick_id
             if (
-                state.secret_trick_id == 3
-                and state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+                (trick == 1 and occupant == int(MazeObjIds.MONST_ACID))
+                or (trick == 2 and occupant == int(MazeObjIds.MONST_DEATH))
+                or (trick == 3 and occupant == int(MazeObjIds.EXIT))
             ):
-                state.secret_player = player_index               # 0x50916-0x50922
-            handled = player_tile_interact(state, slot, player_index)
+                state.secret_player = player_index               # 0x508FA-0x50922
             if (
-                not handled
-                and state.mobs.obj_type(slot) == int(MazeObjIds.PLAYERSTART)
-                and state.thief_mob_slot == slot
-            ):
-                from .thief import thief_remove_and_drop_loot
-
-                thief_remove_and_drop_loot(state, player_index, slot)
-                if state.mobs.picture[slot] != 0:
-                    player_tile_interact(state, slot, player_index)
-            if player.mob_slot != slot:
-                return True
-            if state.mobs.picture[slot] != 0:
-                state.mobs.unlink_and_clear(slot)
-        state.mobs.create(
-            slot,
-            tile=picture,
-            hpos=replace_position(old_h, encode_hpos(x)),
-            vpos=replace_position(old_v, encode_vpos_at_y(y)),
-            obj_type=obj_type,
-            state=obj_state,
-        )
+                resolve_move_tile_interaction(state, slot, player_index)
+                and player.status == int(PlayerStatus.EXITING)
+            ):                                                    # 0x50934-0x5094E
+                state.mobs.picture[slot] = state.player_tport_saved_picture[
+                    player_index
+                ]                                                 # 0x50950-0x50962
+                return 2
+        if state.mobs.obj_type(slot) != int(MazeObjIds.EXIT):    # 0x5097E
+            state.mobs.create(
+                slot,
+                tile=picture,
+                hpos=replace_position(old_h, encode_hpos(x)),
+                vpos=replace_position(old_v, encode_vpos_at_y(y)),
+                obj_type=obj_type,
+                state=obj_state,
+            )                                                     # 0x509C8
     else:
         state.mobs.hpos[source] = replace_position(old_h, encode_hpos(x))
         state.mobs.vpos[source] = replace_position(
@@ -264,9 +300,8 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> bool
         )
 
     state.player_tile_or_tport_dest[player_index] = slot
-    state.player_in_maze[player_index] = 1
     _track_thief_victim_move(state, player_index, player.mob_slot)
-    return True
+    return 1
 
 
 # ROM: adapter game:0x4E630 | Argument-order/import adapter to thief.thief_track_victim_move; route-grid implementation remains there.
@@ -288,6 +323,7 @@ _BLOCKING_OBJ_TYPES = frozenset((
     int(MazeObjIds.DOOR_HORIZ), int(MazeObjIds.DOOR_VERT),
     int(MazeObjIds.WALL_MOVABLE),
 ))
+_MOVABLE_WALL_PICTURE = 0x20F6                        # 0x41C84
 _DOOR_REACT_H_LIMIT = 0x5C0                           # 0x522DC
 _DOOR_REACT_V_LIMIT = 0x4C0                           # 0x522D8
 _HAND_POWER = (2, 2, 1, 1, 3, 3, 2, 2)                # fight.c handpower
@@ -542,20 +578,20 @@ def _player_fight_collision(
     return 1
 
 
-# ROM: merged game:0x4280E,game:0x428A4,game:0x4293A,game:0x429D0,game:0x427B4 | Unifies four directional movable-wall arms and the inlined failed_door_post migration tail; ray-march entries remain callees and ROM zero-status interpretation is inferred.
+# ROM: merged game:0x4280E,game:0x428A4,game:0x4293A,game:0x429D0,game:0x427B4 | Unifies the four one-pixel movable-wall pushes and their shared 0x427B4 cell-migration tail; ray-march entries remain callees.
 def _push_movable_wall(
-    state: GameState, player_index: int, slot: int, delta: int,
-    vertical: bool,
+    state: GameState, player_index: int, slot: int, direction: int,
 ) -> bool:
-    """Push a movable wall one pixel, as 0x4280E-0x42A64 does."""
-    if vertical:
-        step_x = 0
-        step_y = -1 if delta & _JOY_UP else 1
-        ray_probe = (-1, 0) if step_y < 0 else (1, 0)
-    else:
-        step_x = -1 if delta & _JOY_LEFT else 1
-        step_y = 0
-        ray_probe = (0, -1) if step_x < 0 else (0, 1)
+    """Push a movable wall one pixel toward ``direction`` (a _JOY_* bit).
+
+    True when the push resolved (``clr.w d0``): the wall moved, or it reached
+    an exit or transporter and dissolved. False when the ray march found any
+    other blocker. 0x427B4 keeps the new position even when the cell it now
+    belongs to is occupied; the record only migrates into an empty cell.
+    """
+    step_x = {_JOY_RIGHT: 1, _JOY_LEFT: -1}.get(direction, 0)
+    step_y = {_JOY_DOWN: 1, _JOY_UP: -1}.get(direction, 0)
+    ray_probe = (step_y, 0) if step_y else (0, step_x)
 
     old_h = state.mobs.hpos[slot]
     old_v = state.mobs.vpos[slot]
@@ -587,14 +623,40 @@ def _push_movable_wall(
 
     state.mobs.hpos[slot] = new_h
     state.mobs.vpos[slot] = new_v
-    dest = mob_cell_of(new_h, new_v)
-    if dest != slot:
-        if state.mobs.picture[dest] != 0:
-            state.mobs.hpos[slot] = old_h
-            state.mobs.vpos[slot] = old_v
-            return False
-        state.mobs.move_slot(slot, dest)
+    dest = mob_cell_of(new_h, new_v)                             # 0x427B4-0x427CE
+    if dest != slot and state.mobs.picture[dest] == 0:
+        if state.monster_iter_ptr == slot:                       # 0x427DC
+            state.monster_iter_ptr = dest
+        state.mobs.move_slot(slot, dest)                         # 0x42802
     return True
+
+
+# ROM: part game:0x41C30 | The four movement-core movable-wall arms at 0x41C80, 0x41EB8, 0x420C0 and 0x422F4: push along the move, then across it away from the hero.
+def _movable_wall_arm(
+    state: GameState, player_index: int, wall: int, delta: int,
+    vertical: bool,
+) -> bool:
+    """Try the core's two pushes; False sends the axis to its wall arm.
+
+    The first push follows the move. If that is blocked the wall is pushed
+    across the move, away from the hero: for a vertical move by comparing the
+    wall's H with the hero record's (right when not left of it), for a
+    horizontal one by comparing V (up when not below it).
+    """
+    if vertical:
+        along = _JOY_UP if delta & _JOY_UP else _JOY_DOWN
+    else:
+        along = _JOY_LEFT if delta & _JOY_LEFT else _JOY_RIGHT
+    if _push_movable_wall(state, player_index, wall, along):
+        return True
+    hero = state.players[player_index].mob_slot
+    if vertical:
+        ahead = (state.mobs.hpos[wall] - state.mobs.hpos[hero]) & 0x8000 == 0
+        across = _JOY_RIGHT if ahead else _JOY_LEFT
+    else:
+        ahead = (state.mobs.vpos[wall] - state.mobs.vpos[hero]) & 0x8000 == 0
+        across = _JOY_UP if ahead else _JOY_DOWN
+    return _push_movable_wall(state, player_index, wall, across)
 
 
 # ROM: part game:0x425D0,game:0x4260C | Shared three-candidate traversal extracted from private up/down probes; their distinct edge gates remain in the named wrappers.
@@ -607,10 +669,6 @@ def _player_probe_vertical(
     vpos: int,
 ) -> int:
     """Private probe_up/down triplet used by player_try_move_core."""
-    from .mob_probes import (
-        _probe_candidate_blocks as _probe_candidate_blocks,
-    )
-
     col = mob_slot & 0x1F
     return _first_probe_contact(
         state, mob_slot,
@@ -671,10 +729,6 @@ def _player_probe_horizontal(
     it is the last row (``cmpi.w #$7C0``); each cell blocks only when its
     anchor overlaps the proposed position.
     """
-    from .mob_probes import (
-        _probe_candidate_blocks as _probe_candidate_blocks,
-    )
-
     row = mob_slot >> 5
     rows = [row]
     if row >= 2:
@@ -751,7 +805,8 @@ def _wall_collision_response(
         return None
     if not 0 <= result < len(state.mobs.picture):
         return None
-    if state.mobs.picture[result] != _WALL_PICTURE:
+    if state.mobs.picture[result] not in (_WALL_PICTURE, _MOVABLE_WALL_PICTURE):
+        # A movable wall reaches this arm only after both pushes failed.
         return None
 
     # ROM: helper | Python step-direction summary of a changed position word; the ROM keeps raw registers.
@@ -872,10 +927,8 @@ def _resolve_probe(state: GameState, player_index: int, result: int,
         return _PROBE_CLEAR if state.wrap_v else _PROBE_BLOCKED
     if squeeze_through_check(state, result, cur_slot, player_index, delta):
         return _PROBE_SQUEEZED
-    if state.mobs.obj_type(result) == int(MazeObjIds.WALL_MOVABLE):
-        if _push_movable_wall(
-            state, player_index, result, delta, vertical,
-        ):
+    if state.mobs.picture[result] == _MOVABLE_WALL_PICTURE:   # 0x41C84 etc.
+        if _movable_wall_arm(state, player_index, result, delta, vertical):
             return _PROBE_PUSHED
         return _PROBE_BLOCKED
     collision = _player_fight_collision(state, player_index, result)
@@ -969,8 +1022,17 @@ def _shove_player(
             shove |= _JOY_RIGHT
 
     state.movement_type = (state.movement_type - 1) & 0xFFFF   # 0x424B8
+    origin = (target_slot, target_h, target_v)
     player_try_move(
         state, target_index, shove, 0, speed_px=1, core_only=True,
+        track_thief=False,
+    )
+    # The shoved hero's own core call ends in the same occupied-cell tail.
+    rolled_back, _ = resolve_entered_cell(state, target_index, origin)
+    _track_thief_victim_move(
+        state, target_index,
+        rolled_back if rolled_back is not None
+        else _player_record_cell(state, target_index),
     )
     return True
 

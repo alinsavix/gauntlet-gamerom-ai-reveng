@@ -54,7 +54,6 @@ def _spawn(state: GameState, index: int, slot: int) -> object:
         state=index,
     )
     state.player_tile_or_tport_dest[index] = slot
-    state.player_in_maze[index] = 1
     # These tests are about the record, not the independent offscreen gate.
     state.level_flags_4 |= 0x80
     return player
@@ -403,7 +402,6 @@ class TestCameraAndTilePositionAgree:
 
         assert player.mob_slot != start
         assert state.player_tile_or_tport_dest[0] == player.mob_slot
-        assert state.player_in_maze[0] == 1
 
         target = _camera_target(state, include_camera=False)
         assert target == (

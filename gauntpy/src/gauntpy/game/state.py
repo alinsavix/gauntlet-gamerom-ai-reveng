@@ -267,10 +267,7 @@ class GameState:
         default_factory=lambda: [0] * NUM_PLAYERS
     )
     # 0x904BCE, 2 B × 4 ``player_tport_phase``: per-player transport phase.
-    # Negative = not teleporting; 0..0x10 = an in-flight teleport.  WP-13's
-    # ``player_in_maze`` is main_scroll_playfield's reading of the same ROM
-    # word; the port keeps them apart because ``player_in_maze`` uses 1 = in
-    # maze rather than the ROM's negative-means-in-maze polarity.
+    # Negative = not teleporting; 0..0x10 = an in-flight teleport.
     player_tport_phase: list[int] = field(
         default_factory=lambda: [-1] * NUM_PLAYERS
     )
@@ -579,9 +576,6 @@ class GameState:
     # is ``Player.mob_slot`` itself except on the rare frame where an occupied
     # destination held the migrating record back (player_movement.migrate_player_record).
     player_tile_or_tport_dest: list[int] = field(default_factory=lambda: [0] * 4)
-    # Python polarity-normalized view of player_tport_phase for camera tracking.
-    # It has no separate ROM address: 0x904BCE is player_tport_phase.
-    player_in_maze: list[int] = field(default_factory=lambda: [0] * 4)
 
     # =========================================================================
     # WP-14 · scoring, HUD, dialogs

@@ -237,7 +237,6 @@ def player_exit_sequence(state: GameState, player_index: int,
     player = state.players[player_index]
     player.status = int(PlayerStatus.EXITING)      # 0x52C66
     player.exit_pending = 1
-    state.player_in_maze[player_index] = 0
 
     # 0x52C6C-0x52D26: the animation MOB stands in the exit, one reserved slot
     # per player, wearing whatever picture the hero was wearing.  The ROM's

@@ -151,7 +151,6 @@ def _active_player_with_mob(state: GameState, index: int, slot: int,
     p.status = int(PlayerStatus.ALIVE_HERE)
     p.mob_slot = slot
     p.health = health
-    state.player_in_maze[index] = 1
     state.level_players_active += 1
 
 
@@ -185,7 +184,6 @@ class TestPlayerExitSequence:
         # 0x52C66: status 8 for the dissolve, not straight to 2.
         assert state.players[0].status == int(PlayerStatus.EXITING)
         assert state.players[0].exit_pending == 1
-        assert state.player_in_maze[0] == 0
         assert state.mobs.picture[slot0] == 0          # sprite lifted out
         assert (0x0E + 0) in state.sound_log         # per-player exit sound
         # Player 1 is still ALIVE_HERE, so no level advance happened.
@@ -535,7 +533,6 @@ class TestPlayerStartInner:
         p = state.players[0]
         assert p.mob_slot == slot
         assert p.direction == 2                         # facing down
-        assert state.player_in_maze[0] == 1
         assert state.player_tile_or_tport_dest[0] == slot
         assert state.level_players_active == 1
 
@@ -577,7 +574,6 @@ class TestPlayerStartInner:
         assert player.status == int(PlayerStatus.ALIVE_HERE)
         assert player.mob_slot == start
         assert state.mobs.picture[start] != 0
-        assert state.player_in_maze[0] == 1
         scroll_x, scroll_y = viewport_scroll(state, 232, 240)
         player_x, player_y = slot_to_pixels(start)
         assert (player_x - scroll_x) % 512 < 232

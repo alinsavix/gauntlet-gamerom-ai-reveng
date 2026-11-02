@@ -104,7 +104,6 @@ def _forcefield_state() -> GameState:
         obj_type=MazeObjIds.PLAYERSTART,
         state=0,
     )
-    state.player_in_maze[0] = 1
     state.player_tile_or_tport_dest[0] = player.mob_slot
     return state
 
@@ -141,7 +140,6 @@ def _dragon_state() -> GameState:
         vpos=encode_vpos_at_y(13 * 16, 3, 3),
         obj_type=MazeObjIds.PLAYERSTART,
     )
-    state.player_in_maze[0] = 1
     state.player_tile_or_tport_dest[0] = player.mob_slot
     return state
 

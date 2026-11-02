@@ -532,6 +532,11 @@ implementation specification.
      strongest ghost generator at the hero's position; with keys it is a KEY
      pile whose state is the count. Never just clear the slot, and read a KEY
      record's state as a pile size when it is collected.
+107. **A transporting hero resolves what it lands against.** After the
+     move milestone the four public probes run from the landed hero and every
+     overlapping record is collected or, if unhandled, deleted (0x50BB8,
+     0x50C7A). It is positional overlap, not a sweep of the neighbouring
+     cells, and it happens at the milestone, not when the transport starts.
 
 ## Investigation workflow
 

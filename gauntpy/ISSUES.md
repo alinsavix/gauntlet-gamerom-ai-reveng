@@ -80,18 +80,30 @@ difference. Positions, states and RNG are unaffected, so this is display
 fidelity, but the extra refresh should be replaced by the ROM's branch-local
 calls.
 
+## Resolved issues
+
 ### S-187 · movement-core arms not yet ported
 
-Three `player_try_move_core` paths still differ from the ROM: a successful
-movable-wall push continues into the wall arm at 0x42346 (even-pixel retry and
-nudge), which `_PROBE_PUSHED` skips; a shoved hero entering an occupied cell
-should run the core's tile tail rather than being refused by
-`migrate_player_record`; and the public `mob_probe_*` family used by the thief
-still skips pass-through objects instead of stopping at the first overlap as
-0x407A6 does. `player_in_maze` is no longer read by the camera and can be
-retired.
-
-## Resolved issues
+- **Movable walls.** The four core arms push along the move and, when that is
+  blocked by anything but an exit or transporter, across it away from the
+  hero; only when both fail does the axis take its wall arm (even-pixel retry
+  and nudge). A pushed wall keeps its new position even when it cannot
+  migrate, and carries `monster_iter_ptr` when it does. Eight push cases match
+  ROM 0x41BF0 under Unicorn.
+- **Shoves into occupied cells.** The occupied-cell tail (0x424EC-0x42588) is
+  now `resolve_entered_cell`, run by `main_move_players` and by
+  `_shove_player` for the shoved hero, which picks up a key it is shoved onto
+  and is refused by a wall-like object, matching the ROM.
+- **Public probes.** `mob_probe_*` return the first overlapping record
+  whatever it is, wrap flank columns within the row as `andi.w #$3E` does, and
+  no longer have a deferral mode. Their second ROM caller, the transporter
+  landing scan, now runs where the ROM runs it: after the hero lands, in
+  `tport_player_move`, from the hero's record, through a port of
+  `resolve_move_tile_interaction` (0x50C7A) that removes what
+  `player_tile_interact` leaves unhandled. The landing cell itself now tests
+  tricks 1-3 and stops after an exit as 0x50934-0x50968 does, and the arrival
+  pad is recorded at the move milestone.
+- `player_in_maze`, which nothing read, is gone.
 
 ### S-196 · demo inventory row was drawn
 

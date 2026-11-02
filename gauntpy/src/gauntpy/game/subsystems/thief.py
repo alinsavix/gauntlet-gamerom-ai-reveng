@@ -978,7 +978,6 @@ def _move_thief_axis(
         hpos=proposed_h,
         vpos=proposed_v,
         self_slot=slot,
-        defer_interactions=False,
     )
     if candidate >= 0:
         if allow_wall_response and state.mobs.picture[candidate] in (0x8000, 0x8001):

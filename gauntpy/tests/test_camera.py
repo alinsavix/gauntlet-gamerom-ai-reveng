@@ -49,7 +49,6 @@ def _active_player(state: GameState, index: int, slot: int, px: int, py: int) ->
     state.mobs.vpos[slot] = native_v(py) << 7
     # main_move_players maintains these in the real frame; the camera reads
     # them, so the isolated camera tests supply them here.
-    state.player_in_maze[index] = 1
     state.player_tile_or_tport_dest[index] = slot
 
 
@@ -317,9 +316,9 @@ class TestGateConditions:
         assert state.scroll_x == 52               # camera still moves in DEMO mode
 
     def test_no_movement_when_player_not_in_maze(self):
-        """If no player is in the maze (all player_in_maze == 0), scroll is unchanged."""
+        """If no player is in the maze, scroll is unchanged."""
         state = _gameplay_state()
-        # Players all have default status REMOVED -> player_in_maze all 0.
+        # Players all have default status REMOVED.
         state.scroll_x = 100
         state.scroll_y = 100
         main_scroll_playfield(state)
@@ -456,7 +455,7 @@ class TestSnapCamera:
     def test_snap_is_a_noop_without_tracked_players(self):
         state = _gameplay_state()
         state.scroll_x, state.scroll_y = 42, 24
-        snap_camera(state)                             # no player_in_maze set
+        snap_camera(state)
         assert (state.scroll_x, state.scroll_y) == (42, 24)
 
 

@@ -42,52 +42,6 @@ def _probe_candidate_anchor(state: GameState, candidate: int) -> tuple[int, int]
     return candidate_h, candidate_v
 
 
-# ROM: merged game:0x407A6,game:0x42648 | Common implementation of public mob_probe_candidate and private tile_lookup_core: optional proposed coordinates replace register inputs; Python self/interaction guards are additional.
-def _probe_candidate_blocks(
-    state: GameState,
-    mover_slot: int,
-    candidate: int,
-    *,
-    hpos: int | None = None,
-    vpos: int | None = None,
-    self_slot: int | None = None,
-    defer_interactions: bool = True,
-) -> bool:
-    """Position-aware ``mob_probe_candidate`` (0x407A6).
-
-    The directional probes name three possible cells, but a cell blocks only
-    when its rendered anchor actually overlaps the player's proposed position.
-    Treating every named cell as an immediate collision made a wall one row
-    away stop a hero anywhere in the current row.
-
-    ``self_slot`` is the mover's own record. The ROM never needs it -- it
-    probes from ``active_mob_ids`` itself, so the record can never be one of
-    the three cells ahead -- but this port probes from the cell under the
-    hero's feet, and a record hands over to the next row half a cell earlier
-    than that (``coords.mob_cell_of`` versus ``_pixel_to_slot``). For those few
-    pixels the mover's own migrated record *is* one of the named cells, and a
-    hero is not an obstacle to itself.
-    """
-    from .player_movement import (
-        _pixel_to_slot as _pixel_to_slot,
-    )
-
-    if not defer_interactions:
-        return _probe_candidate_overlaps(
-            state, mover_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot,
-        )
-    return (
-        _probe_candidate_overlaps(
-            state, mover_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot,
-        )
-        and not _probe_candidate_deferred(
-            state, mover_slot, candidate, self_slot=self_slot,
-        )
-    )
-
-
 # ROM: helper | Python deferral of pass-through objects and hero-sharing cells that ordinary movement resolves after the probe.
 def _probe_candidate_deferred(
     state: GameState, mover_slot: int, candidate: int, *,
@@ -166,150 +120,107 @@ def _probe_candidate_overlaps(
 # ---------------------------------------------------------------------------
 # The four directional probes (§4.2, contracts CSV)
 # ---------------------------------------------------------------------------
-# Each probe checks three candidates: the cell in the target direction,
-# plus its two flanking neighbours (§4.2: "exactly three times: the cell
-# ahead plus its two flanking neighbours, which covers everything a 24-pixel
-# body can overlap while crossing a 16-pixel cell").
+# Each probe checks three candidates: the cell in the target direction plus
+# its two flanking neighbours (§4.2), and returns the first one whose record
+# overlaps the mover, whatever it is. Callers decide what that record means.
+# Flank columns always wrap within their row (``andi.w #$3E``); flank rows are
+# skipped at the top (slot < 0x40) and bottom (slot >= 0x3E0) instead.
+
+# ROM: helper | Ordered first-overlap walk shared by the four public probes (the bcs exits after each bsr 0x407A6).
+def _first_public_overlap(
+    state: GameState, mob_slot: int, candidates: list[int], *,
+    hpos: int | None, vpos: int | None, self_slot: int | None,
+) -> int:
+    for candidate in candidates:
+        if _probe_candidate_overlaps(
+            state, mob_slot, candidate, hpos=hpos, vpos=vpos,
+            self_slot=self_slot,
+        ):
+            return candidate
+    return -1
+
+
+# ROM: helper | Candidate order of the column-major probes 0x406B6/0x40732: target, column-1, column+1, each wrapped in the row.
+def _row_triplet(row: int, col: int) -> list[int]:
+    return [(row << 5) | ((col + dc) & 0x1F) for dc in (0, -1, 1)]
+
+
+# ROM: helper | Candidate order of the row-major probes 0x4083A/0x408A0: target row, row above when slot >= 0x40, row below when slot < 0x3E0.
+def _column_triplet(mob_slot: int, col: int) -> list[int]:
+    row = mob_slot >> 5
+    rows = [row]
+    if mob_slot >= 0x40:                       # 0x4086E / 0x408D4
+        rows.append(row - 1)
+    if mob_slot < 0x3E0:                       # 0x40880 / 0x408E6
+        rows.append(row + 1)
+    return [(r << 5) | (col & 0x1F) for r in rows]
+
 
 # ROM: direct game:0x406B6 | Public three-candidate upward probe boundary, including its vertical sentinel; distinct from private probe_up.
 def mob_probe_up(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
-    defer_interactions: bool = True,
 ) -> int:
-    """0x406B6 -- probe the cell above for a blocking wall (§4.2).
+    """0x406B6 -- the first record overlapping the mover from the row above.
 
-    Returns the first blocking slot, -1 when clear, or 0x0400 when the proposed
-    live V word crosses the top boundary in the top two slot rows.
+    Returns that slot, -1 when nothing overlaps, or 0x0400 when the live V
+    word of a mover in the top two slot rows is above the top boundary.
     Callers must not treat every non-negative return as a valid slot.
     """
-    row = mob_slot >> 5
-    col = mob_slot & 0x1F
-    if row <= 1:
+    if mob_slot < 0x40:                                    # 0x406C2
         live_vpos = state.mobs.vpos[mob_slot] if vpos is None else vpos
-        if (live_vpos & 0xFFFF) > _TOP_PLAYER_BOUNDARY_V:
+        if (live_vpos & 0xFFFF) > _TOP_PLAYER_BOUNDARY_V:  # 0x406C8
             return _VERTICAL_BOUNDARY
         return -1
-    target_row = row - 1
-    for dc in (0, -1, 1):            # centre, left flank, right flank (§4.2)
-        c = col + dc
-        if state.wrap_h:
-            c &= 0x1F
-        elif not (0 <= c < _MAZE_COLS):
-            continue
-        candidate = (target_row << 5) | c
-        if _probe_candidate_blocks(
-            state, mob_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot, defer_interactions=defer_interactions,
-        ):
-            return candidate
-    return -1
+    return _first_public_overlap(
+        state, mob_slot, _row_triplet((mob_slot >> 5) - 1, mob_slot & 0x1F),
+        hpos=hpos, vpos=vpos, self_slot=self_slot,
+    )
 
 
 # ROM: direct game:0x40732 | Public three-candidate downward probe boundary, including its vertical sentinel; distinct from private probe_down.
 def mob_probe_down(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
-    defer_interactions: bool = True,
 ) -> int:
-    """0x40732 -- probe the cell below for a blocking wall (§4.2).
+    """0x40732 -- the first record overlapping the mover from the row below.
 
-    Returns first blocking slot, -1 when clear, or 0x0400 when a row-31
-    proposed live V word becomes negative.
+    Returns that slot, -1, or 0x0400 when a row-31 mover's live V word is
+    negative.
     """
-    row = mob_slot >> 5
-    col = mob_slot & 0x1F
-    if row >= _MAZE_ROWS - 1:
+    if mob_slot >= 0x3E0:                                  # 0x4073E
         live_vpos = state.mobs.vpos[mob_slot] if vpos is None else vpos
         return _VERTICAL_BOUNDARY if live_vpos & 0x8000 else -1
-    target_row = row + 1
-    for dc in (0, -1, 1):
-        c = col + dc
-        if state.wrap_h:
-            c &= 0x1F
-        elif not (0 <= c < _MAZE_COLS):
-            continue
-        candidate = (target_row << 5) | c
-        if _probe_candidate_blocks(
-            state, mob_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot, defer_interactions=defer_interactions,
-        ):
-            return candidate
-    return -1
+    return _first_public_overlap(
+        state, mob_slot, _row_triplet((mob_slot >> 5) + 1, mob_slot & 0x1F),
+        hpos=hpos, vpos=vpos, self_slot=self_slot,
+    )
 
 
 # ROM: direct game:0x4083A | Public left-and-flanks probe boundary.
 def mob_probe_left(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
-    defer_interactions: bool = True,
 ) -> int:
-    """0x4083A -- probe the cell to the left for a blocking wall (§4.2).
+    """0x4083A -- the first record overlapping the mover from the column to
+    the left (wrapped within the row), then its upper and lower flanks.
 
-    Returns first blocking slot or -1.  Left/right probes have no horizontal
-    boundary sentinel (only up/down do; §4.2, contracts CSV).
+    Left/right probes have no boundary sentinel.
     """
-    row = mob_slot >> 5
-    col = mob_slot & 0x1F
-    if col == 0:
-        if not state.wrap_h:
-            return -1
-        target_col = _MAZE_COLS - 1
-    else:
-        target_col = col - 1
-    flank_rows = [0]
-    if row >= 2:                     # 0x4086E: doubled slot >= 0x80
-        flank_rows.append(-1)
-    if row < _MAZE_ROWS - 1:         # 0x40880: doubled slot < 0x7C0
-        flank_rows.append(1)
-    for dr in flank_rows:            # centre, optional upper/lower flanks
-        r = row + dr
-        if state.wrap_v:
-            r &= 0x1F
-        elif not (0 <= r < _MAZE_ROWS):
-            continue
-        candidate = (r << 5) | target_col
-        if _probe_candidate_blocks(
-            state, mob_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot, defer_interactions=defer_interactions,
-        ):
-            return candidate
-    return -1
+    return _first_public_overlap(
+        state, mob_slot, _column_triplet(mob_slot, (mob_slot & 0x1F) - 1),
+        hpos=hpos, vpos=vpos, self_slot=self_slot,
+    )
 
 
 # ROM: direct game:0x408A0 | Public right-and-flanks probe boundary.
 def mob_probe_right(
     state: GameState, mob_slot: int, *, hpos: int | None = None,
     vpos: int | None = None, self_slot: int | None = None,
-    defer_interactions: bool = True,
 ) -> int:
-    """0x408A0 -- probe the cell to the right for a blocking wall (§4.2).
-
-    Returns first blocking slot or -1.
-    """
-    row = mob_slot >> 5
-    col = mob_slot & 0x1F
-    if col >= _MAZE_COLS - 1:
-        if not state.wrap_h:
-            return -1
-        target_col = 0
-    else:
-        target_col = col + 1
-    flank_rows = [0]
-    if row >= 2:                     # 0x408D4: doubled slot >= 0x80
-        flank_rows.append(-1)
-    if row < _MAZE_ROWS - 1:         # 0x408E6: doubled slot < 0x7C0
-        flank_rows.append(1)
-    for dr in flank_rows:
-        r = row + dr
-        if state.wrap_v:
-            r &= 0x1F
-        elif not (0 <= r < _MAZE_ROWS):
-            continue
-        candidate = (r << 5) | target_col
-        if _probe_candidate_blocks(
-            state, mob_slot, candidate, hpos=hpos, vpos=vpos,
-            self_slot=self_slot, defer_interactions=defer_interactions,
-        ):
-            return candidate
-    return -1
+    """0x408A0 -- the first record overlapping the mover from the column to
+    the right (wrapped within the row), then its upper and lower flanks."""
+    return _first_public_overlap(
+        state, mob_slot, _column_triplet(mob_slot, (mob_slot & 0x1F) + 1),
+        hpos=hpos, vpos=vpos, self_slot=self_slot,
+    )

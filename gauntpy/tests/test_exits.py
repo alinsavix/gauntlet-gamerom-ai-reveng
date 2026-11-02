@@ -789,7 +789,6 @@ class TestExitMove:
         p = state.players[0]
         p.status = int(PlayerStatus.ALIVE_HERE)
         p.mob_slot = 200
-        state.player_in_maze[0] = 1
 
         main_exit_move(state)
 

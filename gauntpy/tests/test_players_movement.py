@@ -101,7 +101,7 @@ def test_pushing_a_movable_wall_into_an_exit_wins_trick_ten():
     )
 
     assert player_movement._push_movable_wall(
-        state, 2, wall, player_movement._JOY_RIGHT, vertical=False,
+        state, 2, wall, player_movement._JOY_RIGHT,
     )
     assert state.secret_player == 2
     assert state.mobs.picture[wall] == 0
@@ -127,7 +127,7 @@ def test_pushing_a_movable_wall_into_a_transporter_dissolves_it():
     )
 
     assert player_movement._push_movable_wall(
-        state, 0, wall, player_movement._JOY_RIGHT, vertical=False,
+        state, 0, wall, player_movement._JOY_RIGHT,
     )
     assert state.mobs.picture[wall] == 0
     assert state.secret_player == -1

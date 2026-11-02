@@ -93,6 +93,7 @@ from .player_movement import (
     _track_thief_victim_move,
     migrate_player_record as migrate_player_record,
     player_try_move as player_try_move,
+    resolve_entered_cell,
 )
 from .player_transport import (
     corner_squeeze_geometry as corner_squeeze_geometry,
@@ -470,7 +471,6 @@ def _status8_complete(state: GameState, player_index: int) -> None:
         if player.mob_slot:                                  # 0x4A6C0/0x4A6D2
             state.mobs.unlink_and_clear(player.mob_slot)
         player.mob_slot = 0
-        state.player_in_maze[player_index] = 0
         if state.player_it == player_index:                  # 0x4A6D6
             state.player_it = 0xFFFF
             from .score import write_it_labels
@@ -873,41 +873,18 @@ def main_move_players(state: GameState) -> None:
             # unchanged cell means "already interacted here"; without that edge
             # gate a non-consumed tile (an acid puddle, another hero's record)
             # would re-trigger every frame.
-            current_tile_slot = _player_record_cell(state, player_index)
-            if (current_tile_slot != player.mob_slot
-                    and current_tile_slot != state.player_tile_or_tport_dest[player_index]):
-                handled = player_tile_interact(
-                    state, current_tile_slot, player_index,
-                )
-                if handled == TILE_TELEPORTED:
-                    # 0x42570-0x42580: a started teleport returns without
-                    # committing this frame's move words.
-                    if movement_origin is not None:
-                        source, old_h, old_v = movement_origin
-                        if player.mob_slot == source:
-                            state.mobs.hpos[source] = old_h
-                            state.mobs.vpos[source] = old_v
-                            movement_destination = source
-                elif handled:
-                    migrated = migrate_player_record(
-                        state, player_index,
-                    )                                       # 0x42588 -> 0x424F2
-                    if not migrated and movement_origin is not None:
-                        source, old_h, old_v = movement_origin
-                        if player.mob_slot == source:
-                            state.mobs.hpos[source] = old_h
-                            state.mobs.vpos[source] = old_v
-                            state.player_joystick[player_index] = _NO_MOVE
-                            walking = False
-                            movement_destination = source
-                elif movement_origin is not None:
-                    source, old_h, old_v = movement_origin
-                    if player.mob_slot == source:
-                        state.mobs.hpos[source] = old_h
-                        state.mobs.vpos[source] = old_v
-                        state.player_joystick[player_index] = _NO_MOVE
-                        walking = False
-                        movement_destination = source
+            origin = movement_origin or (
+                player.mob_slot, state.mobs.hpos[player.mob_slot],
+                state.mobs.vpos[player.mob_slot],
+            )
+            rolled_back, refused = resolve_entered_cell(
+                state, player_index, origin,
+            )
+            if rolled_back is not None and movement_origin is not None:
+                movement_destination = rolled_back
+                if refused:
+                    state.player_joystick[player_index] = _NO_MOVE
+                    walking = False
             if movement_destination is not None:
                 _track_thief_victim_move(
                     state, player_index, movement_destination,
@@ -924,18 +901,12 @@ def main_move_players(state: GameState) -> None:
     # occupies, which is ``mob_slot`` itself except on the rare frame where an
     # occupied destination held the record back.
     for i, player in enumerate(state.players):
-        if player.active:
-            if state.player_tport_phase[i] >= 0:
-                # Mid-transition: player_tile_or_tport_dest already holds the
-                # destination cell and main_scroll_playfield is panning towards
-                # it, so recomputing it from the hero's (still unmoved) pixels
-                # would drag the camera back.
-                state.player_in_maze[i] = 1
-                continue
+        # Mid-transition, player_tile_or_tport_dest already holds the
+        # destination cell and main_scroll_playfield is panning towards it, so
+        # recomputing it from the hero's (still unmoved) pixels would drag the
+        # camera back.
+        if player.active and state.player_tport_phase[i] < 0:
             state.player_tile_or_tport_dest[i] = _player_record_cell(state, i)
-            state.player_in_maze[i] = 1
-        else:
-            state.player_in_maze[i] = 0
 
     # ── Section 4: post-loop ──────────────────────────────────────────────────
     # 0x4ACD4 (``tst.w -4(a6)`` / ``beq 0x4AD44``) gates the whole block -- both

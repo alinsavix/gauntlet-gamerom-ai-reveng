@@ -65,7 +65,6 @@ def spawn_player(state: GameState, character: int) -> int:
         p.mob_slot = start
         p.direction = 2
         state.level_players_active = 1
-        state.player_in_maze[0] = 1
         state.player_tile_or_tport_dest[0] = start
 
     update_player_sprite(state, 0)
