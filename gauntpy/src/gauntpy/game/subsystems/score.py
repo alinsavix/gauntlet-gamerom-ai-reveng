@@ -195,6 +195,8 @@ HEALTH_PULSE_THRESHOLD = 0xC8
 LOW_HEALTH_PULSE_MASK = 0xF
 LOW_HEALTH_DIM_PHASE = 8
 STATE_TIMER_IDLE = 0xFFFF
+#: ``game_settings`` bit 10, the reduced-text selector (doc/05 §1.10).
+_GSETTING_SHORT_TEXT = 0x0400
 ATTR_LOW_HEALTH_SHIFT = -0x1000
 ATTR_ACID_SHIFT = -0x2000
 
@@ -300,22 +302,27 @@ def write_player_panel_static(state: GameState, player_index: int) -> None:
     )
 
 
-# ROM: direct game:0x45ACA | Renamed player_inv_update boundary for inventory/power glyphs; the current body lacks the documented demo-mode inventory suppression.
+# ROM: direct game:0x45ACA | Renamed player_inv_update boundary for inventory/power glyphs, including the DEMO skip of the key/potion row.
 def write_player_inventory(state: GameState, player_index: int) -> None:
-    """player_inv_update's key/potion row and six power-up icon cells."""
+    """player_inv_update's key/potion row and six power-up icon cells.
+
+    In DEMO (0x45AD6) the ROM skips the key/potion row (0x45AE4-0x45B76) and
+    only refreshes the power-up icons from 0x45B78.
+    """
     player = state.players[player_index]
-    row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_INV_ROW
-    keys = min(max(0, player.keysnum), INVENTORY_CELLS)
-    potions = min(max(0, player.potionsnum), INVENTORY_CELLS - keys)
-    blanks = INVENTORY_CELLS - keys - potions
-    words = (
-        [alpha_word(KEY_PALETTE_WORDS[player_index], romtext.GLYPH_KEY)] * keys
-        + [alpha_word(PLAYER_TEXT_PALETTE_WORDS[player_index])] * blanks
-        + [alpha_word(POTION_PALETTE_WORDS[player_index], romtext.GLYPH_POTION)]
-        * potions
-    )
-    start = row * ALPHA_ROW_STRIDE + INVENTORY_COLUMN
-    state.alpha_ram[start:start + INVENTORY_CELLS] = words
+    if state.game_mode != int(GameMode.DEMO):
+        row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_INV_ROW
+        keys = min(max(0, player.keysnum), INVENTORY_CELLS)
+        potions = min(max(0, player.potionsnum), INVENTORY_CELLS - keys)
+        blanks = INVENTORY_CELLS - keys - potions
+        words = (
+            [alpha_word(KEY_PALETTE_WORDS[player_index], romtext.GLYPH_KEY)] * keys
+            + [alpha_word(PLAYER_TEXT_PALETTE_WORDS[player_index])] * blanks
+            + [alpha_word(POTION_PALETTE_WORDS[player_index], romtext.GLYPH_POTION)]
+            * potions
+        )
+        start = row * ALPHA_ROW_STRIDE + INVENTORY_COLUMN
+        state.alpha_ram[start:start + INVENTORY_CELLS] = words
     power_row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_NAME_ROW
     state.alpha_ram[power_row * ALPHA_ROW_STRIDE + PANEL_COLUMN] = 0x8000
     for bit, (column, word) in enumerate(zip(POWER_ICON_COLUMNS, POWER_ICON_WORDS)):
@@ -324,34 +331,54 @@ def write_player_inventory(state: GameState, player_index: int) -> None:
         )
 
 
-# ROM: part game:0x452D0 | Extracted status-dependent text branches from setup_infopanel.
+# ROM: part game:0x452D0 | setup_infopanel's per-player status-text chain at 0x4554E-0x457AE.
 def write_player_panel_status(state: GameState, player_index: int) -> None:
-    """Write the status string selected by setup_infopanel's ROM branches."""
+    """Write the status line setup_infopanel picks at 0x4554E-0x457AE.
+
+    The first matching branch wins: ON LEVEL for a hero waiting on the next
+    level, GAME OVER, INSERT COIN whenever the hero has no health or the game
+    is the demo (unless bit 10 of ``game_settings`` asks for less text),
+    ADD n COIN(S) while coins-to-start is not yet met, SELECT HERO, and PRESS
+    START. A playing demo hero therefore shows INSERT COIN on this row.
+    """
+    from .eeprom import coins_to_start
+
     player = state.players[player_index]
     row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_INV_ROW
     attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
-    if player.status == int(PlayerStatus.SELECTING):
-        write_alpha_text(state, PANEL_COLUMN, row, romtext.TEXT_SELECT_HERO, attribute - 0x2000)
-    elif (
-        not player.mob_slot
-        and player.status in (
-            int(PlayerStatus.ALIVE_NEXT), int(PlayerStatus.SECRET_NAME_ENTRY),
-        )
-        and int(state.game_mode) >= 0
-    ):
+    mode = int(state.game_mode)
+    demo = mode == int(GameMode.DEMO)
+    no_mob = not player.mob_slot
+    if no_mob and mode >= 0 and player.status in (
+        int(PlayerStatus.ALIVE_NEXT), int(PlayerStatus.SECRET_NAME_ENTRY),
+    ):                                                          # 0x4554E
         write_alpha_text(state, 30, row, romtext.TEXT_ON_LEVEL, attribute - 0x1000)
         write_alpha_decimal(state, 39, row, state.level_next, 3, attribute)
-    elif (
-        not player.mob_slot and not player.health
-        and player.state_timer != STATE_TIMER_IDLE and int(state.game_mode) >= 0
-    ):
+        return
+    if (
+        no_mob and mode >= 0 and not player.health
+        and player.state_timer != STATE_TIMER_IDLE
+    ):                                                          # 0x455D8
         write_alpha_text(state, PANEL_COLUMN, row, romtext.TEXT_GAME_OVER, attribute - 0x1000)
-    elif not player.mob_slot and int(state.game_mode) == int(GameMode.DEMO):
+        return
+    if (not player.health or demo) and state.two_player_mode:  # 0x45628
+        if not state.game_settings & _GSETTING_SHORT_TEXT:      # 0x4564C
+            write_alpha_text(
+                state, PANEL_COLUMN, row, romtext.TEXT_INSERT_COIN, attribute - 0x1000,
+            )
+        return
+    unplaced = (no_mob and player.status != int(PlayerStatus.ALIVE_NEXT)) or demo
+    if unplaced and state.two_player_mode:                      # 0x45682
+        needed = coins_to_start(state) - player.coin_count      # 0x456BA-0x456D8
+        if needed > 0:
+            text = romtext.TEXT_ADD_COINS if needed > 1 else romtext.TEXT_ADD_COIN
+            write_alpha_text(state, PANEL_COLUMN, row, text, attribute - 0x2000)
+            write_alpha_decimal(state, 35, row, needed, 1, attribute - 0x2000)
+            return
+    if player.status == int(PlayerStatus.SELECTING):           # 0x4573C
+        write_alpha_text(state, PANEL_COLUMN, row, romtext.TEXT_SELECT_HERO, attribute - 0x2000)
+    elif unplaced:                                              # 0x45760
         write_alpha_text(state, PANEL_COLUMN, row, romtext.TEXT_PRESS_START, attribute - 0x2000)
-    elif player.status == int(PlayerStatus.REMOVED):
-        write_alpha_text(
-            state, PANEL_COLUMN, row, romtext.TEXT_INSERT_COIN, attribute,
-        )
 
 
 # ROM: part game:0x45866,game:0x4590E | Combines only the IT-label set/clear glyph portions across players; omits player_it_label_set's announcement/sound body, so not two whole-callable implementations.

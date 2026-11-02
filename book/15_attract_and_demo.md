@@ -203,7 +203,9 @@ record supplies that Magic press. The normal potion machinery spends
 the collected inventory and produces its effects and advice. The
 information panel never shows that potion: during the demo the panel
 update skips the key and potion row, though it still draws the
-power-up icons.
+power-up icons. That row keeps the status line the panel wrote
+instead, and for a demo hero the status line is INSERT COIN, even
+while the hero is playing.
 
 The recording also contains long stretches of `F3`, no controls.
 Those are waits, not stopped gameplay. Monsters and effects can act
@@ -410,7 +412,9 @@ collision test, and movable wall can answer to a person.
   at `0x4A56E–0x4A5F0`. The opening pairs above were checked directly
   in `row76.bin` at `0x581C4–0x581D5`; joins are at `0x58234/0x58236`.
   `player_inv_update` tests for DEMO at `0x45AD6` and skips the
-  key/potion row at `0x45AE4–0x45B76`.
+  key/potion row at `0x45AE4–0x45B76`; `setup_infopanel`'s status chain
+  (`0x4554E–0x457AE`) picks INSERT COIN for any demo hero at `0x45628`. A
+  MAME capture of the Elf's row shows that text for the whole demo.
 - [ROM table catalog](../doc/05_data_reference.md#5-rom-data-tables-catalog),
   §§5.3, 5.6–5.8: demo pointer table `0x58098`, caption pointers
   `0x5815C`, motion programs `0x5AC2E/0x5AC4E`, monster cells

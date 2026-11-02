@@ -37,14 +37,6 @@ start).
 
 ## Open issues
 
-### S-196 · demo inventory row is drawn
-
-`player_inv_update` (0x45ACA) tests `game_mode == 0xFFFD` at 0x45AD6 and, in
-the demo, skips the twelve-cell key/potion row (0x45AE4-0x45B76) while still
-refreshing the six power-up icons from 0x45B78. `score.write_player_inventory`
-draws the key/potion row in every mode, so the demo Elf's collected potion
-appears in its panel where the arcade shows nothing.
-
 ### S-195 · frame_overflow is never set
 
 `check_frame_overflow` tests `vblank_semaphore`, which `tick` always clears
@@ -100,6 +92,17 @@ still skips pass-through objects instead of stopping at the first overlap as
 retired.
 
 ## Resolved issues
+
+### S-196 · demo inventory row was drawn
+
+`write_player_inventory` now skips the key/potion row in DEMO, as 0x45AD6
+does, and still refreshes the power icons. A MAME capture of that row showed
+it holds the status line instead, so `write_player_panel_status` now follows
+setup_infopanel's chain at 0x4554E-0x457AE: ON LEVEL, GAME OVER, INSERT
+COIN for any hero with no health or in the demo (unless `game_settings` bit
+10 is set), ADD n COIN(S) while coins-to-start is unmet, SELECT HERO and
+PRESS START, with the ROM's attributes. The demo Elf's row now matches the
+capture word for word.
 
 ### S-197 · dead heroes left nothing behind, and key piles gave one key
 

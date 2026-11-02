@@ -318,7 +318,8 @@ def coins_to_start(state: GameState) -> int:
 
     doc/05_data_reference.md §1.10: the raw stored value is 0-3 and the OS
     operator editor displays it as 1-4 (MAME rendered the default word's 0 as
-    "1"). No normal game-code reader masks 0x0300.
+    "1"). Its one game reader is setup_infopanel's ADD n COIN(S) line
+    (0x456BA).
     """
     raw = (state.game_settings & GSETTING_COINTOSTART_MASK) >> GSETTING_COINTOSTART_SHIFT
     return raw + 1

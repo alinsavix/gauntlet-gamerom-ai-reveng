@@ -2529,6 +2529,26 @@ complete words at 0x57334 are written when bits 0–5 are set. In DEMO
 key/potion row (0x45AE4–0x45B76) and still refreshes the power icons from
 0x45B78, so a demo hero's collected potions never appear in its panel.
 
+That row (alpha row `5p + 10`) also carries the player's status line. Each
+per-player rebuild fills the four rows with the player's text word, draws the
+name, labels, score, health and `player_inv_update`, sends status 4 to
+`draw_player_game_over` (0x4A2CA), and otherwise takes the first match in
+0x4554E–0x457AE (attribute `A` is the player's word from 0x57350):
+
+| Condition | Text at column 29 | Attribute |
+|-----------|-------------------|-----------|
+| No MOB, `game_mode >= 0`, status 2 or 0x20 | `ON LEVEL:` at column 30, `level_next` in three digits at 39 | `A-0x1000`, digits `A` |
+| No MOB, `game_mode >= 0`, health 0, state timer not 0xFFFF | `GAME OVER` (0x57564) | `A-0x1000` |
+| Health 0 or DEMO, and `two_player_mode` set | `INSERT COIN` (0x57556) unless `game_settings` bit 10 is set; the row is left alone either way | `A-0x1000` |
+| (No MOB and status not 2, or DEMO), `two_player_mode` set, coins-to-start − `player_coincount` > 0 | `ADD   COIN`/`ADD   COINS` (0x5753A/0x57548), count in one digit at column 35 | `A-0x2000` |
+| Status 0x10 | `SELECT HERO` (0x5751E) | `A-0x2000` |
+| No MOB and status not 2, or DEMO | `PRESS START` (0x5752C) | `A-0x2000` |
+
+The third row is why the demo's playing heroes read `INSERT COIN` throughout:
+a MAME 0.289 capture of the attract demo shows the Elf's row holding it in
+attribute 0xC4 from the first frame to the last, unchanged by its potion
+pickup.
+
 The header is conditional. A whole-panel rebuild first fills alpha columns
 29–41, rows 0–6 with opaque spaces (0x452F2–0x45312). For
 `mazenum_current < 0x68`, it then writes the five-row dungeon-logo glyph block

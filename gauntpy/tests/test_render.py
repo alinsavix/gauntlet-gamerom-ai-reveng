@@ -1352,6 +1352,10 @@ class TestTitleMobs:
         init_alpha_color_ram(state)
         state.game_mode = GameMode.NORMAL
         state.players[0].status = PlayerStatus.SELECTING
+        # player_coindrop credits health and one coin before select
+        # (0x4890E-0x48962); without them the panel asks for a coin instead.
+        state.players[0].health = 700
+        state.players[0].coin_count = 1
         _write_character_select_alpha(state)
         fb = Framebuffer(336, 240)
         blank = fb.image.tobytes()
@@ -1419,6 +1423,10 @@ class TestFrontEndTextIsRomData:
         state = GameState()
         state.game_mode = GameMode.NORMAL
         state.players[0].status = PlayerStatus.SELECTING
+        # player_coindrop credits health and one coin before select
+        # (0x4890E-0x48962); without them the panel asks for a coin instead.
+        state.players[0].health = 700
+        state.players[0].coin_count = 1
         _write_character_select_alpha(state)
         for text, column, row in romtext.CHARACTER_SELECT_LINES:
             start = row * score.ALPHA_ROW_STRIDE + column
@@ -2750,3 +2758,46 @@ class TestMobLayerThroughput:
         # bound. Generous on purpose to avoid flaking slower CI machines --
         # see the WP-2 report for the actual measured figure.
         assert per_frame_ms < 50, f"MOB layer took {per_frame_ms:.2f}ms/frame for {len(rng_positions[:120])} MOBs"
+
+
+class TestPanelStatusChain:
+    """setup_infopanel's status chain (0x4554E-0x457AE) and the DEMO skip in
+    player_inv_update (0x45AD6). A MAME capture of the attract demo shows the
+    playing Elf's row reading INSERT COIN in attribute 0xC4 throughout."""
+
+    @staticmethod
+    def _row(state: GameState, player_index: int) -> str:
+        return _alpha_text(
+            state, score.PANEL_COLUMN,
+            player_index * score.PLAYER_BLOCK_STRIDE + score.PLAYER_INV_ROW, 13,
+        )
+
+    def test_demo_hero_shows_insert_coin_not_inventory(self):
+        state = GameState()
+        state.game_mode = GameMode.DEMO
+        elf = state.players[1]
+        elf.status, elf.health, elf.mob_slot, elf.potionsnum = 1, 2000, 0xA5, 1
+        score.write_player_inventory(state, 1)
+        score.write_player_panel_status(state, 1)
+        assert self._row(state, 1) == romtext.TEXT_INSERT_COIN
+        start = (score.PLAYER_BLOCK_STRIDE + score.PLAYER_INV_ROW) * score.ALPHA_ROW_STRIDE + 30
+        assert state.alpha_ram[start] == 0xC449
+
+    def test_reduced_text_setting_leaves_the_row_blank(self):
+        state = GameState()
+        state.game_mode = GameMode.DEMO
+        state.game_settings = 0x0400
+        state.players[1].health = 2000
+        score.write_player_panel_status(state, 1)
+        assert self._row(state, 1).strip() == ""
+
+    def test_coins_still_needed_are_counted(self):
+        state = GameState()
+        state.game_settings = 0x0200          # coins to start: 3
+        player = state.players[2]
+        player.health, player.coin_count = 700, 1
+        score.write_player_panel_status(state, 2)
+        assert self._row(state, 2) == "  ADD 2 COINS"
+        player.coin_count = 2
+        score.write_player_panel_status(state, 2)
+        assert self._row(state, 2) == "  ADD 1 COIN "
