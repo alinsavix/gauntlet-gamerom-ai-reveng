@@ -207,9 +207,13 @@ redistribution is not a fixed pot of multiplier points: floors,
 caps, and the number of other players determine how much the combined
 total changes.
 
-Solo collection skips the two-step increase. Treasure rooms also use
-a separate collection tally and settlement path rather than this
-ordinary-maze redistribution. Their payout conditions belong to
+Solo collection skips the two-step increase. A score bag runs the same
+redistribution before paying its own value, and shows that value as a
+floating number; ordinary treasure shows none. Only treasure counts
+toward a hero's treasure tally. Treasure rooms also use a separate
+collection tally and settlement path rather than this ordinary-maze
+redistribution: there a treasure is counted and removed without any
+sound, score or multiplier change. Their payout conditions belong to
 Chapter 13; a treasure-room tally should not be mistaken for the
 multiplier shown during ordinary exploration.
 
@@ -416,6 +420,10 @@ the stored state that makes the dungeon remember more than one party.
 - Adaptive-food indexing is at `0x51B90-0x51BE0`; the twenty health
   values and parallel popup indices are at `0x5B74C` and `0x5B774`.
   Treasure redistribution precedes its award at `0x51A16-0x51AC4`.
+  Treasure (type `0x2E`) enters `player_tile_interact` at `0x519C2`,
+  counts itself at `0x519F8`, and in mazes `0x68-0x72` branches from
+  `0x51A12` past the award; the score bag (type `0x30`) enters at
+  `0x51998`, shows its popup, and joins the award at `0x51A16`.
   Conditional multiplier theft is in `thief_steal_from_player`
   (`0x4E1FE`), particularly `0x4E28E-0x4E3F2`.
 - [Data reference](../doc/05_data_reference.md): `player_bonusmult`,

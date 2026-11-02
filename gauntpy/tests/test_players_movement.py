@@ -1287,32 +1287,46 @@ class TestThiefRouteTracking:
 # ---------------------------------------------------------------------------
 
 class TestDoorTraversal:
+    """mob_collision_test's door arm (0x522D8) reacts only inside the
+    0x5C0 x 0x4C0 box on the door's open sides; the step counts below were
+    checked against ROM 0x41BF0 executed under Unicorn."""
+
     def _state_with_door(self, door_slot: int) -> GameState:
         state = GameState()
         state.mobs.link[door_slot] = (int(MazeObjIds.DOOR_HORIZ) << 10) | 0
+        # pf_door_draw_xy gives a lone horizontal door state 10 (left|right).
+        state.mobs.set_state(door_slot, 10)
         state.mobs.picture[door_slot] = 1   # non-zero, non-wall → door
         return state
 
+    @staticmethod
+    def _walk_up(state: GameState, steps: int) -> list[int]:
+        return [player_try_move(state, 0, gin.JOY_UP, 0) for _ in range(steps)]
+
     def test_door_opens_with_key(self):
-        """Player with a key can traverse a door (key consumed, door cleared)."""
+        """The key is spent only once the hero reaches the door box."""
         door_slot = (4 << 5) | 5
         state = self._state_with_door(door_slot)
         player = _active_player_at(state, 0, (5 << 5) | 5)
         player.keysnum = 1
-        y_before = vpos_y(state.mobs.vpos[player.mob_slot])
-        result = player_try_move(state, 0, gin.JOY_UP, 0)
-        assert result != _NO_MOVE, "should be able to move through opened door"
-        assert state.players[0].keysnum == 0, "key should be consumed"
+        self._walk_up(state, 6)
+        assert player.keysnum == 1, "still outside the 0x4C0 box"
+        results = self._walk_up(state, 2)
+        assert _NO_MOVE not in results, "should move through the opened door"
+        assert player.keysnum == 0, "key should be consumed"
+        assert player.mob_slot == door_slot
 
     def test_door_blocked_without_key(self):
-        """Player without a key cannot traverse a door."""
+        """A keyless hero closes to 0x4C0 before the door stops it."""
         door_slot = (4 << 5) | 5
         state = self._state_with_door(door_slot)
         player = _active_player_at(state, 0, (5 << 5) | 5)
         player.keysnum = 0
-        result = player_try_move(state, 0, gin.JOY_UP, 0)
-        assert result == _NO_MOVE, "should not traverse door without key"
-        assert state.players[0].keysnum == 0, "key count unchanged"
+        results = self._walk_up(state, 8)
+        assert _NO_MOVE not in results[:6]
+        assert results[6:] == [_NO_MOVE, _NO_MOVE]
+        assert state.mobs.vpos[player.mob_slot] == 0xD300
+        assert player.keysnum == 0, "key count unchanged"
 
     def test_walking_through_a_door_starts_wp11s_opening_fronts(self):
         """Traversal and tile interaction share the same unlock (0x51E80).
@@ -1330,7 +1344,7 @@ class TestDoorTraversal:
         player.keysnum = 1
         state.escape_timer = 4000
 
-        player_try_move(state, 0, gin.JOY_UP, 0)
+        self._walk_up(state, 7)
 
         assert state.door_endpoint_dir[0:2] == [3, 1]
         assert state.door_endpoint_pos[0:2] == [door_slot - 1, door_slot + 1]
@@ -1350,7 +1364,7 @@ class TestDoorTraversal:
         player = _active_player_at(state, 0, (5 << 5) | 5)
         player.keysnum = 1
 
-        player_try_move(state, 0, gin.JOY_UP, 0)
+        self._walk_up(state, 7)
 
         assert state.maze.data[(5, 4)] == int(MazeObjIds.TILE_FLOOR)
 

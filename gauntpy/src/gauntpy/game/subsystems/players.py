@@ -662,6 +662,13 @@ def main_move_players(state: GameState) -> None:
             # timer and the status; the character and the score survive it, so
             # the ladder and the panel still have something to show.
             if dead_slot:
+                # 0x4690C-0x4691C: the death sparkle on the dead hero's cell.
+                # The ROM anchors it on the marker it has just created there
+                # (ISSUES S-197); the hero's own cell gives the same position
+                # for the ghost-generator marker.
+                from .shot_effects import tport_cycle_start
+
+                tport_cycle_start(state, dead_slot, player_index)
                 state.mobs.unlink_and_clear(dead_slot)
             player_resetcounters(state, player_index)             # 0x4699A
             player.character = character

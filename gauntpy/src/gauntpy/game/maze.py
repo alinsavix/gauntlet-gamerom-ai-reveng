@@ -1637,6 +1637,20 @@ def _setup_decoded_level(
     exit_scan_level(state)
     _remove_deletable_trap_walls(state)                 # 0x43BA0-0x43C1A
     _prepare_secret_challenge(state)
+    _clear_managed_slot_pictures(state)                 # 0x43D16-0x43D7E
+
+
+# ROM: part game:0x438AE | Final managed-slot picture clear at 0x43D16-0x43D7E.
+def _clear_managed_slot_pictures(state: GameState) -> None:
+    """Clear the pictures of managed MOB slots 1-29 on every level load.
+
+    The row-zero fill leaves picture 0x8000 in all 32 reserved records; the
+    ROM then zeroes only the picture words (A3 = 0x902000) of the seven
+    four-slot channel groups 1-28 and slot 29 (``clr.w $3A(a3)``). Links,
+    positions and slots 0/30/31 keep the fill's wall marker.
+    """
+    for slot in range(1, 30):
+        state.mobs.picture[slot] = 0
 
 # ROM: adapter game:0x438AE,game:0x44AC2 | Atomic acquisition-before-reset bridge with fresh MobTable and boolean failure result; preserves old Python state on missing ROMs rather than adding a ROM callable.
 def reset_and_load_level(

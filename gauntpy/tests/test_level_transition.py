@@ -228,10 +228,9 @@ class TestPlayerExitSequence:
         _run_exit_animation(state)
         assert p.status == int(PlayerStatus.ALIVE_NEXT)
         assert state.level_players_active == 0
-        if state.level_start_pending:
-            assert state.mobs.picture[anim_slot] == 0x8000, "the next maze boundary is loaded"
-        else:
-            assert state.mobs.picture[anim_slot] == 0, "ROM-free fallback releases the animation"
+        # Either the animation releases the slot or the next maze's setup clears
+        # managed slots 1-29 after its row-zero fill (0x43D16-0x43D7E).
+        assert state.mobs.picture[anim_slot] == 0
 
     def test_last_player_to_exit_advances_the_level(self):
         """Solo player: stepping on the exit ends the level -- once the exit
@@ -907,3 +906,14 @@ class TestSecretRoomRoundTrip:
         assert state.secret_player == -1
         assert state.secret_trick_id == ex.TRICK_NONE
         assert state.secret_tricks_flags[0] == 0
+
+
+@requires_roms
+def test_level_setup_clears_managed_slot_pictures():
+    """0x43D16-0x43D7E: after the row-zero fill, slots 1-29 lose their picture."""
+    from gauntpy.game.maze import reset_and_load_level
+
+    state = GameState()
+    assert reset_and_load_level(state, 1)
+    assert all(state.mobs.picture[slot] == 0 for slot in range(1, 30))
+    assert [state.mobs.picture[slot] for slot in (0, 30, 31)] == [0x8000] * 3

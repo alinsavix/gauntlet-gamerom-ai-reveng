@@ -288,6 +288,8 @@ _BLOCKING_OBJ_TYPES = frozenset((
     int(MazeObjIds.DOOR_HORIZ), int(MazeObjIds.DOOR_VERT),
     int(MazeObjIds.WALL_MOVABLE),
 ))
+_DOOR_REACT_H_LIMIT = 0x5C0                           # 0x522DC
+_DOOR_REACT_V_LIMIT = 0x4C0                           # 0x522D8
 _HAND_POWER = (2, 2, 1, 1, 3, 3, 2, 2)                # fight.c handpower
 _HAND_RANDOM = (0, 0, 0, 2)                           # fight.c rhandpower
 _GENERATOR_FIGHT_POWER = (3, 2, 0, 0, 4, 3, 0, 1)    # fight.c generpwr
@@ -305,7 +307,7 @@ def _slot_is_blocking(state: GameState, slot: int) -> bool:
     A solid wall (mob_picture == 0x8000, the marker the static/trap/random walls
     carry) always blocks. Otherwise a slot with a real sprite blocks only if its
     obj_type is one of ``_BLOCKING_OBJ_TYPES`` -- a door (key traversal is
-    handled separately by ``_door_try_traverse``) or a movable wall. Items,
+    reached through the ``mob_collision_test`` door arm) or a movable wall. Items,
     monsters, and empty cells are non-blocking for the probe pass.
     """
     pic = state.mobs.picture[slot]
@@ -350,6 +352,18 @@ def _player_fight_collision(
 
     if obj_type in _FIGHT_PASS_TYPES:
         return -1
+
+    if obj_type in (int(MazeObjIds.DOOR_HORIZ), int(MazeObjIds.DOOR_VERT)):
+        # 0x522D8: a door reacts only inside the 0x5C0 x 0x4C0 box on its open
+        # sides, using the separations the probe just recorded; elsewhere the
+        # hero passes (0x52308 -> 0x52600) and keeps closing on it.
+        from .shot_collision import shot_onscreen_check
+
+        if not shot_onscreen_check(
+            state, slot, _DOOR_REACT_H_LIMIT, _DOOR_REACT_V_LIMIT,
+        ):
+            return -1
+        return -1 if player_tile_interact(state, slot, player_index) else 0
 
     if obj_type == int(MazeObjIds.TREASURE_BAG):
         return -1 if player_tile_interact(state, slot, player_index) else 0
@@ -801,38 +815,6 @@ def _wall_collision_response(
     return new_h, new_v, sign(new_h, hpos), nudge_v, True
 
 
-# ---------------------------------------------------------------------------
-# Door traversal helpers (§4.2 -- "door_traverse_{left,right,up,down}")
-# ---------------------------------------------------------------------------
-# Called when a probe returns a door slot and the player has a key.
-# Consume the key, clear the door, return True (traversable).
-
-# ROM: part game:0x511AC | Door-type/key gate into the extracted pickup unlock arm; despite the source section title it is not a movable-wall door_traverse entry.
-def _door_try_traverse(state: GameState, player_index: int,
-                       probe_slot: int) -> bool:
-    """Try to open a door blocking movement.  Consumes a key on success.
-
-    Returns True when the door was opened (player had a key), False when not
-    (player has no key -- door remains, movement blocked).
-
-    Shares ``_door_unlock`` with the tile-interaction path so a door opened by
-    walking into it starts the same two WP-11 opening fronts, resets the escape
-    timer, and announces itself exactly as one opened by standing on it.
-    """
-    from .player_items import (
-        _door_unlock as _door_unlock,
-    )
-
-    ot = state.mobs.obj_type(probe_slot)
-    if ot not in (int(MazeObjIds.DOOR_HORIZ), int(MazeObjIds.DOOR_VERT)):
-        return False   # not a door
-    player = state.players[player_index]
-    if player.keysnum <= 0:
-        return False   # no key
-    _door_unlock(state, probe_slot, player_index)
-    return True
-
-
 # ROM: helper | Python masking utility for native unsigned position words.
 def _u16_pos(value: int) -> int:
     return value & 0xFFFF
@@ -890,8 +872,6 @@ def _resolve_probe(state: GameState, player_index: int, result: int,
         return _PROBE_CLEAR if state.wrap_v else _PROBE_BLOCKED
     if squeeze_through_check(state, result, cur_slot, player_index, delta):
         return _PROBE_SQUEEZED
-    if _door_try_traverse(state, player_index, result):
-        return _PROBE_CLEAR
     if state.mobs.obj_type(result) == int(MazeObjIds.WALL_MOVABLE):
         if _push_movable_wall(
             state, player_index, result, delta, vertical,

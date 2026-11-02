@@ -502,6 +502,15 @@ def player_start_inner(state: GameState, player_index: int) -> int:
                 obj_type=int(MazeObjIds.PLAYERSTART),
                 state=player_index,
             )
+        # 0x48DFC-0x48E26: the arrival sparkle, except for a next-level
+        # survivor (status bit 1, byte test at 0x48E04) and on LEGEND.
+        if (
+            not player.status & int(PlayerStatus.ALIVE_NEXT)
+            and state.game_mode != int(GameMode.LEGEND)
+        ):
+            from .shot_effects import tport_cycle_start
+
+            tport_cycle_start(state, slot, player_index)
         player.direction = 2                # facing down (§4.4)
         player.death_damage_counter = 0
         player.pending_damage = 0

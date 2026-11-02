@@ -207,7 +207,8 @@ def test_four_player_workload_moves_fires_and_casts_with_every_hero():
 @requires_roms
 def test_pathological_setup_shapes_match_their_claimed_edge_cases():
     saturated = _prepared_workload("pathological-slot-saturation")
-    assert len(list(saturated.mobs.iter_chain())) == 899
+    # 899 maze records plus the joining hero's arrival sparkle in effect slot 13.
+    assert len(list(saturated.mobs.iter_chain())) == 900
 
     four_players = _prepared_workload("pathological-four-players")
     assert all(player.active and player.potionsnum == 20 for player in four_players.players)

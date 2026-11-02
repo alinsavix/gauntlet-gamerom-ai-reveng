@@ -531,32 +531,28 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     # This arm must not touch ``level_treasures`` itself or the total would be
     # double-counted and the bonus screen would pay for phantom treasure.
     #
-    # Order matters: the ROM redistributes the bonus multiplier (0x51A16) and
-    # only then awards the score (0x51AC4), so the award uses the *new* value.
+    # Type 0x2E enters at 0x519C2 and shows no popup. Treasure rooms (mazes
+    # 0x68-0x72) branch from 0x51A12 straight to the shared tail at 0x51E36:
+    # no multiplier, sound, score, redraw bit or escape-timer clear, because
+    # the bonus screen pays for the collected count instead.
     if obj_type == int(MazeObjIds.TREASURE):
-        # §4.6: treasure (sound 0x26, calls player_add_score_with_mult).
-        from .shot_effects import playfield_showscore
-
-        playfield_showscore(state, tile_mob_slot, 1)
         _treasure_collected(state, player_index)
-        _treasure_bonus_multiplier(state, player_index)
-        _sound_play(state, 0x26)                       # 0x51AB0
-        player_add_score_with_mult(state, player_index, 100)   # 0x51AC4
-        state.mobs.unlink_and_clear(tile_mob_slot)
+        if state.mazenum_current not in _TREASURE_ROOM_MAZES:
+            _treasure_award(state, player_index, 100)
+        state.mobs.unlink_and_clear(tile_mob_slot)      # 0x51E6A
         return -1
 
+    # Type 0x30 enters at 0x51998: popup, then the award at 0x51A16. It is not
+    # counted as treasure and has no treasure-room branch.
     if obj_type == int(MazeObjIds.TREASURE_BAG):
         from .shot_effects import playfield_showscore
 
         bonus_score = state.special_bonus_score & 0xFFFF
         playfield_showscore(
             state, tile_mob_slot, bonus_score // 1000 + 1,
-        )
-        _treasure_collected(state, player_index)
-        _treasure_bonus_multiplier(state, player_index)
-        _sound_play(state, 0x26)
-        player_add_score_with_mult(state, player_index, bonus_score)
-        state.mobs.unlink_and_clear(tile_mob_slot)
+        )                                               # 0x519B8
+        _treasure_award(state, player_index, bonus_score)
+        state.mobs.unlink_and_clear(tile_mob_slot)      # 0x51E6A
         return -1
 
     # ── Locked treasure (type 0x2F) ───────────────────────────────────────────
@@ -784,7 +780,19 @@ def _player_give_item_id(
     return True
 
 
-# ROM: part game:0x511AC | Treasure-room gate and multiplayer bonus redistribution at 0x519FE-0x51AAE, before the ordinary score-award call.
+# ROM: part game:0x511AC | Shared treasure/bag award at 0x51A16-0x51AD8 and its escape-timer clear at 0x51882.
+def _treasure_award(state: GameState, player_index: int, value: int) -> None:
+    """0x51A16-0x51AD8 -- multiplier, sound 0x26, score, then 0x51882."""
+    from .score import player_add_score_with_mult
+
+    _treasure_bonus_multiplier(state, player_index)
+    _sound_play(state, 0x26)                                # 0x51AB0
+    player_add_score_with_mult(state, player_index, value)  # 0x51AC4
+    state.health_dirty[player_index] = 1                    # 0x51ACE
+    state.escape_timer = 0                                  # 0x51882
+
+
+# ROM: part game:0x511AC | Multiplayer bonus redistribution at 0x51A16-0x51AAE, before the ordinary score-award call.
 def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
     """0x51A16-0x51AAE -- the treasure arm's bonus-multiplier redistribution.
 
@@ -803,14 +811,8 @@ def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
          its panel redraw bit raised (0x51AA2).
 
     Called before the score award, because ``player_add_score_with_mult`` at
-    0x51AC4 multiplies by the value this leaves behind. The collector's own
-    redraw bit is raised after that award (0x51ACE), on the same shared tail.
+    0x51AC4 multiplies by the value this leaves behind.
     """
-    if state.mazenum_current in _TREASURE_ROOM_MAZES:
-        # 0x519FE-0x51A12: the treasure-room band branches away before the
-        # multiplier block and pays out on the bonus screen instead.
-        return
-
     player = state.players[player_index]
     active = state.level_players_active
 
@@ -831,7 +833,6 @@ def _treasure_bonus_multiplier(state: GameState, player_index: int) -> None:
             continue
         victim.bonusmult = (victim.bonusmult - 1) & 0xFFFF  # 0x51A96
         state.health_dirty[other] = 1                      # 0x51AA2
-    state.health_dirty[player_index] = 1                   # 0x51ACE
 
 # Movable-wall base picture (§18); maze_convert_walls_to_exits recognises it
 # alongside the 0x8000 marker (ROM 0x5E832).

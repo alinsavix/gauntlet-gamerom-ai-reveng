@@ -612,6 +612,21 @@ The wall arms (`picture == 0x8000` exactly: right 0x41CC8, left 0x41F00, down
    0x424CA, skipping any remaining axis; without a nudge attempt the rounded
    position carries on to the next axis.
 
+Every record the probe core examines leaves its separations behind:
+`tile_lookup_core` (0x42648) and `mob_probe_candidate` (0x407A6) store the
+signed dH at 0x904028 and, once |dH| is under 0x7C0, |dH| at 0x904024, the
+signed dV at 0x90402A and |dV| at 0x904026. A door that blocks a probe goes to
+`mob_collision_test`, whose door arm (0x522D8, both door types) calls
+`shot_onscreen_check(door, 0x5C0, 0x4C0)` (0x4AEA0) on those values. The door's
+state word names its open sides (`pf_door_draw_xy`: 10 for a horizontal run,
+bits 0x2000|0x0800; 5 for a vertical one, 0x1000|0x0400; a junction its
+neighbour mask), and the check succeeds only when the hero is within 0x4C0
+across and 0x5C0 along one of those sides. Inside, `player_tile_interact`
+opens the door with a key or blocks; outside, 0x52600 returns -1 and the hero
+keeps walking. A keyless hero approaching a horizontal door from below
+therefore stops with |dV| just under 0x4C0 (9.5 pixels), not at the 0x7C0
+probe overlap, and a key is spent only at that distance.
+
 Holding the vertical direction automatically moves the three captured heroes
 onto X=364, 300, and 236, then enters on the next frame; no manual left/right
 alignment is required. All of these cases were confirmed by executing ROM
@@ -786,6 +801,24 @@ both select an ungated character voice through `random_item_group_ptrs`,
 `{0xB5}`, Wizard `{0xBA}`, and Elf `{0xB9,0xBC}`. Death then plays the
 character transition effect 0x14-0x17.
 
+**Confidence: Verified** from disassembly. A dead hero leaves an object in its
+own slot. When the per-frame pass finds health zero (0x467E0), it calls
+`mob_create` on the hero's slot before `player_resetcounters` (0x4699A):
+
+- With no keys (`player_keysnum` zero, 0x467F2) it creates type 0x1E, the
+  strongest ghost generator, from that type's master-table entries: picture
+  0x09BD (0x586C8), H `(hero H & 0xFF80) + 5` (0x5866A) and V
+  `(hero V & 0xFF80) + 0x18` (0x5862A), state 0 (0x467FA-0x46854).
+- With keys it creates a KEY record at the hero's cell with state = the key
+  count: picture 0x0AFC and V offset 9 for one key, picture 0x1D76, V offset
+  0x11 and H 0x200 further left for several (0x4685E-0x46906). §4.6 describes
+  how such a pile is picked up.
+
+It then starts the transporter sparkle on that record (0x4691C), removes the
+hero's live shot (slot 1+p) and transport animation (slot 25+p) through
+`mob_depth_remove` and clears their pictures (0x46922-0x46992), and only then
+resets the player's counters.
+
 **Confidence: Verified.** `player_damage_sample_update(uint16 player_index)`
 (0x50E34), formerly misidentified as a pickup detector, advances a signed
 60-frame window. At expiry it increments the sample count. Health below 500 plus
@@ -811,13 +844,14 @@ outer wrapper. It calls `player_start_inner(uint16 player_index)` (0x48BEC),
 which finds a usable spawn tile, creates the player MOB, installs the two
 character-specific RAM jump stubs, initializes per-player movement/effect
 state, increments `level_players_active`, and returns -1 on success or 0 when
-no usable spawn position exists. After creating the MOB, and after a
-player-status bit test at 0x48DFC–0x48E0E, it calls
-`tport_cycle_start(player_slot, player_index)` unless `game_mode` is LEGEND
-(0x48E10–0x48E26), so an arriving hero appears inside the picture-0x0924
-sparkle in an effect slot (13–16). `main_health_countdown` does the same for
-a dying hero after creating its marker (0x46906–0x4691C). Only after success
-does the wrapper call
+no usable spawn position exists. After creating the MOB it calls
+`tport_cycle_start(player_slot, player_index)` (0x48E26), so an arriving hero
+appears inside the picture-0x0924 sparkle in an effect slot (13–16). Two
+cases skip it: a hero whose `player_status` byte has bit 1 set (status 2,
+alive-next: a survivor being placed in the next maze; byte test at 0x48E04)
+and LEGEND mode (0x48E10). `main_health_countdown` starts the same sparkle on
+the record it leaves where a hero died (0x4690C–0x4691C, §4.3). Only after
+success does the wrapper call
 `player_join_finalize(uint16 player_index)` (0x48A36). The finalizer performs
 coin initialization when necessary, persists configuration through OS 0x1CC,
 sets the player's status/on-level state, plays the character join sound,
@@ -902,13 +936,20 @@ Large dispatch by tile type (from `mob_link >> 10`). Handles:
   Poison therefore also rolls that draw and can speak a food line after its
   own character voice.
 - Keys (0x13)
-- Treasure (0x26, calls `player_add_score_with_mult`). Outside the treasure
-  rooms (mazes 0x68-0x72, which branch from 0x51A12 to 0x51E36 and pay on the
-  bonus screen instead) the collector's multiplier rises by 2 when more than
-  one hero is on the level, is capped at twice that count, every other living
-  hero above 1 loses one, and the collector's health-redraw bit is set after
-  the award (0x51ACE)
-- Doors (check key count)
+- Treasure (type 0x2E, 0x519C2): advances tricks 0x0E/0x50/0x5A, counts the
+  treasure in `player_treascount` (0x519F8) and shows no score popup. In the
+  treasure rooms (mazes 0x68-0x72) it then branches from 0x51A12 to the
+  shared tail at 0x51E36 and pays on the bonus screen instead. Elsewhere it
+  takes the award at 0x51A16: the collector's multiplier rises by 2 when more
+  than one hero is on the level, is capped at twice that count, every other
+  living hero above 1 loses one, sound 0x26 plays, 100 points are awarded with
+  the multiplier, the collector's health-redraw bit is set (0x51ACE) and the
+  escape timer is cleared (0x51882)
+- Treasure bag (type 0x30, 0x51998): popup `special_bonus_score / 1000 + 1`,
+  then the same award at 0x51A16 with `special_bonus_score`. It is not counted
+  as treasure, advances no trick and has no treasure-room branch
+- Doors (check key count). Walking into a door reaches this arm only through
+  `mob_collision_test`'s door gate (§4.2)
 - Transporter (calls `player_tport`)
 - Exit (calls `player_exit_sequence`)
 - Trap triggers: the trigger becomes floor and `maze_place_object_types`
@@ -925,6 +966,14 @@ Keys and ordinary potions share a 12-item capacity. The key arm at
 record 25. A full player leaves the pickup unhandled while an active player can
 still accept that item. The shot-resistant variants retain their distinct final
 discard arms, but no full player receives another inventory byte.
+
+A KEY record can hold a pile. The arm reads `count = state >> 10`
+(0x51504-0x51516): below 2 it adds one key; otherwise it adds
+`min(count, 12 - keys - potions)` keys. When the pile is larger than the free
+room, the record stays, its state drops by the keys taken, and when one key is
+left it switches to the single-key picture 0x0AFC with H += 0x200 and V's low
+six bits set to 9 (0x51566-0x515DA); that path leaves the hero blocked by the
+record. Piles come from heroes who die holding keys (§4.3).
 On successful ordinary-potion collection, 0x51778 sends command 0x26—the same
 treasure/potion pickup sound used by the related item arms—before
 `player_inv_update`; 0x0E belongs to the red player's exit sequence.
@@ -1095,8 +1144,7 @@ Called when transitioning to a new level:
 
 The Python representation initializes random-wall cursors eagerly during this
 setup. It derives the transporter table as an ordered live-MOB scan because the
-stored values are the packed slots themselves. Its level load has no equivalent
-of step 15 (gauntpy `ISSUES.md` S-192).
+stored values are the packed slots themselves.
 
 Like the other whole-maze passes, this routine clears the VBLANK semaphore as
 it scans (every 32 slots at 0x439EE, and again at 0x43C58); see §18's note on

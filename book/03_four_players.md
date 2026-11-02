@@ -39,8 +39,8 @@ Placement comes before the join's final welcome and status updates.
 Successful placement creates the hero, establishes its movement and
 effect state, and increments the active-player count. Outside the
 Legend screens it also starts the transporter sparkle on the new hero's
-cell, so the Wizard appears inside a brief flash; a hero who dies of
-lost health leaves the same flash behind. Only then does the
+cell, so the Wizard appears inside a brief flash. Heroes carried over
+into the next maze arrive without one. Only then does the
 join wrapper finalize the arrival, redraw the information panel, and send
 the welcome. Credit and character choice alone do not establish a body
 inside the level.
@@ -303,6 +303,14 @@ and three potions is full. Spending a key or using a potion creates room
 for either kind. If another active player can still accept the pickup,
 a full hero does not simply add it to an invisible thirteenth pocket.
 
+Keys outlive their owner. When a hero's health runs out, the game puts a
+pile holding every key that hero carried on the cell where they fell,
+marked by the same flash that greets an arriving hero. A friend who
+walks into the pile takes as many keys as fit in their twelve spaces;
+any surplus stays on the floor as a smaller pile, still blocking the
+way. A hero who dies with no keys leaves something worse: a
+strongest-tier ghost generator, standing where the body was.
+
 Power upgrades have a different route. The six permanent improvements are
 armor, speed, magic, shot power, shot speed, and fight. A newly acquired
 power sets its own state rather than consuming an ordinary potion place.
@@ -402,9 +410,15 @@ They have fewer decisions to make, but there are many more of them.
   semantics remain a strong inference in that reference; this chapter
   does not depend on naming that return as an independently observed event.
 - The arrival flash is `player_start_inner`'s call to `tport_cycle_start`
-  at `0x48E10–0x48E26`, skipped in LEGEND mode; the death flash is the
-  same call in `main_health_countdown` at `0x46906–0x4691C`. A MAME demo
-  capture shows the Elf's arrival flash occupying effect slot 13.
+  at `0x48DFC–0x48E26`, skipped for status 2 (a survivor placed in the
+  next maze) and in LEGEND mode. A MAME demo capture shows the Elf's
+  arrival flash occupying effect slot 13.
+- What a dead hero leaves is created by `main_health_countdown` at
+  `0x467E8–0x46906` (type `0x1E` with no keys, type `0x35` with state =
+  key count otherwise), followed by the flash at `0x4691C`; the key arm
+  of `player_tile_interact` reads pile sizes at `0x51504–0x515DA`
+  ([Game subsystems](../doc/04_game_subsystems.md), §§4.3 and 4.6). These
+  were read from disassembly; no MAME capture of a death has been taken.
 - Movement patterns were checked against `player_speed_normal` and
   `player_anim_rate`, ROM `0x580A8–0x580C7`, and their consumer at
   `0x4A92C–0x4A95C`. The ordinary-maze qualification excludes the

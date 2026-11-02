@@ -517,6 +517,17 @@ implementation specification.
      pass-through, 0x41F9A) or it shoves another hero. Wall retries, nudges and
      movable-wall pushes move the hero silently, and the walking picture and
      counter follow the word, not the position.
+104. **Doors gate on the probe's separations.** Every probed record leaves its
+     signed and absolute dH/dV in 0x904024-0x90402A, and `mob_collision_test`'s
+     door arm (0x522D8) passes them to `shot_onscreen_check` with 0x5C0/0x4C0
+     against the door's open-side state bits. Outside that box the hero walks
+     on; inside, the tile interaction opens or blocks. Do not open or block a
+     door at the plain 0x7C0 probe overlap, and give test doors the side bits
+     `pf_door_draw_xy` would (10 horizontal, 5 vertical).
+105. **Level setup ends by clearing managed slots 1-29.** The row-zero wall
+     fill reaches the shot, effect, popup and animation slots; 0x43D16-0x43D7E
+     zeroes their picture words (only) on every level load. Channels test the
+     picture, so skipping the clear launches phantom lobber rocks.
 
 ## Investigation workflow
 

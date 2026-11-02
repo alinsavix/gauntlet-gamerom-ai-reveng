@@ -136,7 +136,14 @@ def _probe_candidate_overlaps(
     vpos: int | None = None,
     self_slot: int | None = None,
 ) -> bool:
-    """Whether ``candidate`` holds a record overlapping the mover."""
+    """Whether ``candidate`` holds a record overlapping the mover.
+
+    Like 0x407B6-0x407DE and 0x42656-0x4267C, every examined record leaves
+    its signed separations in 0x904028/0x90402A and their magnitudes in
+    0x904024/0x904026; the vertical pair is only reached once the horizontal
+    magnitude is under 0x7C0. ``shot_onscreen_check`` reads them back for a
+    door that ``mob_collision_test`` receives.
+    """
     if candidate == mover_slot or state.mobs.picture[candidate] == 0:
         return False
     if candidate == self_slot:
@@ -145,10 +152,15 @@ def _probe_candidate_overlaps(
     mover_v = state.mobs.vpos[mover_slot] if vpos is None else vpos
     candidate_h, candidate_v = _probe_candidate_anchor(state, candidate)
 
-    return (
-        _wrapped_position_delta(candidate_h, mover_h) < _PROBE_OVERLAP
-        and _wrapped_position_delta(candidate_v, mover_v) < _PROBE_OVERLAP
-    )
+    state.shothit_dist_H = (candidate_h - mover_h) & 0xFFFF
+    distance_h = _wrapped_position_delta(candidate_h, mover_h)
+    if distance_h >= _PROBE_OVERLAP:
+        return False
+    state.collision_dist_H = distance_h
+    state.shothit_dist_V = (candidate_v - mover_v) & 0xFFFF
+    distance_v = _wrapped_position_delta(candidate_v, mover_v)
+    state.collision_dist_V = distance_v
+    return distance_v < _PROBE_OVERLAP
 
 
 # ---------------------------------------------------------------------------

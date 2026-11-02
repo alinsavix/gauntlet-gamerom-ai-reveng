@@ -37,6 +37,26 @@ start).
 
 ## Open issues
 
+### S-197 · dead heroes leave nothing behind, and key piles give one key
+
+When health reaches zero, `main_health_countdown` replaces the hero's record
+with a new object before `player_resetcounters` (0x467E8-0x4690C). With no
+keys it creates type 0x1E, the strongest ghost generator, using that type's
+picture and offsets (0x0009BD from 0x586C8, bytes from 0x5862A/0x5866A) at the
+hero's position. With keys it creates a KEY record at the hero's cell with
+state = the key count and picture 0x0AFC for one key or 0x1D76 for several.
+It then puts the death sparkle on that record and clears the hero's live shot
+(slot 1+p) and transport animation (slot 25+p). gauntpy's death block only
+clears the slot; the sparkle is placed from the hero's live position, which
+matches the generator case but not the cell-aligned key case.
+
+The key arm of `player_tile_interact` (0x51458-0x51626) reads such piles:
+`count = state >> 10`; a count below 2 gives one key, otherwise as many as fit
+under the 12-item cap. A partial take leaves the pile with `state` reduced,
+switches it to the single-key picture (adjusting H by 0x200 and V's low bits
+to 9) when one key remains, and leaves the hero blocked by it. gauntpy always
+gives one key and removes the record.
+
 ### S-196 · demo inventory row is drawn
 
 `player_inv_update` (0x45ACA) tests `game_mode == 0xFFFD` at 0x45AD6 and, in
@@ -78,28 +98,6 @@ joins the chain at its first re-key a frame later. And the re-key cell differs:
 In the capture a demon shot was filed one row lower than on the arcade. Draw
 order changes; so could a SLIP bookmark that lands on a shot.
 
-### S-193 · heroes appear and die without the poof
-
-`player_start_inner` calls `tport_cycle_start` on the new hero's slot unless
-`game_mode` is LEGEND (0x48E10-0x48E26), and `main_health_countdown` does the
-same after creating its marker at 0x46906-0x4691C. gauntpy calls neither, so
-the sparkle (pictures from 0x0924) that marks a hero arriving or dying never
-appears. In the MAME demo capture the Elf's arrival poof occupies effect slot
-13 for its first ~36 iterations, and the two scripted joins at iteration 4284
-show one each.
-
-### S-192 · managed MOB slots keep the row-zero wall fill
-
-At the end of `maze_new_level_setup` (0x43D16-0x43D7E) the ROM clears the
-pictures of managed slots 1-29: player, demon and lobber shots, effects,
-popups and exit/transport animations. `load_level` has no equivalent, so the
-row-zero fill leaves picture 0x8000 in them. `main_handle_shots` then treats
-lobber channels 9-12 as four live shots: in the MAME demo comparison gauntpy
-flies phantom lobber rocks from iteration 1, which strike walls and fill the
-four effect slots with impact pictures (iteration 1 and again at 352) that the
-arcade never shows. This happens on every level load. It also explains the
-row-zero half of S-190.
-
 ### S-191 · monster pictures refresh after every walked dispatch
 
 `_dispatch_chain_entry` calls `monster_update_anim_tile` after every monster or
@@ -109,32 +107,6 @@ picture. In the MAME demo capture 55 creatures show 613 frames of picture-only
 difference. Positions, states and RNG are unaffected, so this is display
 fidelity, but the extra refresh should be replaced by the ROM's branch-local
 calls.
-
-### S-190 · reserved row zero holds wall pictures
-
-`load_level` stamps slots 0-31 with `maze_place_object(0, WALL_REGULAR, 0x20)`
-and leaves picture 0x8000 in every slot nothing else occupies. On the arcade
-the same fill happens (0x46054), but `maze_new_level_setup` then clears slots
-1-29 (0x43D16-0x43D7E, see S-192), leaving slot 0 and, until something uses
-them, slots 30-31 as wall markers. Any probe or ray march that reaches those
-slots sees a wall here and empty space there.
-
-### S-189 · doors block at the full probe overlap
-
-`mob_collision_test` (0x522D8) treats a door as a door only inside a tighter
-0x5C0 x 0x4C0 box (0x4AEA0); outside it the hero passes and keeps closing on
-the door until the cell tail interacts with it. `_door_try_traverse` blocks at
-the ordinary 0x7C0 probe overlap, so a keyless hero stops short of where the
-arcade lets it stand. Found by executing ROM 0x41BF0 under Unicorn on
-`test_door_blocked_without_key`.
-
-### S-188 · treasure-room treasure plays sound and scores
-
-In mazes 0x68-0x72 the treasure arm branches from 0x51A12 to 0x51E36, skipping
-the multiplier, sound 0x26, the score award and the redraw bit; the bonus
-screen pays instead. `_treasure_bonus_multiplier` honours the branch, but the
-TREASURE and TREASURE_BAG arms still play the sound and call
-`player_add_score_with_mult`.
 
 ### S-187 · movement-core arms not yet ported
 
@@ -147,23 +119,41 @@ still skips pass-through objects instead of stopping at the first overlap as
 0x407A6 does. `player_in_maze` is no longer read by the camera and can be
 retired.
 
-### S-126 · live-only downward block at level 17 / maze 16 `(396,176)`
-
-The reported session blocks Down at player coordinate `(396,176)`, although no
-visible object occupies the corridor below. This is not reproducible from a
-fresh maze-16 state: with the camera snapped to the live player, gauntpy moves
-to `(396,178)`, and direct ROM execution of `player_try_move` does the same.
-The static maze records around slots `0x179`/`0x199` therefore do not explain
-the report. A transient MOB record, stale camera origin, or another live RAM
-field is required to distinguish the failing state.
-
-F4 now captures that evidence without changing simulation memory. Reproduce
-the block, press F4 once, and retain the printed JSON path under
-`traces/state-dumps/`; the dump contains the complete player/MOB tables,
-camera origins, maze state, path grids, all modeled video/color RAM, timers,
-inputs, and RNG seed.
-
 ## Resolved issues
+
+### S-193 · heroes appear and die without the poof
+
+`player_start_inner` now starts the transporter sparkle on the new hero's slot
+as 0x48DFC-0x48E26 does: skipped for a next-level survivor (`player_status`
+bit 1, a byte test at 0x48E04) and on LEGEND. The death block starts it on the
+dead hero's cell (0x4690C-0x4691C) before clearing the slot. The marker the
+ROM anchors it on is not yet created; see S-197.
+
+### S-192 / S-190 · managed MOB slots kept the row-zero wall fill
+
+`_setup_decoded_level` ends with the ROM's 0x43D16-0x43D7E step: the picture
+words of slots 1-29 are cleared after the row-zero fill, leaving links and
+positions alone, and slot 0 and slots 30-31 keep the wall marker. The phantom
+lobber rocks and their impact pictures at every level start are gone.
+
+### S-189 · doors blocked at the full probe overlap
+
+Doors now go through `mob_collision_test`'s door arm (0x522D8). The shared
+probe overlap test records the signed and absolute separations at
+0x904024-0x90402A as 0x407A6 and 0x42648 do, and `shot_onscreen_check`
+(0x4AEA0) compares them with the 0x5C0 x 0x4C0 box on the door's open sides.
+Inside the box the tile interaction opens it or blocks; outside, the hero
+passes. `_door_try_traverse` is gone. Stepping a hero into a door with and
+without a key matches ROM 0x41BF0 under Unicorn step for step.
+
+### S-188 · treasure-room treasure played sound and scored
+
+Treasure (type 0x2E, 0x519C2) now branches in mazes 0x68-0x72 straight to the
+shared tail, skipping the multiplier, sound 0x26, score, redraw bit and the
+escape-timer clear at 0x51882. Two related differences in the same arms were
+fixed: plain treasure shows no score popup, and the treasure bag (type 0x30,
+0x51998) is not counted as treasure, has no treasure-room branch, and clears
+the escape timer.
 
 ### S-133 · demo workarounds and the HUD latch hid fourteen ROM differences
 

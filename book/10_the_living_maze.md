@@ -27,6 +27,11 @@ has disappeared. A useful route needs all three distinctions.
 ## What one key opens
 
 At the door, the key check turns a carried resource into shared space.
+The check waits until the hero is close. A door reacts only once the
+hero is within about nine and a half pixels of one of its open faces;
+until then the hero simply keeps walking toward it. A hero without a
+key stops at that distance, and a hero with one spends it there.
+
 The game starts up to two opening fronts, each with a stored position
 and direction. The touched section disappears, and subsequent door
 updates advance the fronts through compatible neighboring sections.
@@ -427,6 +432,11 @@ interaction—and the game can revise each agreement separately.
   rejects picture `0x8000` and picture `0x0001`, not ordinary zero
   pictures; object types `0x2F`, `0x3C`, and `0x3E` are locked
   treasure, dragon, and transporter. Doors require a key.
+- The door's reach is `mob_collision_test`'s door arm at `0x522D8`,
+  which calls `shot_onscreen_check` (`0x4AEA0`) with limits `0x5C0`
+  along and `0x4C0` across the door's open sides (subsystem §4.2).
+  `0x4C0` is 9.5 pixels. The stopping position was checked by running
+  ROM `0x41BF0` under Unicorn on a horizontal door, with and without a key.
 - Forcefield contact (`0x4AA42–0x4AB06`) and its eight longwords at
   `0x5813C`: color gate, acid gate, character/armor indexing, and costs.
   Movable-wall counting is at `0x4B448–0x4B496`; secret-wall selection

@@ -31,10 +31,10 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x90401E | 2 B | `playfield_color_latch` | Live palette-0 color-8 latch. VBLANK copies it to playfield color RAM 0x910510 at 0x401D4. The main loop restores it from 0x904020 each frame; potion use temporarily replaces it with color 3 of the triggering player-position alpha palette, producing a one-field screen flash. |
 | 0x904020 | 2 B | `playfield_color_base` | Ordinary level floor color restored into 0x90401E at 0x42A8E before the gameplay calls. Initialized alongside 0x90401E from the selected playfield palette at 0x435B0-0x435BA (or fixed palette word 0x5AC6E at 0x4368E-0x4369E). |
 | 0x904022 | 2 B | `potion_player` | Potion owner plus trigger flags: player index in bits 0-1, player-shot-triggered bit 2; the matrix consumer adds enhanced-magic bit 3 locally. Monster/dragon shots branch before this word is written. |
-| 0x904024 | 2 B | `collision_dist_H` | Horizontal object collision distance |
-| 0x904026 | 2 B | `collision_dist_V` | Vertical object collision distance |
-| 0x904028 | 2 B | `shothit_dist_H` | Horizontal shot collision distance |
-| 0x90402A | 2 B | `shothit_dist_V` | Vertical shot collision distance |
+| 0x904024 | 2 B | `collision_dist_H` | \|dH\| between the last examined candidate and the probe position, stored once under 0x7C0. Written by `mob_probe_candidate` (0x407A6), `tile_lookup_core` (0x42648) and `shot_collision_candidate_core` (0x40A78); read by the movement wall arms and `shot_onscreen_check` |
+| 0x904026 | 2 B | `collision_dist_V` | \|dV\| for the same candidate, stored only when \|dH\| is under 0x7C0 |
+| 0x904028 | 2 B | `shothit_dist_H` | Signed dH (candidate − probe) for the last examined candidate. Despite the name, player probes write it too; `shot_onscreen_check` (0x4AEA0) reads it for door gates on both the shot and movement paths |
+| 0x90402A | 2 B | `shothit_dist_V` | Signed dV for the same candidate, stored only when \|dH\| is under 0x7C0 |
 | 0x90402C | 2 B | `palette_pulse_dir_b` | Direction flag (0 increasing, −1 decreasing) for the second VBL-driven color pulse; flips at color bounds 0x4044/0xA0AA |
 | 0x90402E | 2 B | `palette_pulse_dir_a` | Direction flag for the first VBL-driven color pulse; flips at bounds 0x2220/0xEEE0 |
 | 0x904030 | 2 B | `tport_cycle_pos` | Transporter position counter (bounces 0→4→0) |

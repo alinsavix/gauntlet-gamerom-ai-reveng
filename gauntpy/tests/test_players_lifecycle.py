@@ -2814,15 +2814,18 @@ class TestTreasureAttribution:
         slot = self._treasure(state, 50, MazeObjIds.TREASURE)
         player_items.player_tile_interact(state, slot, 2)
         assert state.player_treascount == [0, 0, 1, 0]
-        assert state.score_display_timer[0] == 0x3C
-        assert state.mobs.picture[0x11] == 0x1DB4
+        # 0x519C2-0x51AD8 never calls playfield_showscore.
+        assert state.score_display_timer[0] == 0
+        assert state.mobs.picture[0x11] == 0
 
-    def test_treasure_bag_credits_the_collector(self):
+    def test_treasure_bag_is_not_counted_as_treasure(self):
+        """Type 0x30 enters at 0x51998: popup and award, no 0x904A50 bump."""
         state = _active_state()
         _make_player_active(state, 1)
         slot = self._treasure(state, 51, MazeObjIds.TREASURE_BAG)
         player_items.player_tile_interact(state, slot, 1)
-        assert state.player_treascount == [0, 1, 0, 0]
+        assert state.player_treascount == [0, 0, 0, 0]
+        assert state.score_display_timer[0] == 0x3C
 
     def test_locked_treasure_is_not_a_walk_in_pickup(self):
         """Type 0x2F goes to the unhandled tail (0x511CE table -> 0x51E60).
@@ -2856,8 +2859,8 @@ class TestTreasureAttribution:
         _make_player_active(state, 0)
         for i, kind in enumerate((MazeObjIds.TREASURE, MazeObjIds.TREASURE_BAG)):
             player_items.player_tile_interact(state, self._treasure(state, 60 + i, kind), 0)
-        assert state.level_treasures == 2
-        assert state.player_treascount == [2, 0, 0, 0]
+        assert state.level_treasures == 1
+        assert state.player_treascount == [1, 0, 0, 0]
 
     def test_every_pickup_is_attributed(self):
         """``_treasure_shares`` credits any unattributed remainder to the first
@@ -2871,7 +2874,7 @@ class TestTreasureAttribution:
             state, self._treasure(state, 71, MazeObjIds.TREASURE), 3)
         player_items.player_tile_interact(
             state, self._treasure(state, 72, MazeObjIds.TREASURE_BAG), 3)
-        assert state.player_treascount == [0, 1, 0, 2]
+        assert state.player_treascount == [0, 1, 0, 1]
         assert sum(state.player_treascount) == state.level_treasures
 
     def test_the_score_award_still_differs_per_treasure_type(self):
@@ -2892,6 +2895,54 @@ class TestTreasureAttribution:
         assert player_items.player_tile_interact(
             state, self._treasure(state, 82, MazeObjIds.TREASURE_LOCKED), 0) == 0
         assert p.score == 300
+
+    def test_treasure_room_treasure_only_counts(self):
+        """0x51A12 branches to the 0x51E36 tail in mazes 0x68-0x72."""
+        state = _active_state()
+        p = _make_player_active(state, 0)
+        state.level_players_active = 2
+        state.mazenum_current = 0x68
+        state.escape_timer = 500
+        p.score = 0
+        p.bonusmult = 1
+        slot = self._treasure(state, 84, MazeObjIds.TREASURE)
+        assert player_items.player_tile_interact(state, slot, 0) == -1
+        assert state.player_treascount == [1, 0, 0, 0]
+        assert p.score == 0
+        assert p.bonusmult == 1
+        assert state.escape_timer == 500
+        assert 0x26 not in _emitted(state)
+        assert state.mobs.picture[slot] == 0
+
+    def test_treasure_room_bag_still_pays(self):
+        """The bag arm (0x51998) has no treasure-room branch."""
+        state = _active_state()
+        p = _make_player_active(state, 0)
+        state.level_players_active = 1
+        state.mazenum_current = 0x68
+        state.escape_timer = 500
+        state.special_bonus_score = 200
+        p.score = 0
+        slot = self._treasure(state, 85, MazeObjIds.TREASURE_BAG)
+        assert player_items.player_tile_interact(state, slot, 0) == -1
+        assert p.score == 200
+        assert state.escape_timer == 0
+
+    def test_spawning_starts_the_arrival_sparkle(self):
+        """0x48DFC-0x48E26: a join poofs; survivors (status 2) and LEGEND do not."""
+        for status, mode, expected in (
+            (int(PlayerStatus.SELECTING), int(GameMode.NORMAL), 0x924),
+            (int(PlayerStatus.ALIVE_NEXT), int(GameMode.NORMAL), 0),
+            (int(PlayerStatus.SELECTING), int(GameMode.LEGEND), 0),
+        ):
+            state = _active_state()
+            state.maze = object()
+            state.game_mode = mode
+            state.mobs.create(90, tile=0, hpos=0, vpos=0,
+                              obj_type=int(MazeObjIds.PLAYERSTART))
+            state.players[0].status = status
+            assert player_lifecycle.player_start_inner(state, 0) == -1
+            assert state.mobs.picture[0x0D] == expected
 
     def test_spawning_clears_the_previous_levels_credit(self):
         """0x48E86: player_start_inner's per-player init zeroes the count."""
