@@ -274,9 +274,7 @@ class HostShell:
     def _connect_gamepad(self, device_index: int) -> None:
         if self._gamepad is not None:
             return
-        gamepad = self._pygame.joystick.Joystick(device_index)
-        gamepad.init()
-        self._gamepad = gamepad
+        self._gamepad = self._pygame.joystick.Joystick(device_index)
 
     # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def _toggle_pause(self) -> None:
