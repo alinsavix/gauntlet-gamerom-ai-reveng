@@ -1303,6 +1303,18 @@ class TestShotChannels:
         state, slot = self._fire_demon()
         assert state.mobs.hpos[slot] & _HPOS_FLAG_ATTACK
 
+    def test_firing_turns_the_shooter_and_restarts_its_frame(self):
+        """0x49114-0x4913E -- ``(state & 0x3FF) + (direction << 10)``."""
+        state = GameState()
+        shooter = pack_slot(10, 10)
+        _arena(state, shooter)
+        _place_monster(state, shooter, MazeObjIds.MONST_DEMON, direction=5)
+        state.mobs.set_state(shooter, (6 << 3) | 5)
+        link = state.mobs.state_link[shooter] & 0x3FF
+        monster_create_shot(state, shooter, 3, 5)
+        assert state.mobs.state(shooter) == 3
+        assert state.mobs.state_link[shooter] & 0x3FF == link
+
 
 class TestShotSpawnPicture:
     """0x491D2 (demon) / 0x49238 (lobber) -- the frame a channel is armed with.

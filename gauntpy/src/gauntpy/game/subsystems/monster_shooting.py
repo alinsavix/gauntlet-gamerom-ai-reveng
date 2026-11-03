@@ -320,6 +320,9 @@ def monster_create_shot(state: GameState, slot: int, direction: int,
 
     state.shot_timer_next[shot_slot - 5] = _SHOT_COOLDOWN
     state.mobs.hpos[slot] |= _HPOS_FLAG_ATTACK          # 0x4910E
+    # 0x49114-0x4913E rebuilds the state word as (state & 0x3FF) + (direction
+    # << 10): the shooter faces its shot and its wind-up starts at frame 0.
+    state.mobs.set_state(slot, direction & 0x07)
     state.shot_anim_lifetime_counter[channel] = _SHOT_COUNTER_RELOAD[channel]
     state.shot_lifetime[shot_slot] = _SHOT_COUNTER_RELOAD[channel]
     # 0x4915C stores the direction the projectile mover reads from ``shot_direction``,

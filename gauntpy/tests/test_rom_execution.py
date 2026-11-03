@@ -18,6 +18,7 @@ from gauntpy.game.subsystems import input as gin  # noqa: E402
 from gauntpy.game.subsystems import player_items  # noqa: E402
 from gauntpy.game.subsystems import player_transport  # noqa: E402
 from gauntpy.game.subsystems import players as gp  # noqa: E402
+from gauntpy.game.subsystems.monster_shooting import monster_create_shot  # noqa: E402
 from gauntpy.game.subsystems.player_movement import player_try_move  # noqa: E402
 
 _TOOL = Path(__file__).resolve().parents[1] / "tools" / "rom_exec.py"
@@ -264,3 +265,27 @@ def test_a_transporting_hero_deletes_an_overlapped_monster(obj_type):
     assert machine.picture(left) == 0
     player_transport.scan_move_path_interactions(state, hero, 0)
     assert state.mobs.picture[left] == 0
+
+
+# --- firing -------------------------------------------------------------------
+
+@pytest.mark.parametrize("frame", [0, 3, 6])
+@pytest.mark.parametrize("direction", range(8))
+def test_firing_sets_the_shooters_state_word_like_the_rom(direction, frame):
+    """0x490DC takes the ROM compass; gauntpy's state field holds its own, two steps round."""
+    state = GameState(game_mode=GameMode.NORMAL)
+    slot = _cell(10, 10)
+    state.mobs.create(
+        slot, tile=0x18C6, hpos=((10 * 16) << 7) | 0x08,
+        vpos=native_v(10 * 16) << 7, obj_type=int(MazeObjIds.MONST_DEMON),
+        state=(frame << 3) | 1,
+    )
+    rom_direction = (direction + 2) & 7
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    machine.call(0x490DC, slot, rom_direction, 5)
+    assert machine.halted
+    monster_create_shot(state, slot, direction, 5)
+    assert machine.record(slot)[4] == rom_direction
+    assert state.mobs.state(slot) == direction
+    assert machine.hpos(slot) == state.mobs.hpos[slot]
+    assert machine.record(5)[:3] == _python_record(state, 5)[:3]

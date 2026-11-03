@@ -37,6 +37,28 @@ start).
 
 ## Open issues
 
+### S-203 · lobber demo: hand fight and chain order differ
+
+Poking the demo's generators into lobbers (`tools/demo_compare.py`, mode `lobbers`) gives
+2381 matching live lobber samples, then two differences, neither traced yet.
+
+The Elf's hand fight against the lobber in slot 914 runs at a different rate from
+iteration 5496: the hero's pictures are 0x16BD, 0x16C6, 0x16C6, 0x16C6 in gauntpy and
+0x16B4, 0x16B4, 0x16BD, 0x16BD on the arcade. At 5500 gauntpy's hit kills the lobber and
+the Elf steps to V 0x1112; on the arcade the lobber survives, with the same H (0x8C99) and
+state word 0x640A, and the Elf stays at V 0x1012. The RNG seed differs from that frame, and
+comparison stops there, so lobbers past 5500 are unchecked. This may be related to S-201.
+These are the first hand fights in any capture, since the shipped demo and the `families`
+poke have none. The Elf has been fighting since 5428 with matching pictures, so the first
+exchanges agree and hand fighting is not simply running at the wrong rate throughout.
+
+Before that, at iteration 5400, a rock's depth links differ while its position and picture
+match. The arcade keeps slot 11 with next 0x352 and previous 14, and impact effect 14 with
+next 11 and previous 0x2AD. gauntpy has re-keyed slot 11 with next 14 and previous 0x2AD. So
+the two are swapped in the chain between 0x2AD and 0x352, 20 of 987 shot-slot samples
+differ, and it affects draw order only so far. A same-key tie or the effect's depth key is
+the likely place to look.
+
 ### S-202 · once-per-cell gate on the occupied-cell tail does nothing
 
 `resolve_entered_cell` skips a cell equal to last frame's
@@ -64,17 +86,19 @@ two acid blobs are a step apart on that frame. gauntpy runs the death block insi
 probably sees the hero at a different point in the frame. Not yet traced. Comparison
 stops at the first difference, so later frames are unchecked.
 
-### S-199 · monster_create_shot keeps the animation frame
-
-0x49128-0x4913E rebuilds the shooter's state word as
-`(state & 0x3FF) + (direction << 10)`, which zeroes the frame field. gauntpy only sets
-the direction. A shooter that fires mid-cycle therefore winds up from the wrong frame:
-in a MAME capture with the demo's ghosts and grunts poked into demons, slot 850's
-picture differs at iteration 5315 (gauntpy frame 6, arcade 0) and its position by 5352.
-Lobbers and sorcerers have not been reached in that comparison yet because it stops at
-this difference.
-
 ## Resolved issues
+
+### S-199 · monster_create_shot kept the animation frame
+
+0x49114-0x4913E rebuilds the shooter's state word as
+`(state & 0x3FF) + (direction << 10)`, which zeroes the frame field; gauntpy only set the
+direction, so a shooter firing mid-cycle wound up from the wrong frame. In the demo with
+its ghosts and grunts poked into other families, slot 850's picture differed at iteration
+5315 (gauntpy frame 6, arcade 0). That run now matches MAME for all 7200 iterations: 3598
+live demon and 309 live sorcerer samples, every picture, and 631 shot-slot link samples.
+It produces no lobbers, so `tools/demo_compare.py` has a `lobbers` mode as well, which
+found S-203. The poke tooling moved from scratch files to `tools/`, and comparison now
+includes hero pictures; leaving them out had hidden S-203's first symptom.
 
 ### S-198 · player_tile_interact had acid and IT arms the ROM lacks
 

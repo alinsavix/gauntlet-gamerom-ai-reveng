@@ -441,8 +441,11 @@ the players are trying to win.
 - The sorcerer's blink is `0x41478–0x4148A` (blank picture `0x1709`) and
   `0x41492` (return); its walk continues through `0x411E6`. Other creatures
   change picture only at the sites listed in subsystem §3.3. A MAME demo
-  capture matched every monster picture in the seven families it shows;
-  sorcerers, demons and lobbers do not appear in it.
+  capture matched every monster picture in the seven families it shows.
+  Sorcerers, demons and lobbers do not appear in it, so the same demo was
+  captured again with the RAM of its ghosts, grunts and generators changed
+  to those types. Demons and sorcerers matched for the whole run, and
+  lobbers until a hand fight at iteration 5500 that is still unexplained.
 - The worked schedule follows direct disassembly at `0x40EAA–0x40EEC`
   and `0x41026–0x41036`, including the doubled normal frame and the
   slot's `OR 2`. The probability comparison at `0x49300–0x4930E`

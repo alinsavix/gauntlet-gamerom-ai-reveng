@@ -369,6 +369,8 @@ an invulnerable potion survives the hit. The monster projectile does not
 activate potion magic: `resolve_shot_hit` branches at 0x4BA32-0x4BA36 for
 shot IDs 4-11, before the player-only flash and `potion_player` writes.
 
+**The shooter restarts its animation (`monster_create_shot`, 0x4910E–0x4913E).** Firing sets the attack flag in the shooter's `mob_hpos` (0x4910E) and rebuilds its state word as `(state & 0x3FF) + (direction << 10)`. The shooter turns to face its shot, and the frame field becomes 0, so its wind-up always starts at the first frame however far through a walk cycle it was. A MAME capture of the demo with its monsters poked into demons shows this: slot 850 fires on walk frame 6 and its state word drops from 0xDF12 to 0x0312.
+
 **Shot spawn geometry (`monster_create_shot`, 0x49192–0x49270).** The projectile inherits only the shooter's *position*: 0x49192/0x491A2 mask `mob_hpos`/`mob_vpos` with 0xFF80 before anything else, so the shooter's palette (which for a monster is its health nibble) and its 3×3 packed sprite size are discarded. The per-direction muzzle offset is added on top, and then three small constants land **under** the position field, replacing the low byte:
 
 | constant | site | branch | meaning |

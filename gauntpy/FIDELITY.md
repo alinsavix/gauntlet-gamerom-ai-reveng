@@ -574,6 +574,12 @@ implementation specification.
    `tests/test_rom_execution.py` pins the results, and
    `tools/rom_xcheck_plugin.py` compares every `player_try_move` in the suite. Treat
    a mismatch as a lead, since it runs a snapshot of RAM, not the machine.
+   `tools/rom_sweeps.py` runs every object type through movement and the arrival scan.
+7. To see behaviour the attract demo does not show, poke it: `tools/demo_compare.py`
+   and `tools/mame_demo_trace.lua` write the same RAM change at the same iteration in
+   MAME and gauntpy, let both play on, and report the first difference. This is real
+   arcade behaviour with no input scripting or new mazes, and a capture takes a minute
+   or two. Add a mode for each new question.
 
 ## Implementation boundaries
 
