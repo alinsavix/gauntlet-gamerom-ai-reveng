@@ -399,8 +399,8 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
 
       * ``invis_timer`` (0x905F50) -> PlayerPower.INVIS   (bit 8,  0x4A80E)
       * the repulsiveness countdown (0x905F38) -> PlayerPower.REPULSE
-        (bit 9, 0x4A826) -- doc/05 calls that word ``reflect_timer``, but bit 9
-        is the one 0x4185C tests to make monsters flee, and reflection is bit 10
+        (bit 9, 0x4A826) -- bit 9 is the one 0x4185C tests to make monsters
+        flee; reflection is bit 10
       * the 0x905F40 countdown -> PlayerPower.INVULN (bit 13, 0x4A880)
 
     That last one also charges damage while it runs: one point every eighth

@@ -300,9 +300,9 @@ literal_address,linear_sites,callable_examples,covering_flags,status,confidence
 0x905F24,0x40296,game_vblank@0x40296,ram.player_power_palette_stubs,exact_union_match,Verified
 0x905F2A,0x402DE,game_vblank@0x402DE,ram.player_power_palette_stubs,exact_union_match,Verified
 0x905F30,0x401DE;0x49782;0x4AAFC;0x4B0B8;0x4B164;0x4B2EC;0x4F85A;0x5137A,game_vblank@0x401DE;main_move_players@0x4AAFC;player_tile_interact@0x5137A;resolve_shot_hit@0x4B0B8;resolve_shot_hit@0x4B164;resolve_shot_hit@0x4B2EC,ram.hurt_cooldown,exact_union_match,Verified
-0x905F38,0x433DA;0x4A814;0x517FE;0x51826,main_move_players@0x4A814;player_resetcounters@0x433DA,ram.reflect_timer,exact_union_match,Verified
+0x905F38,0x433DA;0x4A814;0x517FE;0x51826,main_move_players@0x4A814;player_resetcounters@0x433DA,ram.repulse_timer,exact_union_match,Verified
 0x905F40,0x433E8;0x45A78;0x4674E;0x49716;0x497EE;0x499A0;0x49AFA;0x4A82C;0x4A874;0x4AA50;0x4B05E;0x4B0CE,draw_player_health@0x45A78;main_health_countdown@0x4674E;main_move_players@0x4A82C;main_move_players@0x4A874;main_move_players@0x4AA50;player_hurt_speech_timer@0x49AFA,ram.invuln_timer,exact_union_match,Verified
-0x905F48,0x4A892;0x4A8B8;0x51668;0x516DA;0x51BF2;0x51C62;0x51CD4,main_move_players@0x4A892;main_move_players@0x4A8B8,ram.stun_timer,exact_union_match,Verified
+0x905F48,0x4A892;0x4A8B8;0x51668;0x516DA;0x51BF2;0x51C62;0x51CD4,main_move_players@0x4A892;main_move_players@0x4A8B8,ram.dizzy_timer,exact_union_match,Verified
 0x905F50,0x433CC;0x4A7FC;0x4AC46;0x517CE,main_move_players@0x4A7FC;main_move_players@0x4AC46;player_resetcounters@0x433CC,ram.invis_timer,exact_union_match,Verified
 0x905F58,0x40652;0x4701E;0x48402;0x49F72;0x4A0E0;0x5515A;0x55414,input_debounce@0x40652;main_handle_potions@0x4701E;main_start_game@0x48402;player_death_sequence@0x49F72;player_death_sequence@0x4A0E0;secret_name_entry_update@0x5515A,ram.debounce_shift_magic,exact_union_match,Verified
 0x905F5A,0x4066E,input_debounce@0x4066E,ram.debounce_shift_magic,exact_union_match,Verified

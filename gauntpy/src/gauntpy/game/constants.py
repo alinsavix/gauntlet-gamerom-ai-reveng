@@ -149,7 +149,7 @@ class PlayerPower(IntEnum):
     jump table at 0x5122A routes each ``MazeObjIds`` power-up type to the arm
     that pushes its ID, and three independent ``bclr`` sites confirm the bit
     numbers from the other side (0x4A80E clears bit 8 when ``invis_timer``
-    expires, 0x4A826 bit 9 with ``reflect_timer``, 0x4A880 bit 13 with the
+    expires, 0x4A826 bit 9 with ``repulse_timer``, 0x4A880 bit 13 with the
     0x905F40 countdown -- each a ``bclr`` on the *high byte* of the word).
 
     **Corrected twice.** The six pickup powers are bits 8-13, not bits 0-5 and
@@ -166,11 +166,9 @@ class PlayerPower(IntEnum):
         byte at 0x4185C is the test that makes a monster flee, and ``btst #0``
         at 0x4176C (bit 8) is the one that hides an invisible player from
         targeting.  Reflection is a different bit: shot reflection reads bit 10
-        at 0x4B4B0, which is type 0x38.  What is mislabelled is
-        ``05_data_reference.md``'s name for **0x905F38** (``reflect_timer``) --
-        that countdown's expiry clears bit 9 (0x4A826), so it is the
-        *repulsiveness* timer, and ``character_repulse_timer_init`` (0x5B72C)
-        is the repulsiveness duration table.
+        at 0x4B4B0, which is type 0x38.  **0x905F38** is ``repulse_timer``: its
+        expiry clears bit 9 (0x4A826), and ``character_repulse_timer_init``
+        (0x5B72C) is its duration table.
     """
 
     # Stat powers -- low byte.  Bit numbers are 05_data_reference.md §3's

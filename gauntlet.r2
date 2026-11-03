@@ -2881,11 +2881,11 @@ fs *
 fs *
 'f ram.hurt_cooldown 8 0x00905f30
 fs *
-'f ram.reflect_timer 8 0x00905f38
+'f ram.repulse_timer 8 0x00905f38
 fs *
 'f ram.invuln_timer 8 0x00905f40
 fs *
-'f ram.stun_timer 8 0x00905f48
+'f ram.dizzy_timer 8 0x00905f48
 fs *
 'f ram.invis_timer 8 0x00905f50
 fs *

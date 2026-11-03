@@ -1573,9 +1573,9 @@ f ram.path_direction_grid 3072 0x00905054
 f ram.tport_route_forward 256 0x00905c54
 f ram.tport_route_reverse 256 0x00905d54
 f ram.hurt_cooldown 8 0x00905f30
-f ram.reflect_timer 8 0x00905f38
+f ram.repulse_timer 8 0x00905f38
 f ram.invuln_timer 8 0x00905f40
-f ram.stun_timer 8 0x00905f48
+f ram.dizzy_timer 8 0x00905f48
 f ram.invis_timer 8 0x00905f50
 f ram.debounce_shift_magic 8 0x00905f58
 f ram.debounce_shift_fire 8 0x00905f60

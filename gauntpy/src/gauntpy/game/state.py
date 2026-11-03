@@ -261,8 +261,8 @@ class GameState:
     # pickup, loaded per character from the table at 0x5B72C at 0x5181A.  Its
     # expiry clears PlayerPower.REPULSE (0x4A820-0x4A826) -- bit 9, the bit
     # 0x4185C tests to make monsters flee -- so this is the *repulsiveness*
-    # countdown.  05_data_reference.md calls it ``reflect_timer``; reflection is
-    # bit 10 (type 0x38), read at 0x4B4B0, and has no timer at all.
+    # countdown.  Reflection is bit 10 (type 0x38), read at 0x4B4B0, and has no
+    # timer at all.
     player_repulse_timer: list[int] = field(
         default_factory=lambda: [0] * NUM_PLAYERS
     )
