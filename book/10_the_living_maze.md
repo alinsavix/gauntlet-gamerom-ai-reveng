@@ -145,13 +145,14 @@ ordinary pad travel or generalized into permission to teleport anywhere.
 
 Arrival does not stop at the landing cell. Once the hero is in place,
 the game looks up, down, left and right for anything the new body
-overlaps and deals with it as if the hero had walked into it: a key or
-potion is collected, the thief is knocked out and drops what it
-carried, and a monster or generator that the hero landed on is simply
-deleted. Because a hero stands four pixels left of its cell, that
-usually means the cell on its left and any creature close enough to
-touch, not every neighbouring cell. Other heroes and walls are left
-alone.
+overlaps and deals with it as if the hero had walked into it: an item is
+collected, the thief is knocked out and drops what it carried, and a
+monster that the hero landed on is simply deleted. The reach is short.
+Most stored items sit a full sixteen pixels from a hero standing in the
+next cell, just past the overlap test, so what this usually catches is a
+creature that had walked close. Of the items as the maze stores them,
+only five power-ups qualify, and only from the cell on the hero's left.
+Other heroes and walls are left alone.
 
 Once relocation succeeds, the arrival effect moves to the destination
 and the hero's picture is restored as the transition completes.
@@ -450,8 +451,9 @@ interaction—and the game can revise each agreement separately.
   `0x50A18–0x50A66`, each repeating one public probe (`0x406B6`,
   `0x40732`, `0x4083A`, `0x408A0`) from the landed hero and passing what
   it finds to `resolve_move_tile_interaction` (`0x50C7A`), which removes
-  whatever `player_tile_interact` leaves unhandled except exits. Read
-  from disassembly; the arrival cases were not captured in MAME.
+  whatever `player_tile_interact` leaves unhandled except exits. The
+  reach was measured by running `0x50BB8` under Unicorn on every object
+  type (subsystem §7.2); no arrival has been captured in MAME.
 - The push order is in the movement core's four arms (`0x41C80`,
   `0x41EB8`, `0x420C0`, `0x422F4`). Pushes along the move, sideways
   slides, and the fall-back wall response were checked by running ROM

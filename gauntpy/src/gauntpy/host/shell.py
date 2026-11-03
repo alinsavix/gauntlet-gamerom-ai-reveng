@@ -32,8 +32,9 @@ it as its first statement and checks it afterward, so the only way to observe
 an overflow is for something to set the flag between those two points. A
 synchronous, single-threaded host has no such concurrent signal source: by
 construction there is nothing running during ``game_frame`` that could raise
-it. So under this host ``frame_overflow`` stays at zero and the generator
-spawn throttling it gates never activates from real frame pressure.
+it. So under this host ``frame_overflow`` is only ever set by level setup
+(``maze._mark_level_setup_overrun``), and the generator spawn throttling it
+gates never activates from real frame pressure.
 
 That is a property of hosting the simulation synchronously, not something
 this module leaves undone, and it is not fixable from the
@@ -41,6 +42,9 @@ this module leaves undone, and it is not fixable from the
 have to drive ``game_frame`` itself, or run it on another thread, to have
 anywhere to put the interrupt. Tests that need overflow behaviour set
 ``state.frame_overflow`` directly, which is what the subsystems read anyway.
+Leaving other overruns unmodelled is intentional: which frames run late on the
+arcade depends on 68000 cycle counts we have no way to know (``FIDELITY.md``
+rule 110).
 """
 
 from __future__ import annotations

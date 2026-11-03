@@ -165,6 +165,24 @@ def test_host_can_pause_only_the_treasure_timer(monkeypatch):
     assert state.frame_counter == 1
 
 
+def test_level_setup_inside_a_tick_leaves_frame_overflow_at_eight():
+    """The closing check of the tick that loads a level sees the overrun."""
+    from gauntpy.game.maze import _mark_level_setup_overrun
+    from gauntpy.game import mainloop
+
+    state = GameState()
+    real_game_frame = mainloop.game_frame
+    mainloop.game_frame = lambda s, **_: _mark_level_setup_overrun(s)
+    try:
+        tick(state)
+    finally:
+        mainloop.game_frame = real_game_frame
+    assert state.frame_overflow == 8
+    for expected in (4, 2, 1, 0):
+        tick(state)
+        assert state.frame_overflow == expected
+
+
 def test_frame_overflow_sets_then_decays():
     """Set to 8 when the display laps us mid-frame; halved on each good one."""
     state = GameState(game_mode=GameMode.NORMAL)

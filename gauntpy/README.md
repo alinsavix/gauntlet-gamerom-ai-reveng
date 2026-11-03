@@ -13,7 +13,7 @@ command-named static WAVs without emulating the separate sound CPU.
 
 **Status.** The simulation core, the main loop, and all 28 per-frame subsystem
 calls are implemented and tested. ROM data tables are transcribed from the ROMs
-and verified against radare2/Unicorn. The playable runner covers boot, attract,
+and verified against radare2/Unicorn (`tools/rom_exec.py`). The playable runner covers boot, attract,
 coin/character selection, gameplay, treasure/secret rooms, and level rotation.
 See [PLAN.md](PLAN.md) and [ISSUES.md](ISSUES.md).
 Contributors should also read the concise [fidelity rules](FIDELITY.md) before

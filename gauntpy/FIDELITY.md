@@ -545,6 +545,14 @@ implementation specification.
      keep the old picture, so never refresh after a dispatch. Each site names
      its bank: `monster_update_anim_tile` is the idle bank alone, whatever
      flags the creature carries. See doc/04 §3.3.
+110. **`frame_overflow` is set only by level setup, on purpose.** The arcade
+     sets it whenever a frame outlasts a field, which depends on how long the
+     68000 took. gauntpy has no such timing, so nothing here can say which
+     frames would be late, and inventing a rule (a monster count, say) would
+     suppress spawning and defer sound at guessed moments. Level setup is the
+     exception because the MAME demo capture shows it (8, then 4/2/1/0). Crowded
+     frames therefore never throttle generators or sound here; that difference
+     is accepted, not an open bug.
 
 ## Investigation workflow
 
@@ -561,6 +569,11 @@ implementation specification.
    Keep host usage in its dedicated gauntpy chapter and follow `book/OUTLINE.md`.
 5. Commit the completed, verified batch at the end of the turn. Do not include
    ROMs, local EEPROM/NVRAM, `extra_docs/`, or generated traces.
+6. To ask what a routine does in one exact situation, run it:
+   `tools/rom_exec.py` executes original routines under Unicorn on a `GameState`,
+   `tests/test_rom_execution.py` pins the results, and
+   `tools/rom_xcheck_plugin.py` compares every `player_try_move` in the suite. Treat
+   a mismatch as a lead, since it runs a snapshot of RAM, not the machine.
 
 ## Implementation boundaries
 

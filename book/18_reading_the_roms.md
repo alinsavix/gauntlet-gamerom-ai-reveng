@@ -466,7 +466,9 @@ we know which chain to take apart.
   [demo regression test](../gauntpy/tests/test_attract.py)
   (`test_demo_follows_the_mame_capture`) records milestones from it. The
   routine-level instrument was the Unicorn emulator library calling
-  `player_try_move` (`0x41BF0`) on prepared states.
+  `player_try_move` (`0x41BF0`) on prepared states; see
+  [`rom_exec.py`](../gauntpy/tools/rom_exec.py) and its
+  [tests](../gauntpy/tests/test_rom_execution.py).
 - Inspection setup: [radare2 loader](../doc/gauntlet_loader.r2);
   [generated reference guide](../doc/generated/README.md).
   The maze-boundary example follows the [catalog](../doc/06_maze_catalog.md),

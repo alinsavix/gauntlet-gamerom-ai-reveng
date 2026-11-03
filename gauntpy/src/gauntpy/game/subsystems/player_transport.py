@@ -369,9 +369,10 @@ def scan_move_path_interactions(state: GameState, hero_slot: int,
     For each public probe in turn (0x406B6, 0x40732, 0x4083A, 0x408A0) the ROM
     repeatedly probes from the hero's new record and resolves the first
     overlapping record, stopping when the probe returns nothing, a hero
-    (H palette nibble 0x0C-0x0F), or a wall marker (0x8000/0x8001). With the
-    hero anchored four pixels left of its cell this reaches whatever is in the
-    cell to its left and any live creature close enough to overlap it.
+    (H palette nibble 0x0C-0x0F), or a wall marker (0x8000/0x8001). The hero
+    is cell-aligned and marker pictures round to a cell, so stored items rarely
+    qualify: in practice this reaches live creatures and the few records with
+    an uncorrected position, such as the five power-ups in the cell to the left.
     """
     from .mob_probes import (
         mob_probe_down, mob_probe_left, mob_probe_right, mob_probe_up,
@@ -389,7 +390,10 @@ def scan_move_path_interactions(state: GameState, hero_slot: int,
                 break
             if candidate == previous:
                 # Python-only guard: the ROM loop has no exit when a record
-                # survives its own resolution and still overlaps.
+                # survives its own resolution and still overlaps. The ROM never
+                # gets there. Only exits and transporters survive, and both are
+                # marker pictures that cannot overlap a cell-aligned hero. Here
+                # it can only fire through the non-ROM arms in ISSUES S-198.
                 break
             previous = candidate
             _tport_landing_trick(state, player_index, candidate)  # 0x50C30

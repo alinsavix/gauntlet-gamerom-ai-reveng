@@ -1569,10 +1569,21 @@ doors without a key -- through `moblist_remove_and_clear` (0x50CFE).
 hero's record and resolves the first overlapping record until the probe
 returns nothing, a hero (H palette nibble 0x0C-0x0F, 0x50BF2) or a wall marker
 (0x8000/0x8001). Tricks 1 and 2 (acid, Death) are tested on each record first
-(0x50C30-0x50C52). Because the hero is anchored four pixels left of its cell,
-the reach is the cell to its left plus any live creature within the 0x7C0
-overlap, not the four neighbouring cells: a transporting hero picks up what
-it lands against and deletes monsters it lands on.
+(0x50C30-0x50C52). The reach is narrow, not the four neighbouring cells. The hero
+is cell-aligned, four pixels left of its cell. A record with bit 15 in its picture
+rounds to a cell anchor 16 pixels away, past the 0x7C0 overlap, and items and monsters
+with the four-pixel H correction are 16 pixels away too. Executing the scan on every
+object type as `maze_place_object` writes it, only the five power-ups 0x37-0x3B overlap,
+in the cell to the left. Otherwise it finds live creatures that have walked close, and a
+single-key pile a dead hero left. Those it collects or deletes.
+
+The loop cannot hang on the ROM. It would need a record that survives
+`resolve_move_tile_interaction` and still overlaps with a usable picture. Only a
+transporter (a started teleport) and an exit survive, and both have bit 15 pictures;
+exits are also rejected by picture at 0x50C02. A sweep of every other type under Unicorn,
+forced to overlap with 0, 1 and 12 keys and with all powers, hit no instruction limit and
+left no record behind. Exits and hidden potions need RAM the harness lacks, and a
+transporter with a real destination was not exercised, so those rest on the picture argument.
 
 `tport_check_dest(destination_mob_slot, player_index)` (0x50ADE) returns 1
 for a blocked destination and 0 for a usable one.  Blocking cases include an

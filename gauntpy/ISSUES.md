@@ -37,27 +37,63 @@ start).
 
 ## Open issues
 
-### S-195 · frame_overflow is never set
+### S-202 · once-per-cell gate on the occupied-cell tail does nothing
 
-`check_frame_overflow` tests `vblank_semaphore`, which `tick` always clears
-first, so gauntpy's `frame_overflow` stays zero. The arcade sets it when an
-iteration outlasts a field: the MAME demo capture shows demo setup (one
-iteration of about 27 fields) leave 8, decaying 4/2/1/0 over the next four
-iterations. In ordinary play that value forces the generator spawn
-probability to zero. The demo is unaffected (attract generators use the retry
-countdown), but a level start in normal play probably suppresses spawning for
-about four iterations on the arcade and not in gauntpy. Not every long
-iteration counts: besides the main loop, eight routines clear 0x904002
-(`maze_new_level_setup`, `maze_place_object_types`, `main_walls_cyclic_move`,
-`maze_convert_walls_to_exits` and `forcefield_segments_setup` every 32 or 64
-slots as they scan; `init_display`, `highscore_table_init` and
-`eeprom_load_config` once or twice), so an overrun that ends inside one of
-them is invisible. In the capture the trap-triggered `maze_place_object_types` at
-demo iterations 470 and 1200 spanned two fields each and left the flag at
-zero. Modelling this needs a deterministic rule for which iterations overrun;
-level setup is the clear candidate.
+`resolve_entered_cell` skips a cell equal to last frame's
+`player_tile_or_tport_dest`; the ROM (0x424EC) has no such test. Walking a hero
+into every object type in four directions, with and without keys, gives identical
+results with the gate disabled, and its interaction counts already match the ROM's
+(a keyless door: 17 calls in 24 steps on both). The full suite and the demo
+comparisons also pass without it. A refused step rolls the hero back, so the entered
+cell never equals last frame's. It can simply be removed.
+
+### S-201 · generator's last hand hit and a type-0x0F neighbour
+
+Two leads from that walk, not yet traced. A hero who destroys a generator by hand
+steps forward on the same frame on the ROM (result 0xE0, H + 0x80) and a frame later
+in gauntpy (0xF0). And a neighbouring record of type 0x0F with no hero behind it is
+passed by the ROM (dispatch to 0x5227A) and blocks in gauntpy; the thief is the real
+case of that record, and the fixture is not a real thief.
+
+### S-200 · monsters differ on the frame a hero dies
+
+Poking the demo Elf's health to zero at iteration 1500 in MAME and gauntpy gives the
+same run until the death at iteration 1609. The drop matches the ROM (see S-197), but
+two acid blobs are a step apart on that frame. gauntpy runs the death block inside
+`main_move_players`; the ROM runs it in `main_health_countdown`, so the monster walk
+probably sees the hero at a different point in the frame. Not yet traced. Comparison
+stops at the first difference, so later frames are unchecked.
+
+### S-199 · monster_create_shot keeps the animation frame
+
+0x49128-0x4913E rebuilds the shooter's state word as
+`(state & 0x3FF) + (direction << 10)`, which zeroes the frame field. gauntpy only sets
+the direction. A shooter that fires mid-cycle therefore winds up from the wrong frame:
+in a MAME capture with the demo's ghosts and grunts poked into demons, slot 850's
+picture differs at iteration 5315 (gauntpy frame 6, arcade 0) and its position by 5352.
+Lobbers and sorcerers have not been reached in that comparison yet because it stops at
+this difference.
+
+### S-198 · player_tile_interact has acid and IT arms the ROM lacks
+
+The ROM dispatches only type 1, 0x0A-0x11 and 0x2E-0x3E (0x511DC-0x51226); acid (0x19)
+and IT (0x1B) go to the unhandled exit at 0x51E60 and return 0. gauntpy has "acid puddle"
+and "IT tile" arms that play a sound, set `acid_timer` to 180 (acid) and return -1. Walking
+a hero into an acid blob's cell for 24 steps leaves `acid_timer` at 180 and sound 0x36
+queued; the ROM's timer stays 0. These arms also keep a landed-on acid or IT record alive,
+where the ROM deletes it (0x50CFE), and are the only way gauntpy's arrival-scan guard can
+fire with real records. doc/04 §4.6 lists the same two arms and needs correcting with them.
 
 ## Resolved issues
+
+### S-195 · frame_overflow was never set
+
+Level setup now leaves `frame_overflow` at 8, decaying 4/2/1/0 over the next four
+iterations as the MAME demo capture shows. Nothing else sets it, intentionally:
+which frames run late on the arcade depends on 68000 cycle counts gauntpy has no
+way to know (FIDELITY.md rule 110). So crowded frames never throttle generators
+or the sound queue here. That the same happens at level starts in normal play is
+inferred from the demo's setup; it has not been captured.
 
 ### S-191 · monster pictures refreshed after every walked dispatch
 
@@ -131,7 +167,9 @@ that record, and the hero's shot (slot 1+p) and transport animation (slot
 (0x51504-0x515FA): below 2 one key, otherwise every key that fits; a partial
 take shrinks the pile in place, turns a one-key remainder back into the single
 key picture, clears a positive idle timer and returns 0. Five pickup cases and
-three deaths match ROM 0x511AC and 0x466F6 executed under Unicorn.
+three deaths match ROM 0x511AC and 0x466F6 executed under Unicorn. A MAME capture with
+the demo Elf's health poked to zero confirms the keyless drop on the arcade: slot 201
+becomes picture 0x09BD, type 0x1E, H 0x4605, V 0xC812, as gauntpy does.
 
 ### S-193 · heroes appear and die without the poof
 

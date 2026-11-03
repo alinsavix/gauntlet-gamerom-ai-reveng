@@ -42,7 +42,7 @@ import struct
 from dataclasses import replace
 
 from . import coords
-from .constants import FIRST_PLAYABLE_SLOT, GameMode, MazeObjIds
+from .constants import FIRST_PLAYABLE_SLOT, FRAME_OVERFLOW_SET, GameMode, MazeObjIds
 from ..maze_rom import (
     FLOOR_PALETTES, GexError, LFLAG4_TRAPS_LOCAL, LFLAG4_WRAP_H, LFLAG4_WRAP_V,
     PICTURE_MARKER, SHRUB_FLOOR_COLOR_NUMS, SHRUB_PALETTE_DEFAULT, WALL_PALETTES,
@@ -1638,6 +1638,22 @@ def _setup_decoded_level(
     _remove_deletable_trap_walls(state)                 # 0x43BA0-0x43C1A
     _prepare_secret_challenge(state)
     _clear_managed_slot_pictures(state)                 # 0x43D16-0x43D7E
+    _mark_level_setup_overrun(state)
+
+
+# ROM: part game:0x42A66 | Models the overrun level setup causes: a field arrives after its last semaphore clear, so the check after call 28 loads frame_overflow.
+def _mark_level_setup_overrun(state: GameState) -> None:
+    """Level setup outlasts a field, the one overrun gauntpy reproduces.
+
+    The MAME demo capture shows setup (about 27 fields) leave 8, which decays
+    over the next four iterations. Raising the semaphore lets the closing check
+    of a ``tick`` that loads a level set the 8; the direct write covers setup
+    that runs outside a tick. No other overrun is modelled, deliberately: the
+    arcade's depend on how long the 68000 took, and nothing here has that
+    timing (FIDELITY.md rule 110).
+    """
+    state.vblank_semaphore = 1
+    state.frame_overflow = FRAME_OVERFLOW_SET
 
 
 # ROM: part game:0x438AE | Final managed-slot picture clear at 0x43D16-0x43D7E.

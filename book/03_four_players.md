@@ -419,7 +419,9 @@ They have fewer decisions to make, but there are many more of them.
   of `player_tile_interact` reads pile sizes at `0x51504–0x515DA`
   ([Game subsystems](../doc/04_game_subsystems.md), §§4.3 and 4.6). These
   were read from disassembly and checked by executing both routines
-  under Unicorn; no MAME capture of a death has been taken.
+  under Unicorn. A MAME run with the demo Elf's health poked to zero
+  shows the keyless generator on the arcade; key piles have not been
+  captured.
 - Movement patterns were checked against `player_speed_normal` and
   `player_anim_rate`, ROM `0x580A8–0x580C7`, and their consumer at
   `0x4A92C–0x4A95C`. The ordinary-maze qualification excludes the

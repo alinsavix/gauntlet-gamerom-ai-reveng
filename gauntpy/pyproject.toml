@@ -60,4 +60,5 @@ pythonpath = ["src"]
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "unicorn>=2.1.4",
 ]

@@ -676,6 +676,9 @@ def test_demo_follows_the_mame_capture(tmp_path):
     rows = {row[0]: row[1:] for row in _MAME_DEMO_MILESTONES}
     for iteration in range(1, 7168):
         tick(state)
+        if iteration <= 5:
+            # Setup's overrun, as sampled at the end of these iterations.
+            assert state.frame_overflow == (4, 2, 1, 0, 0)[iteration - 1]
         if iteration in rows:
             seed, slot, h, v, offset, timer, it, potions = rows[iteration]
             assert (
