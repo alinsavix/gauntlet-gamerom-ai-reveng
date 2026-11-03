@@ -187,7 +187,7 @@ def _player_page_rows(
             ),
             (
                 "  TIMERS",
-                f"st{live.stundelay} acid{live.acid_timer} hurt{live.hurt_cooldown} "
+                f"st{live.stundelay} invuln{live.invuln_timer} hurt{live.hurt_cooldown} "
                 f"tp{state.player_tport_phase[player.index]}",
             ),
         ))

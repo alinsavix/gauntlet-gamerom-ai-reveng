@@ -74,17 +74,19 @@ picture differs at iteration 5315 (gauntpy frame 6, arcade 0) and its position b
 Lobbers and sorcerers have not been reached in that comparison yet because it stops at
 this difference.
 
-### S-198 · player_tile_interact has acid and IT arms the ROM lacks
+## Resolved issues
+
+### S-198 · player_tile_interact had acid and IT arms the ROM lacks
 
 The ROM dispatches only type 1, 0x0A-0x11 and 0x2E-0x3E (0x511DC-0x51226); acid (0x19)
-and IT (0x1B) go to the unhandled exit at 0x51E60 and return 0. gauntpy has "acid puddle"
-and "IT tile" arms that play a sound, set `acid_timer` to 180 (acid) and return -1. Walking
-a hero into an acid blob's cell for 24 steps leaves `acid_timer` at 180 and sound 0x36
-queued; the ROM's timer stays 0. These arms also keep a landed-on acid or IT record alive,
-where the ROM deletes it (0x50CFE), and are the only way gauntpy's arrival-scan guard can
-fire with real records. doc/04 §4.6 lists the same two arms and needs correcting with them.
-
-## Resolved issues
+and IT (0x1B) go to the unhandled exit at 0x51E60. gauntpy's "acid puddle" arm armed
+0x905F40 for 180 frames and its "IT tile" arm played a sound, and both reported the tile
+handled. Both are gone. 0x905F40 was also misnamed: its only arming write is the
+POWER_INVULN pickup (0x5189E), and it blocks contact, shot, forcefield and stun-floor harm,
+so walking into an acid blob gave about three seconds of invulnerability. It is now
+`invuln_timer`, with `PlayerPower.INVULN` and `ram.invuln_timer`. A landed-on acid blob or
+IT is now deleted as on the ROM (0x50CFE), so the arrival scan's guard can no longer fire
+with real records.
 
 ### S-195 · frame_overflow was never set
 
@@ -2678,7 +2680,7 @@ former Q-2 — the layout was documented after all.)
 every frame the field colour was lit, with no check that the player was
 actually on a forcefield — so a hero standing still in any maze with a lit field
 lost ~1 HP/frame and died in seconds. The disassembly of the call site
-(0x4AA42-0x4AA68) shows the damage is gated on a zero `acid_timer` **and** a
+(0x4AA42-0x4AA68) shows the damage is gated on a zero `invuln_timer` **and** a
 non-zero `check_forcefield_collision` (0x53346). **Fixed:** added a minimal
 `_check_forcefield_collision` (player's current cell holds a `FORCEFIELDHUB`)
 and the acid gate; the forcefield test now stands the player on a field cell,

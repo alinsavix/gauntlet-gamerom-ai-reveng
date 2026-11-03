@@ -16,6 +16,7 @@ from gauntpy.game.coords import encode_vpos_at_y, native_v  # noqa: E402
 from gauntpy.game.state import GameState  # noqa: E402
 from gauntpy.game.subsystems import input as gin  # noqa: E402
 from gauntpy.game.subsystems import player_items  # noqa: E402
+from gauntpy.game.subsystems import player_transport  # noqa: E402
 from gauntpy.game.subsystems import players as gp  # noqa: E402
 from gauntpy.game.subsystems.player_movement import player_try_move  # noqa: E402
 
@@ -223,3 +224,43 @@ def test_the_death_drop_matches_the_rom(keys):
     machine.call(0x466F6)
     gp.main_move_players(state)
     assert machine.record(slot) == _python_record(state, slot)
+
+
+# --- monsters are not tiles ----------------------------------------------------
+
+@pytest.mark.parametrize("obj_type", [MazeObjIds.MONST_ACID, MazeObjIds.MONST_IT])
+def test_a_monster_is_not_a_tile(obj_type):
+    """0x511DC-0x51226 send creatures to the unhandled exit at 0x51E60."""
+    state = GameState(game_mode=GameMode.NORMAL)
+    player = _hero(state, 0, _cell(10, 9))
+    target = _cell(10, 10)
+    state.mobs.create(
+        target, tile=0x2300, hpos=(10 * 16) << 7,
+        vpos=native_v(10 * 16) << 7, obj_type=int(obj_type),
+    )
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    assert machine.call(0x511AC, target, 0) == 0
+    assert machine.halted
+    assert machine.r16(0x905F40) == 0
+    assert player_items.player_tile_interact(state, target, 0) == 0
+    assert player.invuln_timer == 0
+
+
+@pytest.mark.parametrize("obj_type", [MazeObjIds.MONST_ACID, MazeObjIds.MONST_IT])
+def test_a_transporting_hero_deletes_an_overlapped_monster(obj_type):
+    """0x50BB8 -> 0x50C7A removes what the tile interaction leaves unhandled."""
+    state = GameState(game_mode=GameMode.NORMAL)
+    hero = _cell(10, 10)
+    _hero(state, 0, hero)
+    state.mobs.hpos[hero] |= 0x0C
+    left = _cell(10, 9)
+    state.mobs.create(
+        left, tile=0x2300, hpos=(9 * 16) << 7,
+        vpos=native_v(10 * 16) << 7, obj_type=int(obj_type),
+    )
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    machine.call(0x50BB8, 0x4083A, hero, 0)
+    assert machine.halted
+    assert machine.picture(left) == 0
+    player_transport.scan_move_path_interactions(state, hero, 0)
+    assert state.mobs.picture[left] == 0

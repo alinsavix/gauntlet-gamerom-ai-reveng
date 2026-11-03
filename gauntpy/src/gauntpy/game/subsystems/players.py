@@ -401,12 +401,11 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
       * the repulsiveness countdown (0x905F38) -> PlayerPower.REPULSE
         (bit 9, 0x4A826) -- doc/05 calls that word ``reflect_timer``, but bit 9
         is the one 0x4185C tests to make monsters flee, and reflection is bit 10
-      * the 0x905F40 countdown -> PlayerPower.ACID_AFFLICTION (bit 13, 0x4A880)
+      * the 0x905F40 countdown -> PlayerPower.INVULN (bit 13, 0x4A880)
 
     That last one also charges damage while it runs: one point every eighth
     frame, two when frame-counter bit 3 is clear (0x4A838-0x4A85E), floored at
-    zero, raising the health redraw bit.  It is the same word the acid puddle
-    arms, which is why this port calls it ``acid_timer``.
+    zero, raising the health redraw bit.
     """
     player = state.players[player_index]
 
@@ -422,14 +421,14 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
             player.powers &= ~int(PlayerPower.REPULSE) & 0xFFFF      # 0x4A826
             player_inv_update(state, player_index)
 
-    if player.acid_timer:                                            # 0x4A832
+    if player.invuln_timer:                                            # 0x4A832
         if (state.frame_counter & 0x07) == 0:                        # 0x4A840
             damage = 1 if (state.frame_counter & 0x08) else 2        # 0x4A852
             player.health = max(0, player.health - damage)           # 0x4A85E
             state.health_dirty[player_index] = 1                     # 0x4A868
-        player.acid_timer -= 1                                       # 0x4A87A
-        if player.acid_timer == 0:
-            player.powers &= ~int(PlayerPower.ACID_AFFLICTION) & 0xFFFF       # 0x4A880
+        player.invuln_timer -= 1                                       # 0x4A87A
+        if player.invuln_timer == 0:
+            player.powers &= ~int(PlayerPower.INVULN) & 0xFFFF       # 0x4A880
             state.health_dirty[player_index] = 1                     # 0x4A88C
             player_inv_update(state, player_index)
 
@@ -837,12 +836,12 @@ def main_move_players(state: GameState) -> None:
         # Forcefield contact damage (0x4AA42-0x4AAB8; §4.3 TRAP 5).  It sits
         # *after* the move, which is why walking into a live segment is charged
         # on the frame the hero arrives.  Charged only when the field colour is
-        # lit (not blinked off), the player is not acid-slowed, AND the player
+        # lit (not blinked off), the player is not invulnerable, AND the player
         # is actually overlapping a forcefield -- the last gate
         # (check_forcefield_collision, 0x4AA68) was missing, which drained every
         # player on every lit frame regardless of position.
         if (state.forcefield_color != 0
-                and player.acid_timer == 0
+                and player.invuln_timer == 0
                 and _check_forcefield_collision(state, player_index)):
             armor_bit = 1 if (player.powers & 0x02) else 0
             dmg = _FORCEFIELD_DAMAGE_TABLE[player.character + 4 * armor_bit]
@@ -878,7 +877,7 @@ def main_move_players(state: GameState) -> None:
             #
             # ``player_tile_or_tport_dest`` still holds last frame's cell, so an
             # unchanged cell means "already interacted here"; without that edge
-            # gate a non-consumed tile (an acid puddle, another hero's record)
+            # gate a non-consumed tile (a monster, another hero's record)
             # would re-trigger every frame.
             origin = movement_origin or (
                 player.mob_slot, state.mobs.hpos[player.mob_slot],

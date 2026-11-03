@@ -191,14 +191,14 @@ HEALTH_PULSE_THRESHOLD = 0xC8
 #: Low-health dim: ``draw_player_health`` tests ``player_state_timer & 0xF``
 #: against 8 and, on the dim half (and only while the timer is not its 0xFFFF
 #: idle sentinel and the player has a live MOB), subtracts 0x1000 from the
-#: attribute word. An acid-slowed player instead gets -0x2000.
+#: attribute word. An invulnerable player instead gets -0x2000.
 LOW_HEALTH_PULSE_MASK = 0xF
 LOW_HEALTH_DIM_PHASE = 8
 STATE_TIMER_IDLE = 0xFFFF
 #: ``game_settings`` bit 10, the reduced-text selector (doc/05 §1.10).
 _GSETTING_SHORT_TEXT = 0x0400
 ATTR_LOW_HEALTH_SHIFT = -0x1000
-ATTR_ACID_SHIFT = -0x2000
+ATTR_INVULN_SHIFT = -0x2000
 
 
 # ROM: part os:0x2ABE | OS format_decimal's space-padded field behavior expressed as a Python string; no zero-padding option, unsigned ABI or NUL destination buffer.
@@ -620,7 +620,7 @@ def _health_attribute(state: GameState, player_index: int) -> int:
     Disassembly of 0x45A32-0x45A88: the dim half of the low-health pulse is
     ``(player_state_timer & 0xF) < 8``, and it only dims while that timer is
     not its 0xFFFF idle sentinel *and* the player still has a live MOB
-    (``active_mob_ids[p] != 0``). Failing that, an acid-slowed player
+    (``active_mob_ids[p] != 0``). Failing that, an invulnerable player
     (``0x905F40[p] > 0``) shifts by -0x2000 instead.
     """
     player = state.players[player_index]
@@ -632,8 +632,8 @@ def _health_attribute(state: GameState, player_index: int) -> int:
         and player.mob_slot
     ):
         return attr + ATTR_LOW_HEALTH_SHIFT
-    if player.acid_timer > 0:
-        return attr + ATTR_ACID_SHIFT
+    if player.invuln_timer > 0:
+        return attr + ATTR_INVULN_SHIFT
     return attr
 
 

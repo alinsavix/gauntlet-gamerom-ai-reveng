@@ -736,7 +736,7 @@ class TestPlayerReset:
         p.powers = 0x1FFF
         p.bonusmult, p.mob_slot = 6, 99
         p.state_timer, p.stundelay, p.supershot = 12, 34, 7
-        p.acid_timer = 20
+        p.invuln_timer = 20
         p.character = Character.ELF
         state.player_invis_timer[index] = 50
         state.player_repulse_timer[index] = 60
@@ -755,7 +755,7 @@ class TestPlayerReset:
         assert p.bonusmult == 1                     # 0x90490E
         assert p.state_timer == 0xFFFF              # 0x904A26
         assert p.powers == 0                        # 0x9048E0
-        assert (p.acid_timer, p.supershot, p.stundelay) == (0, 0, 0)
+        assert (p.invuln_timer, p.supershot, p.stundelay) == (0, 0, 0)
         assert state.player_invis_timer[2] == 0     # 0x905F50
         assert state.player_repulse_timer[2] == 0   # 0x905F38
         assert state.player_tport_phase[2] == -1    # 0x904BCE

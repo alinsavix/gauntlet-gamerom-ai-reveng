@@ -203,7 +203,7 @@ def _contact_apply(state: GameState, player_index: int, monster_slot: int,
         death_damage_accumulate(state, player_index, monster_slot,
                                 _MONSTER_CONTACT_DAMAGE_TABLE[index])
 
-    if p.acid_timer == 0:                       # 0x497EE: acid grants immunity
+    if p.invuln_timer == 0:                       # 0x497EE: invulnerability blocks damage
         damage = _contact_damage(p, row)
         p.health = max(0, p.health - damage)
         p.pending_damage += damage
@@ -244,7 +244,7 @@ def _contact_apply(state: GameState, player_index: int, monster_slot: int,
 def player_hurt_speech_timer(state: GameState, player_index: int) -> None:
     """0x49A98 -- tick and, on expiry, announce one hurt voice.
 
-    The cooldown is reloaded before the acid-affliction test, so an acid-slowed
+    The cooldown is reloaded before the invulnerability test, so an invulnerable
     player consumes only the first random draw and remains silent. Ordinary
     expiry then draws once more from the selected character's literal sound
     bank and submits that command through the normal sound path.
@@ -259,7 +259,7 @@ def player_hurt_speech_timer(state: GameState, player_index: int) -> None:
         state.getrandom(8) + _HURT_SPEECH_COOLDOWN_BASE[active]
     ) & 0xFFFF
 
-    if state.players[player_index].acid_timer:
+    if state.players[player_index].invuln_timer:
         return
 
     character = int(state.players[player_index].character) & 0x03
@@ -305,7 +305,7 @@ def _acid_windup(state: GameState, player_index: int, monster_slot: int,
         (field << 10) | (state.mobs.state_link[monster_slot] & 0x3FF)
     )
     p.stundelay = 0x20                                  # 0x49996
-    if p.acid_timer == 0:
+    if p.invuln_timer == 0:
         _sound_play(state, _SOUND_ACID_SLIME)   # 0x36
 
 
@@ -314,7 +314,7 @@ def _death_touch_update(state: GameState, player_index: int) -> None:
     """0x49712-0x49752 -- arm/refresh the looping death-touch sound timer."""
     p = state.players[player_index]
     timer = state.death_touch_timer[player_index]
-    if p.acid_timer != 0:
+    if p.invuln_timer != 0:
         state.death_touch_timer[player_index] = _DEATH_TOUCH_WHILE_ACID
     elif timer == 0:
         state.death_touch_timer[player_index] = _DEATH_TOUCH_NEW   # 0xFFF0

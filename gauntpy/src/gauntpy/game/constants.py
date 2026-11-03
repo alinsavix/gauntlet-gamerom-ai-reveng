@@ -171,7 +171,6 @@ class PlayerPower(IntEnum):
         that countdown's expiry clears bit 9 (0x4A826), so it is the
         *repulsiveness* timer, and ``character_repulse_timer_init`` (0x5B72C)
         is the repulsiveness duration table.
-      * bit 13 (type 0x3B) is not invulnerability -- see ``ACID_AFFLICTION``.
     """
 
     # Stat powers -- low byte.  Bit numbers are 05_data_reference.md §3's
@@ -193,18 +192,15 @@ class PlayerPower(IntEnum):
     REFLECT = 0x0400      # ID 8,  MazeObjIds.POWER_REFLECT (0x38)
     TRANSPORT = 0x0800    # ID 9,  MazeObjIds.POWER_TRANSPORT (0x39)
     SUPERSHOT = 0x1000    # ID 10, MazeObjIds.POWER_SUPERSHOT (0x3A)
-    # ID 11, MazeObjIds.POWER_INVULN (0x3B).  **gex's label misstates this
-    # one.** The tile is not protective: its arm loads the 0x905F40 countdown
-    # with 900 frames (0x5189E), and while that runs main_move_players takes
-    # one health every eighth frame -- two when frame-counter bit 3 is clear
-    # (0x4A838-0x4A85E) -- roughly 170 health over fifteen seconds.  The same
-    # word is what an acid puddle arms (0x512D0), and no other site in the ROM
-    # reads this bit; its only other appearance is the ``bclr #5`` that clears
-    # it when the countdown ends (0x4A880).  So the bit marks "the damage-
-    # over-time is running", which is what the name says.  ``MazeObjIds`` keeps
-    # gex's spelling because this port mirrors that enum value-for-value.
-    ACID_AFFLICTION = 0x2000
-    INVULN = 0x2000       # alias, kept so gex-facing call sites still resolve
+    # ID 11, MazeObjIds.POWER_INVULN (0x3B).  Its arm loads the 0x905F40
+    # countdown with 900 frames (0x5189E), the only write that arms that word.
+    # While it runs, monster contact (0x497EE), shots (0x4B05E), forcefields
+    # (0x4AA50) and stun floors (0x512D0) do nothing, and the flat drain stops
+    # (0x4674E), but main_move_players takes one health every eighth frame, two
+    # when frame-counter bit 3 is clear (0x4A838-0x4A85E): about 170 health over
+    # fifteen seconds.  Nothing reads this bit; it is cleared when the countdown
+    # ends (0x4A880), so the timer is what protects.
+    INVULN = 0x2000
 
 
 #: ``powerup_bit_masks`` (0x59B64) verbatim, indexed by power-up ID 0-11.

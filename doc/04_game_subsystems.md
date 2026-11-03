@@ -992,9 +992,11 @@ Large dispatch by tile type (from `mob_link >> 10`). Handles:
   removes its matching type-7/8/9 wall group
 - Stun floors: the character table adds 120/45/120/60 frames and selects
   sounds 0x32/0x34/0x32/0x33
-- IT tile (0x35)
-- Acid puddle (0x36 — applies acid slow effect)
-- Slow-motion (0x37)
+
+Monsters are not on this list. The dispatch handles only type 1, 0x0A-0x11 and
+0x2E-0x3E (0x511DC-0x51226); acid (0x19), IT (0x1B) and the other creatures go to
+the unhandled exit at 0x51E60 and return 0, and their contact effects belong to
+`monster_playerhit`.
 
 Keys and ordinary potions share a 12-item capacity. The key arm at
 0x51458-0x514CE and good-potion arm at 0x516E4-0x5176C add only while
@@ -2637,7 +2639,7 @@ update conditions require it:
 - Otherwise health redraw uses update bit 1 or health below 0xC8 and
   `draw_player_health` (0x459A2). It renders the bonus multiplier when greater
   than one and the five-digit health value at 0x904980. During the dim half of
-  a low-health pulse it shifts the palette by −0x1000; acid-slowed players use
+  a low-health pulse it shifts the palette by −0x1000; invulnerable players use
   −0x2000. It clears update bit 1 afterward.
 - `player_it_label_set` (0x45866) draws and announces the IT label, but its
   caller owns the tracked IT state. Its two cells use `0xB000 | player<<10`,
@@ -3249,7 +3251,7 @@ handlers, reflection, and wall/item effects.
 
 **Dispatch:** target object type = `mob_link >> 10`. The computed JMP is at 0x4B336; its 62-entry signed-word displacement table `resolve_shot_hit_jumptbl` occupies 0x4B338–0x4B3B3 (124 bytes) and uses 0x4B338 as the branch base. The companion `mob_collision_test` (0x52192) dispatches through `mob_collision_object_jumptbl` at 0x52210, a **53-entry** displacement table of 106 bytes. Across the whole game ROM the twelve computed dispatches reach **81 distinct destinations**, all enumerated in `generated/control_targets.csv`.
 
-**Player victims** (target hpos & 0xF ≥ 0xC; victim = `0x904066[slot] >> 10`): LFLAG4 bit 0 (ShotStun) → `player_stundelay` += 0x28 (clamp 0x5A), fighting dir cleared, `hurt_cooldown` = 0x12; LFLAG4 bit 1 (ShotHurt) → −2 HP; a supershot shooter does −10 HP; acid-slowed victims are immune. Monster shots use `monstshot_damage_tbl` (0x596CE)[character + 4×armor + shot-tier (shot hpos bits 4–5: +0x10/+0x18/+0x20) + 8×(class ≥ 8)] — per-character defense (Valkyrie best, Wizard worst).
+**Player victims** (target hpos & 0xF ≥ 0xC; victim = `0x904066[slot] >> 10`): LFLAG4 bit 0 (ShotStun) → `player_stundelay` += 0x28 (clamp 0x5A), fighting dir cleared, `hurt_cooldown` = 0x12; LFLAG4 bit 1 (ShotHurt) → −2 HP; a supershot shooter does −10 HP; invulnerable victims are immune. Monster shots use `monstshot_damage_tbl` (0x596CE)[character + 4×armor + shot-tier (shot hpos bits 4–5: +0x10/+0x18/+0x20) + 8×(class ≥ 8)] — per-character defense (Valkyrie best, Wizard worst).
 
 **Monsters:** health/tier = the target's own **hpos low nibble**; per-type horizontal-size/tier bases are in `mazeobj_hsize_tier_tbl` (0x5864C: ghost/grunt/aux 4, demon 8, lobber/sorc/supersorc 0xB, generators 5). Damage is subtracted from hpos; if the nibble leaves [base−2, base] the monster is destroyed (`shot_impact_spawn` 0x47DAE sparkle + `moblist_remove_and_clear`), otherwise it survives as a weaker tier. Score = damage × class multiplier (ghost 10, grunt-class 5, Death/IT 1) via `player_add_score_with_mult`. Sorcerers are immune while their hpos phase flag (bit 4) is set unless hit by a supershot. Supershot pierces monsters (returns 0) except Death and IT.
 

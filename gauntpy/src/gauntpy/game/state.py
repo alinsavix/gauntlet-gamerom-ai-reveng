@@ -42,7 +42,7 @@ class Player:
     state_timer: int = 0xFFFF                   # 0x904A26, low-health cadence
     stundelay: int = 0                          # player_stundelay
     hurt_cooldown: int = 0                       # 0x905F30, hurt-palette timer
-    acid_timer: int = 0
+    invuln_timer: int = 0
     supershot: int = 0                          # 0x905F68
     death_damage_counter: int = 0               # 0x904B3A
     damage_sample_timer: int = 60               # 0x904AE6, signed word

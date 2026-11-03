@@ -175,11 +175,11 @@ class TestMainHealthCountdown:
         player_lifecycle.main_health_countdown(state)
         assert p.health == 500
 
-    def test_drain_skipped_while_acid_slowed(self):
-        """A non-zero acid_timer (0x905F40) blocks the drain (0x46754)."""
+    def test_drain_skipped_while_invulnerable(self):
+        """A non-zero invuln_timer (0x905F40) blocks the drain (0x46754)."""
         state = _active_state()
         p = _make_player_active(state, 0, health=500)
-        p.acid_timer = 30
+        p.invuln_timer = 30
         state.frame_counter = 0
         player_lifecycle.main_health_countdown(state)
         assert p.health == 500
@@ -507,7 +507,7 @@ class TestPlayerTileInteract:
             (MazeObjIds.POWER_REPULSE,
              lambda: state.player_repulse_timer[0] == 0x04B8),     # 0x5181A
             (MazeObjIds.POWER_INVULN,
-             lambda: player.acid_timer == 0x384),                  # 0x5189E
+             lambda: player.invuln_timer == 0x384),                  # 0x5189E
         )):
             slot = 40 + i
             state.mobs.create(slot, tile=1, hpos=0, vpos=0,
@@ -3380,8 +3380,7 @@ class TestTimedPowerSemantics:
         frame (0x5189E then 0x4A838-0x4A85E) -- the opposite of protection."""
         from gauntpy.game.constants import PlayerPower
 
-        assert int(PlayerPower.ACID_AFFLICTION) == 0x2000
-        assert int(PlayerPower.INVULN) == int(PlayerPower.ACID_AFFLICTION)
+        assert int(PlayerPower.INVULN) == 0x2000
 
         state = _active_state()
         p = _make_player_active(state, 0, health=1000)
@@ -3389,8 +3388,8 @@ class TestTimedPowerSemantics:
         state.mobs.create(slot, tile=1, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.POWER_INVULN))
         player_items.player_tile_interact(state, slot, 0)
-        assert p.acid_timer == 0x384
-        assert p.powers & int(PlayerPower.ACID_AFFLICTION)
+        assert p.invuln_timer == 0x384
+        assert p.powers & int(PlayerPower.INVULN)
 
         state.frame_counter = 8          # gated frame, bit 3 set -> 1 point
         gp.main_move_players(state)
@@ -3401,12 +3400,12 @@ class TestTimedPowerSemantics:
 
         state = _active_state()
         p = _make_player_active(state, 0, health=500)
-        p.powers = int(PlayerPower.ACID_AFFLICTION)
-        p.acid_timer = 1
+        p.powers = int(PlayerPower.INVULN)
+        p.invuln_timer = 1
         state.frame_counter = 1          # ungated, so no damage this frame
         gp.main_move_players(state)                       # 0x4A880
-        assert p.acid_timer == 0
-        assert not (p.powers & int(PlayerPower.ACID_AFFLICTION))
+        assert p.invuln_timer == 0
+        assert not (p.powers & int(PlayerPower.INVULN))
 
 
 # =============================================================================
@@ -3792,7 +3791,7 @@ class TestInvulnerabilityObjectiveIsAnAssignment:
         state = _trick_state(player_items._TRICK_NOUSEINVUL)
         p = _make_player_active(state, 0)
         self._pickup(state)
-        assert p.acid_timer == player_items._INVULN_TIMER_LOAD
+        assert p.invuln_timer == player_items._INVULN_TIMER_LOAD
 
 
 class TestHiddenPotObjectiveCodes:

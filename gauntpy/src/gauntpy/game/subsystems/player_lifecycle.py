@@ -328,7 +328,7 @@ def player_resetcounters(state: GameState, player_index: int) -> None:
     zeroed, ``player_bonusmult`` (0x90490E) goes back to 1,
     ``player_state_timer`` (0x904A26) to its 0xFFFF disabled sentinel,
     ``player_powers`` (0x9048E0) and the four timed-power countdowns
-    (invisibility 0x905F50, repulsiveness 0x905F38, acid 0x905F40, supershot
+    (invisibility 0x905F50, repulsiveness 0x905F38, invulnerability 0x905F40, supershot
     0x905F68) are cleared along with ``player_stundelay`` (0x904A54), and the
     transport phase word (0x904BCE) is parked on -1.
 
@@ -346,7 +346,7 @@ def player_resetcounters(state: GameState, player_index: int) -> None:
     player.powers = 0                                        # 0x9048E0
     state.player_invis_timer[player_index] = 0               # 0x905F50
     state.player_repulse_timer[player_index] = 0             # 0x905F38
-    player.acid_timer = 0                                    # 0x905F40
+    player.invuln_timer = 0                                    # 0x905F40
     player.supershot = 0                                     # 0x905F68
     player.stundelay = 0                                     # 0x904A54
     state.player_tport_phase[player_index] = -1              # 0x904BCE = 0xFFFF
@@ -617,7 +617,7 @@ def main_health_countdown(state: GameState) -> None:
         path, so the drain cannot push health negative;
       * ``player_status == 1`` exactly (ALIVE_HERE);
       * ``active_mob_ids[p] != 0`` -- no MOB, no drain;
-      * ``acid_timer == 0`` (0x905F40) -- an acid-slowed player stops draining.
+      * ``invuln_timer == 0`` (0x905F40) -- an invulnerable player stops draining.
 
     Each drained point raises ``player_redraw`` bit 1 (0x4676A) and, below 200
     health, calls ``player_lowhealth`` (0x46794) -- **on the drain tick, not on
@@ -652,7 +652,7 @@ def main_health_countdown(state: GameState) -> None:
                 continue
             if player.mob_slot == 0:                        # 0x46744
                 continue
-            if player.acid_timer != 0:                      # 0x46754
+            if player.invuln_timer != 0:                      # 0x46754
                 continue
             player.health -= 1  # 32-bit longword; no mask (§4.3 TRAP 2)
             state.health_dirty[player_index] = 1            # player_redraw bit 1

@@ -63,7 +63,7 @@ def initialize_player_temporary_power(
     elif obj_type == int(MazeObjIds.POWER_SUPERSHOT):
         player.supershot = (player.supershot + _SUPERSHOT_CHARGES) & 0xFF
     elif obj_type == int(MazeObjIds.POWER_INVULN):
-        player.acid_timer = _INVULN_TIMER_LOAD
+        player.invuln_timer = _INVULN_TIMER_LOAD
 
 
 #: The treasure-room maze band (0x519FE/0x51A08): mazes 0x68 through 0x72 skip
@@ -628,7 +628,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     # ── Stun / trap tiles ─────────────────────────────────────────────────────
     if obj_type == int(MazeObjIds.TILE_STUN):
         _clear_floor_marker(state, tile_mob_slot)
-        if player.acid_timer == 0:
+        if player.invuln_timer == 0:
             if state.mazenum_current < 0x73:
                 stun_add = (120, 45, 120, 60)[player.character & 3]
                 sound_id = (0x32, 0x34, 0x32, 0x33)[player.character & 3]
@@ -656,19 +656,6 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         _tile_contact_progress(state, player_index)
         return -1
 
-    # ── IT tile ───────────────────────────────────────────────────────────────
-    if obj_type == int(MazeObjIds.MONST_IT):
-        # §4.6: IT tile (sound 0x35).
-        _sound_play(state, 0x35)
-        return -1
-
-    # ── Acid puddle ───────────────────────────────────────────────────────────
-    if obj_type == int(MazeObjIds.MONST_ACID):
-        # §4.6: acid puddle (sound 0x36, applies acid slow).
-        player.acid_timer = max(player.acid_timer, 180)  # ~3 s at 60 Hz
-        _sound_play(state, 0x36)
-        return -1
-
     # ── Power-up tiles ────────────────────────────────────────────────────────
     # 0x517BA-0x518B0, one arm per type, reached through the tile jump table at
     # 0x5122A.  Every arm pushes its power-up ID, calls
@@ -682,10 +669,10 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         _player_give_item(state, player_index, obj_type)
         initialize_player_temporary_power(state, player_index, obj_type)
         if obj_type == int(MazeObjIds.POWER_INVULN):
-            # 0x5189E arms the 0x905F40 countdown this port calls ``acid_timer``
-            # -- the same word the acid puddle uses (0x512D0) and the same one
-            # main_move_players drains health from every eighth frame
-            # (0x4A838-0x4A85E).  Its expiry clears this power's bit (0x4A880).
+            # 0x5189E arms ``invuln_timer`` (0x905F40), the word that blocks
+            # damage and makes main_move_players drain health every eighth
+            # frame (0x4A838-0x4A85E).  Its expiry clears this power's bit
+            # (0x4A880).
             # 0x518B2: this is the "don't use invulnerability" objective's
             # tell.  Unlike every other trick site it *assigns* 1 rather than
             # bumping (0x518C8 ``move.b #$1``), so picking up a second one

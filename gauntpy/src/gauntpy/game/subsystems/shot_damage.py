@@ -358,17 +358,17 @@ def _handle_player_victim(state: GameState, slot: int, shooter_id: int) -> int:
     _trick_set(state, shooter_id, TRICK_NOHURTFRIENDS, 1)
 
     hurt = False
-    if not victim.acid_timer and (state.level_flags_4 & _LFLAG4_SHOTSTUN):
+    if not victim.invuln_timer and (state.level_flags_4 & _LFLAG4_SHOTSTUN):
         victim.stundelay = min(victim.stundelay + _SHOT_STUN_ADD, _SHOT_STUN_MAX)
         state.player_fighting_dir[victim_index] = 0
         victim.hurt_cooldown = _SHOT_HURT_COOLDOWN
         hurt = True
-    elif not victim.acid_timer and (state.level_flags_4 & _LFLAG4_SHOTHURT):
+    elif not victim.invuln_timer and (state.level_flags_4 & _LFLAG4_SHOTHURT):
         victim.health = max(0, victim.health - _SHOT_HP_HIT)
         _hurt_latch(state, victim_index)
         victim.hurt_cooldown = _SHOT_HURT_COOLDOWN
         hurt = True
-    elif state.players[shooter_id].supershot and not victim.acid_timer:
+    elif state.players[shooter_id].supershot and not victim.invuln_timer:
         victim.health = max(0, victim.health - _SUPERSHOT_HP_HIT)
         _hurt_latch(state, victim_index)
         victim.hurt_cooldown = _SHOT_HURT_COOLDOWN
@@ -388,8 +388,8 @@ def _monster_shot_on_player(state: GameState, slot: int, shooter_id: int,
     """0x4B1AC -- a monster/dragon shot landing on a player."""
     index = _monstshot_damage_index(state, victim, shooter_id)
 
-    if victim.acid_timer:
-        # 0x4B306: an acid-slowed player is immune, and loses trick 8.
+    if victim.invuln_timer:
+        # 0x4B306: an invulnerable player is immune, and loses trick 8.
         from .secret_rooms import TRICK_NOUSEINVUL
         _trick_set(state, victim_index, TRICK_NOUSEINVUL, 0)
         return _finish(state, slot, shooter_id)

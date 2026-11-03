@@ -390,10 +390,10 @@ def scan_move_path_interactions(state: GameState, hero_slot: int,
                 break
             if candidate == previous:
                 # Python-only guard: the ROM loop has no exit when a record
-                # survives its own resolution and still overlaps. The ROM never
-                # gets there. Only exits and transporters survive, and both are
-                # marker pictures that cannot overlap a cell-aligned hero. Here
-                # it can only fire through the non-ROM arms in ISSUES S-198.
+                # survives its own resolution and still overlaps. Neither ever
+                # gets there with real records: only exits and transporters
+                # survive, and both are marker pictures that cannot overlap a
+                # cell-aligned hero.
                 break
             previous = candidate
             _tport_landing_trick(state, player_index, candidate)  # 0x50C30

@@ -838,11 +838,11 @@ class TestMonsterShotDamageIndex:
 
 class TestAcidImmunity:
     def test_acid_slowed_player_ignores_monster_shots(self):
-        """0x4B306: an acid-slowed victim takes no monster-shot damage."""
+        """0x4B306: an invulnerable victim takes no monster-shot damage."""
         state = _make_state()
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
         state.players[1].health = 100
-        state.players[1].acid_timer = 30
+        state.players[1].invuln_timer = 30
         _place_player_mob(state, 303, 1)
         _arm_monster_shot(state, 4)
         result = resolve_shot_hit(state, 303, 4)
@@ -852,7 +852,7 @@ class TestAcidImmunity:
     def test_acid_slowed_victim_loses_trick_eight(self):
         state = _make_state()
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
-        state.players[1].acid_timer = 30
+        state.players[1].invuln_timer = 30
         state.secret_trick_id = 8
         state.secret_tricks_flags[1] = 3
         _place_player_mob(state, 304, 1)
@@ -2252,7 +2252,7 @@ class TestHudLatches:
         state = _make_state()
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
         state.players[1].health = 100
-        state.players[1].acid_timer = 30
+        state.players[1].invuln_timer = 30
         _place_player_mob(state, 409, 1)
         _arm_monster_shot(state, 4)
         _clear_latches(state)
@@ -3454,14 +3454,14 @@ class TestNoGetHitTrick:
 
 
 class TestNoUseInvulTrick:
-    """0x4B306 -- an acid-slowed victim loses the objective."""
+    """0x4B306 -- an invulnerable victim loses the objective."""
 
     def test_the_acid_immune_victim_is_cleared(self):
         state = _make_state()
         state.secret_trick_id = TRICK_NOUSEINVUL
         state.secret_tricks_flags[1] = 3
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
-        state.players[1].acid_timer = 30
+        state.players[1].invuln_timer = 30
         _place_player_mob(state, 322, 1)
         _arm_monster_shot(state, 4)
         resolve_shot_hit(state, 322, 4)
@@ -3472,7 +3472,7 @@ class TestNoUseInvulTrick:
         state.secret_trick_id = TRICK_NOGETHIT
         state.secret_tricks_flags[1] = 3
         state.players[1].status = int(PlayerStatus.ALIVE_HERE)
-        state.players[1].acid_timer = 30
+        state.players[1].invuln_timer = 30
         _place_player_mob(state, 323, 1)
         _arm_monster_shot(state, 4)
         resolve_shot_hit(state, 323, 4)

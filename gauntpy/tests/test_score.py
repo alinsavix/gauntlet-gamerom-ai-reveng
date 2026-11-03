@@ -464,25 +464,25 @@ def test_a_player_without_a_live_mob_never_dims() -> None:
     assert info_panel(state).players[0].health_attr == PLAYER_TEXT_PALETTE_WORDS[0]
 
 
-def test_acid_slowed_players_shift_by_0x2000_instead() -> None:
+def test_invulnerable_players_shift_by_0x2000_instead() -> None:
     state = _normal_state()
     state.frame_counter = 0
     state.players[0].mob_slot = 0x120
     state.players[0].state_timer = 0x000C   # not in the low-health dim half
-    state.players[0].acid_timer = 90
+    state.players[0].invuln_timer = 90
 
     main_score_display(state)
 
     assert info_panel(state).players[0].health_attr == PLAYER_TEXT_PALETTE_WORDS[0] - 0x2000
 
 
-def test_the_low_health_dim_wins_over_the_acid_shift() -> None:
+def test_the_low_health_dim_wins_over_the_invuln_shift() -> None:
     """0x45A6E branches straight to the display call, skipping the acid test."""
     state = _normal_state()
     state.frame_counter = 0
     state.players[0].mob_slot = 0x120
     state.players[0].state_timer = 0x0004
-    state.players[0].acid_timer = 90
+    state.players[0].invuln_timer = 90
 
     main_score_display(state)
 

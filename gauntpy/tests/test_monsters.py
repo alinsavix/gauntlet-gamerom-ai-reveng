@@ -1655,10 +1655,10 @@ class TestIterationAndContact:
         assert state.sound_log == []
         assert state.rng.calls == 0
 
-    def test_acid_suppresses_voice_after_reloading_timer(self):
+    def test_invulnerability_suppresses_voice_after_reloading_timer(self):
         state = GameState(level_players_active=4)
         state.rng = _FixedRNG(7, 3)
-        state.players[0].acid_timer = 1
+        state.players[0].invuln_timer = 1
 
         player_hurt_speech_timer(state, 0)
 
@@ -1976,15 +1976,15 @@ class TestContactDamageExact:
         assert state.mobs.obj_type(mslot) == 0
         assert state.players[0].health == 1000 - 48
 
-    def test_acid_timer_blocks_damage_but_not_the_payout(self):
+    def test_invuln_timer_blocks_damage_but_not_the_payout(self):
         state = GameState()
         mslot = pack_slot(5, 5)
         _place_monster(state, mslot, MazeObjIds.MONST_ACID, health=1, moving=True)
         _place_player(state, 0, pack_slot(5, 6))
         state.players[0].health = 1000
-        state.players[0].acid_timer = 30
+        state.players[0].invuln_timer = 30
         monster_playerhit(state, 0, mslot)
-        assert state.players[0].health == 1000, "acid_timer grants immunity"
+        assert state.players[0].health == 1000, "invuln_timer grants immunity"
         assert state.players[0].score == 30
 
     def test_super_sorcerer_tier(self):
@@ -2017,14 +2017,14 @@ class TestContactDamageExact:
 class TestFirstEncounterDialog:
     """0x4986A/0x496F4 -- the once-per-game "you have met a ..." box."""
 
-    def _hit(self, obj_type, nibble, acid_timer=0):
+    def _hit(self, obj_type, nibble, invuln_timer=0):
         state = GameState()
         state.game_mode = 0
         mslot = pack_slot(5, 5)
         _place_monster(state, mslot, obj_type, health=nibble, moving=True)
         _place_player(state, 0, pack_slot(5, 6))
         state.players[0].health = 1000
-        state.players[0].acid_timer = acid_timer
+        state.players[0].invuln_timer = invuln_timer
         monster_playerhit(state, 0, mslot)
         return state
 
@@ -2051,9 +2051,9 @@ class TestFirstEncounterDialog:
         state = self._hit(MazeObjIds.MONST_IT, 8)
         assert state.dialog_first_encounter_flags & 0x10000000
 
-    def test_acid_immunity_skips_the_dialog(self):
-        """The call sits inside the acid_timer guard (0x497F8)."""
-        state = self._hit(MazeObjIds.MONST_GRUNT, 4, acid_timer=30)
+    def test_invulnerability_skips_the_dialog(self):
+        """The call sits inside the invuln_timer guard (0x497F8)."""
+        state = self._hit(MazeObjIds.MONST_GRUNT, 4, invuln_timer=30)
         assert state.dialog_first_encounter_flags == 0
 
     def test_second_encounter_is_silent(self):
@@ -2128,7 +2128,7 @@ class TestSecretRoomProgress:
     dispatcher, the movement engine or the shooting code.
     """
 
-    def _hit(self, obj_type, nibble, *, task, acid_timer=0, progress=0,
+    def _hit(self, obj_type, nibble, *, task, invuln_timer=0, progress=0,
              player=0, it=-1):
         state = GameState()
         state.game_mode = 0
@@ -2139,7 +2139,7 @@ class TestSecretRoomProgress:
         _place_monster(state, mslot, obj_type, health=nibble, moving=True)
         _place_player(state, player, pack_slot(5, 6))
         state.players[player].health = 1000
-        state.players[player].acid_timer = acid_timer
+        state.players[player].invuln_timer = invuln_timer
         monster_playerhit(state, player, mslot)
         return state
 
@@ -2187,21 +2187,21 @@ class TestSecretRoomProgress:
 
     def test_a_hit_while_immune_clears_the_no_invul_progress(self):
         state = self._hit(MazeObjIds.MONST_GRUNT, 4, task=TRICK_NOUSEINVUL,
-                          acid_timer=30, progress=1)
+                          invuln_timer=30, progress=1)
         assert state.secret_tricks_flags[0] == 0
         assert state.players[0].health == 1000, "immune, so no damage either"
 
     def test_a_hit_that_lands_leaves_the_progress_alone(self):
         """0x49890 jumps over the test, so only the immune branch clears it."""
         state = self._hit(MazeObjIds.MONST_GRUNT, 4, task=TRICK_NOUSEINVUL,
-                          acid_timer=0, progress=1)
+                          invuln_timer=0, progress=1)
         assert state.secret_tricks_flags[0] == 1
         assert state.players[0].health < 1000
 
     def test_another_task_survives_an_immune_hit(self):
         for task in (0, 7, 9, 0x5C):
             state = self._hit(MazeObjIds.MONST_GRUNT, 4, task=task,
-                              acid_timer=30, progress=1)
+                              invuln_timer=30, progress=1)
             assert state.secret_tricks_flags[0] == 1, hex(task)
 
     def test_every_family_clears_it_on_the_immune_path(self):
@@ -2213,23 +2213,23 @@ class TestSecretRoomProgress:
         )
         for obj_type, nibble in families:
             state = self._hit(obj_type, nibble, task=TRICK_NOUSEINVUL,
-                              acid_timer=30, progress=1)
+                              invuln_timer=30, progress=1)
             assert state.secret_tricks_flags[0] == 0, obj_type
 
     def test_the_it_tag_path_does_not_reach_the_clear(self):
         """IT branches away at 0x4967A, long before 0x49892."""
         state = self._hit(MazeObjIds.MONST_IT, 8, task=TRICK_NOUSEINVUL,
-                          acid_timer=30, progress=1)
+                          invuln_timer=30, progress=1)
         assert state.secret_tricks_flags[0] == 1
 
     def test_a_lobber_never_reaches_the_clear(self):
         state = self._hit(MazeObjIds.MONST_LOBBER, 0xB, task=TRICK_NOUSEINVUL,
-                          acid_timer=30, progress=1)
+                          invuln_timer=30, progress=1)
         assert state.secret_tricks_flags[0] == 1
 
     def test_a_cleared_counter_loses_the_exit_check(self):
         state = self._hit(MazeObjIds.MONST_GRUNT, 4, task=TRICK_NOUSEINVUL,
-                          acid_timer=30, progress=1)
+                          invuln_timer=30, progress=1)
         secret_trick_check(state, 0)
         assert state.secret_player < 0
 

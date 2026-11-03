@@ -2883,7 +2883,7 @@ fs *
 fs *
 'f ram.reflect_timer 8 0x00905f38
 fs *
-'f ram.acid_timer 8 0x00905f40
+'f ram.invuln_timer 8 0x00905f40
 fs *
 'f ram.stun_timer 8 0x00905f48
 fs *
