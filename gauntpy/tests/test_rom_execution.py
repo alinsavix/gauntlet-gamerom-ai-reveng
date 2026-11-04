@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
 import sys
 
 import pytest
@@ -366,3 +368,29 @@ def test_an_impact_takes_the_roms_position_and_depth_key(target, shooter, hpos, 
     shot_impact_spawn(state, target, shooter)
     assert machine.record(0x0D)[:3] == _python_record(state, 0x0D)[:3]
     assert machine.r16(0x904940 + 2 * 0x0D) == state.mobs.depth_key[0x0D]
+
+
+# --- crash reports --------------------------------------------------------------
+
+def test_starting_unicorn_is_quiet_and_a_real_crash_is_not(tmp_path):
+    """conftest.py hides Unicorn's start-up fault from faulthandler, and only that."""
+    (tmp_path / "test_crash.py").write_text(
+        "import faulthandler\n"
+        "import rom_exec\n"
+        "def test_crash():\n"
+        "    rom_exec.RomMachine()\n"
+        "    rom_exec.RomMachine()\n"
+        "    faulthandler._read_null()\n",
+        encoding="utf-8",
+    )
+    root = Path(__file__).resolve().parents[1]
+    run = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "conftest", "-p", "no:cacheprovider",
+         "--rootdir", str(tmp_path), str(tmp_path / "test_crash.py")],
+        cwd=tmp_path, capture_output=True, text=True, timeout=60,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(
+            str(root / name) for name in ("tests", "tools", "src"))},
+    )
+    assert run.returncode != 0
+    assert run.stderr.count("Current thread") == 1, run.stderr
+    assert "test_crash.py" in run.stderr
