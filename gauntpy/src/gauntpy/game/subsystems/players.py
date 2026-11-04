@@ -69,7 +69,6 @@ from .player_items import (
     player_tile_interact as player_tile_interact,
 )
 from .player_lifecycle import (
-    _play_random_character_voice,
     calc_score_per_coin as calc_score_per_coin,
     main_handle_death as main_handle_death,
     main_health_countdown as main_health_countdown,
@@ -159,10 +158,6 @@ _DOOR_IDLE_THRESHOLD_NO_KEYS = 0x4B0
 _POWER_SHOTSPEED = int(PlayerPower.SHOTSPEED)   # bit 3, POWERUP_BIT_MASKS[3]
 # shot_reflect_sound_tbl -- ROM 0x5BAD0, indexed by character.
 _SHOT_REFLECT_SOUND_TBL = [0x45, 0x47, 0x46, 0x48]
-# Character-specific death SFX, refs/soundcmds.csv 0x14-0x17; ROM 0x57932
-# (four longwords), played by the death path of main_health_countdown (0x46B2A).
-_PLAYER_DEATH_SOUND_BASE = 0x14
-
 # Shot spawn offsets, ROM shot_spawn_hpos_tbl (0x5BAB0) and shot_spawn_vpos_tbl
 # (0x5BAC0), read by player_create_shot at 0x536FA/0x53746 and added to the
 # firing player's masked hpos/vpos.  Both are native position words, so they
@@ -514,56 +509,7 @@ def _status8_complete(state: GameState, player_index: int) -> None:
         show_continue_prompt(state)
 
 
-# ROM: part game:0x466F6 | Health-zero drop at 0x467E8-0x46992: generator or key pile in the hero's slot, its sparkle, and the shot/transport-slot release.
-def _leave_death_drop(state: GameState, player_index: int, slot: int) -> None:
-    """Replace a dead hero's record with what the ROM leaves behind.
-
-    ``mob_create`` rewrites the hero's own slot without relinking it. With no
-    keys it is the strongest ghost generator (type 0x1E) at the hero's
-    position; with keys, a KEY record at the hero's cell whose state is the
-    key count (0x0AFC with size code 9 for one key; 0x1D76, size code 0x11
-    and four pixels further left for several). The sparkle then starts on it,
-    and the hero's shot (slot 1+p)
-    and transport animation (slot 25+p) are released.
-    """
-    from ..maze import hsize_tier, vpos_offset
-    from .player_items import _KEY_PICTURE, _KEY_PILE_PICTURE
-    from .shot_damage import _MAZEOBJ_BASE_PICTURE_TBL
-    from .shot_effects import tport_cycle_start
-
-    mobs = state.mobs
-    keys = state.players[player_index].keysnum & 0xFF
-    if keys == 0:                                                 # 0x467F2
-        generator = int(MazeObjIds.GEN_GHOST3)
-        mobs.create(
-            slot,
-            tile=_MAZEOBJ_BASE_PICTURE_TBL[generator],            # 0x586C8
-            hpos=(position_field(mobs.hpos[slot]) + hsize_tier(generator)) & 0xFFFF,
-            vpos=(position_field(mobs.vpos[slot]) + vpos_offset(generator)) & 0xFFFF,
-            obj_type=generator,
-        )                                                         # 0x46854
-    else:
-        single = keys == 1                                        # 0x46866
-        key = int(MazeObjIds.KEY)
-        mobs.create(
-            slot,
-            tile=_KEY_PICTURE if single else _KEY_PILE_PICTURE,
-            hpos=(((slot << 11) + hsize_tier(key)
-                   - (0 if single else 0x200)) & 0xFFFF),
-            vpos=((((slot & 0x3E0) ^ 0x3E0) << 6)
-                  + (0x09 if single else 0x11)) & 0xFFFF,
-            obj_type=key,
-            state=keys,
-        )                                                         # 0x46906
-    tport_cycle_start(state, slot, player_index)                  # 0x4691C
-    for channel_slot in (1 + player_index, 0x19 + player_index):  # 0x46922-0x46992
-        if mobs.picture[channel_slot]:
-            mobs.depth_remove(channel_slot - 1)
-            mobs.picture[channel_slot] = 0
-
-
 # ROM: direct game:0x4A53A | Player frame-service/status-dispatch boundary; retains Python synthetic-record cleanup, demo accommodations and extracted helper calls.
-# ROM: part game:0x466F6 | Contains the relocated health-zero death/reset/high-score/continue block from main_health_countdown at 0x467E0-0x46B7E.
 # ROM: part game:0x41C30 | Contains the movement core's occupied-destination tile-interaction/rollback/migration tail at 0x424EC-0x42588, rescheduled after player_try_move.
 def main_move_players(state: GameState) -> None:
     """0x4A53A -- per-frame processing for all four player slots (§4.1).
@@ -680,68 +626,6 @@ def main_move_players(state: GameState) -> None:
         # Neither frame local is written here: the ROM counts a processed player
         # at 0x4A8B4 (after the transport and power-timer work, and only in
         # normal play) and its keys at 0x4AC8C, on the tail below.
-
-        # Death: a player whose health has reached zero (from the flat drain,
-        # forcefield/monster contact, or shots) leaves the level (§4.1 / §4.3).
-        # Without this the player would keep playing with negative health.
-        #
-        # This is the ROM's own death block from main_health_countdown
-        # (0x467E0-0x46B7E), reached from here because this port detects the
-        # zero crossing in the player loop: player_resetcounters (0x4699A)
-        # wipes the slot, the IT label is dropped (0x469C4),
-        # level_players_active is decremented (0x469DA), score-per-coin is
-        # computed (0x46A18) and highscore_check (0x46AC4) decides between
-        # initials entry and the GAME OVER dwell before the panel is rebuilt
-        # (0x46AD0) and the character's death SFX plays (0x46B2A).
-        if player.health <= 0:
-            player.health = 0
-            character = player.character
-            dead_slot = player.mob_slot
-            player.death_damage_counter = 0
-            # The ROM's animation frame *is* player_facing_dir (0x9049A4), so
-            # the death sequence starts from whatever way the hero was facing
-            # and counts down to 4 (0x4A672).
-            state.player_death_anim_frame[player_index] = _PORT_DIR_TO_ROM_DIR[
-                player.direction & 0x07
-            ]
-            state.player_lowhealth_spoken[player_index] = 0       # 0x46944-ish
-            state.player_respawn_speech_timer[player_index] = -1
-            if state.player_it == player_index:                   # 0x469C4
-                state.player_it = 0xFFFF
-                from .score import write_it_labels
-                write_it_labels(state)
-            state.level_players_active = max(0, state.level_players_active - 1)
-            calc_score_per_coin(state, player_index)              # 0x46A18
-            # player_resetcounters clears the inventory, the powers, every
-            # timer and the status; the character and the score survive it, so
-            # the ladder and the panel still have something to show.
-            if dead_slot:
-                _leave_death_drop(state, player_index, dead_slot)
-            player_resetcounters(state, player_index)             # 0x4699A
-            player.character = character
-            player.anim_counter = 0
-            highscore_check(state, player_index)                  # 0x46AC4
-            # highscore_check alone owns the result: a ranked player enters
-            # status 4 for initials; an unranked player remains cleared.
-            setup_infopanel(state, player_index)                  # 0x46AD0
-            _play_random_character_voice(state, character)        # 0x46B16
-            _sound_play(
-                state, _PLAYER_DEATH_SOUND_BASE + (character & 0x03),
-            )                                                     # 0x46B2A
-            if state.level_players_active == 0:                   # 0x46B30
-                if state.dialog_timer:
-                    from .score import main_msgbox_countdown
-                    state.dialog_timer = 1
-                    main_msgbox_countdown(state)                   # 0x46B48
-                if state.levelnum_current == 1:
-                    state.attract_timer = 0x0258                   # 0x46B58
-                else:
-                    state.attract_timer = 0x05DD                   # 0x46B62
-                    show_continue_prompt(state)                    # 0x46B6A
-            if state.thief_victim == player_index:                # 0x46B70
-                from .thief import thief_exit
-                thief_exit(state)
-            continue
 
         # 60-frame damage sample window (§4.3 / 0x50E34).
         player_damage_sample_update(state, player_index)

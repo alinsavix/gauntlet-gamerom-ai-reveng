@@ -213,19 +213,63 @@ def test_collecting_a_key_pile_matches_the_rom(keys, potions, pile):
 
 @pytest.mark.parametrize("keys", [0, 1, 5])
 def test_the_death_drop_matches_the_rom(keys):
-    """main_health_countdown writes the drop before later code this snapshot
-    cannot run (it faults at 0x40632), so only the record is compared."""
     state = GameState(game_mode=GameMode.NORMAL)
     slot = _cell(10, 10)
-    _hero(state, 0, slot, health=0, keysnum=keys)
+    _hero(state, 0, slot, health=0, keysnum=keys, coin_count=1)
     state.mobs.hpos[slot] = (163 << 7) | 0x0C
     state.mobs.vpos[slot] = native_v(158) << 7
     state.level_players_active = 1
     state.frame_counter = 1
     machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
     machine.call(0x466F6)
-    gp.main_move_players(state)
+    assert machine.halted
+    gp.main_health_countdown(state)
     assert machine.record(slot) == _python_record(state, slot)
+
+
+@pytest.mark.parametrize("level,maze,next_maze,survivor,bonus", [
+    (1, 8, 9, False, 6),
+    (5, 40, 41, False, 6),
+    (6, 40, 41, False, 6),      # the rotation's resume position is recorded
+    (6, 0x68, 41, False, 6),    # a treasure room gives way to the next maze first
+    (9, 40, 41, True, 1),
+    (9, 40, 41, True, 2),       # one hero left: the survivor's bonus falls to 1
+    (9, 40, 41, True, 6),
+    (9, 0x68, 41, True, 6),     # the game is not over, so nothing is recorded
+])
+def test_the_death_blocks_game_state_matches_the_rom(level, maze, next_maze, survivor, bonus):
+    state = GameState(game_mode=GameMode.NORMAL)
+    dead, live = _cell(10, 10), _cell(14, 14)
+    _hero(state, 0, dead, health=0, coin_count=1)
+    state.level_players_active = 1
+    if survivor:
+        _hero(state, 1, live, health=500, coin_count=1, bonusmult=bonus)
+        state.level_players_active = 2
+    state.levelnum_current, state.mazenum_current = level, maze
+    state.maze_next, state.maze_number = next_maze, 5
+    state.secret_player = 2
+    state.attract_timer = 0xFFFF
+    state.frame_counter = 1
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    machine.w16(0x904004, level)
+    machine.w16(0x904000, maze)
+    machine.w16(0x904B54, next_maze)
+    machine.w16(0x904010, 5)
+    machine.w8(0x904063, 2)
+    machine.w16(0x904B7C, 0xFFFF)
+    machine.w16(0x90490E + 2, state.players[1].bonusmult)
+    machine.call(0x466F6)
+    assert machine.halted
+    gp.main_health_countdown(state)
+    assert (
+        machine.r16(0x904928), machine.r16(0x904000), machine.r16(0x904010),
+        machine.r8(0x904063), machine.r16(0x904B7C), machine.r16(0x90490E + 2),
+        machine.r16(0x904BFC),
+    ) == (
+        state.level_players_active, state.mazenum_current, state.maze_number,
+        state.secret_player & 0xFF, state.attract_timer, state.players[1].bonusmult,
+        state.rng.seed,
+    )
 
 
 # --- monsters are not tiles ----------------------------------------------------

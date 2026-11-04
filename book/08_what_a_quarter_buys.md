@@ -207,6 +207,12 @@ redistribution is not a fixed pot of multiplier points: floors,
 caps, and the number of other players determine how much the combined
 total changes.
 
+A death changes that ceiling at once. Each survivor at or above twice the
+new active-player count drops to that figure, except that a lone
+survivor at two or more drops all the way to one. Had the Elf died after
+the third pickup, the Valkyrie's three would have become one, and the
+Valkyrie's next 100-point award would have been worth 100.
+
 Solo collection skips the two-step increase. A score bag runs the same
 redistribution before paying its own value, and shows that value as a
 floating number; ordinary treasure shows none. Only treasure counts

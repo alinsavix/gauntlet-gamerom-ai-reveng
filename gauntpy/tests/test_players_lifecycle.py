@@ -27,6 +27,8 @@ checked against ``row76.bin`` rather than the prose docs:
 
 from __future__ import annotations
 
+import pytest
+
 from gauntpy.game import maze as gm
 from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.game.coords import hpos_x, native_v, vpos_y
@@ -163,7 +165,9 @@ class TestMainHealthCountdown:
         player_lifecycle.main_health_countdown(state)
         assert p.health == 0, "0-health player must not drain further (0x46720)"
 
-        p.health = -5           # e.g. an overshooting forcefield hit
+        state = _active_state()
+        p = _make_player_active(state, 0, health=-5)
+        state.frame_counter = 0
         player_lifecycle.main_health_countdown(state)
         assert p.health == -6, "negative health must survive unmasked"
 
@@ -747,7 +751,7 @@ class TestDyingStatusSequence:
         p = _make_player_active(state, 0, health=500)
         state.level_players_active = 1
         p.health = 0
-        gp.main_move_players(state)
+        player_lifecycle.main_health_countdown(state)
         assert p.status == int(PlayerStatus.REMOVED)
         assert state.level_players_active == 0, "active count must decrement"
 
@@ -757,18 +761,9 @@ class TestDyingStatusSequence:
         p = _make_player_active(state, 0, health=0)
         state.player_lowhealth_spoken[0] = 1
         state.player_respawn_speech_timer[0] = 500
-        gp.main_move_players(state)
+        player_lifecycle.main_health_countdown(state)
         assert state.player_lowhealth_spoken[0] == 0
         assert state.player_respawn_speech_timer[0] == -1
-
-    def test_negative_health_unranked_player_is_removed_and_clamped(self):
-        state = _active_state()
-        p = _make_player_active(state, 0, health=500)
-        state.level_players_active = 1
-        p.health = -50            # e.g. a big forcefield/contact hit
-        gp.main_move_players(state)
-        assert p.status == int(PlayerStatus.REMOVED)
-        assert p.health == 0, "health should clamp to 0 on death"
 
     def test_death_transition_plays_character_sfx(self):
         state = _active_state()
@@ -777,7 +772,7 @@ class TestDyingStatusSequence:
         )
         state.level_players_active = 1
 
-        gp.main_move_players(state)
+        player_lifecycle.main_health_countdown(state)
 
         assert 0x16 in state.sound_log
 
@@ -1631,7 +1626,7 @@ class TestRedrawBitsOnEveryValueChange:
         state = _active_state()
         p = _make_player_active(state, 0, health=0)
         p.score = 777
-        gp.main_move_players(state)
+        player_lifecycle.main_health_countdown(state)
         field = info_panel(state).players[0]
         assert field.health_drawn and field.health == 0     # 0x46AD0
         assert field.score == 777
@@ -2186,7 +2181,7 @@ class TestDeathAnimationSeed:
         state = _active_state()
         p = _make_player_active(state, 0, health=0)
         p.direction = 2                 # port "down" -> ROM 4
-        gp.main_move_players(state)
+        player_lifecycle.main_health_countdown(state)
         assert state.player_death_anim_frame[0] == 4
 
     def test_death_clears_the_live_migrated_record_before_reset(self):
@@ -2202,7 +2197,7 @@ class TestDeathAnimationSeed:
             state=0,
         )
 
-        gp.main_move_players(state)
+        player_lifecycle.main_health_countdown(state)
 
         # 0x467FA-0x46854: a keyless hero leaves the strongest ghost generator
         # in its own, still-linked slot, at its own position.
@@ -2228,7 +2223,7 @@ class TestDeathAnimationSeed:
                               obj_type=int(MazeObjIds.PLAYERSTART))
             state.mobs.picture[1] = 0x1234            # a live shot in flight
 
-            gp.main_move_players(state)
+            player_lifecycle.main_health_countdown(state)
 
             assert state.mobs.obj_type(slot) == int(MazeObjIds.KEY)
             assert state.mobs.state(slot) == keys
@@ -4383,7 +4378,7 @@ class TestDeathFlow:
         state.level_players_active = 1
         state.player_it = 0
         p.health = 0
-        gp.main_move_players(state)
+        player_lifecycle.main_health_countdown(state)
         return state
 
     def test_death_wipes_the_inventory_and_the_powers(self):
@@ -4440,6 +4435,98 @@ class TestDeathFlow:
         state = self._kill(level=2)
         assert state.attract_timer == 0x05DD
         assert state.title_intro_state == 1
+
+    def test_the_player_loop_does_not_kill(self):
+        """The block is in main_health_countdown, which runs after the monsters."""
+        state = _active_state()
+        p = _make_player_active(state, 0, health=0)
+        state.level_players_active = 1
+        gp.main_move_players(state)
+        assert p.status == int(PlayerStatus.ALIVE_HERE)
+        assert p.mob_slot != 0
+        assert state.level_players_active == 1
+
+    def _two_heroes(self, *, level: int = 2):
+        state = _active_state()
+        state.levelnum_current = level
+        dead = _make_player_active(state, 0, health=0)
+        live = _make_player_active(state, 1, health=500, mob_slot=0x90)
+        state.level_players_active = 2
+        return state, dead, live
+
+    def test_an_earlier_death_reloads_the_timer_but_shows_no_prompt(self):
+        """0x46B4E is past the active-count branch, and 0x44C7E has its own gate."""
+        state, _, live = self._two_heroes()
+        state.attract_timer = 0xFFFF
+        player_lifecycle.main_health_countdown(state)
+        assert state.level_players_active == 1
+        assert state.attract_timer == 0x05DD
+        assert state.title_intro_state != 1
+        assert live.status == int(PlayerStatus.ALIVE_HERE)
+
+    @pytest.mark.parametrize("before", [1, 2, 4, 6])
+    def test_a_death_lowers_the_last_survivors_bonus(self, before):
+        """0x46C04-0x46C52 with one hero left: anything from 2 up becomes 1."""
+        state, _, live = self._two_heroes()
+        live.bonusmult = before
+        player_lifecycle.main_health_countdown(state)
+        assert live.bonusmult == 1
+
+    @pytest.mark.parametrize("before,after", [(1, 1), (3, 3), (4, 4), (6, 4), (8, 4)])
+    def test_a_death_caps_the_survivors_bonus_at_twice_the_heroes(self, before, after):
+        """0x46C04-0x46C52 with two heroes left: the cap is four."""
+        state, _, live = self._two_heroes()
+        live.bonusmult = before
+        _make_player_active(state, 2, health=500, mob_slot=0x91)
+        state.level_players_active = 3
+        player_lifecycle.main_health_countdown(state)
+        assert state.level_players_active == 2
+        assert live.bonusmult == after
+
+    def test_no_death_leaves_the_bonus_alone(self):
+        state, dead, live = self._two_heroes()
+        dead.health = 500
+        live.bonusmult = 8
+        player_lifecycle.main_health_countdown(state)
+        assert live.bonusmult == 8
+
+    def test_game_over_clears_the_secret_player(self):
+        """0x469E0, and only once nobody is left."""
+        state = _active_state()
+        _make_player_active(state, 0, health=0)
+        state.level_players_active = 1
+        state.secret_player = 2
+        player_lifecycle.main_health_countdown(state)
+        assert state.secret_player == -1
+        state, _, _ = self._two_heroes()
+        state.secret_player = 1
+        player_lifecycle.main_health_countdown(state)
+        assert state.secret_player == 1
+
+    @pytest.mark.parametrize("level,maze,next_maze,resume,after_maze,after_resume", [
+        (6, 40, 41, 5, 40, 40),      # 0x46A00: the rotation resumes here
+        (5, 40, 41, 5, 40, 5),       # too early in the game to record
+        (6, 0x68, 41, 5, 41, 41),    # 0x469E8: not a treasure room
+        (5, 0x68, 41, 5, 41, 5),
+    ])
+    def test_game_over_records_the_maze_rotation(
+        self, level, maze, next_maze, resume, after_maze, after_resume,
+    ):
+        state = _active_state()
+        _make_player_active(state, 0, health=0)
+        state.level_players_active = 1
+        state.levelnum_current = level
+        state.mazenum_current = maze
+        state.maze_next = next_maze
+        state.maze_number = resume
+        player_lifecycle.main_health_countdown(state)
+        assert (state.mazenum_current, state.maze_number) == (after_maze, after_resume)
+
+    def test_an_earlier_death_does_not_record_the_rotation(self):
+        state, _, _ = self._two_heroes(level=6)
+        state.mazenum_current, state.maze_next, state.maze_number = 0x68, 41, 5
+        player_lifecycle.main_health_countdown(state)
+        assert (state.mazenum_current, state.maze_number) == (0x68, 5)
 
 
 class TestNameEntry:
@@ -4619,7 +4706,7 @@ class TestNameEntry:
         state.level_players_active = 1
         p.health = 0
 
-        gp.main_move_players(state)                      # the death frame
+        player_lifecycle.main_health_countdown(state)    # the death frame
         assert p.status == int(PlayerStatus.DYING)
         assert p.highscore_rank == 0
 

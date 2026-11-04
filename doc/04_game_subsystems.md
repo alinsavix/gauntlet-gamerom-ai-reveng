@@ -864,6 +864,17 @@ hero's live shot (slot 1+p) and transport animation (slot 25+p) through
 `mob_depth_remove` and clears their pictures (0x46922-0x46992), and only then
 resets the player's counters.
 
+This pass runs after `main_move_monsters`, so a hero whose health reached zero
+anywhere in the frame is still there for that frame's monsters, and for that frame's
+player loop if the damage came earlier. A MAME capture of the demo with the Elf's
+health poked to zero shows it: acid blobs still step on the frame the last hero dies,
+and stop from the next one. The pass tests only for a MOB and zero health, not
+`player_status`.
+
+Once any hero has died, 0x46C04-0x46C52 caps the survivors' `player_bonusmult`: a value
+at or above twice `level_players_active` becomes that figure, or 1 if one hero remains.
+Treasure pickup applies the same ceiling (0x51A46) but holds a lone hero at 2.
+
 **Confidence: Verified.** `player_damage_sample_update(uint16 player_index)`
 (0x50E34), formerly misidentified as a pickup detector, advances a signed
 60-frame window. At expiry it increments the sample count. Health below 500 plus

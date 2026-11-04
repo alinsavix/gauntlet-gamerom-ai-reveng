@@ -109,6 +109,31 @@ def test_a_poked_demon_fires_from_frame_zero_as_on_mame():
 
 
 @requires_roms
+def test_monsters_still_see_a_hero_on_the_frame_it_dies():
+    """S-200, from traces/mame/poked/death.txt, MAME 0.289.
+
+    A dialog holds the gameplay band until 1609, so the Elf's zero health is first read
+    then.  The acid blobs in slots 131 and 133 step that frame, because
+    main_health_countdown runs after main_move_monsters, and the Elf leaves its drop.
+    """
+    for iteration, state in _run_demo("death"):
+        mobs = state.mobs
+        if iteration == 1608:
+            assert state.players[1].mob_slot == 201
+            assert (mobs.hpos[131] & 0xFFFF, mobs.vpos[131] & 0xFFFF) == (0x1601, 0xD792)
+            assert (mobs.hpos[133] & 0xFFFF, mobs.vpos[133] & 0xFFFF) == (0x2601, 0xDA92)
+        elif iteration == 1609:
+            assert state.rng.seed == 0x324D
+            assert state.players[1].mob_slot == 0
+            assert (mobs.hpos[131] & 0xFFFF, mobs.vpos[131] & 0xFFFF) == (0x1601, 0xD812)
+            assert (mobs.hpos[133] & 0xFFFF, mobs.vpos[133] & 0xFFFF) == (0x2681, 0xDA12)
+            assert (mobs.picture[201], mobs.obj_type(201)) == (0x09BD, 0x1E)
+        elif iteration == 2208:
+            assert state.rng.seed == 0x947B
+            break
+
+
+@requires_roms
 def test_a_poked_lobber_run_matches_mame():
     """S-203, from traces/mame/poked/lobbers.txt, MAME 0.289.
 

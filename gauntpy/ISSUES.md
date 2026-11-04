@@ -55,16 +55,34 @@ in gauntpy (0xF0). And a neighbouring record of type 0x0F with no hero behind it
 passed by the ROM (dispatch to 0x5227A) and blocks in gauntpy; the thief is the real
 case of that record, and the fixture is not a real thief.
 
-### S-200 · monsters differ on the frame a hero dies
-
-Poking the demo Elf's health to zero at iteration 1500 in MAME and gauntpy gives the
-same run until the death at iteration 1609. The drop matches the ROM (see S-197), but
-two acid blobs are a step apart on that frame. gauntpy runs the death block inside
-`main_move_players`; the ROM runs it in `main_health_countdown`, so the monster walk
-probably sees the hero at a different point in the frame. Not yet traced. Comparison
-stops at the first difference, so later frames are unchecked.
-
 ## Resolved issues
+
+### S-200 · the death block ran before the monsters, and lacked four of its writes
+
+Poking the demo Elf's health to zero at iteration 1500 gave the same run in MAME and
+gauntpy until 1609, the first frame after a dialog releases the gameplay band, where two acid
+blobs stepped on the arcade and stood still in gauntpy. The ROM's death block is in
+`main_health_countdown` (0x467E0), after `main_move_monsters`, so the monsters still see the
+hero on the frame it dies. gauntpy ran it at the top of the hero's turn in `main_move_players`.
+It is now `_player_dies`, called from the same place as on the ROM, and the `death` run matches
+MAME through the end of its capture at 2208. A hero killed by a monster now also dies on that
+frame, rather than the next one after shots and the player loop had run.
+
+Reading the block against the ROM found what gauntpy's copy had left out:
+
+- After any death, each survivor's `player_bonusmult` is capped (0x46C04-0x46C52): at or above
+  twice the active count it becomes that figure, or 1 with one hero left.
+- Once nobody is left, `secret_player` is cleared (0x469E0) and the maze rotation's resume
+  position is recorded (0x469E8-0x46A16). doc/06 §3.3 already described this, but
+  `maze_number` was never written in play, so a new game resumed wherever the EEPROM had it.
+- `attract_timer` is reloaded on every death rather than only the last (0x46B4E). `main_attract`
+  ignores it while anyone plays and the continue prompt has its own gates, so this has no
+  visible effect.
+
+The whole block now runs under Unicorn against the same inputs; it stopped short before because a
+coinless fixture faulted at 0x40632. That comparison caught a mistake in the first version of
+the bonus cap. Still not modelled: the OS coin bytes (0x469A0-0x469B6), the session
+histogram (0x46AB8) and the completed-games statistic (0x46A4C-0x46A9E).
 
 ### S-203 · turning from a hand fight and the impact effect's depth key
 

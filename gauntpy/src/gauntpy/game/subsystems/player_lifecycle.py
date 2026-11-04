@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from .. import romtext
 from ..constants import HEALTH_DRAIN_MASK, Character, GameMode, MazeObjIds, PlayerStatus
-from ..coords import encode_hpos, encode_vpos_at_y
+from ..coords import encode_hpos, encode_vpos_at_y, position_field
 from ..state import NUM_PLAYERS, GameState
-from .player_animation import _ANIM_TABLE_IDLE as _ANIM_TABLE_IDLE, update_player_sprite as update_player_sprite
-from .player_names import _HIGHSCORE_NO_RANK as _HIGHSCORE_NO_RANK
+from .player_animation import (
+    _ANIM_TABLE_IDLE as _ANIM_TABLE_IDLE,
+    _PORT_DIR_TO_ROM_DIR,
+    update_player_sprite as update_player_sprite,
+)
+from .player_names import _HIGHSCORE_NO_RANK as _HIGHSCORE_NO_RANK, highscore_check
 from .sound import sound_play as _sound_play
 from .sound import sound_speech_play as _sound_speech_play
 from .player_data import (
@@ -59,6 +63,11 @@ _RANDOM_ITEM_GROUP_VALUES = (
     (0xB9, 0xBC),
 )
 _DIALOG_LOW_HEALTH = 0x00000004     # record 2, 0x4677E / 0x50EB0
+# Character-specific death SFX, refs/soundcmds.csv 0x14-0x17; ROM 0x57932
+# (four longwords), played by the death path of main_health_countdown (0x46B2A).
+_PLAYER_DEATH_SOUND_BASE = 0x14
+_FIRST_TREASURE_MAZE = 0x68         # 0x469E8
+_RESUME_MIN_LEVEL = 6               # 0x46A00
 
 
 # ROM: part game:0x466F6,game:0x511AC | Extracted character-group random voice selection from health-zero death and poison pickup arms; ROM pointer/count tables are data.
@@ -601,7 +610,115 @@ def player_join(state: GameState, player_index: int) -> None:
         player_join_finalize(state, player_index)
 
 
-# ROM: direct game:0x466F6 | Health-drain and heartbeat frame-service boundary; its health-zero death block has been relocated to players.main_move_players.
+# ROM: part game:0x466F6 | Health-zero drop at 0x467E8-0x46992: generator or key pile in the hero's slot, its sparkle, and the shot/transport-slot release.
+def _leave_death_drop(state: GameState, player_index: int, slot: int) -> None:
+    """Replace a dead hero's record with what the ROM leaves behind.
+
+    ``mob_create`` rewrites the hero's own slot without relinking it. With no
+    keys it is the strongest ghost generator (type 0x1E) at the hero's
+    position; with keys, a KEY record at the hero's cell whose state is the
+    key count (0x0AFC with size code 9 for one key; 0x1D76, size code 0x11
+    and four pixels further left for several). The sparkle then starts on it,
+    and the hero's shot (slot 1+p)
+    and transport animation (slot 25+p) are released.
+    """
+    from ..maze import hsize_tier, vpos_offset
+    from .player_items import _KEY_PICTURE, _KEY_PILE_PICTURE
+    from .shot_damage import _MAZEOBJ_BASE_PICTURE_TBL
+    from .shot_effects import tport_cycle_start
+
+    mobs = state.mobs
+    keys = state.players[player_index].keysnum & 0xFF
+    if keys == 0:                                                 # 0x467F2
+        generator = int(MazeObjIds.GEN_GHOST3)
+        mobs.create(
+            slot,
+            tile=_MAZEOBJ_BASE_PICTURE_TBL[generator],            # 0x586C8
+            hpos=(position_field(mobs.hpos[slot]) + hsize_tier(generator)) & 0xFFFF,
+            vpos=(position_field(mobs.vpos[slot]) + vpos_offset(generator)) & 0xFFFF,
+            obj_type=generator,
+        )                                                         # 0x46854
+    else:
+        single = keys == 1                                        # 0x46866
+        key = int(MazeObjIds.KEY)
+        mobs.create(
+            slot,
+            tile=_KEY_PICTURE if single else _KEY_PILE_PICTURE,
+            hpos=(((slot << 11) + hsize_tier(key)
+                   - (0 if single else 0x200)) & 0xFFFF),
+            vpos=((((slot & 0x3E0) ^ 0x3E0) << 6)
+                  + (0x09 if single else 0x11)) & 0xFFFF,
+            obj_type=key,
+            state=keys,
+        )                                                         # 0x46906
+    tport_cycle_start(state, slot, player_index)                  # 0x4691C
+    for channel_slot in (1 + player_index, 0x19 + player_index):  # 0x46922-0x46992
+        if mobs.picture[channel_slot]:
+            mobs.depth_remove(channel_slot - 1)
+            mobs.picture[channel_slot] = 0
+
+
+# ROM: part game:0x466F6 | Health-zero block at 0x467E8-0x46B7E, one player's death inside the per-frame pass; OS coin and statistics writes are not modelled.
+def _player_dies(state: GameState, player_index: int) -> None:
+    """0x467E8-0x46B7E -- a hero with a MOB and no health leaves the level.
+
+    The pass runs late in the frame, so the hero is still there for that frame's
+    monsters, whichever routine took the last point of health.
+
+    Not modelled: the OS coin bytes cleared at 0x469A0-0x469B6, the OS session
+    histogram at 0x46AB8, and the completed-games statistic at 0x46A4C-0x46A9E
+    (see eeprom.py).
+    """
+    player = state.players[player_index]
+    character = player.character
+    player.death_damage_counter = 0
+    # The ROM's animation frame *is* player_facing_dir (0x9049A4), so the death
+    # sequence starts from whatever way the hero was facing and counts down to 4
+    # (0x4A672).
+    state.player_death_anim_frame[player_index] = _PORT_DIR_TO_ROM_DIR[
+        player.direction & 0x07
+    ]
+    state.player_lowhealth_spoken[player_index] = 0
+    state.player_respawn_speech_timer[player_index] = -1
+    _leave_death_drop(state, player_index, player.mob_slot)   # 0x467F2-0x46992
+    # Inventory, powers, timers and status go; the character and the score
+    # survive, so the ladder and the panel still have something to show.
+    player_resetcounters(state, player_index)                 # 0x4699A
+    player.anim_counter = 0
+    if state.player_it == player_index:                       # 0x469BA
+        state.player_it = 0xFFFF
+        from .score import write_it_labels
+        write_it_labels(state)                                # 0x469D2
+    state.level_players_active = max(0, state.level_players_active - 1)  # 0x469DA
+    if state.level_players_active == 0:
+        state.secret_player = -1                              # 0x469E0
+        # doc/06 s3.3: the game is over, so record where the rotation stands.
+        if state.mazenum_current >= _FIRST_TREASURE_MAZE:     # 0x469E8
+            state.mazenum_current = state.maze_next
+        if state.levelnum_current >= _RESUME_MIN_LEVEL:       # 0x46A00
+            state.maze_number = state.mazenum_current
+    calc_score_per_coin(state, player_index)                  # 0x46A18
+    highscore_check(state, player_index)                      # 0x46AC4
+    setup_infopanel(state, player_index)                      # 0x46AD0
+    _play_random_character_voice(state, character)            # 0x46B16
+    _sound_play(state, _PLAYER_DEATH_SOUND_BASE + (character & 0x03))  # 0x46B2A
+    if state.level_players_active == 0 and state.dialog_timer:  # 0x46B30-0x46B3E
+        from .score import main_msgbox_countdown
+        state.dialog_timer = 1
+        main_msgbox_countdown(state)                          # 0x46B48
+    # 0x46B4E is past that branch: every death reloads the timer, which
+    # main_attract ignores while anybody is still playing.
+    if state.levelnum_current == 1:
+        state.attract_timer = 0x0258                          # 0x46B58
+    else:
+        state.attract_timer = 0x05DD                          # 0x46B62
+        show_continue_prompt(state)                           # 0x46B6A
+    if state.thief_victim == player_index:                    # 0x46B70
+        from .thief import thief_exit
+        thief_exit(state)
+
+
+# ROM: direct game:0x466F6 | Health-drain, heartbeat and health-zero frame-service boundary; the death itself is split into _player_dies.
 def main_health_countdown(state: GameState) -> None:
     """0x466F6 -- flat health drain and low-health warning cadence (§4.3).
 
@@ -628,6 +745,7 @@ def main_health_countdown(state: GameState) -> None:
 
       * ``player_respawn_speech_timer`` counts down while non-negative
         (0x467C2-0x467D8);
+      * no health at all is the death path (0x467E0, ``_player_dies``);
       * below 200 health ``player_state_timer`` advances modulo 0x8000
         (0x46BAC) and the per-player sound at 0x57942 (0x18 + player) plays
         whenever ``timer & heartbeat_mask[health >> 5]`` is zero
@@ -661,6 +779,7 @@ def main_health_countdown(state: GameState) -> None:
                 player_lowhealth(state, player_index)   # 0x46794
 
     # ── Per-frame pass (0x467AC-0x46BF8), all four players ────────────────────
+    someone_died = False
     for player_index, player in enumerate(state.players):
         if player.mob_slot == 0:                            # 0x467BA
             continue
@@ -668,7 +787,9 @@ def main_health_countdown(state: GameState) -> None:
         if state.player_respawn_speech_timer[player_index] >= 0:   # 0x467C8
             state.player_respawn_speech_timer[player_index] -= 1
 
-        if player.health == 0:                              # 0x467E0: death path
+        if player.health == 0:                              # 0x467E0
+            someone_died = True                             # 0x467E8
+            _player_dies(state, player_index)
             continue
         if player.health >= _LOW_HEALTH_THRESHOLD:          # 0x46B86
             continue
@@ -680,6 +801,13 @@ def main_health_countdown(state: GameState) -> None:
                               len(_HEARTBEAT_MASK_TABLE) - 1))
         if (player.state_timer & _HEARTBEAT_MASK_TABLE[mask_idx]) == 0:
             _sound_play(state, _HEARTBEAT_SOUND_TABLE[player_index])     # 0x46BEE
+
+    # 0x46C04-0x46C52: fewer heroes means a lower ceiling on the survivors' bonus.
+    if someone_died:
+        cap = state.level_players_active * 2
+        for player in state.players:
+            if player.health and player.bonusmult >= cap:   # 0x46C0E/0x46C2A
+                player.bonusmult = cap if cap > 2 else 1    # 0x46C2E-0x46C48
 
 
 # ROM: direct game:0x4664C | Per-player forcefield/Death looping-sound timer service, not the name-entry/death-animation handler.
