@@ -764,12 +764,8 @@ def main_move_players(state: GameState) -> None:
             # record into it and ``mob_slot`` is that cell. Only an occupied
             # one is offered to ``player_tile_interact`` -- and if the tile is
             # consumed the record follows the hero into the cell it just
-            # cleared, on the same frame.
-            #
-            # ``player_tile_or_tport_dest`` still holds last frame's cell, so an
-            # unchanged cell means "already interacted here"; without that edge
-            # gate a non-consumed tile (a monster, another hero's record)
-            # would re-trigger every frame.
+            # cleared, on the same frame. A refused step rolls the hero back, so
+            # the next frame offers the same cell again, as on the ROM.
             origin = movement_origin or (
                 player.mob_slot, state.mobs.hpos[player.mob_slot],
                 state.mobs.vpos[player.mob_slot],

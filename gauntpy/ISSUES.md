@@ -60,16 +60,6 @@ statistics bytes at configuration offset +0xE6. gauntpy has no operator statisti
 is untraced. doc/02 calls 0x904FF0 `coin_bonus_progress` and says its only reference is 0x35D6, and
 `gauntlet.r2` calls it `coin_totals`, so this game ROM reference disagrees with both.
 
-### S-202 · once-per-cell gate on the occupied-cell tail does nothing
-
-`resolve_entered_cell` skips a cell equal to last frame's
-`player_tile_or_tport_dest`; the ROM (0x424EC) has no such test. Walking a hero
-into every object type in four directions, with and without keys, gives identical
-results with the gate disabled, and its interaction counts already match the ROM's
-(a keyless door: 17 calls in 24 steps on both). The full suite and the demo
-comparisons also pass without it. A refused step rolls the hero back, so the entered
-cell never equals last frame's. It can simply be removed.
-
 ### S-201 · generator's last hand hit and a type-0x0F neighbour
 
 Two leads from that walk, not yet traced. A hero who destroys a generator by hand
@@ -79,6 +69,16 @@ passed by the ROM (dispatch to 0x5227A) and blocks in gauntpy; the thief is the 
 case of that record, and the fixture is not a real thief.
 
 ## Resolved issues
+
+### S-202 · once-per-cell gate on the occupied-cell tail did nothing
+
+`resolve_entered_cell` skipped a cell equal to last frame's
+`player_tile_or_tport_dest`; the ROM has no such test (0x424E6 compares the entered cell with
+the hero's slot and 0x424EC goes straight to the occupied check). Walking a hero into every
+object type in four directions, with and without keys, gave identical results with the gate
+disabled, and its interaction counts already matched the ROM's (a keyless door: 17 calls in 24
+steps on both). A refused step rolls the hero back, so the entered cell never equalled last
+frame's. The gate is gone.
 
 ### S-200 · the death block ran before the monsters, and lacked four of its writes
 

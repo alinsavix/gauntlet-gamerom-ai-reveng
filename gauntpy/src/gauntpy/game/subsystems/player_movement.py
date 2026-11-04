@@ -203,8 +203,7 @@ def resolve_entered_cell(
 
     ``origin`` is the record's ``(slot, H, V)`` before the move. An empty
     entered cell needs nothing: ``migrate_player_record`` already moved the
-    record. An occupied one is interacted with once per cell change (Python
-    gates on last frame's ``player_tile_or_tport_dest``): -2 (a started
+    record. An occupied one is interacted with (0x424EC): -2 (a started
     teleport, 0x42570) keeps the pre-move words; a handled tile lets the
     record migrate (0x42588 -> 0x424F2); anything else refuses the step
     (0x42556). Returns ``(rolled-back cell or None, refused)``.
@@ -214,10 +213,7 @@ def resolve_entered_cell(
     player = state.players[player_index]
     source, old_h, old_v = origin
     entered = _player_record_cell(state, player_index)
-    if (
-        entered == player.mob_slot
-        or entered == state.player_tile_or_tport_dest[player_index]
-    ):
+    if entered == player.mob_slot:                           # 0x424E6
         return None, False
     handled = player_tile_interact(state, entered, player_index)
     if handled != TILE_TELEPORTED and handled and migrate_player_record(
