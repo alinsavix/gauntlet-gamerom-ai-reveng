@@ -37,6 +37,29 @@ start).
 
 ## Open issues
 
+### S-204 · the death block's statistics and coin writes are not modelled
+
+`_player_dies` (0x467E8-0x46B7E) leaves out three things the ROM does. None of them affects a
+game in progress, and no comparison covers them, because the demo captures do not record this RAM.
+
+The completed-games statistic is the one to look at first. When every player's health is zero,
+0x46A64 adds one to `games_played_counter` (0x904B86). Past 2000 (0x46A6A), the ROM sets bit
+15 of `game_settings` (0x46A74), writes the word out through `write_eeprom_setting` (API 0x1C0,
+0x46A8A), clears the counter and sets `eeprom_write_timer` to 1. doc/05 §3.10 names that bit
+`GSETTING_SCORE_RESET_FLAG`, the operator's "Reset High Score Tables" action, and lists no game
+code that reads it. So the high-score tables may be wiped every 2000 games, but nothing
+yet shows what consumes the bit or when. There is a second `ORI.W #0x8000` on the same word at
+0x43160, not yet read. gauntpy has no such counter, and the `eeprom.py` module docstring calls
+it pure bookkeeping that nothing reads, which needs revisiting. `eeprom_periodic_write` also
+omits the counter from its write gate, as its docstring notes.
+
+`record_player_session_histogram` (API 0x19C, called at 0x46AB8) updates the operator
+statistics bytes at configuration offset +0xE6. gauntpy has no operator statistics screens.
+
+0x469A0-0x469B6 clears byte `p` of 0x904FF0 and 0x904FF4. What that does to a coin in progress
+is untraced. doc/02 calls 0x904FF0 `coin_bonus_progress` and says its only reference is 0x35D6, and
+`gauntlet.r2` calls it `coin_totals`, so this game ROM reference disagrees with both.
+
 ### S-202 · once-per-cell gate on the occupied-cell tail does nothing
 
 `resolve_entered_cell` skips a cell equal to last frame's
@@ -82,7 +105,7 @@ Reading the block against the ROM found what gauntpy's copy had left out:
 The whole block now runs under Unicorn against the same inputs; it stopped short before because a
 coinless fixture faulted at 0x40632. That comparison caught a mistake in the first version of
 the bonus cap. Still not modelled: the OS coin bytes (0x469A0-0x469B6), the session
-histogram (0x46AB8) and the completed-games statistic (0x46A4C-0x46A9E).
+histogram (0x46AB8) and the completed-games statistic (0x46A4C-0x46A9E); see S-204.
 
 ### S-203 · turning from a hand fight and the impact effect's depth key
 
