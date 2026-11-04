@@ -17,7 +17,9 @@ from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.game.coords import encode_vpos_at_y, native_v  # noqa: E402
 from gauntpy.game.state import GameState  # noqa: E402
 from gauntpy.game.subsystems import input as gin  # noqa: E402
+from gauntpy.game.maze import maze_place_object  # noqa: E402
 from gauntpy.game.subsystems import player_items  # noqa: E402
+from gauntpy.game.subsystems import player_movement  # noqa: E402
 from gauntpy.game.subsystems import player_transport  # noqa: E402
 from gauntpy.game.subsystems import players as gp  # noqa: E402
 from gauntpy.game.subsystems.monster_shooting import monster_create_shot  # noqa: E402
@@ -368,6 +370,257 @@ def test_an_impact_takes_the_roms_position_and_depth_key(target, shooter, hpos, 
     shot_impact_spawn(state, target, shooter)
     assert machine.record(0x0D)[:3] == _python_record(state, 0x0D)[:3]
     assert machine.r16(0x904940 + 2 * 0x0D) == state.mobs.depth_key[0x0D]
+
+
+# --- hand contact: mob_collision_test (0x52192) ---------------------------------
+
+_HERO, _TARGET = _cell(10, 9), _cell(10, 10)
+_MONSTERS = range(int(MazeObjIds.MONST_GHOST), int(MazeObjIds.MONST_IT) + 1)
+
+
+def _rom_compass(word: int) -> int:
+    return (word & 0x38) | (((word & 7) + 2) & 7)
+
+
+def _contact_state(obj_type, *, fighting=False, movement_type=1, seed=0x1234, keys=0, low=None):
+    state = GameState(game_mode=GameMode.NORMAL)
+    state.rng.seed = seed
+    player = _hero(state, 0, _HERO, keysnum=keys, coin_count=1)
+    state.mobs.hpos[_HERO] |= 0x0C
+    state.level_players_active = 1
+    state.level_flags_4 |= 0x80
+    maze_place_object(state, _TARGET, int(obj_type), 1)
+    if not state.mobs.picture[_TARGET]:
+        state.mobs.create(
+            _TARGET, tile=0x2000, hpos=((10 * 16) << 7) | 0x0B,
+            vpos=native_v(10 * 16) << 7, obj_type=int(obj_type),
+        )
+    if low is not None:
+        state.mobs.hpos[_TARGET] = (state.mobs.hpos[_TARGET] & ~0x3F) | low
+    state.idle_timer, state.escape_timer = 77, 88
+    state.movement_type = movement_type
+    player.anim_counter = 99
+    if fighting:
+        state.player_fighting_dir[0] = player.direction + 1
+    return state
+
+
+def _rom_for_contact(state):
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    if state.mobs.obj_type(_TARGET) in _MONSTERS:
+        word = state.mobs.state_link[_TARGET]
+        machine.w16(rom_exec._STATE + 2 * _TARGET,
+                    (word & 0x3FF) | (_rom_compass(word >> 10) << 10))
+    return machine, machine.count_calls(0x549EA)
+
+
+def _compare_contact(state, monkeypatch, rom_slot=_TARGET):
+    from gauntpy.game.subsystems import shot_damage
+
+    machine, rom_dragon = _rom_for_contact(state)
+    result = machine.call(0x52192, rom_slot, 0)
+    assert machine.halted
+    real = shot_damage.dragon_player_proximity
+    our_dragon = []
+    monkeypatch.setattr(
+        shot_damage, "dragon_player_proximity",
+        lambda *args, **kwargs: (our_dragon.append(args), real(*args, **kwargs)),
+    )
+    ours = player_movement._player_fight_collision(state, 0, rom_slot)
+    mobs = state.mobs
+    assert (
+        result & 0xFFFF == 0xFFFF, bool(machine.r16(0x904A0E)),
+        machine.r16(0x90490C), machine.r16(0x9048C6), machine.r16(0x904BFC),
+        bool(machine.r16(0x9049AC)), machine.r16(0x9049BC), rom_dragon[0],
+        machine.picture(rom_slot), machine.hpos(rom_slot),
+        machine.r16(0x903800 + 2 * rom_slot) >> 10,
+    ) == (
+        ours == -1, ours == 1,
+        state.idle_timer & 0xFFFF, state.escape_timer & 0xFFFF, state.rng.seed & 0xFFFF,
+        bool(state.player_fighting_dir[0]), state.players[0].anim_counter, len(our_dragon),
+        mobs.picture[rom_slot], mobs.hpos[rom_slot],
+        mobs.obj_type(rom_slot),
+    )
+    return machine
+
+
+_CONTACTS = [
+    (int(MazeObjIds.GEN_GHOST1), None), (int(MazeObjIds.GEN_GHOST2), None),
+    (int(MazeObjIds.GEN_GHOST3), None), (int(MazeObjIds.GEN_SORC1), None),
+    (int(MazeObjIds.MONST_GRUNT), None), (int(MazeObjIds.MONST_DEMON), None),
+    (int(MazeObjIds.MONST_LOBBER), None), (int(MazeObjIds.MONST_AUX_GRUNT), None),
+    (int(MazeObjIds.MONST_SORC), 0x0B), (int(MazeObjIds.MONST_SORC), 0x1B),
+    (int(MazeObjIds.MONST_GHOST), None), (int(MazeObjIds.MONST_ACID), None),
+    (int(MazeObjIds.MONST_IT), None), (int(MazeObjIds.MONST_DEATH), None),
+    (int(MazeObjIds.MONST_SUPERSORC), 0x0B), (int(MazeObjIds.MONST_SUPERSORC), 0x2B),
+    (int(MazeObjIds.MONST_DRAGON), None), (int(MazeObjIds.WALL_REGULAR), None),
+]
+
+
+@pytest.mark.parametrize("seed", [0, 0x1234, 0xBEEF])
+@pytest.mark.parametrize("movement_type", [1, 0])
+@pytest.mark.parametrize("fighting", [False, True])
+@pytest.mark.parametrize("obj_type,low", _CONTACTS)
+def test_hand_contact_matches_the_rom(obj_type, low, fighting, movement_type, seed, monkeypatch):
+    """Result, fight latch, timers, RNG, dragon calls and the record, for every arm."""
+    state = _contact_state(
+        obj_type, fighting=fighting, movement_type=movement_type, seed=seed, low=low,
+    )
+    machine = _compare_contact(state, monkeypatch)
+    if state.mobs.picture[_TARGET] and obj_type in _MONSTERS:
+        assert machine.r16(rom_exec._STATE + 2 * _TARGET) >> 10 == _rom_compass(
+            state.mobs.state(_TARGET)
+        )
+
+
+def test_a_killed_generator_draws_nothing_for_its_floor(monkeypatch):
+    """A real level has neighbours to restamp, and the ROM leaves the floor alone."""
+    state = _contact_state(MazeObjIds.GEN_GHOST1, fighting=True, seed=0)
+    state.playfield_floor_catalog = {(0, 0): (0, 0, 0, 0)}
+    _compare_contact(state, monkeypatch)
+
+
+def test_locked_treasure_counts_as_activity(monkeypatch):
+    state = _contact_state(MazeObjIds.TREASURE_LOCKED, keys=3)
+    machine = _compare_contact(state, monkeypatch)
+    assert machine.keys(0) == state.players[0].keysnum == 2
+    assert (state.idle_timer, state.escape_timer) == (0, 0)
+
+
+def _rom_and_ours_touch_super_sorcerer(toucher):
+    """Two heroes; only the toucher's rear is clear, or nobody's when walled in."""
+    state = GameState(game_mode=GameMode.NORMAL)
+    first, second = _cell(10, 9), _cell(20, 20)
+    _hero(state, 0, first, coin_count=1)
+    _hero(state, 1, second, coin_count=1)
+    state.players[1].direction = 0
+    state.mobs.hpos[first] |= 0x0C
+    state.mobs.hpos[second] |= 0x0D
+    state.level_players_active = 2
+    state.level_flags_4 |= 0x80
+    target = _cell(10, 10) if toucher == 0 else _cell(20, 21)
+    state.mobs.create(
+        target, tile=0x2000, hpos=((target & 31) * 16 << 7) | 0x0B,
+        vpos=native_v((target >> 5) * 16) << 7,
+        obj_type=int(MazeObjIds.MONST_SUPERSORC),
+    )
+    state.movement_type = 1
+    return state, target
+
+
+@pytest.mark.parametrize("toucher", [0, 1])
+def test_touching_a_super_sorcerer_sends_it_behind_that_hero(toucher):
+    """0x5FDB8 passes the toucher to 0x5FDE0; only its own blink draws a random start."""
+    state, target = _rom_and_ours_touch_super_sorcerer(toucher)
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    result = machine.call(0x52192, target, toucher)
+    assert machine.halted
+    assert player_movement._player_fight_collision(state, toucher, target) == -1
+    assert result & 0xFFFF == 0xFFFF
+    assert machine.r16(0x904BFC) == state.rng.seed == 0
+    rom_home = [s for s in range(32, 1024)
+                if machine.r16(0x903800 + 2 * s) >> 10 == int(MazeObjIds.MONST_SUPERSORC)]
+    our_home = [s for s in range(32, 1024)
+                if state.mobs.obj_type(s) == int(MazeObjIds.MONST_SUPERSORC)]
+    assert rom_home == our_home and rom_home != [target]
+    home = rom_home[0]
+    assert machine.record(home)[:4] == _python_record(state, home)[:4]
+    assert machine.r16(rom_exec._STATE + 2 * home) >> 10 == _rom_compass(state.mobs.state(home))
+
+
+def test_a_super_sorcerer_with_nowhere_to_go_faces_the_hero_who_touched_it():
+    state, target = _rom_and_ours_touch_super_sorcerer(0)
+    for row in range(1, 32):
+        for col in range(32):
+            slot = _cell(row, col)
+            if slot not in (_cell(10, 9), target, _cell(20, 20)):
+                _wall(state, slot)
+    state.idle_timer, state.escape_timer = 77, 88
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    result = machine.call(0x52192, target, 0)
+    assert machine.halted
+    assert player_movement._player_fight_collision(state, 0, target) == 0
+    assert result == 0
+    assert machine.picture(target) == state.mobs.picture[target]
+    assert machine.r16(rom_exec._STATE + 2 * target) >> 10 == _rom_compass(state.mobs.state(target))
+    assert (machine.r16(0x90490C), machine.r16(0x9048C6)) == (0, 0)
+    assert (state.idle_timer, state.escape_timer) == (0, 0)
+
+
+@pytest.mark.parametrize("item", [
+    MazeObjIds.KEY, MazeObjIds.TREASURE, MazeObjIds.POT_DESTRUCTABLE,
+])
+def test_killing_the_thief_by_hand_matches_the_rom(item):
+    """0x5227A has no thief test of its own; a real thief carries loot and has a slot."""
+    state = GameState(game_mode=GameMode.NORMAL)
+    state.rng.seed = 0x1234
+    player = _hero(state, 0, _HERO, coin_count=1)
+    state.mobs.hpos[_HERO] |= 0x0C
+    state.level_players_active = 1
+    state.level_flags_4 |= 0x80
+    state.mobs.create(
+        _TARGET, tile=0x2000, hpos=(10 * 16) << 7, vpos=native_v(10 * 16) << 7,
+        obj_type=int(MazeObjIds.PLAYERSTART),
+    )
+    state.thief_mob_slot = state.thief_current_pos = _TARGET
+    state.thief_item_carried = int(item)
+    state.thief_victim = 0
+    state.idle_timer, state.escape_timer = 77, 88
+    state.movement_type = 1
+    state.player_fighting_dir[0] = player.direction + 1
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    machine.cpu.mem_write(0x904BB4, int(item).to_bytes(4, "big"))
+    machine.w16(0x904BA4, _TARGET)
+    machine.w16(0x904B9A, 0)
+    result = machine.call(0x52192, _TARGET, 0)
+    assert machine.halted and result & 0xFFFF == 0xFFFF
+    assert player_movement._player_fight_collision(state, 0, _TARGET) == -1
+    assert machine.record(_TARGET) == _python_record(state, _TARGET)
+    assert machine.r16(0x904BFC) == state.rng.seed
+    assert (machine.r16(0x90490C), machine.r16(0x9048C6)) == (0, 0)
+    assert (state.idle_timer, state.escape_timer) == (0, 0)
+
+
+# --- taking a tile: player_tile_interact (0x511AC) ------------------------------
+
+_TAKEN = [
+    (MazeObjIds.TREASURE, None), (MazeObjIds.TREASURE_BAG, None), (MazeObjIds.KEY, None),
+    (MazeObjIds.FOOD_DESTRUCTABLE, None), (MazeObjIds.FOOD_DESTRUCTABLE, 0x25ED),
+    (MazeObjIds.FOOD_INVULN, None), (MazeObjIds.POT_DESTRUCTABLE, None),
+    (MazeObjIds.POT_DESTRUCTABLE, 0x20FC), (MazeObjIds.POT_INVULN, None),
+    (MazeObjIds.POWER_INVIS, None), (MazeObjIds.POWER_INVULN, None),
+    (MazeObjIds.DOOR_HORIZ, None), (MazeObjIds.DOOR_VERT, None),
+]
+
+
+@pytest.mark.parametrize("keys,potions", [(0, 0), (6, 6), (12, 0)])
+@pytest.mark.parametrize("obj_type,picture", _TAKEN)
+def test_taking_a_tile_matches_the_rom(obj_type, picture, keys, potions, monkeypatch):
+    """The tail at 0x51E36-0x51E6A: hero proximity, idle timer, then the record."""
+    from gauntpy.game.subsystems import shot_damage
+
+    state = _contact_state(obj_type, keys=keys)
+    state.players[0].potionsnum = potions
+    if picture is not None:
+        state.mobs.picture[_TARGET] = picture
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    rom_dragon = machine.count_calls(0x549EA)
+    result = machine.call(0x511AC, _TARGET, 0)
+    assert machine.halted
+    real = shot_damage.dragon_player_proximity
+    our_dragon = []
+    monkeypatch.setattr(
+        shot_damage, "dragon_player_proximity",
+        lambda *args, **kwargs: (our_dragon.append(args), real(*args, **kwargs)),
+    )
+    ours = player_items.player_tile_interact(state, _TARGET, 0)
+    assert (
+        result & 0xFFFF == 0xFFFF, machine.r16(0x90490C), machine.r16(0x9048C6),
+        rom_dragon[0], machine.picture(_TARGET), machine.keys(0),
+    ) == (
+        ours == -1, state.idle_timer & 0xFFFF, state.escape_timer & 0xFFFF,
+        len(our_dragon), state.mobs.picture[_TARGET], state.players[0].keysnum,
+    )
 
 
 # --- crash reports --------------------------------------------------------------

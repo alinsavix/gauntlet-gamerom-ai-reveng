@@ -510,18 +510,20 @@ def _supersorc_shoot(state: GameState, slot: int) -> None:
 
 
 # ROM: direct game:0x5FDE0 | Represents the register-body placement search; the separate 0x5FDB8 ABI wrapper has no standalone Python definition.
-def supersorc_place(state: GameState, slot: int) -> int | None:
+def supersorc_place(state: GameState, slot: int, start: int | None = None) -> int | None:
     """Relocate the Super Sorcerer behind a player (§3.3, 0x5FDE0).
 
-    Tries all four players cyclically from a random start, skipping inactive
-    ones.  For each it tests three directions behind that player's facing
-    (biases {0,-1,+1}) requiring clear runs of {4,3,3} on-screen empty cells,
-    staying within rows 1-31, and rejects a destination crowded by another MOB.
-    On the first success it relocates the creature and turns it back towards
-    the player and returns its new slot; otherwise it stays put and returns
-    None.
+    Tries all four players cyclically from ``start``, skipping inactive ones: its
+    own blink draws a random one (0x4108E), and a hero who touches it passes
+    themself (0x5FDB8). For each it tests three directions behind that player's
+    facing (biases {0,-1,+1}) requiring clear runs of {4,3,3} on-screen empty
+    cells, staying within rows 1-31, and rejects a destination crowded by another
+    MOB. On the first success it relocates the creature and turns it back towards
+    the player and returns its new slot; otherwise it changes nothing and returns
+    None (0x5FF8C).
     """
-    start = state.getrandom(4)
+    if start is None:
+        start = state.getrandom(4)
     for i in range(4):
         pi = (start + i) & 3
         p = state.players[pi]
@@ -541,16 +543,6 @@ def supersorc_place(state: GameState, slot: int) -> int | None:
                 # the player it just materialised behind.
                 _supersorc_relocate(state, slot, dest, (direction + 4) & 0x07)
                 return dest if state.mobs.picture[dest] else slot
-    # No valid destination: re-aim at the nearest player and stay put.  The
-    # Super Sorcerer's own aim uses ``apply_direction_from_delta`` (0x41B7E),
-    # whose threshold is a fixed 0x400 position units -- 8 pixels, i.e. 4 of
-    # the 2-pixel units the picker works in.
-    target = _find_target_player(state, slot)
-    if target >= 0:
-        tp = state.players[target]
-        dx = _delta_units(state.mobs.hpos[tp.mob_slot], state.mobs.hpos[slot])
-        dv = _delta_units(state.mobs.vpos[tp.mob_slot], state.mobs.vpos[slot])
-        _set_direction(state, slot, _aim_direction(dx, dv, 0, 4))
     return None                              # 0x5FF8C: nowhere to go
 
 

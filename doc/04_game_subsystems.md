@@ -331,7 +331,12 @@ tile in D0.w;
 after exhausting every player/direction it returns zero. The normal-stack
 `supersorc_place_helper(target_mob_slot, starting_player_index)` at 0x5FDB8
 loads the fixed MOB-array bases and converts the physical slot to the doubled
-byte offset required by the register body.
+byte offset required by the register body. The creature's own blink draws a random
+starting player (0x4108E-0x41094). Its only other caller is hand contact (0x527B4),
+which passes the hero who touched it and draws nothing. There, 0x52782-0x52792 first
+sets the state word to frame 7, rather than adding to it as the blink does. If the
+search fails the routine changes nothing, and the contact arm itself turns the creature
+toward that hero through `calc_direction` (0x52826).
 
 ### 3.4 Generator Spawning (inline in `monster_loop_core`)
 
@@ -691,6 +696,17 @@ calls `monster_playerhit` and then passes. Horizontal motion is applied before
 vertical motion, so a diagonal collision slides along the same axis as the
 original. Movable-wall collision advances only the wall on that frame; the
 hero stays put and retries on later frames.
+
+Hand contact counts as activity. Starting a fight, landing a blow, killing, and taking
+a locked treasure all clear `escape_timer` and a positive `idle_timer` (0x52360,
+0x5249A). A missed swing at a generator does not (0x524AE). Each blow also calls
+`dragon_player_proximity` on the target (0x523E2, 0x524F2, 0x5252E, 0x5275A), so
+fighting beside a sleeping dragon can wake it. Neither a blow nor a kill touches the
+playfield: the floor under a generator was drawn at level start and is left alone, so
+no floor variant is drawn. A tile that `player_tile_interact` takes leaves through
+0x51E36-0x51E6A, which runs the same dragon check on the hero, clears a positive
+`idle_timer` and deletes the record. All of this was compared with the ROM under
+Unicorn; the demo's timers are gated off, so no capture covers it.
 
 #### Heroes shove each other
 

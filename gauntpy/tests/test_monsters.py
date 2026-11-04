@@ -1850,6 +1850,43 @@ class TestSuperSorcerer:
         assert destination == pack_slot(6, 6)
         assert state.mobs.state(destination) & 7 == 1
 
+    def test_a_given_start_draws_nothing_and_tries_that_hero_first(self):
+        """0x5FDB8: hand contact passes the toucher, so no random start is drawn."""
+        state = GameState()
+        rng = _FixedRNG(3)
+        state.rng = rng
+        for index, slot in ((0, pack_slot(10, 10)), (1, pack_slot(20, 20))):
+            _place_player(state, index, slot)
+            state.players[index].direction = 0
+            state.mobs.hpos[slot] = encode_hpos((slot & 31) * 16 - 4, palette=0x0C + index)
+        origin = pack_slot(9, 9)
+        _arena(state, pack_slot(10, 8))
+        _arena(state, pack_slot(20, 18))
+        _place_monster(state, origin, MazeObjIds.MONST_SUPERSORC)
+
+        destination = supersorc_place(state, origin, 1)
+
+        assert rng.calls == 0
+        assert destination == pack_slot(20, 16)
+
+    def test_nowhere_to_go_changes_nothing(self):
+        """0x5FF8C returns zero with the record as it was."""
+        state = GameState()
+        state.rng = _FixedRNG(0)
+        player_slot = pack_slot(10, 10)
+        _place_player(state, 0, player_slot)
+        origin = pack_slot(9, 9)
+        _place_monster(state, origin, MazeObjIds.MONST_SUPERSORC, direction=3)
+        for row in range(1, 32):
+            for col in range(32):
+                slot = pack_slot(row, col)
+                if slot not in (player_slot, origin):
+                    state.mobs.picture[slot] = 0x8000
+        word = state.mobs.state_link[origin]
+
+        assert supersorc_place(state, origin) is None
+        assert state.mobs.state_link[origin] == word
+
     def test_teleport_is_turn_staggered(self):
         """0x41078: the teleport only runs on the creature's stagger frame."""
         state = GameState()

@@ -350,12 +350,24 @@ def _slot_is_blocking(state: GameState, slot: int) -> bool:
     return state.mobs.obj_type(slot) in _BLOCKING_OBJ_TYPES
 
 
+#: gauntpy's compass value for the ROM's direction 0.
+_ROM_DIRECTION_ZERO = 6
+
+
 # ROM: adapter game:0x47DAE | Delegated contact-burst boundary to shot_effects.shot_impact_spawn.
 def _fight_effect(state: GameState, slot: int, player_index: int) -> None:
     """The contact burst shared by hand-to-hand monster/generator hits."""
     from .shot_effects import shot_impact_spawn
 
     shot_impact_spawn(state, slot, player_index)
+
+
+# ROM: part game:0x52192 | The tail shared by every fight outcome, at 0x52360 and 0x5249A.
+def _fight_counts_as_activity(state: GameState) -> None:
+    """0x52360/0x5249A -- hand contact holds off the idle doors and escape exits."""
+    if state.idle_timer > 0:
+        state.idle_timer = 0
+    state.escape_timer = 0
 
 
 # ROM: direct game:0x52192 | Current defining mob_collision_test combat dispatch body, with Python result conventions; legacy players.mob_collision_test does not exist.
@@ -376,6 +388,7 @@ def _player_fight_collision(
         player_inv_update as player_inv_update,
     )
     from .score import player_add_score_with_mult
+    from .shot_damage import dragon_player_proximity
 
     player = state.players[player_index]
     obj_type = state.mobs.obj_type(slot)
@@ -410,7 +423,7 @@ def _player_fight_collision(
         _sound_play(state, 0x2A)                         # 0x52644
         player.stundelay = 30                            # 0x52654
 
-        from .shot_damage import _MAZEOBJ_BASE_PICTURE_TBL, dragon_player_proximity
+        from .shot_damage import _MAZEOBJ_BASE_PICTURE_TBL
         from .shot_effects import tport_cycle_start
 
         tport_cycle_start(state, slot, player_index)     # start_poof
@@ -436,6 +449,7 @@ def _player_fight_collision(
             hpos, vpos, reward, 0,
         )
         dragon_player_proximity(state, slot)
+        _fight_counts_as_activity(state)
         return 0
 
     if (obj_type == int(MazeObjIds.PLAYERSTART)
@@ -444,10 +458,13 @@ def _player_fight_collision(
             from .thief import thief_remove_and_drop_loot
 
             thief_remove_and_drop_loot(state, player_index, slot)
+            dragon_player_proximity(state, slot)               # 0x5229E
+            _fight_counts_as_activity(state)
             return -1
         if state.movement_type == 1:
             state.player_fighting_dir[player_index] = player.direction + 1
             player.anim_counter = 0
+        _fight_counts_as_activity(state)
         return 1
 
     if obj_type == int(MazeObjIds.PLAYERSTART):
@@ -480,30 +497,38 @@ def _player_fight_collision(
                     player.direction + 1
                 )
                 player.anim_counter = 0
+                _fight_counts_as_activity(state)               # 0x5257E
                 return 1
             return 0
 
         if fight_power > state.getrandom(4):
+            from ..maze import placement_picture, set_cell_type
+
+            # The floor under a generator is already drawn, so neither outcome
+            # restamps the playfield or draws a floor variant.
             tier = ((obj_type - int(MazeObjIds.GEN_GHOST1)) % 3) + 1
-            _fight_effect(state, slot, player_index)
-            player_add_score_with_mult(state, player_index, 10)
             if tier == 1:
-                state.mobs.unlink_and_clear(slot)
-                from ..maze import clear_cell_descriptor
-
-                clear_cell_descriptor(state, slot)
+                player_add_score_with_mult(state, player_index, 10)  # 0x524E4
+                dragon_player_proximity(state, slot)           # 0x524F2
+                _fight_effect(state, slot, player_index)       # 0x52348
+                state.mobs.unlink_and_clear(slot)              # 0x52354
+                set_cell_type(state, slot, int(MazeObjIds.TILE_FLOOR))
                 state.player_fighting_dir[player_index] = 0
+                _fight_counts_as_activity(state)
                 return -1
-            else:
-                new_type = obj_type - 1
-                state.mobs.set_obj_type(slot, new_type)
-                from ..maze import placement_picture, set_cell_descriptor
+            dragon_player_proximity(state, slot)               # 0x5252E
+            _fight_effect(state, slot, player_index)           # 0x5253C
+            new_type = obj_type - 1
+            state.mobs.set_obj_type(slot, new_type)
+            state.mobs.picture[slot] = placement_picture(state, new_type)
+            set_cell_type(state, slot, new_type)
+            player_add_score_with_mult(state, player_index, 10)  # 0x52578
+            _fight_counts_as_activity(state)
+            return 1
+        return 0
 
-                state.mobs.picture[slot] = placement_picture(
-                    state, new_type,
-                )
-                set_cell_descriptor(state, slot, new_type)
-                return 1
+    if obj_type == int(MazeObjIds.MONST_DRAGON):               # 0x52864
+        dragon_player_proximity(state, slot)
         return 0
 
     if obj_type not in MONSTER_TYPES:
@@ -523,20 +548,31 @@ def _player_fight_collision(
         return 0
 
     if obj_type == int(MazeObjIds.MONST_SUPERSORC):
+        dragon_player_proximity(state, slot)                   # 0x5275A
         if state.mobs.hpos[slot] & 0x30 == 0x20:
+            dragon_player_proximity(state, slot)               # 0x5286C
             return 0
-        from .monster_state import _anim_add_high, monster_update_anim_tile
+        from .monster_state import monster_update_anim_tile
         from .monster_spawning import supersorc_place
+        from .thief import calc_direction
 
-        _anim_add_high(state, slot, 0xE0)
+        # 0x52782-0x52792 sets frame 7 outright, on the ROM's direction 0.
+        state.mobs.set_state(slot, (7 << 3) | _ROM_DIRECTION_ZERO)
         state.mobs.hpos[slot] &= ~0x30
-        destination = supersorc_place(state, slot)
-        current = destination if destination is not None else slot
-        if state.mobs.picture[current]:
+        destination = supersorc_place(state, slot, player_index)  # 0x527B4
+        _fight_counts_as_activity(state)
+        if destination is not None and destination != slot:
             monster_update_anim_tile(
-                state, current, int(MazeObjIds.MONST_SUPERSORC),
+                state, destination, int(MazeObjIds.MONST_SUPERSORC),
             )
-        return -1 if destination is not None and destination != slot else 0
+            return -1
+        # 0x52806: nowhere to go, so it turns to face the hero who touched it.
+        direction = calc_direction(state, slot, player.mob_slot)  # 0x52826
+        state.mobs.set_state(slot, (7 << 3) | ((direction - 2) & 0x07))
+        monster_update_anim_tile(
+            state, slot, int(MazeObjIds.MONST_SUPERSORC),
+        )
+        return 0
 
     if (obj_type == int(MazeObjIds.MONST_SORC)
             and state.mobs.hpos[slot] & 0x10):
@@ -544,13 +580,17 @@ def _player_fight_collision(
 
         state.mobs.hpos[slot] &= ~0x10
         monster_update_anim_tile(state, slot, obj_type)
+        _fight_counts_as_activity(state)
         return 1
 
     if not state.player_fighting_dir[player_index]:
         if state.movement_type == 1:
             state.player_fighting_dir[player_index] = player.direction + 1
             player.anim_counter = 0
+        _fight_counts_as_activity(state)
         return 1
+
+    dragon_player_proximity(state, slot)                       # 0x523E2
 
     # fight.c indexes rhandpower by cabinet player slot, not character.
     random_bound = _HAND_RANDOM[player_index & 3]
@@ -567,6 +607,7 @@ def _player_fight_collision(
     }.get(obj_type, 0)
     _fight_effect(state, slot, player_index)
     player_add_score_with_mult(state, player_index, 25)
+    _fight_counts_as_activity(state)
     if not 0 <= low - base + 2 < 3:
         state.mobs.unlink_and_clear(slot)
         state.player_fighting_dir[player_index] = 0

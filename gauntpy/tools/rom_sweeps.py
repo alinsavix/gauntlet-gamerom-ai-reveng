@@ -4,9 +4,16 @@
     python tools/rom_sweeps.py scan    # run the transporter arrival scan on each type
 
 ``walk`` steps one continuous ROM run against gauntpy's movement and occupied-cell tail,
-comparing the result word, position, keys and how often player_tile_interact runs.
+comparing the result word, position, keys, the fight latch and how often
+player_tile_interact runs. It does main_move_players' 0x4AA12 and 0x4AA36-0x4AA3E around
+each ROM call, which is what ends a fight when a swing misses.
 ``scan`` forces each type to overlap a landed hero and reports records that survive or
 an instruction limit, which would be a hang.
+
+``walk`` skips PLAYERSTART: a real one is a hero or the thief, and those need more than a
+placed record (tests/test_rom_execution.py has the thief). It stops once a hero starts to
+transport, because main_move_players stops moving them too. Comparing RNG seeds needs a real
+level, since a fixture has no neighbours for floor restamps to draw for.
 
 A difference is a lead, not a verdict: fixtures here are not real maze states, and a fault
 usually means RAM the snapshot lacks. Hand-traced conclusions live in doc/04 §7.2.
@@ -85,12 +92,15 @@ def _walk(obj_type: int, keys: int, delta: int, steps: int = 24):
     player = state.players[0]
     try:
         for step in range(steps):
+            machine.w16(0x904A0E, 0)
             result = rom_exec.player_try_move(machine, state, 0, delta)
             if not machine.halted:
                 return f"ROM stopped at step {step}, fault {machine.fault_pc}"
+            if not machine.r16(0x904A0E):
+                machine.w16(0x9049AC, 0)
             slot = machine.player_slot(0)
             rom = (result, slot, machine.hpos(slot) & ~0xF, machine.vpos(slot),
-                   machine.keys(0), rom_calls[0])
+                   machine.keys(0), rom_calls[0], bool(machine.r16(0x9049AC)))
             state.movement_type = 2
             origin = (player.mob_slot, state.mobs.hpos[player.mob_slot],
                       state.mobs.vpos[player.mob_slot])
@@ -98,9 +108,12 @@ def _walk(obj_type: int, keys: int, delta: int, steps: int = 24):
             _, refused = pm.resolve_entered_cell(state, 0, origin)
             slot = player.mob_slot
             ours = (0xF0 if refused else moved & 0xFFFF, slot, state.mobs.hpos[slot] & ~0xF,
-                    state.mobs.vpos[slot], player.keysnum, our_calls[0])
+                    state.mobs.vpos[slot], player.keysnum, our_calls[0],
+                    bool(state.player_fighting_dir[0]))
             if rom != ours:
                 return f"differs at step {step}: ROM {[hex(x) for x in rom]} gauntpy {[hex(x) for x in ours]}"
+            if state.player_tport_phase[0] >= 0:
+                break
     finally:
         player_items.player_tile_interact = original
     return "same"
@@ -113,6 +126,8 @@ def walk() -> None:
             same = 0
             print(f"--- {name}, keys={keys}")
             for obj_type in range(1, 0x40):
+                if obj_type == int(MazeObjIds.PLAYERSTART):
+                    continue
                 outcome = _walk(obj_type, keys, delta)
                 if outcome == "same":
                     same += 1

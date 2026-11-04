@@ -347,7 +347,9 @@ It has a relocation search behind players, rather than merely a faster
 version of ordinary walking. Starting with one player and trying the
 others cyclically, the search tests straight behind the hero's facing,
 then the two adjacent rear directions. Those probes require clear runs
-of four, three, and three cells.
+of four, three, and three cells. When it blinks on its own the first
+player is random, but a hero who touches it is tried first, so reaching
+out to a Super Sorcerer usually puts it at that hero's back.
 
 A destination must be visible, in valid maze rows, and empty apart from
 the relocating creature's own allowed slot. A further nearby-object

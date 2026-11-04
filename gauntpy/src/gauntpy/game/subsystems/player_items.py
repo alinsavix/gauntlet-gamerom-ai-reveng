@@ -385,6 +385,7 @@ def _door_unlock(state: GameState, door_slot: int, player_index: int) -> None:
 
     _remove_door_slot(state, door_slot)
     _sound_play(state, 0x12)                        # 0x51DDE: "Doors Open"
+    _tile_taken(state, player_index)
 
 
 # ROM: direct game:0x511AC | Tile-type pickup/door/transport/exit dispatch boundary, with several arms extracted into helpers; correspondence does not assert complete behavioral fidelity.
@@ -395,10 +396,8 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     Returns -1 when handled/consumed, 0 when unhandled.
     Sound calls use a fixed sound_play pointer in A2 (see player_runtime_contracts.csv).
 
-    The ROM also clears the escape timer (0x9048C6, ``a3`` here) on each of the
-    twelve handled branches -- "frames since forward progress".  Only the door
-    branch does so below, because that is the branch this port has reworked;
-    the other eleven are recorded here so the finding is not lost.
+    Each branch clears the escape timer (0x9048C6, ``a3`` here) itself; a taken
+    tile leaves through ``_take_tile``.
     """
     from .player_lifecycle import (
         player_inv_update as player_inv_update,
@@ -461,7 +460,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         state.escape_timer = 0                           # 0x51D96: clr.w (a3)
         # "Non-destructible" means shots cannot destroy it; collect() deletes
         # both food types after a successful pickup.
-        state.mobs.unlink_and_clear(tile_mob_slot)
+        _take_tile(state, tile_mob_slot, player_index)
         return -1
 
     # ── Key ───────────────────────────────────────────────────────────────────
@@ -476,7 +475,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             ):
                 return 0
             state.escape_timer = 0
-            state.mobs.unlink_and_clear(tile_mob_slot)
+            _take_tile(state, tile_mob_slot, player_index)
             return -1
         # 0x514D4: a key counts against "don't be greedy" (keys or potions).
         _secret_trick_progress(state, player_index, _TRICK_NOGREEDY1)
@@ -511,7 +510,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             player.keysnum = (player.keysnum + 1) & 0xFF        # 0x51528
         player_inv_update(state, player_index)          # 0x51610
         _dialog(state, player_index, _DIALOG_KEYS)      # 0x51620, record 3
-        state.mobs.unlink_and_clear(tile_mob_slot)
+        _take_tile(state, tile_mob_slot, player_index)
         return -1
 
     # ── Potions ───────────────────────────────────────────────────────────────
@@ -536,7 +535,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
                     )
                 ):
                     return 0
-                state.mobs.unlink_and_clear(tile_mob_slot)
+                _take_tile(state, tile_mob_slot, player_index)
                 return -1
             player.potionsnum = (player.potionsnum + 1) & 0xFF
             _sound_play(state, 0x26)                    # 0x51778
@@ -546,7 +545,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             # never picked up, so it cannot make the player greedy.
             _secret_trick_progress(state, player_index, _TRICK_NOGREEDY1)
         # Both records resist shots differently, but both disappear on pickup.
-        state.mobs.unlink_and_clear(tile_mob_slot)
+        _take_tile(state, tile_mob_slot, player_index)
         return -1
 
     # ── Treasure ──────────────────────────────────────────────────────────────
@@ -564,7 +563,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         _treasure_collected(state, player_index)
         if state.mazenum_current not in _TREASURE_ROOM_MAZES:
             _treasure_award(state, player_index, 100)
-        state.mobs.unlink_and_clear(tile_mob_slot)      # 0x51E6A
+        _take_tile(state, tile_mob_slot, player_index)      # 0x51E6A
         return -1
 
     # Type 0x30 enters at 0x51998: popup, then the award at 0x51A16. It is not
@@ -577,7 +576,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             state, tile_mob_slot, bonus_score // 1000 + 1,
         )                                               # 0x519B8
         _treasure_award(state, player_index, bonus_score)
-        state.mobs.unlink_and_clear(tile_mob_slot)      # 0x51E6A
+        _take_tile(state, tile_mob_slot, player_index)      # 0x51E6A
         return -1
 
     # ── Locked treasure (type 0x2F) ───────────────────────────────────────────
@@ -680,7 +679,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             _secret_trick_set(state, player_index, _TRICK_NOUSEINVUL, 1)
         _sound_play(state, 0x26)                     # 0x5187A/0x51834/0x518A8
         state.escape_timer = 0                       # 0x51882: clr.w (a3)
-        state.mobs.unlink_and_clear(tile_mob_slot)
+        _take_tile(state, tile_mob_slot, player_index)
         player_inv_update(state, player_index)
         return -1
 
@@ -713,7 +712,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         if not granted:
             return 0
         _sound_play(state, 0x26)
-        state.mobs.unlink_and_clear(tile_mob_slot)
+        _take_tile(state, tile_mob_slot, player_index)
         player_inv_update(state, player_index)
         return -1
 
@@ -734,6 +733,21 @@ def _drop_trap_walls(state: GameState, trap_type: int) -> bool:
     from ..maze import maze_place_object_types
 
     return maze_place_object_types(state, trap_type)
+
+
+# ROM: part game:0x511AC | Shared taken-tile tail at 0x51E36-0x51E72: hero proximity, idle timer, then the record's removal.
+def _take_tile(state: GameState, slot: int, player_index: int) -> None:
+    _tile_taken(state, player_index)
+    state.mobs.unlink_and_clear(slot)                       # 0x51E6A
+
+
+# ROM: part game:0x511AC | Hero proximity and idle-timer half of the taken-tile tail, 0x51E36-0x51E5C.
+def _tile_taken(state: GameState, player_index: int) -> None:
+    from .shot_damage import dragon_player_proximity
+
+    dragon_player_proximity(state, state.players[player_index].mob_slot)
+    if state.idle_timer > 0:                                # 0x51E4E
+        state.idle_timer = 0
 
 
 # ROM: part game:0x511AC | Shared trap/stun return-arm bookkeeping: clear escape/positive idle timers and notify the dragon; the dragon routine is a callee.

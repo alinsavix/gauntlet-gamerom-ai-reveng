@@ -60,15 +60,55 @@ statistics bytes at configuration offset +0xE6. gauntpy has no operator statisti
 is untraced. doc/02 calls 0x904FF0 `coin_bonus_progress` and says its only reference is 0x35D6, and
 `gauntlet.r2` calls it `coin_totals`, so this game ROM reference disagrees with both.
 
-### S-201 · generator's last hand hit and a type-0x0F neighbour
+### S-205 · trap tiles in real levels and a transporter on a landed hero
 
-Two leads from that walk, not yet traced. A hero who destroys a generator by hand
-steps forward on the same frame on the ROM (result 0xE0, H + 0x80) and a frame later
-in gauntpy (0xF0). And a neighbouring record of type 0x0F with no hero behind it is
-passed by the ROM (dispatch to 0x5227A) and blocks in gauntpy; the thief is the real
-case of that record, and the fixture is not a real thief.
+`tests/test_rom_execution.py` runs pickups against the ROM, but two comparisons are still open.
+Neither has been shown to be a game difference rather than a fixture one.
+
+Firing a trigger in a real level gave a different RNG seed or wall records from the ROM for 44
+of 153 trap tile and maze combinations, and 2 of 33 stun tile ones. Two things stand
+in the way. TrapsLocal levels (`level_flags_4` bit 2) gate removal on the camera through 0x5E5D2,
+and the harness only partly models the camera. And gauntpy draws from the RNG in
+`_descriptor_for_cell`'s wall stamps during the restamp, which the ROM's count suggests it does
+not: maze 6, which is not TrapsLocal, makes 10 ROM draws and 31 in gauntpy, with no record
+differing. Those draws only choose wall art, so the visible cost is small, but every later
+random result in that game differs from the arcade's.
+
+In `tools/rom_sweeps.py scan`, a transporter overlapping a landed hero is deleted on the ROM
+and kept in gauntpy, where `player_tile_interact` starts a new transport. The fixture has one
+pad and no real level around it.
 
 ## Resolved issues
+
+### S-201 · hand contact left out the timers, the dragon and the toucher
+
+The two leads from the walk sweep were both fixtures. A hero who destroys a generator by hand
+did not step a frame late: on a missed swing gauntpy ends the fight inside `player_try_move`, and
+the ROM ends it in `main_move_players` (0x4AA12, 0x4AA36-0x4AA3E), which the sweep did not run. It
+does now, and generators no longer differ. The type-0x0F neighbour was not a thief; with real loot
+and a real slot the thief arm matches the ROM's record, seed and timers.
+
+Comparing every arm of `mob_collision_test` directly, with seeds and timers, found what the
+walk could not see:
+
+- Hand contact never touched `idle_timer` or `escape_timer`. On the ROM, starting a fight, landing
+  a blow and killing all clear both (0x52360, 0x5249A), and so does taking a locked treasure, so a
+  long fight no longer runs down the idle doors or the escape exits.
+- Taking a tile never cleared `idle_timer` or ran the dragon check. Every pickup and keyed door
+  leaves through 0x51E36-0x51E6A, which does both.
+- Hand blows never reached `dragon_player_proximity` (0x523E2, 0x524F2, 0x5252E, 0x5275A), so
+  fighting beside a sleeping dragon could not wake it. A blow on the dragon itself now reaches it
+  too (0x52864).
+- Touching a super sorcerer sent it behind a random hero. 0x5FDB8 passes the toucher to 0x5FDE0;
+  only its own blink draws a random start (0x4108E). The contact also sets the state word's frame
+  to 7 rather than adding to it, and if there is nowhere to go it faces the toucher (0x52806).
+  The "re-aim at the nearest player" fallback in `supersorc_place` was not on the ROM (0x5FF8C).
+- A generator blow restamped the floor, which drew extra floor variants. The ROM leaves the
+  floor alone, so these now only note the cell's new type.
+
+The demo cannot show any of this: its timers are gated off and it has no such contact, so the
+evidence is the ROM executed under Unicorn. The harness also now loads the transport phase,
+fight latch and all of `level_flags_4`, whose absence had caused false differences of its own.
 
 ### S-202 · once-per-cell gate on the occupied-cell tail did nothing
 

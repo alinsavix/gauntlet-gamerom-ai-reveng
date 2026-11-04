@@ -39,7 +39,6 @@ STACK_TOP = 0x10F000
 _PICTURE, _HPOS, _VPOS, _LINK, _STATE = (
     0x902000, 0x902800, 0x903000, 0x903800, 0x904066,
 )
-PLAYER_OFFSCREEN_FLAG = 0x80
 
 
 def roms_available() -> bool:
@@ -114,6 +113,12 @@ class RomMachine:
             self.w8(0x90405A + i, player.keysnum)
             self.w8(0x904055 + i, player.potionsnum)
             self.w16(0x904B2A + 2 * i, player.coin_count)
+            self.w16(0x904BCE + 2 * i, state.player_tport_phase[i])
+            self.w16(0x9049A4 + 2 * i, (player.direction + 2) & 7)
+            self.w16(0x9049BC + 2 * i, player.anim_counter)
+            # The latch is the facing plus one, on each side's own compass.
+            fighting = state.player_fighting_dir[i]
+            self.w16(0x9049AC + 2 * i, (fighting + 2) & 0xFFFF if fighting else 0)
         for i, pad in enumerate(_tport_pos_table(state)):
             self.w16(0x910700 + 2 * i, pad)
         self.w16(0x9049DC, state.player_it)
@@ -121,7 +126,10 @@ class RomMachine:
         self.w16(0x904918, int(state.game_mode))
         self.w16(0x904928, state.level_players_active)
         self.w8(0x904065, state.secret_trick_id)
-        self.w8(0x90491F, PLAYER_OFFSCREEN_FLAG if state.level_flags_4 & PLAYER_OFFSCREEN_FLAG else 0)
+        self.w8(0x90491F, state.level_flags_4 & 0xFF)
+        self.w16(0x90490C, state.idle_timer)
+        self.w16(0x9048C6, state.escape_timer)
+        self.w16(0x904BF2, state.movement_type)
         self.w16(0x904AC2, (state.scroll_x - 8) << 7)
         self.w16(0x904AC4, (0x108 - state.scroll_y) << 7)
 

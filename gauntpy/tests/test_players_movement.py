@@ -724,6 +724,105 @@ class TestHandToHandGenerators:
         assert state.mobs.picture[slot] != 0
 
 
+class TestHandContactCountsAsActivity:
+    """0x52360/0x5249A: a fight holds off the idle doors and the escape exits."""
+
+    @staticmethod
+    def _fight(obj_type: int, *, fighting: bool, low: int = 0x0B) -> GameState:
+        state = GameState()
+        state.rng = type("ZeroRng", (), {
+            "seed": 0,
+            "getrandom": staticmethod(lambda _bound: 0),
+        })()
+        _active_player_at(state, 0, (10 << 5) | 10)
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x2000, hpos=(176 << 7) | low,
+            vpos=native_v(160) << 7, obj_type=int(obj_type),
+        )
+        state.idle_timer, state.escape_timer = 50, 60
+        state.movement_type = 1
+        state.player_fighting_dir[0] = 1 if fighting else 0
+        player_movement._player_fight_collision(state, 0, slot)
+        return state
+
+    def test_starting_and_landing_a_blow_reset_both_timers(self):
+        for fighting in (False, True):
+            state = self._fight(MazeObjIds.MONST_GRUNT, fighting=fighting)
+            assert (state.idle_timer, state.escape_timer) == (0, 0), fighting
+
+    def test_hitting_a_generator_resets_both_timers(self):
+        state = self._fight(MazeObjIds.GEN_GHOST2, fighting=True)
+        assert (state.idle_timer, state.escape_timer) == (0, 0)
+
+    def test_a_disabled_idle_timer_stays_disabled(self):
+        """0x52366: only a positive count is cleared; -1 means the doors have gone."""
+        state = GameState()
+        _active_player_at(state, 0, (10 << 5) | 10)
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x2000, hpos=(176 << 7) | 0x0B,
+            vpos=native_v(160) << 7, obj_type=int(MazeObjIds.MONST_GRUNT),
+        )
+        state.idle_timer = -1
+        player_movement._player_fight_collision(state, 0, slot)
+        assert state.idle_timer == -1
+
+    def test_a_missed_swing_at_a_generator_does_not(self):
+        """0x524D8 -> 0x524AE returns without touching them."""
+        state = GameState()
+        state.rng = type("HighRng", (), {
+            "seed": 0,
+            "getrandom": staticmethod(lambda _bound: 3),
+        })()
+        player = _active_player_at(state, 0, (10 << 5) | 10)
+        player.character = Character.WIZARD
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x09AB, hpos=176 << 7, vpos=native_v(160) << 7,
+            obj_type=int(MazeObjIds.GEN_GHOST1),
+        )
+        state.idle_timer, state.escape_timer = 50, 60
+        state.player_fighting_dir[0] = 1
+        assert player_movement._player_fight_collision(state, 0, slot) == 0
+        assert (state.idle_timer, state.escape_timer) == (50, 60)
+
+    def test_hand_blows_reach_the_dragon_proximity_check(self, monkeypatch):
+        from gauntpy.game.subsystems import shot_damage
+
+        seen = []
+        monkeypatch.setattr(
+            shot_damage, "dragon_player_proximity",
+            lambda _state, cell, previous_cell=0: seen.append(cell),
+        )
+        self._fight(MazeObjIds.MONST_GRUNT, fighting=True)
+        assert seen == [(10 << 5) | 11]
+
+
+class TestGeneratorBlowsLeaveTheFloorAlone:
+    """0x5233C and 0x52526 restamp nothing, so they draw no floor variant."""
+
+    @pytest.mark.parametrize("generator", [MazeObjIds.GEN_GHOST1, MazeObjIds.GEN_GHOST3])
+    def test_one_draw_per_blow(self, generator):
+        state = GameState()
+        draws = []
+        state.rng = type("CountingRng", (), {
+            "seed": 0,
+            "getrandom": staticmethod(lambda bound: draws.append(bound) or 0),
+        })()
+        _active_player_at(state, 0, (10 << 5) | 10)
+        slot = (10 << 5) | 11
+        state.mobs.create(
+            slot, tile=0x09AB, hpos=176 << 7, vpos=native_v(160) << 7,
+            obj_type=int(generator),
+        )
+        state.player_fighting_dir[0] = 1
+        before = list(state.playfield_floor_descriptors)
+        player_movement._player_fight_collision(state, 0, slot)
+        assert draws == [4]
+        assert list(state.playfield_floor_descriptors) == before
+
+
 class TestTurningFromAFight:
     """main_move_players 0x4A9A4-0x4A9BC -- a turn of more than one step ends it."""
 

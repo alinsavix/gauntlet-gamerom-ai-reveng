@@ -147,10 +147,8 @@ def load_attract_fixed_palette() -> tuple[int, ...] | None:
 def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
     """Update a logical cell and perform the ROM-equivalent local restamps."""
     slot &= 0x3FF
+    set_cell_type(state, slot, object_type)
     data = getattr(state.maze, "data", None)
-    if data is not None and slot >= FIRST_PLAYABLE_SLOT:
-        row, col = coords.unpack_slot(slot)
-        data[(col, row)] = int(object_type)
 
     if state.playfield_floor_catalog and data is not None:
         row, col = coords.unpack_slot(slot)
@@ -200,6 +198,15 @@ def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
     write_tile_descriptor(
         state, slot, _descriptor_for_cell(state, slot, int(object_type)),
     )
+
+
+# ROM: helper | Python's logical maze dictionary, which the ROM keeps in the MOB records themselves.
+def set_cell_type(state: GameState, slot: int, object_type: int) -> None:
+    """Note a cell's new type without touching the playfield."""
+    data = getattr(state.maze, "data", None)
+    if data is not None and slot >= FIRST_PLAYABLE_SLOT:
+        row, col = coords.unpack_slot(slot)
+        data[(col, row)] = int(object_type)
 
 
 # ROM: adapter game:0x5F5A0 | Fixed-floor specialization delegating to set_cell_descriptor; not a new ROM callable or the complete MOB replacement operation.
