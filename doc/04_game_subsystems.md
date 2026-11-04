@@ -98,7 +98,14 @@ by character first:
    `anim_table_fighting` (0x5884A), indexed by
    `(anim_counter/2 & 7, direction, char_type × 64)`, then increments the
    counter. The fighting-direction word is the active-combat latch; the picture
-   table uses the current facing.
+   table uses the current facing. The latch holds the direction the fight began
+   with plus one, and 0x4A9A4-0x4A9BC clears it when
+   `(player_fighting_dir - direction) & 7 >= 3`, so a hero may turn one step either
+   way and keep fighting. A wider turn ends the fight, and with the latch clear
+   that frame's move call runs and can start a new one at counter 0. A stunned
+   hero skips this test (0x4A91C). A MAME capture of the demo poked to make lobbers
+   shows it: the Elf turns at iteration 5496 and the picture restarts on the new
+   facing's first fighting frame.
 
 4. **Shooting:** `player_shooting` selects `anim_table_shooting` (0x5874A),
    indexed by `(anim_counter/4 & 3, direction, char_type × 32)`. The
@@ -3277,6 +3284,16 @@ depth placement but copies H/V from the live projectile MOB at `shooter+1`.
 Ordinary MOB targets copy the target's coordinates, including the ROM's
 four-pixel H adjustment for wider records. Stripping the tag before this call
 can index a reserved shot channel and place the sparkle at unrelated stale H/V.
+
+A target below 0x20 is a shot slot, as when a lobber's rock lands, and needs a
+computed depth key (0x47F5E-0x47F7E). The computation expects D4 to hold H in
+pixels, but only the wide-record path shifts it (`LSR.W #7,D4` at 0x47F36); 0x47F12
+branches past that. On the usual path the column therefore comes from the raw H word,
+`((H + 8) >> 4) & 0x1F`, which is not the cell's column: a rock at H 0x8C81, V 0x3809
+gets key 776 where its cell is 786. Only draw order depends on it. A MAME capture
+confirms the result: a second rock at key 785 sorts behind the effect. A target whose
+column is zero, with `level_flags_4` bit 5 clear, instead goes to 0x47E8A and keeps the
+target itself as its key.
 
 **Doors:** react only when on-screen (`shot_onscreen_check` 0x4AEA0 vs scroll registers 0x904026/28).
 

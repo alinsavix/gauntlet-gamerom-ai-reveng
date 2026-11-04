@@ -85,7 +85,11 @@ distance along the floor.
 Holding Fire changes the situation before collision even begins. It
 bypasses the ordinary walking call, and the shooting wind-up and close
 fight state impose their own restrictions. A speed advantage does not
-mean that a hero advances while performing every other action.
+mean that a hero advances while performing every other action. A fight
+also remembers which way it began. The hero can lean one compass step
+either side of that facing and keep swinging, but a wider turn ends the
+fight. If the hero is still against a monster in the new direction, the
+swing starts again from its first frame, which delays the next blow.
 
 Strength is similarly divided. Against ordinary monsters the unpowered
 hand-fighting base is two for Warrior and Valkyrie, one for Wizard and

@@ -444,8 +444,8 @@ the players are trying to win.
   capture matched every monster picture in the seven families it shows.
   Sorcerers, demons and lobbers do not appear in it, so the same demo was
   captured again with the RAM of its ghosts, grunts and generators changed
-  to those types. Demons and sorcerers matched for the whole run, and
-  lobbers until a hand fight at iteration 5500 that is still unexplained.
+  to those types. Demons, sorcerers and lobbers all matched for the whole
+  run.
 - The worked schedule follows direct disassembly at `0x40EAA–0x40EEC`
   and `0x41026–0x41036`, including the doubled normal frame and the
   slot's `OR 2`. The probability comparison at `0x49300–0x4930E`

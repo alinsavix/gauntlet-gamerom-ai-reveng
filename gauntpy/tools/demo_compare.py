@@ -47,7 +47,6 @@ LUA_TRACE = Path(__file__).resolve().with_name("mame_demo_trace.lua")
 MONSTERS = {int(t) for t in MONSTER_TYPES}
 #: The trace's iterations start here; earlier video frames are demo setup.
 FIRST_DEMO_FRAME = 28
-SHOT_SLOTS = range(1, 13)
 
 
 # --- pokes -----------------------------------------------------------------------
@@ -208,8 +207,8 @@ def compare(path: Path, poke: str, show: int = 8) -> int | None:
     seen: collections.Counter[str] = collections.Counter()
     pictures: collections.Counter[str] = collections.Counter()
     first_picture = None
-    shot_samples = shot_diffs = 0
-    first_shot = None
+    link_samples = link_diffs = 0
+    first_link = None
     stopped_at = None
     last = 0
     for iteration in range(1, max(iterations) + 1):
@@ -240,17 +239,16 @@ def compare(path: Path, poke: str, show: int = 8) -> int | None:
                 if first_picture is None:
                     first_picture = (iteration, slot, _type_name(obj_type),
                                      hex(state.mobs.picture[slot]), hex(record[0]))
-        for slot in SHOT_SLOTS:
-            record = mame.get(slot)
-            if record is None or not (record[0] or state.mobs.picture[slot]):
+        for slot, record in mame.items():
+            if not (record[0] or state.mobs.picture[slot]):
                 continue
-            shot_samples += 1
+            link_samples += 1
             links = (bool(state.mobs.picture[slot]), state.mobs.link[slot] & 0x3FF,
                      state.mobs.state_link[slot] & 0x3FF)
             if links != (bool(record[0]), record[1] & 0x3FF, record[4] & 0x3FF):
-                shot_diffs += 1
-                if first_shot is None:
-                    first_shot = (iteration, slot, links, (record[1] & 0x3FF, record[4] & 0x3FF))
+                link_diffs += 1
+                if first_link is None:
+                    first_link = (iteration, slot, links, (record[1] & 0x3FF, record[4] & 0x3FF))
         if global_diffs or diffs:
             stopped_at = iteration
             print(f"first state difference at iteration {iteration}: {global_diffs}")
@@ -263,7 +261,7 @@ def compare(path: Path, poke: str, show: int = 8) -> int | None:
     print("compared through iteration", last)
     print("live monster samples:", dict(seen))
     print("picture-only differences:", dict(pictures), "first:", first_picture)
-    print(f"shot-slot link differences: {shot_diffs} of {shot_samples}", "first:", first_shot)
+    print(f"depth link differences: {link_diffs} of {link_samples}", "first:", first_link)
     return stopped_at
 
 

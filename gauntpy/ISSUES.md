@@ -37,28 +37,6 @@ start).
 
 ## Open issues
 
-### S-203 · lobber demo: hand fight and chain order differ
-
-Poking the demo's generators into lobbers (`tools/demo_compare.py`, mode `lobbers`) gives
-2381 matching live lobber samples, then two differences, neither traced yet.
-
-The Elf's hand fight against the lobber in slot 914 runs at a different rate from
-iteration 5496: the hero's pictures are 0x16BD, 0x16C6, 0x16C6, 0x16C6 in gauntpy and
-0x16B4, 0x16B4, 0x16BD, 0x16BD on the arcade. At 5500 gauntpy's hit kills the lobber and
-the Elf steps to V 0x1112; on the arcade the lobber survives, with the same H (0x8C99) and
-state word 0x640A, and the Elf stays at V 0x1012. The RNG seed differs from that frame, and
-comparison stops there, so lobbers past 5500 are unchecked. This may be related to S-201.
-These are the first hand fights in any capture, since the shipped demo and the `families`
-poke have none. The Elf has been fighting since 5428 with matching pictures, so the first
-exchanges agree and hand fighting is not simply running at the wrong rate throughout.
-
-Before that, at iteration 5400, a rock's depth links differ while its position and picture
-match. The arcade keeps slot 11 with next 0x352 and previous 14, and impact effect 14 with
-next 11 and previous 0x2AD. gauntpy has re-keyed slot 11 with next 14 and previous 0x2AD. So
-the two are swapped in the chain between 0x2AD and 0x352, 20 of 987 shot-slot samples
-differ, and it affects draw order only so far. A same-key tie or the effect's depth key is
-the likely place to look.
-
 ### S-202 · once-per-cell gate on the occupied-cell tail does nothing
 
 `resolve_entered_cell` skips a cell equal to last frame's
@@ -88,6 +66,31 @@ stops at the first difference, so later frames are unchecked.
 
 ## Resolved issues
 
+### S-203 · turning from a hand fight and the impact effect's depth key
+
+Poking the demo's generators into lobbers (`tools/demo_compare.py`, mode `lobbers`) gave the
+first hand fights in any capture, and two differences. Both are fixed, and that run now
+matches MAME for all 7200 iterations, including 4421 live lobber samples.
+
+Turning from a fight ended it on the arcade but not in gauntpy. 0x4A9A4-0x4A9BC clears the
+latch when `(fighting_dir - direction) & 7 >= 3`, which is any turn of more than one step
+from the facing the fight began with. That frame's move call can then start a new fight with
+the animation counter at 0. At iteration 5496 the demo stream turned the Elf, and gauntpy
+carried on at count 19 and landed a blow at 5500 that the arcade did not.
+
+The impact effect took the wrong depth key when a shot slot was its target, as when a rock
+lands. 0x47F12 branches past the `LSR.W #7,D4` at 0x47F36, so the column at 0x47F5E comes from
+the raw H word rather than pixels: a rock at H 0x8C81 gets key 776 where the real cell is 786.
+gauntpy computed the real cell, so a passing rock sorted before the effect instead of after it.
+This changes draw order only. The ROM also leaves a column-zero target's key as the target
+itself, which gauntpy now does too.
+
+`demo_compare` now checks every slot's links rather than only the shot slots, which found
+one more. A finished exit animation is released by `mob_depth_remove` (0x4A6C0), which leaves
+its picture and position in RAM, and gauntpy zeroed them. It is out of the chain either way,
+so it is never drawn. The shipped demo and the `families` and `lobbers` pokes now show no
+link differences in about 1.2 million samples each.
+
 ### S-199 · monster_create_shot kept the animation frame
 
 0x49114-0x4913E rebuilds the shooter's state word as
@@ -99,6 +102,7 @@ live demon and 309 live sorcerer samples, every picture, and 631 shot-slot link 
 It produces no lobbers, so `tools/demo_compare.py` has a `lobbers` mode as well, which
 found S-203. The poke tooling moved from scratch files to `tools/`, and comparison now
 includes hero pictures; leaving them out had hidden S-203's first symptom.
+
 
 ### S-198 · player_tile_interact had acid and IT arms the ROM lacks
 

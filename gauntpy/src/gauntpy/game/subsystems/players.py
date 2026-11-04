@@ -475,7 +475,7 @@ def _status8_complete(state: GameState, player_index: int) -> None:
         player.status = int(PlayerStatus.ALIVE_NEXT)         # 0x4A6B2
         player.exit_pending = 0
         if player.mob_slot:                                  # 0x4A6C0/0x4A6D2
-            state.mobs.unlink_and_clear(player.mob_slot)
+            state.mobs.depth_remove(player.mob_slot - 1)
         player.mob_slot = 0
         if state.player_it == player_index:                  # 0x4A6D6
             state.player_it = 0xFFFF
@@ -792,6 +792,13 @@ def main_move_players(state: GameState) -> None:
             rom_direction = _direction_from_input(dirn)
             if rom_direction < 8:
                 player.direction = (rom_direction - 2) & 0x07
+        # 0x4A9A4-0x4A9BC: the latch holds the facing the fight began with, plus
+        # one, so turning more than one step off that facing ends the fight and
+        # lets this frame's move call start another.
+        if (not stunned
+                and (state.player_fighting_dir[player_index]
+                     - player.direction) & 0x07 >= 3):
+            state.player_fighting_dir[player_index] = 0
         # Fire is armed only by main_handle_shots (0x47B72), which runs before
         # this routine advances the demo record: a newly loaded SHOOT record
         # starts its throw on the following frame.

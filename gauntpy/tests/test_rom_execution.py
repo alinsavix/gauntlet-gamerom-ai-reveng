@@ -19,6 +19,7 @@ from gauntpy.game.subsystems import player_items  # noqa: E402
 from gauntpy.game.subsystems import player_transport  # noqa: E402
 from gauntpy.game.subsystems import players as gp  # noqa: E402
 from gauntpy.game.subsystems.monster_shooting import monster_create_shot  # noqa: E402
+from gauntpy.game.subsystems.shot_effects import shot_impact_spawn  # noqa: E402
 from gauntpy.game.subsystems.player_movement import player_try_move  # noqa: E402
 
 _TOOL = Path(__file__).resolve().parents[1] / "tools" / "rom_exec.py"
@@ -289,3 +290,35 @@ def test_firing_sets_the_shooters_state_word_like_the_rom(direction, frame):
     assert state.mobs.state(slot) == direction
     assert machine.hpos(slot) == state.mobs.hpos[slot]
     assert machine.record(5)[:3] == _python_record(state, 5)[:3]
+
+
+# --- impact effects ------------------------------------------------------------
+
+@pytest.mark.parametrize("target,shooter,hpos,flags", [
+    (9, 8, 0x8C81, 0),          # a rock landing: the key's column comes from the raw H word
+    (9, 8, 0x8C88, 0),          # the same path at its limit
+    (9, 8, 0x8C90, 0),          # the 0x200 path, which has pixels by then
+    (3, 2, 0x4601, 0),
+    (11, 10, 0x1F81, 0),
+    (0x352, 8, 0x8C81, 0),      # an ordinary MOB is its own key
+    (0x352, 8, 0x8C90, 0),
+    (0x340, 8, 0x8C81, 0),      # column zero uses the shot's position...
+    (0x340, 8, 0x8C81, 0x20),   # ...unless the level wraps
+    (0x400 + 0x145, 0, 0x8C81, 0),
+    (0x400 + 0x05, 0, 0x8C81, 0),
+])
+def test_an_impact_takes_the_roms_position_and_depth_key(target, shooter, hpos, flags):
+    state = GameState(game_mode=GameMode.NORMAL)
+    state.level_flags_4 = flags
+    mobs = state.mobs
+    # Live records for the shot and, where it is one, the target.
+    for slot in {shooter + 1, target} - {t for t in (target,) if t >= 0x400}:
+        mobs.picture[slot] = 0x1C5C
+        mobs.hpos[slot] = hpos
+        mobs.vpos[slot] = 0x3809
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    machine.call(0x47DAE, target, shooter)
+    assert machine.halted
+    shot_impact_spawn(state, target, shooter)
+    assert machine.record(0x0D)[:3] == _python_record(state, 0x0D)[:3]
+    assert machine.r16(0x904940 + 2 * 0x0D) == state.mobs.depth_key[0x0D]

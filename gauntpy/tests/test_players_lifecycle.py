@@ -4692,7 +4692,10 @@ class TestExitingIsNotRespawnWait:
         assert p.status == int(PlayerStatus.ALIVE_NEXT)   # 0x4A6B2
         assert p.exit_pending == 0
         assert p.mob_slot == 0                            # 0x4A6D2
-        assert state.mobs.picture[21] == 0                # 0x4A6C0
+        # 0x4A6C0 is mob_depth_remove: out of the chain, picture and position stay.
+        assert 21 not in list(state.mobs.iter_chain())
+        assert state.mobs.link[21] == state.mobs.state_link[21] == 0
+        assert state.mobs.picture[21] != 0
         assert state.player_it == 0xFFFF                  # 0x4A6DE
         assert state.level_players_active == 1            # 0x4A6E6
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..constants import MazeObjIds
-from ..coords import mob_words_to_slot, position_field
+from ..coords import hpos_x, position_field, vpos_v
 from ..playfield import pf_replace
 from ..state import GameState
 from .shot_data import CONSUMED
@@ -92,18 +92,20 @@ def _impact_geometry(
             depth_key -= 0x20
         return _shot_slot(shooter), 0, depth_key
 
-    if target & 0x1F or state.level_flags_4 & 0x20:
-        hpos_add = 0 if state.mobs.hpos[target] & 0x38 <= 8 else 0x200
-        source_slot = target
-    else:
-        hpos_add = 0
-        source_slot = _shot_slot(shooter)
+    if not (target & 0x1F or state.level_flags_4 & 0x20):
+        return _shot_slot(shooter), 0, target       # 0x47EE0 joins the tile path
 
+    hpos_add = 0 if state.mobs.hpos[target] & 0x38 <= 8 else 0x200
     if target < 0x20:
-        hpos = position_field(state.mobs.hpos[source_slot]) + hpos_add + 1
-        vpos = position_field(state.mobs.vpos[source_slot]) + 9
-        target = mob_words_to_slot(hpos, vpos, x_bias=8)
-    return source_slot, hpos_add, target
+        hpos = position_field(state.mobs.hpos[target]) + hpos_add + 1
+        vpos = position_field(state.mobs.vpos[target]) + 9
+        # 0x47F5E-0x47F7E works the key out from D4, which holds pixels only if
+        # the 0x200 path took its LSR at 0x47F36. 0x47F12 branches past it, so
+        # the usual path takes its column from the raw H word's low bits.
+        column_word = hpos_x(hpos) if hpos_add else hpos
+        row = (vpos_v(vpos) + 8) & 0x1F0 ^ 0x1F0
+        return target, hpos_add, (row << 1) + (((column_word + 8) >> 4) & 0x1F)
+    return target, hpos_add, target
 
 
 # ROM: direct game:0x47DAE | Projectile impact creator with pool allocation, geometry and placement extracted.

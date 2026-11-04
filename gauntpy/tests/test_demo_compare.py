@@ -106,3 +106,31 @@ def test_a_poked_demon_fires_from_frame_zero_as_on_mame():
                 0xDE1F, 0x91, 0x840D, 0xDA12,
             )
             break
+
+
+@requires_roms
+def test_a_poked_lobber_run_matches_mame():
+    """S-203, from traces/mame/poked/lobbers.txt, MAME 0.289.
+
+    At 5400 a rock lands and its impact effect (slot 14) takes the ROM's odd depth key,
+    so a passing rock (slot 11) sorts behind it.  At 5496 the Elf turns from its fight,
+    which ends it and starts another, so the lobber survives the blow gauntpy used to
+    land at 5500 and the two runs stay together to the end.
+    """
+    for iteration, state in _run_demo("lobbers"):
+        mobs = state.mobs
+        if iteration == 5400:
+            assert (mobs.next_slot(11), mobs.prev_slot(11)) == (850, 14)
+            assert (mobs.next_slot(14), mobs.prev_slot(14)) == (11, 685)
+        elif iteration == 5496:
+            assert mobs.picture[state.players[1].mob_slot] == 0x16B4
+        elif iteration == 5500:
+            assert state.rng.seed == 0xFF77
+            assert (mobs.picture[914], mobs.hpos[914] & 0xFFFF) == (0x1BC7, 0x8C99)
+            assert mobs.vpos[state.players[1].mob_slot] & 0xFFFF == 0x1012
+        elif iteration == 7200:
+            elf = state.players[1].mob_slot
+            assert (state.rng.seed, elf, mobs.hpos[elf] & 0xFFFF, mobs.vpos[elf] & 0xFFFF) == (
+                0x6D00, 0x248, 0x3F0D, 0x6812,
+            )
+            break

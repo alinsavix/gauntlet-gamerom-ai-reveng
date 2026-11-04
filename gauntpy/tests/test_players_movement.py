@@ -724,6 +724,55 @@ class TestHandToHandGenerators:
         assert state.mobs.picture[slot] != 0
 
 
+class TestTurningFromAFight:
+    """main_move_players 0x4A9A4-0x4A9BC -- a turn of more than one step ends it."""
+
+    # gauntpy's compass: right, then round through the diagonals.
+    _STICK = (
+        gin.JOY_RIGHT, gin.JOY_RIGHT | gin.JOY_DOWN, gin.JOY_DOWN,
+        gin.JOY_DOWN | gin.JOY_LEFT, gin.JOY_LEFT, gin.JOY_LEFT | gin.JOY_UP,
+        gin.JOY_UP, gin.JOY_UP | gin.JOY_RIGHT,
+    )
+
+    @classmethod
+    def _turn(cls, facing: int, turn: int, stundelay: int = 0):
+        state = GameState()
+        state.game_mode = int(GameMode.NORMAL)
+        player = _active_player_at(state, 0, (10 << 5) | 10)
+        player.health = 500
+        state.mobs.hpos[player.mob_slot] = 156 << 7
+        state.mobs.vpos[player.mob_slot] = native_v(160) << 7
+        state.player_tile_or_tport_dest[0] = (10 << 5) | 10
+        player.direction = facing
+        player.anim_counter = 3             # not a move frame (counter & 15 == 7)
+        player.stundelay = stundelay
+        state.player_fighting_dir[0] = facing + 1
+        state.player_input_raw[0] = 0xFFFF & ~cls._STICK[(facing + turn) & 7]
+        gp.main_move_players(state)
+        return state, player
+
+    @pytest.mark.parametrize("facing", range(8))
+    def test_one_step_either_way_keeps_the_fight(self, facing):
+        for turn in (-1, 0, 1):
+            state, player = self._turn(facing, turn)
+            assert player.direction == (facing + turn) & 7
+            assert state.player_fighting_dir[0] == facing + 1
+            assert player.anim_counter == 4
+
+    @pytest.mark.parametrize("facing", range(8))
+    def test_a_wider_turn_ends_it(self, facing):
+        for turn in (2, 3, 4, 5, 6):
+            state, player = self._turn(facing, turn)
+            assert player.direction == (facing + turn) & 7
+            assert state.player_fighting_dir[0] == 0
+
+    def test_a_stunned_hero_stays_in_the_fight(self):
+        """0x4A91C branches round both the turn and this test."""
+        state, player = self._turn(0, 4, stundelay=5)
+        assert player.direction == 0
+        assert state.player_fighting_dir[0] == 1
+
+
 class TestCharacterFightTables:
     """mob_collision_test 0x521AE-0x52438 table selection."""
 
