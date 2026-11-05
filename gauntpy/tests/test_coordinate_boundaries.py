@@ -106,6 +106,6 @@ def test_no_hand_packed_pixel_cell_formula():
                     f"{path.relative_to(SRC)}:{node.lineno}: {ast.unparse(node)}"
                 )
     assert violations == [], (
-        "use coords.biased_pixels_to_slot/mob_words_to_slot:\n"
+        "use coords.pixels_to_slot/mob_cell_of:\n"
         + "\n".join(violations)
     )

@@ -85,17 +85,6 @@ def pixels_to_slot(x: int, y: int) -> int:
     return pack_slot(y // CELL_PIXELS, x // CELL_PIXELS)
 
 
-# ROM: helper | Parameterized Python screen-coordinate bias and cell-packing convenience.
-def biased_pixels_to_slot(
-    x: int, y: int, *, x_bias: int = 0, y_bias: int = 0,
-) -> int:
-    """Packed cell containing a biased screen-pixel point."""
-    return pack_slot(
-        ((y + y_bias) // CELL_PIXELS) & 0x1F,
-        ((x + x_bias) // CELL_PIXELS) & 0x1F,
-    )
-
-
 # --- MOB hardware word encoding ------------------------------------------------
 #
 # mob_hpos: bits 15-7 X position, bits 6-4 software flags, bits 3-0 palette
@@ -241,16 +230,6 @@ def vpos_y(word: int) -> int:
     return screen_y(vpos_v(word))
 
 
-# ROM: helper | Parameterized Python conversion through screen-coordinate biases; distinct from the specifically extracted mover rule.
-def mob_words_to_slot(
-    hpos: int, vpos: int, *, x_bias: int = 0, y_bias: int = 0,
-) -> int:
-    """Logical packed cell for native H/V words and an explicit origin bias."""
-    return biased_pixels_to_slot(
-        hpos_x(hpos), vpos_y(vpos), x_bias=x_bias, y_bias=y_bias,
-    )
-
-
 #: The native position units the game adds to a live record's H/V words before
 #: slicing its row and column out of them -- 0x600 (12 px) horizontally and
 #: 0x400 (8 px) up the vertical axis. A creature is 24 px in a 16 px cell and is
@@ -273,9 +252,9 @@ def mob_cell_of(hpos: int, vpos: int) -> int:
     column. Because both axes are taken modulo one 512-pixel maze, the result
     wraps at either seam on its own.
 
-    Not the same as ``mob_words_to_slot(..., y_bias=8)``: the vertical bias is
-    applied in the hardware's upward direction, so the row hands over at
-    ``y % 16 == 9`` rather than 8.
+    Not the same as biasing a downward screen Y by 8: the vertical bias is applied
+    in the hardware's upward direction, so the row hands over at ``y % 16 == 9``
+    rather than 8.
     """
     x = ((hpos + CELL_BIAS_H) >> POS_SHIFT) & POS_VALUE_MASK
     up = ((vpos + CELL_BIAS_V) >> POS_SHIFT) & POS_VALUE_MASK

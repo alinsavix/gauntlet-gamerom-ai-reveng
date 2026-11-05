@@ -88,25 +88,6 @@ def _slot_is_linked(state: GameState, slot: int) -> bool:
     return state.mobs.is_linked(slot)
 
 
-# ROM: helper | Python combined terrain/MOB cleanup with synthetic-slot safety and whole-door redraw; constituent callees do not establish a separate ROM entry.
-def _clear_slot(state: GameState, slot: int) -> None:
-    """Clear a dynamic MOB without corrupting synthetic, unlinked test tiles."""
-    from ..maze import clear_cell_descriptor
-
-    was_door = pf_isdoor(state, slot)
-    clear_cell_descriptor(state, slot)
-    if _slot_is_linked(state, slot):
-        state.mobs.unlink_and_clear(slot)
-    else:
-        state.mobs.picture[slot] = 0
-        state.mobs.hpos[slot] = 0
-        state.mobs.vpos[slot] = 0
-        state.mobs.link[slot] = 0
-        state.mobs.state_link[slot] = 0
-    if was_door:
-        maze_doors_setup(state)
-
-
 # ROM: adapter game:0x5DDDA | Door-specialized delegated MOB removal with unlinked-test-tile handling and logical terrain synchronization, deliberately preserving the floor descriptor.
 def _remove_door_slot(state: GameState, slot: int) -> None:
     """Remove one door MOB without touching its existing floor descriptor."""
