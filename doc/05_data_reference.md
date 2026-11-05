@@ -293,7 +293,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904B80 | 2 B | `level_next_treasure` | Level countdown to next treasure room. Seeded with `getrandom(3) + 3` (3–5) by `maze_new_level_setup` when `levelnum_current` reaches 6 (0x438E4–0x438FC), and reloaded from the same expression by `show_level_start_screen` each time it fires (0x44E9C–0x44EAC). `main_move_players` decrements it once per level on the end-of-level path, and only while `mazenum_current` < 104 and `level_next` > 6 (0x4A756–0x4A788). Zero at level start selects a treasure room. See `06_maze_catalog.md` §3.5. |
 | 0x904B82 | 2 B | `title_intro_state` | Small persistent title-intro state/counter. On TITLE setup, zero can trigger the theme and become 2; later entries decrement it. `show_continue_prompt` seeds it to 1, and logo setup chooses between ROM animation sequences 0x5AC2E/0x5AC4E according to zero vs nonzero. It is not a “continue screen active” boolean. |
 | 0x904B84 | 2 B | `level_tport_count` | Number of transporters on current level |
-| 0x904B86 | 2 B | `games_played_counter` | Persistent completed-game/statistics counter mirrored to EEPROM at 0x904B92. It increments when all four player-health slots are empty, is capped for high-score entry, and at 2000 triggers the settings/unlock update before resetting. |
+| 0x904B86 | 2 B | `games_played_counter` | Persistent completed-game/statistics counter mirrored to EEPROM at 0x904B92. It increments when all four player-health slots are empty. Past 2000 it sets `GSETTING_SCORE_RESET_FLAG`, writes the settings word, clears itself and forces an EEPROM save, so the next boot returns the high scores to factory values. |
 | 0x904B88 | 4 B | `ptr_maze_data` | Pointer to current maze data |
 | 0x904B8C | 2 B | `maze_slapstic_cmd_offset` | Offset to activate bank switch for current level |
 
@@ -582,7 +582,7 @@ agree.
 | GSETTING_RESET_FLAG | 0x1000 (4096) | OS Game Options action “Restore Factory Default Settings”; dynamically verified in MAME, with no normal game-code reader |
 | GSETTING_ALLOW_CONTEST_FLAG | 0x2000 (8192) | sole reader 0x54EE2 in `secret_getname` |
 | GSETTING_ATTRACT_SOUNDS | 0x4000 (16384) | sole reader 0x444E0 gating `sound_play(0x3B)` |
-| GSETTING_SCORE_RESET_FLAG | 0x8000 (32768) | OS Game Options action “Reset High Score Tables”; dynamically verified in MAME, with no normal game-code reader |
+| GSETTING_SCORE_RESET_FLAG | 0x8000 (32768) | OS Game Options action “Reset High Score Tables”, dynamically verified in MAME. The game also sets it: `main_health_countdown` past 2000 games (0x46A74), and `eeprom_load_config` when the operator's settings changed (0x43160). `highscore_table_init` consumes it at boot (0x49BEE): it blanks each ladder's top entry, which refills all ten from the factory list, then clears the bit (0x49CC0). The factory word 0xE090 carries it, so first boot ends with 0x6090. |
 
 ### 3.11 Joystick Input Bits
 

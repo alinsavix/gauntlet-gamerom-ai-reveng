@@ -126,7 +126,7 @@ def test_file_binding_reloads_external_operator_changes(tmp_path, policy):
     state = bind_eeprom_storage(GameState(eeprom_save_path=str(path)), policy=policy)
     eeprom.eeprom_load_settings(state)
     assert state.game_settings == 9029
-    path.write_text('{"game_settings": 57488, "two_player_mode": 1}')
+    path.write_text('{"game_settings": 57488, "two_player_mode": 1, "games_played": 0}')
     eeprom.eeprom_load_settings(state)
     assert state.game_settings == 57488
     assert state.two_player_mode == 1

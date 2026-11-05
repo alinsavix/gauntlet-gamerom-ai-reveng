@@ -139,13 +139,16 @@ def walk() -> None:
 def scan() -> None:
     hero = (10 << 5) | 10
     left = (10 << 5) | 9
-    # The exit path needs tables the snapshot lacks; a hidden potion needs a real picture.
-    rom_skipped = {0x10, 0x11, 0x3D}
+    # A hidden potion needs a real picture.
+    rom_skipped = {0x3D}
     for keys, powers in ((0, 0), (1, 0), (12, 0), (0, 0xFFFF)):
         limit, faults, rom_survived, our_survived = [], [], [], []
         for obj_type in range(1, 0x40):
             state = _state_with_hero(hero, keys=keys, powers=powers)
-            state.mobs.create(left, tile=0x0AFC, hpos=(9 * 16) << 7,
+            # Exits and pads carry a marker picture, which ends the scan at 0x50C02.
+            marker = obj_type in (int(MazeObjIds.EXIT), int(MazeObjIds.EXITTO6),
+                                  int(MazeObjIds.TRANSPORTER))
+            state.mobs.create(left, tile=0x8001 if marker else 0x0AFC, hpos=(9 * 16) << 7,
                               vpos=native_v(10 * 16) << 7, obj_type=obj_type)
             if obj_type not in rom_skipped:
                 machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
@@ -164,6 +167,7 @@ def scan() -> None:
         print("  ROM faults:", faults)
         print("  ROM record survived:", rom_survived)
         print("  gauntpy record survived:", our_survived)
+        # Real records never survive to loop, since the marker pictures stop first.
 
 
 def main() -> None:

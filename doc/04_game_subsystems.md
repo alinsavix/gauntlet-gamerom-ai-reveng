@@ -878,7 +878,9 @@ own slot. When the per-frame pass finds health zero (0x467E0), it calls
 It then starts the transporter sparkle on that record (0x4691C), removes the
 hero's live shot (slot 1+p) and transport animation (slot 25+p) through
 `mob_depth_remove` and clears their pictures (0x46922-0x46992), and only then
-resets the player's counters.
+resets the player's counters. If every player's health is now zero, it counts a
+completed game (0x46A64). Past 2000 games it requests a high-score reset through
+`game_settings` bit 15, which takes effect at the next boot.
 
 This pass runs after `main_move_monsters`, so a hero whose health reached zero
 anywhere in the frame is still there for that frame's monsters, and for that frame's
@@ -1592,7 +1594,7 @@ Transporter position table: `tport_pos_table` at `0x910700` (word array[32]), po
 
 When a player touches a transporter:
 1. `player_tport` (0x50224) → `tport_player_flash` (0x50616): saves player MOB picture, sets picture to 0x1709 (flash frame)
-2. `tport_player_move` (0x50662): rechecks candidates with `tport_check_dest` (0x50ADE), handles IT/thief route state, removes the old player record, and resolves a permitted occupant at the landing cell (tricks 1/2/3 win on acid, Death or an exit there, 0x508FA-0x50922; then `resolve_move_tile_interaction`). If that started an exit (status 8) it puts the saved picture on the slot and stops (0x50940-0x50968). Otherwise it recreates the player there unless the cell is an exit, calls `handle_tport` (0x509DE), records the arrival pad for trick 0x56 (0x509E4), and runs `0x50BB8` once per public probe (0x50A18-0x50A66)
+2. `tport_player_move` (0x50662): for a pad transport, ignores the cell `player_tport` stored and searches the destination pad's neighbours in the `tport_direction_rotation` order (0x5B71C), starting from the stick direction, or from `getrandom(8)` with the stick centred (0x506BC-0x506F6). With the stick centred and the destination being the source pad, or if nothing is usable, the hero stays put and the arrival sparkle plays there (0x50A82). A corner transport has one candidate, the stored cell. Each candidate must be on screen, then pass `tport_check_dest` (0x50ADE) and `nearby_mob_clearance_test`. It then handles IT/thief route state, removes the old player record, and resolves a permitted occupant at the landing cell (tricks 1/2/3 win on acid, Death or an exit there, 0x508FA-0x50922; then `resolve_move_tile_interaction`). If that started an exit (status 8) it puts the saved picture on the slot and stops (0x50940-0x50968). Otherwise it recreates the player there unless the cell is an exit, calls `handle_tport` (0x509DE), records the arrival pad for trick 0x56 (0x509E4), and runs `0x50BB8` once per public probe (0x50A18-0x50A66)
 3. `handle_tport` (0x47CFE): copies player position to an animation slot and creates the `tport_create_splodey` effect
 4. `tport_restore_player_picture` (0x50B88), the one-argument completion leaf used when the per-player movement state reaches 0x10, maps the player index through `active_mob_ids` and restores that MOB's picture from `tport_saved_picture[player]`
 

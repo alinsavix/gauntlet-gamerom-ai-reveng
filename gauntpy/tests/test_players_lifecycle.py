@@ -46,6 +46,7 @@ from gauntpy.game.subsystems import (
     player_transport,
     score,
 )
+from gauntpy.game.subsystems import input as gin
 from gauntpy.game.subsystems import players as gp
 from gauntpy.game.subsystems.sound import main_update_sound
 
@@ -3429,6 +3430,8 @@ class TestTransportTransition:
         for row, col in ((5, 5), (5, 9)):
             state.mobs.create(_pack(row, col), tile=0, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.TRANSPORTER))
+        # The pad's neighbour up and right of it: 0x50708 starts from the stick.
+        state.player_input_raw[0] = 0xFFFF & ~(gin.JOY_UP | gin.JOY_RIGHT)
         return state, p, _pack(5, 5)
 
     @staticmethod
@@ -3484,6 +3487,43 @@ class TestTransportTransition:
         # Step 0x10 (phase 32) puts the picture back.
         restore = next(i for i, t in enumerate(trace) if t[0] == 32)
         assert trace[restore][1] == self._HERO_PICTURE
+
+    def test_a_centred_stick_draws_the_starting_direction(self):
+        """0x506DE: the neighbours of the destination pad, from a random start."""
+        state, _, source = self._world()
+        player_transport.player_tport(state, 0, source)
+        state.player_input_raw[0] = 0xFFFF
+        draws = []
+        real = state.rng.getrandom
+        state.rng = type("Rng", (), {
+            "seed": 0,
+            "getrandom": staticmethod(lambda bound: draws.append(bound) or real(bound)),
+        })()
+        player_transport.tport_player_move(state, 0)
+        assert 8 in draws
+
+    def test_a_held_stick_draws_nothing_and_lands_that_way(self):
+        state, _, source = self._world()
+        player_transport.player_tport(state, 0, source)
+        draws = []
+        state.rng = type("Rng", (), {
+            "seed": 0,
+            "getrandom": staticmethod(lambda bound: draws.append(bound) or 0),
+        })()
+        player_transport.tport_player_move(state, 0)
+        assert 8 not in draws
+        assert state.players[0].mob_slot == _pack(4, 10)
+
+    def test_a_centred_stick_on_the_same_pad_stays_put(self):
+        """0x506D4 -> 0x50A82: nowhere to go, and the sparkle plays where the hero is."""
+        state, p, source = self._world()
+        player_transport.player_tport(state, 0, source)
+        state.player_input_raw[0] = 0xFFFF
+        state.player_tport_type[0] = state.player_tport_route_state[0]
+        before = p.mob_slot
+        player_transport.tport_player_move(state, 0)
+        assert p.mob_slot == before
+        assert state.player_tile_or_tport_dest[0] == before
 
     def test_the_transition_retires_itself(self):
         state, _, source = self._world()
@@ -4055,7 +4095,8 @@ class TestTransporterObjectiveSites:
         landed hero (anchored four pixels left of its cell) overlaps."""
         state, source, dest = self._world(trick_id)
         player_transport.player_tport(state, 0, source)
-        landing = state.player_tile_or_tport_dest[0]
+        state.player_input_raw[0] = 0xFFFF & ~(gin.JOY_UP | gin.JOY_RIGHT)
+        landing = _pack(4, 10)
         state.mobs.create(landing - 1, tile=0x2000, hpos=0, vpos=0,
                           obj_type=monster_type)
         player_transport.tport_player_move(state, 0)
@@ -4137,7 +4178,8 @@ class TestTransporterArrivalInteracts:
             state.mobs.create(_pack(row, col), tile=0, hpos=0, vpos=0,
                               obj_type=int(MazeObjIds.TRANSPORTER))
         player_transport.player_tport(state, 0, _pack(5, 5))
-        return state, state.player_tile_or_tport_dest[0]
+        state.player_input_raw[0] = 0xFFFF & ~(gin.JOY_UP | gin.JOY_RIGHT)
+        return state, _pack(4, 10)
 
     def test_a_key_the_landed_hero_overlaps_is_picked_up(self):
         state, landing = self._world()
@@ -4489,6 +4531,33 @@ class TestDeathFlow:
         live.bonusmult = 8
         player_lifecycle.main_health_countdown(state)
         assert live.bonusmult == 8
+
+    def test_the_last_death_counts_a_game(self):
+        state = _active_state()
+        _make_player_active(state, 0, health=0)
+        state.level_players_active = 1
+        state.games_played_counter = 5
+        player_lifecycle.main_health_countdown(state)
+        assert state.games_played_counter == 6
+
+    def test_an_earlier_death_does_not(self):
+        state, _, _ = self._two_heroes()
+        state.games_played_counter = 5
+        player_lifecycle.main_health_countdown(state)
+        assert state.games_played_counter == 5
+
+    def test_the_game_past_2000_requests_a_score_reset(self):
+        """0x46A6A-0x46A98: 2000 itself is still in range."""
+        for before, reset, after in ((1999, False, 2000), (2000, True, 0)):
+            state = _active_state()
+            _make_player_active(state, 0, health=0)
+            state.level_players_active = 1
+            state.game_settings = 0x6090
+            state.games_played_counter = before
+            player_lifecycle.main_health_countdown(state)
+            assert state.games_played_counter == after
+            assert bool(state.game_settings & 0x8000) is reset
+            assert (state.eeprom_write_timer == 1) is reset
 
     def test_game_over_clears_the_secret_player(self):
         """0x469E0, and only once nobody is left."""

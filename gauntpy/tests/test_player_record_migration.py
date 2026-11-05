@@ -27,6 +27,7 @@ from gauntpy.game.coords import (
     vpos_y,
 )
 from gauntpy.render import mobs as render_mobs
+from gauntpy.game.subsystems.camera import scroll_to_slot
 from gauntpy.game.state import GameState
 from gauntpy.game.subsystems import players as gp
 from gauntpy.game.subsystems.input import JOY_DOWN, JOY_IDLE, JOY_RIGHT
@@ -417,6 +418,7 @@ class TestTheTransporterStillRelocatesTheRecord:
         landing = pack_slot(20, 20)
         player = _spawn(state, 0, start)
         state.player_tile_or_tport_dest[0] = landing
+        scroll_to_slot(state, landing)           # 0x50778 tests the cell is visible
 
         gp.tport_player_move(state, 0)
 
@@ -437,6 +439,7 @@ class TestTheTransporterStillRelocatesTheRecord:
         state.mobs.create(landing, tile=0x3333, hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.TREASURE))
         state.player_tile_or_tport_dest[0] = landing
+        scroll_to_slot(state, landing)           # 0x50778 tests the cell is visible
 
         gp.tport_player_move(state, 0)
 
@@ -457,6 +460,7 @@ class TestTheTransporterStillRelocatesTheRecord:
             obj_type=int(MazeObjIds.MONST_DEMON),
         )
         state.player_tile_or_tport_dest[0] = landing
+        scroll_to_slot(state, landing)           # 0x50778 tests the cell is visible
 
         gp.tport_player_move(state, 0)
 
@@ -480,6 +484,7 @@ class TestTheTransporterStillRelocatesTheRecord:
             obj_type=int(MazeObjIds.PLAYERSTART),
         )
         state.player_tile_or_tport_dest[0] = landing
+        scroll_to_slot(state, landing)           # 0x50778 tests the cell is visible
 
         gp.tport_player_move(state, 0)
 
@@ -493,11 +498,13 @@ class TestTheTransporterStillRelocatesTheRecord:
         start = pack_slot(10, 10)
         landing = pack_slot(20, 20)
         player = _spawn(state, 0, start)
+        # 0x507B2: the one wall marker a corner transport does not turn into floor.
         state.mobs.create(
             landing, tile=0x8000, hpos=0, vpos=0,
-            obj_type=int(MazeObjIds.WALL_REGULAR),
+            obj_type=int(MazeObjIds.FORCEFIELDHUB),
         )
         state.player_tile_or_tport_dest[0] = landing
+        scroll_to_slot(state, landing)           # 0x50778 tests the cell is visible
 
         gp.tport_player_move(state, 0)
 

@@ -111,7 +111,10 @@ looks for a usable neighboring landing cell at the destination.
 The live joystick direction participates in this search. The routine
 rotates through an eight-direction table, testing alternatives, rather
 than assuming the first proposed position must remain available.
-Somebody may have moved since the transport began.
+Somebody may have moved since the transport began. With the stick
+centered, the search starts from a random direction, so holding a
+direction is how a player chooses which side of the pad to arrive on.
+If nothing around the pad will do, the hero stays where they were.
 
 Suppose the neighborhood of pad B contains these candidates:
 

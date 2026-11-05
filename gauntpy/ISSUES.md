@@ -37,48 +37,55 @@ start).
 
 ## Open issues
 
-### S-204 · the death block's statistics and coin writes are not modelled
-
-`_player_dies` (0x467E8-0x46B7E) leaves out three things the ROM does. None of them affects a
-game in progress, and no comparison covers them, because the demo captures do not record this RAM.
-
-The completed-games statistic is the one to look at first. When every player's health is zero,
-0x46A64 adds one to `games_played_counter` (0x904B86). Past 2000 (0x46A6A), the ROM sets bit
-15 of `game_settings` (0x46A74), writes the word out through `write_eeprom_setting` (API 0x1C0,
-0x46A8A), clears the counter and sets `eeprom_write_timer` to 1. doc/05 §3.10 names that bit
-`GSETTING_SCORE_RESET_FLAG`, the operator's "Reset High Score Tables" action, and lists no game
-code that reads it. So the high-score tables may be wiped every 2000 games, but nothing
-yet shows what consumes the bit or when. There is a second `ORI.W #0x8000` on the same word at
-0x43160, not yet read. gauntpy has no such counter, and the `eeprom.py` module docstring calls
-it pure bookkeeping that nothing reads, which needs revisiting. `eeprom_periodic_write` also
-omits the counter from its write gate, as its docstring notes.
-
-`record_player_session_histogram` (API 0x19C, called at 0x46AB8) updates the operator
-statistics bytes at configuration offset +0xE6. gauntpy has no operator statistics screens.
-
-0x469A0-0x469B6 clears byte `p` of 0x904FF0 and 0x904FF4. What that does to a coin in progress
-is untraced. doc/02 calls 0x904FF0 `coin_bonus_progress` and says its only reference is 0x35D6, and
-`gauntlet.r2` calls it `coin_totals`, so this game ROM reference disagrees with both.
-
-### S-205 · trap tiles in real levels and a transporter on a landed hero
-
-`tests/test_rom_execution.py` runs pickups against the ROM, but two comparisons are still open.
-Neither has been shown to be a game difference rather than a fixture one.
-
-Firing a trigger in a real level gave a different RNG seed or wall records from the ROM for 44
-of 153 trap tile and maze combinations, and 2 of 33 stun tile ones. Two things stand
-in the way. TrapsLocal levels (`level_flags_4` bit 2) gate removal on the camera through 0x5E5D2,
-and the harness only partly models the camera. And gauntpy draws from the RNG in
-`_descriptor_for_cell`'s wall stamps during the restamp, which the ROM's count suggests it does
-not: maze 6, which is not TrapsLocal, makes 10 ROM draws and 31 in gauntpy, with no record
-differing. Those draws only choose wall art, so the visible cost is small, but every later
-random result in that game differs from the arcade's.
-
-In `tools/rom_sweeps.py scan`, a transporter overlapping a landed hero is deleted on the ROM
-and kept in gauntpy, where `player_tile_interact` starts a new transport. The fixture has one
-pad and no real level around it.
+None.
 
 ## Resolved issues
+
+### S-205 · trap tiles, the transporter's landing and most of a harness
+
+`tests/test_rom_execution.py` now compares trap and stun tiles in real levels, and full
+transports, with the ROM. Most of the differences S-205 first recorded (46 of 186 trigger cases) were the
+harness: it did not load the wall and floor patterns, the other level flags, the level number,
+`pf_hscroll` or the pad count. With those loaded, three real differences remained, and all 186 now match on seed and records.
+
+A destructible wall on a shrub pattern draws no art variant, but 0x5ED46 rolls one before 0x5ED70
+tests the type, so the ROM spends a draw that gauntpy did not. And `mob_place_tile` removes the
+record (0x5F36C) before redrawing adjacent doors (0x5F376); gauntpy did it the other way round,
+so doors beside a removed wall or trigger kept their old picture.
+
+The third was the transporter, and players would notice it. gauntpy landed a hero on the first
+clear cell, except when a direction was held. The ROM ignores the cell `player_tport` chose:
+`tport_player_move` searches the destination pad's neighbours from the stick direction, or
+from `getrandom(8)` with the stick centred, and if nothing is usable the hero stays put
+(0x50A82). It also tests that a candidate is on screen, which gauntpy skipped for corner
+transports, and has no `route_state` guard on replacing a corner's wall with floor. All 149 pad, approach
+and stick cases across the real mazes match on position and seed, and the shipped demo's teleport still
+matches MAME.
+
+The cell `player_tport` stores is ported too, though only the camera sees it for a pad transport.
+Its docstring called the choice unreproducible, because 0x50578 reads A1 and A4 without
+loading them. They are not random: on the only call path they held 0x905F80 (from the sparkle's
+depth insert) and 0x903000 (from `player_try_move`) in all 149 cases. The choice is now
+exact, and depends only on the camera.
+
+The transporter "kept on a landed hero" was a fixture. A real pad's marker picture ends the arrival scan
+at 0x50C02 on both sides, so `rom_sweeps scan` now agrees on every type.
+
+### S-204 · the death block's games counter resets the high scores
+
+0x46A4C-0x46A9E counts a game when every player's health is zero. Past 2000 it sets bit 15 of
+`game_settings`, clears itself and forces a save. doc/05 listed no game code reading that bit, but
+`highscore_table_init` does (0x49BEE): at the next boot it blanks each ladder's top entry, so all
+ten refill from the factory list, and clears the bit (0x49CC0). So a cabinet's high scores return to factory
+every 2000 games. gauntpy now has `games_played_counter`, keeps it in the EEPROM image and does
+all of this. The factory word 0xE090 carries the bit, so a first boot ends with 0x6090.
+
+Older save files hold bit 15 with real scores, because nothing used to clear it, and reading
+one literally would wipe them. A file without `games_played` has the bit dropped on read.
+
+The rest is deliberately not modelled (FIDELITY.md rule 111): the OS session histogram, the OS coin bytes
+and the boot check at 0x430B0. Nothing in the game reads the first, and gauntpy has neither partial
+credits nor a second settings word for the others to act on.
 
 ### S-201 · hand contact left out the timers, the dragon and the toucher
 

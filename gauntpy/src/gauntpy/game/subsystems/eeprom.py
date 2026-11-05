@@ -28,10 +28,10 @@ one. ``eeprom_validate_rotation`` below is that check, and WP-15's
 a lap wraps -- a line that only started meaning anything once these fields
 were actually in the saved image.
 
-What is still not persisted is the statistics block: the four coin/play
-counters and ``games_played_counter`` (0x904B86, clamped to 2000 at
-0x43076-0x43084) have no ``GameState`` representation at all. They are pure
-bookkeeping for the operator screens, so nothing in the simulation reads them.
+``games_played_counter`` (0x904B86) is persisted too, because it is not just a
+statistic: past 2000 it sets ``GSETTING_SCORE_RESET``, and the next boot returns
+every ladder to its factory scores. What stays unmodelled is the OS's operator
+statistics block (FIDELITY.md rule 111).
 
 Reference: ``doc/04_game_subsystems.md`` §20; ``doc/06_maze_catalog.md`` §3.2
 and §3.5 (the rotation words, their ranges and fresh-cabinet defaults);
@@ -59,6 +59,11 @@ GSETTING_DIFFICULTY_SHIFT = 5
 
 GSETTING_COINTOSTART_MASK = 0x0300  # bits 8-9, doc/05_data_reference.md §3.10
 GSETTING_COINTOSTART_SHIFT = 8
+
+GSETTING_SCORE_RESET = 0x8000       # bit 15, consumed by highscore_table_init (0x49BEE)
+
+#: 0x46A6A/0x43076: the count ``games_played_counter`` may reach.
+GAMES_PLAYED_LIMIT = 2000
 
 #: ``game_default_settings`` -- the word baked into the game ROM at 0x40070.
 #: ``one_time_init`` (0x432D8-0x432FA) reads the stored configuration item 12
@@ -412,6 +417,10 @@ def eeprom_load_settings(state: GameState) -> None:
             setattr(state, name, getattr(image.rotation, name))
     eeprom_validate_rotation(state)
 
+    # 0x43070-0x43084: an impossible count reads back as zero.
+    games = image.games_played & 0xFFFF
+    state.games_played_counter = games if games <= GAMES_PLAYED_LIMIT else 0
+
 
 # ROM: part game:0x4327A | Factory settings/cache assignment extracted from one_time_init at 0x432E0-0x432FA; does not implement the OS configuration writer it replaces.
 def _install_factory_settings(state: GameState) -> None:
@@ -437,6 +446,7 @@ def eeprom_image(state: GameState) -> EepromImage:
             for ladder in _high_score_image(state.high_scores)
         ),
         rotation=EepromRotation(**_rotation_image(state)),
+        games_played=state.games_played_counter,
     )
 
 
@@ -507,12 +517,8 @@ def eeprom_periodic_write(state: GameState) -> None:
     cabinet nobody has played still writes nothing, while the first new high
     score or the first rotation lap on it does. WP-15's ``maze_checknum``
     already forces the timer to 1 when a lap wraps, so that save lands on the
-    very next frame.
-
-    The original also gates this on ``games_played_counter`` (0x904B92 against
-    0x904B86), which has no ``GameState`` representation -- see the module
-    docstring. It differing also triggers the write, so the original flushes
-    strictly more often than this does.
+    very next frame. ``games_played_counter`` (0x904B92 against 0x904B86) is
+    compared the same way.
     """
     if state.eeprom_write_timer > 0:
         state.eeprom_write_timer -= 1
@@ -529,7 +535,10 @@ def eeprom_periodic_write(state: GameState) -> None:
     )
     scores_changed = _high_score_image(state.high_scores) != stored_scores
     rotation_changed = _rotation_image(state) != stored_rotation
+    stored = state.eeprom_storage.read()
+    games_changed = state.games_played_counter != (stored.games_played if stored else 0)
 
-    if settings_changed or pricing_changed or scores_changed or rotation_changed:
+    if (settings_changed or pricing_changed or scores_changed or rotation_changed
+            or games_changed):
         eeprom_save_settings(state)
         state.eeprom_settings_cache = state.game_settings

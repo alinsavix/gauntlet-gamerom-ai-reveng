@@ -76,6 +76,7 @@ def serialize_eeprom_snapshot(image: EepromImage | None) -> dict[str, object]:
                 for ladder in image.high_scores
             ],
             "rotation": None if image.rotation is None else asdict(image.rotation),
+            "games_played": image.games_played,
         }
     return {"schema": 1, "image": data}
 
@@ -90,8 +91,14 @@ def parse_eeprom_snapshot(payload: object) -> EepromImage | None:
     data = payload["image"]
     if data is None:
         return None
-    if not isinstance(data, dict) or set(data) != set(EepromImage.__dataclass_fields__):
+    # Snapshots from before games_played were recorded omit it.
+    if not isinstance(data, dict) or (
+        set(data) | {"games_played"} != set(EepromImage.__dataclass_fields__)
+    ):
         raise ValueError("EEPROM image fields are incomplete or unknown")
+    games = data.get("games_played", 0)
+    if type(games) is not int:
+        raise ValueError("EEPROM games_played must be an integer")
     if type(data["game_settings"]) is not int:
         raise ValueError("EEPROM game_settings must be an integer")
     pricing = data["two_player_mode"]
@@ -103,7 +110,12 @@ def parse_eeprom_snapshot(payload: object) -> EepromImage | None:
         if not isinstance(rotation, dict) or set(rotation) != set(EepromRotation.__dataclass_fields__):
             raise ValueError("EEPROM rotation fields are incomplete or unknown")
         rotation = _rotation(rotation)
-    return EepromImage(data["game_settings"], pricing, scores, rotation)
+    return EepromImage(data["game_settings"], pricing, scores, rotation, games)
+
+
+#: Files written before games_played existed never cleared this bit, which came in with the
+#: factory word, so it does not mean a reset was asked for and their scores must survive.
+_SCORE_RESET_BIT = 0x8000
 
 
 class FileEepromStorage:
@@ -150,7 +162,15 @@ class FileEepromStorage:
                 rotation = _rotation(data["rotation"])
             except ValueError as exc:
                 _LOG.warning("Ignoring corrupt EEPROM rotation in %s: %s", self.path, exc)
-        return EepromImage(settings, pricing, scores, rotation)
+        games = 0
+        if "games_played" in data:
+            try:
+                games = int(data["games_played"])
+            except (ValueError, TypeError, OverflowError) as exc:
+                _LOG.warning("Ignoring corrupt EEPROM games_played in %s: %s", self.path, exc)
+        else:
+            settings &= ~_SCORE_RESET_BIT
+        return EepromImage(settings, pricing, scores, rotation, games)
 
     # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
     def write(self, image: EepromImage) -> None:

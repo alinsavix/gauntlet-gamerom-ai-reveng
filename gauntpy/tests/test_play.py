@@ -677,8 +677,8 @@ class TestBuildState:
         ) == 4
 
     def test_power_on_seed_changes_which_level_16_exit_is_fake(self):
-        first = play.build_state(16, Character.ELF, maze_number=15, rng_seed=0)
-        second = play.build_state(16, Character.ELF, maze_number=15, rng_seed=10)
+        first = play.build_state(16, Character.ELF, maze_number=15, rng_seed=2)
+        second = play.build_state(16, Character.ELF, maze_number=15, rng_seed=0)
 
         def real_exit_index(state):
             return next(

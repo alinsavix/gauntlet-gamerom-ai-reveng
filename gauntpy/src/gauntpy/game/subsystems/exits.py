@@ -214,8 +214,8 @@ def maze_pick_one_exit(state: GameState) -> None:
             state.mobs.hpos[slot] |= _EXIT_FAKE_MARK      # 0x43EAC
         else:
             from ..maze import clear_cell_descriptor
-            clear_cell_descriptor(state, slot)
             state.mobs.unlink_and_clear(slot)             # 0x43EBC mob_remove
+            clear_cell_descriptor(state, slot)
 
 
 # ROM: direct game:0x52B06 | Zero-based exit-table search returning table length on a miss.

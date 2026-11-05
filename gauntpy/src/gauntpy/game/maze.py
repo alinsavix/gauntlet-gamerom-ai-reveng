@@ -408,6 +408,10 @@ def _descriptor_for_cell(
     if object_type == int(MazeObjIds.WALL_DESTRUCTABLE):
         if not _wall_is_visible(state, object_type):
             return read_tile_descriptor(state, slot)
+        # 0x5ED46 rolls the shrub variant before 0x5ED70 tests for this type, so
+        # the roll is spent even though the destructible art has no variants.
+        if state.playfield_wallpattern >= 7 and state.playfield_wallpattern != 11:
+            state.getrandom(6)
         descriptor = state.playfield_destruct_catalog.get(
             _wall_adjacency(state, slot)
         )
@@ -1334,8 +1338,9 @@ def maze_place_object_types(state: GameState, trap_type: int) -> bool:
 
             if not tile_near_screen_test(state, slot):
                 continue
-        clear_cell_descriptor(state, slot)
+        # 0x5F36C removes the record before 0x5F376 redraws the doors beside it.
         state.mobs.unlink_and_clear(slot)
+        clear_cell_descriptor(state, slot)
         removed_wall |= object_type == wall_type
     return removed_wall
 

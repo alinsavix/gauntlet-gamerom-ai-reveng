@@ -723,8 +723,8 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
 def _clear_floor_marker(state: GameState, slot: int) -> None:
     from ..maze import clear_cell_descriptor
 
+    state.mobs.unlink_and_clear(slot)                   # 0x5F36C
     clear_cell_descriptor(state, slot)
-    state.mobs.unlink_and_clear(slot)
 
 
 # ROM: adapter game:0x5E7A6 | Delegates the trap-family replacement boundary to maze.maze_place_object_types.

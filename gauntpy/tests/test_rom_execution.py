@@ -17,7 +17,9 @@ from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus
 from gauntpy.game.coords import encode_vpos_at_y, native_v  # noqa: E402
 from gauntpy.game.state import GameState  # noqa: E402
 from gauntpy.game.subsystems import input as gin  # noqa: E402
-from gauntpy.game.maze import maze_place_object  # noqa: E402
+from gex.roms import SLAPSTIC_ROMS, _rom_dir  # noqa: E402
+from gauntpy.game.maze import maze_place_object, reset_and_load_level  # noqa: E402
+from gauntpy.game.subsystems.camera import scroll_to_slot  # noqa: E402
 from gauntpy.game.subsystems import player_items  # noqa: E402
 from gauntpy.game.subsystems import player_movement  # noqa: E402
 from gauntpy.game.subsystems import player_transport  # noqa: E402
@@ -621,6 +623,131 @@ def test_taking_a_tile_matches_the_rom(obj_type, picture, keys, potions, monkeyp
         ours == -1, state.idle_timer & 0xFFFF, state.escape_timer & 0xFFFF,
         len(our_dragon), state.mobs.picture[_TARGET], state.players[0].keysnum,
     )
+
+
+def test_the_games_counter_matches_the_rom():
+    """0x46A4C-0x46A9E: one more game, and past 2000 a score reset is requested."""
+    for before in (5, 1999, 2000):
+        state = GameState(game_mode=GameMode.NORMAL)
+        _hero(state, 0, _HERO, health=0, coin_count=1)
+        state.level_players_active = 1
+        state.frame_counter = 1
+        state.game_settings = 0x6090
+        state.games_played_counter = before
+        machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+        machine.cpu.mem_write(0x904012, state.eeprom_write_timer.to_bytes(4, "big"))
+        machine.call(0x466F6)
+        assert machine.halted
+        gp.main_health_countdown(state)
+        assert (
+            machine.r16(0x904B86), machine.r16(0x904A24),
+            int.from_bytes(bytes(machine.cpu.mem_read(0x904012, 4)), "big"),
+        ) == (state.games_played_counter, state.game_settings, state.eeprom_write_timer)
+
+
+# --- real levels ---------------------------------------------------------------
+
+requires_mazes = pytest.mark.skipif(
+    not (_rom_dir() / SLAPSTIC_ROMS[0]).is_file(), reason="Slapstic ROMs not available",
+)
+
+
+def _real_level(maze, hero_slot=None, avoid=()):
+    state = GameState(game_mode=GameMode.NORMAL)
+    reset_and_load_level(state, 7, maze_number=maze)
+    hero = hero_slot or next(
+        s for s in range(33, 1023) if s not in avoid and not state.mobs.picture[s]
+    )
+    player = state.players[0]
+    player.status = PlayerStatus.ALIVE_HERE
+    player.mob_slot = hero
+    player.health, player.coin_count = 500, 1
+    state.level_players_active = 1
+    state.mobs.create(
+        hero, tile=0x1E0D, hpos=(((hero & 0x1F) * 16 - 4) << 7) | 0x0C,
+        vpos=native_v((hero >> 5) * 16) << 7, obj_type=int(MazeObjIds.PLAYERSTART), state=0,
+    )
+    state.player_tile_or_tport_dest[0] = hero
+    state.rng.seed = 0x1234
+    return state
+
+
+@requires_mazes
+@pytest.mark.parametrize("maze,trigger", [
+    (6, MazeObjIds.TILE_TRAP1), (6, MazeObjIds.TILE_TRAP2), (7, MazeObjIds.TILE_TRAP1),
+    (15, MazeObjIds.TILE_TRAP1), (29, MazeObjIds.TILE_TRAP1), (43, MazeObjIds.TILE_TRAP1),
+    (43, MazeObjIds.TILE_TRAP3), (76, MazeObjIds.TILE_TRAP3), (84, MazeObjIds.TILE_TRAP1),
+    (87, MazeObjIds.TILE_TRAP1), (101, MazeObjIds.TILE_TRAP1), (13, MazeObjIds.TILE_STUN),
+])
+def test_a_floor_trigger_in_a_real_level_matches_the_rom(maze, trigger):
+    """Every floor and wall draw spends the same random numbers, and doors follow."""
+    probe = GameState(game_mode=GameMode.NORMAL)
+    reset_and_load_level(probe, 7, maze_number=maze)
+    slot = next(s for s in range(32, 1024)
+                if probe.mobs.obj_type(s) == int(trigger) and probe.mobs.picture[s])
+    state = _real_level(maze, avoid=(slot,))
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    machine.call(0x511AC, slot, 0)
+    assert machine.halted
+    player_items.player_tile_interact(state, slot, 0)
+    assert machine.r16(0x904BFC) == state.rng.seed & 0xFFFF
+    assert [s for s in range(32, 1024) if machine.picture(s) != state.mobs.picture[s]] == []
+
+
+_APPROACHES = (
+    (gin.JOY_RIGHT, 0, -1), (gin.JOY_LEFT, 0, 1), (gin.JOY_DOWN, -1, 0), (gin.JOY_UP, 1, 0),
+)
+
+
+@requires_mazes
+@pytest.mark.parametrize("centred", [False, True])
+@pytest.mark.parametrize("maze", [16, 36, 46, 72])
+def test_a_transport_in_a_real_level_matches_the_rom(maze, centred):
+    """Walking onto each pad: the stored cell, then where the hero really lands."""
+    probe = GameState(game_mode=GameMode.NORMAL)
+    reset_and_load_level(probe, 7, maze_number=maze)
+    pads = [s for s in range(32, 1024)
+            if probe.mobs.obj_type(s) == int(MazeObjIds.TRANSPORTER) and probe.mobs.picture[s]]
+    assert len(pads) >= 2
+    compared = 0
+    for pad in pads[:3]:
+        for delta, row_step, col_step in _APPROACHES:
+            hero = (((pad >> 5) + row_step & 31) << 5) | ((pad + col_step) & 31)
+            if hero < 32 or probe.mobs.picture[hero]:
+                continue
+            state = _real_level(maze, hero)
+            scroll_to_slot(state, hero)
+            player = state.players[0]
+            state.movement_type = 2
+            machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+            for _ in range(24):
+                rom_exec.player_try_move(machine, state, 0, delta)
+                state.movement_type = 2
+                origin = (player.mob_slot, state.mobs.hpos[player.mob_slot],
+                          state.mobs.vpos[player.mob_slot])
+                player_try_move(state, 0, delta, 0, track_thief=False)
+                player_movement.resolve_entered_cell(state, 0, origin)
+                assert machine.r16(0x904BCE) == state.player_tport_phase[0] & 0xFFFF
+                if state.player_tport_phase[0] >= 0:
+                    break
+            else:
+                continue
+            assert machine.r16(0x904BE2) == state.player_tport_type[0]
+            assert machine.r16(0x904BD8) == state.player_tile_or_tport_dest[0]
+            stick = 0xFFFF if centred else 0xFFFF & ~delta
+            machine.w16(0x904920, stick)
+            state.player_input_raw[0] = stick
+            machine.call(0x50662, 0, count=2_000_000)
+            assert machine.halted
+            player_transport.tport_player_move(state, 0)
+            slot = machine.player_slot(0)
+            assert (slot, machine.hpos(slot) & 0xFF80, machine.vpos(slot) & 0xFF80) == (
+                player.mob_slot, state.mobs.hpos[player.mob_slot] & 0xFF80,
+                state.mobs.vpos[player.mob_slot] & 0xFF80,
+            )
+            assert machine.r16(0x904BFC) == state.rng.seed & 0xFFFF
+            compared += 1
+    assert compared
 
 
 # --- crash reports --------------------------------------------------------------

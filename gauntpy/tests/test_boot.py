@@ -71,11 +71,12 @@ class TestOneTimeInit:
 
     def test_the_factory_settings_word_is_installed_on_a_fresh_cabinet(self, tmp_path):
         """0x432D8-0x432FA: an unprogrammed configuration item 12 reads back
-        with bit 12 set, so one_time_init installs ROM 0x40070 = 0xE090."""
+        with bit 12 set, so one_time_init installs ROM 0x40070 = 0xE090, and
+        highscore_table_init then consumes that word's bit 15 (0x49CC0)."""
         state = GameState(eeprom_save_path=str(tmp_path / "absent.json"))
         one_time_init(state)
-        assert state.game_settings == 0xE090
-        assert state.eeprom_settings_cache == 0xE090
+        assert state.game_settings == 0x6090
+        assert state.eeprom_settings_cache == 0x6090
 
     def test_players_start_removed_and_inactive(self):
         state = GameState()

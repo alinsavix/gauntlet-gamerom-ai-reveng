@@ -665,9 +665,8 @@ def _player_dies(state: GameState, player_index: int) -> None:
     The pass runs late in the frame, so the hero is still there for that frame's
     monsters, whichever routine took the last point of health.
 
-    Not modelled: the OS coin bytes cleared at 0x469A0-0x469B6, the OS session
-    histogram at 0x46AB8, and the completed-games statistic at 0x46A4C-0x46A9E
-    (see eeprom.py).
+    Not modelled (FIDELITY.md rule 111): the OS coin bytes cleared at
+    0x469A0-0x469B6 and the OS session histogram at 0x46AB8.
     """
     player = state.players[player_index]
     character = player.character
@@ -698,6 +697,14 @@ def _player_dies(state: GameState, player_index: int) -> None:
         if state.levelnum_current >= _RESUME_MIN_LEVEL:       # 0x46A00
             state.maze_number = state.mazenum_current
     calc_score_per_coin(state, player_index)                  # 0x46A18
+    if all(p.health == 0 for p in state.players):             # 0x46A4C-0x46A62
+        from .eeprom import GAMES_PLAYED_LIMIT, GSETTING_SCORE_RESET
+
+        state.games_played_counter += 1                       # 0x46A64
+        if state.games_played_counter > GAMES_PLAYED_LIMIT:   # 0x46A6A
+            state.game_settings |= GSETTING_SCORE_RESET       # 0x46A74
+            state.games_played_counter = 0                    # 0x46A90
+            state.eeprom_write_timer = 1                      # 0x46A98
     highscore_check(state, player_index)                      # 0x46AC4
     setup_infopanel(state, player_index)                      # 0x46AD0
     _play_random_character_voice(state, character)            # 0x46B16

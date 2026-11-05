@@ -553,6 +553,14 @@ implementation specification.
      exception because the MAME demo capture shows it (8, then 4/2/1/0). Crowded
      frames therefore never throttle generators or sound here; that difference
      is accepted, not an open bug.
+111. **The OS's operator statistics are not modelled, on purpose.** Nothing in the
+     game reads the session histogram that `_player_dies` skips (OS API 0x19C,
+     called only at 0x46AB8): it feeds the operator screens gauntpy does not have.
+     The same goes for the coin bytes cleared at 0x469A0-0x469B6, since gauntpy credits
+     each coin at once and has no partial credit to lose, and for the boot check at
+     0x430B0, which compares the operator's settings word with the game's copy
+     when gauntpy holds only one. `games_played_counter` is modelled, because
+     it resets the high scores.
 
 ## Investigation workflow
 

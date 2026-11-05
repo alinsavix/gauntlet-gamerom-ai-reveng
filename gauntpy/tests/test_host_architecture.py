@@ -255,6 +255,6 @@ def test_isolated_cold_boot_starts_with_an_unprogrammed_device(monkeypatch):
     monkeypatch.setattr(FileEepromStorage, "read", forbidden)
     state = startup.build_cold_boot_state(persistence_policy=PersistencePolicy.ISOLATED)
     assert isinstance(state.eeprom_storage, MemoryEepromStorage)
-    assert state.game_settings == 0xE090
-    assert state.eeprom_settings_cache == 0xE090
+    assert state.game_settings == 0x6090
+    assert state.eeprom_settings_cache == 0x6090
     assert game_difficulty(state) == 4

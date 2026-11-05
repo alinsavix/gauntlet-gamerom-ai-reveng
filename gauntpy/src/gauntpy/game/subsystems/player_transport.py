@@ -178,6 +178,45 @@ def handle_tport(state: GameState, source_slot: int, player_index: int) -> None:
     state.mobs.insert(effect_slot, depth_key=source_slot)  # 0x47D9E
 
 
+# tport_direction_rotation (0x5B71C).
+_TPORT_DIRECTION_ROTATION = (0, 7, 1, 6, 2, 5, 3, 4)
+# Whatever 0x50578 finds in the two registers it never loads. A4 is the V array base from
+# player_try_move (0x41C1C), and A1 the SLIP base left by the sparkle's depth insert (0x5DFB6).
+_LANDING_A1 = 0x5F80
+_LANDING_A4 = 0x3000
+_DIAGONALS = (1, 3, 5, 7)
+
+
+# ROM: part game:0x50224 | Landing-cell choice at 0x5053A-0x50606, with its two uninitialised registers modelled.
+def _landing_cell(state: GameState, destination: int) -> int:
+    """0x5053A-0x50606 -- pick the diagonal that the hero lands on.
+
+    It looks meant to take the diagonal furthest from the camera's centre, but it
+    never loads a candidate's position. It subtracts the centre from A1 and A4 instead,
+    so each pass only folds those registers further. The pick therefore depends on
+    the camera and not on the cell, and may not be one of the clear cells counted
+    above; ``tport_player_move`` deals with what is really there.
+    """
+    from .player_movement import _DIRECTION_COLUMN_DELTA, _DIRECTION_ROW_DELTA
+    from .shot_state import _s16
+
+    centre_h = ((state.scroll_x + 0x68) << 11) - 0x200            # 0x5053A-0x5054A
+    centre_v = (((state.scroll_y + 0x6C) & 0x1F0) ^ 0x1F0) << 7   # 0x50550-0x50568
+    a1, a4 = _LANDING_A1, _LANDING_A4
+    furthest = 0
+    landing = 0
+    for direction in _DIAGONALS:
+        a1 = abs(_s16(a1 - centre_h))                             # 0x505AC-0x505C0
+        a4 = abs(_s16(a4 - centre_v))                             # 0x505C2-0x505D6
+        if a1 + a4 > furthest:                                    # 0x505E0
+            furthest = a1 + a4
+            landing = (
+                ((destination + _DIRECTION_COLUMN_DELTA[direction]) & 0x1F)
+                + _DIRECTION_ROW_DELTA[direction] + (destination & 0x3E0)
+            )                                                     # 0x50578-0x505AA
+    return landing
+
+
 # ROM: direct game:0x50224 | Pad destination/landing selection and transition producer boundary; Python deterministically selects landing cells instead of reproducing uninitialized ROM registers.
 # ROM: part game:0x50662 | Also moves destination-visit and surrounding-interaction sequencing from tport_player_move at 0x509E4-0x50A66 into the producer.
 def player_tport(state: GameState, player_index: int,
@@ -219,13 +258,7 @@ def player_tport(state: GameState, player_index: int,
     so does this port.  ``player_tport`` is purely the producer -- it picks the
     pad and the landing cell, arms the phase, and returns.  WP-14's
     ``main_score_update`` loop 2 then runs the milestones and this file's
-    ``tport_player_move`` performs the relocation at step 0x0B.  The ROM's own
-    choice *among* the clear landing cells (0x50578-0x505FA) compares two
-    registers, ``a1`` and ``a4``, that the routine never initialises -- a
-    genuine ROM defect that cannot be reproduced without modelling leftover
-    register state -- so the port takes the first clear cell in the ROM's own
-    scan order, preferring the four diagonals its final loop restricts itself
-    to.
+    ``tport_player_move`` performs the relocation at step 0x0B.
     """
     from .player_movement import (
         _direction_neighbor as _direction_neighbor,
@@ -300,11 +333,7 @@ def player_tport(state: GameState, player_index: int,
 
     _sound_play(state, 0x28)                                      # 0x50534
 
-    # 0x50578-0x50606 picks the landing cell; the four diagonals are the only
-    # candidates it considers (its index runs 1, 3, 5, 7).
-    diagonal_cells = {_direction_neighbor(destination, d) for d in (1, 3, 5, 7)}
-    diagonals = [c for c in clear_cells if c in diagonal_cells]
-    landing = diagonals[0] if diagonals else clear_cells[0]
+    landing = _landing_cell(state, destination)
 
     # 0x504F2-0x5052A / 0x50606: arm the transition and hand over.  The hero
     # does not move on this frame -- loop 2 dissolves it, this file's
@@ -526,64 +555,86 @@ def tport_player_move(state: GameState, player_index: int) -> None:
     the *position* is this file's, so the milestone is watched here rather than
     called back into.
 
-    The landing cell is the one the producer stored in
-    ``player_tile_or_tport_dest`` -- the same word the camera is already
-    panning towards.
+    A corner transport lands on the cell its producer stored. A pad transport ignores
+    that word and searches the destination pad's neighbours, starting from the stick
+    direction, or a random one with the stick centred (0x506BC-0x506F6). If nothing is
+    usable the hero stays put and the arrival sparkle plays where they stand (0x50A82).
     """
     from .player_items import (
         _dialog as _dialog,
     )
     from .player_movement import (
-        _direction_from_input as _direction_from_input,
-        _direction_neighbor as _direction_neighbor,
+        _DIRECTION_COLUMN_DELTA,
+        _DIRECTION_ROW_DELTA,
+        _JOYSTICK_NIBBLE_TO_DIRECTION,
         _move_player_to_slot as _move_player_to_slot,
     )
-    from .player_input import _joystick_direction_bits
+    from .player_input import player_joystick_word
+    from ..playfield import pf_replace
 
-    landing = state.player_tile_or_tport_dest[player_index] & 0x3FF
+    player = state.players[player_index]
     destination_pad = state.player_tport_type[player_index] & 0x3FF
-    corner_transport = (
-        destination_pad == 0
-        and state.player_tport_route_state[player_index] != 0
-    )
-    direction = _direction_from_input(
-        _joystick_direction_bits(state, player_index),
-    )
-    if destination_pad and destination_pad != landing and direction < 8:
-        # 0x50708 indexes tport_direction_rotation (0x5B71C): requested
-        # direction, then alternating left/right offsets until a usable
-        # neighbour of the destination pad is found.
-        for rotation in (0, 7, 1, 6, 2, 5, 3, 4):
-            candidate = _direction_neighbor(
-                destination_pad, (direction + rotation) & 7,
-            )
-            if candidate < FIRST_PLAYABLE_SLOT:
-                continue
-            if not tile_on_screen_test(state, candidate):
-                continue
-            if tport_check_dest(state, candidate, player_index):
-                continue
-            if not nearby_mob_clearance_test(state, candidate, player_index):
-                continue
-            landing = candidate
-            state.player_tile_or_tport_dest[player_index] = candidate
-            break
-    if (
-        corner_transport
-        and state.mobs.picture[landing] == _WALL_PICTURE
-        and state.mobs.obj_type(landing) != int(MazeObjIds.FORCEFIELDHUB)
-    ):
-        # 0x5078E-0x507E8: corner transport may land on an ordinary software
-        # wall marker. pf_replace turns both the logical tile and descriptor
-        # VRAM into floor before the normal destination check and player move.
-        from ..playfield import pf_replace
+    attempts = 1
+    direction = 0
+    stay = False
+    if destination_pad:
+        attempts = 8                                              # 0x506BC
+        stick = player_joystick_word(state, player_index) & 0xF0
+        if stick != 0xF0:
+            direction = _JOYSTICK_NIBBLE_TO_DIRECTION[stick >> 4]  # 0x506F0
+        elif destination_pad == state.player_tport_route_state[player_index]:
+            stay = True                                           # 0x506D4
+        else:
+            direction = state.getrandom(8)                        # 0x506DE
 
+    landing = None
+    for attempt in range(0 if stay else attempts):
+        if destination_pad:
+            neighbour = (direction + _TPORT_DIRECTION_ROTATION[attempt]) & 7
+            candidate = (
+                ((destination_pad + _DIRECTION_COLUMN_DELTA[neighbour]) & 0x1F)
+                + _DIRECTION_ROW_DELTA[neighbour] + (destination_pad & 0x3E0)
+            )                                                     # 0x50708-0x5074E
+            if not FIRST_PLAYABLE_SLOT <= candidate < 0x400:      # 0x50750/0x50758
+                continue
+        else:
+            candidate = state.player_tile_or_tport_dest[player_index] & 0x3FF
+        if not tile_on_screen_test(state, candidate):             # 0x50778
+            continue
         if (
-            state.secret_trick_id == 4
-            and state.mobs.obj_type(landing) == int(MazeObjIds.WALL_SECRET)
+            not destination_pad
+            and state.mobs.picture[candidate] == _WALL_PICTURE
+            and state.mobs.obj_type(candidate) != int(MazeObjIds.FORCEFIELDHUB)
         ):
-            state.secret_player = player_index                   # 0x507B8-0x507D4
-        pf_replace(state, landing, int(MazeObjIds.TILE_FLOOR))
+            # 0x5078E-0x507E8: corner transport may land on an ordinary software
+            # wall marker. pf_replace turns both the logical tile and descriptor
+            # VRAM into floor before the normal destination check and player move.
+            if (
+                state.secret_trick_id == 4
+                and state.mobs.obj_type(candidate) == int(MazeObjIds.WALL_SECRET)
+            ):
+                state.secret_player = player_index               # 0x507B8-0x507D4
+            pf_replace(state, candidate, int(MazeObjIds.TILE_FLOOR))
+        if tport_check_dest(state, candidate, player_index):      # 0x507F6
+            continue
+        if not nearby_mob_clearance_test(state, candidate, player_index):  # 0x50810
+            continue
+        if candidate != player.mob_slot:                          # 0x50824
+            landing = candidate
+        break
+
+    if landing is None:                                           # 0x50A82
+        here = player.mob_slot
+        state.player_tile_or_tport_dest[player_index] = here
+        if destination_pad:
+            _dialog(state, player_index, _DIALOG_TRANSPORTER)     # 0x50AAA
+        handle_tport(state, here, player_index)                   # 0x50ABE
+        if player_index == state.thief_victim:
+            state.thief_victim_pos = here                         # 0x50ACE
+        return
+
+    if destination_pad:
+        state.player_tile_or_tport_dest[player_index] = landing   # 0x5083C
     if destination_pad:
         _dialog(state, player_index, _DIALOG_TRANSPORTER)  # 0x50840-0x5084C
     arrival = _move_player_to_slot(state, player_index, landing)

@@ -119,17 +119,30 @@ class RomMachine:
             # The latch is the facing plus one, on each side's own compass.
             fighting = state.player_fighting_dir[i]
             self.w16(0x9049AC + 2 * i, (fighting + 2) & 0xFFFF if fighting else 0)
-        for i, pad in enumerate(_tport_pos_table(state)):
+        pads = _tport_pos_table(state)
+        for i, pad in enumerate(pads):
             self.w16(0x910700 + 2 * i, pad)
+        self.w16(0x904B84, len(pads))
         self.w16(0x9049DC, state.player_it)
         self.w16(0x904006, state.frame_counter)
         self.w16(0x904918, int(state.game_mode))
         self.w16(0x904928, state.level_players_active)
         self.w8(0x904065, state.secret_trick_id)
+        self.w8(0x90491C, state.level_flags & 0xFF)
+        self.w8(0x90491D, state.level_flags_2 & 0xFF)
+        self.w8(0x90491E, state.level_flags_3 & 0xFF)
         self.w8(0x90491F, state.level_flags_4 & 0xFF)
+        self.w16(0x904004, state.levelnum_current)
+        self.w16(0x904A24, state.game_settings)
+        self.w16(0x904B86, state.games_played_counter)
+        if state.maze is not None:
+            self.w16(0x904B5C, getattr(state.maze, "floorpattern", 0))
+            self.w16(0x904B5E, getattr(state.maze, "wallpattern", 0))
         self.w16(0x90490C, state.idle_timer)
         self.w16(0x9048C6, state.escape_timer)
         self.w16(0x904BF2, state.movement_type)
+        self.w16(0x904008, state.scroll_x)
+        self.w16(0x90400A, state.scroll_y)
         self.w16(0x904AC2, (state.scroll_x - 8) << 7)
         self.w16(0x904AC4, (0x108 - state.scroll_y) << 7)
 

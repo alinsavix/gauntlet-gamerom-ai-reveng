@@ -1411,7 +1411,7 @@ inference** semantics where several OS paths reuse the storage.
 | `0x904FC0` | byte | `eeprom_error_count` | Saturating cumulative EEPROM write/decode error count (`eeprom_work+24`) |
 | `0x904FEB` | byte | `sound_status_poll_busy_count` | Cleared on a sound-status transition; saturating count of command-3 status polls rejected because the latch/direct-response path is busy |
 | `0x904FEC` | 4 B | `coin_counters` | Per-player coin counter accumulators |
-| `0x904FF0` | 4 B | `coin_bonus_progress` | Per-channel bonus-progress accumulator; incremented by delta × unit multiplier (0x3696) and decremented by the bonus threshold (0x36D6). Its only reference is 0x35D6; the persistent totals are EEPROM-image bytes `cfg+0x14+ch` with carry into `cfg+0+ch` |
+| `0x904FF0` | 4 B | `coin_bonus_progress` | Per-channel bonus-progress accumulator; incremented by delta × unit multiplier (0x3696) and decremented by the bonus threshold (0x36D6). Its only OS reference is 0x35D6, and the game clears a player's byte on death (0x469A2); the persistent totals are EEPROM-image bytes `cfg+0x14+ch` with carry into `cfg+0+ch` |
 | `0x904FF4` | 4 B | `coin_pending` | Per-player pending coin credits |
 | `0x904FF8` | long | `vblank_counter` | Monotonic VBLANK counter (incremented each frame) |
 | `0x904FFA` | byte | `eeprom_init_timeout_counter_byte` | Alias of byte +2 in the big-endian `vblank_counter`; nonzero after queued-repair draining means at least 256 process ticks and terminal initialization failure |

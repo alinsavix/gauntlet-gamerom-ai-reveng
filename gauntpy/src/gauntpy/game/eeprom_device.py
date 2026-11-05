@@ -22,6 +22,7 @@ class EepromImage:
     two_player_mode: int | None = None
     high_scores: HighScoreImage | None = None
     rotation: EepromRotation | None = None
+    games_played: int = 0
 
 
 class EepromStorage(Protocol):

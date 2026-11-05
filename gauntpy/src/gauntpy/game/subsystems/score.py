@@ -446,12 +446,40 @@ def highscore_table_init(state: GameState) -> None:
     ``state.high_scores[c]`` is that "bank is empty" condition, so this fills
     exactly the banks the EEPROM did not supply and leaves any restored ladder
     alone -- which is what lets an EEPROM load run before this call.
+
+    ``GSETTING_SCORE_RESET`` is what asks for a reset: set by ``_player_dies`` after
+    2000 games, and carried by the factory word. 0x49BEE-0x49C1C blanks each
+    ladder's top entry, so the fill below replaces all ten, and 0x49CC0 clears the bit.
+    A ladder whose fifth entry is blank is refilled from there (0x49C5E).
     """
+    from .eeprom import GSETTING_SCORE_RESET
+
+    reset = state.game_settings & GSETTING_SCORE_RESET
+    _fill_ladders(state, reset=bool(reset))
+    if reset:
+        state.game_settings &= ~GSETTING_SCORE_RESET & 0xFFFF
+        # An unprogrammed part has nothing to reset; anything else must lose the
+        # bit at once, or the next power-on would wipe the ladders again.
+        if state.eeprom_storage.read() is None:
+            state.eeprom_settings_cache = state.game_settings
+        else:
+            state.eeprom_write_timer = 1
+
+
+# ROM: part game:0x49BD0 | Factory-fill loop at 0x49C24-0x49CB2, shared with Python's lazy ladder accessor.
+def _fill_ladders(state: GameState, *, reset: bool = False) -> None:
+    """0x49C24-0x49CB2 -- fill each ladder from its first blank entry."""
     for character, records in enumerate(FACTORY_HIGHSCORE_RECORDS):
-        if not state.high_scores[character]:
-            state.high_scores[character] = [
-                (value, initials) for value, initials in records
-            ]
+        ladder = state.high_scores[character]
+        if reset or not ladder or not ladder[0][0]:
+            first = 0
+        elif len(ladder) > 4 and not ladder[4][0]:
+            first = 4
+        else:
+            continue
+        state.high_scores[character] = ladder[:first] + [
+            (value, initials) for value, initials in records[first:]
+        ]
 
 
 # ROM: helper | Lazily initialized Python ladder accessor; does not implement OS read_high_score_entry's indexed packed-record expansion.
@@ -462,7 +490,7 @@ def high_scores(state: GameState) -> list[list[tuple[int, str]]]:
     best first -- the shape ``read_high_score_entry`` (OS 0x1AE) exposes.
     """
     if any(not ladder for ladder in state.high_scores):
-        highscore_table_init(state)
+        _fill_ladders(state)
     return state.high_scores
 
 

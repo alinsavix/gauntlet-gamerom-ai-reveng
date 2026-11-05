@@ -818,6 +818,7 @@ class GameState:
     game_settings: int = 0            # 0x904A24, EEPROM options word; bit layout in subsystems/eeprom.py
     eeprom_write_timer: int = 0x8CA0  # 0x904012; 36,000 frames (~10 min at 60 Hz)
     eeprom_settings_cache: int = 0   # 0x904B94, last-written game_settings
+    games_played_counter: int = 0    # 0x904B86, games ended since the last score reset
     # Compatibility host configuration; only host.eeprom interprets this path.
     eeprom_save_path: str = "gauntpy_eeprom.json"
     # Host boundary: resumed historical states cannot overwrite newer external

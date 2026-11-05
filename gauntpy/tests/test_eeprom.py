@@ -393,7 +393,7 @@ class TestHighScorePersistence:
         """The settings-only files this module used to write must still load,
         and must hand the factory seeding back to ``highscore_table_init``."""
         save_path = tmp_path / "eeprom.json"
-        save_path.write_text('{"game_settings": 57488}')
+        save_path.write_text('{"game_settings": 57488, "games_played": 0}')
 
         state = _persisted_state(eeprom_save_path=str(save_path))
         ee.eeprom_load_settings(state)
@@ -525,7 +525,7 @@ def test_the_boot_handshake_restores_scores_before_anything_reads_them(tmp_path)
     from gauntpy.game.subsystems.score import FACTORY_HIGHSCORE_RECORDS
 
     save_path = tmp_path / "eeprom.json"
-    writer = _persisted_state(game_settings=0xE090, eeprom_save_path=str(save_path))
+    writer = _persisted_state(game_settings=0x6090, eeprom_save_path=str(save_path))
     high_scores(writer)
     write_high_score_entry(writer, 1, 0, 31337, "BOO")
     ee.eeprom_save_settings(writer)
@@ -533,9 +533,76 @@ def test_the_boot_handshake_restores_scores_before_anything_reads_them(tmp_path)
     booted = _persisted_state(eeprom_save_path=str(save_path))
     one_time_init(booted)
 
-    assert booted.game_settings == 0xE090
+    assert booted.game_settings == 0x6090
     assert high_scores(booted)[1][0] == (31337, "BOO")
     assert high_scores(booted)[0][0] == FACTORY_HIGHSCORE_RECORDS[0][0]
+
+
+def _saved_ladder_boot(tmp_path, game_settings, **fields):
+    from gauntpy.game.subsystems.boot import one_time_init
+
+    save_path = tmp_path / "eeprom.json"
+    writer = _persisted_state(game_settings=game_settings, eeprom_save_path=str(save_path))
+    high_scores(writer)
+    write_high_score_entry(writer, 1, 0, 31337, "BOO")
+    for name, value in fields.items():
+        setattr(writer, name, value)
+    ee.eeprom_save_settings(writer)
+    booted = _persisted_state(eeprom_save_path=str(save_path))
+    one_time_init(booted)
+    return booted, save_path
+
+
+def test_a_score_reset_request_returns_the_ladders_to_factory_at_boot(tmp_path):
+    """0x49BEE-0x49C1C blanks each top entry, and the fill replaces all ten."""
+    from gauntpy.game.subsystems.score import FACTORY_HIGHSCORE_RECORDS
+
+    booted, _ = _saved_ladder_boot(tmp_path, 0xE090, games_played_counter=0)
+
+    assert high_scores(booted)[1][0] == FACTORY_HIGHSCORE_RECORDS[1][0]
+    assert booted.game_settings == 0x6090, "0x49CC0: the request is consumed"
+    assert booted.eeprom_write_timer == 1, "and saved, or the next boot would reset again"
+    ee.eeprom_periodic_write(booted)
+    assert booted.eeprom_storage.read().game_settings == 0x6090
+
+
+def test_a_save_from_before_the_games_counter_keeps_its_scores(tmp_path):
+    """Those files carry the factory word's bit 15 only because nothing cleared it."""
+    import json
+
+    _, save_path = _saved_ladder_boot(tmp_path, 0x6090)
+    data = json.loads(save_path.read_text(encoding="utf-8"))
+    del data["games_played"]
+    data["game_settings"] = 0xE490
+    save_path.write_text(json.dumps(data), encoding="utf-8")
+
+    from gauntpy.game.subsystems.boot import one_time_init
+
+    booted = _persisted_state(eeprom_save_path=str(save_path))
+    one_time_init(booted)
+
+    assert high_scores(booted)[1][0] == (31337, "BOO")
+    assert booted.game_settings == 0x6490
+
+
+def test_the_games_counter_survives_a_power_cycle(tmp_path):
+    booted, _ = _saved_ladder_boot(tmp_path, 0x6090, games_played_counter=1234)
+    assert booted.games_played_counter == 1234
+
+
+def test_an_impossible_games_count_reads_back_as_zero(tmp_path):
+    """0x43076-0x43084."""
+    booted, _ = _saved_ladder_boot(tmp_path, 0x6090, games_played_counter=2001)
+    assert booted.games_played_counter == 0
+
+
+def test_a_new_games_count_is_saved_by_the_periodic_write(tmp_path):
+    """0x43252-0x4325E compares the counter with its cache."""
+    booted, _ = _saved_ladder_boot(tmp_path, 0x6090)
+    booted.games_played_counter = 7
+    booted.eeprom_write_timer = 1
+    ee.eeprom_periodic_write(booted)
+    assert booted.eeprom_storage.read().games_played == 7
 
 
 # ---------------------------------------------------------------------------
@@ -641,7 +708,7 @@ class TestRotationPersistence:
         """The settings-only and settings+scores files this module used to
         write must still load."""
         save_path = tmp_path / "eeprom.json"
-        save_path.write_text('{"game_settings": 57488}')
+        save_path.write_text('{"game_settings": 57488, "games_played": 0}')
 
         state = _persisted_state(eeprom_save_path=str(save_path))
         ee.eeprom_load_settings(state)
