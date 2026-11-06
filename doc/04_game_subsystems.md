@@ -1925,6 +1925,11 @@ common movement handoff's +12-pixel body bias assumes that correction; omitting
 it shifts the visitor four pixels right and makes a two-cell corridor look like
 one centered path instead of two cell-owned lanes.
 
+**Post-theft jump. Confidence: Verified** at 0x4E90C–0x4E99C. After a theft
+the visitor keeps running for 0x1C frames, only counting `thief_stolen_item`.
+From then on it stands while the jump frames from 0x58C8A play, one every
+four frames, until the counter passes 0x3B.
+
 **Escape taunt. Confidence: Verified** at 0x4E960–0x4E992. When the escape
 animation counter passes 0x3B, `getrandom(2)` selects one of two *pitch*
 variants, not a player. Index 0 plays sound 0x62 plus speech 0x63 and index 1
@@ -2041,17 +2046,29 @@ stores `thief_direction + 1` in `thief_collision_direction_code` and clears
 the shared `thief_stolen_item` counter. The collision animation increments
 that counter once per thief frame. Once it is greater than 15, the next
 contact calls `shot_impact_spawn` with the selected victim as effect owner,
-removes the blocking MOB, clears the collision code, and returns blocked for
-that frame. The visitor then resumes its route through the vacated cell.
+removes the blocking MOB, clears the collision code, and returns -1, so the
+step that found it stands and the visitor walks on through the vacated cell.
+
+Its return value decides each probed step. It returns -1, letting the step
+stand, when `thief_test_move_tile` (0x4E7FC) takes the cell, after the monster
+fight above, and after removing an object whose flag at 0x5B6AE is set (every
+pickup, so the thief eats it and walks on in the same frame). Everything else
+returns 0 and blocks: walls, forcefield hubs, a transporter that is not the next
+route cell, and heroes. A hero is recognized by palette nibble 0xC or more
+(0x4F77C), and is only fought while the visitor is escaping.
 
 The ordinary movement engine is anchor-based rather than cell-coarse.
 `thief_move_engine` (0x4EE7A) writes each proposed H or V word, then calls
 `thief_probe_axis` (0x4EE0A) with one of the generic `mob_probe_*` callbacks.
 Those callbacks test the three cells ahead against the proposed live anchor.
 If no candidate overlaps, the full thief/mugger speed is retained. An occupied
-candidate goes through `thief_handle_tile_collision`; its enclosing directional
-arm restores the proposed axis before continuing, whether the object is a
-wall, player, pickup, or non-solid transporter/floor marker. The common tail at
+candidate goes through `thief_handle_tile_collision`, and only a 0 result
+undoes the step (0x4EE44-0x4EE66). The undo is uneven: a blocked right or up
+step gives back only the speed beyond one pixel, a blocked left or down step
+gives back all of it, and either way `andi #$FF3F` then clears the position's
+lowest pixel bit. The result is `thief_collision_direction_code` plus one if
+any probe let its step stand or the thief reached a hero who is not
+transporting; that hero's theft is tried at once. The common tail at
 0x4F4A2 derives the destination MOB slot from `(H + 0x600) >> 11` and the
 corresponding `V + 0x400` row arithmetic, then calls `moblist_replace` only when
 that biased destination is empty.

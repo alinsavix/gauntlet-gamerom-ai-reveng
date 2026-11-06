@@ -82,7 +82,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904872 | 4 B | `secret_tricks_flags` | Array of 4 × 1B: per-player progress toward secret trick goal |
 | 0x904878 | 2 B | `secret_possible_counter` | Counts down; when 0, secret room entry is possible |
 | 0x90487A | 2 B | `secret_possible_start` | Starting value for secret_possible_counter |
-| 0x904060 | 1 B | `thief_pursuit_direction` | Signed shot-dodge direction latch. `-1` means no direction has yet been latched; after `thief_find_aligned_shooter` selects a player, `main_thief_anim` stores the first computed dodge direction and uses a nonnegative value to gate direction changes. |
+| 0x904060 | 1 B | `thief_pursuit_direction` | Signed shot-dodge direction latch. `-1` means no direction has yet been latched; after `thief_find_aligned_shooter` selects a player, `main_thief_anim` stores the first computed dodge direction and uses a nonnegative value to gate direction changes. While it is negative the whole dodge check is skipped (0x4E9AC). Only `main_thief_anim` writes it, so it carries over between levels; a cold-booted cabinet holds zero. |
 | 0x904061 | 1 B | `thief_pursuit_player` | Player selected by `thief_find_aligned_shooter` when the thief enters shot-dodge mode. It indexes that player's MOB and shot-direction entry. |
 | 0x904062 | 1 B | `thief_pursuit_shot_direction` | Snapshot of byte 1 of the selected player's `shot_direction` word. If the live value changes while the pursuit gate is active, theft is aborted. |
 

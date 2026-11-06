@@ -10,12 +10,11 @@ from ..alpha_memory import write_path_grid_byte as _write_path_grid_byte
 
 from ..constants import FIRST_PLAYABLE_SLOT, MazeObjIds
 from ..coords import (
-    decode_hpos,
-    decode_vpos,
+    POS_SHIFT,
     encode_hpos,
     encode_vpos_at_y,
     hpos_x,
-    mob_cell_of,
+    position_field,
     vpos_y,
 )
 from ..state import GameState
@@ -88,19 +87,6 @@ _THIEF_COLLISION_REMOVE_FLAGS = (
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0,
 )
-_THIEF_SOLID_OBJECTS = frozenset((
-    int(MazeObjIds.WALL_REGULAR),
-    int(MazeObjIds.WALL_MOVABLE),
-    int(MazeObjIds.WALL_SECRET),
-    int(MazeObjIds.WALL_DESTRUCTABLE),
-    int(MazeObjIds.WALL_RANDOM),
-    int(MazeObjIds.WALL_TRAPCYC1),
-    int(MazeObjIds.WALL_TRAPCYC2),
-    int(MazeObjIds.WALL_TRAPCYC3),
-    int(MazeObjIds.DOOR_HORIZ),
-    int(MazeObjIds.DOOR_VERT),
-    int(MazeObjIds.MONST_DRAGON),
-))
 
 # row76.bin animation tables: 0x58C8A-0x58E3D.
 _THIEF_ESCAPE_ANIM = (0x0FAB, 0x0FAB, 0x0FAB, 0x0FB4, 0x0FB4, 0x0FBD, 0x0FBD, 0x0DF3)
@@ -384,7 +370,6 @@ def thief_setup(state: GameState) -> None:
     state.mugger_item_carried = 0
     state.thief_mode = THIEF_DEAD
     state.thief_collision_direction_code = 0
-    state.thief_pursuit_direction = -1
     state.thief_tport_timer = -1
     state.thief_tport_dest = 0
 
@@ -515,10 +500,8 @@ def _repair_route_after_mode_toggle(state: GameState) -> None:
 # ROM: direct game:0x4E122 | Changes pursuit to retraced-route escape.
 def thief_exit(state: GameState) -> None:
     """0x4E122 -- change an active thief from pursuit to route-retracing escape."""
-    if not state.thief_current_pos:
-        state.thief_enter_time = -1
-        return
-    if state.thief_mode & THIEF_ESCAPE:
+    if not state.thief_current_pos or state.thief_mode & THIEF_ESCAPE:   # 0x4E12C-0x4E13A
+        state.thief_enter_time = -1                                     # 0x4E166
         return
     state.thief_mode = (state.thief_mode & ~0x09) | THIEF_ESCAPE
     _repair_route_after_mode_toggle(state)
@@ -697,25 +680,9 @@ def _slot_for_thief(state: GameState) -> int:
     return state.thief_mob_slot or state.thief_current_pos
 
 
-# ROM: helper | Generic Python world-coordinate clamping/wrapping utility.
-def _clamp_or_wrap(value: int, wraps: bool) -> int:
-    return value % _WORLD_PIXELS if wraps else max(0, min(_WORLD_PIXELS - 1, value))
-
-
-# ROM: helper | Python live-player identity lookup for a packed cell.
-def _player_at_cell(state: GameState, cell: int) -> int:
-    for index in range(len(state.players)):
-        if _player_is_targetable(state, index) and _player_packed_cell(state, index) == cell:
-            return index
-    return -1
-
-
-# ROM: helper | Python active-player identity lookup replacing ROM palette/state decoding.
-def _fixed_player_at_slot(state: GameState, slot: int) -> int:
-    for index in range(len(state.players)):
-        if state.players[index].active and state.players[index].mob_slot == slot:
-            return index
-    return -1
+# ROM: helper | Python helper: a record is a hero by its palette nibble, 0xC plus the player (0x4F77C, 0x4EFF6).
+def _is_hero_record(state: GameState, slot: int) -> bool:
+    return (state.mobs.hpos[slot] & 0x0F) >= 0x0C
 
 
 # ROM: part game:0x4F742 | Extracts the escape-contact damage table, redraw, hurt timer and sound branch.
@@ -733,55 +700,46 @@ def _damage_player_from_escape_contact(state: GameState, player_index: int) -> N
         _sound_play(state, 0x1E)
 
 
-# ROM: part game:0x4F742 | Extracts the player-contact fight latch and sixteen-frame damage dwell.
-def _handle_escape_player_contact(state: GameState, player_index: int) -> None:
-    if not state.thief_collision_direction_code:
-        state.thief_collision_direction_code = state.thief_direction + 1
-        state.thief_stolen_item = 0
-        return
-    if state.thief_stolen_item > 0x0F:
-        _damage_player_from_escape_contact(state, player_index)
-        state.thief_collision_direction_code = 0
-
-
-# ROM: direct game:0x4F742 | Prospective-cell interaction and fight entry; player contact branches are extracted.
+# ROM: direct game:0x4F742 | Prospective-cell interaction: -1 lets the thief's move stand, 0 blocks it.
 def thief_handle_tile_collision(state: GameState, candidate_mob_slot: int) -> int:
-    """0x4F742 -- handle a prospective cell; -1 means this frame is blocked."""
-    if not 0 <= candidate_mob_slot <= _PATH_GRID_MAX_CELL:
-        return -1
-    player_index = _fixed_player_at_slot(state, candidate_mob_slot)
-    if player_index >= 0:
-        if state.thief_mode & THIEF_ESCAPE:
-            _handle_escape_player_contact(state, player_index)
+    """0x4F742 -- what the record a probe found does to the thief's move.
+
+    It returns -1 when the move may stand: a transporter route took it, or the
+    record was a monster beaten after the fight dwell, or an object the thief
+    removes. Everything else, walls and heroes included, returns 0 and blocks.
+    A hero is recognized by palette nibble, and is only fought while escaping.
+    """
+    slot = candidate_mob_slot
+    if _is_hero_record(state, slot):                                  # 0x4F77C-0x4F784
+        if state.thief_mode & THIEF_ESCAPE:                           # 0x4F788
+            if not state.thief_collision_direction_code:              # 0x4F794
+                state.thief_collision_direction_code = state.thief_direction + 1
+                state.thief_stolen_item = 0                           # 0x4F86A-0x4F876
+            elif state.thief_stolen_item > 0x0F:                      # 0x4F79A
+                _damage_player_from_escape_contact(
+                    state, state.mobs.state(slot),                    # 0x4F7AE-0x4F7BC
+                )
+                state.thief_collision_direction_code = 0              # 0x4F866
         return 0
 
-    obj_type = state.mobs.obj_type(candidate_mob_slot)
-    move_result = thief_test_move_tile(state, candidate_mob_slot, obj_type)
-    if move_result:
+    obj_type = state.mobs.obj_type(slot)
+    if thief_test_move_tile(state, slot, obj_type):                   # 0x4F88A
         return -1
-    if (
-        int(MazeObjIds.MONST_GHOST)
-        <= obj_type
-        <= int(MazeObjIds.GEN_AUX_GRUNT3)
-    ):
-        if not state.thief_collision_direction_code:
+    if int(MazeObjIds.MONST_GHOST) <= obj_type <= int(MazeObjIds.GEN_AUX_GRUNT3):  # 0x4F89A
+        if not state.thief_collision_direction_code:                  # 0x4F8A6
             state.thief_collision_direction_code = state.thief_direction + 1
             state.thief_stolen_item = 0
             return 0
-        if state.thief_stolen_item <= 0x0F:
+        if state.thief_stolen_item <= 0x0F:                           # 0x4F8AA
             return 0
         from .shot_effects import shot_impact_spawn
 
-        shot_impact_spawn(
-            state, candidate_mob_slot, state.thief_victim,
-        )
-        state.mobs.unlink_and_clear(candidate_mob_slot)
+        shot_impact_spawn(state, slot, state.thief_victim)            # 0x4F8C0
+        state.mobs.unlink_and_clear(slot)                             # 0x4F8CC
         state.thief_collision_direction_code = 0
         return -1
-    if _THIEF_COLLISION_REMOVE_FLAGS[obj_type]:
-        state.mobs.unlink_and_clear(candidate_mob_slot)
-        return -1
-    if state.mobs.picture[candidate_mob_slot] == 0x8000 or obj_type in _THIEF_SOLID_OBJECTS:
+    if _THIEF_COLLISION_REMOVE_FLAGS[obj_type]:                       # 0x4F8EA-0x4F8FE
+        state.mobs.unlink_and_clear(slot)
         return -1
     return 0
 
@@ -800,19 +758,21 @@ def thief_test_move_tile(
     if path_grid_get_direction(state, state.thief_next_pos) != 8:
         return 0
 
+    # A direction of 8 (previous and next the same cell, as after a dodge
+    # begins) is not a stop: it steps nowhere, and 0x4E8AC then squeezes the
+    # thief through if that cell is where the victim stands.
     direction = calc_direction(
         state, state.thief_previous_pos, state.thief_next_pos,
-    )
-    if direction == 8:
-        return 0
+    )                                                                 # 0x4E854
     corner_target = _advance_route_cell(state.thief_next_pos, direction) & 0x3FF
-    corner_direction = path_grid_get_direction(state, corner_target)
+    corner_direction = path_grid_get_direction(state, corner_target)  # 0x4E88E
     if (
         corner_direction == 8
         or (direction ^ corner_direction) == 4
-    ) and corner_target != state.thief_victim_pos:
+    ) and corner_target != state.thief_victim_pos:                    # 0x4E8AC
         return 0
-    if (state.mobs.hpos[candidate_pos] & 0x0F) > 0x0C:
+    # corner_squeeze_geometry's thief arm first tests the probed record (0x4FFB6-0x4FFF4).
+    if (state.mobs.hpos[candidate_pos] & 0x0F) >= 0x0C:
         return 0
     if (
         int(MazeObjIds.MONST_GHOST)
@@ -924,170 +884,167 @@ def thief_enter_tport(state: GameState, transporter_pos: int) -> int:
     return -1
 
 
-# ROM: helper | Python inverse lookup from movement flags to the cached thief direction.
-def _direction_from_move_flags(move_flags: int) -> int:
-    try:
-        return _THIEF_DIRECTION_STEP_SIZE.index(move_flags & 0xFF)
-    except ValueError:
-        return 8
+# ROM: direct game:0x4EE0A | One probe of the movement engine: a blocking record undoes ``delta`` of the step.
+def thief_probe_axis(state: GameState, probe, positions, delta: int) -> int:
+    """0x4EE0A -- the blocking slot, or -1 when the step stands.
+
+    The undo also clears bits 6 and 7 of the position word (``andi #$FF3F``),
+    so a blocked thief lands on an even pixel.
+    """
+    current = state.thief_current_pos
+    hit = probe(state, current)                       # 0x4EE2A
+    if hit < 0:
+        return -1
+    hit &= 0x3FF                                      # 0x4EE30
+    if thief_handle_tile_collision(state, hit):       # 0x4EE3A
+        return -1
+    positions[current] = ((positions[current] + delta) & 0xFFFF) & 0xFF3F  # 0x4EE44-0x4EE66
+    return hit
 
 
-# ROM: part game:0x4EE7A | Extracts horizontal/vertical direction-bit decoding from the thief movement engine.
-def _axis_delta(move_flags: int, horizontal_speed: int, vertical_speed: int) -> tuple[int, int]:
-    dx = 0 if (move_flags & 0x30) == 0x30 else (
-        -horizontal_speed if move_flags & 0x10 else horizontal_speed
-    )
-    if move_flags & 0x40:
-        dy = 0 if move_flags & 0x80 else -vertical_speed
-    else:
-        dy = vertical_speed if move_flags & 0x80 else 0
-    return dx, dy
-
-
-# ROM: part game:0x4EE7A,game:0x4EE0A | Recombines directional probe, wall response, theft and relocation fragments; not a direct port of the narrower callback/correction leaf.
-def _move_thief_axis(
-    state: GameState, dx: int, dy: int, move_flags: int,
-    *, allow_wall_response: bool = True,
-) -> tuple[bool, bool]:
-    """Apply one ROM-probed axis. Returns (moved, blocked)."""
-    if not dx and not dy:
-        return False, False
-    slot = _slot_for_thief(state)
-    if not slot:
-        return False, True
-    x, flags, palette = decode_hpos(state.mobs.hpos[slot])
-    _, width, height = decode_vpos(state.mobs.vpos[slot])
-    y = vpos_y(state.mobs.vpos[slot])
-    new_x = _clamp_or_wrap(x + dx, state.wrap_h)
-    new_y = _clamp_or_wrap(y + dy, state.wrap_v)
-
-    from .mob_probes import (
-        mob_probe_down,
-        mob_probe_left,
-        mob_probe_right,
-        mob_probe_up,
-    )
-
-    proposed_h = encode_hpos(new_x, palette, flags)
-    proposed_v = encode_vpos_at_y(new_y, width, height)
-    if dx:
-        probe = mob_probe_right if dx > 0 else mob_probe_left
-    else:
-        probe = mob_probe_down if dy > 0 else mob_probe_up
-    candidate = probe(
-        state,
-        slot,
-        hpos=proposed_h,
-        vpos=proposed_v,
-        self_slot=slot,
-    )
-    if candidate >= 0:
-        if allow_wall_response and state.mobs.picture[candidate] in (0x8000, 0x8001):
-            from .mob_probes import _probe_candidate_anchor, _wrapped_position_delta
-
-            candidate_h, candidate_v = _probe_candidate_anchor(state, candidate)
-            row_delta = ((candidate >> 5) - (slot >> 5)) & 0x1F
-            col_delta = ((candidate & 0x1F) - (slot & 0x1F)) & 0x1F
-            nudge_x = nudge_y = 0
-            if dy and _wrapped_position_delta(candidate_h, state.mobs.hpos[slot]) > 0x200:
-                if col_delta == 0x1F and move_flags & 0x20:
-                    nudge_x = 1
-                elif col_delta == 1 and move_flags & 0x10:
-                    nudge_x = -1
-            elif dx and _wrapped_position_delta(candidate_v, state.mobs.vpos[slot]) > 0x200:
-                if row_delta == 1 and move_flags & 0x40:
-                    nudge_y = -1
-                elif row_delta == 0x1F and move_flags & 0x80:
-                    nudge_y = 1
-            if nudge_x or nudge_y:
-                moved, _ = _move_thief_axis(
-                    state, nudge_x, nudge_y, move_flags,
-                    allow_wall_response=False,
-                )
-                return moved, True
-        player_index = _fixed_player_at_slot(state, candidate)
-        if (
-            player_index >= 0
-            and _player_is_targetable(state, player_index)
-            and not state.thief_mode & THIEF_ESCAPE
-            and thief_steal_from_player(state, player_index)
-        ):
-            return False, True
-        if candidate > _PATH_GRID_MAX_CELL or thief_handle_tile_collision(
-            state, candidate,
-        ):
-            return False, True
-        return False, False
-
-    state.mobs.hpos[slot] = proposed_h
-    state.mobs.vpos[slot] = proposed_v
-    new_cell = mob_cell_of(proposed_h, proposed_v)
-    if new_cell != slot and not state.mobs.is_occupied(new_cell):
-        state.mobs.move_slot(slot, new_cell)
-        slot = new_cell
-        state.thief_mob_slot = slot
-        state.thief_current_pos = slot
-        if state.thief_current_pos == state.thief_next_pos:
-            path_grid_set_high_direction_if_empty(
-                state, slot, (state.thief_path_direction + 4) & 7
-            )
-    return True, False
-
-
-# ROM: direct game:0x4EE7A | Thief movement entry with axis bodies extracted; Python tuple/flag representation differs.
+# ROM: direct game:0x4EE7A | Thief movement: right or left, then down or up, each probed, with wall-corner nudges, hero contact and cell migration.
 def thief_move_engine(
     state: GameState,
     move_flags: int,
-    horizontal_delta_bias: int,
-    vertical_delta_bias: int,
+    horizontal_speed: int,
+    vertical_speed: int,
 ) -> int:
-    """0x4EE7A -- ROM-order horizontal/vertical thief movement and collision."""
-    slot = _slot_for_thief(state)
-    if not slot:
-        return -1
-    state.thief_current_pos = slot
-    player_index = _player_at_cell(state, state.thief_current_pos)
-    contacted_current_player = player_index >= 0
-    if player_index >= 0:
-        if state.thief_mode & THIEF_ESCAPE:
-            _handle_escape_player_contact(state, player_index)
-        elif thief_steal_from_player(state, player_index):
-            return state.thief_collision_direction_code + 1
-    direction = _direction_from_move_flags(move_flags)
-    if direction != 8:
-        state.thief_direction = direction
-    horizontal_speed = max(0, horizontal_delta_bias >> 7)
-    vertical_speed = max(0, vertical_delta_bias >> 7)
-    dx, dy = _axis_delta(move_flags, horizontal_speed, vertical_speed)
+    """0x4EE7A -- move the thief one frame; returns the fight latch plus one if it got anywhere.
 
-    blocked = False
-    moved_h, blocked_h = _move_thief_axis(state, dx, 0, move_flags)
-    blocked |= blocked_h
-    moved_v, blocked_v = _move_thief_axis(state, 0, dy, move_flags)
-    blocked |= blocked_v
-    if not moved_h and not moved_v and not blocked and not contacted_current_player:
-        player_index = _player_at_cell(state, state.thief_current_pos)
-        if player_index >= 0 and not state.thief_mode & THIEF_ESCAPE:
-            blocked = bool(thief_steal_from_player(state, player_index))
+    ``move_flags`` is active low: bit 4 clear moves right, bit 5 left, bit 6 down
+    and bit 7 up. A blocked right or up step is undone only by the speed beyond
+    one pixel, while a blocked left or down step is undone completely. A wall
+    met with more than 0x200 of overlap on the other axis nudges the thief a
+    pixel round its corner instead of moving on the other axis. Touching a hero
+    who is not transporting counts as getting somewhere, and tries the theft.
+    """
+    from .mob_probes import mob_probe_down, mob_probe_left, mob_probe_right, mob_probe_up
 
-    return state.thief_collision_direction_code + int(blocked)
+    current = state.thief_current_pos
+    hpos, vpos = state.mobs.hpos, state.mobs.vpos
+    saved_h, saved_v = hpos[current], vpos[current]                       # 0x4EEA2-0x4EEB0
+    h_excess = horizontal_speed - 0x80 if horizontal_speed >= 0x80 else 0  # 0x4EEBC
+    v_excess = vertical_speed - 0x80 if vertical_speed >= 0x80 else 0      # 0x4EEC8
+    got_somewhere = 0
+
+    # ROM: helper | Neighbour arithmetic the four arms repeat inline (0x4EF3E-0x4EF62 and kin).
+    def cell(column_delta: int, row_delta: int) -> int:
+        return ((current + column_delta) & 0x1F) + ((current + row_delta) & 0x3E0)
+
+    # ROM: helper | The 0x8000/0x8001 picture test each arm repeats inline (0x4EF0A-0x4EF2E and kin).
+    def wall(hit: int) -> bool:
+        return state.mobs.picture[hit] in (0x8000, 0x8001)
+
+    # ROM: helper | The position-word add each arm repeats inline (0x4EEE6 and kin).
+    def step(positions, amount: int) -> None:
+        positions[current] = (positions[current] + amount) & 0xFFFF
+
+    # ROM: helper | A wall-corner nudge and its probe, repeated inline in each arm (0x4EF6E-0x4EF90 and kin).
+    def nudge(positions, amount: int, probe) -> None:
+        nonlocal got_somewhere
+        step(positions, amount)
+        if thief_probe_axis(state, probe, positions, -amount) < 0:
+            got_somewhere = 1
+
+    # ROM: helper | Hero-contact arm repeated inline after each probe (0x4EFE8-0x4F048 and kin).
+    def hero(hit: int) -> bool:
+        """0x4EFE8-0x4F048: a hero who is not transporting is reached; the theft is tried."""
+        nonlocal got_somewhere
+        nibble = hpos[hit] & 0x0F
+        if nibble < 0x0C or state.player_tport_phase[nibble - 0x0C] != -1:
+            return False
+        got_somewhere = 1
+        return bool(thief_steal_from_player(state, state.mobs.state(hit)))
+
+    corner = False
+    if not move_flags & 0x10:                                     # right, 0x4EED8
+        step(hpos, horizontal_speed)
+        hit = thief_probe_axis(state, mob_probe_right, hpos, -h_excess)
+        if hit < 0:
+            got_somewhere = 1
+        elif wall(hit):
+            if state.collision_dist_V > 0x200:                    # 0x4EF32
+                if hit == cell(1, 0x20) and move_flags & 0x40:
+                    nudge(vpos, 0x80, mob_probe_up)
+                    corner = True
+                elif hit == cell(1, -0x20) and move_flags & 0x80:
+                    nudge(vpos, -0x80, mob_probe_down)
+                    corner = True
+        elif hero(hit):
+            hpos[current] = saved_h                               # 0x4F048
+    elif not move_flags & 0x20:                                   # left, 0x4F052
+        step(hpos, -horizontal_speed)
+        hit = thief_probe_axis(state, mob_probe_left, hpos, horizontal_speed)
+        if hit < 0:
+            got_somewhere = 1
+        elif wall(hit):
+            if state.collision_dist_V > 0x200:                    # 0x4F0A8
+                if hit == cell(-1, 0x20) and move_flags & 0x40:
+                    nudge(vpos, 0x80, mob_probe_up)
+                    corner = True
+                elif hit == cell(-1, -0x20) and move_flags & 0x80:
+                    nudge(vpos, -0x80, mob_probe_down)
+                    corner = True
+        elif hero(hit):
+            hpos[current] = saved_h                               # 0x4F1BE
+
+    if not corner:
+        if not move_flags & 0x40:                                 # down, 0x4F1C4
+            step(vpos, -vertical_speed)
+            hit = thief_probe_axis(state, mob_probe_down, vpos, vertical_speed)
+            if hit < 0:
+                got_somewhere = 1
+            elif wall(hit):
+                if state.collision_dist_H > 0x200:                # 0x4F21C
+                    if hit == cell(-1, 0x20) and move_flags & 0x20:
+                        nudge(hpos, 0x80, mob_probe_right)
+                    elif hit == cell(1, 0x20) and move_flags & 0x10:
+                        nudge(hpos, -0x80, mob_probe_left)
+            elif hero(hit):
+                vpos[current] = saved_v                           # 0x4F32A
+        elif not move_flags & 0x80:                               # up, 0x4F334
+            step(vpos, vertical_speed)
+            hit = thief_probe_axis(state, mob_probe_up, vpos, -v_excess)
+            if hit < 0:
+                got_somewhere = 1
+            elif wall(hit):
+                if state.collision_dist_H > 0x200:                # 0x4F390
+                    if hit == cell(-1, -0x20) and move_flags & 0x20:
+                        nudge(hpos, 0x80, mob_probe_right)
+                    elif hit == cell(1, -0x20) and move_flags & 0x10:
+                        nudge(hpos, -0x80, mob_probe_left)
+            elif hero(hit):
+                vpos[current] = saved_v                           # 0x4F49C
+
+    # 0x4F4A2-0x4F4DA: the cell the body is now in.
+    x = _s16(_s16(hpos[current]) >> POS_SHIFT & 0xFFFF)
+    y = _s16(_s16(vpos[current]) >> POS_SHIFT & 0xFFFF)
+    new_cell = ((x + 12) >> 4 & 0x1F) + ((((y + 8) & 0x1F0) ^ 0x1F0) << 1)
+    # 0x4F4DC-0x4F546: a step of more than two pixels on either axis ends a fight.
+    dh = _s16(position_field(saved_h) - position_field(hpos[current]))
+    dv = _s16(position_field(saved_v) - position_field(vpos[current]))
+    if not (-0x100 <= dh <= 0x100 and -0x100 <= dv <= 0x100):
+        state.thief_collision_direction_code = 0
+    if (not state.thief_tport_active and new_cell != current         # 0x4F54C-0x4F568
+            and not state.mobs.picture[new_cell]):
+        state.mobs.move_slot(current, new_cell)                      # 0x4F576
+        state.thief_current_pos = state.thief_mob_slot = new_cell
+        if state.thief_next_pos == new_cell:                         # 0x4F582
+            path_grid_set_high_direction_if_empty(
+                state, new_cell, (state.thief_path_direction + 4) & 7,
+            )
+    return state.thief_collision_direction_code + got_somewhere
 
 
-# ROM: helper | Python fallback direction reconstruction when a shot was armed without its normal direction field.
+# ROM: helper | Python signed-16-bit view of a word.
+def _s16(value: int) -> int:
+    value &= 0xFFFF
+    return value - 0x10000 if value & 0x8000 else value
+
+
+# ROM: helper | Reads a player shot's direction word at 0x9049C4, as 0x4FD44 and 0x4E9F2 do.
 def _shot_direction(state: GameState, player_index: int) -> int:
-    direction = state.shot_direction[player_index]
-    if 0 <= direction <= 7:
-        return direction
-    slot = player_index + 1
-    dx = state.shot_dx[slot] if slot < len(state.shot_dx) else 0
-    dy = state.shot_dy[slot] if slot < len(state.shot_dy) else 0
-    if dx == 0:
-        return 0 if dy < 0 else 4 if dy > 0 else 8
-    if dy == 0:
-        return 2 if dx > 0 else 6
-    if dx > 0:
-        return 1 if dy < 0 else 3
-    return 7 if dy < 0 else 5
+    return state.shot_direction[player_index]
 
 
 # ROM: helper | Generic Python shortest wrapped-axis delta utility.
@@ -1150,12 +1107,19 @@ def thief_find_aligned_shooter(state: GameState) -> int:
 
 # ROM: part game:0x4E8DC | Extracts the post-theft pause, jump animation and taunt at 0x4E90C-0x4E99C.
 def _escape_animation(state: GameState) -> bool:
-    """Advance the post-theft pause at 0x4E90C-0x4E99C."""
+    """Advance the post-theft jump at 0x4E90C-0x4E99C; True when it holds the thief still.
+
+    For its first 0x1C frames the thief keeps running and only counts (0x4E916,
+    0x4E99C). After that it stands and plays the jump, then taunts.
+    """
     if not state.thief_mode & THIEF_JUMPJUMP:
         return False
     counter = state.thief_stolen_item
+    if counter < 0x1C:
+        state.thief_stolen_item = counter + 1
+        return False
     slot = _slot_for_thief(state)
-    if counter >= 0x1C and slot:
+    if slot:
         state.mobs.picture[slot] = _THIEF_ESCAPE_ANIM[((counter - 0x1C) >> 2) & 7]
     state.thief_stolen_item = counter + 1
     if state.thief_stolen_item > _TAUNT_THRESHOLD:
@@ -1206,16 +1170,19 @@ def _finish_escape_at_start(state: GameState) -> bool:
 
 # ROM: part game:0x4E8DC | Extracts dodge acquisition and tracked-shot disappearance/direction-change handling.
 def _update_dodge(state: GameState) -> None:
+    """0x4E9A2-0x4EA30. Nothing changes while the dodge has begun but not yet moved (0x4E9AC)."""
     if state.thief_mode & THIEF_IS_MUGGER:
+        return
+    if state.thief_pursuit_direction < 0:
         return
     if state.thief_mode & THIEF_DODGE:
         player_index = state.thief_pursuit_player
         shot_slot = player_index + 1
         if not 0 <= player_index < 4 or not state.mobs.picture[shot_slot]:
-            thief_end_dodge(state)
+            thief_end_dodge(state)                                   # 0x4E9D6
             return
-        if state.thief_pursuit_direction >= 0 and _shot_direction(state, player_index) != state.thief_pursuit_shot_direction:
-            thief_end_dodge(state)
+        if _shot_direction(state, player_index) != state.thief_pursuit_shot_direction:
+            thief_end_dodge(state)                                   # 0x4E9F2-0x4E9F8
         return
     player_index = thief_find_aligned_shooter(state)
     if player_index < 0:
@@ -1223,7 +1190,7 @@ def _update_dodge(state: GameState) -> None:
     thief_begin_dodge(state)
     state.thief_pursuit_direction = -1
     state.thief_pursuit_player = player_index
-    state.thief_pursuit_shot_direction = _shot_direction(state, player_index)
+    state.thief_pursuit_shot_direction = _shot_direction(state, player_index) & 0xFF  # 0x4EA28, low byte
     state.thief_direction_change_pos = 0
 
 
@@ -1252,45 +1219,92 @@ def _set_thief_animation(state: GameState, movement_result: int) -> None:
 
 # ROM: direct game:0x4E8DC | Thief frame-service entry with escape, dodge and animation branches extracted.
 def main_thief_anim(state: GameState) -> None:
-    """0x4E8DC -- thief state graph, dodge latches, movement and animation."""
+    """0x4E8DC -- thief state graph, dodge latches, movement and animation.
+
+    On reaching its next route cell the thief first walks to the cell's centre,
+    each axis at most its speed and at most the distance left (0x4EA4A-0x4EB66).
+    Only once centred does it wait on a dodge, finish an escape, or take the
+    next route step (0x4EB68-0x4EC78).
+    """
     if not state.thief_current_pos or state.thief_enter_time >= 0:
         return
     if state.thief_tport_timer >= 0:                 # 0x4E900-0x4E908
         return
     if _escape_animation(state):
         return
-    if _finish_escape_at_start(state):
-        return
 
-    _update_dodge(state)
-    if (
-        state.thief_mode & THIEF_DODGE
-        and state.thief_pursuit_direction >= 0
-        and state.thief_current_pos == state.thief_next_pos
-        and state.thief_direction_change_pos
-        and state.thief_direction_change_pos != state.thief_current_pos
-    ):
-        return
+    _update_dodge(state)                             # 0x4E9A2-0x4EA30
+    horizontal_speed = vertical_speed = state.thief_speed   # 0x4EA36-0x4EA3C
+    current = state.thief_current_pos
+    if current == state.thief_next_pos:              # 0x4EA3E
+        direction, horizontal_speed, vertical_speed = _centring_step(
+            state, horizontal_speed,
+        )
+        if not horizontal_speed and not vertical_speed:
+            if (                                     # 0x4EB74-0x4EB96
+                state.thief_mode & THIEF_DODGE
+                and state.thief_pursuit_direction >= 0
+                and state.thief_direction_change_pos
+                and state.thief_direction_change_pos != current
+            ):
+                return
+            if _finish_escape_at_start(state):       # 0x4EB9A-0x4EC56
+                return
+            thief_compute_path(state)                # 0x4EC5A
+            horizontal_speed = vertical_speed = state.thief_speed
+            direction = calc_direction(state, current, state.thief_next_pos)
+    else:
+        direction = calc_direction(state, current, state.thief_next_pos)  # 0x4EC92
 
-    if state.thief_current_pos == state.thief_next_pos:
-        thief_compute_path(state)
-    direction = calc_direction(state, state.thief_current_pos, state.thief_next_pos)
-    if state.thief_mode & THIEF_DODGE:
+    if state.thief_mode & THIEF_DODGE:               # 0x4EC9A-0x4ECC2
         if state.thief_pursuit_direction < 0:
             state.thief_pursuit_direction = direction
         elif direction != state.thief_direction:
-            state.thief_direction_change_pos = state.thief_current_pos
+            state.thief_direction_change_pos = current
     state.thief_direction = direction
     if not 0 <= direction <= 8:
         return
 
-    state.thief_tport_active = 0
+    state.thief_tport_active = 0                     # 0x4ECDC
     movement_result = thief_move_engine(
         state,
         _THIEF_DIRECTION_STEP_SIZE[direction],
-        state.thief_speed,
-        state.thief_speed,
+        horizontal_speed,
+        vertical_speed,
     )
     if movement_result < 0:
         return
     _set_thief_animation(state, movement_result)
+
+
+# ROM: part game:0x4E8DC | The centring step at 0x4EA4A-0x4EB66: direction to the next cell's anchor, and speeds clamped to the distance left.
+def _centring_step(state: GameState, speed: int) -> tuple[int, int, int]:
+    """``(direction, horizontal speed, vertical speed)`` toward the anchor of ``thief_next_pos``.
+
+    Distances are in position units and wrap at half the maze. An axis within
+    0x80 of the anchor gives way to the other in the direction; both speeds
+    are zero once the thief stands exactly on the anchor.
+    """
+    current, target = state.thief_current_pos, state.thief_next_pos
+    dh = ((target & 0x1F) << 11) - 0x200 - position_field(state.mobs.hpos[current])
+    dv = ((((target & 0x3E0) ^ 0x3E0) << 6)) - position_field(state.mobs.vpos[current])
+    if dh > 0x1000:                                  # 0x4EAA6-0x4EAC0
+        dh -= 0x10000
+    elif dh < -0x1000:
+        dh += 0x10000
+    if dv > 0x1000:
+        dv -= 0x10000
+    elif dv < -0x1000:
+        dv += 0x10000
+    direction = 1                                    # 0x4EAE2-0x4EB26
+    if -0x80 < dh < 0x80:
+        direction = 0
+    if -0x80 < dv < 0x80:
+        direction = 2
+    if dh <= -0x80:
+        direction = (8 - direction) & 7
+    if dv <= -0x80:
+        direction = (12 - direction) & 7
+    horizontal = min(speed, abs(dh))                 # 0x4EB28-0x4EB46
+    vertical = min(speed, abs(dv))                   # 0x4EB48-0x4EB66
+    return direction, horizontal, vertical

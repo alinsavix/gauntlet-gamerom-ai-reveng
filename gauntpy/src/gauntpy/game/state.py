@@ -454,10 +454,12 @@ class GameState:
     thief_path_direction: int = 0   # 0x90404A, byte; selected route direction
     thief_direction: int = 0        # 0x904B9C, movement/animation direction
     # 0x904060-0x904062, shot-dodge latches.  Direction -1 means that a
-    # dodge has begun but has not yet selected its first movement direction.
-    thief_pursuit_direction: int = -1
-    thief_pursuit_player: int = -1
-    thief_pursuit_shot_direction: int = -1
+    # dodge has begun but has not yet selected its first movement direction,
+    # and freezes the dodge check until it does (0x4E9AC). Nothing resets them:
+    # a cold-booted cabinet holds zero, and they carry over between levels.
+    thief_pursuit_direction: int = 0
+    thief_pursuit_player: int = 0
+    thief_pursuit_shot_direction: int = 0
     # 0x9048B0, route cell which constrains a mid-dodge direction change.
     thief_direction_change_pos: int = 0
     thief_previous_pos: int = 0     # 0x904BA2, prior route cell

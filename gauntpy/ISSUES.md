@@ -45,9 +45,8 @@ half of the 40 calls with no Python match. The rest are mostly screens and setup
 Of 270 mapped game routines, 62 have never run in a ROM execution test or in the shipped demo's
 test. These are the groups that matter most:
 
-- The thief's movement and routing: `thief_move_engine`, `thief_compute_path`,
-  `thief_handle_tile_collision`, `thief_enter_tport` and the path grid. Arrival, theft, leaving
-  and removal are compared (S-207, S-209, S-210, S-212), but no thief has walked in a comparison.
+- The thief walks in step with the ROM now (S-216). Not yet compared: a thief entering a
+  transporter on its own route (`thief_enter_tport`), and fights with other heroes while escaping.
 - The dragon: its segments, `dragon_choose_move_direction`, `dragon_shot_hit` and the head pose. The
   crosswalk note on `_advance_wake_or_turn` does not certify the transition pictures.
 - Secret rooms and name entry, `shot_reflect_calc` and the forcefield setup.
@@ -57,6 +56,42 @@ test. These are the groups that matter most:
 These are leads, not known bugs. A routine that has run in a comparison may still have unreached branches.
 
 ## Resolved issues
+
+### S-216 · the thief's movement was not the ROM's
+
+`tools/thief_walk.py` runs a thief through real levels frame by frame in gauntpy and in the ROM:
+a hero leaves a trail, the thief arrives, follows it, steals and runs back, with a ghost on the
+route, an arrow aimed at it, or a hero still walking. All 816 runs across ten mazes now match on
+every thief word, its record, the route grid, the victim and the RNG seed. Getting there found
+these:
+
+- `thief_move_engine` (0x4EE7A) was a reconstruction, and it added one to its result when
+  the thief was blocked, where the ROM adds one when it got somewhere. It is now a direct port: right
+  or left, then down or up, each probed through 0x4EE0A, with the ROM's wall-corner nudges, its
+  uneven undo (a blocked right or up step keeps one pixel) and the even-pixel rounding of
+  `andi #$FF3F`. A hero is found by palette nibble and its theft tried as the probe reaches it.
+- `thief_handle_tile_collision` (0x4F742) returns -1 to let a step stand and 0 to block it.
+  gauntpy blocked on pickups it had just eaten and walked through objects the ROM blocks on.
+- On reaching its next route cell the thief first walks to the cell's centre, each axis clamped
+  to the distance left (0x4EA4A-0x4EB66). gauntpy took the next route step at once, and checked
+  the getaway before the dodge.
+- After a theft the thief keeps running for 0x1C frames before it stops to jump (0x4E916);
+  gauntpy stood still for the whole jump.
+- The dodge check is skipped while 0x904060 is negative (0x4E9AC). gauntpy started that latch at
+  -1 and reset it every level, which with the ROM's gate would mean a thief that never dodges.
+  Nothing in the game resets it, and a cold-booted cabinet in MAME holds zero there.
+- `thief_test_move_tile` (0x4E7FC) gave up when the route direction was 8, as it is just after a
+  dodge begins. The ROM carries on, and squeezes the thief through if that cell is the victim's.
+  Its hero test was also off by one (nibble 0xC or more, 0x4FFC6).
+- A shot's direction is read as it is (0x4FD44); the fallback that rebuilt it from the shot's
+  velocity was gauntpy's own.
+- `thief_exit` (0x4E122) also parks `thief_enter_time` when the thief is already escaping.
+
+Thirteen thief tests had encoded the old behaviour. Each was run through the ROM on the same
+state: most fixtures lacked the hero palette nibble or stood off the cell anchor, and the ROM
+decided every expectation. One test placed the thief and its victim in the same record slot,
+which a real maze cannot do, and is gone; `tests/test_thief_walk.py` runs a sample of the walks
+instead.
 
 ### S-206 · an IT change never announced the new holder
 

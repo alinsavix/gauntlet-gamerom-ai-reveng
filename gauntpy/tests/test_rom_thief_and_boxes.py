@@ -427,6 +427,23 @@ def test_the_victim_leaving_through_an_exit_matches_the_rom(mode, armed):
         assert state.thief_mode & _ESCAPE
 
 
+@pytest.mark.parametrize("present,escaping", [(False, False), (True, False), (True, True)])
+def test_thief_exit_matches_the_rom(present, escaping):
+    state = _state()
+    if present:
+        _thief_on_level(state, _ESCAPE if escaping else 0)
+    state.thief_enter_time = 7
+    machine = _rom(state)
+    machine.call(0x4E122)
+    assert machine.halted
+    from gauntpy.game.subsystems.thief import thief_exit
+
+    thief_exit(state)
+    assert machine.r16(0x904B9E) == state.thief_enter_time & 0xFFFF
+    assert machine.r16(0x904BA0) == state.thief_mode
+    assert machine.r16(0x904BA6) == state.thief_next_pos
+
+
 @pytest.mark.parametrize("loot", [MazeObjIds.KEY, MazeObjIds.POT_DESTRUCTABLE, _EMPTY_CARRY])
 def test_a_moving_exit_landing_on_the_thief_matches_the_rom(loot):
     state = _state((20 << 5) | 20)

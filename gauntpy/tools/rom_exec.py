@@ -142,6 +142,27 @@ class RomMachine:
         self.cpu.mem_write(0x9049E4, struct.pack(">I", state.dialog_first_encounter_flags))
         self.w16(0x90487E, state.dialog_once_flags)
         self.w16(0x904A9E, state.dialog_timer)
+        self.w8(0x90404A, state.thief_path_direction)
+        self.w16(0x904B9C, state.thief_direction)
+        self.w8(0x904060, state.thief_pursuit_direction)
+        self.w8(0x904061, state.thief_pursuit_player)
+        self.w8(0x904062, state.thief_pursuit_shot_direction)
+        self.w16(0x9048B0, state.thief_direction_change_pos)
+        self.w16(0x9048BC, state.thief_speed)
+        self.w16(0x904BB8, state.thief_collision_direction_code)
+        self.w16(0x904BBC, state.thief_stolen_item)
+        self.w16(0x904BBE, state.thief_tport_active)
+        self.w16(0x904BCC, state.thief_tport_saved_picture)
+        self.w16(0x904BE0, state.thief_tport_dest)
+        for i, direction in enumerate(state.shot_direction):
+            self.w16(0x9049C4 + 2 * i, direction)
+        # The route grid and the transporter route words live in the alpha
+        # workspace past column 41 (0x50FD2, 0x510BC).
+        self.cpu.mem_write(0x905054, bytes(state.path_direction_grid))
+        for pad in range(1, len(state.tport_route_forward)):
+            offset = (pad // 22) * 0x80 + (pad % 22) * 2
+            self.w16(0x905C54 + offset, state.tport_route_forward[pad])
+            self.w16(0x905D54 + offset, state.tport_route_reverse[pad])
         self.w16(0x9049DC, state.player_it)
         self.w16(0x904006, state.frame_counter)
         self.w16(0x904918, int(state.game_mode))
