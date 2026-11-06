@@ -481,11 +481,12 @@ def _player_fight_collision(
         # running into another live player on a non-recursive movement pass. The
         # target is stunned for 0x40 frames.
         if state.movement_type != 0 and state.player_it == player_index:
-            state.player_it = target_index
-            from .score import write_it_labels
+            from .score import player_it_announce, write_it_labels
 
+            player_it_announce(state, target_index)      # 0x41DC8
+            state.player_it = target_index
             write_it_labels(state)
-            _sound_play(state, 0x35)
+            _sound_play(state, 0x35)                     # 0x41DD4
             state.players[target_index].stundelay = 0x40
         return 0
 

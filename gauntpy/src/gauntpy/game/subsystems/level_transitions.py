@@ -232,6 +232,11 @@ def player_exit_sequence(state: GameState, player_index: int,
 
     secret_trick_check(state, player_index)        # 0x52B60-0x52C4E
 
+    if player_index == state.thief_victim:         # 0x52C50-0x52C58
+        from .thief import thief_exit
+
+        thief_exit(state)
+
     sound_play(state, 0x0E + (player_index & 3))    # §12.1
 
     player = state.players[player_index]

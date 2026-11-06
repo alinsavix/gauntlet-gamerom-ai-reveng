@@ -110,8 +110,14 @@ that invariably arrives after it is over.
 
 Throughout the countdown, the victim is already writing directions.
 Deployment uses the saved *old* cell, not the player's current cell.
-An arrival effect then accompanies a further sixty-frame entrance pause.
+If something occupies that cell, or stands within about a cell's width of
+it, the visitor waits another five seconds and tries again. An arrival
+effect then accompanies a further sixty-frame entrance pause.
 By the time pursuit starts moving, it has a journey to read.
+
+Leaving the level ends the hunt. If the victim walks out through an exit,
+a visitor still counting down never arrives, and one already in the maze
+turns for home.
 
 ## Two drawings of the same corridor
 
@@ -246,7 +252,9 @@ neither representation could express alone.
 
 Reaching the recorded start on the return journey provides the normal
 successful getaway. The visitor disappears with a transporter-style
-effect. It need not find the exit the players are using.
+effect. It need not find the exit the players are using. The first time
+it gets away with something, the victim sees `FIND STOLEN ITEM ON NEXT
+LEVEL`.
 
 ## Fast does not mean unstoppable
 
@@ -303,7 +311,9 @@ continue obligingly toward it.
 
 ## What the loot actually contains
 
-Contact turns pursuit into escape and chooses the loss. Permanent powers
+Contact turns pursuit into escape and chooses the loss. The first theft
+in a game shows `KILL THIEF TO RECOVER STOLEN ITEM`, and the first
+mugging `KILL MUGGER TO RECOVER FOOD`. Permanent powers
 take priority, in the same descending order used by their wealth weights.
 Our Blue player loses extra shot power.
 
@@ -330,7 +340,9 @@ the ordinary score-addition rule. A different hero can collect it.
 
 Kill the visitor and its carried object drops at the death location.
 The killer also receives a separate base 500-point bounty through their
-current multiplier. If the visitor escapes, the game saves the loot for
+current multiplier. A moving exit that lands on the visitor removes it
+too, but pays no bounty, and the exit claims the cell where the loot
+would have dropped, so that loot is simply gone. If the visitor escapes, the game saves the loot for
 placement on the next eligible level instead. It chooses a candidate
 cell and steps through alternatives until it finds empty, non-reserved
 space; secret rooms are excluded. The returned potion, key, food, or bag
@@ -369,6 +381,10 @@ take, and where you might intercept its return.
   `0x35` for a key, and `multiplier × 500 × 64 + 0x30` for a score bag.
   Speed and allowance checks are at `0x4E516–0x4E566`; movement consumes
   the speed at `0x4EA36` and clamps centering steps at `0x4EB28–0x4EB68`.
+  Arrival tests the start cell at `0x4DEFA`; the victim's exit calls
+  `thief_exit` at `0x52C58`, and a moving exit removes the visitor at
+  `0x5297E`. The three messages are shown from `0x4E40A`, `0x4E274` and
+  `0x4EC0A`.
   Escaped-loot
   placement is at `0x44166–0x441A6`.
 - [`thief.py`](../gauntpy/src/gauntpy/game/subsystems/thief.py) provides a

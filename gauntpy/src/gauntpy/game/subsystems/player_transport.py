@@ -217,7 +217,7 @@ def _landing_cell(state: GameState, destination: int) -> int:
     return landing
 
 
-# ROM: direct game:0x50224 | Pad destination/landing selection and transition producer boundary; Python deterministically selects landing cells instead of reproducing uninitialized ROM registers.
+# ROM: direct game:0x50224 | Pad destination/landing selection and transition producer boundary.
 # ROM: part game:0x50662 | Also moves destination-visit and surrounding-interaction sequencing from tport_player_move at 0x509E4-0x50A66 into the producer.
 def player_tport(state: GameState, player_index: int,
                  tile_mob_slot: int) -> int:
@@ -503,6 +503,10 @@ def corner_squeeze_geometry(state: GameState, packed_slot: int,
         return 0
     if state.mobs.obj_type(target) == int(MazeObjIds.TRANSPORTER):
         return 0
+    for other in range(len(state.players)):          # 0x500F0-0x50134
+        if (state.player_tile_or_tport_dest[other] == target
+                and state.player_tport_phase[other] >= 0):
+            return 0
 
     _sound_play(state, 0x28)
     # 0x5015C clears the destination-pad word for a corner squeeze.  The zero is

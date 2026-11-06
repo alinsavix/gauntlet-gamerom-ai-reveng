@@ -361,8 +361,12 @@ def _exit_relocate(state: GameState) -> None:
                 state.movement_type = 1         # 0x5293C
                 player_exit_sequence(state, index_, new_slot, int(MazeObjIds.EXIT))
                 break
-        if state.mobs.is_occupied(new_slot):
-            state.mobs.unlink_and_clear(new_slot)
+        if new_slot == state.thief_current_pos:
+            from .thief import thief_remove_and_drop_loot
+
+            thief_remove_and_drop_loot(state, -1, 0)    # 0x52976-0x5297E
+        elif state.mobs.is_occupied(new_slot):
+            state.mobs.unlink_and_clear(new_slot)       # 0x5296E
 
     if state.mobs.is_occupied(old_slot):
         state.mobs.unlink_and_clear(old_slot)

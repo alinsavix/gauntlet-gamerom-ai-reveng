@@ -33,6 +33,7 @@ __all__ = [
     "SECRET_CHARACTER_NAMES",
     "CHARACTER_HUD_GLYPHS", "LABEL_SCORE_GLYPHS",
     "LABEL_HEALTH_GLYPHS", "LABEL_IT_GLYPHS", "GLYPH_KEY", "GLYPH_POTION",
+    "POWERUP_OWNER_LINES", "POWERUP_ITEM_LINES",
     "TEXT_LEVEL", "TEXT_LEVEL_SPLASH", "TEXT_INSERT_COIN", "TEXT_PRESS_START",
     "TEXT_SELECT_HERO",
     "TEXT_GAME_OVER", "TEXT_ADD_COIN", "TEXT_ADD_COINS", "TEXT_ATARI_GAMES",
@@ -87,6 +88,30 @@ LABEL_SCORE_GLYPHS = (0xA8, 0xA9, 0xAA)
 LABEL_HEALTH_GLYPHS = (0xA4, 0xA5, 0xA6, 0xA7)
 # player_it_label_set writes the literal alpha codes for "IT" at 0x458BE.
 LABEL_IT_GLYPHS = (0x49, 0x54)
+
+#: The power-up box's first line, by character: pointers at 0x5A500.
+POWERUP_OWNER_LINES = (
+    "    WARRIOR NOW HAS   ",
+    "   VALKYRIE NOW HAS   ",
+    "    WIZARD NOW HAS    ",
+    "      ELF NOW HAS     ",
+)
+
+#: The power-up box's item line, by power-up ID: pointers at 0x5A510.
+POWERUP_ITEM_LINES = (
+    "     EXTRA ARMOR      ",
+    "     EXTRA SPEED      ",
+    "  EXTRA MAGIC POWER   ",
+    "   EXTRA SHOT POWER   ",
+    "   EXTRA SHOT SPEED   ",
+    "  EXTRA FIGHT POWER   ",
+    "    INVISIBILITY      ",
+    "    REPULSIVENESS     ",
+    "   REFLECTING SHOTS   ",
+    "   TRANSPORTABILITY   ",
+    "    10 SUPER SHOTS    ",
+    "   INVULNERABILITY    ",
+)
 
 #: Inventory cell glyphs written by ``player_inv_update`` (0x45ACA): character
 #: 0xA1 per held key, 0xA3 per held potion.

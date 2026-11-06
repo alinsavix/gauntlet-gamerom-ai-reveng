@@ -37,6 +37,7 @@ from .. import romtext
 from ..constants import GameMode, PlayerStatus
 from ..coords import hpos_x, vpos_y
 from ..state import NUM_PLAYERS, GameState
+from .player_data import _SPEECH_CHARNAME_TBL
 from .display import (
     alpha_word,
     clear_alpha_visible,
@@ -381,7 +382,17 @@ def write_player_panel_status(state: GameState, player_index: int) -> None:
         write_alpha_text(state, PANEL_COLUMN, row, romtext.TEXT_PRESS_START, attribute - 0x2000)
 
 
-# ROM: part game:0x45866,game:0x4590E | Combines only the IT-label set/clear glyph portions across players; omits player_it_label_set's announcement/sound body, so not two whole-callable implementations.
+# ROM: part game:0x45866 | The announcement at 0x458BC-0x458FE: the new holder's name, then 0xD4 if nobody held IT or 0xD3 if someone did.
+def player_it_announce(state: GameState, player_index: int) -> None:
+    """Call before ``player_it`` changes: both tests read the old holder (0x45872, 0x458E6)."""
+    if player_index == state.player_it:
+        return
+    character = state.players[player_index].character & 0x03
+    sound_play(state, _SPEECH_CHARNAME_TBL[character + player_index * 4])  # 0x458E0
+    sound_play(state, 0xD4 if state.player_it == 0xFFFF else 0xD3)         # 0x458FE
+
+
+# ROM: part game:0x45866,game:0x4590E | Combines only the IT-label set/clear glyph portions across players; player_it_announce owns player_it_label_set's sounds, so not two whole-callable implementations.
 def write_it_labels(state: GameState) -> None:
     """Synchronize player_it_label_set's two literal glyph cells."""
     for player_index in range(NUM_PLAYERS):
@@ -801,36 +812,40 @@ SOUND_MESSAGE_APPEARS = 0x1C
 
 #: Box height: three rows plus one per extra line (0x4C54C).
 DIALOG_BOX_BASE_ROWS = 3
+POWERUP_BOX_WIDTH = 0x16
 
 
 # ROM: part game:0x4CCBC | Extracted expired-box rectangle erasure from main_msgbox_countdown; unlike 0x4C70A, this clears alpha cells rather than filling a string buffer.
 def _clear_dialog_alpha(state: GameState) -> None:
     if state.dialog_box_column < 0 or state.dialog_box_row < 0:
         return
+    # 0x4CCD8-0x4CD10 clears exactly width by height cells.
     fill_alpha_rect(
         state, state.dialog_box_column, state.dialog_box_row,
-        state.dialog_box_width + 2, state.dialog_box_height, 0,
+        state.dialog_box_width, state.dialog_box_height, 0,
     )
 
 
 # ROM: part game:0x4C440,game:0x4C9A2 | Shared extraction of first-encounter/demo box background and line drawing; these are portions of the two dialog entries.
-def _write_dialog_alpha(state: GameState) -> None:
-    """Write the positioned first-encounter/demo box synchronously."""
+def _write_dialog_alpha(state: GameState, attribute: int | None = None) -> None:
+    """Write the positioned box: a blank row, its lines, a blank row (0x4C5C8-0x4C5E6).
+
+    Each line is drawn at the box column, and a blank row is a width-long line of
+    spaces (0x4C5C2). ``attribute`` defaults to the first-encounter palette.
+    """
     if state.dialog_box_column < 0 or state.dialog_box_row < 0:
         return
-    attribute = (
-        PLAYER_TEXT_PALETTE_WORDS[state.dialog_player] - 0x1000
-        if 0 <= state.dialog_player < NUM_PLAYERS else 0x8000
-    )
-    fill_alpha_rect(
-        state, state.dialog_box_column, state.dialog_box_row,
-        state.dialog_box_width + 2, state.dialog_box_height,
-        alpha_word(attribute),
-    )
-    for offset, line in enumerate(state.dialog_message, 1):
+    if attribute is None:
+        attribute = (
+            PLAYER_TEXT_PALETTE_WORDS[state.dialog_player] - 0x1000
+            if 0 <= state.dialog_player < NUM_PLAYERS else 0x8000
+        )
+    blank = " " * state.dialog_box_width
+    rows = [blank, *state.dialog_message, blank]
+    for offset, line in enumerate(rows):
         write_alpha_text(
-            state, state.dialog_box_column + 1,
-            state.dialog_box_row + offset, line, attribute,
+            state, state.dialog_box_column, state.dialog_box_row + offset,
+            line, attribute,
         )
 
 
@@ -858,7 +873,16 @@ def dialog_position_box(state: GameState, player_index: int) -> None:
     column, row = 14, 15
     if 0 <= player_index < NUM_PLAYERS:
         player = state.players[player_index]
-        if player.mob_slot:
+        if state.player_tport_phase[player_index] >= 0:
+            # 0x4CB7E-0x4CBBA: a transporting hero's box goes by its destination.
+            slot = state.player_tile_or_tport_dest[player_index]
+            x = (slot & 0x1F) * 16 - state.scroll_x - 4
+            y = ((slot & 0x3E0) >> 1) - state.scroll_y
+            column = (x >> 3) & 0x3F
+            row = (y >> 3) & 0x3F
+            if column > 28 or row > 29:
+                column, row = 14, 15
+        elif player.mob_slot:
             x = hpos_x(state.mobs.hpos[player.mob_slot]) - state.scroll_x
             y = vpos_y(state.mobs.vpos[player.mob_slot]) - state.scroll_y - 8
             column = (x >> 3) & 0x3F
@@ -992,11 +1016,52 @@ def dialog_first_encounter(
     state.dialog_player = player_index if 0 <= player_index < NUM_PLAYERS else -1
     dialog_position_box(state, state.dialog_player)
     _write_dialog_alpha(state)
+    if 0 <= state.dialog_player < NUM_PLAYERS and state.dialog_box_column >= 0:
+        for offset, line in enumerate(lines, 1):
+            if line == DIALOG_NUMERIC_LINE:          # 0x4C63C-0x4C67A
+                write_alpha_text(
+                    state, state.dialog_box_column + DIALOG_NUMERIC_COLUMN,
+                    state.dialog_box_row + offset,
+                    format_field(numeric_value, DIALOG_NUMERIC_WIDTH),
+                    PLAYER_TEXT_PALETTE_WORDS[state.dialog_player],
+                )
     state.dialog_timer = (
         DIALOG_TIMER_FRAMES_SHORT if reduce_text else DIALOG_TIMER_FRAMES
     )
     sound_play(state, SOUND_MESSAGE_APPEARS)
     return spoken
+
+
+# ROM: part game:0x4C72A | Power-up box: retires an open box, then positions and draws its own, in the unshifted player palette.
+def powerup_box_draw(state: GameState, player_index: int, item_id: int) -> None:
+    """0x4C7BC-0x4C962 -- the box's lines, less the speech its caller interleaves."""
+    if state.dialog_timer:
+        state.dialog_timer = 1                  # 0x4C7C4
+        main_msgbox_countdown(state)            # 0x4C7CC
+    dialog_clear_message(state)
+    item = romtext.POWERUP_ITEM_LINES[item_id]
+    if state.game_settings & GAME_SETTINGS_REDUCE_TEXT:      # 0x4C882
+        lines = [item]
+    else:
+        character = state.players[player_index].character & 0x03
+        lines = [romtext.POWERUP_OWNER_LINES[character], item]
+    state.dialog_message = lines
+    state.dialog_box_width = POWERUP_BOX_WIDTH               # 0x4C7D2
+    state.dialog_box_height = DIALOG_BOX_BASE_ROWS + (len(lines) - 1)  # 0x4C7EA, 0x4C7F4
+    state.dialog_player = player_index
+    dialog_position_box(state, player_index)                 # 0x4C802
+    _write_dialog_alpha(state, PLAYER_TEXT_PALETTE_WORDS[player_index])  # 0x4C830
+
+
+# ROM: part game:0x4C72A | Power-up box tail: the appearance sound and the dialog timer that freezes the gameplay band.
+def powerup_box_finish(state: GameState) -> None:
+    """0x4C968-0x4C98E -- sound 0x1C and the timer, after the speech."""
+    sound_play(state, SOUND_MESSAGE_APPEARS)
+    state.dialog_timer = (
+        DIALOG_TIMER_FRAMES_SHORT
+        if state.game_settings & GAME_SETTINGS_REDUCE_TEXT
+        else DIALOG_TIMER_FRAMES
+    )
 
 
 # ---------------------------------------------------------------------------

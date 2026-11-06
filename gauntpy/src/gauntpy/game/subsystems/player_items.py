@@ -771,8 +771,9 @@ def _player_give_item(state: GameState, player_index: int, obj_type: int) -> boo
     a one-shot dialog latch. A nonzero ``powerup_speech_ids[id]`` composes the
     gated name / NOW HAS / item sentence, with the reduced-text shortcut.
 
-    Returns True when the bit was newly granted.  The message box and its speech
-    are WP-14 alpha work; the bit is the part this file owns.
+    Each grant that gets this far also shows the message box (``score.powerup_box_draw``),
+    whose timer freezes the gameplay band like any other box. Returns True when
+    the bit was newly granted.
     """
     item_id = POWERUP_ITEM_ID.get(obj_type)
     if item_id is None:
@@ -780,7 +781,7 @@ def _player_give_item(state: GameState, player_index: int, obj_type: int) -> boo
     return _player_give_item_id(state, player_index, item_id)
 
 
-# ROM: direct game:0x4C72A | Current defining power-grant body: owned-bit guard, power OR, one-shot latch and speech; legacy players.player_give_item_with_message does not exist.
+# ROM: direct game:0x4C72A | Current defining power-grant body: owned-bit guard, power OR, one-shot latch and speech, with the box in score.powerup_box_draw; legacy players.player_give_item_with_message does not exist.
 def _player_give_item_id(
     state: GameState, player_index: int, item_id: int,
 ) -> bool:
@@ -796,6 +797,9 @@ def _player_give_item_id(
         if state.dialog_once_flags & mask:    # 0x4C79C-0x4C7AA
             return True
         state.dialog_once_flags |= mask       # 0x4C7AE-0x4C7B6
+    from .score import powerup_box_draw, powerup_box_finish
+
+    powerup_box_draw(state, player_index, item_id)
     speech = _POWERUP_SPEECH_IDS[item_id]
     if speech:
         if not state.game_settings & _GAME_SETTINGS_REDUCE_TEXT:
@@ -803,6 +807,7 @@ def _player_give_item_id(
             _sound_speech_play(state, _SPEECH_CHARNAME_TBL[index])  # 0x4C8AE
             _sound_speech_play(state, 0x8D)                         # 0x4C8F8
         _sound_speech_play(state, speech)                           # 0x4C940
+    powerup_box_finish(state)
     return True
 
 

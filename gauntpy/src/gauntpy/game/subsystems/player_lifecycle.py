@@ -413,6 +413,10 @@ def calc_score_per_coin(state: GameState, player_index: int) -> int:
     return player.score_per_coin
 
 
+#: A joining hero's candidate cells around each hero already in the maze: left, right, up, down.
+_JOIN_NEIGHBOURS = ((-1, 0), (1, 0), (0, -0x20), (0, 0x20))
+
+
 # ROM: direct game:0x48BEC | Spawn-position selection and live player-MOB initialization boundary; includes Python synthetic-maze/camera accommodations.
 def player_start_inner(state: GameState, player_index: int) -> int:
     """0x48BEC -- find a spawn tile and turn it into the player MOB (§4.4).
@@ -447,19 +451,19 @@ def player_start_inner(state: GameState, player_index: int) -> int:
     }
     slot = 0
     if state.level_players_active:
-        for other in state.players:
-            if other.index == player_index or not other.mob_slot:
-                continue
+        from .monster_spawning import tile_occupancy_test
+        from .player_transport import tile_on_screen_test
+
+        for other in state.players:                               # 0x48C1A
             # ``active_mob_ids`` names the cell the hero is standing in, so the
             # adjacent-cell scan starts from the record itself.
             base = other.mob_slot
-            for candidate in (
-                (base & 0x3E0) | ((base - 1) & 0x1F),
-                (base & 0x3E0) | ((base + 1) & 0x1F),
-                (base - 0x20) & 0x3FF,
-                (base + 0x20) & 0x3FF,
-            ):
-                if candidate > 0x20 and state.mobs.picture[candidate] == 0:
+            if not base:
+                continue
+            for column_delta, row_delta in _JOIN_NEIGHBOURS:      # 0x578A2, 0x578B2
+                candidate = (base & 0x3E0) + row_delta + ((base + column_delta) & 0x1F)
+                if (tile_on_screen_test(state, candidate)          # 0x48C62
+                        and tile_occupancy_test(state, candidate)):  # 0x48C76
                     slot = candidate
                     break
             if slot:

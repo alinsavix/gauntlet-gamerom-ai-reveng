@@ -37,9 +37,91 @@ start).
 
 ## Open issues
 
-None.
+### S-215 · routines no comparison has reached
+
+Comparing the ROM's call graph with Python's, through the crosswalk, found S-206 to S-212 in about
+half of the 40 calls with no Python match. The rest are mostly screens and setup, and are unread.
+
+Of 270 mapped game routines, 62 have never run in a ROM execution test or in the shipped demo's
+test. These are the groups that matter most:
+
+- The thief's movement and routing: `thief_move_engine`, `thief_compute_path`,
+  `thief_handle_tile_collision`, `thief_enter_tport` and the path grid. Arrival, theft, leaving
+  and removal are compared (S-207, S-209, S-210, S-212), but no thief has walked in a comparison.
+- The dragon: its segments, `dragon_choose_move_direction`, `dragon_shot_hit` and the head pose. The
+  crosswalk note on `_advance_wake_or_turn` does not certify the transition pictures.
+- Secret rooms and name entry, `shot_reflect_calc` and the forcefield setup.
+
+`_update_forcefield_color` also reads `frame_counter` where doc/07 names `pf_vscroll_hi`.
+
+These are leads, not known bugs. A routine that has run in a comparison may still have unreached branches.
 
 ## Resolved issues
+
+### S-206 · an IT change never announced the new holder
+
+`player_it_label_set` (0x45866) plays the hero's name from table 0x596F6 and then 0xD4 if nobody held
+IT, or 0xD3 if someone did (0x458E0, 0x458FE). It does nothing if that hero already holds IT, and both
+tests read the old holder, so the announcement has to come before `player_it` changes. gauntpy
+played only 0x35. Tagging the IT monster and passing IT to another hero now both match the ROM's
+sound order.
+
+### S-207 · the thief's three message boxes never appeared
+
+`thief_steal_from_player` shows "KILL THIEF TO RECOVER STOLEN ITEM" (0x4E40A, with its speech) or
+"KILL MUGGER TO RECOVER FOOD" (0x4E274). A thief leaving with loot at its start cell shows "FIND
+STOLEN ITEM ON NEXT LEVEL" (0x4EBFA-0x4EC0A): a thief unless it carries nothing, a mugger only
+with food and a victim still in the maze. gauntpy had the text but nothing called it.
+
+### S-208 · a power-up showed no message box
+
+0x4C7BC-0x4C98E retires any open box and draws "ELF NOW HAS / EXTRA ARMOR", 22 cells wide, in the
+unshifted player palette. A comment had left this to "WP-14", which never did it. Players will notice this one: its
+`dialog_timer` freezes the gameplay band for 150 frames, or 120 with Reduced Text, like every box.
+Every item, character and text setting matches the ROM cell for cell, including retiring an open
+box and the once-only powers that show nothing the second time.
+
+### S-209 · the thief did not flee when its victim left through an exit
+
+0x52C50-0x52C58 calls `thief_exit`, which turns an arrived thief back toward its start, or cancels one
+still waiting to arrive. gauntpy called it only on theft and on death.
+
+### S-210 · a moving exit landing on the thief deleted only its record
+
+0x52976-0x5297E runs `thief_remove_and_drop_loot(-1, 0)`. gauntpy unlinked the record and left
+`thief_current_pos` and the loot behind.
+
+### S-211 · a mid-level join skipped the screen and occupancy tests
+
+0x48C62 and 0x48C76 require a candidate cell to be on screen and to pass `tile_occupancy_test`, which goes by
+pixel distance to the eight neighbours. gauntpy required only an empty record. On static real levels that
+changed the cell rarely (1 of 450), but a monster nearby or a hero at the screen edge is where it matters. All
+real-level cases now match the ROM, and the join also tries each hero's neighbours exactly as the ROM does,
+including its own record if it has one.
+
+### S-212 · thief arrival used a tile-type test and could retarget
+
+0x4DEFA calls `tile_occupancy_test`; gauntpy used the thief's route table, so a monster just across a cell boundary
+did not delay arrival. 0x4DEB8 also never chooses a new victim, because `thief_exit` cancels a thief
+whose victim has gone (S-209), so the fallback in `_thief_deploy` is gone. The arrival also resets
+`thief_tport_timer` (0x4DFA2), and starts its sparkle before computing its path, as the ROM does.
+
+### S-213 · a corner squeeze could land where another hero was arriving
+
+0x500F0-0x50134 refuses a cell that is any hero's in-flight destination. gauntpy had no such test.
+
+The other lead here, `test_transport_skips_an_item_instead_of_collecting_it`, was the harness. 0x4FEE8
+reads the stick from 0x904920, not from its argument, and `rom_exec.player_try_move` left that word
+empty. With it loaded, the ROM and gauntpy agree, and the `rom_xcheck` plugin reports 243 of 252
+calls identical. Of the other nine, seven are tests whose RNG stub the harness cannot load, and two
+place a hero in a slot that does not match its position, which the ROM re-files.
+
+### S-214 · message boxes were one column right and two cells too wide
+
+0x4C5E6 draws each line at the box column, and 0x4CCD8-0x4CD10 erases exactly width by height. gauntpy drew at
+column + 1 and filled and erased width + 2, on every first-encounter and demo box. The number in "PLAYER LOSES nn
+HEALTH" is also drawn in the unshifted palette (0x4C63C-0x4C67A), and 0x4CB7E-0x4CBBA places a
+transporting hero's box from its destination. The alpha cells now match the ROM throughout.
 
 ### S-205 · trap tiles, the transporter's landing and most of a harness
 

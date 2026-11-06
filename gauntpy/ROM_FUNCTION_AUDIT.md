@@ -35,6 +35,11 @@ Python source preserves the ROM's function boundary. The port deliberately
 merges register-entry wrappers, shared assembly bodies, and small leaves into
 Python helpers.
 
+These labels date from a reading of the source, and comparison with the ROM has since
+found missing behavior in routines labelled complete (ISSUES S-200, S-201 and S-206
+to S-214). Treat "missing: 0" as the state of this audit, not a result. S-215 lists
+what no comparison has yet reached.
+
 The naming recheck leaves these totals unchanged. Direct disassembly confirms
 `door_open_start` (0x51E80) seeds the door fronts and calls `main_open_doors`,
 while `demo_message_show` (0x4C9A2) writes and times a dialog without making a

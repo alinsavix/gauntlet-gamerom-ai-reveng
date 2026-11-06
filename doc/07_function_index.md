@@ -293,7 +293,7 @@ runtime, movement, collision, and path contracts.
 | 0x4083A | `mob_probe_left` | Frameless probe (three BSRs to `mob_probe_candidate` at 0x40866, 0x40876, 0x40888) for the cell to the left plus its two vertical neighbours |
 | 0x408A0 | `mob_probe_right` | Mirrored frameless probe (three BSRs to `mob_probe_candidate` at 0x408CC, 0x408DC, 0x408EE) for the cell to the right plus its two vertical neighbours |
 | 0x407A6 | `mob_probe_candidate` | Shared BSR-only helper for the four directional probes: reject an empty candidate, compute wrapped horizontal/vertical separation for an occupied cell, store signed/absolute deltas at 0x904024–0x90402A, and return the distance comparison in condition codes |
-| 0x4FEB2 | `corner_squeeze_geometry` | Resolves diagonal squeeze geometry and transporter entry for `packed_slot`/`player_index`: derives a direction from the table at 0x580FC and neighbour offsets from 0x5B64A/0x5B65C, tests the surrounding tile types (0xF, 0x10, 0x11, 0x2F, 0x3C, 0x3E and the range 0x12–0x1B) in `vram.mob_picture`/0x903800, and on a clear diagonal commits via `handle_tport`, `thief_start_tport_anim`, `path_grid_set_high_direction_if_empty` and sound 0x28, returning `D0.l` = -2; a blocked shape returns 0 |
+| 0x4FEB2 | `corner_squeeze_geometry` | Resolves diagonal squeeze geometry and transporter entry for `packed_slot`/`player_index`: derives a direction from the table at 0x580FC and neighbour offsets from 0x5B64A/0x5B65C, tests the surrounding tile types (0xF, 0x10, 0x11, 0x2F, 0x3C, 0x3E and the range 0x12–0x1B) in `vram.mob_picture`/0x903800, and on a clear diagonal commits via `handle_tport`, `thief_start_tport_anim`, `path_grid_set_high_direction_if_empty` and sound 0x28, returning `D0.l` = -2; a blocked shape, or a cell that is any hero's in-flight transport destination (0x500F0-0x50134), returns 0 |
 | 0x4280E | `door_traverse_right` | Ray-march rightward via ray_march_right; spawn passage marker |
 | 0x428A4 | `door_traverse_left` | Ray-march leftward via ray_march_left |
 | 0x4293A | `door_traverse_up` | Ray-march upward via ray_march_up |
@@ -601,7 +601,7 @@ collision, route, and transport contracts.
 | 0x4F742 | `thief_handle_tile_collision` | Handle thief contact with players, shots, obstacles, transporter tiles, and object types 18–45; monster/generator contact latches a fight direction, advances the shared contact counter in the caller, then spawns an impact and removes the blocker after counter 15 |
 | 0x4FAD4 | `thief_enter_tport` | Select the linked transporter destination and route direction for the thief, then start the transporter transition when the destination is usable |
 | 0x4FBFC | `thief_start_tport_anim` | Hide/remove the thief at a transporter, create its transition MOB, record source/destination state, and start the teleport sound/animation |
-| 0x4E122 | `thief_exit` | Thief departure: animate exit, remove MOB, schedule next appearance |
+| 0x4E122 | `thief_exit` | Turn a present, non-escaping visitor to escape; otherwise park `thief_enter_time` at -1, cancelling a scheduled arrival. Called on theft, on the victim's death and on the victim's exit |
 
 ---
 

@@ -43,6 +43,11 @@ _SPEED_THIEF = 0x200
 _THIEF_MAZE_LIMIT = 0x73
 _THIEF_MIN_LEVEL = 6
 _THIEF_CARRIED_EMPTY = 0x7D30
+
+#: ``dialog_first_encounter`` masks pushed at 0x4E3FE, 0x4EBFA and 0x4E268.
+_DIALOG_KILL_THIEF = 0x00100000
+_DIALOG_FIND_STOLEN_ITEM = 0x00200000
+_DIALOG_KILL_MUGGER = 0x20000000
 _THIEF_TPORT_ANIM_SLOT = 0x1D
 _TAUNT_THRESHOLD = 0x3B
 _TAUNT_PAIRS = ((0x62, 0x63), (0x64, 0x65))
@@ -447,20 +452,15 @@ def _spawn_picture(state: GameState) -> int:
     return 0x2400 if state.thief_mode & THIEF_IS_MUGGER else 0x0DEA
 
 
-# ROM: part game:0x4DEB8 | Extracted arrival deployment transaction at 0x4DEDC-0x4DFDE, with Python victim-repair fallback.
+# ROM: part game:0x4DEB8 | Extracted arrival deployment transaction at 0x4DEDC-0x4DFDE.
 def _thief_deploy(state: GameState) -> None:
     """0x4DEDC-0x4DFDE -- create the thief after its arrival timer expires."""
-    if state.thief_victim < 0 or not _player_is_targetable(state, state.thief_victim):
-        thief_target_calc(state)
-        if state.thief_victim < 0:
-            state.thief_enter_time = -1
-            return
-        state.thief_start_location = _player_packed_cell(state, state.thief_victim)
-        state.thief_victim_pos = state.thief_start_location
+    from .monster_spawning import tile_occupancy_test
+    from .shot_effects import tport_cycle_start
 
     slot = state.thief_start_location
-    if state.mobs.picture[slot] != 0 or not _route_cell_is_traversable(state, slot):
-        state.thief_enter_time = 0x12C
+    if state.mobs.picture[slot] != 0 or not tile_occupancy_test(state, slot):
+        state.thief_enter_time = 0x12C              # 0x4DFE0
         return
 
     row, col = slot >> 5, slot & 0x1F
@@ -472,19 +472,17 @@ def _thief_deploy(state: GameState) -> None:
         encode_vpos_at_y(row * 16, width=3, height=3),
         MazeObjIds.PLAYERSTART,
     )
+    tport_cycle_start(state, slot, state.thief_victim)  # 0x4DF84
     state.thief_mob_slot = slot
     state.thief_current_pos = slot
     state.thief_previous_pos = slot
     state.thief_next_pos = slot
     state.thief_direction = 8
     state.thief_enter_time = 0x3C
-    state.thief_collision_direction_code = 0
-    state.thief_tport_active = 0
+    state.thief_collision_direction_code = 0        # 0x4DF9C
+    state.thief_tport_timer = -1                    # 0x4DFA2
     path_grid_set_high_direction_if_empty(state, slot, 8)
     thief_compute_path(state)
-    from .shot_effects import tport_cycle_start
-
-    tport_cycle_start(state, slot, state.thief_victim)
     _sound_play(state, 0x2D if state.thief_mode & THIEF_IS_MUGGER else 0x29)
 
 
@@ -571,12 +569,15 @@ def thief_steal_from_player(state: GameState, player_index: int) -> int:
     """0x4E1FE -- steal the ROM-selected item, or mug 100 health."""
     if state.thief_mode & THIEF_ESCAPE:
         return 0
+    from .score import dialog_first_encounter
+
     thief_exit(state)
     player = state.players[player_index]
 
     if state.thief_mode & THIEF_IS_MUGGER:
         player.health = max(0, player.health - 100)
         state.mugger_item_carried = int(MazeObjIds.FOOD_INVULN)
+        dialog_first_encounter(state, player_index, _DIALOG_KILL_MUGGER)  # 0x4E274
         state.thief_mode |= THIEF_ENTER_OK_MUGGER
         if hasattr(state, "health_dirty"):
             state.health_dirty[player_index] = 1
@@ -606,6 +607,7 @@ def thief_steal_from_player(state: GameState, player_index: int) -> int:
     from .player_lifecycle import setup_infopanel
 
     setup_infopanel(state, player_index)                         # 0x4E3F8
+    dialog_first_encounter(state, player_index, _DIALOG_KILL_THIEF)  # 0x4E40A
     state.thief_mode |= THIEF_ENTER_OK
     _sound_play(state, 0x26)
     return 1
@@ -1172,6 +1174,20 @@ def _finish_escape_at_start(state: GameState) -> bool:
         return False
     if state.thief_previous_pos == state.thief_start_location:
         return False
+    from .score import dialog_first_encounter
+
+    # 0x4EBC0-0x4EC0A: "find stolen item on next level", when there is an item.
+    victim = state.thief_victim
+    if state.thief_mode & THIEF_IS_MUGGER:
+        tell = (
+            0 <= victim < len(state.players)
+            and state.players[victim].mob_slot and state.mugger_item_carried
+        )
+    else:
+        tell = state.thief_item_carried != _THIEF_CARRIED_EMPTY
+    if tell:
+        dialog_first_encounter(state, victim, _DIALOG_FIND_STOLEN_ITEM)
+
     slot = _slot_for_thief(state)
     if state.thief_mode & THIEF_IS_MUGGER:
         state.mugger_item_nextlevel = state.mugger_item_carried

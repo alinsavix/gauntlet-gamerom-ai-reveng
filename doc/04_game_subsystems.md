@@ -945,6 +945,12 @@ player's trick byte. It never calls `player_join_finalize`, so a surviving
 player does not replay the join sound, `WELCOME`/character speech, or the
 finalizer's join-time field resets at every maze.
 
+A join into a level already in progress (0x48C1A-0x48C92) walks `active_mob_ids`
+and, around each hero with a record, tries the cells to the left, right, above
+and below, using the offsets at 0x578A2 and 0x578B2. A candidate must pass
+`tile_on_screen_test` (0x48C62) and `tile_occupancy_test` (0x48C76); the first
+that does becomes the new hero's cell.
+
 An actual finalizer sends `player_coin_sound_ids[character]` (0x57952:
 0x09-0x0C) before the gated welcome sentence. If `player_start_inner` exhausts
 all four directions around all active players, 0x48C94 sends command 0x43
@@ -1080,6 +1086,13 @@ name. Reduced-text bit 0x0400 skips the first two but retains the power name;
 speech-disable bit 0x0800 suppresses every spoken command. High-byte temporary
 powers also use their mask in `dialog_once_flags`, so a power that expires and
 is collected again on the same level does not repeat the dialog/sentence.
+
+The routine also opens a message box, 22 cells wide, after retiring any open one
+(0x4C7BC-0x4C7CC). It holds the character line from `powerup_name_ptrs` (`ELF NOW
+HAS`), which Reduced Text omits, and the item line, between two blank rows, in the
+player's text palette. It plays sound 0x1C, which Speech Disable does not affect, and
+sets `dialog_timer` to 150 frames, or 120 with Reduced Text. As with every box, that
+timer holds the gameplay band still until it runs out.
 
 The collision machinery identifies the player's logical cell from the
 sprite-center horizontal anchor (`x + 12`) and the ROM vertical handoff. A
@@ -1880,7 +1893,23 @@ States (in `ram.thief_mode`, `0x904BA0`):
 | THIEF_ENTER_OK (16) | Entering the level |
 | THIEF_IS_MUGGER (128) | Mugger variant |
 
-When overlapping target player: steals an item or health (calls `thief_steal_from_player`, 0x4E1FE). Exit when thief reaches the maze edge calls `thief_exit` (0x4E122).
+When overlapping target player: steals an item or health (calls `thief_steal_from_player`, 0x4E1FE).
+
+`thief_exit` (0x4E122) turns a visitor that is present and not yet escaping toward its start: it clears the
+pursue and dodge bits, sets escape, and heads for `thief_previous_pos`, recomputing the path if it is
+standing there. With no visitor present, or one already escaping, it sets `thief_enter_time` to -1 instead,
+which cancels a scheduled arrival. It has three callers: the theft itself (0x4E224), the victim's death
+(0x46B78), and the victim leaving through an exit (0x52C50-0x52C58).
+
+Three first-encounter records belong to the visitor. A theft shows record 20, "KILL THIEF TO RECOVER
+STOLEN ITEM" (0x4E40A), and a mugging record 29, "KILL MUGGER TO RECOVER FOOD" (0x4E274). A getaway at
+the start cell shows record 21, "FIND STOLEN ITEM ON NEXT LEVEL", to the victim (0x4EBFA-0x4EC0A): for a
+thief unless it carries nothing (0x7D30), and for a mugger only when it carries food and the victim
+still has a record in the maze.
+
+Deployment waits for room. If `thief_start_location` holds a record, or fails
+`tile_occupancy_test` (0x4DEFA), `main_start_thief` reloads `thief_enter_time`
+with 0x12C and tries again later (0x4DFE0). It never chooses a new victim.
 
 Deployment is visible state, not an instantaneous sprite write. After
 `mob_create`, 0x4DF7E calls `tport_cycle_start(start, victim)`, placing the
@@ -2161,6 +2190,15 @@ zero is non-null. Every other normal-play encounter therefore sets its seen
 flag and returns before speech lookup, alpha writes, sound 0x1C, or
 `dialog_timer`; record zero displays its short text for 120 frames. Negative
 DEMO/attract modes retain the full records (also with the 120-frame timer).
+
+The box is as wide as its first line (`string_length`, 0x4C558) and three rows
+tall plus one per further line (0x4C550). `dialog_position_box` (0x4CB50) places
+it near the player, or near a transporting player's destination cell while
+`player_tport_phase` is not negative (0x4CB7E-0x4CBBA). Every row, including the
+blank rows above and below the text, is drawn starting at the box column, with
+no margin. `main_msgbox_countdown` (0x4CCBC) erases exactly that width and
+height when the timer runs out. In the numeric record, the two-digit field is
+drawn over the line in the unshifted player palette (0x4C63C-0x4C67A).
 
 ### 10.5 Continue Prompt (`show_continue_prompt`, 0x44C7E)
 
@@ -2506,6 +2544,12 @@ At relocation, 0x52984-0x529D0 writes a new 0x8001 marker and derives its H/V
 words from the destination slot before clearing the old marker. This is not a
 record move: preserving the old H/V words would anchor a later player-exit
 animation at the vacated cell.
+
+Something already in the destination cell is dealt with first (0x52918-0x5297E). A hero, recognized
+by palette nibble 0xC or more, leaves through the exit (`player_exit_sequence`, 0x52958). The thief
+or mugger is removed through `thief_remove_and_drop_loot(-1, 0)`, so no one earns its bounty, and
+the loot it recreates in that cell is overwritten at once by the new exit marker. Anything else is
+removed with `moblist_remove_and_clear` (0x5296E).
 
 Ordinary EXIT rests as descriptor `(0x039E, 0x039F, 0x0006, 0x0006)` at
 0x5C8A0. EXITTO6 is visibly distinct:

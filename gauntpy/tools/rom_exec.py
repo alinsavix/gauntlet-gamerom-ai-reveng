@@ -123,6 +123,25 @@ class RomMachine:
         for i, pad in enumerate(pads):
             self.w16(0x910700 + 2 * i, pad)
         self.w16(0x904B84, len(pads))
+        for i, player in enumerate(state.players):
+            self.w16(0x90490E + 2 * i, player.bonusmult)
+            self.w16(0x904BD8 + 2 * i, state.player_tile_or_tport_dest[i])
+        self.w16(0x904B98, state.thief_victim_pos)
+        self.w16(0x904B9A, state.thief_victim)
+        self.w16(0x904B9E, state.thief_enter_time)
+        self.w16(0x904BA0, state.thief_mode)
+        self.w16(0x904BA2, state.thief_previous_pos)
+        self.w16(0x904BA4, state.thief_current_pos)
+        self.w16(0x904BA6, state.thief_next_pos)
+        self.w16(0x904BBA, state.thief_start_location)
+        self.w16(0x904BD6, state.thief_tport_timer)
+        self.cpu.mem_write(0x904BA8, struct.pack(">I", state.mugger_item_nextlevel & 0xFFFFFFFF))
+        self.cpu.mem_write(0x904BAC, struct.pack(">I", state.thief_item_nextlevel & 0xFFFFFFFF))
+        self.cpu.mem_write(0x904BB0, struct.pack(">I", state.mugger_item_carried & 0xFFFFFFFF))
+        self.cpu.mem_write(0x904BB4, struct.pack(">I", state.thief_item_carried & 0xFFFFFFFF))
+        self.cpu.mem_write(0x9049E4, struct.pack(">I", state.dialog_first_encounter_flags))
+        self.w16(0x90487E, state.dialog_once_flags)
+        self.w16(0x904A9E, state.dialog_timer)
         self.w16(0x9049DC, state.player_it)
         self.w16(0x904006, state.frame_counter)
         self.w16(0x904918, int(state.game_mode))
@@ -211,6 +230,8 @@ def player_try_move(
     machine.w16(0x904BF2, movement_type)
     speed = _player_speed_units(state, state.players[player_index])
     joystick = (0xFF & ~delta) & 0xFF
+    # corner_squeeze_geometry reads the stick from RAM rather than its argument (0x4FEE8).
+    machine.w16(0x904920 + 2 * player_index, joystick)
     return machine.call(0x41BF0, player_index, speed, joystick, count=200_000) & 0xFFFF
 
 

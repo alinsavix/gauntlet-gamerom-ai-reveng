@@ -327,15 +327,17 @@ def _it_tag(state: GameState, player_index: int, monster_slot: int) -> None:
     """0x4967A -- touching IT transfers the curse instead of dealing damage.
 
     The ROM also swaps the on-screen IT name label here (0x4590E clears the old
-    holder's, 0x45866 sets the new one); synchronize those two alpha cells here.
+    holder's, 0x45866 sets the new one and announces it); synchronize those two
+    alpha cells here.
     """
     p = state.players[player_index]
     _sound_play(state, _SOUND_IT_TAG)           # 0x35
     # 0x496AC: the "be IT" challenge only needs one tag, and the bump lands
     # before player_it is reassigned, so the *new* holder is credited.
+    from .score import player_it_announce, write_it_labels
+    player_it_announce(state, player_index)     # 0x496A6
     secret_trick_progress(state, player_index, _TRICK_TASK_WHILE_IT)
     state.player_it = player_index
-    from .score import write_it_labels
     write_it_labels(state)
     state.mobs.unlink_and_clear(monster_slot)
     p.stundelay = _IT_TAG_STUN

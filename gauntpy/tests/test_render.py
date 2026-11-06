@@ -1094,7 +1094,7 @@ class TestMessageBox:
         dialog_first_encounter(state, 0, 1 << 3)
         for offset, line in enumerate(state.dialog_message, 1):
             assert _alpha_text(
-                state, state.dialog_box_column + 1,
+                state, state.dialog_box_column,
                 state.dialog_box_row + offset, len(line),
             ) == line
         assert " SAVE KEYS TO  " in state.dialog_message

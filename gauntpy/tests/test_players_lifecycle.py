@@ -481,7 +481,7 @@ class TestPlayerTileInteract:
 
         assert player_items._player_give_item_id(state, 0, 6)
 
-        assert state.sound_log == [0x8E]
+        assert state.sound_log == [0x8E, 0x1C]      # 0x4C940, then the box's sound 0x4C96E
 
     def test_speech_disable_suppresses_the_complete_power_announcement(self):
         state = _active_state()
@@ -490,7 +490,7 @@ class TestPlayerTileInteract:
 
         assert player_items._player_give_item_id(state, 0, 6)
 
-        assert state.sound_log == []
+        assert state.sound_log == [0x1C]            # the box's sound is not speech (0x4C96E)
 
     def test_supershot_pickup_adds_eleven_charges(self):
         """0x51874 ``addi.b #$b`` -- and it accumulates."""

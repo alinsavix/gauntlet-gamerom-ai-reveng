@@ -25,7 +25,10 @@ does not depend on finding a marker still visible on the floor.
 Our Wizard is joining an existing party, so the game uses another search.
 It examines the cells immediately left, right, above, and below an
 existing hero, then proceeds around the other heroes if necessary. A
-candidate must be empty and on screen. The first suitable candidate wins.
+candidate must be on screen and empty, and nothing in the eight cells
+around it may stand within about a cell's width of it. A ghost drifting
+across the next cell is enough to rule a cell out. The first suitable
+candidate wins.
 This is a local placement search, not permission to choose any comfortable
 corner of the maze.
 
@@ -324,6 +327,11 @@ potion collection. With full pockets, the duplicate can instead become
 Who already owns the power matters before anyone discusses who needs
 another potion.
 
+A new power is also announced in a message box, such as `ELF NOW HAS /
+EXTRA ARMOR`, near the hero who took it. Like every message box, it stops
+the action until it clears: two and a half seconds, or two with the
+cabinet's reduced-text option.
+
 Temporary effects are separate again. Invisibility changes eligibility
 for ordinary monster targeting; repulsion changes pursuit behavior.
 Invulnerability is not the armor table, and supershots and reflection
@@ -451,6 +459,9 @@ They have fewer decisions to make, but there are many more of them.
   original `player_try_move` on test positions; the shove is from
   disassembly and a MAME 0.289 capture of the attract demo, where the
   Wizard shoves the Elf.
+- Joining's candidate tests are at `0x48C62` and `0x48C76`, and the
+  power-up box at `0x4C7BC–0x4C98E`. Both were compared with the original
+  routines executed under Unicorn.
 - All party situations and numerical movement/camera examples here are
   illustrative, not captured original-ROM play. The reconstructed
   [player frame loop](../gauntpy/src/gauntpy/game/subsystems/players.py),
