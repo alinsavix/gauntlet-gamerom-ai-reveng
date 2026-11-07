@@ -1692,6 +1692,16 @@ Each entry in the forcefield segment table at `0x910780` is a 16-bit word (termi
 | 13–10 | length_m1 | Length minus 1 (0–15 → 1–16 tiles) |
 | 9–0 | hub_slot | Slot position of forcefield hub (row × 32 + col) |
 
+`forcefield_segments_setup` (0x53398) builds the table at level setup, scanning hubs in
+slot order, at most 0x3E segments. From each hub it looks right for another hub, up to 15
+cells (16 from column 0), and **wraps within the row whatever the level's wrap flags say**:
+reaching column 0 sets bit 14 and carries on (0x53436-0x5344A). Then it looks down up to 15
+rows, never wrapping; the scan stops at the bottom of the maze. Only a wall or exit marker
+picture (0x8000/0x8001) ends a scan, and a hub in the very next cell makes no segment. Each
+segment found ORs bits into the hubs' state words: 0x800 (across) or 0x1000 (down) on the near
+hub, 0x2000 or 0x400 on the far one. `pf_floor_update` reads those bits back to pick the hub's
+picture from table 0x5BA70.
+
 `pf_isff` (0x5FC5E): iterates the segment table. For each entry:
 1. Extract hub_slot from bits 9-0; compute delta = query_slot - hub_slot
 2. If bit 14 (wrap): adjust delta for maze edge wrapping
@@ -2295,7 +2305,10 @@ ROM's `getrandom(16) > 13` chance to select one phrase from 0x5796E.
 `secret_check_winner` (0x4D1A4) supplies the secret-room award predicate. It
 checks the active challenge code and the entrant's progress (and scans the
 playfield for challenge 0x53), returning -1 when the 5,000-per-coin bonus is
-earned and 0 otherwise.
+earned and 0 otherwise. It never checks that there is a winner: the progress byte
+is read from 0x904872 indexed by the signed `secret_player` byte (so -1 reads the
+low byte of `secret_prev_maze`), every comparison is signed, and the challenges
+with no progress condition (0x54, 0x55, 0x57-0x59) pass whoever holds the byte.
 
 ### 10.6 Secret Room (verified by disassembly)
 

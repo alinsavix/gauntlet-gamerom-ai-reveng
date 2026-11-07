@@ -212,7 +212,19 @@ def secret_check(state: GameState) -> None:
     state.secret_possible_counter = state.secret_possible_start  # 0x4874A
 
 
-# ROM: direct game:0x4D1A4 | Challenge-specific progress/MOB tests; Python bool represents the ROM -1/0 result and an invalid winner safely fails.
+# ROM: helper | The progress byte 0x4D1B8 reads: 0x904872 indexed by the signed winner byte, so no winner (-1) reads the low byte of secret_prev_maze before it.
+def _winner_progress(state: GameState) -> int:
+    player = state.secret_player
+    if 0 <= player < NUM_PLAYERS:
+        value = state.secret_tricks_flags[player] & 0xFF
+    elif player == -1:
+        value = state.secret_prev_maze & 0xFF
+    else:
+        value = 0
+    return value - 0x100 if value & 0x80 else value             # compared signed
+
+
+# ROM: direct game:0x4D1A4 | Challenge-specific progress/MOB tests with the ROM's signed byte compares and no winner check; Python bool represents the ROM -1/0 result.
 def secret_check_winner(state: GameState) -> bool:
     """0x4D1A4 -- was the secret room's challenge task completed?
 
@@ -220,11 +232,8 @@ def secret_check_winner(state: GameState) -> bool:
     exception: it sweeps the MOB table and passes only when no monster or
     generator (object types 0x12-0x2D) is left standing (0x4D26C-0x4D290).
     """
-    player = state.secret_player
-    if not 0 <= player < NUM_PLAYERS:
-        return False
     task = state.secret_trick_id
-    progress = state.secret_tricks_flags[player]
+    progress = _winner_progress(state)                           # 0x4D1B8-0x4D1BE
 
     if task in _CHALLENGE_WALLS:                                 # 0x4D1C0
         return progress > _CHALLENGE_WALLS_TARGET

@@ -12,7 +12,10 @@ RAM throughout; only the scenario's own changes are written to both sides.
 
 Scenarios: ``plain``; ``monster``, a ghost standing on the route; ``shot``, a hero's arrow
 held on the thief's ray for 40 frames, which starts and ends a dodge; ``moving``, a hero who
-keeps walking away, reported through ``thief_track_victim_move`` (0x4E630) on both sides.
+keeps walking away, reported through ``thief_track_victim_move`` (0x4E630) on both sides;
+``block``, the hero steps onto the escape route after the theft, so the thief fights its way
+past (0x4F788-0x4F866); ``tport``, the trail goes through a transporter pair, recorded with
+``tport_route_connect`` (0x4E684) as a hero's transport does, so the thief takes it too.
 
 The run stops at the first difference, because everything after it is contaminated. While a
 thief transition is in flight, main_score_update (0x4715E), which drives it, runs on both sides
@@ -39,7 +42,7 @@ from gauntpy.game.state import GameState  # noqa: E402
 from gauntpy.game.subsystems.camera import scroll_to_slot  # noqa: E402
 from gauntpy.game.subsystems import score, thief  # noqa: E402
 
-SCENARIOS = ("plain", "monster", "shot", "moving")
+SCENARIOS = ("plain", "monster", "shot", "moving", "block", "tport")
 _STEPS = (-1, 1, -0x20, 0x20)
 _COLUMN_STEP = (0, 1, 1, 1, 0, -1, -1, -1)
 _ROW_STEP = (-1, -1, 0, 1, 1, 1, 0, -1)
@@ -75,6 +78,56 @@ def route(state: GameState, start: int, length: int, avoid: frozenset = frozense
     return path[::-1]
 
 
+def _tport_trail(state: GameState, start: int, length: int):
+    """A walk to a transporter pad, a jump to another pad's free neighbour, and on from there."""
+    pads = [slot for slot in range(0x20, 0x400) if state.mobs.obj_type(slot) == int(MazeObjIds.TRANSPORTER)]
+    if len(pads) < 2:
+        return None
+    for source in pads:
+        for step in _STEPS:
+            approach = source - step
+            if not 0x40 <= approach < 0x3E0 or state.mobs.picture[approach]:
+                continue
+            path = route(state, start, 40)
+            if approach not in path:
+                lead = _route_to(state, start, approach)
+                if lead is None:
+                    continue
+            else:
+                lead = path[:path.index(approach) + 1]
+            for destination in pads:
+                if destination == source:
+                    continue
+                for out in _STEPS:
+                    landing = destination + out
+                    if 0x40 <= landing < 0x3E0 and not state.mobs.picture[landing]:
+                        tail = route(state, landing, length, avoid=frozenset(lead))
+                        if len(tail) > 3:
+                            return lead + [(source, destination, landing)] + tail[1:]
+    return None
+
+
+def _route_to(state: GameState, start: int, goal: int):
+    previous = {start: None}
+    queue = deque([start])
+    while queue:
+        cell = queue.popleft()
+        if cell == goal:
+            path = [cell]
+            while previous[path[-1]] is not None:
+                path.append(previous[path[-1]])
+            return path[::-1]
+        for step in _STEPS:
+            nxt = cell + step
+            if not 0x40 <= nxt < 0x3E0 or nxt in previous or state.mobs.picture[nxt]:
+                continue
+            if step in (-1, 1) and (nxt >> 5) != (cell >> 5):
+                continue
+            previous[nxt] = cell
+            queue.append(nxt)
+    return None
+
+
 def _record(state: GameState, slot: int, picture: int, obj_type: int, state_word: int = 0,
             palette: int = 0) -> None:
     state.mobs.create(
@@ -89,7 +142,12 @@ def setup(maze: int, start: int, length: int, mugger: bool, scenario: str = "pla
     reset_and_load_level(state, 7, maze_number=maze)
     if state.mobs.picture[start]:
         return None
-    path = route(state, start, length)
+    if scenario == "tport":
+        path = _tport_trail(state, start, length)
+        if path is None:
+            return None
+    else:
+        path = route(state, start, length)
     if len(path) < 4:
         return None
     hero = state.players[0]
@@ -99,16 +157,26 @@ def setup(maze: int, start: int, length: int, mugger: bool, scenario: str = "pla
     state.thief_victim = 0
     state.thief_victim_pos = path[0]
     for cell in path[1:]:
+        if isinstance(cell, tuple):                  # a transport: (source pad, destination pad, landing)
+            source, destination, landing = cell
+            thief.thief_track_victim_move(state, source, 0)
+            thief.tport_route_connect(state, source, destination, landing)
+            state.thief_victim_pos = landing
+            continue
         thief.thief_track_victim_move(state, cell, 0)
+    path = [cell[2] if isinstance(cell, tuple) else cell for cell in path]
     end = path[-1]
     hero.mob_slot = end
     _record(state, end, 0x1E0D, int(MazeObjIds.PLAYERSTART), 0, palette=0x0C)
     onward = route(state, end, 12, avoid=frozenset(path))[1:] if scenario == "moving" else []
+    if scenario == "block":
+        onward = list(path)
     if scenario == "monster":
         _record(state, path[len(path) // 2], _GHOST, int(MazeObjIds.MONST_GHOST))
     scroll_to_slot(state, end)
     state.thief_start_location = path[0]
-    state.thief_mode = thief.THIEF_IS_MUGGER if mugger else 0
+    # thief_timer_set (0x4E4D8) leaves a scheduled visitor in pursuit.
+    state.thief_mode = thief.THIEF_PURSUE | (thief.THIEF_IS_MUGGER if mugger else 0)
     state.thief_speed = thief._SPEED_MUGGER if mugger else thief._SPEED_THIEF
     state.thief_enter_time = 1
     state.thief_level_setup_done = True      # as main_start_game's 0x4835E tail leaves it
@@ -187,6 +255,8 @@ def walk(state: GameState, onward=(), scenario: str = "plain", frames: int = 200
     machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
     onward = list(onward)
     transported = False
+    blocked = False
+    escape_frame = None
     for frame in range(1, frames + 1):
         state.frame_counter = (state.frame_counter + 1) & 0xFFFF
         machine.w16(0x904006, state.frame_counter)
@@ -203,6 +273,22 @@ def walk(state: GameState, onward=(), scenario: str = "plain", frames: int = 200
                 state.mobs.picture[1] = 0
             _copy_slot(machine, state, 1)
             machine.w16(0x9049C4, state.shot_direction[0])
+        if scenario == "block" and state.thief_mode & thief.THIEF_ESCAPE and not blocked:
+            if escape_frame is None:
+                escape_frame = frame
+            elif frame == escape_frame + 40:
+                blocked = True
+                behind = [c for c in onward[1:-1] if not state.mobs.picture[c]]
+                if behind:
+                    hero = state.players[0]
+                    old, new = hero.mob_slot, behind[len(behind) // 2]
+                    state.mobs.move_slot(old, new)
+                    state.mobs.hpos[new] = ((((new & 0x1F) * 16 - 4) << 7) | 0x0C) & 0xFFFF
+                    state.mobs.vpos[new] = (native_v((new >> 5) * 16) << 7) & 0xFFFF
+                    hero.mob_slot = new
+                    for slot in (old, new):
+                        _copy_slot(machine, state, slot)
+                    machine.w16(0x9048C8, new)
         if scenario == "moving" and onward and frame > 70 and frame % 10 == 0 \
                 and not state.thief_mode & thief.THIEF_ESCAPE:
             hero = state.players[0]

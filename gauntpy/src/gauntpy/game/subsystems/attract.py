@@ -560,6 +560,11 @@ def start_attract_screen(state: GameState, mode: int) -> None:
     Per-screen *rendering* (high-score page, title logo, legend art) is WP-2's.
     """
     state.game_mode = mode
+    if state.dialog_timer:                         # 0x44438-0x44448
+        from .score import main_msgbox_countdown
+
+        state.dialog_timer = 1
+        main_msgbox_countdown(state)
     _sound_play(state, _SOUND_SCREEN_CHANGE)       # 0x4444E
     state.levelnum_current = _ATTRACT_LEVEL        # 0x4445A
     state.mazenum_current = _ATTRACT_MAZE          # 0x44462

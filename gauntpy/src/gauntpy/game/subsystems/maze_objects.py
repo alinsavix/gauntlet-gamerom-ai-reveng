@@ -70,16 +70,6 @@ _DOOR_VPOS_ADD3 = (
     0x000B, 0x0009, 0x000A, 0x0009,
 )
 
-_FORCEFIELD_BLOCKERS = frozenset((
-    int(MazeObjIds.WALL_REGULAR),
-    int(MazeObjIds.WALL_SECRET),
-    int(MazeObjIds.WALL_DESTRUCTABLE),
-    int(MazeObjIds.WALL_RANDOM),
-    int(MazeObjIds.WALL_TRAPCYC1),
-    int(MazeObjIds.WALL_TRAPCYC2),
-    int(MazeObjIds.WALL_TRAPCYC3),
-))
-
 _POWER_TRANSPORT = 0x0800
 
 
@@ -723,60 +713,67 @@ def main_walls_random_move(state: GameState) -> None:
 # Forcefield segment table
 # ---------------------------------------------------------------------------
 
-# ROM: part game:0x53398 | Extracted directional scan-coordinate and wrapping calculation for hub-to-hub segment construction.
-def _forcefield_candidate(
-    hub: int, distance: int, horizontal: bool, wraps: bool
-) -> tuple[int, bool] | None:
-    row, col = hub >> 5, hub & 0x1F
-    if horizontal:
-        next_col = col + distance
-        wrapped = next_col >= 32
-        if wrapped:
-            if not wraps:
-                return None
-            next_col &= 0x1F
-        return (row << 5) | next_col, wrapped
-
-    next_row = row + distance
-    wrapped = next_row >= 32
-    if wrapped:
-        if not wraps:
-            return None
-        next_row &= 0x1F
-    return (next_row << 5) | col, wrapped
-
-
-# ROM: direct game:0x53398 | Hub scan, beam construction and graphics updates using a Python list instead of a zero-terminated RAM table; hub graphic-state reconstruction is split out.
+# ROM: direct game:0x53398 | Hub scan, beam construction and hub state bits; the segment list stands in for the zero-terminated table at 0x910780.
 def forcefield_segments_setup(state: GameState) -> None:
-    """0x53398 -- build the packed, zero-terminated forcefield segment view."""
-    hubs = {
-        slot
-        for slot in range(FIRST_PLAYABLE_SLOT, NUM_MOB_SLOTS)
-        if state.mobs.obj_type(slot) == int(MazeObjIds.FORCEFIELDHUB)
-    }
+    """0x53398 -- build the packed forcefield segment table and mark the hubs.
+
+    For each hub in slot order, a horizontal scan looks right for another hub,
+    wrapping within the row whatever the level's wrap flags, up to 15 cells
+    (16 from column 0); then a vertical scan looks down, never wrapping, up to
+    15 rows. A wall or exit marker picture ends a scan, and a hub next door
+    makes no segment. Each segment found marks its far hub's state word (0x2000
+    across, 0x400 down) and its near hub's (0x800, 0x1000); the floor renderer
+    reads those bits back (0x5E892).
+    """
+    mobs = state.mobs
+    hub_type = int(MazeObjIds.FORCEFIELDHUB)
     segments: list[int] = []
-    for hub in sorted(hubs):
-        for horizontal, wraps in ((True, state.wrap_h), (False, state.wrap_v)):
-            for distance in range(1, 16):
-                candidate_data = _forcefield_candidate(hub, distance, horizontal, wraps)
-                if candidate_data is None:
-                    break
-                candidate, wrapped = candidate_data
-                if candidate in hubs:
-                    if distance > 1:
-                        segments.append(
-                            (0x8000 if horizontal else 0)
-                            | (0x4000 if wrapped else 0)
-                            | ((distance - 1) << 10)
-                            | hub
-                        )
-                    break
-                object_type = state.mobs.obj_type(candidate)
-                if (
-                    object_type in _FORCEFIELD_BLOCKERS
-                    or state.mobs.picture[candidate] in (0x8000, 0x8001)
-                ):
-                    break
+    for hub in range(FIRST_PLAYABLE_SLOT, NUM_MOB_SLOTS):        # 0x533C4-0x533D8
+        if len(segments) >= 0x3E:
+            break
+        if mobs.obj_type(hub) != hub_type:
+            continue
+        hub_bits = 0
+
+        # 0x533F6-0x5351A: across, to the right.
+        cell = hub
+        limit = min(hub + 15 + (0 if hub & 0x1F else 1), 0x400)
+        wrapped = False
+        while True:
+            cell += 1
+            if cell > limit:
+                break
+            if not cell & 0x1F:                                  # 0x53436-0x5344A
+                wrapped = True
+                cell -= 0x20
+                limit = hub - 15
+            if mobs.obj_type(cell) == hub_type and cell != hub + 1:
+                mobs.state_link[cell] |= 0x2000                  # 0x5347C
+                hub_bits |= 0x0800
+                end = cell + 0x20 if wrapped else cell
+                segments.append(
+                    ((end - hub - 1) << 10) + (hub | 0x8000 | (0x4000 if wrapped else 0))
+                )
+                break
+            if mobs.picture[cell] in (0x8000, 0x8001):          # 0x534FC-0x5350E
+                break
+
+        # 0x5351E-0x5360C: down.
+        cell = hub
+        limit = min(hub + 0x200, 0x400)
+        while True:
+            cell += 0x20
+            if cell >= limit:
+                break
+            if mobs.obj_type(cell) == hub_type and cell != hub + 0x20:
+                mobs.state_link[cell] |= 0x0400                  # 0x5357E
+                hub_bits |= 0x1000
+                segments.append((((cell - hub - 0x20) & 0x3E0) << 5) + hub)
+                break
+            if mobs.picture[cell] in (0x8000, 0x8001):
+                break
+
+        mobs.state_link[hub] |= hub_bits                         # 0x53618
     state.forcefield_segment_table = segments
     state.forcefield_segments_ready = True
     from ..playfield_vram import write_tile_descriptor

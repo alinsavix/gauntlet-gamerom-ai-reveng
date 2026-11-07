@@ -108,8 +108,14 @@ def start_attract_to_game(state: GameState) -> None:
     stops running until a screen loads a timer again.
     """
     from .player_lifecycle import player_resetall
+    from .score import main_msgbox_countdown
     from .sound import sound_play
 
+    # 0x44220-0x44232: a box still up (a demo tip, say) is retired at once, or
+    # its timer would hold the new game's gameplay band still.
+    if 0 < state.dialog_timer < 0x8000:
+        state.dialog_timer = 1
+        main_msgbox_countdown(state)
     state.dialog_once_flags = 0              # 0x4423A
     state.dialog_first_encounter_flags = 0   # 0x44244
     if state.game_mode == GameMode.DEMO:     # 0x4424A

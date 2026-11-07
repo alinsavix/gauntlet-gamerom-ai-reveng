@@ -46,13 +46,16 @@ Of 270 mapped game routines, 62 had never run in a ROM execution test or in the 
 test when this was filed. The thief and dragon work (S-216, S-217) and the reflection sweep below
 have since reached about twenty of them. What remains:
 
-- The thief: entering a transporter on its own route (`thief_enter_tport`), and fights with other
-  heroes while escaping. Arrival, pursuit, dodging, theft, getaway and corner squeezes match.
 - The dragon's fireballs once they leave the muzzle belong to `main_handle_shots`, which the
   dragon comparison does not step.
-- Secret rooms and name entry, and the forcefield setup (`maze_forcefield_setup`,
-  `forcefield_segments_setup`).
-- About twenty of the call-graph mismatches, mostly screens and setup, are still unread.
+- The secret winner's name entry and code (`secret_getname`, `secret_name_entry_update`,
+  `secret_code_build`) are screens and have not been run against the ROM; `secret_code_build`
+  has its own verifier test.
+- The remaining call-graph mismatches have been read. Those left are maze decoding (gex supplies
+  it), rendering internals (`pf_floor_draw_xy` and its wrappers), attract and high-score screens
+  (`init_display`, `maze_new_level_setup` behind the high-score table), the level-end tally's
+  record teardown, and `main_start_game`'s joins, which Python makes with `player_start_inner`
+  and `player_join_finalize` exactly as `player_join` would.
 
 Settled since: `shot_reflect_calc` (0x53818) matches the ROM in all 5,760 swept cases with a shot
 direction of 0-7, on result, bounce count and remembered wall. Only direction 8, which a live
@@ -64,6 +67,32 @@ table at 0x405C0 matches.
 These are leads, not known bugs. A routine that has run in a comparison may still have unreached branches.
 
 ## Resolved issues
+
+### S-218 · forcefield beams, the secret-room verdict and boxes left over from attract
+
+`tools/forcefield_check.py` intercepts level setup on every maze and runs the ROM's
+`forcefield_segments_setup` (0x53398) and `maze_forcefield_setup` (0x52F26) on the same state;
+`tools/secret_check.py` sweeps the secret-room bookkeeping and the name-entry ring. All match now.
+The thief walk gained two scenarios, a transporter trip on the trail and a hero blocking the
+getaway, and all 1,230 runs match. What changed:
+
+- A horizontal forcefield beam wraps within its row whatever the level's wrap flags
+  (0x53436-0x5344A), and a vertical one never wraps. gauntpy did both only on wrapping levels, so
+  maze 64 lost a beam. Only a wall or exit marker picture ends a scan; gauntpy also stopped at a
+  list of object types. The hubs now carry the ROM's direction bits in their state words, and the
+  floor renderer reads them as `pf_floor_update` does instead of rebuilding them.
+- `secret_check_winner` (0x4D1A4) compares the progress byte signed, reads it with no winner
+  check (no winner reads the byte before the table), and passes the unconditional challenges
+  whoever holds it. gauntpy compared unsigned and refused when there was no winner.
+- Starting a game from attract (0x44220-0x44232) and changing attract screen (0x44438-0x44448)
+  retire any open message box at once. gauntpy left it, so a game started over a demo tip held
+  its gameplay band still until the tip's timer ran out.
+- The walker had started thieves with mode 0, where a real scheduled thief pursues
+  (`thief_timer_set`, 0x4E4D8). With pursuit set the transporter route is followed as the ROM
+  follows it; the earlier scenarios still match.
+
+`name_entry_step_char` (0x55440) and `secret_check` (0x486FE) already matched. Tests:
+`tests/test_level_setup_rom.py`, and the new thief scenarios in `tools/thief_walk.py`.
 
 ### S-217 · the dragon's transitions, path index and death were not the ROM's
 

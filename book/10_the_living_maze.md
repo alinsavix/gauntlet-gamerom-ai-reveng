@@ -165,7 +165,12 @@ break a pursuer's trail. We will follow that consequence next chapter.
 
 ## A crossing paid for by the frame
 
-Beyond pad B the forcefield flashes. It does not stop movement like
+Beyond pad B the forcefield flashes. A field is a beam strung between
+two hubs, found when the level is set up: rightward from a hub, or
+downward, up to fifteen cells, stopping at any wall. A rightward beam
+may run off the edge of the maze and come back in on the same row,
+even in a level whose edges do not otherwise join; a downward one
+never does. It does not stop movement like
 a locked door. Its danger comes from a separate contact check, beginning
 with the live field-color word. Zero means the field is dark, and
 the damage branch is skipped.

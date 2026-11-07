@@ -368,24 +368,9 @@ def write_cyclic_wall_descriptor(
     write_tile_descriptor(state, slot, _descriptor_words(stamp, 7))
 
 
-# ROM: adapter game:0x53398,game:0x5E892 | Reconstructs hub graphic connectivity from Python segment records instead of the mob_state_link graphic state produced by setup and consumed by floor rendering.
+# ROM: part game:0x5E892 | A hub's beam-direction bits, which forcefield_segments_setup (0x53398) left in its state word: 1 down-end, 2 across-start, 4 down-start, 8 across-end.
 def _forcefield_adjacency(state: GameState, slot: int) -> int:
-    result = 0
-    for segment in state.forcefield_segment_table:
-        hub = segment & 0x3FF
-        row, col = coords.unpack_slot(hub)
-        length = ((segment >> 10) & 0x0F) + 1
-        horizontal = bool(segment & 0x8000)
-        endpoint = (
-            (row << 5) | ((col + length) & 0x1F)
-            if horizontal
-            else (((row + length) & 0x1F) << 5) | col
-        )
-        if slot == hub:
-            result |= 2 if horizontal else 4
-        elif slot == endpoint:
-            result |= 8 if horizontal else 1
-    return result
+    return state.mobs.state(slot) & 0x0F
 
 
 # ROM: merged game:0x5E892,game:0x5EAB8 | Combines floor special-type dispatch and wall descriptor selection; returns cached/provider descriptors instead of implementing either complete VRAM-writing boundary.

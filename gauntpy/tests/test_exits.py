@@ -1529,9 +1529,19 @@ class TestSecretCheckWinner:
                           obj_type=int(MazeObjIds.GEN_SORC2))
         assert not secret_check_winner(state)
 
-    def test_no_winner_is_not_a_completion(self):
+    def test_an_unconditional_task_completes_even_with_no_winner(self):
+        """0x4D238-0x4D25E never test the winner; ROM-checked by tools/secret_check.py."""
         state = self._room(0x54, 0)
         state.secret_player = -1
+        assert secret_check_winner(state)
+
+    def test_no_winner_reads_the_byte_before_the_progress_table(self):
+        """0x4D1B8 indexes 0x904872 by the signed winner: -1 reads secret_prev_maze's low byte."""
+        state = self._room(0x50, 0)
+        state.secret_player = -1
+        state.secret_prev_maze = 6
+        assert secret_check_winner(state)
+        state.secret_prev_maze = 7
         assert not secret_check_winner(state)
 
 
