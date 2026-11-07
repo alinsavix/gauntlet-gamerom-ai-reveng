@@ -45,6 +45,14 @@ _DRAGON_PATH_PROGRAMS = (
     (0, 3, 4, 7, 6, 5, 2, 1, 2, 4, 7, 5, 4, 2, 3, 1),
 )
 
+#: The 16 bytes before the path programs (the turn pictures at 0x5D568), then the
+#: programs themselves, as one table: 0x5D568-0x5D5C7.
+_PATH_TABLE_LEAD = 16
+_PATH_TABLE_BYTES = (
+    0xA2, 0xE0, 0xA5, 0x20, 0xA1, 0x80, 0xA5, 0x10,
+    0xA2, 0x60, 0xA5, 0x00, 0xA1, 0x00, 0xA5, 0x30,
+) + tuple(byte for program in _DRAGON_PATH_PROGRAMS for byte in program)
+
 # ROM 0x5D438 / 0x5D478, in whole world pixels (the raw words are all
 # multiples of 0x80, one native position unit per pixel) and in the hardware's
 # own axes, so a positive V delta walks the head *up* the screen.  These are
@@ -194,8 +202,16 @@ def _dragon_slot(state: GameState) -> int | None:
 
 # ROM: part game:0x53D10,game:0x54112,game:0x54454,game:0x545FA,game:0x54748 | Shared extraction of path-program lookup by program number and counter phase; not a separate ROM callable.
 def _current_path_byte(state: GameState) -> int:
-    program = _DRAGON_PATH_PROGRAMS[state.dragon_path_num % len(_DRAGON_PATH_PROGRAMS)]
-    return program[(state.dragon_anim_ctr & 0x7F) >> 3]
+    """The byte at ``0x5D578 + (counter >> 3) + path * 16``, with the counter signed.
+
+    The ROM indexes one flat table (0x53D3C-0x53D5C, 0x5412E). A turn or a
+    return to sleep leaves the counter negative, and a frame that reads the
+    path byte then reads backwards into the turn-picture table before it.
+    """
+    counter = state.dragon_anim_ctr & 0xFFFF
+    counter = counter - 0x10000 if counter & 0x8000 else counter
+    index = _PATH_TABLE_LEAD + (counter >> 3) + state.dragon_path_num * 16
+    return _PATH_TABLE_BYTES[index]
 
 
 # ROM: part game:0x53D10,game:0x54748 | Extracts the halved path-byte plus facing index used by muzzle alignment and projectile setup.
@@ -283,24 +299,42 @@ def _select_new_path(state: GameState) -> None:
     state.dragon_path_num = state.getrandom(len(_DRAGON_PATH_PROGRAMS))
 
 
-# ROM: part game:0x54454 | Extracted wake and turn transition branches; correspondence does not certify omitted transition-picture behavior.
+#: 0x5D508: head pictures while waking or falling asleep, four per facing.
+_DRAGON_WAKE_PICTURES = (
+    0xA2E0, 0xA550, 0xA550, 0xA540, 0xA180, 0xA550, 0xA550, 0xA540,
+    0xA260, 0xA750, 0xA750, 0xA740, 0xA100, 0xA750, 0xA750, 0xA740,
+)
+#: 0x5D568: head pictures while turning, by (counter / 8 + facing) & 7.
+_DRAGON_TURN_PICTURES = (0xA2E0, 0xA520, 0xA180, 0xA510, 0xA260, 0xA500, 0xA100, 0xA530)
+
+
+# ROM: part game:0x54454 | Wake/sleep and turn transition branches at 0x54490-0x5459C, with their head pictures.
 def _advance_wake_or_turn(state: GameState, head_slot: int) -> bool:
     """Run a transition frame and return whether normal path execution is blocked."""
-    if state.dragon_state & _ST_WAKING:
-        if state.dragon_anim_ctr == 0:
+    if state.dragon_state & _ST_WAKING:                       # 0x54490
+        if state.dragon_anim_ctr < 0:                         # falling asleep again
+            state.dragon_anim_ctr += 1                        # 0x5449E
+            if not state.dragon_anim_ctr & 0x0F:
+                index = ((state.dragon_anim_ctr + 0x31) >> 4) + state.dragon_facing * 2
+                state.mobs.picture[head_slot] = _DRAGON_WAKE_PICTURES[index]   # 0x544D6
             return True
-        was_positive = state.dragon_anim_ctr > 0
-        state.dragon_anim_ctr += -1 if was_positive else 1
-        if state.dragon_anim_ctr == 0 and was_positive:
-            state.dragon_state &= ~_ST_WAKING
+        state.dragon_anim_ctr -= 1                            # 0x544DE
+        if not state.dragon_anim_ctr & 0x0F:
+            index = (state.dragon_anim_ctr >> 4) + state.dragon_facing * 2
+            state.mobs.picture[head_slot] = _DRAGON_WAKE_PICTURES[index]       # 0x54514
+        if state.dragon_anim_ctr == 0:
+            state.dragon_state = 0                            # 0x5451E clears every bit
             _select_new_path(state)
         return True
 
-    if state.dragon_state & _ST_TURNING:
+    if state.dragon_state & _ST_TURNING:                      # 0x54534
         state.dragon_anim_ctr += -1 if state.dragon_anim_ctr > 0 else 1
-        if state.dragon_anim_ctr == 0:
-            state.dragon_state &= ~_ST_TURNING
-            _select_new_path(state)
+        if not state.dragon_anim_ctr & 7:
+            index = ((state.dragon_anim_ctr >> 3) + state.dragon_facing) & 7
+            state.mobs.picture[head_slot] = _DRAGON_TURN_PICTURES[index]       # 0x5457E
+            if state.dragon_anim_ctr == 0:
+                state.dragon_state &= ~_ST_TURNING            # 0x54588
+                _select_new_path(state)
         return True
 
     return False
@@ -575,9 +609,11 @@ def main_handle_dragon(state: GameState) -> None:
     head_slot = _dragon_slot(state)
     if head_slot is None:
         return
+    if state.dragon_state & _ST_WAKING and state.dragon_anim_ctr == 0:
+        return                                                # 0x54472-0x5447E: asleep
 
-    if state.dragon_fire_cooldown > 0:
-        state.dragon_fire_cooldown -= 1
+    if state.dragon_fire_cooldown:                            # 0x54482
+        state.dragon_fire_cooldown = (state.dragon_fire_cooldown - 1) & 0xFFFF
 
     if _advance_wake_or_turn(state, head_slot):
         return
@@ -625,14 +661,13 @@ def _dragon_die(state: GameState, shooter_id: int) -> None:
     tport_cycle_start(state, primary, shooter_id)
     state.mobs.hpos[primary] = original_hpos
     state.mobs.vpos[primary] = original_vpos
-    for slot in _segments(state):
+    for slot in _segments(state):                     # 0x54280-0x542B0
         if slot:
             state.mobs.unlink_and_clear(slot)
-    state.dragon_seg_mob_ids = [0] * 4
+    # 0x5440A clears only the first id. The other three, the head words and the
+    # state word keep their values; nothing reads them once the first is zero.
+    state.dragon_seg_mob_ids[0] = 0
     state.dragon_mob_slot = 0
-    state.dragon_state = 0
-    state.dragon_head_hpos = 0
-    state.dragon_head_vpos = 0
 
     from ..maze import placement_base_picture, placement_geometry
 

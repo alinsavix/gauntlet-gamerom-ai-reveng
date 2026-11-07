@@ -305,7 +305,9 @@ The sleeping dragon reacts to entry into a surrounding ten-by-ten-cell
 region. Movement supplies previous and current cells, allowing the game
 to distinguish entering from merely remaining nearby. A new entrance
 starts a forty-nine-frame wake transition. Staying inside does not keep
-restarting it.
+restarting it. The wake is visible: every sixteen frames the head takes
+the next picture of its waking sequence, and a turn shows its own frames
+every eight.
 
 Potion magic has a separate dragon branch. It checks all four pieces
 against the wider near-screen region. An eligible active dragon gains

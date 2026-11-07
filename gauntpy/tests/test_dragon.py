@@ -480,7 +480,8 @@ class TestDamage:
             dragon_shot_hit(state, 0x400 + primary, 0)
 
         assert state.dragon_mob_slot == 0
-        assert state.dragon_seg_mob_ids == [0, 0, 0, 0]
+        # 0x5440A clears only the first id; the records themselves are all gone.
+        assert state.dragon_seg_mob_ids == [0, primary - 0x20, primary + 1, primary - 0x1F]
         assert not any(
             state.mobs.obj_type(slot) == int(MazeObjIds.MONST_DRAGON)
             for slot in (primary, primary - 0x20, primary + 1, primary - 0x1F)

@@ -42,20 +42,52 @@ start).
 Comparing the ROM's call graph with Python's, through the crosswalk, found S-206 to S-212 in about
 half of the 40 calls with no Python match. The rest are mostly screens and setup, and are unread.
 
-Of 270 mapped game routines, 62 have never run in a ROM execution test or in the shipped demo's
-test. These are the groups that matter most:
+Of 270 mapped game routines, 62 had never run in a ROM execution test or in the shipped demo's
+test when this was filed. The thief and dragon work (S-216, S-217) and the reflection sweep below
+have since reached about twenty of them. What remains:
 
-- The thief walks in step with the ROM now (S-216). Not yet compared: a thief entering a
-  transporter on its own route (`thief_enter_tport`), and fights with other heroes while escaping.
-- The dragon: its segments, `dragon_choose_move_direction`, `dragon_shot_hit` and the head pose. The
-  crosswalk note on `_advance_wake_or_turn` does not certify the transition pictures.
-- Secret rooms and name entry, `shot_reflect_calc` and the forcefield setup.
+- The thief: entering a transporter on its own route (`thief_enter_tport`), and fights with other
+  heroes while escaping. Arrival, pursuit, dodging, theft, getaway and corner squeezes match.
+- The dragon's fireballs once they leave the muzzle belong to `main_handle_shots`, which the
+  dragon comparison does not step.
+- Secret rooms and name entry, and the forcefield setup (`maze_forcefield_setup`,
+  `forcefield_segments_setup`).
+- About twenty of the call-graph mismatches, mostly screens and setup, are still unread.
 
-`_update_forcefield_color` also reads `frame_counter` where doc/07 names `pf_vscroll_hi`.
+Settled since: `shot_reflect_calc` (0x53818) matches the ROM in all 5,760 swept cases with a shot
+direction of 0-7, on result, bounce count and remembered wall. Only direction 8, which a live
+shot never carries, differs: the ROM flips it to 12 and gauntpy's `_live_direction` fallback
+guesses one from the shot's velocity. `_update_forcefield_color` was never a mismatch: 0x904006
+is one word the OS calls `pf_vscroll_hi` and the game uses as `frame_counter`, and the colour
+table at 0x405C0 matches.
 
 These are leads, not known bugs. A routine that has run in a comparison may still have unreached branches.
 
 ## Resolved issues
+
+### S-217 · the dragon's transitions, path index and death were not the ROM's
+
+`tools/dragon_walk.py` runs a dragon in the four dragon mazes at level 13 (dragons are only placed
+from level 12, 0x45E6A), frame by frame in gauntpy and the ROM: a hero wakes it, walks around it or
+out of its box, and in one scenario shoots it to death. All 48 runs match on every dragon word, its
+segment records, its fireball channels, its loot and the RNG seed. Getting there found these:
+
+- The wake, the return to sleep and the turn change the head's picture (0x5D508, 0x5D568); gauntpy
+  never did, as the crosswalk note on `_advance_wake_or_turn` had warned. The wake's end clears
+  the whole state word (0x5451E), not just bit 0.
+- A sleeping dragon does not count down its fire cooldown (0x54472-0x5447E).
+- The path byte is read with a signed index into one flat table (0x53D3C). gauntpy wrapped the
+  counter with `& 0x7F`, so on the frame a turn starts, when the counter is negative, its flame
+  lock tested a different pose from the ROM's.
+- Death clears only the first segment id (0x5440A). gauntpy cleared all four, the head words and
+  the state; nothing reads them afterwards, but they are now as the ROM leaves them.
+- Placing a managed low slot writes its link and state words whole (0x5E052-0x5E056), so a
+  projectile or effect there has no type or state bits. gauntpy kept the bits already there,
+  which in slots 1-29 are the row-zero fill's wall type. The demo comparison checks only the low
+  link bits of those slots, so it could not see this.
+
+`tests/test_dragon_walk.py` runs a sample of the walks and compares a sleeping dragon's cooldown
+directly. Undoing any of these fixes fails it.
 
 ### S-216 · the thief's movement was not the ROM's
 

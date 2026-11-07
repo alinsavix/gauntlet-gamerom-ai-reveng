@@ -233,6 +233,11 @@ class MobTable:
         """
         if depth_key is not None and slot < NUM_DEPTH_KEYS:
             self.depth_key[slot] = depth_key
+            # 0x5E052-0x5E056 store the new links as whole words, so a managed
+            # slot leaves with no type or state bits: a projectile in a slot the
+            # row-zero fill typed as a wall is not a wall afterwards.
+            self.link[slot] = 0
+            self.state_link[slot] = 0
 
         key = self.sort_key(slot)
         prev = NULL_SLOT

@@ -154,6 +154,23 @@ class RomMachine:
         self.w16(0x904BBE, state.thief_tport_active)
         self.w16(0x904BCC, state.thief_tport_saved_picture)
         self.w16(0x904BE0, state.thief_tport_dest)
+        for address, value in (
+            (0x90487C, state.dragon_fire_cooldown), (0x904880, state.dragon_hits),
+            (0x904882, state.dragon_head_hpos), (0x904884, state.dragon_head_vpos),
+            (0x904886, state.dragon_path_num), (0x90488C, state.dragon_move_state),
+            (0x90488E, state.dragon_facing), (0x904890, state.dragon_state),
+            (0x904892, state.dragon_anim_ctr),
+        ):
+            self.w16(address, value)
+        self.w16(0x90486E, state.secret_need_hint)
+        for i in range(4):
+            self.w16(0x9048BE + 2 * i, state.reflect_count[i])
+            self.w16(0x9048A8 + 2 * i, state.player_shot_last_wall_pos[i])
+        for slot, key in enumerate(state.mobs.depth_key):
+            self.w16(0x904940 + 2 * slot, key)
+        self.w16(0x904B56, state.special_bonus_score)
+        for i, slot in enumerate(state.dragon_seg_mob_ids):
+            self.w16(0x904894 + 2 * i, slot)
         for i, direction in enumerate(state.shot_direction):
             self.w16(0x9049C4 + 2 * i, direction)
         # The route grid and the transporter route words live in the alpha

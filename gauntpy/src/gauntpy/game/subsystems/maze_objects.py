@@ -122,7 +122,7 @@ def select_forcefield_delay_profile(state: GameState) -> None:
     state.tport_secret_event_keys = [-1] * len(state.tport_secret_event_keys)
 
 
-# ROM: part game:0x40528 | Extracted even/odd forcefield color selection; source uses frame_counter while doc/07 names pf_vscroll_hi for color-index bits, so this is provenance rather than fidelity certification.
+# ROM: part game:0x40528 | Extracted even/odd forcefield color selection at 0x40596-0x405B8: table 0x405C0 by frame_counter bits 2-3 (0x904006, the word the OS calls pf_vscroll_hi).
 def _update_forcefield_color(state: GameState) -> None:
     if state.forcefield_step & 1:
         state.forcefield_color = 0

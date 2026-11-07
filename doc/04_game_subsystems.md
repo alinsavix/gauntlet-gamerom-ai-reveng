@@ -1764,7 +1764,17 @@ Dragon state is encoded in `ram.dragon_state` (`0x904890`) as a bitmask:
 **Wakeup:** `dragon_player_proximity` (0x549EA) receives previous/current packed
 cells. It reacts when current enters the wrapped rectangle from head column
 -4..+5 and row -5..+4 while previous is zero or outside. Sleeping state with a
-zero/negative counter starts or reverses the positive 49-frame wake.
+zero/negative counter starts or reverses the positive 49-frame wake. The routine
+takes the previous cell first: callers push `(previous, current)`, as 0x512AC does.
+
+While the dragon sleeps (bit 0 set, counter zero), `main_handle_dragon` returns at
+0x54472-0x5447E, before it counts down `dragon_fire_cooldown`. During the wake the
+counter falls by one per frame; every sixteen counts the head takes a picture from
+0x5D508 at `(counter >> 4) + facing * 2`, and when it reaches zero 0x5451E clears the
+whole state word, not just bit 0, and picks a path with `getrandom(5)`. A reversed
+wake (negative counter) climbs back to zero with the pictures at
+`((counter + 0x31) >> 4) + facing * 2`. A turn steps its counter toward zero and
+every eight counts shows 0x5D568 at `((counter >> 3) + facing) & 7`.
 
 **Active:** Tests the current path byte's fire trigger, allocates a shot with
 `dragon_find_free_shot_slot`, calls `dragon_fire_setup` when possible, chooses
@@ -1792,10 +1802,8 @@ selected. Consequently a close aligned player behind that leading wall does not
 activate sustained flame lock. Directly above/right/below/left maps to compass 0/2/4/6.
 No-target state is `4 | facing<<4 | 0x1000`.
 
-`dragon_update_segments` (0x53D10) reads the current path pose and facing,
-updates the four dragon segment MOB positions/pictures from the pose tables,
-and clears the turning/update bit when the segments reach the required
-alignment.
+The routine at 0x53D10, catalogued as `dragon_update_segments`, moves no segment:
+it is the muzzle-alignment test described below, setting or clearing state bit 3.
 
 `dragon_fire_setup` (0x54748, formerly `_x100`/`dragon_fire_attack`): fires one projectile into the monster-shot channel `dragon_find_free_shot_slot` handed it. Sets `dragon_fire_cooldown` (0x90487C) = 8; the *owner* recorded in `active_mob_ids` (0x9048C8) is `dragon_seg_mob_ids[tbl_0x5D4B8[pose + facing*2]]` (a signed-byte index into the 4-word segment MOB-id array at 0x904894), while the spawn position is masked (`& 0xFF80`) out of `dragon_seg_mob_ids[0]` at 0x547DC/0x547EE. Every per-channel word is indexed by `shot_slot - 1`, not by the MOB slot: `active_mob_ids[shot_slot-1]` (0x547CA), `shot_direction[shot_slot-1] = dragon_facing` (0x9049C4, 0x547D8) and `shot_anim_lifetime_counter[shot_slot-1]` (0x904B02, 0x54816/0x548AE).
 
@@ -1834,6 +1842,8 @@ when the current path byte's fire bit is set, `dragon_fire_cooldown` == 0, and
 
 The path table at 0x5D578 is **5 path programs × 16 bytes** (0x5D578–0x5D5C7), *not* 128×16. The current program is `dragon_path_num` (0x904886, 0–4); the byte index is `dragon_anim_ctr` (0x904892) >> 3, so the path phase advances every 8 frames and wraps at 128.
 
+The ROM reads it as one flat table with a signed index, `0x5D578 + (counter asr 3) + path * 16` (0x53D3C-0x53D5C, 0x5412E). A turn or a return to sleep leaves the counter negative, so a lock test on the frame a turn starts, or a hit during one, reads backwards into the turn pictures at 0x5D568.
+
 **Path byte format:** bit 0 = fire trigger; the **pose is `byte >> 1`** (0–3). The ROM builds *two different indices* out of that byte, and they are not interchangeable:
 
 | index | formula | width | tables | disassembly |
@@ -1846,6 +1856,8 @@ The head index is exactly `2 × pose index + fire bit`, so each (pose, facing) o
 Head rendering per phase boundary writes `mob_picture[dragon_seg_mob_ids[0]]` from 0x5D528 and produces `dragon_head_hpos/vpos` (0x904882/84) as `(delta + segment word) & 0xFF80` — position field only, no palette and no sprite size (0x5466C/0x5469E). **Contradicted and corrected (twice):** an early note gave `byte + facing*4` for *everything*, which is wrong for the fire/segment tables; the correction then applied `(byte >> 1) + facing*2` to everything, which is wrong for the head tables — it was verified against 0x53D5C–0x53D70, the *fire* path, and never against 0x54616.
 
 **Sustained fire:** while locked-in (state bit 3), a fire byte at a phase boundary holds the counter until the fire cooldown expires (continuous flame), otherwise the counter advances mod 128.
+
+**Death.** The ninth hit (0x54232-0x5444A) starts the poof on the head, removes all four segment records, and drops a score bag and a hidden potion (`getrandom(6)` picks its picture) at offsets from the head chosen by facing. It then clears only `dragon_seg_mob_ids[0]` (0x5440A); the other three ids, the head words and `dragon_state` keep their values, which nothing reads once the first id is zero. It also sets `secret_need_hint` and a 2000-point special bonus, and completes the *Don't Get Hit* objective for the shooter unless already failed.
 
 **Damage rules** (`dragon_shot_hit`, 0x54112, called from `resolve_shot_hit`): hits only count when the fire bit is active (mouth open) and the dragon is not sleeping/turning; each hit plays sound 0x3A, increments `dragon_hits` (0x904880) — the 9th kills the dragon — and switches to a new random path (getrandom(5)), fast-forwarded to the first byte matching the current pose so the animation stays continuous. Before the impact tail, 0x541E8–0x5422A rewrites the primary segment's hpos palette nibble as `5 + (11-hits)/3`: hits 1–2 use palette 8, hits 3–5 palette 7, and hits 6–8 palette 6, visibly darkening the dragon in three bands.
 
