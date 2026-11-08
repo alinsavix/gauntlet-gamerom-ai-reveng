@@ -171,6 +171,13 @@ class RomMachine:
         self.w16(0x904B56, state.special_bonus_score)
         for i, slot in enumerate(state.dragon_seg_mob_ids):
             self.w16(0x904894 + 2 * i, slot)
+        for channel in range(4, 12):
+            owner = state.shot_owner_mob[channel]
+            self.w16(0x9048C8 + 2 * channel, owner if owner >= 0 else 0)
+        for channel, counter in enumerate(state.shot_anim_lifetime_counter):
+            self.w16(0x904B02 + 2 * channel, counter)
+        for i, timer in enumerate(state.shot_timer_next):
+            self.w16(0x90492A + 2 * i, timer)
         for i, direction in enumerate(state.shot_direction):
             self.w16(0x9049C4 + 2 * i, direction)
         # The route grid and the transporter route words live in the alpha

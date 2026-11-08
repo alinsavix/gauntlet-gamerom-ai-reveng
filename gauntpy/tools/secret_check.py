@@ -22,7 +22,7 @@ import rom_exec  # noqa: E402
 from gauntpy.game.constants import GameMode  # noqa: E402
 from gauntpy.game.maze import reset_and_load_level  # noqa: E402
 from gauntpy.game.state import GameState  # noqa: E402
-from gauntpy.game.subsystems.player_names import name_entry_step_char  # noqa: E402
+from gauntpy.game.subsystems.player_names import name_entry_step_char, secret_code_for  # noqa: E402
 from gauntpy.game.subsystems.secret_rooms import secret_check, secret_check_winner  # noqa: E402
 
 
@@ -104,10 +104,133 @@ def check_winner_cases(tasks=range(0, 0x60), winners=(-1, 0, 2, 4),
     return out
 
 
+def secret_code_cases(count: int = 3000) -> list[str]:
+    """``secret_code_build`` (0x54BE0) on random names and contest fields."""
+    import random
+
+    rng = random.Random(0x5EC)
+    out = []
+    machine = rom_exec.RomMachine()
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ    "
+    for _ in range(count):
+        length = rng.randint(0, 29)
+        name = "".join(rng.choice(alphabet) for _ in range(length))
+        maze = rng.randint(0, 117)
+        previous_trick = rng.randint(0, 15)
+        challenge = rng.choice([0, *range(0x50, 0x5E)])
+        machine.cpu.mem_write(0x904AA4, name.encode("ascii") + b"\0" * 4)
+        machine.w8(0x904064, previous_trick)
+        machine.w8(0x904065, challenge)
+        machine.w16(0x904870, maze)
+        machine.call(0x54BE0)
+        rom = bytes(machine.cpu.mem_read(0x904AA4, 7)).decode("ascii", "replace")
+        py = secret_code_for(name, maze, previous_trick, challenge)
+        if rom != py:
+            out.append(f"secret_code({name!r}, {maze}, {previous_trick}, {challenge:#x}): ROM {rom} PY {py}")
+    return out
+
+
+# ROM addresses of the secret winner's editor fields, per player.
+_CURSOR, _VELOCITY, _DELAY, _STATUS = 0x904A3A, 0x904A2E, 0x904A36, 0x9049A0
+_TIMER, _BUFFER, _MAGIC, _FIRE, _RAW = 0x904A4E, 0x904AA4, 0x905F58, 0x905F60, 0x904920
+
+_SCRIPT = (                       # (frames, raw word): active low; dirs in bits 4-7
+    (130, 0xFFFF), (40, 0xFFEF), (3, 0xFFFD), (10, 0xFFFF), (25, 0xFFDF), (3, 0xFFFD),
+    (6, 0xFFFF), (60, 0xFFBF), (3, 0xFFFE), (8, 0xFFFF), (90, 0xFF7F), (3, 0xFFFD),
+    (20, 0xFFFF), (12, 0xFFEF), (3, 0xFFFD), (4, 0xFFFF), (200, 0xFFDF), (3, 0xFFFE),
+    (1100, 0xFFFF),               # idle until the timer ends the entry and shows the code
+)
+
+
+def _editor_words(machine, state: GameState, winner: int) -> list[str]:
+    player = state.players[winner]
+    pairs = (
+        ("cursor", machine.r8(_CURSOR + 4 * winner), player.initials_cursor & 0xFF),
+        ("velocity", machine.r16(_VELOCITY + 2 * winner), player.name_entry_velocity & 0xFFFF),
+        ("repeat delay", machine.r8(_DELAY + winner), player.name_entry_repeat_delay & 0xFF),
+        ("status", machine.r8(_STATUS + winner), int(player.status) & 0xFF),
+        ("global_delay_timer", machine.r16(_TIMER), state.global_delay_timer & 0xFFFF),
+        ("secret_player", machine.r8(0x904063), state.secret_player & 0xFF),
+    )
+    out = [f"{name}: ROM {rom:#x} PY {py:#x}" for name, rom, py in pairs if rom != py]
+    rom_buffer = list(bytes(machine.cpu.mem_read(_BUFFER, 29)))
+    if rom_buffer != [b & 0xFF for b in state.secret_name_buffer[:29]]:
+        out.append(f"buffer: ROM {bytes(rom_buffer)!r} PY {bytes(state.secret_name_buffer[:29])!r}")
+    alpha = [machine.r16(0x905000 + 2 * i) for i in range(64 * 30)]
+    bad = [i for i in range(64 * 30) if (i % 64) < 42 and alpha[i] != state.alpha_ram[i]]
+    if bad:
+        i = bad[0]
+        out.append(f"alpha ({i % 64},{i // 64}): ROM {alpha[i]:#x} PY {state.alpha_ram[i]:#x} ({len(bad)} cells)")
+    return out
+
+
+def name_entry_cases(winners=(0, 2), settings=(0x2000, 0)) -> list[str]:
+    """``secret_getname`` (0x54EC6), then ``secret_name_entry_update`` (0x54FE8) each frame."""
+    from gauntpy.game.constants import PlayerStatus
+    from gauntpy.game.subsystems.player_names import secret_getname, secret_name_entry_update
+
+    out = []
+    finishes = 0
+    for winner in winners:
+        for setting in settings:
+            state = GameState(game_mode=GameMode.NORMAL)
+            state.game_settings = setting
+            state.secret_player = winner
+            state.secret_prev_maze, state.secret_trick_last, state.secret_trick_id = 37, 5, 0x54
+            player = state.players[winner]
+            player.status = PlayerStatus.ALIVE_NEXT
+            machine = rom_exec.RomMachine.from_state(state)
+            _load_secret_words(machine, state)
+            machine.w8(0x904064, state.secret_trick_last)
+            machine.w16(_TIMER, state.global_delay_timer)
+            machine.cpu.mem_write(_BUFFER, bytes(b & 0xFF for b in state.secret_name_buffer))
+            machine.call(0x54EC6, count=2_000_000)
+            secret_getname(state)
+            label = f"winner {winner} settings {setting:#x}"
+            differences = _editor_words(machine, state, winner)
+            if differences:
+                out.append(f"{label} after secret_getname: " + "; ".join(differences[:3]))
+                continue
+            frame = 0
+            for frames, raw in _SCRIPT:
+                for _ in range(frames):
+                    frame += 1
+                    if state.secret_player != winner:
+                        break
+                    # input_debounce (0x40644), fed identically to both sides.
+                    state.player_input_raw[winner] = raw
+                    state.debounce_shift_magic[winner] = ((state.debounce_shift_magic[winner] << 1) | (raw & 1)) & 0xFFFF
+                    state.debounce_shift_fire[winner] = ((state.debounce_shift_fire[winner] << 1) | ((raw >> 1) & 1)) & 0xFFFF
+                    machine.w16(_RAW + 2 * winner, raw)
+                    machine.w16(_MAGIC + 2 * winner, state.debounce_shift_magic[winner])
+                    machine.w16(_FIRE + 2 * winner, state.debounce_shift_fire[winner])
+                    if state.global_delay_timer:
+                        state.global_delay_timer -= 1
+                    machine.w16(_TIMER, state.global_delay_timer)
+                    machine.call(0x54FE8, count=2_000_000)
+                    if not machine.halted:
+                        out.append(f"{label} frame {frame}: ROM did not return (fault {machine.fault_pc})")
+                        break
+                    secret_name_entry_update(state)
+                    finished = state.secret_player != winner
+                    differences = _editor_words(machine, state, winner)
+                    if differences:
+                        out.append(f"{label} frame {frame}: " + "; ".join(differences[:3]))
+                        break
+                    if finished:
+                        finishes += 1
+                else:
+                    continue
+                break
+    name_entry_cases.finishes = finishes
+    return out
+
+
 def main() -> int:
     failures = 0
     for name, cases in (("name_entry_step_char", step_char_cases), ("secret_check", secret_check_cases),
-                        ("secret_check_winner", check_winner_cases)):
+                        ("secret_check_winner", check_winner_cases), ("secret_code_build", secret_code_cases),
+                        ("secret name entry", name_entry_cases)):
         differences = cases()
         failures += len(differences)
         print(f"{name}: {len(differences)} differences")

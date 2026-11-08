@@ -2331,6 +2331,19 @@ Secret-room availability is paced by a pair of level counters:
   `secret_code_build` when entry completes. `secret_getname` initializes the
   byte repeat delay to 0xA0, so the first held direction waits 160 frames; later
   repeats accelerate to 8-13 frames exactly like ordinary initials entry.
+  The velocity word is updated in unsigned arithmetic (0x5502A-0x55078), and the
+  two directions are not mirror images. Up or right adds one, and its unsigned cap
+  at 0xA0 sends a negative velocity straight to 0xA0. Down or left zeroes any
+  nonzero velocity (`tst` then `bhi`) and otherwise stores -1, so it alternates
+  0 and -1 and never speeds up: stepping backwards stays at the slowest repeat.
+  The editor redraws only what changes, through `name_entry_draw_char` (0x554B6):
+  a stepped character at the cursor in `0xB000 + player<<10`, and on a commit the
+  committed cell in the player's text palette (0x57350) and then the new cursor
+  cell. That routine shows a space as glyph 0 only in the 0xD000-0xDC00 palettes,
+  so the cursor's space shows the raw 0x20 glyph, and a backspace as glyph 0x3B.
+  On completion the cursor cell becomes a space, the name row and the row two
+  below are blanked in palette 0x8000, and `secret_code_build` writes the code
+  over the name in the same buffer.
   Fire or Magic commits the current character. Each non-backspace commit advances
   the cursor and reloads the hidden timer to 0x0385; reaching byte 29 completes
   immediately, while expiry below five fills the remaining bytes with spaces.

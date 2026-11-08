@@ -38,7 +38,9 @@ from ..constants import GameMode, PlayerStatus
 from ..coords import hpos_x, vpos_y
 from ..state import NUM_PLAYERS, GameState
 from .player_data import _SPEECH_CHARNAME_TBL
+from ..alpha_memory import write_alpha_word
 from .display import (
+    alpha_index,
     alpha_word,
     clear_alpha_visible,
     fill_alpha_rect,
@@ -578,21 +580,43 @@ def write_secret_name_entry(state: GameState, player_index: int) -> None:
         write_alpha_glyphs(state, offset, row, (code,), attribute)
 
 
+# ROM: direct game:0x554B6 | name_entry_draw_char: one name cell, with a space blank only in the 0xD000-0xDC00 palettes and backspace as glyph 0x3B.
+def secret_name_draw_char(state: GameState, player_index: int, offset: int, attribute: int) -> None:
+    """0x554B6 -- redraw one cell of the secret winner's name.
+
+    The character goes to the alpha cell as its raw code, except that a space is
+    blank (glyph 0) only in the 0xD000-0xDC00 palettes (0x554CA-0x554E0) and a
+    backspace shows glyph 0x3B (0x554E4-0x554EA). So the cursor's space, in the
+    0xB000 family, shows the raw 0x20 glyph.
+    """
+    code = state.secret_name_buffer[offset] & 0xFF
+    if code == 0x20 and 0xD000 <= attribute <= 0xDC00:
+        code = 0
+    elif code == 0x08:
+        code = 0x3B
+    row = player_index * 5 + 7
+    if 0 <= offset < 64:
+        write_alpha_word(state, alpha_index(offset, row), alpha_word(attribute, code))
+
+
 # ROM: part game:0x54FE8 | Result-page drawing portion of secret_name_entry_update, not its full editing/contest workflow.
 def write_secret_code_result(state: GameState, player_index: int) -> None:
     """Write secret_name_entry_update's contest-code result page."""
     row = player_index * 5 + 7
     attribute = 0x8400 + player_index * 0x0400
+    # 0x5528A-0x552DA blank the name row and the row two below it.
     fill_alpha_rect(state, 0, row, 29, 1, alpha_word(0x8000))
+    fill_alpha_rect(state, 0, row + 2, 29, 1, alpha_word(0x8000))
     write_alpha_large_text(state, 1, 1, "REMEMBER YOUR", 0x8000)
     write_alpha_large_text(state, 3, 4, "SECRET CODE", 0x8000)
     write_alpha_text(state, 10, row + 2, "TASK", attribute)
     write_alpha_decimal(
         state, 15, row + 2, state.secret_trick_id - 0x50, 2, attribute,
     )
-    write_alpha_text(state, 2, row + 3, "SEND CONTEST ENTRY FORM", attribute)
-    write_alpha_text(state, 2, row + 4, " TO ATARI GAMES CORP.  ", attribute)
-    write_alpha_text(state, 2, row + 5, " CONTEST ENDS 12/19/86 ", attribute)
+    # 0x5534C-0x553B2: the contest lines are in the plain 0x8000 palette.
+    write_alpha_text(state, 2, row + 3, "SEND CONTEST ENTRY FORM", 0x8000)
+    write_alpha_text(state, 2, row + 4, " TO ATARI GAMES CORP.  ", 0x8000)
+    write_alpha_text(state, 2, row + 5, " CONTEST ENDS 12/19/86 ", 0x8000)
     for offset, character in enumerate(state.secret_code):
         write_alpha_name_entry_large_char(
             state, 7 + offset * 2, row, character, attribute,

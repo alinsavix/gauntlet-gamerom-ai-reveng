@@ -295,5 +295,5 @@ def _channel_clear(state: GameState, shooter_id: int) -> None:
     state.mobs.picture[slot] = 0
     state.shot_dx[slot] = 0
     state.shot_dy[slot] = 0
-    state.shot_direction[shooter_id] = 8
+    # The direction word keeps its last value, as the ROM leaves 0x9049C4 alone.
     state.shot_owner_mob[shooter_id] = -1

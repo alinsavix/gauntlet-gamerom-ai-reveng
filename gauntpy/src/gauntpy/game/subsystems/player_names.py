@@ -97,6 +97,8 @@ def secret_code_build(state: GameState) -> str:
         state.secret_trick_id,
     )
     state.secret_code = code
+    # 0x54C28-0x54C9C write the code over the name, in the same buffer at 0x904AA4.
+    state.secret_name_buffer[:8] = list(code.encode("ascii")) + [0]
     return code
 
 
@@ -135,48 +137,64 @@ def secret_name_entry_update(state: GameState) -> None:
 
     cursor = player.initials_cursor
     dirs = (~(state.player_input_raw[winner] >> 4)) & 0x0F
-    velocity = player.name_entry_velocity
+    # 0x5502A-0x55078, in the ROM's unsigned word arithmetic. Up or right adds
+    # one and caps at 0xA0 with an unsigned compare, so a negative velocity jumps
+    # straight to the top. Down or left zeroes any nonzero velocity (``tst`` then
+    # ``bhi``) and otherwise takes one off, so it alternates 0 and -1.
+    velocity = player.name_entry_velocity & 0xFFFF
     if dirs & 0x09:
-        velocity = min(velocity + 1, _NAME_ENTRY_VELOCITY_LIMIT) if velocity >= 0 else 0
+        velocity = (velocity + 1) & 0xFFFF
+        if velocity > _NAME_ENTRY_VELOCITY_LIMIT:
+            velocity = _NAME_ENTRY_VELOCITY_LIMIT
     elif dirs & 0x06:
-        velocity = max(velocity - 1, -_NAME_ENTRY_VELOCITY_LIMIT) if velocity <= 0 else 0
+        if velocity:
+            velocity = 0
+        else:
+            velocity = 0xFFFF
     else:
         velocity = 0
+    velocity = velocity - 0x10000 if velocity & 0x8000 else velocity
     player.name_entry_velocity = velocity
 
     delay = player.name_entry_repeat_delay
     if delay:
         delay -= 1
+    from .score import secret_name_draw_char, write_secret_code_result
+    from .score import PLAYER_TEXT_PALETTE_WORDS
+
+    cursor_attribute = 0xB000 + (winner << 10)
     if delay == 0:
         if velocity and 0 <= cursor < _SECRET_NAME_LENGTH:
             state.secret_name_buffer[cursor] = name_entry_step_char(
                 state.secret_name_buffer[cursor], velocity, bool(cursor),
             )
+            secret_name_draw_char(state, winner, cursor, cursor_attribute)   # 0x550FC
         delay = ((_NAME_ENTRY_VELOCITY_LIMIT - abs(velocity))
                  >> _NAME_ENTRY_REPEAT_SHIFT) + _NAME_ENTRY_REPEAT_BASE
     player.name_entry_repeat_delay = delay & 0xFF
 
-    from .score import write_secret_code_result, write_secret_name_entry
-
-    write_secret_name_entry(state, winner)
     if (
         _name_entry_commit_pressed(state, winner)
         and state.global_delay_timer < 0x0A15
     ):
-        if state.secret_name_buffer[cursor] == _NAME_ENTRY_BACKSPACE:
-            state.secret_name_buffer[cursor] = _NAME_ENTRY_SPACE
+        backspace = state.secret_name_buffer[cursor] == _NAME_ENTRY_BACKSPACE
+        if backspace:
+            state.secret_name_buffer[cursor] = _NAME_ENTRY_SPACE       # 0x551AC
+        # 0x551B4-0x551E8: the committed cell in the player's text palette.
+        secret_name_draw_char(state, winner, cursor, PLAYER_TEXT_PALETTE_WORDS[winner])
+        if backspace:
             cursor = max(0, cursor - 1)
         else:
             cursor += 1
             state.global_delay_timer = 0x0385
         player.initials_cursor = cursor
-        if cursor < _SECRET_NAME_LENGTH:
-            write_secret_name_entry(state, winner)
+        if 0 <= cursor < _SECRET_NAME_LENGTH:                          # 0x55204-0x5523E
+            secret_name_draw_char(state, winner, cursor, cursor_attribute)
 
     if state.global_delay_timer >= 5 and cursor < _SECRET_NAME_LENGTH:
         return
-    for index in range(max(0, cursor), _SECRET_NAME_LENGTH):
-        state.secret_name_buffer[index] = _NAME_ENTRY_SPACE
+    if cursor < _SECRET_NAME_LENGTH:                                # 0x5526A-0x55274
+        state.secret_name_buffer[cursor] = _NAME_ENTRY_SPACE
     secret_code_build(state)
     write_secret_code_result(state, winner)
     player.status = int(PlayerStatus.ALIVE_NEXT)

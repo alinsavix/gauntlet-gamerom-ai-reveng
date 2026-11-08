@@ -37,36 +37,52 @@ start).
 
 ## Open issues
 
-### S-215 · routines no comparison has reached
-
-Comparing the ROM's call graph with Python's, through the crosswalk, found S-206 to S-212 in about
-half of the 40 calls with no Python match. The rest are mostly screens and setup, and are unread.
-
-Of 270 mapped game routines, 62 had never run in a ROM execution test or in the shipped demo's
-test when this was filed. The thief and dragon work (S-216, S-217) and the reflection sweep below
-have since reached about twenty of them. What remains:
-
-- The dragon's fireballs once they leave the muzzle belong to `main_handle_shots`, which the
-  dragon comparison does not step.
-- The secret winner's name entry and code (`secret_getname`, `secret_name_entry_update`,
-  `secret_code_build`) are screens and have not been run against the ROM; `secret_code_build`
-  has its own verifier test.
-- The remaining call-graph mismatches have been read. Those left are maze decoding (gex supplies
-  it), rendering internals (`pf_floor_draw_xy` and its wrappers), attract and high-score screens
-  (`init_display`, `maze_new_level_setup` behind the high-score table), the level-end tally's
-  record teardown, and `main_start_game`'s joins, which Python makes with `player_start_inner`
-  and `player_join_finalize` exactly as `player_join` would.
-
-Settled since: `shot_reflect_calc` (0x53818) matches the ROM in all 5,760 swept cases with a shot
-direction of 0-7, on result, bounce count and remembered wall. Only direction 8, which a live
-shot never carries, differs: the ROM flips it to 12 and gauntpy's `_live_direction` fallback
-guesses one from the shot's velocity. `_update_forcefield_color` was never a mismatch: 0x904006
-is one word the OS calls `pf_vscroll_hi` and the game uses as `frame_counter`, and the colour
-table at 0x405C0 matches.
-
-These are leads, not known bugs. A routine that has run in a comparison may still have unreached branches.
+None.
 
 ## Resolved issues
+
+### S-219 · the dragon's fireballs in flight, and the secret winner's editor
+
+The dragon comparison now runs `main_handle_shots` (0x474F6) too, so its fireballs fly, hit the
+hero and expire on both sides; all 48 runs still match. The only difference was that gauntpy reset
+a freed channel's direction word to 8, where the ROM's channel clear leaves 0x9049C4 alone.
+
+`tools/secret_check.py` now also runs `secret_code_build` (0x54BE0) on 3,000 random names and
+contest fields, and drives `secret_getname` (0x54EC6) and `secret_name_entry_update` (0x54FE8)
+frame by frame with the same inputs, through stepping, commits, a backspace, the timeout and the
+code page. The code already matched. The editor did not:
+
+- Its velocity is updated in unsigned arithmetic (0x5502A-0x55078). Up or right builds speed, and a
+  negative velocity jumps to the cap. Down or left alternates 0 and -1, so stepping backwards
+  never speeds up. gauntpy treated both directions alike.
+- It redraws only what changes, through `name_entry_draw_char` (0x554B6): the cursor cell in
+  `0xB000 + player<<10`, and on a commit the committed cell in the player's text palette before
+  the new cursor cell. That routine leaves a space as the raw 0x20 glyph outside the
+  0xD000-0xDC00 palettes and shows a backspace as 0x3B. gauntpy redrew every cell each frame from
+  the cursor position, in the wrong palette after a commit.
+- On completion it writes the code over the name in the shared buffer at 0x904AA4, blanks the
+  name row and the row two below, and draws the three contest lines in palette 0x8000.
+
+`tests/test_level_setup_rom.py` covers both, and undoing any of these fixes fails it.
+
+### S-215 · routines no comparison had reached
+
+Comparing the ROM's call graph with Python's through the crosswalk found S-206 to S-212. Of 270
+mapped game routines, 62 had never run in a ROM comparison; the thief (S-216), the dragon
+(S-217), the forcefield setup, secret rooms and attract boxes (S-218), the fireballs and the
+secret winner's editor (S-219) and a reflection sweep have reached the groups that matter, and
+every call-graph mismatch has been read.
+
+Those not fixed are not differences. Maze decoding comes from gex; `pf_floor_draw_xy` and its
+wrappers are rendering internals; `init_display` and the high-score table's maze are screens; the
+level-end tally's record teardown is done on the exit path; and `main_start_game`'s joins use
+`player_start_inner` and `player_join_finalize` exactly as `player_join` would.
+`shot_reflect_calc` (0x53818) matches the ROM in all 5,760 swept cases with a direction of 0-7;
+only direction 8, which a live shot never carries, differs, through gauntpy's `_live_direction`
+fallback. `_update_forcefield_color` was never a mismatch: 0x904006 is one word the OS calls
+`pf_vscroll_hi` and the game uses as `frame_counter`.
+
+A routine that has run in a comparison may still have branches no comparison has reached.
 
 ### S-218 · forcefield beams, the secret-room verdict and boxes left over from attract
 

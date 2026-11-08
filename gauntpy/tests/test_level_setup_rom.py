@@ -82,3 +82,13 @@ def test_leaving_attract_retires_an_open_box():
         leave(state)
         assert state.dialog_timer == 0
         assert state.dialog_message == []
+
+
+def test_the_secret_code_matches_the_rom():
+    assert secret_check.secret_code_cases(count=600) == []
+
+
+def test_the_secret_winners_name_entry_matches_the_rom_frame_by_frame():
+    """Stepping, commits, the timeout and the code page (0x54EC6, 0x54FE8)."""
+    assert secret_check.name_entry_cases(winners=(1,)) == []
+    assert secret_check.name_entry_cases.finishes == 1

@@ -36,6 +36,7 @@ from gauntpy.game.state import GameState  # noqa: E402
 from gauntpy.game.subsystems.camera import scroll_to_slot  # noqa: E402
 from gauntpy.game.subsystems import dragon  # noqa: E402
 from gauntpy.game.subsystems.shot_damage import dragon_player_proximity  # noqa: E402
+from gauntpy.game.subsystems.shots import main_handle_shots  # noqa: E402
 
 MAZES = (13, 41, 67, 78)
 SCENARIOS = ("wake", "leave", "hits", "stun")
@@ -142,12 +143,20 @@ def compare(machine, state: GameState, cells=()) -> list[str]:
         rom, py = machine.r16(0x9049C4 + 2 * channel), state.shot_direction[channel] & 0xFFFF
         if rom != py:
             out.append(f"shot_direction[{channel}]: ROM {rom:#x} PY {py:#x}")
+    for channel in range(4, 8):
+        rom, py = machine.r16(0x904B02 + 2 * channel), state.shot_anim_lifetime_counter[channel] & 0xFFFF
+        if rom != py:
+            out.append(f"shot counter[{channel}]: ROM {rom:#x} PY {py:#x}")
+    rom_health = int.from_bytes(bytes(machine.cpu.mem_read(0x904980, 4)), "big", signed=True)
+    if rom_health != state.players[0].health:
+        out.append(f"health: ROM {rom_health} PY {state.players[0].health}")
     if machine.r16(0x904BFC) != state.rng.seed:
         out.append(f"seed: ROM {machine.r16(0x904BFC):#x} PY {state.rng.seed:#x}")
     return out
 
 
-def walk(state: GameState, scenario: str, frames: int = 1500, show: bool = False):
+def walk(state: GameState, scenario: str, frames: int = 1500, show: bool = False,
+         shots_too: bool = True):
     """``(frames compared, first differences, how the run ended)``."""
     head = state.dragon_seg_mob_ids[0]
     near = _free_cells(state, head, 3)
@@ -186,6 +195,12 @@ def walk(state: GameState, scenario: str, frames: int = 1500, show: bool = False
             dragon.dragon_shot_hit(state, state.dragon_seg_mob_ids[0], 0)
         if scenario == "stun" and frame == 400:
             _move_hero(state, machine, near[1])
+        if shots_too:
+            # main_handle_shots (0x474F6) runs before the dragon in the main loop.
+            machine.call(0x474F6, count=2_000_000)
+            if not machine.halted:
+                return frame, [f"ROM did not return from main_handle_shots (fault {machine.fault_pc})"], "fault"
+            main_handle_shots(state)
         machine.call(0x54454, count=2_000_000)
         if not machine.halted:
             return frame, [f"ROM did not return from main_handle_dragon (fault {machine.fault_pc})"], "fault"

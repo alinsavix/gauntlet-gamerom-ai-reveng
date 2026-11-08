@@ -256,7 +256,10 @@ name entry. Otherwise the result returns toward ordinary play without
 the contest editor. The screen asks for last name followed by first name.
 The joystick changes characters, and Fire or Magic commits one; the
 buffer allows twenty-nine characters, with unused positions filled by
-spaces when entry times out.
+spaces when entry times out. The two directions do not behave alike.
+Holding one way speeds the characters up the longer it is held; holding
+the other way never speeds up, so stepping backwards through the
+alphabet stays slow throughout.
 
 For a worked example, let the Elf enter the invented name `SMITH ADA`.
 Keep the saved ordinary maze at 6, original objective at `0x0D`, and
