@@ -30,8 +30,10 @@ from .display import (
     alpha_word,
     fill_alpha_rect,
     write_alpha_decimal,
+    write_alpha_large_text,
     write_alpha_text,
 )
+from .score import maze_hide
 from .sound import sound_play as _sound_play
 
 # =============================================================================
@@ -249,12 +251,12 @@ def _write_legend_alpha(state: GameState) -> None:
         ):
             fill_alpha_rect(state, column, row, width, height, 0)
     if page == 2:
-        write_alpha_text(state, 8, 0, "LEGEND", 0x8000)
+        write_alpha_large_text(state, 8, 0, "LEGEND", 0x8000)
         for text, column, row, attribute in romtext.LEGEND_RULES_TEXT:
             write_alpha_text(state, column, row, text, attribute)
         return
     elif page == 1:
-        write_alpha_text(state, 6, 0, "MONSTERS", 0x8000)
+        write_alpha_large_text(state, 6, 0, "MONSTERS", 0x8000)
         for text, column in (
             ("Type", 1), ("Fight", 12), ("Shoot", 18), ("Magic", 24),
         ):
@@ -263,7 +265,7 @@ def _write_legend_alpha(state: GameState) -> None:
         for index, (name, fight, shoot, magic) in enumerate(
             romtext.LEGEND_MONSTER_ROWS
         ):
-            art_row = 4 + index + (1 if index == 9 else 0)
+            art_row = 4 + index + (2 if index == 9 else 0)
             table_row = 19 + index
             write_alpha_text(state, 0, art_row, name, 0x9000)
             write_alpha_text(state, 0, table_row, name, 0x9000)
@@ -328,6 +330,7 @@ def load_legend_page(state: GameState) -> None:
     )
     if state.attract_legend == 1 and state.maze is not None:
         maze.initialize_maze_color_ram(state, state.maze, floorcolor=7)
+    maze_hide(state)                                   # 0x44536
     setup_infopanel(state, -1)
     if state.attract_legend == 2:
         state.scroll_x = 0x2C
@@ -524,6 +527,7 @@ def _attract_timer_expired(state: GameState, mode: int) -> None:
             from .player_lifecycle import setup_infopanel
 
             state.attract_legend = 2               # 0x448DE
+            maze_hide(state)                       # 0x448E6
             setup_infopanel(state, -1)             # 0x448EC-0x448F2
 
     start_attract_screen(state, int(state.game_mode))   # 0x4490E
@@ -569,8 +573,8 @@ def start_attract_screen(state: GameState, mode: int) -> None:
     state.levelnum_current = _ATTRACT_LEVEL        # 0x4445A
     state.mazenum_current = _ATTRACT_MAZE          # 0x44462
 
-    from .player_lifecycle import player_resetall
     from .display import clear_attract_display_memory, restore_alpha_color_ram
+    from .player_lifecycle import player_resetall
 
     clear_attract_display_memory(state)              # 0x44468 / 0x44474
     restore_alpha_color_ram(state)                   # init_display common prefix
@@ -579,13 +583,14 @@ def start_attract_screen(state: GameState, mode: int) -> None:
     state.attract_timer = _LOADED_TIMER.get(mode, 0x258)
 
     if mode == int(GameMode.TITLE):
+        from ..maze import (
+            load_attract_display_tilemap,
+            load_attract_fixed_palette,
+        )
         from .display import (
             init_alpha_color_ram,
             init_fixed_playfield_color_ram,
             init_title_logo_colors,
-        )
-        from ..maze import (
-            load_attract_display_tilemap, load_attract_fixed_palette,
         )
 
         # attract_display (0x4438E) finishes with init_display(0x10, 0x10),
@@ -662,6 +667,7 @@ def attract_demo_init(state: GameState) -> None:
     from .player_lifecycle import player_join, setup_infopanel
     from .session import player_coindrop
 
+    maze_hide(state)                               # 0x449D8
     setup_infopanel(state, -1)                     # 0x449DE-0x449E4
     state.dialog_once_flags = 0                    # 0x449EC
     state.dialog_first_encounter_flags = 0         # 0x449F6
@@ -675,6 +681,8 @@ def attract_demo_init(state: GameState) -> None:
     # to move through. Guarded so a ROM-less environment still sets up the demo
     # state (it just has no maze). maze.reset_and_load_level resets the MOB table.
     if maze.reset_and_load_level(state, state.levelnum_current, maze_number=_DEMO_MAZE):
+        # 0x449FC selects the demo's maze by bank alone: 0x904000 stays at attract's (0x44462).
+        state.mazenum_current = _ATTRACT_MAZE
         exit_scan_level(state)
         player_join(state, _DEMO_ACTIVE_PLAYER)
         from .level_transitions import update_monster_spawn_bonus_from_score_per_coin

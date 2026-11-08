@@ -1163,7 +1163,7 @@ class TestSecretWall:
         # pf_replace stamps a freshly randomized floor before the prize draw.
         state.rng = _FixedRandom([0, *rolls])
         SLOT = 360
-        _place_typed(state, SLOT, MazeObjIds.WALL_SECRET)
+        _place_typed(state, SLOT, MazeObjIds.WALL_SECRET, picture=0x8000)
         result = resolve_shot_hit(state, SLOT, 0)
         return state, SLOT, result
 

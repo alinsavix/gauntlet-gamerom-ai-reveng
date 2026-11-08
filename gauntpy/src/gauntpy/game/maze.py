@@ -312,10 +312,13 @@ def _wall_adjacency(state: GameState, slot: int) -> int:
 def _floor_adjacency(state: GameState, slot: int) -> int:
     if state.playfield_wallpattern >= 11:
         return 0
+    if state.level_flags_2 & 0x80 and state.levelnum_current != LEVEL_SENTINEL:   # 0x5E96C-0x5E97E
+        return 0
     row, col = coords.unpack_slot(slot)
     return sum(
         bit for dx, dy, bit in _FLOOR_ADJ3
-        if (
+        if not (row + dy) & 0x1F                     # 0x5EA6A: row zero is always joined
+        or (
             (object_type := _logical_cell_type(
                 state, col + dx, row + dy,
             )) in _WALL_TYPES
@@ -831,6 +834,9 @@ _ROM_MARKER_TYPES = _SOLID_WALL_MARKERS | _TILE_MARKERS
 WALL_MARKER_PICTURE = 0x8000
 #: Floor/animated marker word (ROM 0x460B8-0x46100).
 TILE_MARKER_PICTURE = 0x8001
+#: A destructible wall's marker during floor and wall drawing on these patterns (0x4603A).
+LATE_WALL_MARKER_PICTURE = 0x8003
+_LATE_WALL_PATTERNS = (6, 11)
 
 # ``getrandom(3)`` picks the invulnerable-food picture from a three-word ROM
 # table at 0x58F20 (doc/04 sec 5.4; ROM 0x46150-0x46168). Read through gex's
@@ -1249,20 +1255,18 @@ def _prepare_secret_challenge(state: GameState) -> None:
             state.mobs.create(
                 slot, picture, hpos, vpos, int(MazeObjIds.HIDDENPOT), 0,
             )
-            set_cell_descriptor(state, slot, int(MazeObjIds.HIDDENPOT))
+            # 0x43CDA is only mob_create: the floor under the record stays as drawn.
+            set_cell_type(state, slot, int(MazeObjIds.HIDDENPOT))
             continue
         if not _CHALLENGE_GENERATOR_FIRST <= object_type <= _CHALLENGE_GENERATOR_LAST:
             continue
 
-        state.mobs.unlink_and_clear(slot)
-        replacement = (
-            int(MazeObjIds.EXIT)
-            if object_type == target_type
-            else int(MazeObjIds.TILE_FLOOR)
+        from .playfield import pf_replace
+
+        pf_replace(                                    # 0x43CE6-0x43D08
+            state, slot,
+            int(MazeObjIds.EXIT) if object_type == target_type else int(MazeObjIds.TILE_FLOOR),
         )
-        if replacement == int(MazeObjIds.EXIT):
-            _place_one(state, slot, replacement)
-        set_cell_descriptor(state, slot, replacement)
 
 
 # ROM: part game:0x438AE | Trap-identity rotation block at 0x439B0-0x43A8E, with Python logical-maze synchronization.
@@ -1381,13 +1385,27 @@ def place_decoded_objects(state: GameState, maze: Maze) -> None:
     double-create slots 0-31 -- and row 0 has no mirror image, so it must not
     go through the mirroring path either.
     """
-    cells = sorted(
-        ((coords.pack_slot(row, col), object_type)
-         for (col, row), object_type in maze.data.items()
-         if row != 0),
-    )
-    for slot, object_type in cells:
-        maze_place_object(state, slot, object_type, 1)
+    writes = getattr(maze, "write_order", None)
+    if writes is None:                         # a maze built by a scenario or a test
+        cells = sorted(
+            ((coords.pack_slot(row, col), object_type)
+             for (col, row), object_type in maze.data.items()
+             if row != 0),
+        )
+        for slot, object_type in cells:
+            maze_place_object(state, slot, object_type, 1)
+        return
+
+    # A vertical run writes upward over cells already placed. Only the last write to a
+    # cell survives, but a food the run covers still spent its picture draw (0x46154).
+    last_write = {slot: index for index, (slot, _) in enumerate(writes)}
+    for index, (slot, object_type) in enumerate(writes):
+        if slot < FIRST_PLAYABLE_SLOT:
+            continue
+        if last_write[slot] == index:
+            maze_place_object(state, slot, object_type, 1)
+        elif object_type == int(MazeObjIds.FOOD_INVULN):
+            state.getrandom(_FOOD_INVULN_PICTURES_COUNT)
 
 
 # ROM: part game:0x43D8C | Scan mode -1 only: choose a player start and process losing starts; not the full multi-mode scanner.
@@ -1536,6 +1554,17 @@ def maze_load_pickup_config(state: GameState, maze: Maze) -> None:
     state.wrap_v = bool(state.level_flags_4 & LFLAG4_WRAP_V)
 
 
+# ROM: part game:0x44DB4 | The start screen's 0x45216-0x4521C: the next maze's header flags and their draws, before the splash's.
+def load_start_screen_pickup_config(state: GameState) -> None:
+    """The level's flags are drawn before the splash, which reads them and draws too."""
+    try:
+        decoded = decode_maze(state.mazenum_current)
+    except MazeError:
+        return
+    maze_load_pickup_config(state, decoded)
+    state.pickup_config_maze = state.mazenum_current
+
+
 # ---------------------------------------------------------------------------
 # load_level -- the public entry point
 # ---------------------------------------------------------------------------
@@ -1596,13 +1625,18 @@ def _setup_decoded_level(
     state.thief_level_setup_done = False
     from .subsystems.maze_objects import select_forcefield_delay_profile
     select_forcefield_delay_profile(state)
-    state.level_treasures = 0            # fresh level: reset the bonus tally count
     state.special_bonus_score = 100      # 0x44166, ordinary score-bag value
     state.random_pickups_setup_done = False
 
     state.mazenum_current = mazenum
 
-    maze_load_pickup_config(state, maze)
+    if state.pickup_config_maze == mazenum:
+        state.pickup_config_maze = -1        # the start screen already ran it, 0x4521C
+    else:
+        maze_load_pickup_config(state, maze)
+    # 0x438E4: the countdown is armed the first time the cabinet reaches level 6.
+    if level_number == 6:
+        state.level_next_treasure = state.getrandom(3) + 3
 
     # Decode cursor never emits row 0 (doc/04 sec 5.3) -- populate the
     # decoded tokens first, then stamp the reserved row separately, exactly
@@ -1610,13 +1644,11 @@ def _setup_decoded_level(
     # maze_setupnew calls maze_place_object(0, 2, 0x20)").
     place_decoded_objects(state, maze)
     maze_place_object(state, 0, MazeObjIds.WALL_REGULAR, FIRST_PLAYABLE_SLOT)
+    _mark_late_destructible_walls(state, int(maze.wallpattern))
     # Logical maze data remains useful to gameplay/catalog code. The display
     # bridge commits its random texture decisions once into hardware-shaped
     # descriptor RAM; rendering never treats this dictionary as pixels.
     state.maze = mirror_maze(state, maze)
-    select_player_start_slot(state)              # maze_scan_objects(-1), 0x4395E
-    from .subsystems.camera import scroll_to_slot
-    scroll_to_slot(state, state.maze_player_start_slot)  # 0x43974
     from .subsystems.maze_objects import (
         forcefield_segments_setup, maze_forcefield_setup,
     )
@@ -1624,8 +1656,14 @@ def _setup_decoded_level(
     if state.level_flags_3 & 0x08:
         maze_forcefield_setup(state)
     initialize_playfield_ram(state, state.maze)
+    maze_special_floor(state)
     from .subsystems.maze_objects import maze_doors_setup
     maze_doors_setup(state)
+    # The start cell's draw comes after every floor and wall draw of maze_setupnew,
+    # so taking it earlier gives each cell the art of the one before.
+    select_player_start_slot(state)              # maze_scan_objects(-1), 0x4395E
+    from .subsystems.camera import scroll_to_slot
+    scroll_to_slot(state, state.maze_player_start_slot)  # 0x43974
     postdecode_level_setup(state)                        # 0x439B0-0x43B5A
     # The ROM scans existing exits before its secret-maze transformation, so
     # generated challenge exits are deliberately absent from the position table.
@@ -1651,6 +1689,30 @@ def _mark_level_setup_overrun(state: GameState) -> None:
     """
     state.vblank_semaphore = 1
     state.frame_overflow = FRAME_OVERFLOW_SET
+
+
+# ROM: part game:0x45E40 | The 0x8003 arm of the wall markers at 0x46012-0x4603A; the mirrored decode write 0x4643C is the same rule.
+def _mark_late_destructible_walls(state: GameState, wallpattern: int) -> None:
+    """Patterns 6 and 11 give destructible walls a marker the drawing passes skip.
+
+    Floors and walls connect only to picture 0x8000, so while these hold 0x8003 nothing
+    draws as joined to them, though the wall pass still draws them. ``maze_special_floor``
+    makes them ordinary walls afterwards.
+    """
+    if wallpattern not in _LATE_WALL_PATTERNS:
+        return
+    for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link)):
+        if state.mobs.obj_type(slot) == int(MazeObjIds.WALL_DESTRUCTABLE):
+            state.mobs.picture[slot] = LATE_WALL_MARKER_PICTURE
+
+
+# ROM: direct game:0x5E868 | Turns the 0x8003 markers back into 0x8000 once floors and walls are drawn; its caller's pattern gate is 0x44C52-0x44C66, and no other pattern has a marker to change.
+def maze_special_floor(state: GameState) -> None:
+    """0x5E868 -- the destructible walls of patterns 6 and 11 become plain markers."""
+    pictures = state.mobs.picture
+    for slot, picture in enumerate(pictures):
+        if picture == LATE_WALL_MARKER_PICTURE:
+            pictures[slot] = WALL_MARKER_PICTURE
 
 
 # ROM: part game:0x438AE | Final managed-slot picture clear at 0x43D16-0x43D7E.

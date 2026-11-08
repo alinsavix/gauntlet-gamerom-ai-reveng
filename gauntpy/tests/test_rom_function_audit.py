@@ -31,7 +31,6 @@ OMITTED = {
     0x5554E, 0x555C4, 0x5F644,
     0x449CC, 0x5317C,
     0x45BE8, 0x5FD58, 0x5FD64, 0x5FD6A,
-    0x5E868,
 }
 
 
@@ -68,7 +67,7 @@ def test_every_callable_has_exactly_one_audit_class():
     assert not (MISSING & OMITTED)
     assert not (PARTIAL & OMITTED)
     assert exceptions <= inventory
-    assert len(inventory - exceptions) == 272
+    assert len(inventory - exceptions) == 273
 
 
 def test_crosswalk_matches_the_callable_inventory_and_class_totals():
@@ -82,9 +81,9 @@ def test_crosswalk_matches_the_callable_inventory_and_class_totals():
         status: sum(row["status"] == status for row in rows)
         for status in {"complete", "partial", "unnecessary", "missing_gameplay"}
     } == {
-        "complete": 272,
+        "complete": 273,
         "partial": 0,
-        "unnecessary": 50,
+        "unnecessary": 49,
         "missing_gameplay": 0,
     }
 

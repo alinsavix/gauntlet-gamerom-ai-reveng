@@ -12,6 +12,7 @@ from gauntpy.render import text as text_renderer
 from gauntpy import assets
 from gauntpy.render.alpha import draw_alpha_layer
 from gauntpy.render.framebuffer import Framebuffer
+from gauntpy.game import romtext
 from gauntpy.game.state import GameState
 from gauntpy.game.subsystems import score
 from gauntpy.game.subsystems.display import (
@@ -139,11 +140,12 @@ def test_setup_infopanel_writes_complete_rom_words_to_alpha_ram():
             for word in state.alpha_ram[
                 score_start:score_start + score.SCORE_DIGITS
             ]
-        ).strip() == ""
+        ).strip() == "0", "0x45940 draws every player's score, joined or not"
 
 
-def test_setup_infopanel_makes_the_entire_status_column_opaque():
+def test_the_status_column_stays_opaque_after_maze_hide_and_setup_infopanel():
     state = GameState()
+    score.maze_hide(state)                 # the rows between blocks are only ever written here
     setup_infopanel(state, -1)
 
     assert all(
@@ -204,11 +206,14 @@ def test_inventory_writer_stamps_complete_rom_power_icon_words():
         word if state.players[2].powers & (1 << bit) else 0x8000
         for bit, word in enumerate(score.POWER_ICON_WORDS)
     ]
-    assert score.POWER_ICON_COLUMNS == (40, 39, 32, 31, 30, 29)
+    assert score.POWER_ICON_COLUMNS == (41, 40, 33, 32, 31, 30), "0x45B8C steps past column 29"
+    assert state.alpha_ram[row * score.ALPHA_ROW_STRIDE + 29] == 0x8000
 
 
-def test_removed_player_rebuild_clears_every_stale_panel_content_cell():
+def test_a_removed_player_still_gets_the_whole_panel_block():
+    """0x45476-0x45522 has no arm for status 0, as attract's four panels show."""
     state = GameState()
+    state.game_mode = 0
     player_index = 1
     base_row = player_index * score.PLAYER_BLOCK_STRIDE + score.PLAYER_NAME_ROW
     for row in range(base_row, base_row + score.PLAYER_BLOCK_ROWS):
@@ -225,12 +230,10 @@ def test_removed_player_rebuild_clears_every_stale_panel_content_cell():
     ]
     assert 0x9BAD not in block
     assert not set(score.POWER_ICON_WORDS) & set(block)
-    assert all(
-        state.alpha_ram[
-            base_row * score.ALPHA_ROW_STRIDE + column
-        ] & 0x3FF == score.ALPHA_SPACE_GLYPH
-        for column in range(score.PANEL_COLUMN, score.PANEL_LAST_COLUMN + 1)
-    )
+    glyphs = romtext.CHARACTER_HUD_GLYPHS[int(state.players[player_index].character) & 3]
+    name = base_row * score.ALPHA_ROW_STRIDE + score.PLAYER_NAME_COLUMN
+    assert [word & 0x3FF for word in state.alpha_ram[name:name + len(glyphs)]] == list(glyphs)
+
 
 
 def test_generic_renderer_observes_opaque_bank_palette_and_glyph(monkeypatch):

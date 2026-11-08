@@ -288,6 +288,7 @@ def walk(state: GameState, onward=(), scenario: str = "plain", frames: int = 200
                     hero.mob_slot = new
                     for slot in (old, new):
                         _copy_slot(machine, state, slot)
+                    machine.load_depth_chain(state.mobs)
                     machine.w16(0x9048C8, new)
         if scenario == "moving" and onward and frame > 70 and frame % 10 == 0 \
                 and not state.thief_mode & thief.THIEF_ESCAPE:
@@ -302,6 +303,7 @@ def walk(state: GameState, onward=(), scenario: str = "plain", frames: int = 200
                 hero.mob_slot = new
                 for slot in (old, new):
                     _copy_slot(machine, state, slot)
+                machine.load_depth_chain(state.mobs)
                 machine.w16(0x9048C8, new)
         machine.call(0x4E8DC, count=2_000_000)
         if not machine.halted:

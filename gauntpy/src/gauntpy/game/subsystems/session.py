@@ -7,12 +7,15 @@ Reference: ``doc/04_game_subsystems.md`` §10.1, §22, §6.4;
 from __future__ import annotations
 
 from .. import romtext
+from ..alpha_memory import write_alpha_word
 from ..constants import SLOT_SHOT_EXPLOSIONS, Character, GameMode, PlayerStatus
 from ..state import NUM_PLAYERS, GameState
 from .display import (
-    clear_alpha_visible, write_alpha_glyphs, write_alpha_large_text,
+    write_alpha_glyphs, write_alpha_large_text,
 )
-from .player_lifecycle import player_join_finalize, player_start_inner, setup_infopanel
+from .player_lifecycle import (
+    player_join_finalize, player_start_inner, setup_infopanel, show_continue_prompt,
+)
 
 # ---------------------------------------------------------------------------
 # Health added per coin for an active player, indexed by game_settings & 0x1F.
@@ -33,17 +36,23 @@ _HEALTH_PER_COIN_TABLE: list[int] = [
 # doc/05_data_reference.md's "character announcement speech IDs" label misses.
 _COIN_SLOT_SOUND: list[int] = [0x22, 0x23, 0x24, 0x25]
 
+_CHARACTER_SELECT_CORNERS = (
+    (13, 25, 0x841C), (14, 25, 0x841D), (11, 26, 0x841C), (16, 26, 0x841D),
+    (11, 27, 0x841E), (16, 27, 0x841F), (13, 28, 0x841E), (14, 28, 0x841F),
+)
+
 
 # ROM: part game:0x44204 | Extracted portrait-name/instruction drawing portion of start_attract_to_game.
 def _write_character_select_alpha(state: GameState) -> None:
     """start_attract_to_game's portrait names and ROM instruction chain."""
-    clear_alpha_visible(state)
-    setup_infopanel(state, -1)
     positions = ((12, 24), (5, 26), (12, 29), (18, 26))  # ROM 0x570B4/0x570B8
     for klass, (column, row) in enumerate(positions):
         write_alpha_glyphs(
             state, column, row, romtext.CHARACTER_HUD_GLYPHS[klass], 0x8000,
         )
+    # The corners around the portraits (0x442F6-0x4432A, tables 0x570BC-0x570DC).
+    for column, row, word in _CHARACTER_SELECT_CORNERS:
+        write_alpha_word(state, row * 64 + column, word)
     for text, column, row in romtext.CHARACTER_SELECT_LINES:
         write_alpha_large_text(state, column, row, text, 0x8C00)
 
@@ -129,13 +138,14 @@ def start_attract_to_game(state: GameState) -> None:
     state.mugger_item_carried = 0       # 0x44286-0x4428E
     state.mugger_item_nextlevel = 0
     sound_play(state, 0x02)             # 0x4429A session-start sting
-    # The ROM calls show_level_start_screen here; this merged host path writes
-    # character select directly, but retains the screen routine's mixer command.
-    sound_play(state, 0xD7)             # 0x442AC -> 0x44F68-0x44F6E
+    from .level_transitions import show_level_start_screen
+    from .score import maze_hide
+
+    maze_hide(state)                    # 0x442A6
+    show_level_start_screen(state)      # 0x442AC
     state.global_delay_timer = 0               # 0x44366 global_delay_timer
     state.bonus_amount = 0
     state.treasure_timer = 0
-    state.level_treasures = 0
     state.player_treascount = [0] * NUM_PLAYERS
     state.welcome_elapsed_frames = 0       # fresh session setup, 0x48692
     state.attract_timer = 0xFFFF        # 0x4436C: the attract machine stands down
@@ -143,6 +153,9 @@ def start_attract_to_game(state: GameState) -> None:
     from .exits import exit_scan_level
     if maze.reset_and_load_level(state, 1):   # level 1 = maze 0 (I-08 spawn target)
         exit_scan_level(state)                # maze_new_level_setup exit table
+        from .secret_rooms import secret_new_level_setup
+
+        secret_new_level_setup(state)         # 0x43916-0x4395C
     _write_character_select_alpha(state)      # 0x442BC-0x44346
 
 
@@ -270,6 +283,11 @@ def coincheck(state: GameState) -> None:
                 setup_infopanel(state, i)                # 0x42CA4
             sound_play(state, _COIN_SLOT_SOUND[i & 3])   # 0x42CB6
         else:
+            # A coin for a hero entering initials ends the entry first, and the
+            # continue prompt's own gates now see that hero as gone (0x42CCA-0x42CDE).
+            if player.status == int(PlayerStatus.DYING):
+                player.status = int(PlayerStatus.REMOVED)
+                show_continue_prompt(state)
             # New player joining: player_coindrop (0x488CA) sets the
             # starting health, credits one coin, and enters character select.
             if state.credits > 0:
@@ -337,6 +355,106 @@ def _cancel_solo_only_trick(state: GameState) -> None:
         return
     if state.level_players_active == 1:
         state.secret_trick_id = TRICK_NONE
+
+
+# ROM: part game:0x4800C | Which Magic presses count, 0x4841A-0x484A4.
+def _press_is_accepted(state: GameState, player_index: int) -> bool:
+    player = state.players[player_index]
+    selecting = player.status == int(PlayerStatus.SELECTING)
+    coins_needed = ((state.game_settings & 0x300) >> 8) + 1
+    if (
+        player.health
+        and (player.coin_count & 0xFFFF) >= coins_needed
+        and selecting
+        and state.game_mode >= 0
+    ):
+        return True
+    if not state.two_player_mode:
+        return selecting or not player.status or state.game_mode < 0
+    return False
+
+
+# ROM: part game:0x4800C | A hero entering a loaded level by way of player_join, or player_join_finalize in a secret room (0x485A8-0x485C2, 0x4869A-0x486B4). A level loaded by no one, as in a ROM-free front end, still counts the hero.
+def _enter_the_level(state: GameState, player_index: int) -> None:
+    player = state.players[player_index]
+    player.character = state.pending_character[player_index]
+    if state.mazenum_current >= 0x73:
+        player_join_finalize(state, player_index)
+        return
+    placed = player_start_inner(state, player_index)
+    if placed != -1 and state.maze is None:
+        state.level_players_active += 1
+        placed = -1
+    if placed == -1:
+        player_join_finalize(state, player_index)
+
+
+# ROM: part game:0x4800C | The reload both first-hero arms share: 0x4853C-0x48576 and 0x4861E-0x48656.
+def _reload_the_level(state: GameState) -> None:
+    from .. import maze
+    from .secret_rooms import secret_new_level_setup
+
+    if state.level_next_potion == 3:
+        state.level_next_potion = 0
+    if maze.reset_and_load_level(
+        state, state.levelnum_current, maze_number=state.mazenum_current,
+    ):
+        secret_new_level_setup(state)                  # 0x43916-0x4395C
+    # These arms have no thief_setup (0x4835E), so main_start_thief must not run one.
+    state.thief_level_setup_done = True
+
+
+# ROM: part game:0x4800C | The first hero of a level with the reload: a continue (0x48512-0x4859C) or free play (0x48612-0x48692).
+def _first_hero_reloads_the_level(
+    state: GameState, player_index: int, *, enable_pickups: bool,
+) -> None:
+    from ..maze import maze_addrandompickups
+    from .display import maze_show
+    from .level_transitions import update_monster_spawn_bonus_from_score_per_coin
+
+    _reload_the_level(state)
+    _enter_the_level(state, player_index)
+    update_monster_spawn_bonus_from_score_per_coin(state)
+    maze_addrandompickups(state, enable_pickups)
+    maze_show(state)
+    state.welcome_elapsed_frames = 0
+
+
+# ROM: part game:0x4800C | A Magic press once it counts, 0x484A8-0x486E2: every arm of the start, join and continue decision.
+def _handle_start_press(state: GameState, player_index: int) -> None:
+    from .display import maze_show
+    from .sound import sound_play
+
+    player = state.players[player_index]
+    free_play = not state.two_player_mode
+    if free_play and state.game_mode < 0:              # 0x484A8-0x484CA
+        start_attract_to_game(state)
+        player_coindrop(state, player_index)
+        return
+    if player.status != int(PlayerStatus.SELECTING):   # 0x484FE, 0x485EA, 0x486D4
+        player_coindrop(state, player_index)
+        return
+    if state.global_delay_timer:                       # 0x486DC: the splash is still up
+        player.character = state.pending_character[player_index]
+        player_join_finalize(state, player_index)
+        return
+    if state.level_players_active:                     # 0x48508, 0x485F4
+        _enter_the_level(state, player_index)
+        return
+    attract_timer = state.attract_timer & 0xFFFF
+    if state.game_mode == 0 and attract_timer < 0x8000:   # 0x484D4-0x484E4: a continue
+        setup_infopanel(state, -1)                     # 0x48524
+        sound_play(state, 0x3C)                        # 0x4852A-0x48530
+        _first_hero_reloads_the_level(state, player_index, enable_pickups=False)
+    elif free_play and state.game_mode >= 0:           # 0x485FE-0x4860E
+        _first_hero_reloads_the_level(state, player_index, enable_pickups=True)
+    else:                                              # 0x4867E: a new game's level is loaded
+        _enter_the_level(state, player_index)
+        maze_show(state)                               # 0x4526A
+        state.welcome_elapsed_frames = 0               # 0x48692
+        # Nothing on this path adds pickups or schedules a thief.
+        state.random_pickups_setup_done = True
+        state.thief_level_setup_done = True
 
 
 # ROM: direct game:0x4800C | Game start/join/transition boundary; extracted helpers and ROM-less join fallback do not create additional ROM entries.
@@ -416,58 +534,5 @@ def main_start_game(state: GameState) -> None:
                 _finish_level_end(state)
 
     for i in range(NUM_PLAYERS):
-        if not _magic_press_edge(state, i):
-            continue
-
-        player = state.players[i]
-
-        if player.status == PlayerStatus.SELECTING:
-            from .display import clear_alpha_visible
-
-            initial_selection = not any(
-                other.status == PlayerStatus.ALIVE_HERE
-                for index, other in enumerate(state.players)
-                if index != i
-            )
-            # Commit character selection and starting health.
-            player.character = state.pending_character[i]
-
-            # Full join (I-08): place the hero MOB into the maze when one is
-            # loaded, then finalize (ALIVE_HERE + join speech / HUD redraw).
-            # player_start_inner returns -1 and counts the player itself when it
-            # finds a spawn tile. A loaded-maze failure must remain SELECTING;
-            # finalizing it would create an active player with MOB slot zero.
-            # ROM-free/front-end-only harnesses have no world and keep the old
-            # status-only behavior.
-            placed = player_start_inner(state, i)
-            joined = placed == -1
-            if not joined and state.maze is None:
-                # ROM-free/front-end-only harness: there is no world to place.
-                joined = True
-                state.level_players_active += 1
-            if not joined:
-                continue
-            player_join_finalize(state, i)
-            if initial_selection:
-                from ..maze import maze_addrandompickups
-                from .level_transitions import (
-                    update_monster_spawn_bonus_from_score_per_coin,
-                )
-
-                update_monster_spawn_bonus_from_score_per_coin(state)
-                if not state.random_pickups_setup_done:
-                    maze_addrandompickups(state, True)          # 0x48672
-                clear_alpha_visible(state)
-                setup_infopanel(state, -1)
-
-            # Tricks 0x0F-0x11 need somebody else to be pushy with, to be IT
-            # against, or to avoid hurting, so a solo cabinet cancels them
-            # (0x48294-0x482B2).
-            _cancel_solo_only_trick(state)
-
-        elif state.game_mode < 0 and state.two_player_mode == 0:
-            # Free-play path: Magic press in attract starts the session and
-            # credits the pressing player straight into character select
-            # (0x484B8 start_attract_to_game, then 0x484BE player_coindrop).
-            start_attract_to_game(state)
-            player_coindrop(state, i)
+        if _magic_press_edge(state, i) and _press_is_accepted(state, i):
+            _handle_start_press(state, i)

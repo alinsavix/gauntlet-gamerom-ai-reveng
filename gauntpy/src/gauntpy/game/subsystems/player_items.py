@@ -222,9 +222,7 @@ def _treasure_collected(state: GameState, player_index: int) -> None:
     ``player_treascount`` (0x904A50) is the treasure factor of the per-player
     level-end bonus (0x4D57E), so a pickup has to name its collector rather than
     only bumping the level total.  WP-15 owns that counter and exposes
-    ``secret_rooms.treasure_collected`` as its single write site; that routine raises
-    ``player_treascount[p]`` *and* ``level_treasures``, which is why this arm no
-    longer touches the total itself.
+    ``secret_rooms.treasure_collected`` as its single write site.
 
     Function-local import for the same reason ``player_exit_sequence`` uses one:
     exits.py re-enters this module for the post-transition respawn.
@@ -551,9 +549,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
     # ── Treasure ──────────────────────────────────────────────────────────────
     # Each treasure collected is credited to its collector through WP-15's
     # ``treasure_collected`` (the ROM's write site at 0x519F0-0x519F8), which
-    # bumps ``player_treascount`` *and* the level total ``level_treasures``.
-    # This arm must not touch ``level_treasures`` itself or the total would be
-    # double-counted and the bonus screen would pay for phantom treasure.
+    # bumps ``player_treascount``.
     #
     # Type 0x2E enters at 0x519C2 and shows no popup. Treasure rooms (mazes
     # 0x68-0x72) branch from 0x51A12 straight to the shared tail at 0x51E36:

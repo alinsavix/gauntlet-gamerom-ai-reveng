@@ -24,9 +24,9 @@ set.
 
 | Classification | Entries |
 |---|---:|
-| Complete Python equivalent, including merged helpers | 272 |
+| Complete Python equivalent, including merged helpers | 273 |
 | Partial Python equivalent | 0 |
-| Intentionally omitted platform/ABI/dead entry | 50 |
+| Intentionally omitted platform/ABI/dead entry | 49 |
 | Missing game behavior | 0 |
 | **Total** | **322** |
 
@@ -96,18 +96,15 @@ These entries do not represent missing live game logic in the Python model.
 | Unreferenced duplicate/legacy bodies | 3 | `0x5554E name_entry_step_char_copy`<br>`0x555C4 name_entry_draw_char_copy`<br>`0x5F644 refresh_tile_visual_legacy` |
 | Operator/no-op hooks | 2 | `0x449CC attract_noop_hook`<br>`0x5317C game_options_display` |
 | C-runtime primitives | 4 | `0x45BE8 string_length`<br>`0x5FD58 memclear`<br>`0x5FD64 memclear_core`<br>`0x5FD6A copy_longwords` |
-| Obviated representation conversion | 1 | `0x5E868 maze_special_floor` |
 
 The Slapstic rows are platform boundaries because gauntpy obtains decoded maze
 records through gex rather than emulating the bank-switch device. The ABI rows
-share behavior with a separately ported Python body. The `0x5E868` conversion
-is unnecessary because gauntpy never creates the ROM's intermediate `0x8003`
-marker representation.
+share behavior with a separately ported Python body.
 
 ## Complete set
 
-The **complete set is the 272 entries in the source inventory after subtracting
-the 50 addresses in the intentionally omitted table
+The **complete set is the 273 entries in the source inventory after subtracting
+the 49 addresses in the intentionally omitted table
 above**. This definition is machine-checked by
 `tests/test_rom_function_audit.py`, so every inventory entry belongs to exactly
 one category and additions cannot silently inherit “complete” status.

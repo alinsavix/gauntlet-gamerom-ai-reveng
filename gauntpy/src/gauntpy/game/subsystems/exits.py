@@ -197,7 +197,13 @@ def maze_pick_one_exit(state: GameState) -> None:
     if not state.level_flags_3 & _LFLAG3_EXIT_PICK_MASK:  # 0x43B6A
         return
 
-    count = len(state.exit_slots)
+    # The scanner walks the records (0x43DA6-0x43DD8), not exit_slot_list, whose 32
+    # entries maze 52's 201 exits overflow.
+    exits = [
+        slot for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link))
+        if state.mobs.obj_type(slot) == int(MazeObjIds.EXIT)
+    ]
+    count = len(exits)
     if count == 0:                                        # 0x43DFA-0x43DFE
         return
     if count == 1:                                        # 0x43ED4-0x43EE8
@@ -205,9 +211,9 @@ def maze_pick_one_exit(state: GameState) -> None:
         return
 
     chosen = state.getrandom(count)                       # 0x43E2E
-    state.exit_open_id = state.exit_slots[chosen]         # 0x43E8C
+    state.exit_open_id = exits[chosen]                    # 0x43E8C
     fake_exits = state.level_flags_4 & _LFLAG4_EXIT_FAKE  # 0x43E98
-    for index, slot in enumerate(state.exit_slots):
+    for index, slot in enumerate(exits):
         if index == chosen:
             continue
         if fake_exits:

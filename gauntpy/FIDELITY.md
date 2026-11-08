@@ -562,6 +562,15 @@ implementation specification.
      when gauntpy holds only one. `games_played_counter` is modelled, because
      it resets the high scores.
 
+112. **A matching seed does not prove a matching level.** Level setup's draws can swap with no
+     change in their number, so the final seed agrees while every cell has the wrong art. The
+     order is the ROM's: the header's mirror draw, the splash, the level-6 countdown, the decode,
+     floors, walls, then the start cell. `tools/level_load_check.py` compares the playfield too.
+
+113. **The first hero to press decides the level, not just the join.** A continue or free play
+     reloads the level, a paid new game does not, and neither runs `thief_setup`. See
+     `session._handle_start_press`, which follows 0x484A8-0x486E2 arm by arm.
+
 ## Investigation workflow
 
 1. Reproduce the reported behavior with the smallest deterministic scenario.

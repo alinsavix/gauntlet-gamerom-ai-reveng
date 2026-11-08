@@ -42,6 +42,9 @@ from gauntpy.game.playfield_vram import (
     write_tile_descriptor,
 )
 from gauntpy.game.rng import GameRandom
+import pytest
+
+from gauntpy.game.maze import reset_and_load_level
 from gauntpy.game.state import GameState
 from gauntpy.game.subsystems.exits import (
     _EXIT_ANIM_SETTLE,
@@ -468,6 +471,9 @@ class TestTreasureScheduling:
         state.levelnum_current = 6
         state.level_next_treasure = 0
         show_level_start_screen(state)
+        assert state.level_next_treasure == 0, "not until setup"
+        if not reset_and_load_level(state, 6, maze_number=5):
+            pytest.skip("maze ROMs not available")
         assert 3 <= state.level_next_treasure <= 5
 
     def test_countdown_zero_hijacks_the_level_into_a_treasure_room(self):
@@ -1072,7 +1078,9 @@ class TestLevelEndHold:
             state, (29 - len(second)) // 2, 16, len(second),
         ) == second
 
-    def test_level_flag_notices_share_the_rom_speech_latch(self):
+    def test_level_flag_notices_share_the_rom_speech_latch(self, monkeypatch):
+        # These flags are the point of the test, so keep the header's off them.
+        monkeypatch.setattr("gauntpy.game.maze.load_start_screen_pickup_config", lambda state: None)
         state = GameState(
             levelnum_current=7,
             mazenum_current=26,
@@ -1101,7 +1109,9 @@ class TestLevelEndHold:
         assert state.sound_log == [0xD7, 0x8C]
         assert state.rng.bounds == [4, 9]
 
-    def test_trap_wall_notice_has_its_quarter_chance_speech(self):
+    def test_trap_wall_notice_has_its_quarter_chance_speech(self, monkeypatch):
+        # These flags are the point of the test, so keep the header's off them.
+        monkeypatch.setattr("gauntpy.game.maze.load_start_screen_pickup_config", lambda state: None)
         state = GameState(
             levelnum_current=2,
             mazenum_current=1,
@@ -1153,13 +1163,12 @@ class TestBonusTally:
     """``100 x player_activecount x player_coincount[p] x player_treascount[p]``."""
 
     def test_treasure_collected_credits_the_picker_and_the_level(self):
-        """0x519F8 bumps player_treascount; the level total feeds the display."""
+        """0x519F8 bumps player_treascount."""
         state = GameState()
         treasure_collected(state, 2)
         treasure_collected(state, 2)
         treasure_collected(state, 0)
         assert state.player_treascount == [1, 0, 2, 0]
-        assert state.level_treasures == 3
 
     def test_one_pickup_is_one_bump_for_every_matching_code(self):
         """0x519C2/0x519CE/0x519DA are three compares over one ``addq.b #1`` at
@@ -1174,7 +1183,6 @@ class TestBonusTally:
             treasure_collected(state, 1)
             assert state.secret_tricks_flags[1] == 1, hex(code)
             assert state.player_treascount[1] == 1, hex(code)
-            assert state.level_treasures == 1, hex(code)
             assert state.secret_tricks_flags == [0, 1, 0, 0], "only the picker"
 
     def test_a_pickup_credits_nothing_when_no_code_matches(self):
@@ -1233,16 +1241,6 @@ class TestBonusTally:
         show_level_end_bonus_screen(state)
         assert state.players[1].score == 0
 
-    def test_unattributed_treasures_go_to_the_first_exiter(self):
-        """A pickup routed through the level total instead of
-        ``treasure_collected`` still pays out, on the pre-counter rule."""
-        state = GameState()
-        state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
-        state.players[0].coin_count = 1
-        state.level_treasures = 5                  # nobody claimed them
-        show_level_end_bonus_screen(state)
-        assert state.players[0].score == 100 * 1 * 1 * 5
-
     def test_no_treasures_is_no_bonus(self):
         state = GameState()
         state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
@@ -1251,15 +1249,14 @@ class TestBonusTally:
         assert state.bonus_amount == 0
         assert state.players[0].score == 0
 
-    def test_coin_factor_floors_at_one(self):
-        """Every player who joins is credited a coin (player_coindrop 0x48962),
-        so a hero placed directly by a test still tallies."""
+    def test_a_hero_with_no_coins_is_paid_nothing(self):
+        """0x4D578 has no floor: the coin factor is the word at 0x904B2A."""
         state = GameState()
         state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
         treasure_collected(state, 0)
         show_level_end_bonus_screen(state)
-        assert state.players[0].score == 100
-
+        assert state.players[0].score == 0
+        assert state.score_dirty[0] == 1, "0x4D5AA sets it regardless"
 
 # ---------------------------------------------------------------------------
 # Secret rooms (§10.6): the level's trick, who wins it, and the challenge room

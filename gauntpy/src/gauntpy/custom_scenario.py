@@ -431,6 +431,10 @@ def build_synthetic_state(scenario: SyntheticScenario) -> GameState:
     exit_scan_level(state)
     spawn_player(state, scenario.character)
     state.players[0].health = scenario.health
+    # A direct start has had no attract screen to leave the panel opaque.
+    from .game.subsystems.score import maze_hide
+
+    maze_hide(state)
     setup_infopanel(state, -1)
 
     runtime = SyntheticScenarioRuntime(scenario)

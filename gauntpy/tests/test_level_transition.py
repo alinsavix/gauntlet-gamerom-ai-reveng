@@ -331,6 +331,10 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
         from gauntpy.game import maze
 
         state = GameState()
+        # Attract left the panel opaque; nothing on this path writes the rows between blocks.
+        from gauntpy.game.subsystems.score import maze_hide
+
+        maze_hide(state)
         maze.load_level(state, 1)                       # level 1 = maze 0
         # Drop a hero in via the real spawn path.
         assert gp.player_start_inner(state, 0) == -1
@@ -386,13 +390,13 @@ class TestLevelEndBonus:
         p.mob_slot = 40
         state.mobs.create(40, tile=0, hpos=0, vpos=0, obj_type=int(MazeObjIds.TREASURE))
         gp.player_tile_interact(state, 40, 0)
-        assert state.level_treasures == 1
+        assert state.player_treascount[0] == 1
 
     def test_bonus_tally_and_phase(self):
         state = GameState()
         state.game_mode = GameMode.NORMAL
         state.levelnum_current, state.mazenum_current = 1, 0
-        state.level_treasures = 5
+        state.player_treascount[0] = 5
         state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
         state.players[0].coin_count = 1
         ex.compute_next_level(state, int(MazeObjIds.EXIT))
@@ -406,7 +410,6 @@ class TestLevelEndBonus:
         state = GameState()
         state.game_mode = GameMode.NORMAL
         state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
-        state.level_treasures = 0
         ex.show_level_end_bonus_screen(state)
         assert state.bonus_amount == 0
 

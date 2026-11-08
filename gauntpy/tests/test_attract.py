@@ -386,7 +386,8 @@ class TestDemoInit:
         state = GameState()
         start_attract_screen(state, int(GameMode.DEMO))
         assert state.game_mode == int(GameMode.DEMO)
-        assert state.mazenum_current == 102
+        assert state.maze is not None
+        assert state.mazenum_current == 0, "0x449FC selects maze 102 by bank alone"
         assert state.frame_counter == 0
 
     def test_demo_streams_loaded_from_rom(self):

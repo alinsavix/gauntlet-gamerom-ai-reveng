@@ -566,12 +566,12 @@ def _handle_wall(state: GameState, raw_target: int, slot: int,
         count = mobs.state_link[slot]
         state.movable_wall_hits[slot] = count & ~0x3FF
         if count >= _WALL_MOVE_DISSOLVE:
-            from ..maze import clear_cell_descriptor
+            from ..maze import set_cell_type
 
             state.movable_wall_hits.pop(slot, None)
             tport_cycle_start(state, slot, shooter_id)
-            mobs.unlink_and_clear(slot)
-            clear_cell_descriptor(state, slot)
+            mobs.unlink_and_clear(slot)                  # 0x4B490: the floor stays as drawn
+            set_cell_type(state, slot, int(MazeObjIds.TILE_FLOOR))
             return _consume(state, shooter_id)
     return _handle_generic_wall(state, raw_target, shooter_id)
 

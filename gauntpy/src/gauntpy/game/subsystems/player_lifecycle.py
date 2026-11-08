@@ -136,45 +136,25 @@ def setup_infopanel(state: GameState, player_selector: int) -> None:
     """
     from . import score
 
-    if player_selector < 0:
-        targets = range(NUM_PLAYERS)
-    elif player_selector < NUM_PLAYERS:
-        targets = range(player_selector, player_selector + 1)
-    else:
+    if player_selector >= NUM_PLAYERS:
         return
     if player_selector < 0:
-        score.maze_hide(state)
-        score.write_info_panel_header(state)
+        score.write_info_panel_header(state)             # 0x452F2-0x4537C
+        if not state.game_settings & 0x400 or state.game_mode < 0:   # 0x4537E-0x45396
+            score.write_pricing_lines(state)             # 0x4539A-0x4546A
+        targets = range(NUM_PLAYERS - 1, -1, -1)         # 0x4546E-0x45470
+    else:
+        targets = (player_selector,)
     for i in targets:
-        score.write_player_panel_background(state, i)
-        initials_entry = (
-            state.players[i].status == int(PlayerStatus.DYING)
-            and 0 <= state.players[i].highscore_rank < _HIGHSCORE_NO_RANK
-        )
-        if initials_entry:
-            score.clear_player_panel_content(state, i)
-            score.draw_player_initials_entry(state, i)
-        elif state.players[i].status == int(PlayerStatus.SECRET_NAME_ENTRY):
-            score.clear_player_panel_content(state, i)
-            score.write_secret_name_entry(state, i)
-        elif state.players[i].status != int(PlayerStatus.REMOVED):
-            score.write_player_panel_static(state, i)
-            score.draw_player_score(state, i)     # 0x45940
-            score.draw_player_health(state, i)    # 0x459A2
-            player_inv_update(state, i)            # 0x45522
+        # Every player gets the whole block, joined or not (0x45476-0x45522).
+        score.write_player_panel_static(state, i)
+        score.draw_player_score(state, i)                # 0x45940
+        score.draw_player_health(state, i)               # 0x459A2
+        player_inv_update(state, i)                      # 0x45ACA
+        if state.players[i].status == int(PlayerStatus.DYING):   # 0x45530
+            score.draw_player_initials_entry(state, i)   # 0x4A2CA
         else:
-            score.clear_player_panel_content(state, i)
-            field = score.info_panel(state).players[i]
-            field.score = state.players[i].score
-            field.score_attr = score.PLAYER_TEXT_PALETTE_WORDS[i]
-            field.score_drawn = True
-            field.health = state.players[i].health
-            field.health_attr = score.PLAYER_TEXT_PALETTE_WORDS[i]
-            field.health_drawn = True
-            field.bonusmult = state.players[i].bonusmult
-        if not initials_entry and state.players[i].status != int(PlayerStatus.SECRET_NAME_ENTRY):
             score.write_player_panel_status(state, i)
-    score.write_it_labels(state)
 
 
 # ROM: direct game:0x48754 | Welcome lead-in, elapsed-frame gate, character phrase and timer reload boundary.

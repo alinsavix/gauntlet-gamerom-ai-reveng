@@ -577,7 +577,10 @@ def test_front_end_character_commit_uses_the_selected_hero_picture():
         start, tile=0x1E0D, hpos=encode_hpos(x), vpos=encode_vpos_at_y(y),
         obj_type=MazeObjIds.PLAYERSTART,
     )
+    state.attract_timer = 0xFFFF
     state.players[1].status = PlayerStatus.SELECTING
+    state.players[1].health = 1234
+    state.players[1].coin_count = 1
     state.pending_character[1] = Character.WIZARD
     state.debounce_shift_magic[1] = 0x1C
 

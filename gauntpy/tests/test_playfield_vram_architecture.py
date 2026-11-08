@@ -621,6 +621,7 @@ def test_initial_floor_rng_mapping_is_column_outer_row_inner(monkeypatch):
     initialize_playfield_ram(state, maze)
 
     assert state.rng.calls == 1024
-    for col, row in ((0, 0), (0, 1), (0, 2), (1, 0), (7, 3), (31, 30)):
+    # Row zero joins every neighbour (0x5EA6A), and its cells are walls drawn over anyway.
+    for col, row in ((0, 1), (0, 2), (1, 1), (7, 3), (31, 29)):
         descriptor = read_tile_descriptor(state, (row << 5) | col)
         assert descriptor == (row & 3,) * 4

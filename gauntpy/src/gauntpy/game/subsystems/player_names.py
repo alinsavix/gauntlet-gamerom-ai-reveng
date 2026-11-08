@@ -235,8 +235,9 @@ def highscore_check(state: GameState, player_index: int) -> None:
         player.state_timer = _NAME_ENTRY_TIMEOUT             # 0x49D88
         player.name_entry_velocity = 0                       # 0x49D98
         player.initials_cursor = 0                           # 0x49D9C
-        player.initials = [_NAME_ENTRY_FIRST_LETTER] * _NAME_ENTRY_LENGTH
+        # The initials stay as this slot last left them: only boot sets them (0x49CEE).
         player.status = int(PlayerStatus.DYING)              # 0x49DA6
+        state.games_played_counter = min(state.games_played_counter, 0x708)   # 0x49DAC-0x49DB6
     else:
         player.state_timer = _GAME_OVER_TIMEOUT              # 0x49DCA
 

@@ -167,7 +167,8 @@ def secret_trick_check(state: GameState, player_index: int) -> None:
     if trick == TRICK_SAVESUPERSHOTS:                            # 0x52B9C
         won = state.players[player_index].supershot >= _SAVESUPERSHOTS_TARGET
     elif trick in (TRICK_WATCHSHOOT1, TRICK_WATCHSHOOT2):        # 0x52BB4
-        won = progress > 1
+        # bgt at 0x52BCA is signed, and a hero who has joined holds 0xFF (0x48EDC).
+        won = (progress if progress < 0x80 else progress - 0x100) > 1
     elif trick == TRICK_NOUSEINVUL:                              # 0x52BCE
         won = progress == 1
     elif trick in (TRICK_NOGETHIT, TRICK_DIET):                  # 0x52BE0: 9, 0x0D
@@ -184,7 +185,7 @@ def secret_trick_check(state: GameState, player_index: int) -> None:
         won = False
 
     if won:
-        state.secret_player = player_index                       # 0x52C46
+        state.secret_player = state.current_player               # 0x52C46
 
 
 # ROM: direct game:0x486FE | Adaptive secret-room availability pacing and previous-maze recording.
@@ -410,10 +411,13 @@ def _secret_room_payout(state: GameState, completed: bool) -> bool:
                 and player.status in (int(PlayerStatus.ALIVE_NEXT),
                                       int(PlayerStatus.RESPAWN_WAIT))):
             open_name_entry = True
-            bonus = _SECRET_ROOM_BONUS * max(1, player.coin_count)   # 0x4D778
+            bonus = _SECRET_ROOM_BONUS * (player.coin_count & 0xFFFF)  # 0x4D778
             player.score += bonus                                # 0x4D788
             state.bonus_amount = bonus
-        player.status = int(PlayerStatus.ALIVE_NEXT)             # 0x4D85C
+        if player.status in (int(PlayerStatus.ALIVE_HERE), int(PlayerStatus.RESPAWN_WAIT)):
+            from .treasure_rooms import _hero_leaves_for_the_tally
+
+            _hero_leaves_for_the_tally(state, winner)            # 0x4D7C0-0x4D85C
         player.keysnum = (
             player.keysnum + state.monster_spawn_probability_bonus
         ) & 0xFF
@@ -445,8 +449,7 @@ def treasure_collected(state: GameState, player_index: int) -> None:
         since ``secret_trick_id`` holds exactly one code at a time the calls
         below likewise bump at most once;
       * ``player_treascount`` (0x904A50) is bumped at 0x519F8 -- the treasure
-        factor of the level-end bonus (0x4D57E);
-      * ``level_treasures`` stays as the level total the bonus screen displays.
+        factor of the level-end bonus (0x4D57E).
 
     The *food* arms are a different block reporting 0x0D (0x51C0C, 0x51CEE);
     WP-6 owns those, so eating never advances a treasure objective and vice
@@ -454,7 +457,6 @@ def treasure_collected(state: GameState, player_index: int) -> None:
     """
     counts = state.player_treascount
     counts[player_index] = (counts[player_index] + 1) & 0xFF
-    state.level_treasures += 1
     secret_trick_progress(state, player_index, TRICK_NO_TREASURE)          # 0x519C2
     secret_trick_progress(state, player_index, _CHALLENGE_TREASURES)       # 0x519CE
     secret_trick_progress(state, player_index, _CHALLENGE_REMOVE_TREASURE)  # 0x519DA

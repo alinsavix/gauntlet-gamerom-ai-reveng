@@ -344,9 +344,8 @@ def show_level_start_screen(state: GameState) -> None:
     next (``compute_next_level`` skips its computation from a bonus room).
 
     The level-6 seed of ``level_next_treasure`` belongs to
-    ``maze_new_level_setup`` (0x438E4-0x438FC), which the ROM runs immediately
-    after this call. The port applies the seed here, before the subsequent
-    maze load, rather than inside ``load_level``.
+    ``maze_new_level_setup`` (0x438E4-0x438FC), so ``_setup_decoded_level`` does it,
+    after the mirror draw at the end of this routine.
     """
     from .level_state import in_bonus_room, in_secret_room, player_activecount
     from .secret_rooms import (
@@ -371,11 +370,6 @@ def show_level_start_screen(state: GameState) -> None:
             state.treasure_announcement_delay = 0
             state.treasure_voice_set = 0
 
-    # maze_new_level_setup 0x438E4: the countdown is armed the first time the
-    # cabinet reaches level 6.
-    if state.levelnum_current == 6:
-        state.level_next_treasure = state.getrandom(3) + 3
-
     from .player_lifecycle import setup_infopanel
 
     setup_infopanel(state, -1)                               # 0x44F38-0x44F3E
@@ -399,7 +393,10 @@ def show_level_start_screen(state: GameState) -> None:
         write_alpha_large_text(
             state, 16, 9, f"{state.levelnum_current:>3}", 0x8000,
         )
-    _write_level_splash_details(state)
+    from ..maze import load_start_screen_pickup_config
+
+    load_start_screen_pickup_config(state)           # 0x45216-0x4521C
+    _write_level_splash_details(state)               # 0x45222
 
     # 0x45228-0x45260: normal/reduced-text/secret-room display holds.
     state.global_delay_timer = (
@@ -421,9 +418,6 @@ def _finish_level_end(state: GameState) -> None:
         _exiting_or_here as _exiting_or_here,
     )
 
-    from .display import clear_alpha_visible
-
-    clear_alpha_visible(state)
     sound_play(state, 0x39)                          # 0x4812E-0x48134
     show_level_start_screen(state)                   # 0x4813A
     if state.mazenum_current < _TREASURE_MAZE_FIRST:
@@ -539,6 +533,9 @@ def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
             state.players[i].status = int(PlayerStatus.ALIVE_HERE)
             setup_infopanel(state, state.secret_player)
             state.secret_tricks_flags[i] = 0         # next-level survivor, 0x48280
+    from .session import _cancel_solo_only_trick
+
+    _cancel_solo_only_trick(state)                   # 0x48294-0x482B2
 
     # 0x4834E: both handoff arms converge here, with the heroes already back to
     # status 1, so the bonus is computed from the party that is about to play.

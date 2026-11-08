@@ -164,7 +164,13 @@ class GameState:
     # (bits 24-31/16-23/8-15/0-7); only LFLAG4 tests directly against its
     # byte here without shifting -- see gauntpy.game.maze._split_flags/_join_flags
     # for the reassembly WP-3 needs internally.
+    # 0x904876: the hero main_move_players last served (0x4A60C), which is who a trick
+    # credits at an exit (0x52C46), even when a moving exit landed on someone else.
+    current_player: int = 0
     level_flags: int = 0            # 0x90491C, LFLAG1 byte
+    # The maze whose header flags the start screen has already loaded, so that the
+    # deferred load does not draw them again. Python only: the ROM has one call site.
+    pickup_config_maze: int = -1
     level_flags_2: int = 0          # 0x90491D, LFLAG2 byte
     level_flags_3: int = 0          # 0x90491E, LFLAG3 byte
     level_flags_4: int = 0          # 0x90491F, LFLAG4 byte
@@ -677,11 +683,6 @@ class GameState:
     secret_saved_supershot: int = 0
     # 0x904872: per-player trick progress/violation flags (WP-15 tracks, WP-7 writes)
     secret_tricks_flags: list[int] = field(default_factory=lambda: [0] * 4)
-    # Treasures picked up on the current level -- feeds the level-end bonus
-    # tally (doc/04 §16 "100 x players x coins x treasures"). Reset by level
-    # setup, incremented by player_tile_interact on a treasure pickup. (No single
-    # ROM address; the original derives the count during the bonus screen.)
-    level_treasures: int = 0
     # 0x904A50 player_treascount: per-player treasure pickups on this level, the
     # bonus tally's treasure factor (show_level_end_bonus_screen 0x4D57E/0x4D638).
     # The ROM bumps it in player_tile_interact's treasure arm (0x519F8) and

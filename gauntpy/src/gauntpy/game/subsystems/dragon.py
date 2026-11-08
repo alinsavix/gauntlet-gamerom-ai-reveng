@@ -137,7 +137,7 @@ _DRAGON_HEAD_PICS = (
 # long-range fireball, both picked by ``shot_state.shot_picture``.
 
 
-# ROM: direct game:0x5496E | Initializes the four footprint slots and dragon state; Python also publishes an initial head pose.
+# ROM: direct game:0x5496E | Initializes the four footprint slots and dragon state.
 def dragon_setup_segments(state: GameState, primary_slot: int) -> None:
     """0x5496E -- initialize the four-slot 2×2 dragon footprint."""
     row = primary_slot & 0x3E0
@@ -154,7 +154,6 @@ def dragon_setup_segments(state: GameState, primary_slot: int) -> None:
     state.dragon_facing = 4
     state.dragon_move_state = 0x1044
     state.dragon_hits = 0
-    dragon_head_pose_update(state, primary_slot)
 
 
 # ROM: helper | Synchronizes the Python primary-slot alias and reconstructs missing segments for legacy setup.

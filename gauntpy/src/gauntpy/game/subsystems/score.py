@@ -181,8 +181,9 @@ ALPHA_ROW_STRIDE = 64
 # OS draw_string maps ASCII space to alpha glyph zero (0x2F68-0x2F70).
 ALPHA_SPACE_GLYPH = 0
 # player_inv_update 0x45B88-0x45BDC. The six power bits stamp complete
-# attribute/glyph words around (not over) the character name on row p*5+7.
-POWER_ICON_COLUMNS = (40, 39, 32, 31, 30, 29)  # ROM 0x5732E + base column 29
+# attribute/glyph words around (not over) the character name on row p*5+7. 0x45B8C
+# writes column 29 as it steps to the base, so column 29 is always blank.
+POWER_ICON_COLUMNS = (41, 40, 33, 32, 31, 30)  # ROM 0x5732E + base column 30
 POWER_ICON_WORDS = (                           # ROM 0x57334
     0x983B, 0x9D7A, 0xA0A2, 0xA49C, 0xA97B, 0xACA3,
 )
@@ -230,28 +231,12 @@ def info_panel(state: GameState):
 def write_player_panel_background(state: GameState, player_index: int) -> None:
     """Write setup_infopanel's opaque player-colored space cells to alpha RAM."""
     attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
-    base = player_index * PLAYER_BLOCK_STRIDE
-    name_row = base + PLAYER_NAME_ROW
-    for column in range(PLAYER_NAME_COLUMN - 1, PLAYER_NAME_COLUMN + 5):
-        state.alpha_ram[name_row * ALPHA_ROW_STRIDE + column] = alpha_word(
-            attribute, ALPHA_SPACE_GLYPH,
-        )
-    for row in range(base + PLAYER_LABEL_ROW, base + PLAYER_INV_ROW + 1):
+    first = player_index * PLAYER_BLOCK_STRIDE + PLAYER_NAME_ROW
+    for row in range(first, first + PLAYER_BLOCK_ROWS):       # 0x4549C-0x454B4
         start = row * ALPHA_ROW_STRIDE + PANEL_COLUMN
         state.alpha_ram[start:start + PANEL_WIDTH] = [
             alpha_word(attribute, ALPHA_SPACE_GLYPH)
         ] * PANEL_WIDTH
-
-
-# ROM: part game:0x452D0 | Extracted four-row per-player clearing portion of setup_infopanel.
-def clear_player_panel_content(state: GameState, player_index: int) -> None:
-    """Blank every content cell in a removed player's four-row panel block."""
-    attribute = PLAYER_TEXT_PALETTE_WORDS[player_index]
-    start_row = player_index * PLAYER_BLOCK_STRIDE + PLAYER_NAME_ROW
-    fill_alpha_rect(
-        state, PANEL_COLUMN, start_row, PANEL_WIDTH, PLAYER_BLOCK_ROWS,
-        alpha_word(attribute, ALPHA_SPACE_GLYPH),
-    )
 
 
 # ROM: part game:0x452D0 | Extracted ordinary-level versus bonus-room header branch of setup_infopanel.
@@ -332,6 +317,26 @@ def write_player_inventory(state: GameState, player_index: int) -> None:
         state.alpha_ram[power_row * ALPHA_ROW_STRIDE + column] = (
             word if player.powers & (1 << bit) else 0x8000
         )
+
+
+# ROM: part game:0x452D0 | The health-per-coin and minimum-coin lines at 0x4539A-0x4546A.
+def write_pricing_lines(state: GameState) -> None:
+    """The bottom of the panel: what a coin buys, or free play's health."""
+    from .session import _HEALTH_PER_COIN_TABLE
+
+    paid = state.two_player_mode
+    write_alpha_text(state, 30, 28, romtext.TEXT_PRICE_HEALTH, 0x8000)
+    if paid:
+        write_alpha_text(state, 33, 27, romtext.TEXT_ONE_COIN, 0x8000)
+    else:
+        write_alpha_text(state, 30, 27, romtext.TEXT_FREE_PLAY, 0x8000)
+    index = state.game_settings & 0x1F if paid else 0x1F
+    write_alpha_decimal(state, 30, 28, _HEALTH_PER_COIN_TABLE[index], 4, 0x8000)
+    if paid:
+        coins = ((state.game_settings & 0x300) >> 8) + 1
+        if coins > 1:
+            write_alpha_text(state, 33, 29, romtext.TEXT_COIN_MIN, 0x8400)
+            write_alpha_decimal(state, 31, 29, coins, 1, 0x8400)
 
 
 # ROM: part game:0x452D0 | setup_infopanel's per-player status-text chain at 0x4554E-0x457AE.
@@ -511,12 +516,6 @@ def high_scores(state: GameState) -> list[list[tuple[int, str]]]:
 def attract_highscores(state: GameState) -> None:
     """attract_highscores (0x4A124): populate its complete alpha page."""
     clear_alpha_visible(state)
-    opaque_blank = alpha_word(0x8000, ALPHA_SPACE_GLYPH)
-    for column, row, width, height in (
-        (1, 1, 17, 13), (20, 1, 21, 13),
-        (1, 17, 17, 12), (20, 17, 21, 12),
-    ):
-        fill_alpha_rect(state, column, row, width, height, opaque_blank)
     column, row = romtext.TEXT_SCORE_PER_COIN_POS
     write_alpha_large_text(state, column, row, romtext.TEXT_SCORE_PER_COIN, 0)
     ladders = high_scores(state)
@@ -552,7 +551,7 @@ def draw_player_initials_entry(state: GameState, player_index: int) -> None:
         state, 29, row + 2, player.score_per_coin, 7, attribute,
     )
     rank = player.highscore_rank
-    rank_text = "#10" if rank == 9 else f"#{rank + 1}"
+    rank_text = "#10" if rank == 9 else f" #{rank + 1}"      # 0x4A398-0x4A3C6
     write_alpha_text(state, 32, row + 3, rank_text, attribute - 0x1000)
     for offset, code in enumerate(player.initials[:3]):
         character = "\b" if code == 0x08 else chr(code or 0x20)
@@ -561,8 +560,8 @@ def draw_player_initials_entry(state: GameState, player_index: int) -> None:
             if offset == player.initials_cursor
             else attribute
         )
-        write_alpha_name_entry_large_char(
-            state, 36 + offset * 2, row, character, char_attribute,
+        write_alpha_name_entry_large_char(                   # 0x4A418-0x4A42E
+            state, 36 + offset * 2, row + 2, character, char_attribute,
         )
 
 
@@ -631,6 +630,8 @@ def rank_high_score(state: GameState, character: int, value: int) -> int:
     §10.3: ``highscore_check`` (0x49D0E) passes the player's 24-bit
     **score-per-coin** value, not the raw score.
     """
+    if value > 0xFFFFFF:                                  # 0x3FAC: no table holds more
+        return -1
     ladder = high_scores(state)[character & 3]
     for rank, (entry_value, _initials) in enumerate(ladder):
         if value > entry_value:

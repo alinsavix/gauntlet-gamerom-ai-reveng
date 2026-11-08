@@ -365,8 +365,10 @@ def test_main_start_game_magic_edge_commits_and_sets_alive():
     """Magic press edge on a SELECTING player → ALIVE_HERE with committed char."""
     state = GameState()
     state.game_mode = GameMode.NORMAL
+    state.attract_timer = 0xFFFF            # a new game parks it, 0x4436C
     state.players[0].status = PlayerStatus.SELECTING
     state.players[0].health = 1234
+    state.players[0].coin_count = 1         # 0x4842A-0x4844E: the coins to start
     state.pending_character[0] = Character.ELF
 
     _make_magic_edge(state, 0)
@@ -401,7 +403,10 @@ def test_main_start_game_first_warrior_sets_spawn_bonus_not_multiplier():
     state.game_mode = GameMode.NORMAL
     state.maze = object()
     state.maze_player_start_slot = 0x120
+    state.attract_timer = 0xFFFF
     state.players[0].status = PlayerStatus.SELECTING
+    state.players[0].health = 1234
+    state.players[0].coin_count = 1
     state.pending_character[0] = Character.WARRIOR
 
     _make_magic_edge(state, 0)
@@ -416,7 +421,10 @@ def test_main_start_game_first_wizard_sets_spawn_bonus_not_multiplier():
     state.game_mode = GameMode.NORMAL
     state.maze = object()
     state.maze_player_start_slot = 0x120
+    state.attract_timer = 0xFFFF
     state.players[0].status = PlayerStatus.SELECTING
+    state.players[0].health = 1234
+    state.players[0].coin_count = 1
     state.pending_character[0] = Character.WIZARD
 
     _make_magic_edge(state, 0)
@@ -443,6 +451,8 @@ def test_main_start_game_later_join_clears_spawn_bonus_not_multiplier():
 
     # Player 1 commits.
     state.players[1].status = PlayerStatus.SELECTING
+    state.players[1].health = 1234
+    state.players[1].coin_count = 1
     state.pending_character[1] = Character.WARRIOR  # would be 3 if first
 
     _make_magic_edge(state, 1)

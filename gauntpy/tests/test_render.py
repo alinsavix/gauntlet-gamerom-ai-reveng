@@ -1321,7 +1321,7 @@ class TestTitleMobs:
             draw_alpha_layer(fb, state)
             assert fb.image.tobytes() != blank, mode
 
-    def test_scores_preserve_the_maze_between_opaque_score_boxes(self):
+    def test_scores_show_the_maze_through_the_score_boxes(self):
         from PIL import Image
 
         fb = Framebuffer(336, 240)
@@ -1335,7 +1335,7 @@ class TestTitleMobs:
 
         assert fb.get_pixel(0, 239) == (12, 34, 56, 255)
         assert fb.get_pixel(8, 0) == (12, 34, 56, 255)
-        assert fb.get_pixel(8, 8) == (0, 0, 0, 255)
+        assert fb.get_pixel(8, 8) == (12, 34, 56, 255), "the ROM writes no box behind the ladders"
 
     def test_scores_compositor_does_not_leak_gameplay_hud_backgrounds(self):
         state = GameState(game_mode=GameMode.SCORES)
@@ -1400,8 +1400,8 @@ class TestFrontEndTextIsRomData:
 
         assert state.alpha_ram[1] == 0
         assert state.alpha_ram[20] == 0
-        assert state.alpha_ram[score.ALPHA_ROW_STRIDE + 1] & 0x8000
-        assert state.alpha_ram[score.ALPHA_ROW_STRIDE + 20] & 0x8000
+        assert state.alpha_ram[score.ALPHA_ROW_STRIDE + 1] == 0
+        assert state.alpha_ram[score.ALPHA_ROW_STRIDE + 20] == 0
 
     def test_scores_screen_shows_the_rom_factory_ladder(self):
         state = GameState()
@@ -1427,6 +1427,9 @@ class TestFrontEndTextIsRomData:
         # (0x4890E-0x48962); without them the panel asks for a coin instead.
         state.players[0].health = 700
         state.players[0].coin_count = 1
+        from gauntpy.game.subsystems.player_lifecycle import setup_infopanel
+
+        setup_infopanel(state, -1)          # the start screen's, 0x44F3E
         _write_character_select_alpha(state)
         for text, column, row in romtext.CHARACTER_SELECT_LINES:
             start = row * score.ALPHA_ROW_STRIDE + column
@@ -1450,7 +1453,7 @@ class TestFrontEndTextIsRomData:
         start_attract_screen(state, int(GameMode.LEGEND))
         for text, column, row, _attribute in romtext.LEGEND_RULES_TEXT:
             assert _alpha_text(state, column, row, len(text)) == text
-        assert _alpha_text(state, 8, 0, 6) == "LEGEND"
+        assert all(word & 0x0100 for word in state.alpha_ram[8:20]), "two-row capitals, 0x4CFDA"
 
     def test_legend_rules_reveals_the_rom_rectangles_without_erasing_the_panel(self):
         from gauntpy.game.subsystems.attract import start_attract_screen
@@ -1476,12 +1479,12 @@ class TestFrontEndTextIsRomData:
         from gauntpy.game.subsystems.attract import load_legend_page
         load_legend_page(state)
 
-        assert _alpha_text(state, 6, 0, 8) == "MONSTERS"
+        assert all(word & 0x0100 for word in state.alpha_ram[6:22]), "two-row capitals, 0x4CDB8"
         assert _alpha_text(state, 0, 19, 5) == "GHOST"
         assert _alpha_text(state, 15, 19, 2) == "NO"
         assert _alpha_text(state, 20, 19, 3) == "YES"
         assert _alpha_text(state, 25, 25, 4) == "STUN"
-        assert _alpha_text(state, 0, 14, 6) == "DRAGON"
+        assert _alpha_text(state, 0, 15, 6) == "DRAGON"
 
 
 class TestRomTextTables:
@@ -1517,8 +1520,7 @@ class TestRomTextTables:
 
 class TestBonusScreenUsesThePerPlayerTally:
     """show_level_end_bonus_screen pays each exiting hero from
-    ``player_treascount`` (0x904A50), so the screen shows that, not the
-    level-wide ``level_treasures``."""
+    ``player_treascount`` (0x904A50), so the screen shows that."""
 
     def _bonus_state(self):
         state = GameState()
@@ -1532,7 +1534,6 @@ class TestBonusScreenUsesThePerPlayerTally:
 
         state = self._bonus_state()
         state.player_treascount = [3, 0, 0, 0]
-        state.level_treasures = 3
         show_level_end_bonus_screen(state)
         assert _alpha_text(state, 7, 8, len(romtext.BONUS_100_X_COINS)) == (
             romtext.BONUS_100_X_COINS
@@ -1547,7 +1548,6 @@ class TestBonusScreenUsesThePerPlayerTally:
 
         state = self._bonus_state()
         state.player_treascount = [2, 0, 0, 0]
-        state.level_treasures = 2
         show_level_end_bonus_screen(state)
         assert state.bonus_amount == 200
         assert _alpha_text(state, 13, 10, len(romtext.BONUS_EQUALS)) == romtext.BONUS_EQUALS

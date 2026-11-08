@@ -572,6 +572,7 @@ def main_move_players(state: GameState) -> None:
     active_processed = 0
     keys_held = 0
     for player_index in range(NUM_PLAYERS):
+        state.current_player = player_index      # 0x4A60A
         player = state.players[player_index]
         state.player_joystick[player_index] = _NO_MOVE
 

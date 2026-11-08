@@ -41,6 +41,99 @@ None.
 
 ## Resolved issues
 
+### S-221 · the info panel, the start arms, name entry, the tally's teardown and the attract screens
+
+Every part of the game below ran on the ROM and in gauntpy from the same RAM, and these differed.
+`tools/level_load_check.py`, `tools/name_entry_check.py` and `tools/rom_sweeps.py` now keep the
+comparisons, and `tests/test_level_load_rom.py` a sample. The harness now loads the depth chain's
+bookmarks, as a placement otherwise appends to the chain.
+
+**The info panel (`setup_infopanel`, 0x452D0).** It has no arm for a player who has not joined: the
+name, labels, score, health and inventory are always drawn, as attract's four panels show. The
+`1 COIN = n HEALTH` lines at the bottom (0x4539A-0x4546A) were never drawn. The power icons start at
+column 30, since 0x45B8C steps past column 29, so gauntpy's overwrote the last of a hero's name. A
+rebuild erases the IT label, which only 0x45866 draws. `maze_hide` is its callers' (five sites), and
+the level transition has no alpha clear at all, so the rows between the blocks stay opaque.
+
+**A Magic press (`main_start_game`, 0x484A8-0x486E2).** gauntpy had one arm; the ROM has these:
+
+- A continue after game over (0x484D4) reloads the level, so the monsters come back, with a new
+  mirror draw and floor, then joins, runs the spawn bonus and pickups(0). Free play from the game
+  state (0x485FE) does the same with pickups(1).
+- A paid new game (0x4867E) only joins. `start_attract_to_game` runs the start screen and level
+  setup, with no pickups, spawn bonus or thief, and gauntpy had added all three and skipped the
+  screen's draws. The same routine draws the select screen's corners (0x442F6-0x4432A).
+- A press needs the coins to start (0x4841A-0x484A4). A join in a secret room only finalizes, and
+  one while the splash is up finalizes too. `_cancel_solo_only_trick` belongs to the next-level arm
+  (0x48294), not to joining.
+
+**High scores.** The large initials go two rows under the prompt, not on it, and `#5` has a leading
+space (0x4A398, 0x4A418). The initials start from what that slot last typed; only boot sets `AAA`
+(0x49CEE). A ranked hero caps `games_played_counter` at 0x708 (0x49DAC), which delays S-204's reset.
+A score above 24 bits does not rank (0x3FAC).
+
+**The tally's teardown (0x4D692-0x4D8C4).** S-215 called this the exit path's. It is the tally's: a
+hero still on the level or in the exit loses their sprites and becomes status 2, every hero's slot
+word and the active count clear, and `remove_dying_player_sprites` (0x489B8) is ported. gauntpy's
+survivor list leaves out status 8, so a hero mid-exit when a bonus room's clock ran out was lost.
+A secret room's winner is only moved on from status 1 or 8, where gauntpy revived a removed one,
+and with no winner the arm writes no text.
+
+**At an exit (0x52B40).** The trick 5/6 test is signed (`bgt` at 0x52BCA), and a hero who has joined
+holds 0xFF, so gauntpy credited a hero who had done nothing. The winner is `current_player` (0x52C46,
+0x4A60A), not always the hero leaving: a moving exit lands on someone else.
+
+**Redraws and screens.** Floors treat row zero as joined by number (0x5EA6A), so bottom-row floors
+redrawn in play lost their shadow, and all shadows stop under `level_flags_2` bit 7 (0x5E96C). The
+legend's headings are two-row capitals and DRAGON is on row 15. The high-score page has no opaque
+boxes: the ROM leaves those cells 0 and the maze shows through. The demo's `mazenum_current` stays 0,
+since 0x449FC selects its maze by bank alone.
+
+Now compared and found the same: `tport_route_connect` and its if-empty form (4,000 cases),
+`shot_reflect_calc` (36,864), `resolve_shot_hit` across every object type (1,488), `player_exit_sequence`
+(1,500), `maze_convert_walls_to_exits`, the colours `init_display` loads (39 mazes), and the speech
+after `thief_setup`. Not compared: the title's depth chain, where the ROM keeps the II group apart;
+its records and alpha match. `eeprom_load_config`, the monster and shot branches the demo does not
+reach, and `main_move_players`'s arms have still only run in the demo comparisons.
+
+### S-220 · level loads, the level-end tally and a coin during name entry
+
+`tools/level_load_check.py` runs the ROM's own level load under Unicorn, with a port of MAME's
+Slapstic 106 in front of the real maze data, and compares every record, the seed, the flags, the
+setup tables and all 4,096 playfield words: every maze at six levels and four seeds, then the
+start screen first, then the party, pickups and thief. The demo compares records only, so none of
+this was visible to it, and a final seed that matches says nothing about who got which draw. All
+sweeps now match. What they found:
+
+- The start cell's draw came before the floors and walls (0x43964, after `maze_setupnew`), so
+  every cell had the art of the one before it, on every level.
+- The header's mirror draw came after the splash's draws (0x4521C before 0x45222), so a level's
+  mirroring differed from the arcade's for the same seed, on every level. The splash's notices
+  also read the flags before this level's were loaded, so they described the previous level.
+- The level-6 countdown draw came before the mirror draw (0x438F2 follows both).
+- Maze 52 has 201 exits. `maze_pick_one_exit` used the 32-entry exit table where the ROM walks the
+  records, so it drew from the wrong range and 169 exits that should be decoys were real.
+- A destructible wall on patterns 6 and 11 holds 0x8003 through floor and wall drawing (0x4603A,
+  0x5E868), so nothing draws as joined to it. The audit had called `maze_special_floor` obviated.
+- A vertical run writes upward over cells already decoded. Food it covers still spent its picture
+  draw (0x46154, mazes 7 and 65), so objects are now placed in the decoder's write order.
+- `pf_replace` to floor redraws only a marker. A sprite loses its record and updates the doors, and
+  an empty cell is untouched (0x5F362-0x5F376). gauntpy redrew all three, spending draws.
+- The same mistake was in a movable wall's dissolve (0x4B484-0x4B490), which spent floor draws in
+  play, and in a secret room's replacements (0x43CDA, 0x43D08).
+- A dragon has no head pose until it wakes: its record holds 0xA740 and the head words stay zero.
+
+The level-end tally (`0x4D516-0x4D5AA`) had three differences. `_treasure_shares` paid "unattributed"
+treasure to the first exiter, which a hero's rejoin (0x48E86) could produce, so it and
+`level_treasures`, which nothing else read, are gone. `mulu.w` at 0x4D58E keeps only the low 16 bits
+of 100 x players x coins, so four heroes wrap from 164 coins each. And coins have no floor of one,
+and the redraw bit is set even for a bonus of zero.
+
+A coin for a hero entering initials ends the entry and runs the continue prompt before the join
+(0x42CC2-0x42CDE); `coincheck` had no such arm, though S-215 took the call-graph edge as read.
+
+Tests: `tests/test_level_load_rom.py`, `tests/test_rom_tally_and_coins.py`.
+
 ### S-219 · the dragon's fireballs in flight, and the secret winner's editor
 
 The dragon comparison now runs `main_handle_shots` (0x474F6) too, so its fireballs fly, hit the

@@ -14,6 +14,7 @@ from gex.constants import (
     LFLAG4_TRAPS_LOCAL, LFLAG4_WRAP_H, LFLAG4_WRAP_V, MAX_MAZE_NUM,
 )
 from gex.floor import floor_get_stamp
+from gex import mazedecode
 from gex.mazedecode import Maze, maze_decompress
 from gex.objparams import (
     PICTURE_MARKER, base_picture, hpos_correction, hsize_tier, vpos_offset,
@@ -53,6 +54,49 @@ def find_maze(maze_number: int) -> MazeLocation:
     return MazeLocation(bank, addr)
 
 
+class _WriteLog(dict):
+    """A maze's cells, also remembering each write in decode order."""
+
+    # ROM: helper | Starts an empty log of a maze's object writes.
+    def __init__(self) -> None:
+        super().__init__()
+        self.order: list[tuple[int, int]] = []
+
+    # ROM: helper | Records one object write as gex's token routines make it.
+    def __setitem__(self, cell: tuple[int, int], object_type: int) -> None:
+        super().__setitem__(cell, object_type)
+        self.order.append((cell[1] << 5 | cell[0], int(object_type)))
+
+
+# ROM: part game:0x4C1BC | The token walk again through gex's own token routines, keeping the order of the object writes that gex's final map loses.
+def maze_write_order(compressed: list[int]) -> list[tuple[int, int]] | None:
+    """Every (packed slot, object type) the decoder writes, in order, floors excepted."""
+    if len(compressed) < 11:
+        return None
+    maze = Maze()
+    log = _WriteLog()
+    maze.data = log
+    htype1, htype2, vtype1, vtype2 = compressed[7:11]
+    prev = htype2
+    location = 32
+    pos = 11
+    while location < 1024 and pos < len(compressed):
+        token = compressed[pos]
+        pos += 1
+        top2 = token & mazedecode._TOP2_MASK
+        if top2 == mazedecode._TOK_LITERAL:
+            location, prev = mazedecode._token_literal(maze, location, token)
+        elif top2 == mazedecode._TOK_REPEAT:
+            location, prev = mazedecode._token_repeat(
+                maze, location, token, prev, htype1, htype2, vtype1, vtype2,
+            )
+        elif top2 == mazedecode._TOK_WALL_OR_PREV:
+            location = mazedecode._token_wall_or_prev(maze, location, token, prev)
+        elif top2 == mazedecode._TOK_FLOOR:
+            location = mazedecode._token_floor(maze, location, token)
+    return log.order
+
+
 # ROM: adapter game:0x4C1BC | ROM acquisition and delegated maze-decode adapter returning a gex Maze; not the complete maze_setupnew body at 0x44AC2, which additionally places MOBs and initializes game state.
 def decode_maze(maze_number: int) -> Maze:
     """Acquire and decode a record; maze 116 has no trailing delimiter."""
@@ -60,7 +104,9 @@ def decode_maze(maze_number: int) -> Maze:
         raise MazeError(f"maze number {maze_number} out of range 0..{MAX_MAZE_NUM}")
     try:
         compressed = slapstic_read_maze(maze_number)
-        return maze_decompress(compressed, allow_missing_delimiter=maze_number == MAX_MAZE_NUM)
+        maze = maze_decompress(compressed, allow_missing_delimiter=maze_number == MAX_MAZE_NUM)
+        maze.write_order = maze_write_order(compressed)
+        return maze
     except GexError as exc:
         raise MazeError(f"could not decode maze {maze_number}: {exc}") from exc
 

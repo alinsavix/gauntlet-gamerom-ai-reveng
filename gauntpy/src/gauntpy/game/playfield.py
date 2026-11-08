@@ -30,15 +30,18 @@ def pf_replace(state: GameState, slot: int, obj_type: int) -> None:
         set_cell_descriptor(state, slot, obj_type)
         return
 
-    from .maze import clear_cell_descriptor
+    from .maze import clear_cell_descriptor, set_cell_type
+    from .subsystems.maze_objects import pf_door_update_surrounding_xy
 
-    clear_cell_descriptor(state, slot)
     picture = state.mobs.picture[slot]
-    if picture in (0x8000, 0x8001):
+    if picture in (0x8000, 0x8001):                # 0x5F37E-0x5F38C
         hpos = state.mobs.hpos[slot]
         vpos = state.mobs.vpos[slot]
         state.mobs.unlink_and_clear(slot)
         state.mobs.hpos[slot] = hpos
         state.mobs.vpos[slot] = vpos
-    elif picture:
+        clear_cell_descriptor(state, slot)
+    elif picture:                                  # 0x5F36A-0x5F376: nothing else is redrawn
         state.mobs.unlink_and_clear(slot)
+        set_cell_type(state, slot, int(MazeObjIds.TILE_FLOOR))
+        pf_door_update_surrounding_xy(state, slot)

@@ -127,6 +127,10 @@ def build_state(
     player.potionsnum = potions
     for power in powers:
         initialize_player_temporary_power(state, 0, power)
+    # A direct start has had no attract screen to leave the panel opaque.
+    from ..game.subsystems.score import maze_hide
+
+    maze_hide(state)
     setup_infopanel(state, -1)
     from ..game.subsystems.thief import thief_setup
 

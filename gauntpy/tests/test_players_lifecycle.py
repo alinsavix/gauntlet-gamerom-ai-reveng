@@ -1451,7 +1451,7 @@ class TestHudHooks:
         _make_player_active(state, 2, health=100)
         state.player_it = 2
 
-        player_lifecycle.setup_infopanel(state, 2)
+        score.write_it_labels(state)
 
         row = 2 * score.PLAYER_BLOCK_STRIDE + score.PLAYER_LABEL_ROW
         words = state.alpha_ram[
@@ -1460,7 +1460,22 @@ class TestHudHooks:
         ]
         assert [word & 0xFC00 for word in words] == [0xB800, 0xB800]
 
-    def test_panel_bottom_contains_no_host_diagnostics(self):
+    def test_panel_rebuild_erases_the_it_label_until_it_next_changes(self):
+        """0x4549C-0x454B4 fill the block, and only 0x45866 draws the label."""
+        from gauntpy.game.subsystems import score
+
+        state = _active_state()
+        _make_player_active(state, 2, health=100)
+        state.player_it = 2
+        score.write_it_labels(state)
+
+        player_lifecycle.setup_infopanel(state, 2)
+
+        row = 2 * score.PLAYER_BLOCK_STRIDE + score.PLAYER_LABEL_ROW
+        column = row * score.ALPHA_ROW_STRIDE + score.IT_LABEL_COLUMN
+        assert [word & 0xFC00 for word in state.alpha_ram[column:column + 2]] == [0xD800, 0xD800]
+
+    def test_panel_bottom_shows_only_the_pricing_lines(self):
         from gauntpy.game.subsystems import score
 
         state = _active_state()
@@ -1471,10 +1486,10 @@ class TestHudHooks:
 
         player_lifecycle.setup_infopanel(state, -1)
 
-        for row in (27, 28):
+        for row, expected in ((27, "1 COIN ="), (28, "HEALTH")):
             start = row * score.ALPHA_ROW_STRIDE + score.PANEL_COLUMN
             words = state.alpha_ram[start:start + score.PANEL_WIDTH]
-            assert all(word & 0x03FF == 0 for word in words)
+            assert expected in "".join(chr(word & 0xFF or 0x20) for word in words)
 
     def test_setup_infopanel_ignores_an_out_of_range_selector(self):
         state = _active_state()
@@ -2874,33 +2889,6 @@ class TestTreasureAttribution:
         slot = self._treasure(state, 53, MazeObjIds.TREASURE_LOCKED)
         assert player_items.player_tile_interact(state, slot, 0) == 0
         assert state.player_treascount == [0, 0, 0, 0]
-        assert state.level_treasures == 0
-
-    def test_the_level_total_is_not_double_counted(self):
-        """The pickup arm must not bump ``level_treasures`` itself: WP-15's
-        write site already does, and doing both would pay the bonus screen for
-        treasure nobody picked up."""
-        state = _active_state()
-        _make_player_active(state, 0)
-        for i, kind in enumerate((MazeObjIds.TREASURE, MazeObjIds.TREASURE_BAG)):
-            player_items.player_tile_interact(state, self._treasure(state, 60 + i, kind), 0)
-        assert state.level_treasures == 1
-        assert state.player_treascount == [1, 0, 0, 0]
-
-    def test_every_pickup_is_attributed(self):
-        """``_treasure_shares`` credits any unattributed remainder to the first
-        recipient; with the pickup path attributing, the remainder is zero."""
-        state = _active_state()
-        _make_player_active(state, 1)
-        _make_player_active(state, 3)
-        player_items.player_tile_interact(
-            state, self._treasure(state, 70, MazeObjIds.TREASURE), 1)
-        player_items.player_tile_interact(
-            state, self._treasure(state, 71, MazeObjIds.TREASURE), 3)
-        player_items.player_tile_interact(
-            state, self._treasure(state, 72, MazeObjIds.TREASURE_BAG), 3)
-        assert state.player_treascount == [0, 1, 0, 1]
-        assert sum(state.player_treascount) == state.level_treasures
 
     def test_the_score_award_still_differs_per_treasure_type(self):
         state = _active_state()
@@ -3969,7 +3957,6 @@ class TestFoodAndTreasureObjectiveSites:
         _make_player_active(state, 0)
         self._treasure(state)
         assert state.player_treascount[0] == 1
-        assert state.level_treasures == 1
 
 
 class TestFakeExitObjective:
@@ -4760,8 +4747,9 @@ class TestNameEntry:
             chr(word & 0x3FF) if word & 0x3FF else " "
             for word in state.alpha_ram[row * 64 + 29:row * 64 + 36]
         ).startswith("  Enter")
-        assert state.alpha_ram[row * 64 + 36] & 0x0100
-        assert state.alpha_ram[(row + 1) * 64 + 36] & 0x0100
+        initials_row = row + 2              # 0x4A418: two rows under the prompt's first
+        assert state.alpha_ram[initials_row * 64 + 36] & 0x0100
+        assert state.alpha_ram[(initials_row + 1) * 64 + 36] & 0x0100
         assert p.highscore_rank == 0
 
     def test_the_whole_death_to_removal_lifecycle_runs(self):

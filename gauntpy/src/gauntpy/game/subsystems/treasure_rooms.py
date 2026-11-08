@@ -169,11 +169,14 @@ _BONUS_DISPLAY_FRAMES = 0x12C
 def _write_bonus_alpha(
     state: GameState, *,
     ordinary_rows: dict[int, tuple[int, int, int, int]],
+    secret_room: bool,
     secret_player: int,
 ) -> None:
     """Write show_level_end_bonus_screen's exact small-alpha tally."""
     fill_alpha_rect(state, 0, 0, 29, 30, alpha_word(0x8000))
-    if secret_player >= 0:
+    if secret_room:                                  # 0x4D720: only the winner has a line
+        if secret_player < 0:
+            return
         attribute = 0x8400 + (secret_player << 10)
         row = 9 + secret_player * 5
         if state.bonus_amount:
@@ -226,24 +229,31 @@ def _bonus_recipients(state: GameState) -> list[int]:
     ]
 
 
-# ROM: helper | Python tally compatibility helper credits unattributed level-total pickups to the first recipient; this historical fallback is not documented ROM behavior.
-def _treasure_shares(state: GameState, recipients: list[int]) -> dict[int, int]:
-    """Per-player treasure counts for the tally, with unattributed pickups.
-
-    ``player_treascount`` is authoritative. Any treasure counted in
-    ``level_treasures`` that no player claimed -- a pickup routed through the
-    level total instead of ``treasure_collected`` -- is credited to the first
-    recipient, which is what the level-wide tally did before the counter
-    existed. The remainder is zero as soon as every pickup site attributes.
-    """
-    shares = {i: state.player_treascount[i] for i in recipients}
-    unattributed = state.level_treasures - sum(state.player_treascount)
-    if unattributed > 0 and recipients:
-        shares[recipients[0]] += unattributed
-    return shares
+# ROM: direct game:0x489B8 | The hero's power-up flash and transport sparkle go, and any transport in flight ends.
+def remove_dying_player_sprites(state: GameState, player_index: int) -> None:
+    mobs = state.mobs
+    if mobs.picture[player_index + 1]:               # 0x489CE-0x489EC
+        mobs.depth_remove(player_index)
+        mobs.picture[player_index + 1] = 0
+    if mobs.picture[player_index + 0x19]:            # 0x489F4-0x48A1A
+        mobs.depth_remove(player_index + 0x18)
+        mobs.picture[player_index + 0x19] = 0
+    state.player_tport_phase[player_index] = -1      # 0x48A26
 
 
-# ROM: direct game:0x4D476 | Bonus/tally and committed next-position boundary with extracted payout/text arms; synthetic coin/count fallbacks and deferred Python continuation remain caveats. Its docstring's timer-owner statement is stale.
+# ROM: part game:0x4D476 | A hero's way off the level at the tally: from the level (0x4D6EC-0x4D712, 0x4D810-0x4D82E) or the exit animation (0x4D6A0-0x4D6BE, 0x4D840-0x4D856).
+def _hero_leaves_for_the_tally(state: GameState, player_index: int) -> None:
+    player = state.players[player_index]
+    remove_dying_player_sprites(state, player_index)
+    if player.status == int(PlayerStatus.ALIVE_HERE):
+        state.mobs.unlink_and_clear(player.mob_slot)
+    else:
+        state.mobs.depth_remove(player_index + 0x14)
+        player.exit_pending = 0
+    player.status = int(PlayerStatus.ALIVE_NEXT)
+
+
+# ROM: direct game:0x4D476 | Bonus/tally and committed next-position boundary with extracted payout/text arms; the deferred Python continuation remains a caveat.
 def show_level_end_bonus_screen(state: GameState) -> None:
     """0x4D476 -- end the level: award the treasure bonus, show the tally, then
     (after the hold) load the saved next maze.
@@ -253,16 +263,18 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     player_coincount[p] x player_treascount[p]`` (0x4D516-0x4D5AA, doc/04 §16) --
     then enters the display phase: ``game_mode = TREAS_EXIT`` with ``global_delay_timer``
     (the ROM's ``global_delay_timer``, 0x904A4E) counting 300 frames down
-    instead of cutting straight to the next level. ``main_treasure_timer`` runs
+    instead of cutting straight to the next level. ``main_start_game`` runs
     the countdown and fires the deferred load (``_finish_level_end``) when it
     expires. This routine writes the settled tally into alpha VRAM before it
     returns; the generic alpha pass displays those words during the hold.
 
-    ``player_coincount`` floors at 1 because every player who joins through the
-    real path is credited one coin (``player_coindrop`` 0x48962) whether the
-    cabinet is on free play or not; the floor only matters for a hero placed
-    directly by a test or the dev runner. ``bonus_amount`` is the total shown on
-    the screen; 0 treasures yields 0 (a "NO BONUS" screen).
+    The product is the ROM's, with its widths: ``mulu.w`` at 0x4D578 keeps the
+    whole of 100 x players x coins, which the screen shows, but ``mulu.w`` at
+    0x4D58E takes only its low 16 bits, so with four heroes the bonus wraps from
+    164 coins each. The treasure count is the byte at 0x904A50, which
+    ``player_start_inner`` clears, so a hero who rejoins forfeits what they held.
+    ``bonus_amount`` is the total shown on the screen; 0 treasures yields 0 (a
+    "NO BONUS" screen).
 
     Robust to a ROM-less environment -- the deferred load leaves the old maze
     intact if the next one cannot be decoded.
@@ -312,18 +324,15 @@ def show_level_end_bonus_screen(state: GameState) -> None:
         open_name_entry = _secret_room_payout(state, challenge_completed)
         state.secret_need_hint = 0                   # 0x4D8D4
     else:
-        players = max(1, player_activecount(state))   # 0x4D516 player_activecount
-        recipients = _bonus_recipients(state)        # 0x4D552/0x4D55E status 2 / 8
-        shares = _treasure_shares(state, recipients)
+        player_factor = (100 * player_activecount(state)) & 0xFFFF  # 0x4D516-0x4D526
 
         state.bonus_amount = 0
-        for i in recipients:
+        for i in _bonus_recipients(state):           # 0x4D552/0x4D55E status 2 / 8
             player = state.players[i]
-            coins = max(1, player.coin_count)        # 0x4D574 player_coincount
-            bonus = 100 * players * coins * shares[i]   # 0x4D522/0x4D578/0x4D58E
-            ordinary_rows[i] = (100 * players, 100 * players * coins, shares[i], bonus)
-            if not bonus:
-                continue
+            coin_factor = (player.coin_count & 0xFFFF) * player_factor  # 0x4D574-0x4D57A
+            treasures = state.player_treascount[i] & 0xFF               # 0x4D586
+            bonus = (coin_factor & 0xFFFF) * treasures                  # 0x4D58E mulu.w
+            ordinary_rows[i] = (player_factor, coin_factor, treasures, bonus)
             player.score += bonus                    # 0x4D59E
             state.score_dirty[i] = 1                 # 0x4D5AA ori.b #1
             state.bonus_amount += bonus
@@ -331,8 +340,16 @@ def show_level_end_bonus_screen(state: GameState) -> None:
         secret_check(state)                          # 0x4D8DC
 
     _write_bonus_alpha(
-        state, ordinary_rows=ordinary_rows, secret_player=secret_player,
+        state, ordinary_rows=ordinary_rows, secret_room=was_secret_room,
+        secret_player=secret_player,
     )
+    if not was_secret_room:
+        for i, player in enumerate(state.players):   # 0x4D692-0x4D712
+            if player.status in (int(PlayerStatus.ALIVE_HERE), int(PlayerStatus.RESPAWN_WAIT)):
+                _hero_leaves_for_the_tally(state, i)
+    for player in state.players:                     # 0x4D8A4-0x4D8AE
+        player.mob_slot = 0
+    state.level_players_active = 0                   # 0x4D8C4
     if open_name_entry:
         from .player_names import secret_getname
 

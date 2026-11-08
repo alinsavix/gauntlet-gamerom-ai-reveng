@@ -45,6 +45,75 @@ def roms_available() -> bool:
     return all((REPO_ROOT / name).exists() for name in ROM_FILES)
 
 
+# Direct bank selects, by word offset from 0x38000.
+_SLAPSTIC_BANKS = {0x0008: 0, 0x000A: 1, 0x000C: 2, 0x000E: 3}
+
+
+class Slapstic:
+    """Slapstic 137412-106, Gauntlet II's: MAME's state machine over word offsets from 0x38000.
+
+    Every access to 0x38000-0x3FFFF drives it, reads included, and those addresses all
+    show the current 8 KB bank of ``row10.bin``.
+    """
+
+    def __init__(self, image: bytes) -> None:
+        self.image = image
+        self.bank = 3
+        self.loaded = 0
+        self.state = "idle"
+
+    def access(self, word: int) -> None:
+        state = self.state
+        if word == 0:
+            self.state = "active"
+        elif state == "active":
+            if word in _SLAPSTIC_BANKS:
+                self.bank = _SLAPSTIC_BANKS[word]
+                self.state = "idle"
+            elif word & 0x7F == 0x2B:
+                self.state = "alt_valid"
+            elif word & 0x3FF0 == 0x3DA0:
+                self.state = "bit_load"
+        elif state == "alt_valid":
+            self.state = "alt_select" if word & 0x3FFF == 0x0052 else "active"
+        elif state == "alt_select":
+            if word & 0x3FFC == 0x0064:
+                self.loaded = word & 3
+                self.state = "alt_commit"
+            else:
+                self.state = "active"
+        elif state == "alt_commit":
+            if word & 0x3FF9 == 0x0008:
+                self.bank = self.loaded
+                self.state = "idle"
+        elif state == "bit_load":
+            if word & 0x3FF9 == 0x0008:
+                self.loaded = self.bank
+                self.state = "bit_odd"
+        elif state in ("bit_odd", "bit_even"):
+            if word & 0x3FF8 == 0x3DB0:
+                self.bank = self.loaded
+                self.state = "idle"
+            elif word & 0x3FF3 in (0x3DA0, 0x3DA1, 0x3DA2, 0x3DA3):
+                code = word & 3
+                if state == "bit_even":
+                    code = 3 - code
+                self.loaded = (self.loaded & ~(1 << (code >> 1))) | ((code & 1) << (code >> 1))
+                self.state = "bit_even" if state == "bit_odd" else "bit_odd"
+
+    def read(self, _cpu, offset: int, size: int, _data) -> int:
+        self.access((offset >> 1) & 0x3FFF)
+        if size == 4:
+            self.access(((offset + 2) >> 1) & 0x3FFF)
+        window = self.bank * 0x2000 + (offset & 0x1FFF)
+        return int.from_bytes(self.image[window:window + size], "big")
+
+    def write(self, _cpu, offset: int, size: int, _value: int, _data) -> None:
+        self.access((offset >> 1) & 0x3FFF)
+        if size == 4:
+            self.access(((offset + 2) >> 1) & 0x3FFF)
+
+
 class RomMachine:
     """A 68000 with the ROMs and RAM mapped, ready to call game routines."""
 
@@ -67,6 +136,13 @@ class RomMachine:
         machine.load_state(state)
         return machine
 
+    def install_slapstic(self) -> Slapstic:
+        """Put the banked maze ROM behind a Slapstic, for routines that decode mazes."""
+        slapstic = Slapstic((REPO_ROOT / "row10.bin").read_bytes())
+        self.cpu.mem_unmap(0x38000, 0x8000)
+        self.cpu.mmio_map(0x38000, 0x8000, slapstic.read, None, slapstic.write, None)
+        return slapstic
+
     # --- RAM access ----------------------------------------------------------
 
     def w16(self, address: int, value: int) -> None:
@@ -80,6 +156,23 @@ class RomMachine:
 
     def r8(self, address: int) -> int:
         return bytes(self.cpu.mem_read(address, 1))[0]
+
+    def load_depth_chain(self, mobs) -> None:
+        """The chain's links and its way in, after a record has moved on gauntpy's side.
+
+        The ROM's bookmark for a row is entry (row + 1) * 2 of 0x905F80, and 0x9049DE holds
+        the tail. Without them a placement appends to the chain.
+        """
+        chain = list(mobs.iter_chain())
+        for slot in chain:
+            self.w16(_LINK + 2 * slot, mobs.link[slot])
+            self.w16(_STATE + 2 * slot, mobs.state_link[slot])
+        self.w16(0x9049DE, chain[-1] if chain else 0)
+        head = chain[0] if chain else 0
+        self.w16(0x905F80, head)
+        self.w16(0x905F82, head)
+        for band in range(2, 64):
+            self.w16(0x905F80 + 2 * band, mobs.slip_heads[band - 2] & 0xFFFF)
 
     def load_state(self, state) -> None:
         """Copy the fields movement, pickups and monsters read into RAM."""
@@ -97,6 +190,10 @@ class RomMachine:
             self.w16(_LINK + 2 * slot, mobs.link[slot])
             self.w16(_STATE + 2 * slot, mobs.state_link[slot])
         self.w16(0x904BFC, state.rng.seed)
+        self.load_depth_chain(mobs)
+        self.w16(0x904876, state.current_player)
+        for index, word in enumerate(state.forcefield_segment_table):
+            self.w16(0x910780 + 2 * index, word)
         for i, player in enumerate(state.players):
             if player.active and player.mob_slot and (mobs.hpos[player.mob_slot] & 0xF) < 0xC:
                 # Fixture heroes without the palette nibble the ROM reads them by.
