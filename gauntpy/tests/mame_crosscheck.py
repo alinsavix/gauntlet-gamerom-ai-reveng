@@ -1,37 +1,18 @@
-"""WP-21 sub-deliverable 3 -- MAME cross-check interface.
+"""RAM address map and trace helpers for comparing gauntpy with MAME.
 
-**Scoped down to a design, not a run.** PLAN.md says "The repository already
-has this workflow (see the 2026-08-12 trace pass)," but that pass -- recorded
-in ``doc/08_known_issues.md`` under "Resolved in the 2026-08-12 MAME trace
-pass" (SOL-02, SOL-09, SOL-10, the operator-field and sound-control
-resolutions) -- was a set of one-off, expert-driven interactive MAME/6502
-sessions written up as prose corrections. There is no reusable script, Lua
-watch file, or RAM-watch export committed anywhere in the tree: checked for a
-``mame/`` (or similarly named) directory, any ``*.lua`` file (only
-``doc/table-widths.lua`` exists, unrelated), and any watch/trace/export file
-under ``doc/`` or ``refs/`` -- none exist. Producing a fresh trace requires an
-interactive MAME session with a scripted input sequence and a debugger poke
-to force the RNG seed, which is out of scope for one sitting. What follows is
-the interface a future session (or a human with MAME open) needs in order to
-finish the cross-check, plus the one part of it that *is* checkable without
-MAME: that the address map it will compare against is sound.
+This began as WP-21's plan for a MAME cross-check: replay ``golden.py``'s scripted
+input in MAME with the RNG seed forced, dump watched RAM each frame, and diff it
+here. That trace was never recorded, and the comparison is now done by other means:
 
-## What a completed cross-check needs
+- ``tools/demo_compare.py`` with ``tools/mame_demo_trace.lua`` captures the attract
+  demo, and three poked variants of it, frame by frame in MAME 0.289 and compares
+  every MOB record and the RNG seed with gauntpy (``tests/test_demo_compare.py``).
+- ``tools/rom_exec.py`` runs the original routines under Unicorn, and
+  ``tools/thief_walk.py``, ``dragon_walk.py``, ``forcefield_check.py`` and
+  ``secret_check.py`` compare whole subsystems with them (``tests/test_rom_*``,
+  ``test_thief_walk.py``, ``test_dragon_walk.py``, ``test_level_setup_rom.py``).
 
-1. A MAME Lua script that, for our fixed RNG seed and a scripted input
-   sequence -- ideally exactly ``tests/golden.py``'s ``SCRIPTED_INPUTS``,
-   replayed onto MAME's input ports -- dumps one row per ``(frame, address)``
-   pair being watched, in the CSV shape ``load_mame_trace`` reads (see its
-   docstring). This script does not exist yet.
-2. Per PLAN.md §21 ("When cross-checking against MAME, force the seed on
-   both sides"): before the scripted run starts, MAME's debugger must poke
-   the RNG seed at ``0x904BFC`` to the same value ``golden.GOLDEN_SEED``
-   seeds ``GameRandom`` with. The seed is never initialized on real hardware
-   (see ``rng.py``), so without this step the two runs cannot agree from
-   frame one.
-3. Run ``golden.run_scripted_trace`` on our side and the Lua script on MAME
-   with the identical input sequence, then call ``compare_state_to_trace``
-   once per frame that has trace rows.
+The helpers below remain as a checked address map and a small trace reader.
 
 ## What exists today
 

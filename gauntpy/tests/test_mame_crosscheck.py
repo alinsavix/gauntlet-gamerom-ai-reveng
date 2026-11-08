@@ -1,34 +1,23 @@
-"""WP-21 sub-deliverable 3 -- MAME cross-check.
+"""The RAM address map and trace helpers in ``mame_crosscheck.py``.
 
-Scoped down to a design for this session: see ``mame_crosscheck.py``'s module
-docstring for why (no reusable MAME script/trace exists anywhere in the
-tree, and producing one needs an interactive MAME session). The tests below
-check the interface itself rather than a real trace: the address map is
-parsed from ``state.py``, not hand-copied, and the comparison logic behaves
-correctly against a hand-built fake "MAME export."
-
-The dedicated ``test_a_full_crosscheck_would_activate_here`` documents the
-one remaining step -- pointing ``TRACE_PATH`` at a real export -- and is
-skipped until that file exists, exactly like ``test_mainloop.py``'s
-``requires_contracts`` pattern for a missing CSV.
+These check the interface itself: the address map is parsed from ``state.py``,
+not hand-copied, and agrees with doc/05, and the comparison logic behaves
+correctly against a hand-built trace. The comparisons with the arcade run
+elsewhere (see ``mame_crosscheck.py``'s module docstring); the test that waited
+here for a scripted-run MAME trace was retired once they did.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from golden import GOLDEN_SEED, build_scripted_state
+from golden import build_scripted_state
 from mame_crosscheck import (
     PLAYER_FIELD_ADDRESSES,
     compare_state_to_trace,
     field_addresses,
     load_mame_trace,
 )
-
-TRACE_PATH = Path(__file__).resolve().parent / "goldens" / "mame_trace.csv"
-
 
 def test_field_address_map_matches_state_py_verbatim():
     """A few load-bearing addresses, spot-checked against doc/05_data_
@@ -110,30 +99,3 @@ def test_load_mame_trace_parses_hex_and_decimal_cells():
 
     assert rows[0] == {"frame": 0, "address": 0x904006, "value": 0}
     assert rows[1] == {"frame": 1, "address": 0x904006, "value": 1}
-
-
-@pytest.mark.skipif(
-    not TRACE_PATH.exists(),
-    reason=(
-        "no MAME trace recorded yet -- see mame_crosscheck.py's module "
-        "docstring for what producing tests/goldens/mame_trace.csv requires"
-    ),
-)
-def test_a_full_crosscheck_would_activate_here():
-    """Once tests/goldens/mame_trace.csv exists (a real export, forced to
-    GOLDEN_SEED per PLAN.md §21), this replays the same scripted run our
-    golden trace uses and diffs every frame against MAME."""
-    from gauntpy.game.mainloop import tick
-
-    state = build_scripted_state()
-    assert state.rng.seed == GOLDEN_SEED
-
-    trace = load_mame_trace(TRACE_PATH)
-    frames = {r["frame"] for r in trace}
-
-    problems: list[str] = []
-    for frame in range(max(frames) + 1):
-        tick(state)
-        problems.extend(compare_state_to_trace(state, trace, frame))
-
-    assert not problems, "diverged from MAME:\n  " + "\n  ".join(problems)
