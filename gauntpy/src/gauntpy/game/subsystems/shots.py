@@ -28,9 +28,8 @@ accumulators. ``main_handle_shots`` retains its owner/counter/accumulator
 fallback for channels armed by hand. Player creation seeds direction too;
 ``shot_state._live_direction`` recovers it from ``shot_dx/dy`` only when unset.
 
-``shot_effects.wall_crumble`` tracks crumble progress in
-``state.destructible_wall_stage`` and writes the resulting descriptor or palette
-to playfield VRAM. Rendering reads that VRAM, not the stage dictionary.
+``shot_effects.wall_crumble`` keeps crumble progress in playfield VRAM, as the
+descriptor or the palette, and reads it back from there.
 """
 
 from __future__ import annotations
@@ -60,8 +59,6 @@ from .shot_effects import (
     shot_impact_spawn as shot_impact_spawn,
     tport_cycle_start as tport_cycle_start,
     wall_crumble as wall_crumble,
-    wall_crumble_descriptor as wall_crumble_descriptor,
-    wall_crumble_palette as wall_crumble_palette,
 )
 from .shot_state import (
     _SHOT_COUNTER_RELOAD,

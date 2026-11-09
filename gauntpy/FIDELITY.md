@@ -601,6 +601,8 @@ implementation specification.
    --seed 4` runs the ROM and gauntpy in lockstep from a cold boot, with heroes walked
    to exits, items and monsters, and stops at the first difference. Every difference is
    a lead into the code that made it, and the frames after it are contaminated.
+   `--coins 2 --rich` rations the coins, so heroes die, enter initials and play again.
+   Heroes also walk to keys, doors and movable walls.
 
 ## Implementation boundaries
 

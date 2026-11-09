@@ -926,6 +926,93 @@ class TestPlayerAddScoreWithMult:
 # 6. main_handle_death -- looping sound timers (§21)
 # =============================================================================
 
+class TestGameOverDwell:
+    """0x4A7D0-0x4ACC8: a hero with no record counts this word down."""
+
+    def _dead_hero(self) -> GameState:
+        state = _active_state()
+        player = state.players[1]
+        player.status = PlayerStatus.REMOVED
+        player.mob_slot = 0
+        player.health = 0
+        return state
+
+    def test_it_counts_down_and_keeps_the_panel(self):
+        state = self._dead_hero()
+        state.players[1].state_timer = 2
+        gp.main_move_players(state)
+        assert state.players[1].state_timer == 1
+
+    def test_the_panel_asks_for_coins_when_it_runs_out(self):
+        state = self._dead_hero()
+        state.players[1].state_timer = 0
+        gp.main_move_players(state)
+        assert state.players[1].state_timer == 0xFFFF
+        row = 1 * score.PLAYER_BLOCK_STRIDE + score.PLAYER_INV_ROW
+        text = bytes(state.alpha_ram[row * 64 + 30 + i] & 0xFF for i in range(11))
+        assert text.replace(b"\0", b" ") == b"INSERT COIN"
+
+    def test_an_idle_word_stays_idle(self):
+        state = self._dead_hero()
+        state.players[1].state_timer = 0xFFFF
+        gp.main_move_players(state)
+        assert state.players[1].state_timer == 0xFFFF
+
+
+class TestTrapSound:
+
+    def test_a_distant_wall_still_sounds_the_trap(self):
+        """0x5E7DA sets the result before the TrapsLocal gate at 0x5E7E2."""
+        from gauntpy.game import maze
+
+        state = _active_state()
+        state.level_flags_4 |= maze.LFLAG4_TRAPS_LOCAL
+        slot = (20 << 5) | 20
+        state.mobs.create(slot, tile=0x8000, hpos=0, vpos=0, obj_type=int(MazeObjIds.TILE_TRAP1) - 3)
+        state.scroll_x, state.scroll_y = 0, 0
+        found = maze.maze_place_object_types(state, int(MazeObjIds.TILE_TRAP1))
+        assert found
+        assert state.mobs.picture[slot] == 0x8000, "too far from the screen to fall"
+
+
+class TestFightEndsWhenAMoveTouchesNothing:
+
+    def test_a_call_with_no_contact_clears_the_latch(self):
+        """0x4AA36 tests after the whole call, so every way out of the move clears it."""
+        state = _active_state()
+        player = state.players[0]
+        slot = (10 << 5) | 10
+        state.mobs.create(slot, tile=0x0BD8, hpos=(10 * 16 - 4) << 7, vpos=native_v(10 * 16) << 7,
+                          obj_type=int(MazeObjIds.PLAYERSTART))
+        player.mob_slot = slot
+        player.status = PlayerStatus.ALIVE_HERE
+        player.direction = 2
+        player.anim_counter = 7
+        state.level_players_active = 1
+        state.player_fighting_dir[0] = 3
+        state.player_input_raw[0] = 0xFFEF      # the stick right
+        gp.main_move_players(state)
+        assert state.player_fighting_dir[0] == 0
+
+
+class TestPlacedHeroPicture:
+
+    def test_a_stale_fight_latch_does_not_change_the_first_picture(self):
+        """0x48DF6 places the idle picture. The fight table waits for the next move."""
+        state = _active_state()
+        player = state.players[1]
+        player.status = PlayerStatus.REMOVED
+        player.mob_slot = 0
+        state.player_fighting_dir[1] = 6
+        state.maze = object()
+        state.mobs.create(60, tile=0, hpos=0, vpos=0,
+                          obj_type=int(MazeObjIds.PLAYERSTART))
+        player_lifecycle.player_join(state, 1)
+        assert player.mob_slot
+        expected = player_lifecycle._ANIM_TABLE_IDLE[(player.character & 3) * 8 + 4]
+        assert state.mobs.picture[player.mob_slot] == expected
+
+
 class TestMainHandleDeath:
 
     def test_negative_forcefield_timer_plays_0x2E(self):
@@ -3610,7 +3697,15 @@ class TestCornerSqueezeUsesTheSameTransition:
             state=0,
         )
         state.movement_type = 1
+        state.player_input_raw[0] = ~0x10 & 0xFFFF      # the stick held right
         return state, p
+
+    def test_a_shove_in_the_moves_word_does_not_steer_it(self):
+        """0x4FEE8 reads the raw stick, so only that direction picks the landing."""
+        state, player = self._world()
+        slot = player.mob_slot
+        assert player_transport.corner_squeeze_geometry(state, slot, 0, 0x90) == -2
+        assert state.player_tile_or_tport_dest[0] == slot + 1
 
     def test_it_arms_rather_than_commits(self):
         state, player = self._world()

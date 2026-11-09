@@ -118,6 +118,11 @@ class TestScheduling:
         thief_setup(state)
         assert state.thief_enter_time < 0
 
+    def test_the_route_grid_reads_past_the_bottom_row(self):
+        """A thief heading down from the bottom row asks about cells past the maze."""
+        state = GameState()
+        assert path_grid_get_direction(state, 0x41F) == 8
+
     def test_setup_leaves_the_last_victim_when_its_gate_fails(self):
         state = GameState()
         state.game_mode = -1

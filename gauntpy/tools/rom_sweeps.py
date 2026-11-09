@@ -121,6 +121,8 @@ def _walk(obj_type: int, keys: int, delta: int, steps: int = 24):
                       state.mobs.vpos[player.mob_slot])
             moved = pm.player_try_move(state, 0, delta, 0, track_thief=False)
             _, refused = pm.resolve_entered_cell(state, 0, origin)
+            if not state.player_fight_contact:        # 0x4AA36, as for the ROM above
+                state.player_fighting_dir[0] = 0
             slot = player.mob_slot
             ours = (0xF0 if refused else moved & 0xFFFF, slot, state.mobs.hpos[slot] & ~0xF,
                     state.mobs.vpos[slot], player.keysnum, our_calls[0],

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import random
 import sys
 from pathlib import Path
 
@@ -40,6 +41,27 @@ def test_attract_stays_in_step():
 def test_a_two_hero_game_stays_in_step():
     frame, found = game_run.run(1500, False, 5, heroes=2)
     assert not found, f"frame {frame}: {found[:4]}"
+
+
+def test_a_hero_who_dies_stays_in_step_through_game_over():
+    lockstep = game_run.Lockstep(5)
+    try:
+        pilot = game_run.Pilot(random.Random(5), 1, coins=1)
+        died = False
+        for frame in range(1, 2201):
+            raw, coins = pilot.inputs(frame, lockstep.state)
+            for player in coins:
+                lockstep.coin(player)
+            if frame == 200:
+                lockstep.set_health(0, 10)
+            lockstep.step(raw)
+            found = lockstep.differences()
+            assert not found, f"frame {frame}: {found[:4]}"
+            died = died or lockstep.state.players[0].health == 0
+        assert died
+        assert lockstep.state.players[0].state_timer >= 0x8000, "the GAME OVER dwell has run out"
+    finally:
+        lockstep.close()
 
 
 def test_the_word_past_the_supershot_table_holds_the_scroll():

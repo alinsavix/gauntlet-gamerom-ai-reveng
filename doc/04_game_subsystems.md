@@ -351,7 +351,11 @@ live population count. It is `monster_spawn_probability_table[((game_settings & 
 + players_active − 1]` plus the signed `monster_spawn_probability_bonus` byte (0x90405F),
 clamped to `level × 2` on every level except level 1, and forced to zero when
 `frame_overflow` (0x904916) is set. `handle_generate` compares it against
-`getrandom(32)` and returns without spawning when the random value wins. The
+`getrandom(32)` and returns without spawning when the random value wins. A negative
+bonus does not lower the result. It is sign-extended to a word and the table entry is
+added as a byte (0x40F7E), so the high byte stays set. The clamp's unsigned compare
+(0x40F90) then gives `level × 2`, the level's maximum. On level 1, which has no clamp,
+the word stays negative and the signed compare at 0x4930A never lets a monster through. The
 former description referenced a `ram.monster_count` variable and a
 max-monsters-per-type cap; neither exists in the shipped image
 (**Contradicted**).
@@ -2209,7 +2213,7 @@ from `0x904B1A`, not the raw score and not OS 0x1AE. If the value ranks in the
 top 10, it stores the rank in `ram.player_highscore_rank` (`0x904A4A`) and
 sets `ram.player_status = 0x04` (name entry mode).
 
-It also initializes `player_state_timer` (`0x904A26[player]`): a qualifying score gets 0x0A8C (2700 frames, 45 seconds) for initials entry, while a non-qualifying score gets 0x0258 (600 frames, 10 seconds) for the GAME OVER display. `player_death_sequence` and the per-player loop decrement this timer. This is the death-state reuse of the live player's low-health warning counter.
+It also initializes `player_state_timer` (`0x904A26[player]`): a qualifying score gets 0x0A8C (2700 frames, 45 seconds) for initials entry, while a non-qualifying score gets 0x0258 (600 frames, 10 seconds) for the GAME OVER display. `player_death_sequence` and the per-player loop decrement this timer. This is the death-state reuse of the live player's low-health warning counter. For a hero with no record, the per-player loop counts it down (0x4ACA2-0x4ACB6), and when it goes negative in normal play it redraws that hero's panel (0x4ACC2), which is how GAME OVER gives way to INSERT COIN.
 
 ### 10.4 First-Encounter Dialogs (`dialog_first_encounter`, 0x4C440)
 

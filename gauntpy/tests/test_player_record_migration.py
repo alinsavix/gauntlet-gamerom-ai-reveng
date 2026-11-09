@@ -111,7 +111,8 @@ class TestCrossingACellMovesTheRecord:
         assert state.mobs.state_link[start] == 0
         assert not state.mobs.is_occupied(start)
 
-    def test_picture_only_dynamic_remnant_cannot_block_the_player(self):
+    def test_a_picture_with_no_position_stays_and_does_not_block(self):
+        """The ROM keeps such a record too: lockstep found one the port had deleted."""
         state = GameState(game_mode=GameMode.NORMAL)
         start = pack_slot(5, 16)
         blocker = start + 1
@@ -121,13 +122,14 @@ class TestCrossingACellMovesTheRecord:
         state.mobs.insert(blocker)
         state.player_input_raw[0] = JOY_IDLE & ~JOY_RIGHT
 
+        before_x = hpos_x(state.mobs.hpos[start])
+
         gp.main_move_players(state)
 
-        assert not state.mobs.is_occupied(blocker)
-        assert blocker not in list(state.mobs.iter_chain())
-        assert player.mob_slot == start
+        assert state.mobs.picture[blocker] == _HERO_PICTURE
+        assert hpos_x(state.mobs.hpos[player.mob_slot]) > before_x
 
-    def test_unlinked_partial_thief_remnant_cannot_block_the_player(self):
+    def test_an_unlinked_thief_picture_stays_and_does_not_block(self):
         state = GameState(game_mode=GameMode.NORMAL)
         start = pack_slot(23, 3)
         blocker = start + 1
@@ -140,8 +142,7 @@ class TestCrossingACellMovesTheRecord:
 
         gp.main_move_players(state)
 
-        assert state.mobs.picture[blocker] == 0
-        assert state.mobs.vpos[blocker] == 0
+        assert state.mobs.picture[blocker] == 0x0DF3
         assert hpos_x(state.mobs.hpos[player.mob_slot]) > before_x
 
     def test_the_handover_row_is_the_roms_own_bias(self):

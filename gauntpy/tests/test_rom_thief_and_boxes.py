@@ -549,6 +549,7 @@ def test_a_corner_squeeze_refuses_another_heros_destination():
             state.player_tile_or_tport_dest[1] = _HERO + 2
         machine = _rom(state)
         rom_result = rom_exec.player_try_move(machine, state, 0, gin.JOY_RIGHT, 2)
+        state.player_input_raw[0] = ~gin.JOY_RIGHT & 0xFFFF
         python_result = player_try_move(state, 0, gin.JOY_RIGHT, 0)
         assert rom_result == python_result & 0xFFFF
         assert machine.r16(0x904BD8) == state.player_tile_or_tport_dest[0]

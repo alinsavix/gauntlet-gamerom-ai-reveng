@@ -230,16 +230,22 @@ def _spawn_probability(state: GameState) -> int:
     ``((game_settings & 0xE0) >> 3) + level_players_active - 1``, then biased by
     the signed ``monster_spawn_probability_bonus`` byte and capped at twice the
     level number on every level but 1 (0x40F82-0x40F9E).
+
+    The bias is sign-extended to a word but added as a byte (0x40F7E), so a negative
+    bonus leaves the high byte set, and the cap's unsigned compare then gives the
+    level's maximum. Level 1 has no cap, so there the word stays negative and
+    ``handle_generate``'s signed compare (0x4930A) never lets a monster through.
     """
     if state.frame_overflow:
         return 0
     idx = ((state.game_settings & 0xE0) >> 3) + state.level_players_active - 1
     idx = max(0, min(idx, len(_MONSTER_SPAWN_PROBABILITY_TABLE) - 1))
-    prob = _MONSTER_SPAWN_PROBABILITY_TABLE[idx] + _signed_byte(state.monster_spawn_probability_bonus)
+    bonus = _signed_byte(state.monster_spawn_probability_bonus)
+    prob = (bonus & 0xFF00) | ((bonus + _MONSTER_SPAWN_PROBABILITY_TABLE[idx]) & 0xFF)
     level = state.levelnum_current
     if level != 1:
-        prob = min(prob, level * 2)
-    return max(0, prob)
+        prob = min(prob, level * 2)                    # 0x40F90: an unsigned word compare
+    return prob - 0x10000 if prob & 0x8000 else prob
 
 
 # ROM: direct game:0x492C0 | Generator spawn-attempt entry with attract retry and ordinary random branches.

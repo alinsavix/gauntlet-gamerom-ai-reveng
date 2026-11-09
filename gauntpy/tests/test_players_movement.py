@@ -1240,6 +1240,12 @@ class TestMobCollisionDispatch:
 # Invulnerable corner squeeze (I-02, ROM 0x42744 / 0x4FEB2)
 # ---------------------------------------------------------------------------
 
+def _squeeze_move(state: GameState, delta: int) -> int:
+    """A move with the stick held that way: 0x4FEE8 reads the stick itself."""
+    state.player_input_raw[0] = ~delta & 0xFFFF
+    return player_try_move(state, 0, delta, 0)
+
+
 class TestCornerSqueezeGeometry:
     _POWER_INVULN = 1 << 11
 
@@ -1255,7 +1261,7 @@ class TestCornerSqueezeGeometry:
         state.mobs.hpos[player.mob_slot] = 170 << 7
         state.movement_type = 2
 
-        result = player_try_move(state, 0, gin.JOY_UP, 0)
+        result = _squeeze_move(state, gin.JOY_UP)
 
         # 0x42560-0x42580 return the untouched result word after a squeeze.
         assert result == _NO_MOVE
@@ -1274,7 +1280,7 @@ class TestCornerSqueezeGeometry:
         state.mobs.set_obj_type(wall, int(MazeObjIds.WALL_REGULAR))
         state.movement_type = 2
 
-        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+        _squeeze_move(state, gin.JOY_RIGHT)
 
         assert state.player_tile_or_tport_dest[0] == ((10 << 5) | 12)
 
@@ -1298,7 +1304,7 @@ class TestCornerSqueezeGeometry:
             )
         state.movement_type = 2
 
-        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+        _squeeze_move(state, gin.JOY_RIGHT)
         assert state.player_tport_type[0] == 0
         assert state.player_tile_or_tport_dest[0] == landing
 
@@ -1319,7 +1325,7 @@ class TestCornerSqueezeGeometry:
         )
         state.movement_type = 2
 
-        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+        _squeeze_move(state, gin.JOY_RIGHT)
 
         assert state.player_tile_or_tport_dest[0] == ((10 << 5) | 12)
         assert state.mobs.obj_type(key) == int(MazeObjIds.KEY)
@@ -1342,7 +1348,7 @@ class TestCornerSqueezeGeometry:
         )
         state.movement_type = 2
 
-        player_try_move(state, 0, gin.JOY_RIGHT, 0)
+        _squeeze_move(state, gin.JOY_RIGHT)
         player_transport.tport_player_move(state, 0)
 
         assert player.mob_slot == key
@@ -1357,7 +1363,7 @@ class TestCornerSqueezeGeometry:
         state.mobs.set_obj_type(wall, int(MazeObjIds.WALL_REGULAR))
         state.movement_type = 1
 
-        result = player_try_move(state, 0, gin.JOY_RIGHT, 0)
+        result = _squeeze_move(state, gin.JOY_RIGHT)
 
         assert result == _NO_MOVE
         assert state.player_tile_or_tport_dest[0] == 0
@@ -1372,6 +1378,7 @@ class TestCornerSqueezeGeometry:
         state.mobs.picture[transporter] = 1
         state.mobs.set_obj_type(transporter, int(MazeObjIds.TRANSPORTER))
 
+        state.player_input_raw[0] = ~gin.JOY_RIGHT & 0xFFFF
         result = corner_squeeze_geometry(
             state, (10 << 5) | 10, 0, gin.JOY_RIGHT,
         )
@@ -1389,7 +1396,7 @@ class TestCornerSqueezeGeometry:
         state.mobs.set_obj_type(wall, int(MazeObjIds.WALL_REGULAR))
         state.movement_type = 2
 
-        player_try_move(state, 0, gin.JOY_UP, 0)
+        _squeeze_move(state, gin.JOY_UP)
 
         assert state.player_tile_or_tport_dest[0] == ((31 << 5) | 10)
 
@@ -1403,6 +1410,7 @@ class TestCornerSqueezeGeometry:
         state.mobs.set_obj_type(wall, int(MazeObjIds.WALL_REGULAR))
         state.movement_type = 2
 
+        state.player_input_raw[0] = ~gin.JOY_LEFT & 0xFFFF
         result = corner_squeeze_geometry(
             state, player.mob_slot, 0, gin.JOY_LEFT,
         )

@@ -28,6 +28,11 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
   depends on stack history, so gauntpy uses the commonest. This is a known
   approximation. It needs every hero invisible or gone, and it changes only which
   way the monster faces.
+- **A negative spawn bonus maximizes the generators:** the bonus byte at 0x90405F
+  wraps negative once a rich party has added enough to it, and the byte add at
+  0x40F7E leaves the sign in the high byte, so the unsigned clamp at 0x40F90 gives
+  `level × 2`. Level 1 has no clamp, and there the same value stops its generators
+  entirely. gauntpy reproduces both.
 - **A hero who transports onto an exit leaves the exit's record standing:** 0x52D5C
   declines to unlink a record of type 0x10, and 0x50950 then writes the saved hero
   picture over the exit's marker picture.

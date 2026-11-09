@@ -179,16 +179,20 @@ def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
             )
             if wall_refreshed:
                 # 0x5EAB8 paints a whole wall, and a destructible wall keeps its
-                # damage in its palette: a neighbour's change heals it (0x530E0).
-                state.destructible_wall_stage.pop(neighbour, None)
+                # damage in its palette: a neighbour's change heals it (0x5312E).
                 write_tile_descriptor(
                     state, neighbour,
                     _descriptor_for_cell(state, neighbour, neighbour_type),
                 )
-            elif refresh_floor and neighbour_type not in _WALL_TYPES:
+            elif refresh_floor:
+                # 0x5E888 asks nothing more: a random wall that is off has its type
+                # still, and is floor to the picture test at 0x5EA44.
                 write_tile_descriptor(
                     state, neighbour,
-                    _descriptor_for_cell(state, neighbour, neighbour_type),
+                    _descriptor_for_cell(
+                        state, neighbour,
+                        int(MazeObjIds.TILE_FLOOR) if neighbour_type in _WALL_TYPES else neighbour_type,
+                    ),
                 )
 
             if (
@@ -1313,11 +1317,13 @@ def _mark_adaptive_food(state: GameState) -> None:
 def maze_place_object_types(state: GameState, trap_type: int) -> bool:
     """0x5E7A6 -- replace one trap trigger and its matching wall group."""
     wall_type = trap_type - 3
-    removed_wall = False
+    found_wall = False
     for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.link)):
         object_type = state.mobs.obj_type(slot)
         if object_type not in (wall_type, trap_type):
             continue
+        # 0x5E7DA: a wall anywhere counts, though the gate below may leave it standing.
+        found_wall |= object_type == wall_type
         if state.level_flags_4 & LFLAG4_TRAPS_LOCAL:
             from .subsystems.dragon import tile_near_screen_test
 
@@ -1326,8 +1332,7 @@ def maze_place_object_types(state: GameState, trap_type: int) -> bool:
         # 0x5F36C removes the record before 0x5F376 redraws the doors beside it.
         state.mobs.unlink_and_clear(slot)
         clear_cell_descriptor(state, slot)
-        removed_wall |= object_type == wall_type
-    return removed_wall
+    return found_wall
 
 
 # ROM: part game:0x438AE | Flag-selected one/two trap-wall-group deletion block at 0x43BA0-0x43C1A; called replacement routines are not merged bodies.

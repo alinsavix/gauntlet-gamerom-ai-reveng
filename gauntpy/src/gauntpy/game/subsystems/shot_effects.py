@@ -10,9 +10,8 @@ from .shot_data import CONSUMED
 from .shot_state import _shot_slot, _u16
 
 # ``wall_desc_destructible`` -- ROM 0x5BA5C points at the three stage records
-# 0x5D3D0/0x5D3D8/0x5D3E0, each four playfield stamp words. The ROM recovers
-# the stage from the stamped first word; the port tracks it in
-# destructible_wall_stage and wall_crumble writes the next record to VRAM.
+# 0x5D3D0/0x5D3D8/0x5D3E0, each four playfield stamp words. The stage is read
+# back from the stamped first word.
 # Byte-identical to gex's ``wall.SHRUB_DESTRUCT_STAMPS``, whose entry 0 is the
 # untouched destructible wall.
 _WALL_CRUMBLE_DESCS = (
@@ -227,28 +226,28 @@ def _spawn_maze_object(state: GameState, slot: int, obj_type: int,
     state.mobs.create(slot, picture, hpos, vpos, obj_type, field)
 
 
-# ROM: direct game:0x5303A | Destructible-wall damage entry using Python stage bookkeeping to represent ROM descriptor/palette state.
+# ROM: direct game:0x5303A | Destructible-wall damage entry; the stage is read back from playfield VRAM.
 def wall_crumble(state: GameState, slot: int, damage: int) -> int:
     """0x5303A -- apply shot damage to a destructible wall.
 
     Returns -1 when the wall is gone and 0 when it only crumbles a step.
 
     Three ROM branches.  With ``level_flags`` bit 23 (LFLAG2 bit 7) the wall
-    vanishes on the first hit (0x53046).  On a shrub level -- ``wallpattern``
+    vanishes on the first hit (0x5305C).  On a shrub level -- ``wallpattern``
     (0x904B5E) >= 6 -- the stage is the tile's own graphic: the ROM matches the
     low 12 bits of the stamped descriptor against ``wall_desc_destructible``
-    and destroys the wall outright when nothing matches (0x53084-0x530C6).
-    Everywhere else it is a palette crumble (0x530E0-0x53136): the tile starts
-    at palette 7 and each hit subtracts ``damage`` from all four quadrant words,
-    destroying the wall once the drop would pass the ``(p - 5) & 7`` headroom.
-    The port keeps the stage in ``destructible_wall_stage`` and writes each
-    surviving step's descriptor or palette to playfield VRAM. The renderer
-    consumes the resulting VRAM words, not this bookkeeping dictionary.
+    (0x530CE-0x530F6), so a tile matching nothing reads back as a huge stage and
+    goes in one hit.  Everywhere else it is a palette crumble (0x5312E-0x5316A):
+    the tile starts at palette 7, and each hit subtracts ``damage`` from all four
+    quadrant words, destroying the wall once the drop would pass the
+    ``(p - 5) & 7`` headroom.
+
+    The playfield is the only record of the damage, which is why a neighbour's
+    repaint heals a wall and why nothing carries over to the next level.
     """
     if state.level_flags_2 & 0x80:
         # 0x5305C: this branch clears the four MOB words itself and stamps no
         # replacement tile, so it is not the shared destroy tail.
-        state.destructible_wall_stage.pop(slot, None)
         state.mobs.link[slot] = 0
         state.mobs.vpos[slot] = 0
         state.mobs.hpos[slot] = 0
@@ -258,65 +257,31 @@ def wall_crumble(state: GameState, slot: int, damage: int) -> int:
         clear_cell_descriptor(state, slot)
         return CONSUMED
 
-    stage = state.destructible_wall_stage.get(slot, 0)
-    if _wallpattern(state) >= 6:
-        # 0x53096: an unrecognised descriptor reads back as a huge stage, so a
-        # tile that was never a destructible shrub crumbles away in one hit.
-        if not 0 <= stage < len(_WALL_CRUMBLE_DESCS):
-            _wall_destroy(state, slot)
-            return CONSUMED
-        if stage + damage >= len(_WALL_CRUMBLE_DESCS):
-            _wall_destroy(state, slot)
-            return CONSUMED
-    else:
-        # 0x530E8: headroom left in the tile's palette nibble, p = 7 - stage.
-        if damage > ((7 - stage) - 5) & 7:
-            _wall_destroy(state, slot)
-            return CONSUMED
-
-    state.destructible_wall_stage[slot] = stage + damage
     from ..playfield_vram import read_tile_descriptor, write_tile_descriptor
 
-    descriptor = wall_crumble_descriptor(state, slot)
-    if descriptor is not None:
-        write_tile_descriptor(state, slot, descriptor, 0x7000)
-    else:
-        palette = wall_crumble_palette(state, slot) & 7
-        write_tile_descriptor(
-            state,
-            slot,
-            tuple((word & 0x8FFF) | (palette << 12)
-                  for word in read_tile_descriptor(state, slot)),
-        )
+    words = read_tile_descriptor(state, slot)
+    if _wallpattern(state) >= 6:
+        stamp = words[0] & 0x0FFF
+        firsts = [record[0] for record in _WALL_CRUMBLE_DESCS]
+        stage = (firsts.index(stamp) if stamp in firsts else stamp) + damage
+        if stage >= len(_WALL_CRUMBLE_DESCS):                     # 0x530FA
+            _wall_destroy(state, slot)
+            return CONSUMED
+        write_tile_descriptor(state, slot, _WALL_CRUMBLE_DESCS[stage], 0x7000)  # 0x53124
+        return 0
+
+    drop = damage << 12
+    if drop > ((words[0] - 0x7000 + 0x2000) & 0x7000):            # 0x5313A-0x53150
+        _wall_destroy(state, slot)
+        return CONSUMED
+    write_tile_descriptor(state, slot, tuple((word - drop) & 0xFFFF for word in words))
     return 0
 
 
 # ROM: part game:0x5303A | Extracted common floor-replacement destruction tail at 0x530FE.
 def _wall_destroy(state: GameState, slot: int) -> None:
     """0x530FE -- the crumble ladders' shared "wall is gone" tail."""
-    state.destructible_wall_stage.pop(slot, None)
     pf_replace(state, slot, int(MazeObjIds.TILE_FLOOR))
-
-
-# ROM: part game:0x5303A | Extracts damaged-shrub descriptor selection, represented through the Python wall-stage dictionary.
-def wall_crumble_descriptor(state: GameState, slot: int) -> tuple[int, ...] | None:
-    """The shrub descriptor ``wall_crumble`` writes to playfield VRAM.
-
-    Shrub levels return the four-stamp ``wall_desc_destructible`` record the
-    ROM stamps into the playfield; everywhere else the crumble is a palette
-    walk and there is no replacement descriptor.  ``None`` also means "not
-    damaged", which is the untouched wall.
-    """
-    stage = state.destructible_wall_stage.get(slot)
-    if stage is None or _wallpattern(state) < 6:
-        return None
-    return _WALL_CRUMBLE_DESCS[min(stage, len(_WALL_CRUMBLE_DESCS) - 1)]
-
-
-# ROM: part game:0x5303A | Extracts the surviving wall palette value at 0x53120 using Python accumulated-stage bookkeeping.
-def wall_crumble_palette(state: GameState, slot: int) -> int:
-    """The palette nibble ``wall_crumble`` writes to playfield VRAM (0x53120)."""
-    return 7 - state.destructible_wall_stage.get(slot, 0)
 
 
 # ROM: helper | Python maze wall-pattern accessor with a missing-maze fallback.

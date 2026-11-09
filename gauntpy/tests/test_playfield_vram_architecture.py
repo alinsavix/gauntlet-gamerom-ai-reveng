@@ -294,7 +294,6 @@ def test_descriptor_stays_committed_until_a_real_restamp_then_rerolls():
         ) * 4
     trap_slot = (3 << 5) | 3
     destruct_slot = (3 << 5) | 4
-    state.destructible_wall_stage[destruct_slot] = 2
     write_tile_descriptor(state, trap_slot, committed)
     write_tile_descriptor(state, destruct_slot, damaged)
 
@@ -306,7 +305,8 @@ def test_descriptor_stays_committed_until_a_real_restamp_then_rerolls():
     )
 
     assert read_tile_descriptor(state, trap_slot) != committed
-    assert read_tile_descriptor(state, destruct_slot) == damaged
+    # With no record picture it is floor to 0x5EA44, whatever its type says.
+    assert read_tile_descriptor(state, destruct_slot) != damaged
 
 
 def test_live_random_wall_draw_uses_state_rng_at_the_write(monkeypatch):

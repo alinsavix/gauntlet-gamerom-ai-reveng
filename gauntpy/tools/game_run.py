@@ -4,6 +4,7 @@
     python tools/game_run.py --play 1 --frames 8000             # a coin, a hero, random input
     python tools/game_run.py --pilot 4 --frames 30000           # four heroes, played through levels
     python tools/game_run.py --pilot 2 --warp --frames 30000    # each exit leads somewhere deep
+    python tools/game_run.py --pilot 2 --coins 2 --rich --frames 30000  # heroes die, enter initials, play again
 
 The ROM's main loop body (0x42A86-0x42B66) and VBLANK handler (0x4017E) run under Unicorn against
 gauntpy's ``tick``, with the same raw input on the same frame. Each frame compares the records,
@@ -31,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import rom_exec  # noqa: E402
 from rom_exec import registers  # noqa: E402
-from gauntpy.game.constants import MONSTER_TYPES, GameMode, MazeObjIds  # noqa: E402
+from gauntpy.game.constants import MONSTER_TYPES, GameMode, MazeObjIds, PlayerStatus  # noqa: E402
 from gauntpy.game.mainloop import tick  # noqa: E402
 from gauntpy.game.subsystems import sound  # noqa: E402
 from gauntpy.game.subsystems.level_transitions import maze_checknum, player_exit_sequence  # noqa: E402
@@ -102,6 +103,15 @@ class Lockstep:
         """Hand ``sound_play`` back: the wrapper outlives this object otherwise."""
         sound.sound_play.__code__ = self._sound_code
         sound.__dict__.pop("_lockstep_sound_request", None)
+
+    def set_score(self, index: int, score: int) -> None:
+        """A score the same on both sides, as the high-score table needs a large one."""
+        self.state.players[index].score = score
+        self.machine.cpu.mem_write(0x904990 + 4 * index, struct.pack(">I", score))
+
+    def set_health(self, index: int, health: int) -> None:
+        self.state.players[index].health = health
+        self.machine.cpu.mem_write(0x904980 + 4 * index, struct.pack(">i", health))
 
     def aim(self, level: int, maze: int) -> None:
         """Send the next level somewhere else: both sides hold it in the same two words."""
@@ -208,6 +218,9 @@ class Lockstep:
         if pc != 0x42B66:
             raise RuntimeError(f"frame {self.frame}: ROM stopped at {pc:#x}")
         tick(state)
+        # A level setup overruns its frame on the real machine (0x42B4E), and gauntpy models
+        # that. A frame here is one pass of the loop and never overruns, so the ROM is told.
+        machine.w16(0x904916, state.frame_overflow & 0xFFFF)
 
     def differences(self) -> list[str]:
         machine, state = self.machine, self.state
@@ -276,6 +289,7 @@ class Lockstep:
                 ("secret in", machine.r16(0x904878), state.secret_possible_counter & 0xFFFF),
                 ("idle", machine.r16(0x90490C), state.idle_timer & 0xFFFF),
                 ("escape", machine.r16(0x9048C6), state.escape_timer & 0xFFFF),
+                ("spawn bonus", machine.r8(0x90405F), state.monster_spawn_probability_bonus & 0xFF),
             ]
         for index, player in enumerate(state.players):
             words += [
@@ -297,11 +311,16 @@ class Lockstep:
                 (f"repulse{index}", machine.r16(0x905F38 + 2 * index), state.player_repulse_timer[index] & 0xFFFF),
                 (f"dizzy{index}", machine.r16(0x905F48 + 2 * index), state.player_dizzy_timer[index] & 0xFFFF),
                 (f"hurt{index}", machine.r16(0x905F30 + 2 * index), player.hurt_cooldown & 0xFFFF),
+                (f"statetimer{index}", machine.r16(0x904A26 + 2 * index), player.state_timer & 0xFFFF),
+                (f"character{index}", machine.r16(0x9048E8 + 2 * index), int(player.character) & 0xFFFF),
             ]
             if player.mob_slot:      # gauntpy only loads these words with the hero, as they first matter
                 words += [
                     (f"moved{index}", machine.r16(0x9048F0 + 2 * index), state.player_joystick[index] & 0xFFFF),
                     (f"facing{index}", machine.r16(0x9049A4 + 2 * index), (player.direction + 2) & 7),
+                    # The latch holds a facing plus one, in each side's own compass.
+                    (f"fight{index}", machine.r16(0x9049AC + 2 * index),
+                     ((state.player_fighting_dir[index] + 1) & 7) + 1 if state.player_fighting_dir[index] else 0),
                     (f"pending{index}", machine.r16(0x904AD6 + 2 * index), player.pending_damage & 0xFFFF),
                     (f"cumulative{index}", machine.r16(0x904ADE + 2 * index), player.cumulative_damage & 0xFFFF),
                     (f"sampletimer{index}", machine.r16(0x904AE6 + 2 * index), player.damage_sample_timer & 0xFFFF),
@@ -384,12 +403,15 @@ class Pilot:
     """Heroes who join, stay fed, and walk to exits, items and monsters.
 
     It reads only gauntpy's state, which equals the ROM's until the run stops, and the same
-    input goes to both sides.
+    input goes to both sides. With ``coins`` each hero has only that many per game, so heroes
+    die, work the initials editor when they qualify, and come back from attract for another game.
     """
 
-    def __init__(self, rng: random.Random, heroes: int) -> None:
+    def __init__(self, rng: random.Random, heroes: int, coins: int | None = None) -> None:
         self.rng = rng
         self.heroes = heroes
+        self.coins = coins
+        self.paid = [0] * 4
         self.goal = ["exit"] * 4
         self.until = [0] * 4
         self.jitter = [0] * 4
@@ -409,7 +431,14 @@ class Pilot:
             if not mobs.picture[cell]:
                 continue
             kind = mobs.obj_type(cell)
-            if goal == "exit" and kind in _EXITS or goal == "monster" and (kind in MONSTERS or kind in _GENERATORS) or goal == "item" and 0x2E <= kind <= 0x3E:
+            if (
+                (goal == "exit" and kind in _EXITS)
+                or (goal == "monster" and (kind in MONSTERS or kind in _GENERATORS))
+                or (goal == "item" and 0x2E <= kind <= 0x3E)
+                or (goal == "key" and kind == MazeObjIds.KEY)
+                or (goal == "door" and kind in (MazeObjIds.DOOR_HORIZ, MazeObjIds.DOOR_VERT))
+                or (goal == "wall" and kind == MazeObjIds.WALL_MOVABLE)
+            ):
                 cells.add(cell)
         return cells
 
@@ -420,7 +449,9 @@ class Pilot:
             return _IDLE & ~1 if frame % 20 < 4 else _IDLE      # Magic starts a hero
         if frame >= self.until[index]:
             self.until[index] = frame + rng.randint(120, 600)
-            self.goal[index] = rng.choices(("exit", "item", "monster"), (7, 2, 1))[0]
+            # A hero with a key looks for a door, and one without looks for a key.
+            lock = "door" if player.keysnum else "key"
+            self.goal[index] = rng.choices(("exit", "item", "monster", lock, "wall"), (5, 2, 1, 4, 1))[0]
         self.still[index] = self.still[index] + 1 if cell == self.last_cell[index] else 0
         self.last_cell[index] = cell
         if self.still[index] > 40:                              # stuck on a corner
@@ -456,36 +487,64 @@ class Pilot:
                     lockstep.force_exit(player.index)
             lockstep.aim(*self.target)
 
+    def _initials(self, frame: int) -> int:
+        """A press now and then, and a push of the stick between them."""
+        beat = frame % 48
+        if beat < 3:
+            return self.rng.choice((_IDLE & ~1, _IDLE & ~2))
+        if 12 <= beat < 12 + self.rng.randint(1, 20):
+            return self.rng.choice((0xFFDF, 0xFFEF))
+        return _IDLE
+
     def inputs(self, frame: int, state) -> tuple[tuple[int, int, int, int], list[int]]:
         coins = []
         raw = [_IDLE] * 4
+        if self.coins is not None and state.game_mode < 0 and frame % 400 == 0:
+            self.paid = [0] * 4
         for index in range(self.heroes):
             player = state.players[index]
-            if frame >= 20 + 10 * index and player.health < 500 and frame >= self.fed[index]:
+            if (
+                frame >= 20 + 10 * index and player.health < 500 and frame >= self.fed[index]
+                and (self.coins is None or self.paid[index] < self.coins)
+            ):
                 coins.append(index)
+                self.paid[index] += 1
                 self.fed[index] = frame + 90
-            raw[index] = self._hero(frame, state, index)
+            if self.coins is not None and player.status == PlayerStatus.DYING:
+                raw[index] = self._initials(frame)
+            else:
+                raw[index] = self._hero(frame, state, index)
         return tuple(raw), coins
 
 
-def run(frames: int, play: bool, seed: int, heroes: int = 0, warp: bool = False) -> tuple[int, list[str]]:
+def run(
+    frames: int, play: bool, seed: int, heroes: int = 0, warp: bool = False,
+    coins: int | None = None, rich: bool = False,
+) -> tuple[int, list[str]]:
     lockstep = Lockstep(seed)
     try:
-        return _fly(lockstep, frames, play, seed, heroes, warp)
+        return _fly(lockstep, frames, play, seed, heroes, warp, coins, rich)
     finally:
         lockstep.close()
 
 
-def _fly(lockstep: Lockstep, frames: int, play: bool, seed: int, heroes: int, warp: bool) -> tuple[int, list[str]]:
+def _fly(
+    lockstep: Lockstep, frames: int, play: bool, seed: int, heroes: int, warp: bool,
+    coins: int | None, rich: bool,
+) -> tuple[int, list[str]]:
     rng = random.Random(seed)
     found = lockstep.differences()
     if found:
         return 0, found
     if heroes:
-        pilot = Pilot(rng, heroes)
+        pilot = Pilot(rng, heroes, coins)
         for frame in range(1, frames + 1):
-            raw, coins = pilot.inputs(frame, lockstep.state)
-            for player in coins:
+            if rich and frame == 100:
+                for index, player in enumerate(lockstep.state.players):
+                    if player.active:
+                        lockstep.set_score(index, 3_000_000 + index * 1000)
+            raw, due = pilot.inputs(frame, lockstep.state)
+            for player in due:
                 lockstep.coin(player)
             lockstep.step(raw)
             found = lockstep.differences()
@@ -510,9 +569,11 @@ def main() -> int:
     parser.add_argument("--play", type=int, default=0)
     parser.add_argument("--pilot", type=int, default=0, help="this many heroes, walked to goals")
     parser.add_argument("--warp", action="store_true", help="send each exit to a random deep level")
+    parser.add_argument("--coins", type=int, help="this many coins per hero per game, so heroes die")
+    parser.add_argument("--rich", action="store_true", help="a score high enough for the high-score table")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
-    frame, found = run(args.frames, bool(args.play), args.seed, args.pilot, args.warp)
+    frame, found = run(args.frames, bool(args.play), args.seed, args.pilot, args.warp, args.coins, args.rich)
     if found:
         print(f"first difference at frame {frame}:")
         print(*found[:14], sep="\n")

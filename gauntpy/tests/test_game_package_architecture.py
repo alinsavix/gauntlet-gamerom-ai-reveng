@@ -53,7 +53,7 @@ COMPATIBILITY_EXPORTS = {
         shot_mob_collision shot_onscreen_check shot_reflect_calc SURVIVES
         death_damage_accumulate dragon_player_proximity resolve_shot_hit CONSUMED
         playfield_showscore shot_impact_spawn tport_cycle_start wall_crumble
-        wall_crumble_descriptor wall_crumble_palette lobber_accumulator_seed
+        lobber_accumulator_seed
         shot_cell shot_picture shot_velocity
     """.split()),
 }

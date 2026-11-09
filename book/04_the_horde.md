@@ -83,6 +83,13 @@ thirty-one fails.
 That is one chance in four *on an eligible generator turn*. It is not
 one monster every four frames.
 
+The bonus has a sting in it. It is a single signed byte, and every level
+adds to it according to the party's score per coin, so a rich enough party
+can carry it past 127 and turn it negative. A negative bonus ought to
+calm the generators. Instead the sign survives in the upper half of the
+sum, the level cap compares it as an enormous unsigned number, and the
+result is simply the cap. The richest parties get the level's maximum.
+
 ## Why an empty floor matters twice
 
 Even a successful roll cannot put a creature anywhere it likes. The

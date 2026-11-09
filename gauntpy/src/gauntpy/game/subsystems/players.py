@@ -19,7 +19,6 @@ ROM wins and the disagreement is written down at the point of use.
 from __future__ import annotations
 
 from ..constants import (
-    FIRST_PLAYABLE_SLOT,
     SLOT_PLAYER_SHOTS,
     GameMode,
     MazeObjIds,
@@ -529,31 +528,11 @@ def main_move_players(state: GameState) -> None:
         return
 
     # ── Section 1: game-mode gate ─────────────────────────────────────────────
-    if state.game_mode < 0:
-        # Attract family: only DEMO runs the player loop.
-        if state.game_mode != int(GameMode.DEMO):
-            return  # TITLE / SCORES / LEGEND -- skip entirely
-        # DEMO: fall through to demo section.
-    elif state.game_mode == int(GameMode.TREAS_EXIT):
-        return  # level-end bonus screen: the world is frozen (WP-15/§16)
-    # game_mode >= 0 (normal): skip demo section, proceed to per-player loop.
-
-    # A dynamic picture with no object identity and either no complete position
-    # or no depth-list membership is not a record any ROM MOB writer can produce.
-    # Clear this Python-only remnant before collision probes can treat it as an
-    # invisible obstacle.
-    for slot in range(FIRST_PLAYABLE_SLOT, len(state.mobs.picture)):
-        if (
-            state.mobs.picture[slot]
-            and state.mobs.obj_type(slot) == 0
-            and state.mobs.state(slot) == 0
-            and (
-                state.mobs.hpos[slot] == 0
-                or state.mobs.vpos[slot] == 0
-                or not state.mobs.is_linked(slot)
-            )
-        ):
-            state.mobs.unlink_and_clear(slot)
+    # Attract family: only DEMO runs the player loop, so TITLE, SCORES and LEGEND skip it.
+    if state.game_mode < 0 and state.game_mode != int(GameMode.DEMO):
+        return
+    # game_mode >= 0 (normal, or the tally with every hero gone): skip demo section,
+    # proceed to per-player loop.
 
     # ── Section 2: demo playback ──────────────────────────────────────────────
     if state.game_mode == int(GameMode.DEMO):
@@ -613,6 +592,15 @@ def main_move_players(state: GameState) -> None:
                     ]
                 continue
             _status8_complete(state, player_index)
+            continue
+
+        # 0x4A7D0-0x4ACC8: with no record, the word that paces low health is GAME
+        # OVER's dwell, and the panel goes back to asking for coins when it runs out.
+        if not player.mob_slot:
+            if player.state_timer < 0x8000:
+                player.state_timer = (player.state_timer - 1) & 0xFFFF
+                if player.state_timer >= 0x8000 and state.game_mode >= 0:
+                    setup_infopanel(state, player_index)
             continue
 
         # All other inactive statuses (REMOVED 0x00, ALIVE_NEXT 0x02, etc.).
@@ -739,6 +727,10 @@ def main_move_players(state: GameState) -> None:
                     _track_thief_victim_move(
                         state, player_index, movement_destination,
                     )
+                # 0x4AA36: a call that touched nothing ends the fight, however it
+                # left, and a squeeze leaves early.
+                if not state.player_fight_contact:
+                    state.player_fighting_dir[player_index] = 0
             else:
                 # 0x4AA1E still calls the wrapper, which folds and clears any
                 # shove-cancelled direction even with the stick centred.

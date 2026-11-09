@@ -64,7 +64,9 @@ _ROUTE_COLUMN_DELTAS = (0, 1, 1, 1, 0, -1, -1, -1, 0)
 _ROUTE_ROW_DELTAS = (-0x20, -0x20, 0, 0x20, 0x20, 0x20, 0, -0x20, 0)
 _PATH_GRID_COLUMNS = 44
 _PATH_GRID_ROW_STRIDE = 0x80
-_PATH_GRID_MAX_CELL = 0x3FF
+# The thief can head off the bottom row, and 0x5103E reads what lies past it: row 23 of
+# the grid has room for these 32 cells.
+_PATH_GRID_MAX_CELL = 0x41F
 
 #: 0x5B66E, read by ``_route_cell_is_traversable`` (0x4FA50/0x4FA70).
 _MAZE_OBJECT_TRAVERSABILITY_FLAGS = (
@@ -479,8 +481,12 @@ def main_start_thief(state: GameState) -> None:
     if state.thief_enter_time < 0:
         # Direct dev/test level loads do not run main_start_game's 0x4835E tail.
         # Let them perform that setup once without repeating its RNG draw. A level
-        # behind its splash is only waiting for that tail to run.
-        if not state.thief_level_setup_done and not state.level_start_pending:
+        # behind its splash, or a new game with nobody placed, is only waiting for
+        # that tail to run.
+        if (
+            not state.thief_level_setup_done and not state.level_start_pending
+            and state.level_players_active
+        ):
             thief_setup(state)
         return
     if state.thief_enter_time > 0:

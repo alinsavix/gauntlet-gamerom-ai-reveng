@@ -1271,16 +1271,13 @@ def main_score_update(state: GameState) -> None:
     # per frame, not four times.
     _advance_thief_transition(state)
 
-    # Loop 2: per-player transporter/transition MOBs.
+    # One pass over the four indices: a hero's transporter or transition MOB, then
+    # the shared effect MOB of the same index. The byte counter wraps, advances
+    # pictures only on even values, and releases the channel at the end of its ROM
+    # picture sequence. A hero's landing can start an effect in a channel this pass
+    # has already aged, so that effect sits out the frame.
     for i in range(4):
         _advance_player_transition(state, i)
-
-    # ------------------------------------------------------------------
-    # Loop 3: age the four occupied shared effect MOBs. The byte counter wraps,
-    # advances pictures only on even values, and releases the channel at the end
-    # of its ROM picture sequence.
-    # ------------------------------------------------------------------
-    for i in range(4):
         _advance_effect(state, i)
 
 

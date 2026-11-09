@@ -41,6 +41,65 @@ None.
 
 ## Resolved issues
 
+### S-223 · a thief off the bottom row, GAME OVER's dwell and the generators' bonus
+
+`tools/game_run.py --coins N --rich` lets heroes die, enter initials and play a second game, none of
+which earlier flights reached, since the pilot bought more health first. Coverage of the ROM's blocks
+found the gap.
+
+**A crash.** A thief heading down from the bottom row asks the route grid about cells 0x400-0x41F.
+0x5103E just reads them, and row 23 of the grid has room, but `_path_grid_offset` raised `ValueError`, which
+ended the game. It now allows them.
+
+**GAME OVER's dwell.** With no record, a hero's `player_state_timer` counts down and redraws the panel when
+it goes negative (0x4ACA2-0x4ACC8). gauntpy never counted it, so a dead hero's panel kept GAME OVER rather
+than going back to INSERT COIN.
+
+**Wall damage carried between levels.** gauntpy kept a destructible wall's stage in a dictionary that nothing
+cleared on a level load, so a wall in a cell damaged on an earlier level went down too soon. A later monster shot
+then destroyed a wall the ROM still had. `wall_crumble` now reads the stage from playfield VRAM, as 0x5303A does,
+and the dictionary and its two readers are gone.
+
+**Traps and a second game.** With TrapsLocal, 0x5E7DA counts a matching wall before asking if it is near the
+screen, so the trap's sound plays even when no wall falls. gauntpy counted only walls it removed. And a new
+game's first frames ran the dev-load fallback in `main_start_thief`, resetting the thief's mode before anyone was
+placed, where the ROM waits for the hand-off.
+
+The per-hero loop also runs on the tally screen (0x4A548 takes every `game_mode >= 0`), where a hero who left with
+low health still counts that word down. gauntpy returned early there.
+
+**Doors and a move that touches nothing.** The pilot now walks to keys, doors and movable walls, and the harness
+compares the fight latch. 0x4AA36 clears that latch after the whole move call when nothing was touched, so a squeeze,
+which leaves early, clears it too. gauntpy tested only on its main way out.
+
+**A neighbour's floor and an effect's first frame.** Refreshing a cell repaints the floor to its north, north-east
+and east unless the picture test says wall (0x5EA44), so a random wall that is off gets floor even though its type
+says wall. gauntpy tested the type, and so skipped a draw and a tile. And 0x4715E's second and third loops are one
+pass, a hero's transition and then the effect of the same index, so an effect that hero 1's landing starts in channel
+0 sits out the frame.
+
+**A squeeze's direction.** 0x4FEE8 takes the corner squeeze's direction from the raw stick word (0x904920), so a
+shove folded into the move's word does not steer it. gauntpy used the move's word, and squeezed through a wall the
+hero was only being shoved towards.
+
+**A record gauntpy deleted and the ROM kept.** `main_move_players` cleared any untyped picture with no position or
+depth link, as a remnant only Python could produce. The ROM holds such a thief record while it is in the middle of a
+move, and deleting it split the two. The cleanup is gone, and flights show nothing else depended on it.
+
+**The generators' bonus.** The probability is a byte add to a sign-extended word, compared unsigned against
+the level cap (0x40F7E-0x40F90). A negative bonus therefore gives the level's maximum, or a negative word on
+level 1 that never spawns, and gauntpy read it as a low or zero probability, which also skipped the ROM's
+draw. `doc/08_known_issues.md` has the quirk.
+
+**A second game's first picture.** `player_start_inner` drew the hero through the action tables, so a fight
+latch left over from the last game gave the first frame a fight picture. 0x48DF6 places the idle picture, and
+the fight table waits for the next move.
+
+The harness tells the ROM about `frame_overflow`, since a level setup overruns its frame on the real machine
+and one pass of the loop never does. It also now compares the character, the state timer and the spawn bonus.
+Measured before the last few flights, these were still unrun in flight: `maze_convert_walls_to_exits`, the
+branch at 0x48812 in `player_lowhealth`, and parts of `name_entry_draw_large_char`.
+
 ### S-222 · the whole game in lockstep with the ROM
 
 `tools/game_run.py` boots the ROM under Unicorn and gauntpy side by side from a cold start, gives both

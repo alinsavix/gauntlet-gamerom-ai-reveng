@@ -1142,8 +1142,6 @@ def player_try_move(
     right = bool(delta & _JOY_RIGHT)
 
     if not (up or down or left or right):
-        if not core_only:
-            state.player_fighting_dir[player_index] = 0   # 0x4AA3E: no contact this call
         return _NO_MOVE
 
     # Current native position words. player_try_move_core keeps the doubled
@@ -1294,9 +1292,6 @@ def player_try_move(
                 if response is not None:
                     final_h, final_v, response_dx, dv, _ = response
                     dx += response_dx
-
-    if not state.player_fight_contact and not core_only:
-        state.player_fighting_dir[player_index] = 0
 
     if dx == 0 and dv == 0:
         return moved_dirs

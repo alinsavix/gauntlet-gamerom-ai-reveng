@@ -465,7 +465,8 @@ def corner_squeeze_geometry(state: GameState, packed_slot: int,
         _direction_neighbor as _direction_neighbor,
     )
 
-    direction = _direction_from_input(delta)
+    # 0x4FEE8 reads the raw stick, not the move's word, which may hold a shove too.
+    direction = _direction_from_input(~state.player_input_raw[player_index] & 0xF0)
     if direction == 8:
         return 0
     state.player_tport_route_state[player_index] = packed_slot  # 0x4FEDA

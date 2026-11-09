@@ -32,6 +32,7 @@ from gauntpy.game.subsystems import (
     shots,
 )
 from gauntpy.game.subsystems.shot_damage import _WALL_MOVE_DISSOLVE, resolve_shot_hit
+from gauntpy.game.playfield_vram import read_tile_descriptor, write_tile_descriptor
 from gauntpy.game.subsystems.shots import main_handle_shots
 from gauntpy.game.subsystems.shot_effects import (
     shot_impact_spawn,
@@ -1226,6 +1227,7 @@ class TestDestructibleWall:
         state.players[0].character = Character.ELF      # damage 1
         SLOT = 371
         _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
+        write_tile_descriptor(state, SLOT, (0x71A0, 0x71A1, 0x71A2, 0x71A3))
         for _ in range(2):
             resolve_shot_hit(state, SLOT, 0)
             assert state.mobs.picture[SLOT] != 0
@@ -2638,23 +2640,32 @@ class TestProbeWrapWindows:
 # =============================================================================
 
 class TestWallCrumbleStages:
-    def test_shrub_levels_walk_the_three_stamp_records(self):
+    DESCS = shot_effects._WALL_CRUMBLE_DESCS
+
+    def _wall(self, slot: int, wallpattern: int) -> GameState:
         state = _make_state()
-        state.maze = _FakeMaze(wallpattern=6)
+        state.maze = _FakeMaze(wallpattern=wallpattern)
+        _place_typed(state, slot, MazeObjIds.WALL_DESTRUCTABLE)
+        if wallpattern >= 6:
+            write_tile_descriptor(state, slot, self.DESCS[0], 0x7000)
+        else:
+            write_tile_descriptor(state, slot, (0x71A0, 0x71A1, 0x71A2, 0x71A3))
+        return state
+
+    def test_shrub_levels_walk_the_three_stamp_records(self):
         SLOT = 400
-        _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        assert shot_effects.wall_crumble_descriptor(state, SLOT) is None
+        state = self._wall(SLOT, 6)
         for stage in (1, 2):
             assert wall_crumble(state, SLOT, 1) == 0
-            assert state.destructible_wall_stage[SLOT] == stage
-            assert (shot_effects.wall_crumble_descriptor(state, SLOT)
-                    == shot_effects._WALL_CRUMBLE_DESCS[stage])
+            assert read_tile_descriptor(state, SLOT) == tuple(
+                word + 0x7000 for word in self.DESCS[stage]
+            )
         assert wall_crumble(state, SLOT, 1) == -1
-        assert SLOT not in state.destructible_wall_stage
+        assert state.mobs.picture[SLOT] == 0
 
     def test_the_stamp_records_are_the_rom_descriptors(self):
         """0x5BA5C -> 0x5D3D0/0x5D3D8/0x5D3E0, four stamp words each."""
-        assert shot_effects._WALL_CRUMBLE_DESCS == (
+        assert self.DESCS == (
             (0x07A7, 0x07A8, 0x07A9, 0x07AA),
             (0x07AB, 0x07AC, 0x07AD, 0x07AE),
             (0x07AF, 0x07B0, 0x07B1, 0x07B2),
@@ -2662,31 +2673,26 @@ class TestWallCrumbleStages:
 
     def test_they_match_gex_shrub_destruct_stamps(self):
         gex_wall = pytest.importorskip("gex.wall")
-        assert [list(d) for d in shot_effects._WALL_CRUMBLE_DESCS] == [
+        assert [list(d) for d in self.DESCS] == [
             list(s) for s in gex_wall.SHRUB_DESTRUCT_STAMPS
         ]
 
     def test_non_shrub_levels_walk_the_palette_down_from_seven(self):
-        state = _make_state()
-        state.maze = _FakeMaze(wallpattern=0)
         SLOT = 401
-        _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        assert shot_effects.wall_crumble_palette(state, SLOT) == 7
+        state = self._wall(SLOT, 0)
         assert wall_crumble(state, SLOT, 1) == 0
-        assert shot_effects.wall_crumble_palette(state, SLOT) == 6
+        assert read_tile_descriptor(state, SLOT) == (0x61A0, 0x61A1, 0x61A2, 0x61A3)
         assert wall_crumble(state, SLOT, 1) == 0
-        assert shot_effects.wall_crumble_palette(state, SLOT) == 5
+        assert read_tile_descriptor(state, SLOT) == (0x51A0, 0x51A1, 0x51A2, 0x51A3)
         assert wall_crumble(state, SLOT, 1) == -1
-        assert shot_effects.wall_crumble_descriptor(state, SLOT) is None
+        assert state.mobs.picture[SLOT] == 0
 
     @pytest.mark.parametrize("wallpattern", [0, 5, 6, 11])
     @pytest.mark.parametrize("first,second", [(1, 2), (2, 1), (3, 0)])
     def test_both_branches_share_one_three_point_ladder(self, wallpattern,
                                                         first, second):
-        state = _make_state()
-        state.maze = _FakeMaze(wallpattern=wallpattern)
         SLOT = 402
-        _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
+        state = self._wall(SLOT, wallpattern)
         if second:
             assert wall_crumble(state, SLOT, first) == 0
             assert wall_crumble(state, SLOT, second) == -1
@@ -2694,41 +2700,35 @@ class TestWallCrumbleStages:
             assert wall_crumble(state, SLOT, first) == -1
 
     def test_lflag2_bit7_still_wins_over_both_branches(self):
-        state = _make_state()
-        state.maze = _FakeMaze(wallpattern=6)
-        state.level_flags_2 = 0x80
         SLOT = 403
-        _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
+        state = self._wall(SLOT, 6)
+        state.level_flags_2 = 0x80
         assert wall_crumble(state, SLOT, 1) == -1
         assert state.mobs.picture[SLOT] == 0
 
     def test_an_unmatched_shrub_descriptor_destroys_outright(self):
-        """0x53096: a tile whose stamp is in no record reads back huge."""
-        state = _make_state()
-        state.maze = _FakeMaze(wallpattern=6)
+        """0x530F6: a tile whose stamp is in no record reads back huge."""
         SLOT = 404
-        _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        state.destructible_wall_stage[SLOT] = 9
+        state = self._wall(SLOT, 6)
+        write_tile_descriptor(state, SLOT, (0x7123, 0x7124, 0x7125, 0x7126))
         assert wall_crumble(state, SLOT, 0) == -1
         assert state.mobs.picture[SLOT] == 0
 
     def test_destroying_a_wall_clears_the_tile(self):
-        state = _make_state()
-        state.maze = _FakeMaze(wallpattern=6)
         SLOT = 405
-        _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
+        state = self._wall(SLOT, 6)
         assert wall_crumble(state, SLOT, 3) == -1
         assert state.mobs.picture[SLOT] == 0
         assert state.mobs.link[SLOT] == 0
-        assert SLOT not in state.destructible_wall_stage
 
-    def test_a_missing_maze_falls_back_to_the_palette_branch(self):
-        state = _make_state()
-        assert state.maze is None
+    def test_a_fresh_wall_takes_its_full_ladder_whatever_stood_there_before(self):
+        """The damage is in the tile, so a new level's wall starts whole."""
         SLOT = 406
-        _place_typed(state, SLOT, MazeObjIds.WALL_DESTRUCTABLE)
-        assert wall_crumble(state, SLOT, 1) == 0
-        assert shot_effects.wall_crumble_palette(state, SLOT) == 6
+        state = self._wall(SLOT, 0)
+        assert wall_crumble(state, SLOT, 2) == 0
+        write_tile_descriptor(state, SLOT, (0x71A0, 0x71A1, 0x71A2, 0x71A3))
+        assert wall_crumble(state, SLOT, 2) == 0
+        assert state.mobs.picture[SLOT] != 0
 
 
 # =============================================================================

@@ -579,7 +579,6 @@ def player_join_finalize(state: GameState, player_index: int) -> None:
     )                                                       # 0x48AB2-0x48ABC
     speech_welcome(state, player_index)
     setup_infopanel(state, player_index)
-    update_player_sprite(state, player_index)
 
 
 # ROM: direct game:0x48BB6 | ROM's own successful-placement wrapper: call player_start_inner and finalize only on success.

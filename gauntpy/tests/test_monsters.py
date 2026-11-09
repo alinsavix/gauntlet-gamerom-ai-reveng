@@ -947,6 +947,31 @@ class TestOddAngleOverride:
         monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_GRUNT))
         assert state.mobs.state(slot) & 7 == 7, "should face up-right, not right"
 
+    def test_a_negative_spawn_bonus_gives_the_levels_maximum(self):
+        """0x40F7E adds a byte to a sign-extended word, and 0x40F90 compares it unsigned."""
+        state = GameState()
+        state.level_players_active = 1
+        state.levelnum_current = 3
+        state.monster_spawn_probability_bonus = 0xFE
+        assert _spawn_probability(state) == 6
+
+    def test_a_negative_spawn_bonus_on_level_one_stays_negative(self):
+        """Level 1 has no cap, so handle_generate's signed compare always loses."""
+        state = GameState()
+        state.level_players_active = 1
+        state.levelnum_current = 1
+        state.monster_spawn_probability_bonus = 0xFE
+        assert _spawn_probability(state) < 0
+
+    def test_a_positive_spawn_bonus_is_added_and_capped(self):
+        state = GameState()
+        state.level_players_active = 1
+        state.levelnum_current = 40
+        state.monster_spawn_probability_bonus = 3
+        assert _spawn_probability(state) == 7
+        state.levelnum_current = 2
+        assert _spawn_probability(state) == 4
+
     def test_with_no_hero_in_sight_it_aims_from_stale_locals(self):
         """0x417AA: the stack's leftovers read as a far target down and right."""
         state = GameState()

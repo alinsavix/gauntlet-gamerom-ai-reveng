@@ -366,7 +366,6 @@ class GameState:
     # the tile's palette nibble has been walked down from 7. The port tracks
     # the stage here; wall_crumble writes the resulting descriptor/palette to
     # playfield RAM. Rendering consumes those words, not this dictionary.
-    destructible_wall_stage: dict = field(default_factory=dict)  # slot → 0-2
     # 0x90486E ``secret_need_hint``: set when a secret wall is shot open, so
     # the next level start screen offers the hint.  WP-7 writes, WP-15 reads.
     secret_need_hint: int = 0
