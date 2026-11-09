@@ -51,12 +51,14 @@ class TestTransporterAndForcefieldCycle:
             for _ in range(4):
                 main_cycle_tport_and_ffield(state)
             positions.append(state.tport_cycle_pos)
-        assert positions == [1, 2, 3, 4, 5, 4, 3, 2, 1, 0]
+        # Boot leaves the direction at 0, so the first step only sets it (0x4055E).
+        assert positions == [0, 1, 2, 3, 4, 5, 4, 3, 2, 1]
 
     def test_transporter_and_forcefield_cycles_write_their_color_banks(self):
         state = GameState(frame_counter=8, game_mode=GameMode.NORMAL)
         state.forcefield_step_timer = 5
         state.tport_cycle_divider = 3
+        state.tport_cycle_dir = 1
         before = list(state.playfield_color_ram)
 
         main_cycle_tport_and_ffield(state)
@@ -70,6 +72,16 @@ class TestTransporterAndForcefieldCycle:
         assert state.playfield_color_ram[4 * 16 + 8:4 * 16 + 14] == [
             0x8F00, 0x8F00, 0xCF21, 0xFF76, 0xFF98, 0xFFDD,
         ]
+
+    def test_a_pulse_from_a_zeroed_colour_wraps_as_a_word(self):
+        """0x403F6/0x40446: subtract as a word and compare unsigned, so 0 becomes 0xEEF0."""
+        from gauntpy.game.subsystems.maze_objects import playfield_palette_vblank
+
+        state = GameState(frame_counter=8, game_mode=GameMode.NORMAL)
+        state.palette_pulse_dir_a = -1
+        playfield_palette_vblank(state)
+        assert state.playfield_color_ram[2 * 16] == 0xEEF0
+        assert state.palette_pulse_dir_a == -1
 
     def test_vblank_palette_colors_bounce_at_the_rom_bounds(self):
         from gauntpy.game.subsystems.maze_objects import playfield_palette_vblank

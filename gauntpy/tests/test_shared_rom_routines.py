@@ -2,12 +2,9 @@
 
 from copy import deepcopy
 import json
-import os
 from pathlib import Path
 import pickle
 import struct
-import subprocess
-import sys
 
 import pytest
 
@@ -248,20 +245,10 @@ def rom_runner():
         pytest.skip("original local row76.bin is unavailable")
 
     def run(check_name, *arguments):
-        # Unicorn's handled Windows memory probes trigger pytest's fatal-error
-        # handler. Isolate native execution without changing pytest's handler.
-        script = (
-            "import faulthandler,json,runpy,sys; faulthandler.disable(); "
-            "module=runpy.run_path(sys.argv[1]); "
-            "module[sys.argv[2]](*json.loads(sys.argv[3]))"
-        )
-        result = subprocess.run(
-            [sys.executable, "-c", script, str(Path(__file__).resolve()),
-             check_name, json.dumps(arguments)],
-            capture_output=True, text=True, timeout=30,
-            env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)},
-        )
-        assert result.returncode == 0, result.stdout + result.stderr
+        # conftest.py keeps Unicorn's start-up probe away from faulthandler, so the
+        # check runs in this process. The JSON round trip keeps the argument types
+        # the checks were written against.
+        globals()[check_name](*json.loads(json.dumps(arguments)))
 
     return run
 

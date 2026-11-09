@@ -384,14 +384,16 @@ def playfield_palette_vblank(state: GameState) -> None:
 
     _write_live_color(state, 3, state.forcefield_color)
     if not state.frame_counter & 1:
+        # Word arithmetic and unsigned compares (0x403DE-0x40446): a colour a palette
+        # load left at 0 wraps rather than clamping.
         stun = state.playfield_color_ram[2 * 16]
         if state.palette_pulse_dir_a < 0:
-            stun -= 0x1110
+            stun = (stun - 0x1110) & 0xFFFF
             if stun <= 0x2220:
                 stun = 0x2220
                 state.palette_pulse_dir_a = 0
         else:
-            stun += 0x1110
+            stun = (stun + 0x1110) & 0xFFFF
             if stun >= 0xEEE0:
                 stun = 0xEEE0
                 state.palette_pulse_dir_a = -1
@@ -399,12 +401,12 @@ def playfield_palette_vblank(state: GameState) -> None:
 
         trap = state.playfield_color_ram[1 * 16]
         if state.palette_pulse_dir_b < 0:
-            trap -= 0x1011
+            trap = (trap - 0x1011) & 0xFFFF
             if trap <= 0x4044:
                 trap = 0x4044
                 state.palette_pulse_dir_b = 0
         else:
-            trap += 0x1011
+            trap = (trap + 0x1011) & 0xFFFF
             if trap >= 0xA0AA:
                 trap = 0xA0AA
                 state.palette_pulse_dir_b = -1

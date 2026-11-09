@@ -266,6 +266,8 @@ class Lockstep:
             ("dialog", machine.r16(0x904A9E), state.dialog_timer & 0xFFFF),
             ("active", machine.r16(0x904928), state.level_players_active),
             ("scroll", (machine.r16(0x904008), machine.r16(0x90400A)), (state.scroll_x & 0xFFFF, state.scroll_y & 0xFFFF)),
+            ("transporter cycle", (machine.r16(0x904030), machine.r16(0x904032), machine.r16(0x904034)),
+             (state.tport_cycle_pos & 0xFFFF, state.tport_cycle_dir & 0xFFFF, state.tport_cycle_divider & 0xFFFF)),
         ]
         if mode >= 0:      # a new game sets the loot words, and gauntpy boots with them set
             words += [
@@ -344,6 +346,15 @@ class Lockstep:
         if bad:
             at = bad[0]
             out.append(f"alpha row {at // 64} col {at % 64}: ROM {alpha[at]:#x} PY {state.alpha_ram[at]:#x} ({len(bad)} cells)")
+        colors = _words(machine, 0x910000, 0x300)
+        for name, base, ours in (("alpha color", 0, state.alpha_color_ram),
+                                 ("mob color", 0x100, state.mob_color_ram),
+                                 ("playfield shadow color", 0x200, state.playfield_shadow_color_ram),
+                                 ("playfield color", 0x280, state.playfield_color_ram)):
+            bad = [i for i, word in enumerate(ours) if colors[base + i] != word & 0xFFFF]
+            if bad:
+                at = bad[0]
+                out.append(f"{name} [{at}]: ROM {colors[base + at]:#x} PY {ours[at] & 0xFFFF:#x} ({len(bad)} words)")
         playfield = _words(machine, 0x900000, 64 * 64)
         bad = [i for i in range(64 * 64) if playfield[i] != state.playfield_ram[i]]
         if bad:

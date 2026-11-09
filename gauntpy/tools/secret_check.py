@@ -11,7 +11,10 @@ state as gauntpy and compares the result and every word the routine owns.
 
 from __future__ import annotations
 
+import concurrent.futures
+
 import copy
+import os
 from pathlib import Path
 import sys
 
@@ -76,32 +79,51 @@ def secret_check_cases() -> list[str]:
     return out
 
 
-def check_winner_cases(tasks=range(0, 0x60), winners=(-1, 0, 2, 4),
-                       progresses=(0, 1, 2, 3, 4, 5, 6, 10, 0x0B, 0x10, 0x20, 0xFF)) -> list[str]:
+_WINNER_BASES: list[GameState] = []
+
+
+def _winner_bases() -> list[GameState]:
+    """Level 7 on maze 6, and the same level with its monsters and generators gone."""
+    if not _WINNER_BASES:
+        level = GameState(game_mode=GameMode.NORMAL)
+        reset_and_load_level(level, 7, maze_number=6)
+        cleared = copy.deepcopy(level)
+        for slot in range(32, 1024):
+            if 0x12 <= cleared.mobs.obj_type(slot) <= 0x2D:
+                cleared.mobs.unlink_and_clear(slot)
+        _WINNER_BASES.extend((level, cleared))
+    return _WINNER_BASES
+
+
+def _check_winner_task(job: tuple) -> list[str]:
+    cleared, task, winners, progresses = job
+    base = _winner_bases()[cleared]
     out = []
-    level = GameState(game_mode=GameMode.NORMAL)
-    reset_and_load_level(level, 7, maze_number=6)
-    cleared = copy.deepcopy(level)
-    for slot in range(32, 1024):
-        if 0x12 <= cleared.mobs.obj_type(slot) <= 0x2D:
-            cleared.mobs.unlink_and_clear(slot)
-    for base in (level, cleared):
-        for task in tasks:
-            for winner in winners:
-                for progress in progresses:
-                    state = copy.deepcopy(base)
-                    state.secret_trick_id = task
-                    state.secret_player = winner
-                    if 0 <= winner < 4:
-                        state.secret_tricks_flags[winner] = progress
-                    machine = rom_exec.RomMachine.from_state(state)
-                    _load_secret_words(machine, state)
-                    rom = _signed32(machine.call(0x4D1A4))
-                    py = -1 if secret_check_winner(state) else 0
-                    if rom != py:
-                        out.append(f"check_winner(task {task:#x}, winner {winner}, progress {progress:#x}, "
-                                   f"{'cleared' if base is cleared else 'level'}): ROM {rom} PY {py}")
+    for winner in winners:
+        for progress in progresses:
+            state = copy.deepcopy(base)
+            state.secret_trick_id = task
+            state.secret_player = winner
+            if 0 <= winner < 4:
+                state.secret_tricks_flags[winner] = progress
+            machine = rom_exec.RomMachine.from_state(state)
+            _load_secret_words(machine, state)
+            rom = _signed32(machine.call(0x4D1A4))
+            py = -1 if secret_check_winner(state) else 0
+            if rom != py:
+                out.append(f"check_winner(task {task:#x}, winner {winner}, progress {progress:#x}, "
+                           f"{'cleared' if cleared else 'level'}): ROM {rom} PY {py}")
     return out
+
+
+def check_winner_cases(tasks=range(0, 0x60), winners=(-1, 0, 2, 4),
+                       progresses=(0, 1, 2, 3, 4, 5, 6, 10, 0x0B, 0x10, 0x20, 0xFF),
+                       jobs: int = 1) -> list[str]:
+    work = [(cleared, task, tuple(winners), tuple(progresses)) for cleared in (0, 1) for task in tasks]
+    if jobs <= 1:
+        return [line for job in work for line in _check_winner_task(job)]
+    with concurrent.futures.ProcessPoolExecutor(jobs) as pool:
+        return [line for lines in pool.map(_check_winner_task, work, chunksize=4) for line in lines]
 
 
 def secret_code_cases(count: int = 3000) -> list[str]:
@@ -226,12 +248,19 @@ def name_entry_cases(winners=(0, 2), settings=(0x2000, 0)) -> list[str]:
     return out
 
 
+_GROUPS = (("name_entry_step_char", step_char_cases), ("secret_check", secret_check_cases),
+           ("secret_check_winner", check_winner_cases), ("secret_code_build", secret_code_cases),
+           ("secret name entry", name_entry_cases))
+
+
 def main() -> int:
     failures = 0
-    for name, cases in (("name_entry_step_char", step_char_cases), ("secret_check", secret_check_cases),
-                        ("secret_check_winner", check_winner_cases), ("secret_code_build", secret_code_cases),
-                        ("secret name entry", name_entry_cases)):
-        differences = cases()
+    # check_winner shares its cases between workers; the other four are quick.
+    results = [
+        cases(jobs=os.cpu_count() or 1) if cases is check_winner_cases else cases()
+        for _, cases in _GROUPS
+    ]
+    for (name, _), differences in zip(_GROUPS, results):
         failures += len(differences)
         print(f"{name}: {len(differences)} differences")
         for line in differences[:8]:

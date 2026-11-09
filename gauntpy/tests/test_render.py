@@ -2278,10 +2278,7 @@ class TestPygameFramebuffer:
         )
 
     def test_render_frame_matches_the_reference_compositor(self):
-        import pygame
-
         from gauntpy.render.compositor import RenderCache
-        from gauntpy.render.framebuffer import PygameFramebuffer
 
         state = GameState()
         init_alpha_color_ram(state)
@@ -2289,7 +2286,8 @@ class TestPygameFramebuffer:
         _place(state.mobs, row=8, col=8, picture=5)
         assets = _FakeAssets()
         reference, _ = render_frame(state, assets)
-        accelerated = PygameFramebuffer(pygame, 336, 240)
+        # Its own display: another test may or may not have opened one in this worker.
+        accelerated = self._surface_framebuffer(336, 240)
 
         actual, _ = render_frame(
             state, assets, cache=RenderCache(), framebuffer=accelerated,

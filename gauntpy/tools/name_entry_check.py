@@ -12,7 +12,9 @@ Needs the ROMs ``rom_exec.py`` needs.
 
 from __future__ import annotations
 
+import concurrent.futures
 import copy
+import os
 import random
 import struct
 import sys
@@ -41,8 +43,7 @@ _MAGIC_HELD, _FIRE_HELD = _IDLE & ~1, _IDLE & ~2
 def _machine(state: GameState, player: int) -> rom_exec.RomMachine:
     hero = state.players[player]
     machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
-    for index, word in enumerate(state.alpha_ram[:64 * 30]):
-        machine.w16(0x905000 + 2 * index, word)
+    machine.write_words(0x905000, state.alpha_ram[:64 * 30])
     machine.w8(0x9049A0 + player, int(hero.status))
     machine.w16(0x904A26 + 2 * player, hero.state_timer)
     machine.w8(0x904A36 + player, hero.name_entry_repeat_delay)
@@ -120,56 +121,69 @@ def highscore_cases(rng: random.Random, count: int = 1200) -> list[str]:
     return out
 
 
-def editor_cases(rng: random.Random, count: int = 60) -> tuple[list[str], int]:
-    out = []
-    finished = 0
-    for _ in range(count):
-        state = GameState(game_mode=GameMode.NORMAL, levelnum_current=8, mazenum_current=20)
-        state.attract_timer = 0x5DD
-        player = rng.randint(0, 3)
-        hero = state.players[player]
-        hero.status = int(PlayerStatus.DYING)
-        hero.highscore_rank = rng.randint(0, 9)
-        hero.score_per_coin = rng.choice((1200, 50000))
-        hero.character = rng.randint(0, 3)
-        hero.state_timer = 0xA8C
-        hero.name_entry_repeat_delay = 0xA0
-        machine = _machine(state, player)
-        machine.call(0x452D0, player, count=3_000_000)
-        setup_infopanel(state, player)
-        script = []
-        for _ in range(40):
-            script.append((rng.randint(1, 60), rng.choice((*_STICK, _IDLE, _IDLE))))
-            if rng.random() < 0.5:
-                script.append((rng.randint(1, 4), rng.choice((_MAGIC_HELD, _FIRE_HELD))))
-            script.append((rng.randint(1, 6), _IDLE))
-        frame = 0
-        found: list[str] = []
-        for frames, raw in script:
-            for _ in range(frames):
-                if hero.status != PlayerStatus.DYING or found:
-                    break
-                frame += 1
-                state.player_input_raw[player] = raw
-                # input_debounce (0x40644), fed identically to both sides.
-                state.debounce_shift_magic[player] = (
-                    (state.debounce_shift_magic[player] << 1) | (raw & 1 == 0)) & 0xFF
-                state.debounce_shift_fire[player] = (
-                    (state.debounce_shift_fire[player] << 1) | (raw & 2 == 0)) & 0xFF
-                machine.w16(0x904920 + 2 * player, raw)
-                machine.w16(0x905F58 + 2 * player, state.debounce_shift_magic[player])
-                machine.w16(0x905F60 + 2 * player, state.debounce_shift_fire[player])
-                machine.call(0x49DE6, player, count=3_000_000)
-                if not machine.halted:
-                    found = [f"ROM did not return (fault {machine.fault_pc})"]
-                    break
-                player_death_sequence(state, player)
-                found = _words(machine, state, player)
-        if found:
-            out.append(f"frame {frame}: " + "; ".join(found[:3]))
-        if hero.status != PlayerStatus.DYING:
-            finished += 1
-    return out, finished
+def _editor_setup(rng: random.Random) -> tuple:
+    """One session's hero and stick script, drawn in the order the serial loop drew them."""
+    player = rng.randint(0, 3)
+    rank = rng.randint(0, 9)
+    score_per_coin = rng.choice((1200, 50000))
+    character = rng.randint(0, 3)
+    script = []
+    for _ in range(40):
+        script.append((rng.randint(1, 60), rng.choice((*_STICK, _IDLE, _IDLE))))
+        if rng.random() < 0.5:
+            script.append((rng.randint(1, 4), rng.choice((_MAGIC_HELD, _FIRE_HELD))))
+        script.append((rng.randint(1, 6), _IDLE))
+    return player, rank, score_per_coin, character, script
+
+
+def editor_cases(rng: random.Random, count: int = 60, jobs: int = 1) -> tuple[list[str], int]:
+    setups = [_editor_setup(rng) for _ in range(count)]
+    if jobs <= 1:
+        results = [_editor_session(setup) for setup in setups]
+    else:
+        with concurrent.futures.ProcessPoolExecutor(jobs) as pool:
+            results = list(pool.map(_editor_session, setups))
+    return [line for line, _ in results if line], sum(done for _, done in results)
+
+
+def _editor_session(setup: tuple) -> tuple[str, bool]:
+    player, rank, score_per_coin, character, script = setup
+    state = GameState(game_mode=GameMode.NORMAL, levelnum_current=8, mazenum_current=20)
+    state.attract_timer = 0x5DD
+    hero = state.players[player]
+    hero.status = int(PlayerStatus.DYING)
+    hero.highscore_rank = rank
+    hero.score_per_coin = score_per_coin
+    hero.character = character
+    hero.state_timer = 0xA8C
+    hero.name_entry_repeat_delay = 0xA0
+    machine = _machine(state, player)
+    machine.call(0x452D0, player, count=3_000_000)
+    setup_infopanel(state, player)
+    frame = 0
+    found: list[str] = []
+    for frames, raw in script:
+        for _ in range(frames):
+            if hero.status != PlayerStatus.DYING or found:
+                break
+            frame += 1
+            state.player_input_raw[player] = raw
+            # input_debounce (0x40644), fed identically to both sides.
+            state.debounce_shift_magic[player] = (
+                (state.debounce_shift_magic[player] << 1) | (raw & 1 == 0)) & 0xFF
+            state.debounce_shift_fire[player] = (
+                (state.debounce_shift_fire[player] << 1) | (raw & 2 == 0)) & 0xFF
+            machine.w16(0x904920 + 2 * player, raw)
+            machine.w16(0x905F58 + 2 * player, state.debounce_shift_magic[player])
+            machine.w16(0x905F60 + 2 * player, state.debounce_shift_fire[player])
+            machine.call(0x49DE6, player, count=3_000_000)
+            if not machine.halted:
+                found = [f"ROM did not return (fault {machine.fault_pc})"]
+                break
+            player_death_sequence(state, player)
+            found = _words(machine, state, player)
+    line = f"frame {frame}: " + "; ".join(found[:3]) if found else ""
+    return line, hero.status != PlayerStatus.DYING
 
 
 def main() -> int:
@@ -177,7 +191,7 @@ def main() -> int:
     high = highscore_cases(rng)
     print(f"highscore_check: {len(high)} of 1200 differ")
     print(*high[:5], sep="\n")
-    editor, finished = editor_cases(rng)
+    editor, finished = editor_cases(rng, jobs=os.cpu_count() or 1)
     print(f"initials editor: {len(editor)} of 60 differ, {finished} ran to the end")
     print(*editor[:5], sep="\n")
     return 1 if high or editor else 0

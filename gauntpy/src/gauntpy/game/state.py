@@ -508,7 +508,8 @@ class GameState:
     # 0x904030, transporter colour animation position (bounces 0-5)
     tport_cycle_pos: int = 0
     # 0x904032, transporter direction of bounce (+1 or -1)
-    tport_cycle_dir: int = 1
+    # Boot clears it, and only the first step of the cycle (0x4055E) makes it 1.
+    tport_cycle_dir: int = 0
     # 0x904034, 2-bit sub-frame divider for transporter animation (ticks every 4th frame)
     tport_cycle_divider: int = 0
     # 0x90402E / 0x90402C: directions for colors held in live playfield RAM.

@@ -26,6 +26,8 @@ too. A difference is a lead, not a verdict: the RAM here is what
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import os
 from collections import deque
 import copy
 from pathlib import Path
@@ -344,31 +346,47 @@ def walk(state: GameState, onward=(), scenario: str = "plain", frames: int = 200
     return frames, [], "time"
 
 
+def _run(run: tuple) -> tuple[int, list[str], str] | None:
+    scenario, maze, start, length, mugger, show = run
+    made = setup(maze, start, length, mugger, scenario)
+    if made is None:
+        return None
+    state, onward = made
+    return walk(state, onward, scenario, show=show)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--maze", type=int, action="append")
     parser.add_argument("--scenario", choices=SCENARIOS, action="append")
     parser.add_argument("--show", action="store_true")
+    parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
+                        help="worker processes; every run happens once whatever the count")
     args = parser.parse_args()
     mazes = args.maze or [6, 7, 13, 15, 29, 43, 76, 84, 87, 101]
     scenarios = args.scenario or list(SCENARIOS)
     failures = 0
     endings: dict[str, int] = {}
-    for scenario in scenarios:
-        for maze in mazes:
-            for start in (0x84, 0x14A, 0x1D6, 0x2A8, 0x330):
-                for length in (6, 14, 30):
-                    for mugger in (False, True):
-                        made = setup(maze, start, length, mugger, scenario)
-                        if made is None:
-                            continue
-                        state, onward = made
-                        frames, differences, end = walk(state, onward, scenario, show=args.show)
-                        endings[f"{scenario}/{end}"] = endings.get(f"{scenario}/{end}", 0) + 1
-                        if differences:
-                            failures += 1
-                            print(f"{scenario} maze {maze} start {start:#x} length {length} mugger {mugger}: "
-                                  f"frame {frames}: {'; '.join(differences)}")
+    runs = [
+        (scenario, maze, start, length, mugger, args.show)
+        for scenario in scenarios
+        for maze in mazes
+        for start in (0x84, 0x14A, 0x1D6, 0x2A8, 0x330)
+        for length in (6, 14, 30)
+        for mugger in (False, True)
+    ]
+    jobs = 1 if args.show else max(1, args.jobs)     # --show prints as it goes
+    with concurrent.futures.ProcessPoolExecutor(jobs) as pool:
+        for run, result in zip(runs, pool.map(_run, runs, chunksize=4)):
+            if result is None:
+                continue
+            scenario, maze, start, length, mugger, _ = run
+            frames, differences, end = result
+            endings[f"{scenario}/{end}"] = endings.get(f"{scenario}/{end}", 0) + 1
+            if differences:
+                failures += 1
+                print(f"{scenario} maze {maze} start {start:#x} length {length} mugger {mugger}: "
+                      f"frame {frames}: {'; '.join(differences)}")
     print("endings:", dict(sorted(endings.items())))
     print("runs with differences:", failures)
     return 1 if failures else 0

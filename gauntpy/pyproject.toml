@@ -56,9 +56,12 @@ gauntpy = ["data/*.csv"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# pytest-xdist: one worker per core. ``-p no:xdist`` or ``-n 0`` runs serially.
+addopts = "-n auto"
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-xdist>=3.8.0",
     "unicorn>=2.1.4",
 ]

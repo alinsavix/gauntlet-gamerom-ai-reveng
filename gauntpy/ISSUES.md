@@ -41,6 +41,25 @@ None.
 
 ## Resolved issues
 
+### S-224 · colour RAM, and checks that take minutes rather than half an hour
+
+`tools/game_run.py` now compares all four colour RAM banks each frame, and three faults came out at once.
+VBLANK reads the frame counter before the loop body advances it (0x42A86), but `tick` advanced it first, so the IT
+label flash and the logo gradient ran a frame early. Boot leaves the transporter cycle's direction at 0, so its
+first step only sets it (0x4055E), where gauntpy started at 1 and ran a step ahead for the whole game. And the
+stun and trap pulses are word arithmetic with unsigned compares (0x403DE-0x40446): after a palette load leaves a
+colour at 0, the ROM wraps to 0xEEF0, where gauntpy clamped. The transporter cycle words are compared too.
+
+**Faster checks, with every case still run.** The suite runs on every core through pytest-xdist (about 20 s, from
+70). `RomMachine.load_state` copies the record tables in five writes instead of 5,120, and
+`RomMachine.write_words` does the same for the tools. `test_shared_rom_routines.py` no longer starts a Python
+process per test, since `conftest.py` already keeps Unicorn's start-up probe from faulthandler; that now covers
+`emu_start` too, which grows the same buffer. The slow tools share their cases between processes:
+`level_load_check` (54 s, from about 10 minutes), the reflect sweep (18 s, from 7 minutes), the shots sweep,
+`thief_walk`, `secret_check` and `name_entry_check`, each giving the same results. `tools/check_all.py` runs them all
+at once, with `--flights 8` for lockstep flights, in about two and a half minutes. `rom_sweeps.py` now exits 1 on
+a difference. A pygame test that relied on another test having opened a display now opens its own.
+
 ### S-223 · a thief off the bottom row, GAME OVER's dwell and the generators' bonus
 
 `tools/game_run.py --coins N --rich` lets heroes die, enter initials and play a second game, none of

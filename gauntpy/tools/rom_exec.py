@@ -150,6 +150,11 @@ class RomMachine:
 
     # --- RAM access ----------------------------------------------------------
 
+    def write_words(self, address: int, words) -> None:
+        """A run of words in one write, as a table copy needs."""
+        words = [word & 0xFFFF for word in words]
+        self.cpu.mem_write(address, struct.pack(f">{len(words)}H", *words))
+
     def w16(self, address: int, value: int) -> None:
         self.cpu.mem_write(address, struct.pack(">H", value & 0xFFFF))
 
@@ -185,23 +190,21 @@ class RomMachine:
     def load_state(self, state) -> None:
         """Copy the fields movement, pickups and monsters read into RAM."""
         mobs = state.mobs
-        for slot in range(1024):
-            h, v = mobs.hpos[slot], mobs.vpos[slot]
-            if mobs.picture[slot] and h == 0 and v == 0 and slot >= 32:
+        hpos, vpos = list(mobs.hpos[:1024]), list(mobs.vpos[:1024])
+        for slot in range(32, 1024):
+            if mobs.picture[slot] and hpos[slot] == 0 and vpos[slot] == 0:
                 # Fixtures that set only a picture: give the record the position
                 # its cell implies, as a real maze record would carry.
-                h = ((slot & 0x1F) * 16 << 7) & 0xFFFF
-                v = (native_v((slot >> 5) * 16) << 7) & 0xFFFF
-            self.w16(_PICTURE + 2 * slot, mobs.picture[slot])
-            self.w16(_HPOS + 2 * slot, h)
-            self.w16(_VPOS + 2 * slot, v)
-            self.w16(_LINK + 2 * slot, mobs.link[slot])
-            self.w16(_STATE + 2 * slot, mobs.state_link[slot])
+                hpos[slot] = ((slot & 0x1F) * 16 << 7) & 0xFFFF
+                vpos[slot] = (native_v((slot >> 5) * 16) << 7) & 0xFFFF
+        # One write per table: the five are adjacent 0x800-byte blocks.
+        for base, words in ((_PICTURE, mobs.picture), (_HPOS, hpos), (_VPOS, vpos),
+                            (_LINK, mobs.link), (_STATE, mobs.state_link)):
+            self.cpu.mem_write(base, struct.pack(">1024H", *(w & 0xFFFF for w in words[:1024])))
         self.w16(0x904BFC, state.rng.seed)
         self.load_depth_chain(mobs)
         self.w16(0x904876, state.current_player)
-        for index, word in enumerate(state.forcefield_segment_table):
-            self.w16(0x910780 + 2 * index, word)
+        self.write_words(0x910780, state.forcefield_segment_table)
         for i, player in enumerate(state.players):
             if player.active and player.mob_slot and (mobs.hpos[player.mob_slot] & 0xF) < 0xC:
                 # Fixture heroes without the palette nibble the ROM reads them by.

@@ -140,13 +140,15 @@ def tick(state: GameState, *, treasure_timer_paused: bool = False) -> None:
     RNG seed produces the same frame, always. ``treasure_timer_paused`` is the
     playable host's explicit non-arcade F8 gate around only call 15.
     """
-    state.frame_counter = (state.frame_counter + 1) & 0xFFFF
-    state.vblank_semaphore = 0
+    # VBLANK comes first and reads the frame counter the last pass left; the loop
+    # body counts this frame only once it starts (0x42A86).
     state.vblank_scroll_word = (state.scroll_y << 7) & 0xFFFF     # 0x4018E-0x4019C
     potion_flash_vblank(state)
     player_hurt_palette_vblank(state)
     alpha_palette_vblank(state)
     playfield_palette_vblank(state)
+    state.frame_counter = (state.frame_counter + 1) & 0xFFFF
+    state.vblank_semaphore = 0
 
     game_frame(state, treasure_timer_paused=treasure_timer_paused)
 

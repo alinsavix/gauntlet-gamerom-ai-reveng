@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import argparse
 import collections
+import concurrent.futures
 import copy
+import os
 import random
 import sys
 from pathlib import Path
@@ -229,8 +231,7 @@ def check_party(maze: int, level: int, seed: int, characters: tuple[int, ...],
 def _rom_with_party(state: GameState) -> rom_exec.RomMachine:
     machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
     machine.install_slapstic()
-    for index, word in enumerate(state.alpha_ram[:64 * 30]):
-        machine.w16(0x905000 + 2 * index, word)
+    machine.write_words(0x905000, state.alpha_ram[:64 * 30])
     for address, value in (
         (0x904000, state.mazenum_current), (0x904004, state.levelnum_current),
         (0x9049E2, state.two_player_mode), (0x904A24, state.game_settings),
@@ -458,8 +459,7 @@ def check_panel(rng: random.Random) -> list[str]:
     state = panel_state(rng)
     selector = rng.choice((-1, -1, 0, 1, 2, 3))
     machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
-    for index, word in enumerate(state.alpha_ram[:64 * 30]):
-        machine.w16(0x905000 + 2 * index, word)
+    machine.write_words(0x905000, state.alpha_ram[:64 * 30])
     machine.w16(0x9049E2, state.two_player_mode)
     machine.w16(0x904A24, state.game_settings)
     machine.w16(0x904918, int(state.game_mode) & 0xFFFF)
@@ -564,95 +564,118 @@ def check(maze: int, level: int, seed: int, task: int = 0) -> tuple[str, dict[st
     return "", differences(machine, state)
 
 
+def _cases(args) -> list[tuple]:
+    """Every comparison main runs, in its order, as plain data a worker can take."""
+    cases: list[tuple] = []
+    for maze in args.maze or MAZES:
+        for level in args.level or LEVELS:
+            for seed in args.seed or SEEDS:
+                # A secret room is only ever entered with a challenge task chosen (0x44DD6).
+                cases.append(("load", maze, level, seed, 0x50 + seed % 14 if maze >= 115 else 0))
+    for maze in args.maze or range(104):
+        for level in args.level or LEVELS:
+            for seed in args.seed or SEEDS:
+                for next_treasure in (3, 0):
+                    cases.append(("screen", maze, level, seed, next_treasure))
+    for maze in args.maze or range(5, 102, 5):
+        for level in args.level or (2, 8, 13, 30, 61):
+            for seed in args.seed or SEEDS[:3]:
+                for characters in PARTIES:
+                    for settings, bonus in ((0, 0), (0xC0, 3), (0x40, 0xFE)):
+                        cases.append(("party", maze, level, seed, characters, settings, bonus))
+    for maze in args.maze or (5, 14, 30, 39, 47, 60, 77, 90):
+        for level in args.level or (2, 8, 13, 30):
+            for seed in args.seed or SEEDS[:3]:
+                for pricing, timer in ((1, 0x5DD), (0, 0x5DD), (0, 0xFFFF)):
+                    cases.append(("first hero", maze, level, seed, pricing, timer))
+    for seed in args.seed or (*SEEDS, 99, 0xFFFE):
+        for character in range(4):
+            cases.append(("new game", seed, character))
+    for mode, pages in ((GameMode.TITLE, (2,)), (GameMode.SCORES, (2,)), (GameMode.DEMO, (2,)),
+                        (GameMode.LEGEND, (2, 1, 0))):
+        for page in pages:
+            for seed in args.seed or SEEDS:
+                cases.append(("attract", int(mode), page, seed))
+    return cases
+
+
+def _run(case: tuple) -> tuple[tuple, str, dict[str, list[str]] | list[str]]:
+    kind, *rest = case
+    if kind == "load":
+        return (case, *check(*rest))
+    if kind == "screen":
+        return (case, *check_start_screen(*rest))
+    if kind == "party":
+        return (case, *check_party(*rest))
+    if kind == "first hero":
+        return (case, *check_first_hero(*rest))
+    if kind == "new game":
+        return (case, *check_new_game(*rest))
+    return case, "", check_attract_screen(*rest)
+
+
+def _label(case: tuple) -> str:
+    kind, *rest = case
+    if kind == "load":
+        maze, level, seed, _ = rest
+        return f"maze {maze} level {level} seed {seed:#x}"
+    if kind == "screen":
+        maze, level, seed, next_treasure = rest
+        return f"maze {maze} level {level} seed {seed:#x} screen next_treasure {next_treasure}"
+    if kind == "party":
+        maze, level, seed, characters, settings, bonus = rest
+        return (f"maze {maze} level {level} seed {seed:#x} party {characters} "
+                f"settings {settings:#x} bonus {bonus:#x}")
+    if kind == "first hero":
+        maze, level, seed, pricing, timer = rest
+        return f"maze {maze} level {level} seed {seed:#x} first hero pricing {pricing} timer {timer:#x}"
+    if kind == "new game":
+        seed, character = rest
+        return f"new game seed {seed:#x} character {character}"
+    mode, page, seed = rest
+    return f"attract {GameMode(mode).name} page {page} seed {seed:#x}"
+
+
+def _panels(count: int) -> int:
+    rng = random.Random(1)
+    return sum(bool(check_panel(rng)) for _ in range(count))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--maze", type=int, action="append")
     parser.add_argument("--level", type=int, action="append")
     parser.add_argument("--seed", type=lambda text: int(text, 0), action="append")
     parser.add_argument("--show", action="store_true")
+    parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
+                        help="worker processes; every case runs once whatever the count")
     args = parser.parse_args()
     kinds: collections.Counter[str] = collections.Counter()
-    runs = bad = 0
-    for maze in args.maze or MAZES:
-        for level in args.level or LEVELS:
-            for seed in args.seed or SEEDS:
-                runs += 1
-                # A secret room is only ever entered with a challenge task chosen (0x44DD6).
-                task = 0x50 + seed % 14 if maze >= 115 else 0
-                error, found = check(maze, level, seed, task)
-                if error:
-                    bad += 1
-                    kinds[error.split(" (")[0]] += 1
-                    print(f"maze {maze} level {level} seed {seed:#x}: {error}")
-                    continue
-                if found:
-                    bad += 1
-                    kinds.update(kind.split("[")[0] for kind in found)
-                    if args.show:
-                        print(f"maze {maze} level {level} seed {seed:#x}")
-                        for kind, rows in found.items():
-                            print(f"  {kind} ({len(rows)}): {rows[:3]}")
-    for maze in args.maze or range(104):
-        for level in args.level or LEVELS:
-            for seed in args.seed or SEEDS:
-                for next_treasure in (3, 0):
-                    runs += 1
-                    error, found = check_start_screen(maze, level, seed, next_treasure)
-                    if error or found:
-                        bad += 1
-                        kinds.update((error.split(" (")[0],) if error else (k.split("[")[0] for k in found))
-                        print(f"maze {maze} level {level} seed {seed:#x} screen next_treasure {next_treasure}: {error}")
-                        if args.show:
-                            for kind, rows in found.items():
-                                print(f"  {kind} ({len(rows)}): {rows[:3]}")
-    for maze in args.maze or range(5, 102, 5):
-        for level in args.level or (2, 8, 13, 30, 61):
-            for seed in args.seed or SEEDS[:3]:
-                for characters in PARTIES:
-                    for settings, bonus in ((0, 0), (0xC0, 3), (0x40, 0xFE)):
-                        runs += 1
-                        error, found = check_party(maze, level, seed, characters, settings, bonus)
-                        if error or found:
-                            bad += 1
-                            kinds.update((error,) if error else (k.split("[")[0] for k in found))
-                            print(f"maze {maze} level {level} seed {seed:#x} party {characters} "
-                                  f"settings {settings:#x} bonus {bonus:#x}: {error}")
-                            if args.show:
-                                for kind, rows in found.items():
-                                    print(f"  {kind} ({len(rows)}): {rows[:3]}")
-    for maze in args.maze or (5, 14, 30, 39, 47, 60, 77, 90):
-        for level in args.level or (2, 8, 13, 30):
-            for seed in args.seed or SEEDS[:3]:
-                for pricing, timer in ((1, 0x5DD), (0, 0x5DD), (0, 0xFFFF)):
-                    runs += 1
-                    error, found = check_first_hero(maze, level, seed, pricing, timer)
-                    if error or found:
-                        bad += 1
-                        kinds.update((error,) if error else (k.split("[")[0] for k in found))
-                        print(f"maze {maze} level {level} seed {seed:#x} first hero pricing {pricing} "
-                              f"timer {timer:#x}: {error}")
-    for seed in args.seed or (*SEEDS, 99, 0xFFFE):
-        for character in range(4):
-            runs += 1
-            error, found = check_new_game(seed, character)
-            if error or found:
-                bad += 1
-                kinds.update((error,) if error else (k.split("[")[0] for k in found))
-                print(f"new game seed {seed:#x} character {character}: {error}")
-    for mode, pages in ((GameMode.TITLE, (2,)), (GameMode.SCORES, (2,)), (GameMode.DEMO, (2,)),
-                        (GameMode.LEGEND, (2, 1, 0))):
-        for page in pages:
-            for seed in args.seed or SEEDS:
-                runs += 1
-                found = check_attract_screen(int(mode), seed, page)
-                if found:
-                    bad += 1
-                    kinds[f"attract {mode.name}"] += 1
-                    print(f"attract {mode.name} page {page} seed {seed:#x}: {found[:3]}")
-    rng = random.Random(1)
-    panels = sum(bool(check_panel(rng)) for _ in range(3000))
+    cases = _cases(args)
+    bad = 0
+    with concurrent.futures.ProcessPoolExecutor(max(1, args.jobs)) as pool:
+        # The 3000 panels share one generator, so they stay in one worker.
+        panels_future = pool.submit(_panels, 3000)
+        for case, error, found in pool.map(_run, cases, chunksize=8):
+            if not (error or found):
+                continue
+            bad += 1
+            kind = case[0]
+            if kind == "attract":
+                kinds[f"attract {GameMode(case[1]).name}"] += 1
+                print(f"{_label(case)}: {found[:3]}")
+                continue
+            if error:
+                kinds[error.split(" (")[0]] += 1
+            else:
+                kinds.update(name.split("[")[0] for name in found)
+            print(f"{_label(case)}: {error}")
+            if args.show and found:
+                for name, rows in found.items():
+                    print(f"  {name} ({len(rows)}): {rows[:3]}")
+        panels = panels_future.result()
     print(f"3000 panels, {panels} with differences")
-    print(f"{runs} loads, {bad} with differences")
+    print(f"{len(cases)} loads, {bad} with differences")
     for kind, count in kinds.most_common():
         print(f"  {kind}: {count}")
     return 1 if bad or panels else 0

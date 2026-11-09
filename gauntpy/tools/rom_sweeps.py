@@ -27,7 +27,9 @@ usually means RAM the snapshot lacks. Hand-traced conclusions live in doc/04 §7
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import copy
+import os
 from pathlib import Path
 import random
 import sys
@@ -50,6 +52,8 @@ from gauntpy.game.subsystems.shot_collision import shot_reflect_calc  # noqa: E4
 from gauntpy.game.subsystems.shots import resolve_shot_hit  # noqa: E402
 from gauntpy.game.subsystems.shot_state import _shot_slot  # noqa: E402
 from gauntpy.game.subsystems.player_transport import scan_move_path_interactions  # noqa: E402
+
+_JOBS = os.cpu_count() or 1
 
 _NEIGHBOUR = {
     gin.JOY_RIGHT: (10 << 5) | 10, gin.JOY_LEFT: (10 << 5) | 8,
@@ -182,52 +186,68 @@ def routes(count: int = 4000) -> int:
     return bad
 
 
-def reflect() -> int:
-    """shot_reflect_calc (0x53818) for every direction, approach, corner and bounce state."""
+def _reflect_pair(pair: tuple[int, int]) -> tuple[int, int, list[str]]:
+    """Every case of shot_reflect_calc for one direction and shooter."""
+    direction, shooter = pair
     bad = cases = 0
+    lines: list[str] = []
     target = (12 << 5) | 12
     neighbours = {"up": target - 32, "down": target + 32, "left": target - 1, "right": target + 1}
     near_cell = (0, 1, -1, 32, -32, 33, -33, 31, -31, 2, -2, 64)
-    for direction in range(8):
-        for shooter in (0, 2):
-            for wall_mask in range(16):
-                for delta in near_cell:
-                    for count in (0, 1, 3):
-                        for raw_target in (target, target | 0x400):
-                            for top in (False, True):
-                                cases += 1
-                                state = GameState()
-                                for bit, cell in enumerate(neighbours.values()):
-                                    if wall_mask >> bit & 1:
-                                        state.mobs.picture[cell] = 0x8000
-                                        state.mobs.hpos[cell] = (cell & 0x1F) * 16 << 7
-                                        state.mobs.vpos[cell] = native_v((cell >> 5) * 16) << 7
-                                        state.mobs.link[cell] = int(MazeObjIds.WALL_REGULAR) << 10
-                                state.shot_direction[shooter] = direction
-                                state.reflect_count[shooter] = count
-                                state.player_shot_last_wall_pos[shooter] = (target - delta) & 0x3FF
-                                slot = _shot_slot(shooter)
-                                state.mobs.picture[slot] = 0x1000
-                                state.mobs.hpos[slot] = 12 * 16 << 7
-                                state.mobs.vpos[slot] = 0xF900 if top else native_v(12 * 16) << 7
-                                machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
-                                rom = machine.call(0x53818, raw_target, shooter, count=500_000) & 0xFFFF
-                                ours = shot_reflect_calc(state, raw_target, shooter) & 0xFFFF
-                                pairs = (
-                                    ("result", rom, ours),
-                                    ("direction", machine.r16(0x9049C4 + 2 * shooter), state.shot_direction[shooter] & 0xFFFF),
-                                    ("bounces", machine.r16(0x9048BE + 2 * shooter), state.reflect_count[shooter] & 0xFFFF),
-                                    ("h", machine.hpos(slot), state.mobs.hpos[slot] & 0xFFFF),
-                                    ("v", machine.vpos(slot), state.mobs.vpos[slot] & 0xFFFF),
-                                    ("seed", machine.r16(0x904BFC), state.rng.seed & 0xFFFF),
-                                )
-                                wrong = [f"{name} ROM {a:#x} PY {b:#x}" for name, a, b in pairs if a != b]
-                                if wrong or not machine.halted:
-                                    bad += 1
-                                    if bad <= 6:
-                                        print(f"  dir {direction} shooter {shooter} walls {wall_mask:#x} "
-                                              f"delta {delta} count {count} target {raw_target:#x} top {top}: {wrong[:3]}")
+    for wall_mask in range(16):
+        for delta in near_cell:
+            for count in (0, 1, 3):
+                for raw_target in (target, target | 0x400):
+                    for top in (False, True):
+                        cases += 1
+                        state = GameState()
+                        for bit, cell in enumerate(neighbours.values()):
+                            if wall_mask >> bit & 1:
+                                state.mobs.picture[cell] = 0x8000
+                                state.mobs.hpos[cell] = (cell & 0x1F) * 16 << 7
+                                state.mobs.vpos[cell] = native_v((cell >> 5) * 16) << 7
+                                state.mobs.link[cell] = int(MazeObjIds.WALL_REGULAR) << 10
+                        state.shot_direction[shooter] = direction
+                        state.reflect_count[shooter] = count
+                        state.player_shot_last_wall_pos[shooter] = (target - delta) & 0x3FF
+                        slot = _shot_slot(shooter)
+                        state.mobs.picture[slot] = 0x1000
+                        state.mobs.hpos[slot] = 12 * 16 << 7
+                        state.mobs.vpos[slot] = 0xF900 if top else native_v(12 * 16) << 7
+                        machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+                        rom = machine.call(0x53818, raw_target, shooter, count=500_000) & 0xFFFF
+                        ours = shot_reflect_calc(state, raw_target, shooter) & 0xFFFF
+                        pairs = (
+                            ("result", rom, ours),
+                            ("direction", machine.r16(0x9049C4 + 2 * shooter), state.shot_direction[shooter] & 0xFFFF),
+                            ("bounces", machine.r16(0x9048BE + 2 * shooter), state.reflect_count[shooter] & 0xFFFF),
+                            ("h", machine.hpos(slot), state.mobs.hpos[slot] & 0xFFFF),
+                            ("v", machine.vpos(slot), state.mobs.vpos[slot] & 0xFFFF),
+                            ("seed", machine.r16(0x904BFC), state.rng.seed & 0xFFFF),
+                        )
+                        wrong = [f"{name} ROM {a:#x} PY {b:#x}" for name, a, b in pairs if a != b]
+                        if wrong or not machine.halted:
+                            bad += 1
+                            lines.append(f"  dir {direction} shooter {shooter} walls {wall_mask:#x} "
+                                         f"delta {delta} count {count} target {raw_target:#x} top {top}: "
+                                         f"{wrong[:3]}")
+    return bad, cases, lines
+
+
+def reflect() -> int:
+    """shot_reflect_calc (0x53818) for every direction, approach, corner and bounce state."""
+    bad = cases = 0
+    shown: list[str] = []
+    pairs = [(direction, shooter) for direction in range(8) for shooter in (0, 2)]
+    with concurrent.futures.ProcessPoolExecutor(_JOBS) as pool:
+        for pair_bad, pair_cases, lines in pool.map(_reflect_pair, pairs):
+            bad += pair_bad
+            cases += pair_cases
+            shown += lines
+    for line in shown[:6]:
+        print(line)
     print(f"reflect: {bad} of {cases} differ")
+    return bad
     return bad
 
 
@@ -358,87 +378,108 @@ def _shot_words(machine, state: GameState, shooter: int, target: int) -> list[tu
     return words
 
 
+def _shots_for(obj_type: int) -> tuple[int, int, dict[str, int], list[tuple[str, str]]]:
+    """Every shots case for one object type: (differing, cases, kinds, first line of each kind)."""
+    bad = cases = 0
+    kinds: dict[str, int] = {}
+    lines: list[tuple[str, str]] = []
+    for shooter in (0, 1, 4, 7):
+        for powers in (0, 0x400, 0x10):
+            for health_low in (False, True):
+                for seed in (0x1234, 0xBFE6):
+                    # A real level, so a redraw has floors to draw on both sides.
+                    state = GameState()
+                    state.game_mode = 0
+                    state.levelnum_current = 8
+                    state.rng.seed = seed
+                    if not reset_and_load_level(state, 8, maze_number=20):
+                        return -1, 0, {}, []
+                    hero_player = state.players[0]
+                    hero_player.status = int(PlayerStatus.ALIVE_HERE)
+                    hero_player.coin_count = 1
+                    hero_player.health = 500
+                    player_start_inner(state, 0)
+                    hero_player.status = int(PlayerStatus.ALIVE_HERE)
+                    state.player_input_raw[0] = 0xFFFF
+                    target = next(
+                        cell for cell in range(12 << 5, 1000)
+                        if not state.mobs.picture[cell] and (cell & 0x1F) not in (0, 31)
+                    )
+                    maze_place_object(state, target, obj_type, 1)
+                    if not state.mobs.picture[target]:
+                        continue
+                    # wall_crumble reads its headroom from the tile's palette (0x5313A).
+                    if state.mobs.picture[target] == 0x8000:
+                        set_cell_descriptor(state, target, obj_type)
+                    if obj_type == int(MazeObjIds.HIDDENPOT):
+                        state.mobs.picture[target] = 0xA728
+                    hero = state.players[0]
+                    hero.powers = powers
+                    hero.health = 40 if health_low else 500
+                    slot = _shot_slot(shooter)
+                    state.mobs.picture[slot] = 0x1000
+                    state.mobs.hpos[slot] = ((target & 0x1F) * 16) << 7
+                    state.mobs.vpos[slot] = native_v((target >> 5) * 16) << 7
+                    state.shot_direction[shooter] = 2
+                    if shooter < 4:
+                        state.reflect_count[shooter] = 2
+                        state.player_shot_last_wall_pos[shooter] = target - 1
+                    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+                    machine.install_slapstic()
+                    for address, value in ((0x904000, 20), (0x904004, 8), (0x904B5C, int(state.maze.floorpattern)),
+                                           (0x904B5E, int(state.maze.wallpattern))):
+                        machine.w16(address, value)
+                    machine.write_words(0x900000, state.playfield_ram)
+                    cases += 1
+                    rom_result = machine.call(0x4AF50, target, shooter, count=3_000_000) & 0xFFFF
+                    if not machine.halted:
+                        kinds[f"ROM stops: {_name(obj_type)}"] = kinds.get(f"ROM stops: {_name(obj_type)}", 0) + 1
+                        continue
+                    our_result = resolve_shot_hit(state, target, shooter) & 0xFFFF
+                    wrong = [name for name, rom, ours in _shot_words(machine, state, shooter, target) if rom != ours]
+                    if rom_result != our_result:
+                        wrong.append("result")
+                    rom_record = (machine.picture(target), machine.hpos(target), machine.vpos(target))
+                    our_record = (state.mobs.picture[target], state.mobs.hpos[target], state.mobs.vpos[target])
+                    if rom_record != our_record:
+                        wrong.append("target record")
+                    if wrong:
+                        bad += 1
+                        key = f"{_name(obj_type)} shooter {'hero' if shooter < 4 else 'monster'}: {wrong[0]}"
+                        if key not in kinds:
+                            line = (f"  {_name(obj_type)} shooter {shooter} powers {powers:#x} low {health_low}: "
+                                    f"{wrong[:4]} result ROM {rom_result:#x} PY {our_result:#x} "
+                                    f"record ROM {tuple(map(hex, rom_record))} PY {tuple(map(hex, our_record))}")
+                            lines.append((key, line))
+                        kinds[key] = kinds.get(key, 0) + 1
+    return bad, cases, kinds, lines
+
+
 def shots() -> int:
     """resolve_shot_hit (0x4AF50): every object type, shooter and power, seen from the records."""
     bad = cases = 0
     kinds: dict[str, int] = {}
-    for obj_type in range(1, 0x40):
-        for shooter in (0, 1, 4, 7):
-            for powers in (0, 0x400, 0x10):
-                for health_low in (False, True):
-                    for seed in (0x1234, 0xBFE6):
-                        # A real level, so a redraw has floors to draw on both sides.
-                        state = GameState()
-                        state.game_mode = 0
-                        state.levelnum_current = 8
-                        state.rng.seed = seed
-                        if not reset_and_load_level(state, 8, maze_number=20):
-                            return -1
-                        hero_player = state.players[0]
-                        hero_player.status = int(PlayerStatus.ALIVE_HERE)
-                        hero_player.coin_count = 1
-                        hero_player.health = 500
-                        player_start_inner(state, 0)
-                        hero_player.status = int(PlayerStatus.ALIVE_HERE)
-                        state.player_input_raw[0] = 0xFFFF
-                        target = next(
-                            cell for cell in range(12 << 5, 1000)
-                            if not state.mobs.picture[cell] and (cell & 0x1F) not in (0, 31)
-                        )
-                        maze_place_object(state, target, obj_type, 1)
-                        if not state.mobs.picture[target]:
-                            continue
-                        # wall_crumble reads its headroom from the tile's palette (0x5313A).
-                        if state.mobs.picture[target] == 0x8000:
-                            set_cell_descriptor(state, target, obj_type)
-                        if obj_type == int(MazeObjIds.HIDDENPOT):
-                            state.mobs.picture[target] = 0xA728
-                        hero = state.players[0]
-                        hero.powers = powers
-                        hero.health = 40 if health_low else 500
-                        slot = _shot_slot(shooter)
-                        state.mobs.picture[slot] = 0x1000
-                        state.mobs.hpos[slot] = ((target & 0x1F) * 16) << 7
-                        state.mobs.vpos[slot] = native_v((target >> 5) * 16) << 7
-                        state.shot_direction[shooter] = 2
-                        if shooter < 4:
-                            state.reflect_count[shooter] = 2
-                            state.player_shot_last_wall_pos[shooter] = target - 1
-                        machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
-                        machine.install_slapstic()
-                        for address, value in ((0x904000, 20), (0x904004, 8), (0x904B5C, int(state.maze.floorpattern)),
-                                               (0x904B5E, int(state.maze.wallpattern))):
-                            machine.w16(address, value)
-                        for index, word in enumerate(state.playfield_ram):
-                            machine.w16(0x900000 + 2 * index, word)
-                        cases += 1
-                        rom_result = machine.call(0x4AF50, target, shooter, count=3_000_000) & 0xFFFF
-                        if not machine.halted:
-                            kinds[f"ROM stops: {_name(obj_type)}"] = kinds.get(f"ROM stops: {_name(obj_type)}", 0) + 1
-                            continue
-                        our_result = resolve_shot_hit(state, target, shooter) & 0xFFFF
-                        wrong = [name for name, rom, ours in _shot_words(machine, state, shooter, target) if rom != ours]
-                        if rom_result != our_result:
-                            wrong.append("result")
-                        rom_record = (machine.picture(target), machine.hpos(target), machine.vpos(target))
-                        our_record = (state.mobs.picture[target], state.mobs.hpos[target], state.mobs.vpos[target])
-                        if rom_record != our_record:
-                            wrong.append("target record")
-                        if wrong:
-                            bad += 1
-                            key = f"{_name(obj_type)} shooter {'hero' if shooter < 4 else 'monster'}: {wrong[0]}"
-                            if key not in kinds and len(kinds) < 60:
-                                print(f"  {_name(obj_type)} shooter {shooter} powers {powers:#x} low {health_low}: "
-                                      f"{wrong[:4]} result ROM {rom_result:#x} PY {our_result:#x} "
-                                      f"record ROM {tuple(map(hex, rom_record))} PY {tuple(map(hex, our_record))}")
-                            kinds[key] = kinds.get(key, 0) + 1
+    shown = 0
+    with concurrent.futures.ProcessPoolExecutor(_JOBS) as pool:
+        for part_bad, part_cases, part_kinds, lines in pool.map(_shots_for, range(1, 0x40)):
+            if part_bad < 0:
+                return -1
+            bad += part_bad
+            cases += part_cases
+            for key, line in lines:
+                if key not in kinds and shown < 60:
+                    print(line)
+                    shown += 1
+            for key, count in part_kinds.items():
+                kinds[key] = kinds.get(key, 0) + count
     print(f"shots: {bad} of {cases} differ")
     for key, count in sorted(kinds.items()):
         print(f"  {count:5} {key}")
     return bad
 
 
-def walk() -> None:
+def walk() -> int:
+    bad = 0
     for name, delta in (("right", gin.JOY_RIGHT), ("left", gin.JOY_LEFT),
                         ("up", gin.JOY_UP), ("down", gin.JOY_DOWN)):
         for keys in (0, 3):
@@ -451,11 +492,14 @@ def walk() -> None:
                 if outcome == "same":
                     same += 1
                 elif outcome is not None:
+                    bad += 1
                     print(f"  {_name(obj_type)}: {outcome}")
             print(f"  {same} types the same")
+    return bad
 
 
-def scan() -> None:
+def scan() -> int:
+    bad = 0
     hero = (10 << 5) | 10
     left = (10 << 5) | 9
     # A hidden potion needs a real picture.
@@ -486,14 +530,23 @@ def scan() -> None:
         print("  ROM faults:", faults)
         print("  ROM record survived:", rom_survived)
         print("  gauntpy record survived:", our_survived)
+        bad += len(limit) + len(faults) + (rom_survived != our_survived)
         # Real records never survive to loop, since the marker pictures stop first.
+    return bad
 
 
-def main() -> None:
+def main() -> int:
+    global _JOBS
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("sweep", choices=("walk", "scan", "routes", "reflect", "exits", "shots"))
-    {"walk": walk, "scan": scan, "routes": routes, "reflect": reflect, "exits": exits, "shots": shots}[parser.parse_args().sweep]()
+    parser.add_argument("--jobs", type=int, default=_JOBS,
+                        help="worker processes for reflect; every case runs once whatever the count")
+    args = parser.parse_args()
+    _JOBS = max(1, args.jobs)
+    sweep = {"walk": walk, "scan": scan, "routes": routes, "reflect": reflect, "exits": exits,
+             "shots": shots}[args.sweep]
+    return 1 if sweep() else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

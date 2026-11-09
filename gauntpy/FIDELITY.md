@@ -578,7 +578,9 @@ implementation specification.
    whole-codebase audit unless the user requests one or the work is an explicit
    audit batch.
 3. Run the smallest targeted tests and affected ROM contract generators during
-   iteration. Run the complete gauntpy suite once at the end.
+   iteration. Run the complete gauntpy suite once at the end; it runs on every core
+   through pytest-xdist (``-n 0`` runs it serially). ``tools/check_all.py`` runs every
+   ROM comparison at once, and ``--flights 8`` adds lockstep flights.
 4. Record terse source/ROM findings while working. Update `doc/`, `book/`, and
    `ISSUES.md` once per completed batch instead of repeatedly during iteration.
    For the book, revise the affected explanation as a whole; do not append
