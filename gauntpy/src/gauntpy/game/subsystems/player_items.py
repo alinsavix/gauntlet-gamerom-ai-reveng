@@ -518,8 +518,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
                     int(MazeObjIds.POT_INVULN)):
         state.escape_timer = 0                          # 0x5162E: clr.w (a3)
         if state.mobs.picture[tile_mob_slot] == _POISONED_POTION_PICTURE:
-            _poisoned(state, player_index)              # 0x51644-0x516C8
-            state.health_dirty[player_index] = 1
+            _poisoned(state, player_index)              # 0x51644-0x516C8; no redraw bit
         else:
             if player.keysnum + player.potionsnum >= 12:
                 _dialog(state, player_index, _DIALOG_INVENTORY_FULL)
@@ -595,6 +594,8 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
 
     # ── Transporter ───────────────────────────────────────────────────────────
     if obj_type == int(MazeObjIds.TRANSPORTER):
+        if state.player_tport_phase[player_index] >= 0:  # 0x513B8: a shove while mid-transport
+            return 0
         # 0x513CE returns player_tport's D0 unchanged: -2 means the teleport
         # happened, 0 means it was aborted for too few clear landing cells, in
         # which case the tile has not been handled. The movement tail at
@@ -617,8 +618,12 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             _secret_trick_set(state, player_index, _TRICK_NOFOOLED, 1)
             return -1
         # The tile's obj_type *is* the ROM exit_type (EXIT=0x10, EXITTO6=0x11).
+        # The record stays, so the tile counts as unhandled (0x51E60).
+        state.escape_timer = 0                          # 0x5142A: clr.w (a3)
         player_exit_sequence(state, player_index, tile_mob_slot, obj_type)
-        return -1
+        if state.idle_timer > 0:                        # 0x51442
+            state.idle_timer = 0
+        return 0
 
     # ── Stun / trap tiles ─────────────────────────────────────────────────────
     if obj_type == int(MazeObjIds.TILE_STUN):
@@ -708,6 +713,7 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         if not granted:
             return 0
         _sound_play(state, 0x26)
+        state.escape_timer = 0                          # 0x5198C: clr.w (a3)
         _take_tile(state, tile_mob_slot, player_index)
         player_inv_update(state, player_index)
         return -1

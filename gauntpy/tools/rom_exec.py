@@ -141,6 +141,11 @@ class RomMachine:
         slapstic = Slapstic((REPO_ROOT / "row10.bin").read_bytes())
         self.cpu.mem_unmap(0x38000, 0x8000)
         self.cpu.mmio_map(0x38000, 0x8000, slapstic.read, None, slapstic.write, None)
+        # The alternate select's first step is no data access: the chip sees the 68000 prefetch
+        # the word after 0x56E54 (``move.w (a0),(a1)``), whose address has the low bits it wants.
+        self.cpu.hook_add(
+            unicorn.UC_HOOK_CODE, lambda *_: slapstic.access(0x2B), begin=0x56E54, end=0x56E54,
+        )
         return slapstic
 
     # --- RAM access ----------------------------------------------------------
@@ -153,6 +158,9 @@ class RomMachine:
 
     def w8(self, address: int, value: int) -> None:
         self.cpu.mem_write(address, bytes([value & 0xFF]))
+
+    def r32(self, address: int) -> int:
+        return int.from_bytes(self.cpu.mem_read(address, 4), "big")
 
     def r8(self, address: int) -> int:
         return bytes(self.cpu.mem_read(address, 1))[0]

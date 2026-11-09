@@ -553,6 +553,8 @@ def test_live_refresh_visits_walls_and_door_routines_in_rom_order(monkeypatch):
         (slot & 0x1F, slot >> 5): int(MazeObjIds.WALL_REGULAR)
         for slot in neighbors
     })
+    for slot in neighbors:
+        state.mobs.picture[slot] = 0x8000      # what 0x5EA44 looks for
     for adjacency in (0, 4, 8, 12, 16, 20, 24, 28):
         for variation in range(4):
             state.playfield_floor_catalog[(adjacency, variation)] = (

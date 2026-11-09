@@ -222,7 +222,9 @@ def _spawn_maze_object(state: GameState, slot: int, obj_type: int,
     """
     from ..maze import placement_geometry
     hpos, vpos = placement_geometry(obj_type, slot)
-    state.mobs.create(slot, picture, hpos, vpos, obj_type, 0)
+    # 0x4B5FC passes state 0. For the Death prize that is ROM direction 0: six on gauntpy's compass.
+    field = 6 if obj_type == int(MazeObjIds.MONST_DEATH) else 0
+    state.mobs.create(slot, picture, hpos, vpos, obj_type, field)
 
 
 # ROM: direct game:0x5303A | Destructible-wall damage entry using Python stage bookkeeping to represent ROM descriptor/palette state.

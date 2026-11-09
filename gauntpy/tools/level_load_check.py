@@ -522,7 +522,7 @@ def differences(machine: rom_exec.RomMachine, state: GameState) -> dict[str, lis
     for i, slot in enumerate(_tport_pos_table(state)):
         scalar(f"tport_slots[{i}]", r16(0x910700 + 2 * i), slot)
     for i, word in enumerate(state.forcefield_segment_table):
-        scalar(f"forcefield_segments[{i}]", r16(0x910780 + 2 * i), word)
+        scalar(f"forcefield segment {i}", r16(0x910780 + 2 * i), word)
     if state.level_flags_3 & 0x08:
         for i in range(8, 256):
             scalar(f"cycle_codes[{i}]", machine.r8(0x910600 + i), state.cyclic_wall_assignments[i] & 0xFF)

@@ -142,6 +142,7 @@ def tick(state: GameState, *, treasure_timer_paused: bool = False) -> None:
     """
     state.frame_counter = (state.frame_counter + 1) & 0xFFFF
     state.vblank_semaphore = 0
+    state.vblank_scroll_word = (state.scroll_y << 7) & 0xFFFF     # 0x4018E-0x4019C
     potion_flash_vblank(state)
     player_hurt_palette_vblank(state)
     alpha_palette_vblank(state)

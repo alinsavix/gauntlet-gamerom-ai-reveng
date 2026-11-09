@@ -67,6 +67,9 @@ _GENERATOR_SPLIT = 0x1C
 # 0x579D2 / 0x579E2, indexed by death_hits & 7.
 _DEATH_POTION_SCORE_TABLE = (1000, 4000, 2000, 6000, 1000, 8000, 1000, 2000)
 _DEATH_POTION_POPUP_TYPE_TABLE = (2, 5, 3, 7, 2, 9, 2, 3)
+# 0x40D78, by bonus multiplier: the blast's points for anything but Death. Past
+# 8 the index runs on into the next table.
+_POTION_HIT_SCORE = (0, 10, 20, 30, 40, 50, 60, 70, 80, 8, 1, 4, 2, 4, 4, 4)
 
 # The blast is not global.  0x41560-0x41584 subtracts the two camera-derived
 # monster culling origins from the target's H/V words and rejects it with an
@@ -83,10 +86,13 @@ _DEATH_POTION_POPUP_TYPE_TABLE = (2, 5, 3, 7, 2, 9, 2, 3)
 _TIER_BASE = {
     int(MazeObjIds.MONST_GHOST): 4,
     int(MazeObjIds.MONST_GRUNT): 4,
-    int(MazeObjIds.MONST_AUX_GRUNT): 4,
     int(MazeObjIds.MONST_DEMON): 8,
     int(MazeObjIds.MONST_LOBBER): 0xB,
     int(MazeObjIds.MONST_SORC): 0xB,
+    int(MazeObjIds.MONST_AUX_GRUNT): 4,
+    int(MazeObjIds.MONST_DEATH): 0,
+    int(MazeObjIds.MONST_ACID): 1,
+    int(MazeObjIds.MONST_SUPERSORC): 0xB,
 }
 
 # ``mazeobj_base_picture_tbl`` at 0x5868C, entries 0x1C--0x2D.  A nonzero
@@ -154,7 +160,7 @@ def main_handle_potions(state: GameState) -> None:
     screen-clearing blast.
     """
     for p in state.players:
-        if not p.active:
+        if not p.mob_slot:                         # 0x4700A
             continue
         if not _magic_press_edge(state, p.index):
             continue
@@ -272,6 +278,7 @@ def potion_blast(state: GameState, player_index: int, *,
         _apply_potion_effect(
             state, slot, obj_type, trigger, player_index,
         )
+    state.score_dirty[player_index] = 1            # 0x41734-0x41744, once the scan is over
 
 
 # ROM: part game:0x40E6A | Extracts per-target potion matrix, reveal, destruction and generator-demotion branches.
@@ -291,18 +298,24 @@ def _apply_potion_effect(state: GameState, slot: int, obj_type: int,
             state.mobs.state_link[slot] &= 0x1FFF
             return
 
+    # 0x41608-0x41644: the points come before the matrix is read, so a target that
+    # survives pays too.
+    player = state.players[player_index]
+    if obj_type == int(MazeObjIds.MONST_DEATH):
+        from .shot_effects import playfield_showscore
+
+        index = state.death_hits & 7
+        playfield_showscore(
+            state, slot, _DEATH_POTION_POPUP_TYPE_TABLE[index],
+        )
+        award = _DEATH_POTION_SCORE_TABLE[index]
+    else:
+        award = _POTION_HIT_SCORE[player.bonusmult & 0x0F]
+    player.score = (player.score + award) & 0xFFFF_FFFF
+
     entry = _POTION_EFFECT_MATRIX[obj_type][trigger & 0x0F]
 
     if entry == 0:
-        if obj_type == int(MazeObjIds.MONST_DEATH):
-            from .shot_effects import playfield_showscore
-
-            index = state.death_hits & 7
-            playfield_showscore(
-                state, slot, _DEATH_POTION_POPUP_TYPE_TABLE[index],
-            )
-            state.players[player_index].score += _DEATH_POTION_SCORE_TABLE[index]
-            state.score_dirty[player_index] = 1
         state.mobs.unlink_and_clear(slot)        # zero destroys outright
         return
 
@@ -314,13 +327,15 @@ def _apply_potion_effect(state: GameState, slot: int, obj_type: int,
         ]
         return
 
-    # Monster: subtract from the hpos tier nibble; destroy if it leaves the
-    # exact three-value [base-2, base] window.
+    # Monster: subtract from the H word's low byte (0x41696 ``sub.b``); destroy if
+    # its nibble leaves the three values below the type's base (0x416AA).
     hpos = state.mobs.hpos[slot]
-    tier = hpos & 0x0F
-    base = _TIER_BASE.get(obj_type, 4)
-    new_tier = tier - entry
-    if not base - 2 <= new_tier <= base:
+    low = ((hpos & 0xFF) - entry) & 0xFF
+    if ((_TIER_BASE[obj_type] - low) & 0x0F) >= 3:
         state.mobs.unlink_and_clear(slot)
-    else:
-        state.mobs.hpos[slot] = (hpos & ~0x0F) | (new_tier & 0x0F)
+        return
+    hpos = (hpos & 0xFF00) | low
+    if obj_type == int(MazeObjIds.MONST_SORC):     # 0x416B4: back out of its attack
+        hpos &= ~_HPOS_FLAG_ATTACK
+        state.mobs.state_link[slot] &= 0x1FFF
+    state.mobs.hpos[slot] = hpos

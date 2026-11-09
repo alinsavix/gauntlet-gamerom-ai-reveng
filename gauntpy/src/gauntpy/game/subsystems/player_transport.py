@@ -639,22 +639,21 @@ def tport_player_move(state: GameState, player_index: int) -> None:
 
     if destination_pad:
         state.player_tile_or_tport_dest[player_index] = landing   # 0x5083C
-    if destination_pad:
         _dialog(state, player_index, _DIALOG_TRANSPORTER)  # 0x50840-0x5084C
-    arrival = _move_player_to_slot(state, player_index, landing)
-    if arrival:
-        source_pad = state.player_tport_route_state[player_index] & 0x3FF
-        if (
-            player_index == state.thief_victim
-            and source_pad
-            and destination_pad
-        ):
-            from .thief import tport_route_connect
+    # The thief hears of the jump before the hero's record moves.
+    if player_index == state.thief_victim:                # 0x50852 / 0x5088C
+        from .thief import thief_track_victim_move, tport_route_connect
 
+        if destination_pad:
             tport_route_connect(
-                state, source_pad, destination_pad, landing,
-            )                                           # 0x5085C-0x5087A
-            state.thief_victim_pos = landing           # 0x50880
+                state, state.player_tport_route_state[player_index] & 0x3FF,
+                destination_pad, landing,
+            )                                             # 0x5085C-0x5087A
+        else:
+            state.thief_victim_pos = player.mob_slot      # 0x50898
+            thief_track_victim_move(state, landing, player_index)  # 0x508AC
+        state.thief_victim_pos = landing                  # 0x50880 / 0x508B2
+    arrival = _move_player_to_slot(state, player_index, landing)
     if arrival == 1:
         # 0x509DE creates the arrival sparkle from the newly installed player
         # record. The earlier 0x5050A effect remains at the source for dissolve.

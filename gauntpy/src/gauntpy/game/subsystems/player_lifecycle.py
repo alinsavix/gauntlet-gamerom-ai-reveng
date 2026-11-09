@@ -339,8 +339,6 @@ def player_resetcounters(state: GameState, player_index: int) -> None:
     player.supershot = 0                                     # 0x905F68
     player.stundelay = 0                                     # 0x904A54
     state.player_tport_phase[player_index] = -1              # 0x904BCE = 0xFFFF
-    state.player_fighting_dir[player_index] = 0               # 0x9049AC
-    state.player_shooting[player_index] = 0                   # 0x9049B4
     state.player_walking[player_index] = 0                    # port-side frame result
     player.exit_pending = 0
 
@@ -567,10 +565,11 @@ def player_join_finalize(state: GameState, player_index: int) -> None:
         from .session import player_coindrop
 
         player_coindrop(state, player_index)
+    # 0x48A88-0x48A9C: a first hero restarts the door clock even from its "doors have
+    # opened" -1, a later one only a running clock.
+    if state.level_players_active == 1 or state.idle_timer > 0:
+        state.idle_timer = 0
     player.status = PlayerStatus.ALIVE_HERE  # §4.4
-    player.anim_counter = 0
-    state.player_fighting_dir[player_index] = 0
-    state.player_shooting[player_index] = 0
     state.player_walking[player_index] = 0
     player.state_timer = _STATE_TIMER_DISABLED             # 0x48972
     state.player_lowhealth_spoken[player_index] = 0        # 0x48980
@@ -667,7 +666,6 @@ def _player_dies(state: GameState, player_index: int) -> None:
     # Inventory, powers, timers and status go; the character and the score
     # survive, so the ladder and the panel still have something to show.
     player_resetcounters(state, player_index)                 # 0x4699A
-    player.anim_counter = 0
     if state.player_it == player_index:                       # 0x469BA
         state.player_it = 0xFFFF
         from .score import write_it_labels
@@ -822,22 +820,23 @@ def main_handle_death(state: GameState) -> None:
     for i in range(NUM_PLAYERS):
         # ── Forcefield hurt timer ─────────────────────────────────────────────
         ff = state.forcefield_hurt_timer[i]
-        if ff < 0:
-            # New contact: play start sound, flip to positive countdown.
-            _sound_play(state, 0x2E)  # "Player Touches Force Field" (§21)
-            state.forcefield_hurt_timer[i] = -ff
-        elif ff > 0:
+        if ff:
+            if ff < 0:
+                # New contact: play start sound, flip to positive countdown,
+                # which starts on this same pass (0x46678-0x46682).
+                _sound_play(state, 0x2E)  # "Player Touches Force Field" (§21)
+                ff = -ff
             state.forcefield_hurt_timer[i] = ff - 1
             if state.forcefield_hurt_timer[i] == 0:
                 _sound_play(state, 0x2F)  # "Force Field Silencer" (§21)
 
         # ── Death touch timer ─────────────────────────────────────────────────
         dt = state.death_touch_timer[i]
-        if dt < 0:
-            # New contact: play start sound, flip to positive countdown.
-            _sound_play(state, 0x20)  # "Death Touches Player" (§21)
-            state.death_touch_timer[i] = -dt
-        elif dt > 0:
+        if dt:
+            if dt < 0:
+                # New contact, the same shape as above (0x466BC-0x466C6).
+                _sound_play(state, 0x20)  # "Death Touches Player" (§21)
+                dt = -dt
             state.death_touch_timer[i] = dt - 1
             if state.death_touch_timer[i] == 0:
                 _sound_play(state, 0x21)  # "Death Silencer" (§21)

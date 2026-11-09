@@ -1013,7 +1013,8 @@ class TestDispatchLeaves:
 
         assert resolve_shot_hit(state, SLOT, 0) == -1
         assert state.mobs.hpos[SLOT] & 0x10, "IT should be phased out"
-        assert state.mobs.state_link[SLOT] == (0x1C00 | prev_link)
+        # This word's compass is two steps from the ROM's, and 0x4BC4E folds the ROM's.
+        assert state.mobs.state_link[SLOT] == (0x1400 | prev_link)
         assert state.mobs.picture[SLOT] != 0, "IT is never removed by a shot"
 
     def test_it_second_hit_only_masks_the_state_field(self):
@@ -2454,9 +2455,10 @@ class TestEncounterRecords:
         )
         assert not raised & contact_only
 
-    def test_player_shot_record_shows_the_rom_message_without_speech(self):
+    def test_player_shot_record_shows_the_rom_message_and_speaks(self):
         state = _make_state()
-        assert shot_damage._dialog(state, 0, shot_damage._DIALOG_PLAYER_SHOT) == 0
+        # Entry 18 of the table at 0x5A280 is speech 0x9E.
+        assert shot_damage._dialog(state, 0, shot_damage._DIALOG_PLAYER_SHOT) == 1
         assert state.dialog_message == [
             "  SHOTS DO NOT HURT  ",
             " OTHER PLAYERS (YET) ",
@@ -3514,3 +3516,65 @@ class TestTrickWiringUsesWp15:
             ("set", 0, TRICK_WATCHSHOOT1, 1),
             ("set", 2, TRICK_NOUSEINVUL, 0),
         ]
+
+
+# =============================================================================
+# The supershot read that runs off its table (0x4B000)
+# =============================================================================
+
+class TestSupershotReadPastItsTable:
+    """Monster shooters index the four-byte hero table with their shot channel."""
+
+    def test_a_hero_reads_their_own_byte(self):
+        state = _make_state()
+        state.players[2].supershot = 7
+        assert shot_damage._supershot_byte(state, 2) == 7
+
+    def test_channel_five_reads_the_byte_saved_for_the_secret_room(self):
+        state = _make_state()
+        state.secret_saved_supershot = 9
+        assert shot_damage._supershot_byte(state, 5) == 9
+
+    @pytest.mark.parametrize("shooter, expected", [(6, 0x41), (7, 0x80)])
+    def test_channels_six_and_seven_read_the_vertical_scroll(self, shooter, expected):
+        state = _make_state()
+        state.vblank_scroll_word = 0x4180
+        assert shot_damage._supershot_byte(state, shooter) == expected
+
+    @pytest.mark.parametrize("shooter", [4, 8, 11])
+    def test_every_other_channel_reads_zero(self, shooter):
+        state = _make_state()
+        state.vblank_scroll_word = 0x4180
+        state.secret_saved_supershot = 9
+        assert shot_damage._supershot_byte(state, shooter) == 0
+
+
+# =============================================================================
+# A tagged top-row hit reads its type from the RAM past the record table
+# =============================================================================
+
+class TestDragonTestPastTheRecordTable:
+
+    def _hit(self, state: GameState, slot: int) -> int:
+        return shot_collision._dragon_hitbox_retry(state, slot, 0, 0, 0, -1, False)
+
+    def test_separation_word_that_reads_as_a_dragon_restarts_the_clocks(self):
+        state = _make_state()
+        state.idle_timer, state.escape_timer = 39, 39
+        state.shothit_dist_H = 0xF012        # 0xF012 >> 10 is the dragon's 0x3C
+        self._hit(state, 0x414)
+        assert (state.idle_timer, state.escape_timer) == (0, 0)
+
+    def test_an_ordinary_separation_changes_nothing(self):
+        state = _make_state()
+        state.idle_timer, state.escape_timer = 39, 39
+        state.shothit_dist_H = 0x0012
+        assert self._hit(state, 0x414) == 0x414
+        assert (state.idle_timer, state.escape_timer) == (39, 39)
+
+    def test_a_timer_already_expired_stays_expired(self):
+        state = _make_state()
+        state.idle_timer = -1
+        state.shothit_dist_H = 0xF012
+        self._hit(state, 0x414)
+        assert state.idle_timer == -1

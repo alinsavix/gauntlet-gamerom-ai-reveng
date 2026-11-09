@@ -483,21 +483,33 @@ def main_start_game(state: GameState) -> None:
         state.welcome_elapsed_frames + 1
     ) & 0xFFFF_FFFF                                               # 0x48020
 
-    # 0x48026-0x480E2: after the final recorded actor finishes its exit
-    # animation, DEMO has no active players, at least one status-2 survivor, and
-    # no shared effect in slots 13-16. Reset the puppet party and expire this
-    # attract screen; main_attract later in the same frame advances to LEGEND.
+    # 0x48026-0x480B2: nothing below runs until the last hero is off the level,
+    # one is waiting for the next (status bit 1, or bit 5 naming a secret) and the
+    # shared effects in slots 13-16 have played out.
+    statuses = 0
+    for player in state.players:
+        statuses |= int(player.status)
     if (
         state.level_players_active == 0
-        and state.game_mode == int(GameMode.DEMO)
-        and any(
-            player.status == int(PlayerStatus.ALIVE_NEXT)
-            for player in state.players
-        )
+        and statuses & 0x22
         and not any(
             state.mobs.picture[slot] for slot in SLOT_SHOT_EXPLOSIONS
         )
     ):
+        _level_handoff(state)
+        if state.game_mode == int(GameMode.DEMO):
+            return
+
+    for i in range(NUM_PLAYERS):
+        if _magic_press_edge(state, i) and _press_is_accepted(state, i):
+            _handle_start_press(state, i)
+
+
+# ROM: part game:0x4800C | The level handoff at 0x480B6-0x483FC: the demo's end, the next level's commit, and the splash countdown that places the heroes.
+def _level_handoff(state: GameState) -> None:
+    # 0x480B6-0x480E2: the recorded actors are done. Reset the puppet party and
+    # expire this attract screen; main_attract later in the frame goes to LEGEND.
+    if state.game_mode == int(GameMode.DEMO):
         from .player_lifecycle import player_resetall
         from .score import main_msgbox_countdown
 
@@ -508,9 +520,19 @@ def main_start_game(state: GameState) -> None:
             main_msgbox_countdown(state)                           # 0x480DC
         return
 
-    # global_delay_timer is decremented here, outside the dialog-gated world
-    # band (0x4817C). This keeps level splashes advancing even while a message
-    # box freezes gameplay.
+    # 0x480E6: with the timer at zero the next level goes in, and its splash starts.
+    if state.global_delay_timer == 0:
+        from .level_transitions import _finish_level_end
+        from .secret_rooms import secret_check
+
+        secret_check(state)                                # 0x480EC
+        state.levelnum_current = state.level_next          # 0x480F2
+        state.mazenum_current = state.maze_next            # 0x48102
+        _finish_level_end(state)
+        return
+
+    # global_delay_timer counts here, outside the dialog-gated world band
+    # (0x4817C), so level splashes advance even while a message box freezes play.
     if state.global_delay_timer > 0:
         state.global_delay_timer -= 1
         if (
@@ -520,6 +542,14 @@ def main_start_game(state: GameState) -> None:
             from .sound import sound_play
 
             sound_play(state, 0x3B)                         # 0x4817C-0x48190
+        # 0x48198-0x481D8: the room's clock stays up through the tally, counting its hold.
+        if (state.game_mode == int(GameMode.TREAS_EXIT)
+                and state.global_delay_timer % 60 == 0):
+            from .display import write_alpha_large_text
+
+            write_alpha_large_text(
+                state, 34, 2, f"{state.global_delay_timer // 60:>2}", 0x8000,
+            )
         if state.global_delay_timer == 0:
             from .treasure_rooms import _exiting_or_here
             from .level_transitions import _finish_level_end, _spawn_level_players
@@ -531,8 +561,4 @@ def main_start_game(state: GameState) -> None:
                 maze_show(state)                       # 0x4526A
                 _spawn_level_players(state, _exiting_or_here(state))
             elif state.game_mode == int(GameMode.TREAS_EXIT):
-                _finish_level_end(state)
-
-    for i in range(NUM_PLAYERS):
-        if _magic_press_edge(state, i) and _press_is_accepted(state, i):
-            _handle_start_press(state, i)
+                _finish_level_end(state, after_tally=True)

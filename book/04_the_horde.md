@@ -260,6 +260,25 @@ because it was launched. Equally, hiding behind something shootable can
 consume the thing they intended to collect. The front rank and its
 missiles obey different occupancy rules.
 
+A fireball that hits another monster has a stranger rule, and it looks
+like an accident. Before the game applies a shot's damage, it asks whether
+the shooter has a supershot. It asks by using the shooter's number to pick
+a byte from a four-byte list, one byte per player. Nothing checks that the
+shooter is a player. Demon shots are numbered four to seven, so they read
+whatever sits in memory just past the list, and any nonzero byte means three
+points of damage rather than one.
+
+The four reservations therefore do not hit alike. The first reads a byte
+nothing ever writes. The second reads a byte the secret room uses to set
+aside a hero's supershots. The third and fourth read the two halves of the
+hardware's vertical scroll register, which holds the camera's position.
+Everywhere but the very top of the maze, a third fireball hits for three.
+Three points is more than any monster's strength range can absorb, so that
+fireball kills a full-strength grunt where the first one only changes its
+color. The fourth does the same at every odd scroll position. Nothing on the
+screen tells you which reservation a fireball holds, and a player would
+have to be very patient to notice that it depends on where the camera stood.
+
 The lobber goes further: a wall between attacker and hero need not stop
 the rock at all.
 
@@ -459,6 +478,11 @@ the players are trying to win.
   class-dependent solo initialization, and the distinct Death counters.
   The complete accounting belongs in
   [What a quarter buys](08_what_a_quarter_buys.md).
+- The fireball damage rule is the unchecked read at `0x4B002` in
+  `resolve_shot_hit`; the bytes it reaches are tabulated under that routine in
+  the [game subsystems](../doc/04_game_subsystems.md). VBLANK stores the scroll
+  word at `0x4018E–0x4019C`. A lockstep run of the ROM and gauntpy found it when
+  a grunt died on one side only, and MAME reads the register back as written.
 - Lobber range and prediction were checked at `0x41750–0x41A22`.
   High-byte position differences have two-pixel granularity; the
   direction components at `0x580D8/0x580EA` are zero or ±2.

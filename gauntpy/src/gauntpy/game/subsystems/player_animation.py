@@ -7,7 +7,7 @@ in players, at their original points in the movement transaction.
 
 from __future__ import annotations
 
-from ..constants import PlayerPower
+from ..constants import PlayerPower, PlayerStatus
 from ..state import NUM_PLAYERS, GameState
 
 
@@ -158,7 +158,7 @@ def _player_animation_action(state: GameState, player_index: int,
 
 # ROM: part game:0x4A53A | Picture-selection and invisibility-blink portion at 0x4AB08-0x4AC7A; counter/action advancement remains elsewhere.
 def update_player_sprite(state: GameState, player_index: int,
-                         *, walking: bool | None = None) -> None:
+                         *, walking: bool | None = None, moving: bool = False) -> None:
     """Write one hero's current ROM animation picture without advancing time.
 
     This is the presentation half of ``main_move_players``' 0x4AB08-0x4AC7A
@@ -174,8 +174,9 @@ def update_player_sprite(state: GameState, player_index: int,
     if not 0 <= player_index < NUM_PLAYERS:
         return
     player = state.players[player_index]
-    if (not player.active or not player.mob_slot
-            or state.player_tport_phase[player_index] >= 0):
+    if (not (player.active or player.status == int(PlayerStatus.EXITING))
+            or not player.mob_slot
+            or (state.player_tport_phase[player_index] >= 0 and not moving)):
         return
 
     character = player.character & 0x03
@@ -200,7 +201,7 @@ def update_player_sprite(state: GameState, player_index: int,
     # 0x4AC30-0x4AC7A: the invisibility blink is applied after every ordinary
     # action-table lookup.  ``main_move_players`` clears the power as its timer
     # reaches zero, so a manual active bit with timer 0 follows ROM table row 0.
-    if player.powers & int(PlayerPower.INVIS):
+    if player.powers & int(PlayerPower.INVIS) and not state.dialog_timer:  # 0x4AC3E
         phase = (state.player_invis_timer[player_index] >> 7) & 0x0F
         if (_INVISIBILITY_FLASH_MASKS[phase] & state.frame_counter) == 0:
             picture = _PLAYER_INVISIBLE_PICTURE

@@ -41,6 +41,66 @@ None.
 
 ## Resolved issues
 
+### S-222 · the whole game in lockstep with the ROM
+
+`tools/game_run.py` boots the ROM under Unicorn and gauntpy side by side from a cold start, gives both
+the same coins and sticks, and compares every record, hero word, thief word, level word, the route grid and
+each sound request after every frame. `Pilot` walks up to four heroes to exits, items and monsters, and
+`--warp` sends each exit to a random deep level. `tests/test_game_run.py` keeps a short flight. No flight has
+reached a secret room, so `tools/secret_check.py` remains that room's comparison.
+
+Everything below was a difference it found, and each fix is the ROM's behaviour.
+
+**Moving.** The tile is offered inside the move, from the words before it, and only when the hero moved
+(0x424EC), and so before the forcefield charge. `_wall_collision_response` reads the separations the probe
+stored, including stale ones at the top and bottom gates, and the movable-wall arm asks which side the last
+ray march's hit lies on, with the ROM's borrow across the column seam in its row test. A hero's record gives
+a nudge no pass. A fight direction is cleared on the early return, and a fight anywhere in the call marks
+`player_fight_contact` (0x904A0E). The dragon's proximity test runs only when the record migrated. Squeezes
+and shoves tell the thief of a change of cell, not of a refused step.
+
+**Transport.** The thief hears of a jump before the hero's record moves. An exit landed on keeps its record,
+and the dissolve wears the picture saved at the sparkle's start (0x52CDE, 0x52D5C).
+
+**Hero bookkeeping.** The death spin steps the real facing word (0x4A67C), which the Super Sorcerer's placement
+reads later. Reset, join and death leave the fight, shoot and animation words alone. Hurt timers count down on
+the pass that negates them. The exit tile and a power-up pickup clear the escape clock (0x5142A, 0x5198C).
+Poison does not mark the health dirty. The per-hero sprite update, the shooting gate, the forcefield dialog and
+the shot counter clear (0x536B6) moved to where the ROM has them.
+
+**Monsters.** The acid's walking animation is the real table at 0x593B6. `_find_target_player` asks for a slot
+word, and asks IT for nothing more. A Sorcerer's contact clears its attack bit. `tile_occupancy_test` does not
+wrap. The Super Sorcerer's crowding test does not exempt its own record, and its target goes by slot. Fight
+rewards and prizes from Death use state 6.
+
+**Shots and potions.** The supershot read runs off its table (`doc/08_known_issues.md`). IT's phase-out folds the
+ROM's compass. A potion scores before its matrix runs and clears the score flag after the scan, and the tier
+table is complete, with the byte subtract the ROM uses. The speech table's third row was off by one, so record 18
+does speak.
+
+**Two reads of memory nothing wrote for them.** A tagged top-row shot hit has no record, but 0x40A44 reads its type
+from RAM past the table all the same, so a separation word that happens to read as 0x3C sends it through the
+dragon's hitbox, which clears the escape and idle clocks (0x54B68) and can tag the hit. `_dragon_hitbox_retry`
+models the three words that can do so. With no hero in sight, `monster_find_and_shoot` still aims from locals
+nothing wrote (0x417AA). They hold what the last call at that stack depth left, and four different leftovers have
+been seen. gauntpy always uses the commonest, and the harness pins the ROM's locals to the same value, so
+**this is the one place the port is knowingly approximate.** It needs every hero invisible or gone, and it changes
+which way a monster faces.
+
+**Level flow.** `main_start_game` is the level's hand-off (`_level_handoff`): the tally's clock and its sound run
+there, and `_status8_complete` no longer commits the level. An escaping thief's loot carries over from where the ROM
+does it (`carry_thief_loot_over`). The attract loop tests its timer with `<`, each block excludes its own screen,
+and `clear_attract_display_memory` clears only the chain heads and record 0. A cyclic wall's V word and draw order,
+the wall refresh's literal test (0x5EA2E) and the dragon head's clear on load also follow the ROM.
+
+**Host.** `demo_skip_stick` lets a one-player keyboard walk the demo hero past the demo. It lives in the host layer
+and changes nothing on the game side.
+
+**Harness facts worth keeping.** The ROM's EEPROM refresh, coin overflow and sound board replies must be answered
+(`Lockstep`). The Slapstic's alternate select is triggered by the 68000's prefetch of the word after 0x56E54, so
+`rom_exec` hooks it. A hero's record has type 0 on the ROM's side and 0x0F in gauntpy, so `thief_walk` writes 0 back
+after `load_depth_chain`. `Lockstep.close()` hands back `sound_play`, which it otherwise leaves wrapped.
+
 ### S-221 · the info panel, the start arms, name entry, the tally's teardown and the attract screens
 
 Every part of the game below ran on the ROM and in gauntpy from the same RAM, and these differed.

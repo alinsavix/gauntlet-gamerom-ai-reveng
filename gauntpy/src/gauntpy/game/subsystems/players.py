@@ -187,8 +187,8 @@ def _player_shooting_input_update_one(state: GameState,
                                       player_index: int) -> None:
     """Arm one held-Fire action; the call is idempotent during its throw."""
     player = state.players[player_index]
-    if (not player.active or not player.mob_slot
-            or state.player_tport_phase[player_index] >= 0
+    # 0x47B30-0x47B42: a slot word and not leaving. A transport does not stop the throw.
+    if (not player.mob_slot or player.status == int(PlayerStatus.EXITING)
             or player.stundelay
             or not _joystick_fire_held(state, player_index)):
         return
@@ -226,12 +226,16 @@ def _advance_player_sprite(state: GameState, player_index: int, *,
                            walking: bool, fire_held: bool) -> None:
     """Run the counter/action half of 0x4AB08-0x4AC0E for one hero."""
     player = state.players[player_index]
-    if (not player.active or not player.mob_slot
-            or state.player_tport_phase[player_index] >= 0):
+    # The hero who took an exit this frame still gets 0x4AB08's picture, on the
+    # exit animation's record: 0x4AB18 reads the slot afresh.
+    # Nor does a transport that starts inside this hero's own move stop the tail
+    # (0x4A7EC tests the phase once, before the move).
+    if (not (player.active or player.status == int(PlayerStatus.EXITING))
+            or not player.mob_slot):
         return
 
     state.player_walking[player_index] = int(walking)
-    update_player_sprite(state, player_index, walking=walking)
+    update_player_sprite(state, player_index, walking=walking, moving=True)
 
     if state.player_fighting_dir[player_index] or walking:
         player.anim_counter = (player.anim_counter + 1) & 0xFFFF
@@ -320,6 +324,7 @@ def player_create_shot(state: GameState, player_index: int) -> None:
     rom_dir = _PORT_DIR_TO_ROM_DIR[port_dir]
     character = player.character & 0x03
 
+    state.shot_anim_lifetime_counter[player_index] = 0   # 0x536B6
     state.mobs.picture[shot_slot] = _PLAYER_SHOT_PICTURE[character * 8 + rom_dir]
     state.mobs.hpos[shot_slot] = (
         base_h + _SHOT_REFLECT_HDELTA[rom_dir]
@@ -477,25 +482,16 @@ def _status8_complete(state: GameState, player_index: int) -> None:
             from .score import write_it_labels
             write_it_labels(state)
         state.level_players_active = max(0, state.level_players_active - 1)
-        setup_infopanel(state, player_index)
         if state.level_players_active == 0:                  # 0x4A6E6
-            from .level_transitions import _finish_level_end, advance_level_countdowns
+            from .level_transitions import advance_level_countdowns
+            from .thief import carry_thief_loot_over
             from .treasure_rooms import show_level_end_bonus_screen
 
+            carry_thief_loot_over(state)                     # 0x4A6F0-0x4A742
+            # main_start_game takes the level from here, once the effects are gone.
             if advance_level_countdowns(state):              # 0x4A748-0x4A788
                 show_level_end_bonus_screen(state)           # 0x4A78C
-            else:
-                # DEMO completion is owned by main_start_game at
-                # 0x480B6-0x480E2. The countdown bookkeeping above still runs,
-                # but level 2 is never committed for the recorded actors.
-                if state.game_mode == int(GameMode.DEMO):
-                    return
-                from .secret_rooms import secret_check
-
-                secret_check(state)                          # 0x480EC
-                state.levelnum_current = state.level_next
-                state.mazenum_current = state.maze_next
-                _finish_level_end(state)
+        setup_infopanel(state, player_index)                 # 0x4ACC0, after any tally
         return
 
     # The port's death animation: the hero leaves the level for good.
@@ -574,7 +570,6 @@ def main_move_players(state: GameState) -> None:
     for player_index in range(NUM_PLAYERS):
         state.current_player = player_index      # 0x4A60A
         player = state.players[player_index]
-        state.player_joystick[player_index] = _NO_MOVE
 
         # Status 0x20: secret winner name entry.
         if player.status == int(PlayerStatus.SECRET_NAME_ENTRY):
@@ -604,6 +599,7 @@ def main_move_players(state: GameState) -> None:
                 player.anim_counter = 0
                 frame = (frame - 1) & 0x07
                 state.player_death_anim_frame[player_index] = frame
+                player.direction = (frame - 2) & 0x07             # 0x4A67C
                 if player.mob_slot:
                     state.mobs.picture[player.mob_slot] = _ANIM_TABLE_IDLE[
                         (player.character & 0x03) * 8 + frame
@@ -639,6 +635,9 @@ def main_move_players(state: GameState) -> None:
         if state.player_tport_phase[player_index] >= 0:
             continue
 
+        # 0x4A7F0: only a hero who gets this far has the word rewritten (0x4AC96),
+        # so a lobber leads a transporting hero by the last step taken.
+        state.player_joystick[player_index] = _NO_MOVE
         _power_timers_tick(state, player_index)
 
         # 0x4A8A2-0x4A8B4: the branch that decides where this frame's joystick
@@ -716,9 +715,30 @@ def main_move_players(state: GameState) -> None:
                 )
                 state.player_joystick[player_index] = moved_dirs
                 walking = moved_dirs != _NO_MOVE
-                movement_destination = (
-                    _player_record_cell(state, player_index) if walking else None
+                # A wall nudge reports no step, but the record may have changed cell.
+                # 0x4258C: within one cell the thief hears nothing.
+                movement_destination = _player_record_cell(state, player_index)
+                if movement_destination == movement_origin[0]:
+                    movement_destination = None
+                # 0x424EC-0x4254C, inside the move and so before the forcefield below: an
+                # *empty* entered cell needs no interaction, because ``player_try_move``
+                # has already migrated the record into it. An occupied one is offered to
+                # ``player_tile_interact`` -- and if the tile is consumed the record
+                # follows the hero into the cell it just cleared, on the same frame. A
+                # refused step rolls the hero back, so the next frame offers the same
+                # cell again, as on the ROM.
+                _, refused = resolve_entered_cell(
+                    state, player_index, movement_origin,
                 )
+                # A started teleport still tells the thief about the pad (0x42576).
+                if refused:
+                    movement_destination = None
+                    state.player_joystick[player_index] = _NO_MOVE
+                    walking = False
+                if movement_destination is not None:
+                    _track_thief_victim_move(
+                        state, player_index, movement_destination,
+                    )
             else:
                 # 0x4AA1E still calls the wrapper, which folds and clears any
                 # shove-cancelled direction even with the stick centred.
@@ -738,7 +758,6 @@ def main_move_players(state: GameState) -> None:
             armor_bit = 1 if (player.powers & 0x02) else 0
             dmg = _FORCEFIELD_DAMAGE_TABLE[player.character + 4 * armor_bit]
             player.health = max(0, player.health - dmg)          # 0x4AAA8-0x4AAAE
-            player.pending_damage += dmg
             state.health_dirty[player_index] = 1     # player_redraw bit 1
             # Signal a new-contact event to main_handle_death (§21): set to
             # negative only when the countdown is not already running.
@@ -746,43 +765,8 @@ def main_move_players(state: GameState) -> None:
                 state.forcefield_hurt_timer[player_index] = -_FORCEFIELD_HURT_TIMEOUT
             elif 0 < state.forcefield_hurt_timer[player_index] < _FORCEFIELD_HURT_TIMEOUT:
                 state.forcefield_hurt_timer[player_index] = _FORCEFIELD_HURT_TIMEOUT
-            _dialog(state, player_index, _DIALOG_FORCEFIELD)   # 0x4AAEE
+            _dialog(state, player_index, _DIALOG_FORCEFIELD, dmg)   # 0x4AAE4-0x4AAEE
             player.hurt_cooldown = 0x12                        # 0x4AAFC-0x4AB06
-
-        # 0x4A91C jumps past the tile work but still lands on the shared
-        # picture-table tail: a stunned hero keeps its sprite updated and still
-        # contributes its keys, it simply does not consult this frame's
-        # joystick.  ``walking`` is already False on that arm.
-        if not stunned:
-            # Tile interaction (§4.6): the cell the player's record now names,
-            # taken from its H/V words with the ROM's own sprite bias
-            # (``coords.mob_cell_of``).  This is where food/keys/potions/
-            # treasure and power-ups are picked up, doors are opened, and exits
-            # are taken (which drives the level transition, WP-20).
-            #
-            # 0x424EC-0x4254C is the shape: an *empty* entered cell needs no
-            # interaction, because ``player_try_move`` has already migrated the
-            # record into it and ``mob_slot`` is that cell. Only an occupied
-            # one is offered to ``player_tile_interact`` -- and if the tile is
-            # consumed the record follows the hero into the cell it just
-            # cleared, on the same frame. A refused step rolls the hero back, so
-            # the next frame offers the same cell again, as on the ROM.
-            origin = movement_origin or (
-                player.mob_slot, state.mobs.hpos[player.mob_slot],
-                state.mobs.vpos[player.mob_slot],
-            )
-            rolled_back, refused = resolve_entered_cell(
-                state, player_index, origin,
-            )
-            if rolled_back is not None and movement_origin is not None:
-                movement_destination = rolled_back
-                if refused:
-                    state.player_joystick[player_index] = _NO_MOVE
-                    walking = False
-            if movement_destination is not None:
-                _track_thief_victim_move(
-                    state, player_index, movement_destination,
-                )
 
         _advance_player_sprite(
             state, player_index, walking=walking, fire_held=fire_held,

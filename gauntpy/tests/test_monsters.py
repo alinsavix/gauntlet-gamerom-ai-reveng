@@ -947,6 +947,17 @@ class TestOddAngleOverride:
         monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_GRUNT))
         assert state.mobs.state(slot) & 7 == 7, "should face up-right, not right"
 
+    def test_with_no_hero_in_sight_it_aims_from_stale_locals(self):
+        """0x417AA: the stack's leftovers read as a far target down and right."""
+        state = GameState()
+        slot = pack_slot(10, 10)
+        _arena(state, slot)
+        _place_monster(state, slot, MazeObjIds.MONST_GRUNT, direction=2)
+        _place_player(state, 0, pack_slot(10, 15))
+        state.players[0].powers |= PlayerPower.INVIS
+        monster_find_and_shoot(state, slot, int(MazeObjIds.MONST_GRUNT))
+        assert state.mobs.state(slot) & 7 == 7, "ROM direction 1"
+
     def test_plain_grunt_faces_the_player(self):
         state = GameState()
         slot = pack_slot(10, 10)

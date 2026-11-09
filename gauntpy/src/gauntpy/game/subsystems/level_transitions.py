@@ -249,7 +249,12 @@ def player_exit_sequence(state: GameState, player_index: int,
     # wrappers, so the slot is depth-keyed by the exit's own cell.
     anim_slot = SLOT_EXIT_ANIMS[player_index & 3]
     hero_slot = player.mob_slot
-    picture = state.mobs.picture[hero_slot] if hero_slot else 0
+    # A hero still in a transporter's sparkle wears the picture saved at its start
+    # (0x52CDE); one landing on the exit has only the exit's own record to read.
+    if state.player_tport_phase[player_index] >= 0:
+        picture = state.player_tport_saved_picture[player_index]
+    else:
+        picture = state.mobs.picture[hero_slot] if hero_slot else 0
     if state.mobs.picture[anim_slot]:
         state.mobs.unlink_and_clear(anim_slot)
     state.mobs.picture[anim_slot] = picture
@@ -262,7 +267,8 @@ def player_exit_sequence(state: GameState, player_index: int,
     ) & 0xFFFF                                     # 0x52CC6-0x52CD0
     state.mobs.insert(anim_slot, depth_key=exit_mob_slot)
 
-    if hero_slot:                                  # 0x52D76: the hero leaves
+    # 0x52D76: the hero leaves, unless that record is the exit it transported onto.
+    if hero_slot and state.mobs.obj_type(hero_slot) != int(MazeObjIds.EXIT):
         state.mobs.unlink_and_clear(hero_slot)
     player.powers &= 0xF3FF                        # 0x52D88
     from .player_lifecycle import player_inv_update
@@ -406,7 +412,7 @@ def show_level_start_screen(state: GameState) -> None:
 
 
 # ROM: part game:0x4800C | main_start_game handoff at 0x480F2-0x48156, split for deferred loading and splash timing; neither cited interior address is its own function.
-def _finish_level_end(state: GameState) -> None:
+def _finish_level_end(state: GameState, *, after_tally: bool = False) -> None:
     """Prepare the next maze and level splash when the prior display ends.
 
     This is the ``main_start_game`` transition tail (0x480F2-0x48156): the
@@ -418,9 +424,11 @@ def _finish_level_end(state: GameState) -> None:
         _exiting_or_here as _exiting_or_here,
     )
 
-    sound_play(state, 0x39)                          # 0x4812E-0x48134
+    # 0x481F2-0x4820A: the way out of a tally plays neither of the fanfares.
+    if not after_tally:
+        sound_play(state, 0x39)                      # 0x4812E-0x48134
     show_level_start_screen(state)                   # 0x4813A
-    if state.mazenum_current < _TREASURE_MAZE_FIRST:
+    if state.mazenum_current < _TREASURE_MAZE_FIRST and not after_tally:
         sound_play(state, 0x42)                      # 0x48140-0x4814E
     state.level_start_pending = _load_next_level(
         state, state.levelnum_current, _exiting_or_here(state),

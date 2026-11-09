@@ -19,7 +19,10 @@ from __future__ import annotations
 
 import pytest
 
-from gauntpy.game.constants import Character, GameMode, MazeObjIds, PlayerStatus, SLOT_PLAYER_SHOTS
+from gauntpy.game.constants import (
+    SLOT_EXIT_ANIMS,
+    Character, GameMode, MazeObjIds, PlayerStatus, SLOT_PLAYER_SHOTS, SLOT_SHOT_EXPLOSIONS,
+)
 from gauntpy.game.coords import encode_hpos, encode_vpos_at_y, pack_slot
 from gauntpy.game.mainloop import tick
 from gauntpy.game.state import GameState
@@ -166,12 +169,36 @@ def _run_exit_animation(state: GameState, frames: int = 96) -> None:
         state.game_mode = int(GameMode.NORMAL)
     for _ in range(frames):
         if not any(p.exit_pending for p in state.players):
+            # The arrival sparkle has no shot pass here to play it out, and the
+            # handoff later in the same frame waits for slots 13-16 (0x4808C).
+            for slot in SLOT_SHOT_EXPLOSIONS:
+                if state.mobs.picture[slot]:
+                    state.mobs.unlink_and_clear(slot)
+            sess.main_start_game(state)
             return
         gp.main_move_players(state)
     raise AssertionError("the exit animation never finished")
 
 
 class TestPlayerExitSequence:
+    def test_transporting_onto_an_exit_keeps_the_record_and_the_saved_picture(self):
+        """0x52CDE and 0x52D5C: the hero's slot is the exit itself by then."""
+        state = GameState()
+        _active_player_with_mob(state, 1, pack_slot(12, 12))
+        exit_slot = pack_slot(10, 10)
+        state.mobs.create(exit_slot, tile=0x8001, hpos=0, vpos=0, obj_type=int(MazeObjIds.EXIT))
+        player = state.players[0]
+        player.status = int(PlayerStatus.ALIVE_HERE)
+        player.mob_slot = exit_slot
+        state.player_tport_phase[0] = 22
+        state.player_tport_saved_picture[0] = 0x0BD8
+
+        ex.player_exit_sequence(state, 0, exit_slot, int(MazeObjIds.EXIT))
+
+        assert state.mobs.picture[SLOT_EXIT_ANIMS[0]] == 0x0BD8
+        assert state.mobs.obj_type(exit_slot) == int(MazeObjIds.EXIT)
+        assert state.mobs.picture[exit_slot] == 0x8001
+
     def test_exit_marks_player_exiting_plays_sound_and_removes_sprite(self):
         state = GameState()
         _active_player_with_mob(state, 0, pack_slot(10, 10))
@@ -297,6 +324,7 @@ def test_secret_level_splash_starts_theme_at_timer_0x14a():
         mazenum_current=115,
         global_delay_timer=0x14B,
     )
+    state.players[0].status = int(PlayerStatus.ALIVE_NEXT)     # 0x48056: someone is waiting
 
     sess.main_start_game(state)
 

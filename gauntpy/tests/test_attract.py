@@ -199,26 +199,32 @@ class TestInputLockout:
         main_attract(state)
         assert state.game_mode == int(GameMode.DEMO)
 
-    def test_position0_direction_advances_demo_to_legend(self):
+    def test_a_screen_does_not_restart_itself(self):
+        """Each block skips the screen it would start (0x445E2, 0x44676, 0x446FC)."""
+        for mode, position, held in (
+            (GameMode.SCORES, 1, 0x02),
+            (GameMode.TITLE, 0, 0x02),
+            (GameMode.DEMO, 0, 0x80),
+            (GameMode.DEMO, 3, 0x80),
+        ):
+            state = GameState()
+            _attract(state, int(mode))
+            state.attract_timer = _INPUT_THRESHOLD[int(mode)]
+            state.player_input_raw[position] = _IDLE & ~held
+            main_attract(state)
+            assert state.game_mode == int(mode)
+            assert state.attract_timer == _INPUT_THRESHOLD[int(mode)] - 1
+
+    def test_the_threshold_itself_is_still_locked_out(self):
+        """0x445E8 is ``blt``: one frame below the threshold is the first armed."""
         state = GameState()
-        _attract(state, int(GameMode.DEMO))
-        state.attract_timer = _INPUT_THRESHOLD[int(GameMode.DEMO)]
+        _attract(state, int(GameMode.SCORES))
+        state.attract_timer = _INPUT_THRESHOLD[int(GameMode.SCORES)] + 1
         state.player_input_raw[0] = _IDLE & ~0x80
-
         main_attract(state)
-
-        assert state.game_mode == int(GameMode.LEGEND)
-
-    def test_position3_direction_still_restarts_demo(self):
-        state = GameState()
-        _attract(state, int(GameMode.DEMO))
-        state.attract_timer = _INPUT_THRESHOLD[int(GameMode.DEMO)]
-        state.player_input_raw[3] = _IDLE & ~0x80
-
+        assert state.game_mode == int(GameMode.SCORES)
         main_attract(state)
-
         assert state.game_mode == int(GameMode.DEMO)
-        assert state.attract_timer == _LOADED_TIMER[int(GameMode.DEMO)]
 
     def test_free_play_ignores_magic_only(self):
         """In free play (two_player_mode 0) only FIRE qualifies, not MAGIC."""

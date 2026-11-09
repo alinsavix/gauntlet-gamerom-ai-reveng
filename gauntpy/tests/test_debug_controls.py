@@ -11,6 +11,7 @@ from gauntpy.host.debug_controls import (
     debug_enable_secret_room,
     debug_force_secret_room,
     debug_skip_level,
+    demo_skip_stick,
 )
 from gauntpy.game.state import GameState
 
@@ -312,3 +313,35 @@ def test_skip_secret_room_splash_does_not_duplicate_unstashed_inventory(
     assert state.secret_player == -1
     assert (player.keysnum, player.potionsnum, player.supershot) == (2, 3, 4)
     assert (state.levelnum_current, state.mazenum_current) == (20, 41)
+
+
+def _demo_skip_state(mode: GameMode) -> GameState:
+    state = GameState(game_mode=mode)
+    state.player_input_raw[1] = 0xFFFF
+    return state
+
+
+class TestDemoSkipStick:
+    """One-player keyboards have no second stick to walk the demo hero away with."""
+
+    def test_the_stick_drives_player_two_in_the_demo(self):
+        state = _demo_skip_state(GameMode.DEMO)
+        demo_skip_stick(state, 0, 0xFFDF)
+        assert state.player_input_raw[1] == 0xFFDF
+
+    def test_only_the_stick_bits_are_passed_on(self):
+        state = _demo_skip_state(GameMode.DEMO)
+        demo_skip_stick(state, 0, 0xFFDC)
+        assert state.player_input_raw[1] == 0xFFDF, "fire and magic stay released"
+
+    def test_the_line_is_released_out_of_the_demo(self):
+        state = _demo_skip_state(GameMode.NORMAL)
+        state.player_input_raw[1] = 0xFFDF
+        demo_skip_stick(state, 0, 0xFFDF)
+        assert state.player_input_raw[1] == 0xFFFF
+
+    @pytest.mark.parametrize("player", [1, 2])
+    def test_a_player_with_their_own_stick_is_left_alone(self, player):
+        state = _demo_skip_state(GameMode.DEMO)
+        demo_skip_stick(state, player, 0xFFDF)
+        assert state.player_input_raw[1] == 0xFFFF

@@ -111,7 +111,7 @@ limited to behavior actually exercised by the software.
 | `0x803140` | W | VBLANK acknowledge |
 | `0x803150` | W | EEPROM unlock |
 | `0x803170–0x803171` | W | Sound-command latch, normally written as a word at the even base; the command byte is on the odd lane (`0x803171`) |
-| `0x905F6E–0x905F6F` | W | Playfield vertical-scroll register (one 16-bit word; `0x905F6F` is its low byte) |
+| `0x905F6E–0x905F6F` | R/W | Playfield vertical-scroll register (one 16-bit word; `0x905F6F` is its low byte). Reads return the written word under MAME, and `resolve_shot_hit` reads it by accident through an unchecked index (game subsystems) |
 
 ### 3.1 Status Register Bits (`0x803009`)
 

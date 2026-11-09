@@ -938,11 +938,11 @@ class TestMainHandleDeath:
             "negative forcefield_hurt_timer must play sound 0x2E"
 
     def test_negative_forcefield_timer_negated_after_start_sound(self):
-        """Timer flips positive so the countdown begins (§21)."""
+        """Timer flips positive and counts its first frame on the same pass (§21)."""
         state = _active_state()
         state.forcefield_hurt_timer[0] = -30
         player_lifecycle.main_handle_death(state)
-        assert state.forcefield_hurt_timer[0] == 30
+        assert state.forcefield_hurt_timer[0] == 29
 
     def test_forcefield_timer_counts_down(self):
         """Positive timer decrements by 1 per frame (§21)."""
@@ -993,7 +993,7 @@ class TestMainHandleDeath:
             state.forcefield_hurt_timer[i] = -5
         player_lifecycle.main_handle_death(state)
         for i in range(4):
-            assert state.forcefield_hurt_timer[i] == 5, \
+            assert state.forcefield_hurt_timer[i] == 4, \
                 f"player {i} timer should have been negated"
         _emitted(state)
         # One 0x2E per player = four occurrences.
@@ -5098,11 +5098,11 @@ class TestPostLoopIsNormalPlayOnly:
         )
 
     def test_the_demo_hero_still_picks_things_up(self):
-        state = _demo_state([[], [40, 0xF3], [], []])
+        state = _demo_state([[], [40, self._RIGHT_HELD], [], []])
         p = self._demo_hero(state)
         # The cell next door, which the hero walks into on the tile pass.
         food_slot = p.mob_slot + 1
-        state.mobs.hpos[p.mob_slot] = (9 * 16 - 4) << 7
+        state.mobs.hpos[p.mob_slot] = ((9 * 16 - 4) << 7) - 0x20
         state.mobs.create(food_slot, tile=gp._WHOLESOME_FOOD_PICTURE,
                           hpos=0, vpos=0,
                           obj_type=int(MazeObjIds.FOOD_DESTRUCTABLE))

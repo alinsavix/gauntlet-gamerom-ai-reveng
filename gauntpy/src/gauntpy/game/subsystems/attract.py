@@ -48,8 +48,9 @@ _LOADED_TIMER = {
     int(GameMode.LEGEND): 0x258,    # ~10 s
 }
 
-# Input-lockout threshold: exactly 60 frames below the loaded timer.  While the
-# timer is above this, screen-switching input is ignored (§6.4).
+# Input-lockout threshold: exactly 60 frames below the loaded timer. A block
+# tests its input only once the timer is below this (``blt``), and never on the
+# screen it would start (§6.4).
 _INPUT_THRESHOLD = {
     int(GameMode.SCORES): 0x21C,
     int(GameMode.TITLE): 0x5A1,
@@ -114,7 +115,9 @@ _TITLE_MOB_LAST = 0xBE
 def _title_mob_record(
     state: GameState, slot: int, picture: int, hpos: int, vpos: int,
 ) -> None:
+    state_word = state.mobs.state_link[slot]   # 0x4DAE2 writes four of the five tables
     state.mobs.create(slot, tile=picture, hpos=hpos, vpos=vpos, obj_type=0)
+    state.mobs.state_link[slot] = state_word
 
 
 # ROM: part game:0x4DA3E | MOB construction and initial motion state extracted from title_logo_init; colors and full/short selection are elsewhere, and no title_logo_init Python function exists.
@@ -480,8 +483,8 @@ def main_attract(state: GameState) -> None:
     if mode != int(GameMode.NORMAL):
         threshold = _INPUT_THRESHOLD[mode]
         # The one-second lockout gates screen switching only: interruption tests
-        # are armed once the timer drops to the threshold.
-        if state.attract_timer <= threshold:
+        # are armed once the timer drops below the threshold.
+        if state.attract_timer < threshold:
             if _check_attract_interrupt(state, mode):
                 return
 
@@ -524,13 +527,20 @@ def _attract_timer_expired(state: GameState, mode: int) -> None:
         # SCORES -> TITLE -> DEMO -> LEGEND.
         state.game_mode = _NEXT_SCREEN[mode]
         if state.game_mode == int(GameMode.LEGEND):
-            from .player_lifecycle import setup_infopanel
-
-            state.attract_legend = 2               # 0x448DE
-            maze_hide(state)                       # 0x448E6
-            setup_infopanel(state, -1)             # 0x448EC-0x448F2
+            _enter_legend(state)
 
     start_attract_screen(state, int(state.game_mode))   # 0x4490E
+
+
+# ROM: part game:0x44562 | Extracted legend setup shared by the rotation at 0x448DE-0x448F2 and the interruption at 0x447AC-0x447C4.
+def _enter_legend(state: GameState) -> None:
+    """0x448DE/0x447AC -- start from page 2, with the maze and panel cleared."""
+    from .player_lifecycle import setup_infopanel
+
+    state.game_mode = int(GameMode.LEGEND)
+    state.attract_legend = 2                       # 0x448DE
+    maze_hide(state)                               # 0x448E6
+    setup_infopanel(state, -1)                     # 0x448EC-0x448F2
 
 
 # ROM: part game:0x44414 | Extracted every-thirteenth-TITLE settings refresh from start_attract_screen; delegates to a broader typed EEPROM restore.
@@ -684,18 +694,15 @@ def attract_demo_init(state: GameState) -> None:
         # 0x449FC selects the demo's maze by bank alone: 0x904000 stays at attract's (0x44462).
         state.mazenum_current = _ATTRACT_MAZE
         exit_scan_level(state)
-        player_join(state, _DEMO_ACTIVE_PLAYER)
-        from .level_transitions import update_monster_spawn_bonus_from_score_per_coin
-
-        update_monster_spawn_bonus_from_score_per_coin(state)
-        maze.maze_addrandompickups(state, False)         # 0x48590
+        player_join(state, _DEMO_ACTIVE_PLAYER)          # 0x44A32, and nothing after it
+        state.random_pickups_setup_done = True
 
 
 # =============================================================================
 # Interruption test blocks (§6.4)
 # =============================================================================
 
-# ROM: part game:0x44562 | Extracted five attract input-interruption blocks; includes a host-specific position-zero next-screen shortcut and reordered legend paging.
+# ROM: part game:0x44562 | Extracted five attract input-interruption blocks.
 def _check_attract_interrupt(state: GameState, mode: int) -> bool:
     """Run the five interruption tests; restart a screen on the first match.
 
@@ -703,55 +710,48 @@ def _check_attract_interrupt(state: GameState, mode: int) -> bool:
     Entering gameplay is a separate path (``coincheck`` / ``main_start_game``)
     that runs every frame regardless of this lockout (§6.4).
     """
-    # Block 1 (positions 1, 2 -- blue/yellow): FIRE/MAGIC -> SCORES.
-    if _button_pressed(state, 1) or _button_pressed(state, 2):
+    # Block 1 (0x445E2, positions 1, 2): FIRE/MAGIC -> SCORES.
+    if mode != int(GameMode.SCORES) and (
+        _button_pressed(state, 1) or _button_pressed(state, 2)
+    ):
         start_attract_screen(state, int(GameMode.SCORES))
         return True
 
-    # Block 2 (positions 0, 3 -- red/green): FIRE/MAGIC -> TITLE.
-    if _button_pressed(state, 0) or _button_pressed(state, 3):
+    # Block 2 (0x44676, positions 0, 3): FIRE/MAGIC -> TITLE.
+    if mode != int(GameMode.TITLE) and (
+        _button_pressed(state, 0) or _button_pressed(state, 3)
+    ):
         start_attract_screen(state, int(GameMode.TITLE))
         return True
 
-    # Block 3 (positions 0, 3): joystick direction -> DEMO.
-    if _direction_pressed(state, 0):
-        # A single-player host can only drive position 0. Once DEMO is already
-        # selected, treat the same cabinet shortcut as "next" so it reaches the
-        # LEGEND screen instead of reinitializing maze 102 forever.
-        destination = (
-            int(GameMode.LEGEND)
-            if mode == int(GameMode.DEMO)
-            else int(GameMode.DEMO)
-        )
-        start_attract_screen(state, destination)
-        return True
-    if _direction_pressed(state, 3):
+    # Block 3 (0x446FC, positions 0, 3): joystick direction -> DEMO.
+    if mode != int(GameMode.DEMO) and (
+        _direction_pressed(state, 0) or _direction_pressed(state, 3)
+    ):
         start_attract_screen(state, int(GameMode.DEMO))
         return True
 
-    # Block 5 (positions 1, 2, LEGEND only): joystick direction -> next legend
-    # page, or SCORES when the last page has shown.  Checked before block 4 so
-    # a direction on the LEGEND screen pages rather than restarting it.
-    if mode == int(GameMode.LEGEND) and (
-        _direction_pressed(state, 1) or _direction_pressed(state, 2)
-    ):
-        if state.attract_legend > 0:
-            state.attract_legend -= 1
-            state.attract_timer = _LOADED_TIMER[int(GameMode.LEGEND)]
-            from .player_lifecycle import player_resetall
+    if not (_direction_pressed(state, 1) or _direction_pressed(state, 2)):
+        return False
 
-            player_resetall(state)
-            load_legend_page(state)
-        else:
-            start_attract_screen(state, int(GameMode.SCORES))
-        return True
-
-    # Block 4 (positions 1, 2): joystick direction -> LEGEND, reset counter.
-    if _direction_pressed(state, 1) or _direction_pressed(state, 2):
+    # Block 4 (0x4474E, positions 1, 2): joystick direction -> LEGEND, from page 2.
+    if mode != int(GameMode.LEGEND):
+        _enter_legend(state)
         start_attract_screen(state, int(GameMode.LEGEND))
         return True
 
-    return False
+    # Block 5 (0x447DA, positions 1, 2, LEGEND only): the next page, or SCORES
+    # when the last page has shown.
+    if state.attract_legend > 0:
+        state.attract_legend -= 1
+        state.attract_timer = _LOADED_TIMER[int(GameMode.LEGEND)]
+        from .player_lifecycle import player_resetall
+
+        player_resetall(state)
+        load_legend_page(state)
+    else:
+        start_attract_screen(state, int(GameMode.SCORES))
+    return True
 
 
 # ROM: part game:0x44562 | Extracted raw FIRE/paid-MAGIC predicates used by the main_attract interruption blocks.

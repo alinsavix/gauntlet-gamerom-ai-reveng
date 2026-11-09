@@ -8,7 +8,7 @@ generated contracts; and ROM routines 0x40528, 0x45C00, 0x52F26, 0x53346,
 from __future__ import annotations
 
 from ..constants import FIRST_PLAYABLE_SLOT, GameMode, MazeObjIds, NUM_MOB_SLOTS
-from ..coords import encode_hpos, encode_vpos_at_y, slot_to_pixels
+from ..coords import encode_hpos, slot_to_pixels
 from ..playfield_vram import (
     SPECIAL_COLOR_INDEX_1,
     SPECIAL_COLOR_INDEX_2,
@@ -595,20 +595,23 @@ def main_walls_cyclic_move(state: GameState) -> None:
             and tile != state.thief_current_pos
             and state.mobs.picture[tile] == 0
         ):
-            x, y = slot_to_pixels(tile)
+            x, _ = slot_to_pixels(tile)
             state.mobs.picture[tile] = 0x8000
             state.mobs.hpos[tile] = encode_hpos(x)
-            state.mobs.vpos[tile] = encode_vpos_at_y(y, 2, 2)
+            state.mobs.vpos[tile] = ((tile & 0x3E0) ^ 0x3E0) << 6      # 0x5E74A-0x5E756
             state.mobs.link[tile] = (6 + new_phase) << 10
             state.mobs.state_link[tile] = 0
             placed.append((tile, 6 + new_phase))
 
     from ..maze import write_cyclic_wall_descriptor, write_floor_descriptor
 
-    for tile in removed:
-        write_floor_descriptor(state, tile)
-    for tile, object_type in placed:
-        write_cyclic_wall_descriptor(state, tile, object_type)
+    # 0x5E770: the ROM chains the changed cells as it scans and draws them from the
+    # last back, in one pass. A new floor draws its texture from the game's dice.
+    for tile in sorted([*removed, *(tile for tile, _ in placed)], reverse=True):
+        if tile in removed:
+            write_floor_descriptor(state, tile)
+        else:
+            write_cyclic_wall_descriptor(state, tile, dict(placed)[tile])
 
 
 # ---------------------------------------------------------------------------

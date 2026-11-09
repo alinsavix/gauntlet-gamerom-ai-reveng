@@ -27,6 +27,10 @@ def pf_replace(state: GameState, slot: int, obj_type: int) -> None:
         from .maze import _place_one, set_cell_descriptor
 
         _place_one(state, slot, obj_type)
+        # 0x5F4D6 passes state 0: unlike a level's own monsters, these face ROM direction
+        # 0, which is six on gauntpy's compass.
+        if int(MazeObjIds.MONST_GHOST) <= obj_type <= int(MazeObjIds.MONST_IT):
+            state.mobs.set_state(slot, 6)
         set_cell_descriptor(state, slot, obj_type)
         return
 

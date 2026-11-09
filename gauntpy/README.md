@@ -256,6 +256,11 @@ Synthetic-scenario dumps additionally embed the complete normalized fixture,
 its SHA-256 and source filename, plus event progress, so resume never depends on
 the original file remaining present or unchanged.
 
+During the attract demo, the stick also moves the game on to the legend
+screens. A cabinet does this with the sticks at positions 1 and 2, which a
+single keyboard does not have, so the host lends its stick to position 1 while
+the demo runs. It takes effect after the demo's one-second input lockout.
+
 F5–F11 are host troubleshooting controls, not original cabinet inputs. The
 level skip uses the live cabinet maze rotation, enters the normal `LEVEL n`
 splash, and respawns the surviving party when its presentation timer expires.

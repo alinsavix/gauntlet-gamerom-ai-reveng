@@ -3386,6 +3386,18 @@ handlers, reflection, and wall/item effects.
 
 **Player shot damage:** base = `shot_damage_base_tbl` (0x596B6)[class] where class = `player_character` (+8 with the shot-power upgrade, `player_powers` byte 1 bit 4): Warrior 2, others 1, upgraded 2; classes 2 and 8 add getrandom(2) (`shot_damage_rand_tbl` 0x596C2). Supershot (`player_supershot` 0x905F68) forces damage 3.
 
+**Monster shot damage, and the supershot read that runs off its table. Confidence: Verified** by disassembly at 0x4AFBC-0x4B00E, by running the ROM and gauntpy in lockstep (`gauntpy/tools/game_run.py`), and by reading the register back under MAME. A monster's shooter number is its shot slot minus one: demon shots 4-7 (slots 5-8), lobber shots 8-11 (slots 9-12). Those numbers index `shot_damage_base_tbl` directly, which gives 1 for 4-7 and 2 for 8-11, and shooter 8 also adds getrandom(2). Then 0x4B000-0x4B00E tests `player_supershot[shooter]` with no check that the shooter is a player, so a monster shot reads the bytes past that four-byte array:
+
+| Shooter | Slot | Byte read | What is there |
+|---|---|---|---|
+| 4 | 5 | 0x905F6C | No ROM code addresses it |
+| 5 | 6 | 0x905F6D | `secret_saved_supershot`, the last secret-room entrant's saved supershots; nothing clears it |
+| 6 | 7 | 0x905F6E | High byte of the V-scroll register word |
+| 7 | 8 | 0x905F6F | Low byte of that word |
+| 8-11 | 9-12 | 0x905F70-0x905F73 | No ROM code addresses them |
+
+`game_vblank` stores `(0x90400A << 7) | 0x90400C` into the scroll word each field (0x4018E-0x4019C), and 0x90400C stays zero after boot, so the high byte is the V scroll shifted right by one and the low byte is 0x80 when the scroll is odd. When the byte read is nonzero the damage becomes 3. Shooter 6 therefore hits for 3 at any V scroll except 0 or 1 (modulo 512), shooter 7 hits for 3 at odd V scrolls, and shooter 5 hits for 3 once a secret-room entrant has saved supershots. The value comes from the start of the frame, before `main_scroll_playfield` moves the camera. A monster's three-value strength window means a hit of 3 always destroys it, so one demon's fireball can kill a full-strength grunt where another only weakens it. The same number feeds the generator and destructible-wall arms. It does not reach player victims, who use `monstshot_damage_tbl`. Every other supershot read in `resolve_shot_hit` is behind `cmpi.w #4,d3` or the shooter-below-4 branch at 0x4B03E, so this read is the only one a monster shot can reach.
+
 **Dispatch:** target object type = `mob_link >> 10`. The computed JMP is at 0x4B336; its 62-entry signed-word displacement table `resolve_shot_hit_jumptbl` occupies 0x4B338–0x4B3B3 (124 bytes) and uses 0x4B338 as the branch base. The companion `mob_collision_test` (0x52192) dispatches through `mob_collision_object_jumptbl` at 0x52210, a **53-entry** displacement table of 106 bytes. Across the whole game ROM the twelve computed dispatches reach **81 distinct destinations**, all enumerated in `generated/control_targets.csv`.
 
 **Player victims** (target hpos & 0xF ≥ 0xC; victim = `0x904066[slot] >> 10`): LFLAG4 bit 0 (ShotStun) → `player_stundelay` += 0x28 (clamp 0x5A), fighting dir cleared, `hurt_cooldown` = 0x12; LFLAG4 bit 1 (ShotHurt) → −2 HP; a supershot shooter does −10 HP; invulnerable victims are immune. Monster shots use `monstshot_damage_tbl` (0x596CE)[character + 4×armor + shot-tier (shot hpos bits 4–5: +0x10/+0x18/+0x20) + 8×(class ≥ 8)] — per-character defense (Valkyrie best, Wizard worst).

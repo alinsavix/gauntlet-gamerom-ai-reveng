@@ -6,6 +6,32 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
 |---|---|---|---|
 | — | — | No active prioritized issue remains in this backlog. Unresolved findings raised by the 2026-08-11 full semantic audit are recorded in the repository-root `SOL_ISSUES.md`; promote one back into this table if it becomes testable from the supplied artifacts. | — |
 
+## Found in the 2026-11-08 lockstep pass
+
+- **Monster shots read the supershot array out of bounds:** 0x4B002 indexes
+  `player_supershot` (0x905F68) with shooters 4-11, so demon shots 5-7 read
+  `secret_saved_supershot` and the V-scroll word and can hit for 3. This is the
+  ROM's behavior, not an open question. The full table is under
+  `resolve_shot_hit` in the game subsystems, and gauntpy reproduces it.
+- **A tagged top-row shot hit reads its type from past the record table:**
+  0x40A44 indexes the link table (0x903800) with the doubled hit, and a hit tagged
+  by 0x40A94 lands on 0x904000-0x90403F. `shothit_dist_H` and `shothit_dist_V` can
+  read as the dragon's 0x3C there, and so can `frame_counter` for about 17 seconds
+  in every 18 minutes. The hit then takes the dragon's hitbox test against the
+  stale head position, which clears `escape_timer` and `idle_timer` (0x54B68) and
+  can tag the hit. gauntpy models those three words.
+- **With no hero in sight, a monster aims from uninitialized locals:**
+  `monster_find_and_shoot` skips the writes at 0x417F2-0x41806 but still reads
+  -$4 to -$A of its frame from 0x41826. They hold what the last call at that stack
+  depth left. Four leftovers have been seen, the commonest being a saved 0x902000
+  and 0x904066, which reads as a far target down and to the right. The result
+  depends on stack history, so gauntpy uses the commonest. This is a known
+  approximation. It needs every hero invisible or gone, and it changes only which
+  way the monster faces.
+- **A hero who transports onto an exit leaves the exit's record standing:** 0x52D5C
+  declines to unlink a record of type 0x10, and 0x50950 then writes the saved hero
+  picture over the exit's marker picture.
+
 ## Resolved in the 2026-08-12 MAME trace pass
 
 - **SOL-02 resolved:** `maze_decode` still starts at slot 0x20, but

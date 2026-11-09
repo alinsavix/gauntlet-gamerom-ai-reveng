@@ -227,12 +227,26 @@ def compare(machine, state: GameState) -> list[str]:
     return out
 
 
+def _rom_link(state: GameState, slot: int) -> int:
+    """A hero's record has type 0 on the ROM's side, and 0x0F only in gauntpy."""
+    link = state.mobs.link[slot]
+    return link & 0x3FF if any(player.mob_slot == slot for player in state.players) else link
+
+
+def _load_depth_chain(machine, state: GameState) -> None:
+    """The chain comes over in whole link words, which brings gauntpy's hero type too."""
+    machine.load_depth_chain(state.mobs)
+    for player in state.players:
+        if player.mob_slot:
+            machine.w16(rom_exec._LINK + 2 * player.mob_slot, _rom_link(state, player.mob_slot))
+
+
 def _copy_slot(machine, state: GameState, slot: int) -> None:
     """Write one record's words from gauntpy into ROM RAM."""
     machine.w16(rom_exec._PICTURE + 2 * slot, state.mobs.picture[slot])
     machine.w16(rom_exec._HPOS + 2 * slot, state.mobs.hpos[slot])
     machine.w16(rom_exec._VPOS + 2 * slot, state.mobs.vpos[slot])
-    machine.w16(rom_exec._LINK + 2 * slot, state.mobs.link[slot])
+    machine.w16(rom_exec._LINK + 2 * slot, _rom_link(state, slot))
     machine.w16(rom_exec._STATE + 2 * slot, state.mobs.state_link[slot])
 
 
@@ -253,6 +267,7 @@ def walk(state: GameState, onward=(), scenario: str = "plain", frames: int = 200
          show: bool = False) -> tuple[int, list[str], str]:
     """``(frames compared, first differences, how the run ended)``."""
     machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    _load_depth_chain(machine, state)
     onward = list(onward)
     transported = False
     blocked = False
@@ -288,7 +303,7 @@ def walk(state: GameState, onward=(), scenario: str = "plain", frames: int = 200
                     hero.mob_slot = new
                     for slot in (old, new):
                         _copy_slot(machine, state, slot)
-                    machine.load_depth_chain(state.mobs)
+                    _load_depth_chain(machine, state)
                     machine.w16(0x9048C8, new)
         if scenario == "moving" and onward and frame > 70 and frame % 10 == 0 \
                 and not state.thief_mode & thief.THIEF_ESCAPE:
@@ -303,7 +318,7 @@ def walk(state: GameState, onward=(), scenario: str = "plain", frames: int = 200
                 hero.mob_slot = new
                 for slot in (old, new):
                     _copy_slot(machine, state, slot)
-                machine.load_depth_chain(state.mobs)
+                _load_depth_chain(machine, state)
                 machine.w16(0x9048C8, new)
         machine.call(0x4E8DC, count=2_000_000)
         if not machine.halted:

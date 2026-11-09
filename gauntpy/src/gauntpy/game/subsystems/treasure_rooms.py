@@ -315,6 +315,8 @@ def show_level_end_bonus_screen(state: GameState) -> None:
     # 0x4D4D6 parks the announcement delay on -1: no countdown speech can fire
     # while the tally is up. Entering the next treasure room re-zeroes it.
     state.treasure_announcement_delay = 0xFFFF
+    state.thief_enter_time = -1                      # 0x4D4C8: no thief arrives in a tally
+    state.thief_current_pos = 0                      # 0x4D4D0
     setup_infopanel(state, -1)                       # 0x4D4DE-0x4D4E4
     state.global_delay_timer = _BONUS_DISPLAY_FRAMES        # 0x4D50E
     state.game_mode = GameMode.TREAS_EXIT            # display phase (world frozen)

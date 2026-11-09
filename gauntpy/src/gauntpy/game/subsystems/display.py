@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..alpha_memory import fill_alpha_words, write_alpha_word
-from ..mob import MobTable
+from ..constants import NULL_SLOT
 from ..state import GameState
 
 ALPHA_COLUMNS = 64
@@ -241,7 +241,7 @@ def clear_mob_color_ram(state: GameState) -> None:
     state.mob_color_ram[:] = [0] * 256
 
 
-# ROM: merged game:0x5FCCE,game:0x5FD14 | Combines palette-bank clearing with display-state/VRAM clearing; reconstructs the Python MOB table instead of clearing the hardware lists in place.
+# ROM: merged game:0x5FCCE,game:0x5FD14 | Combines palette-bank clearing with display-state/VRAM clearing.
 def clear_attract_display_memory(state: GameState) -> None:
     """Port pf_palette_clear/display_state_clear at 0x5FCCE/0x5FD14."""
     state.playfield_color_latch = 0
@@ -254,7 +254,12 @@ def clear_attract_display_memory(state: GameState) -> None:
     fill_alpha_rect(state, 0, 0, ALPHA_COLUMNS, ALPHA_ROWS, 0)
     state.playfield_ram[:] = [0] * len(state.playfield_ram)
     state.playfield_generation += 1
-    state.mobs = MobTable()
+    # 0x5FD14 clears the bookmarks and record zero. The other records stay, with
+    # no chain leading to them, until something loads over them.
+    mobs = state.mobs
+    mobs.depth_list_head = NULL_SLOT
+    mobs.slip_heads[:] = [NULL_SLOT] * len(mobs.slip_heads)
+    mobs.picture[0] = mobs.hpos[0] = mobs.vpos[0] = 0
     state.scroll_x = 0
     state.scroll_y = 0
 

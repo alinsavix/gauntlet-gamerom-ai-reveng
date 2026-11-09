@@ -44,6 +44,11 @@ _MONSTER_SHOOT_AXIS_THRESHOLDS = (
     (4, 1),   # 9 IT
 )
 
+# -$4(a6) and -$6(a6) as monster_find_and_shoot finds them with no target: the low
+# word of a saved 0x904066 and the high word of the same register.
+_STALE_AIM_DH = 0x4066
+_STALE_AIM_DV = 0x0090
+
 # Shooter range gates, in the 2-pixel units monster_find_and_shoot works in.
 _LOBBER_MIN_RANGE = 0x14        # closer than this on both axes: back away (0x41946)
 _LOBBER_MAX_RANGE = 0x2C        # further than this on either axis: no throw
@@ -82,16 +87,21 @@ def monster_find_and_shoot(state: GameState, slot: int, obj_type: int) -> None:
     index = _monster_index(obj_type)
     target = _find_target_player(state, slot)
     if target < 0:
-        return
-    p = state.players[target]
-    dx = _delta_units(state.mobs.hpos[p.mob_slot], state.mobs.hpos[slot])
-    dv = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[slot])
+        # 0x417AA: with no hero in sight the ROM still aims, from locals nothing
+        # wrote. What an earlier call saved on the stack is still there, and those
+        # register values read as a far target down and to the right.
+        dx, dv = _STALE_AIM_DH, _STALE_AIM_DV
+        repulsive = False
+    else:
+        p = state.players[target]
+        dx = _delta_units(state.mobs.hpos[p.mob_slot], state.mobs.hpos[slot])
+        dv = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[slot])
+        repulsive = bool(p.powers & _POWER_REPULSE)
 
     override = _oddangle_override(state, obj_type)
     thresholds = _MONSTER_SHOOT_AXIS_THRESHOLDS[index]
     threshold = thresholds[0] if override == 0x80 else thresholds[1]
     direction = _aim_direction(dx, dv, override, threshold)
-    repulsive = bool(p.powers & _POWER_REPULSE)
 
     if obj_type == int(MazeObjIds.MONST_LOBBER):
         direction = _lobber_throw(state, slot, direction, dx, dv, target)
@@ -192,24 +202,25 @@ def _demon_muzzle_clear(state: GameState, slot: int, direction: int) -> bool:
 
 # ROM: part game:0x41750 | Extracts IT-first, invisibility-aware nearest-player selection and byte-scale wrapped distances.
 def _find_target_player(state: GameState, slot: int) -> int:
-    """Nearest active player by |dH| + |dV|, IT evaluated first.
+    """Nearest player with a record by |dH| + |dV|, IT evaluated first.
 
-    Distances are the byte deltas of 0x417C8-0x417EA, so they wrap the shorter
-    way round the maze.  An invisible player is skipped entirely, IT included.
+    A slot word is all it asks for (0x417B8), not a status: a hero leaving through
+    an exit is still chased, in its animation's record.  Distances are the byte
+    deltas of 0x417C8-0x417EA, so they wrap the shorter way round the maze.  An
+    invisible player is skipped entirely, IT included.
     The ROM walks the four slots *backwards* (D3 = 6, 4, 2, 0) and only takes a
     strictly closer one, so an exact tie is won by the **higher** player index;
     scanning forwards with ``<=`` is the same rule.
     """
     it = state.player_it
     if (it != 0xFFFF and 0 <= it < len(state.players)
-            and state.players[it].active
             and not (state.players[it].powers & _POWER_INVIS)):
         return it
 
     best = -1
     best_dist = None
     for p in state.players:
-        if not p.active or (p.powers & _POWER_INVIS):
+        if not p.mob_slot or (p.powers & _POWER_INVIS):
             continue
         dx = _delta_units(state.mobs.hpos[p.mob_slot], state.mobs.hpos[slot])
         dv = _delta_units(state.mobs.vpos[p.mob_slot], state.mobs.vpos[slot])

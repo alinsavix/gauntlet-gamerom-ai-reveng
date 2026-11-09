@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..coords import POS_SHIFT, hpos_x, native_v, vpos_y
+from ..coords import POS_SHIFT, native_v
 from ..state import GameState
 from .player_data import (
     _FIGHT_PASS_TYPES as _FIGHT_PASS_TYPES,
@@ -42,7 +42,7 @@ def _probe_candidate_anchor(state: GameState, candidate: int) -> tuple[int, int]
     return candidate_h, candidate_v
 
 
-# ROM: helper | Python deferral of pass-through objects and hero-sharing cells that ordinary movement resolves after the probe.
+# ROM: helper | Python deferral of pass-through objects that ordinary movement resolves after the probe.
 def _probe_candidate_deferred(
     state: GameState, mover_slot: int, candidate: int, *,
     self_slot: int | None,
@@ -53,10 +53,6 @@ def _probe_candidate_deferred(
     then passes the hero through pickups and similar objects, which the cell
     tail interacts with after the move. This predicate is that pass result.
     """
-    from .player_movement import (
-        _pixel_to_slot as _pixel_to_slot,
-    )
-
     if state.mobs.obj_type(candidate) in _FIGHT_PASS_TYPES:
         transporting = any(
             player.active
@@ -68,14 +64,6 @@ def _probe_candidate_deferred(
             # Ordinary movement resolves these after entering their cell. With
             # transportability, squeeze_through_check runs first and teleports
             # past them instead (0x42744 precedes mob_collision_test).
-            return True
-    for player in state.players:
-        if not player.active or candidate != player.mob_slot:
-            continue
-        player_x = hpos_x(state.mobs.hpos[player.mob_slot])
-        player_y = vpos_y(state.mobs.vpos[player.mob_slot])
-        if _pixel_to_slot(player_x, player_y) == mover_slot:
-            # Two heroes sharing one cell do not block each other out of it.
             return True
     return False
 

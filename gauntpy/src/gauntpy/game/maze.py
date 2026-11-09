@@ -178,6 +178,9 @@ def set_cell_descriptor(state: GameState, slot: int, object_type: int) -> None:
                 state, neighbour, neighbour_type,
             )
             if wall_refreshed:
+                # 0x5EAB8 paints a whole wall, and a destructible wall keeps its
+                # damage in its palette: a neighbour's change heals it (0x530E0).
+                state.destructible_wall_stage.pop(neighbour, None)
                 write_tile_descriptor(
                     state, neighbour,
                     _descriptor_for_cell(state, neighbour, neighbour_type),
@@ -263,20 +266,13 @@ def _logical_cell_type(state: GameState, col: int, row: int) -> int:
 def _wall_needs_refresh(
     state: GameState, slot: int, object_type: int,
 ) -> bool:
-    """Match refresh_tile_visual's connectable-wall probe for live records."""
-    if object_type not in _WALL_TYPES:
-        return False
-    if (
-        object_type == int(MazeObjIds.WALL_DESTRUCTABLE)
-        and slot in state.destructible_wall_stage
-    ):
-        return False
-    if (
-        object_type == int(MazeObjIds.WALL_RANDOM)
-        and state.mobs.picture[slot] == 0
-    ):
-        return False
-    return True
+    """0x5EA2E -- refresh_tile_visual's wall probe, asked of the live record."""
+    if not slot >> 5:                                       # 0x5EA32: the top row always is
+        return object_type in _WALL_TYPES
+    return (
+        state.mobs.picture[slot] == 0x8000
+        and state.mobs.obj_type(slot) != 0x3F
+    )
 
 
 # ROM: part game:0x5F2C0,game:0x5EAB8 | Shared extracted wall visibility gates, including the level sentinel; not the whole initialization pass or wall renderer.
@@ -1615,6 +1611,8 @@ def _setup_decoded_level(
     state: GameState, level_number: int, mazenum: int, maze: Maze,
 ) -> None:
     """Run the game-owned setup writes after ROM acquisition succeeds."""
+    state.dragon_seg_mob_ids[0] = 0                        # 0x44ADA: until this maze places one
+    state.dragon_mob_slot = 0
     state.levelnum_current = level_number
     state.monster_slowmo_timer = 0                         # 0x438C2
     state.thief_enter_time = -1                            # 0x438CA
@@ -1625,7 +1623,6 @@ def _setup_decoded_level(
     state.thief_level_setup_done = False
     from .subsystems.maze_objects import select_forcefield_delay_profile
     select_forcefield_delay_profile(state)
-    state.special_bonus_score = 100      # 0x44166, ordinary score-bag value
     state.random_pickups_setup_done = False
 
     state.mazenum_current = mazenum

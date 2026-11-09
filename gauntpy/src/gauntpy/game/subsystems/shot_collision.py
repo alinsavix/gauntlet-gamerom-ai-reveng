@@ -253,9 +253,24 @@ def _dragon_hitbox_retry(state: GameState, slot: int, shooter_id: int,
                          maxtier: bool) -> int:
     """0x40A3E -- the dragon gets a second, tighter pass over the same cell."""
     if slot >= 0x400:
+        # A tagged top-row hit (above) has no record, but 0x40A44 reads its type
+        # all the same, from the RAM past the table: 0x903800 + 0x800 is 0x904000.
+        # The words there that can look like a dragon are the frame counter and
+        # the signed separations the probe has only just stored.
+        word = {
+            0x403: state.frame_counter,
+            0x414: state.shothit_dist_H,
+            0x415: state.shothit_dist_V,
+        }.get(slot, 0)
+        obj_type = (word & 0xFFFF) >> 10
+    else:
+        obj_type = state.mobs.obj_type(slot)
+    if obj_type != int(MazeObjIds.MONST_DRAGON):
         return slot
-    if state.mobs.obj_type(slot) != int(MazeObjIds.MONST_DRAGON):
-        return slot
+    # 0x54B6A: whoever shot it, the escape clock and the first hero's idle timer
+    # start over.
+    state.escape_timer = 0
+    state.idle_timer = min(state.idle_timer, 0)
     character = (
         state.players[shooter_id].character & 0x03 if shooter_id < 4 else 0
     )
@@ -267,6 +282,7 @@ def _dragon_hitbox_retry(state: GameState, slot: int, shooter_id: int,
     if hsep & 0x8000:
         hsep ^= POS_FIELD_MASK
     hsep = _s16(hsep - offsets[(facing >> 1) + 1])
+    state.collision_dist_H = hsep & 0xFFFF                # 0x54BA0
     width = _DRAGON_HITBOX_WIDTH[character]
     if hsep >= width:
         return slot
@@ -275,6 +291,7 @@ def _dragon_hitbox_retry(state: GameState, slot: int, shooter_id: int,
     if vsep & 0x8000:
         vsep ^= POS_FIELD_MASK
     vsep = _s16(vsep - offsets[facing >> 1])
+    state.collision_dist_V = vsep & 0xFFFF                # 0x54BBC
     if vsep >= width or hsep + vsep >= _DRAGON_HITBOX_SPAN[character]:
         return slot
 

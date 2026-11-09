@@ -118,14 +118,14 @@ class TestScheduling:
         thief_setup(state)
         assert state.thief_enter_time < 0
 
-    def test_setup_clears_a_stale_victim_when_its_gate_fails(self):
+    def test_setup_leaves_the_last_victim_when_its_gate_fails(self):
         state = GameState()
         state.game_mode = -1
         state.thief_victim = 3
 
         thief_setup(state)
 
-        assert state.thief_victim == -1
+        assert state.thief_victim == 3
 
     def test_schedules_when_roll_succeeds(self):
         state = GameState()

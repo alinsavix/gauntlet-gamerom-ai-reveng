@@ -597,6 +597,10 @@ implementation specification.
    MAME and gauntpy, let both play on, and report the first difference. This is real
    arcade behaviour with no input scripting or new mazes, and a capture takes a minute
    or two. Add a mode for each new question.
+8. To see the whole game, fly it: `tools/game_run.py --pilot 3 --warp --frames 40000
+   --seed 4` runs the ROM and gauntpy in lockstep from a cold boot, with heroes walked
+   to exits, items and monsters, and stops at the first difference. Every difference is
+   a lead into the code that made it, and the frames after it are contaminated.
 
 ## Implementation boundaries
 

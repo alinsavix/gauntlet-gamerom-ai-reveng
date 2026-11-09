@@ -8,7 +8,7 @@ from .secret_rooms import TRICK_NOUSEINVUL, secret_trick_progress, secret_trick_
 from .score import dialog_first_encounter, player_add_score_with_mult
 from .shot_damage import death_damage_accumulate
 from .sound import sound_play as _sound_play
-from .monster_data import _HPOS_FLAG_MOVING, _MAZEOBJ_HSIZE_TIER_TBL
+from .monster_data import _HPOS_FLAG_ATTACK, _HPOS_FLAG_MOVING, _MAZEOBJ_HSIZE_TIER_TBL
 
 # Contact-hurt feedback, from monster_playerhit (0x49876-0x4988A / 0x4967A).
 _SOUND_MONSTER_HIT = 0x1E       # "Monster Hits Player"
@@ -157,6 +157,8 @@ def monster_playerhit(state: GameState, player_index: int,
     if offset is None:
         return          # lobber: no contact damage, only its thrown rocks hurt
     row += offset
+    if obj_type == int(MazeObjIds.MONST_SORC):     # 0x49666: touching a hero ends its phase
+        state.mobs.hpos[monster_slot] &= ~_HPOS_FLAG_ATTACK
 
     if obj_type == int(MazeObjIds.MONST_GHOST):
         # 0x49634: the ghost explodes on contact, pays (row+1)*10, and only

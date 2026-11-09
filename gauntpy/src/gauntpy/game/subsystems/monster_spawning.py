@@ -25,7 +25,6 @@ from .monster_state import (
     _anim_advance,
     _delta_units,
     _get_direction,
-    _s16,
     _set_direction,
     _signed_byte,
     _ANIM_SUPERSORC_FADE,
@@ -348,9 +347,9 @@ def tile_occupancy_test(state: GameState, slot: int) -> bool:
 
     In the hardware's own words all of those distances are the ROM's literal
     constants, exactly as ``_OVERLAP``/``_SOFTWARE_MOB_BIAS`` already are for
-    the ray march, and the separations are taken modulo the maze: the position
-    words span exactly one maze in 16 bits, so the subtraction wraps at the
-    seam on its own.
+    the ray march. The words are extended to longs before they are subtracted
+    (0x48FBA-0x48FC4), so the separation does not wrap at the maze's seam: a
+    neighbour across it is never close.
     """
     if not _OCCUPANCY_MIN_SLOT < slot < _OCCUPANCY_MAX_SLOT:
         return False
@@ -368,12 +367,12 @@ def tile_occupancy_test(state: GameState, slot: int) -> bool:
         occupant, picture = _rendered_occupant(state, neighbour)
         if not picture:
             continue
-        delta_h = _s16(state.mobs.hpos[occupant] - candidate_h)
+        delta_h = (state.mobs.hpos[occupant] & 0xFFFF) - candidate_h
         if picture & 0x8000:
             delta_h -= _SOFTWARE_MOB_BIAS
         if abs(delta_h) > _OVERLAP:
             continue
-        if abs(_s16(state.mobs.vpos[occupant] - candidate_v)) <= _OVERLAP:
+        if abs((state.mobs.vpos[occupant] & 0xFFFF) - candidate_v) <= _OVERLAP:
             return False
     return True
 
@@ -527,7 +526,7 @@ def supersorc_place(state: GameState, slot: int, start: int | None = None) -> in
     for i in range(4):
         pi = (start + i) & 3
         p = state.players[pi]
-        if not p.active:
+        if not p.mob_slot:                  # 0x5FDFA
             continue
 
         # 0x5FE1A reads active_mob_ids directly. A hero's corrected sprite
@@ -568,25 +567,25 @@ def _supersorc_candidate(state: GameState, slot: int, prow: int, pcol: int,
         if not tile_on_screen_d4(state, cell):
             return None
     dest = (r << 5) | c
-    if _supersorc_too_crowded(state, dest, slot):
+    if _supersorc_too_crowded(state, dest):
         return None
     return dest
 
 
 # ROM: part game:0x5FDE0 | Extracts the eight-neighbor destination proximity rejection at 0x5FF06-0x5FF1C.
-def _supersorc_too_crowded(state: GameState, dest: int, self_slot: int) -> bool:
+def _supersorc_too_crowded(state: GameState, dest: int) -> bool:
     """True if another MOB sits within the proximity box of ``dest``.
 
     Walk the eight neighbouring cells (``spawn_candidate_*_delta``,
-    0x578A2/0x578B2) and test whichever of them hold a picture, excluding the
-    relocating creature's own record.
+    0x578A2/0x578B2) and test whichever of them hold a picture. The relocating
+    creature's own record gets no exemption.
     """
     dest_h = (((dest & 0x1F) * 16 - 4) << POS_SHIFT) & 0xFFFF
     dest_v = native_v((dest >> 5) * 16) << POS_SHIFT
     row_base = dest & 0x3E0
     for dc, dr in zip(_SPAWN_CANDIDATE_COLUMN_DELTA, _SPAWN_CANDIDATE_ROW_DELTA):
         s = row_base + dr + ((dest + dc) & 0x1F)
-        if not 0x20 <= s < 0x400 or s == self_slot:
+        if not 0x20 <= s < 0x400:
             continue
         picture = state.mobs.picture[s]
         if picture == 0:

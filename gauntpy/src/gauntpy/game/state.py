@@ -146,6 +146,8 @@ class GameState:
     )
 
     vblank_semaphore: int = 0        # 0x904002
+    # 0x905F6E: the V scroll, shifted, as this frame's VBLANK found it (0x4018E-0x4019C).
+    vblank_scroll_word: int = 0
     frame_counter: int = 0           # 0x904006
     frame_overflow: int = 0          # 0x904916, generator spawn throttle
     game_mode: int = GameMode.TITLE  # 0x904918
@@ -195,9 +197,10 @@ class GameState:
     # WP-5 · player movement and collision
     # =========================================================================
     movement_type: int = 0            # 0x904BF2
-    # 0x9048F0: active-low directions actually moved this frame; 0xF0 = still.
+    # 0x9048F0: active-low directions actually moved this frame; 0xF0 = still,
+    # and zero until a hero has first taken a turn.
     player_joystick: list[int] = field(
-        default_factory=lambda: [0x00F0] * NUM_PLAYERS
+        default_factory=lambda: [0] * NUM_PLAYERS
     )
 
     # =========================================================================
@@ -346,6 +349,10 @@ class GameState:
     collision_dist_H: int = 0
     shothit_dist_V: int = 0
     collision_dist_V: int = 0
+    # D1 after a movable wall's failed pushes: what the last ray march hit.
+    movable_wall_blocker: int = 0
+    # 0x904A0E: a fight arm ran during this hero's move, however deep in the call.
+    player_fight_contact: bool = False
     # 0x9048C8 ``active_mob_ids`` entries 4-11: the MOB slot that fired each
     # monster/dragon shot channel, so a shot cannot hit its own shooter.
     # Entries 0-3 come from ``Player.mob_slot`` and are refreshed each frame.
@@ -478,7 +485,7 @@ class GameState:
     mugger_item_carried: int = 0
     thief_item_carried: int = 0x7D30
     # 0x904B56, value carried by the special score-bag pickup.
-    special_bonus_score: int = 100
+    special_bonus_score: int = 0
     # 0x904BB8-0x904BBE, collision and transporter state.
     thief_collision_direction_code: int = 0
     thief_stolen_item: int = 0

@@ -257,6 +257,9 @@ def _advance_route_cell(packed_pos: int, direction: int) -> int:
 
 # ROM: helper | Python object-type traversability-table accessor reused by routing and deployment.
 def _route_cell_is_traversable(state: GameState, packed_pos: int) -> bool:
+    # A hero's record has type 0 on the ROM's side, and 0x0F only here.
+    if any(player.mob_slot == packed_pos for player in state.players):
+        return bool(_MAZE_OBJECT_TRAVERSABILITY_FLAGS[0])
     return bool(_MAZE_OBJECT_TRAVERSABILITY_FLAGS[state.mobs.obj_type(packed_pos)])
 
 
@@ -307,9 +310,8 @@ def thief_compute_path(state: GameState) -> None:
         return
     if not _route_cell_is_traversable(state, row_side_pos):
         return
+    # 0x4FA80: no test of this direction, so an unset 8 steps on through entry 8.
     diagonal_next_direction = path_grid_get_direction(state, diagonal_pos)
-    if diagonal_next_direction == 8:
-        return
     if path_grid_get_direction(state, _advance_route_cell(diagonal_pos, diagonal_next_direction)) == 8:
         return
     state.thief_path_direction = diagonal_direction
@@ -365,11 +367,9 @@ def thief_setup(state: GameState) -> None:
     state.thief_current_pos = 0
     state.thief_mob_slot = 0
     state.thief_enter_time = -1
-    state.thief_victim = -1
     state.thief_item_carried = _THIEF_CARRIED_EMPTY
     state.mugger_item_carried = 0
     state.thief_mode = THIEF_DEAD
-    state.thief_collision_direction_code = 0
     state.thief_tport_timer = -1
     state.thief_tport_dest = 0
 
@@ -413,14 +413,16 @@ def thief_timer_set(state: GameState) -> None:
     state.thief_current_pos = 0
     state.thief_mob_slot = 0
     state.thief_enter_time = -1
-    if state.thief_victim < 0 or not _player_is_targetable(state, state.thief_victim):
+    # 0x4E4FA-0x4E510: a slot word is all it asks of the victim. One leaving by an exit
+    # still has one, so the next arrival is scheduled all the same.
+    if state.thief_victim < 0 or not state.players[state.thief_victim].mob_slot:
         return
     if state.thief_mode & (THIEF_ENTER_OK | THIEF_ENTER_OK_MUGGER) == (
         THIEF_ENTER_OK | THIEF_ENTER_OK_MUGGER
     ):
         return
 
-    state.thief_mode = (state.thief_mode & (THIEF_ENTER_OK | THIEF_ENTER_OK_MUGGER)) | THIEF_PURSUE
+    state.thief_mode = (state.thief_mode & 0xFF70) | THIEF_PURSUE     # 0x4E528-0x4E52C
     is_mugger = False
     if not state.thief_mode & THIEF_ENTER_OK_MUGGER:
         is_mugger = state.getrandom(32) < 16 or bool(state.thief_mode & THIEF_ENTER_OK)
@@ -476,8 +478,9 @@ def main_start_thief(state: GameState) -> None:
     """0x4DEB8 -- schedule/deploy bookkeeping and the arrival pause."""
     if state.thief_enter_time < 0:
         # Direct dev/test level loads do not run main_start_game's 0x4835E tail.
-        # Let them perform that setup once without repeating its RNG draw.
-        if not state.thief_level_setup_done:
+        # Let them perform that setup once without repeating its RNG draw. A level
+        # behind its splash is only waiting for that tail to run.
+        if not state.thief_level_setup_done and not state.level_start_pending:
             thief_setup(state)
         return
     if state.thief_enter_time > 0:
@@ -495,6 +498,21 @@ def _repair_route_after_mode_toggle(state: GameState) -> None:
         thief_compute_path(state)
     else:
         state.thief_next_pos = state.thief_previous_pos
+
+
+# ROM: part game:0x4A53A | Thief loot carry-over at 0x4A6F0-0x4A742, run when the last hero has left.
+def carry_thief_loot_over(state: GameState) -> None:
+    """0x4A6F0-0x4A742 -- what an escaping thief takes with it to the next level."""
+    if state.thief_mode & THIEF_ESCAPE and state.thief_current_pos:
+        if state.thief_mode & THIEF_IS_MUGGER:
+            state.mugger_item_nextlevel = state.mugger_item_carried
+        else:
+            state.thief_item_nextlevel = state.thief_item_carried
+        return
+    if state.thief_item_carried == _THIEF_CARRIED_EMPTY:
+        state.thief_item_nextlevel = _THIEF_CARRIED_EMPTY
+    if not state.mugger_item_carried:
+        state.mugger_item_nextlevel = 0
 
 
 # ROM: direct game:0x4E122 | Changes pursuit to retraced-route escape.

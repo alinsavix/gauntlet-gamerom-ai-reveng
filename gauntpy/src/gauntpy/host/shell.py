@@ -86,6 +86,7 @@ from .debug_controls import (
     debug_enable_secret_room,
     debug_force_secret_room,
     debug_skip_level,
+    demo_skip_stick,
 )
 from .audio import StaticSoundPlayer
 from .state_dump import dump_game_state
@@ -580,6 +581,7 @@ class HostShell:
             ):
                 raw &= ~JOY_MAGIC_BIT
         state.player_input_raw[self.player] = raw & 0xFFFF
+        demo_skip_stick(state, self.player, raw)
 
     # -- lifecycle -------------------------------------------------------------
 

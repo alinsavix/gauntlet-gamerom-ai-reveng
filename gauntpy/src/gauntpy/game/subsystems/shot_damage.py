@@ -264,6 +264,26 @@ def death_damage_accumulate(state: GameState, player_index: int,
 # Damage
 # =============================================================================
 
+# ROM: part game:0x4AF50 | The unguarded byte read at 0x4B002: the shooter indexes four player bytes, and monster shots land past them.
+def _supershot_byte(state: GameState, shooter_id: int) -> int:
+    """0x905F68 + shooter -- monster shots read the bytes after the players'.
+
+    Shot 5 lands on ``secret_saved_supershot`` (0x905F6D).  The word at 0x905F6E
+    is the one VBLANK stores from the scroll registers (0x4019C), so shots 6 and
+    7 hit for 3 whenever its bytes are not zero, which depends on where the camera
+    stood.  No ROM code addresses the other bytes.
+    """
+    if shooter_id < 4:
+        return state.players[shooter_id].supershot
+    if shooter_id == 5:
+        return state.secret_saved_supershot & 0xFF
+    if shooter_id == 6:
+        return state.vblank_scroll_word >> 8
+    if shooter_id == 7:
+        return state.vblank_scroll_word & 0xFF
+    return 0
+
+
 # ROM: part game:0x4AF50 | Extracts shot damage class, power, randomness and supershot selection at 0x4AFA6-0x4B00E.
 def _shot_damage(state: GameState, shooter_id: int) -> int:
     """0x4AFA6-0x4B00E -- the damage this shot carries.
@@ -284,7 +304,7 @@ def _shot_damage(state: GameState, shooter_id: int) -> int:
     damage = _SHOT_DAMAGE_BASE_TBL[shot_class]
     if _SHOT_DAMAGE_RAND_TBL[shot_class]:
         damage += state.getrandom(2)
-    if shooter_id < 4 and state.players[shooter_id].supershot:
+    if _supershot_byte(state, shooter_id):         # 0x4B000-0x4B00E
         damage = _SUPERSHOT_DAMAGE
     return damage
 
@@ -525,9 +545,10 @@ def _handle_it(state: GameState, slot: int, shooter_id: int,
     previous = mobs.state_link[slot]
     mobs.state_link[slot] = previous & 0x1FFF
     if not (mobs.hpos[slot] & _MONST_PHASED):
-        mobs.state_link[slot] = _u16(
-            (mobs.state_link[slot] & 0x3FF) + ((previous >> 3) & 0x1C00)
-        )
+        # 0x4BC92: the old animation becomes the direction, which on gauntpy's compass
+        # sits two steps round from the ROM's.
+        direction = ((previous >> 13) - 2) & 7
+        mobs.state_link[slot] = _u16((mobs.state_link[slot] & 0x3FF) | (direction << 10))
         mobs.hpos[slot] = _u16(mobs.hpos[slot] | _MONST_PHASED)
     return _score_tail(
         state, slot, shooter_id, damage, obj_type, _SCORE_MULT_DEATH_IT,
@@ -978,6 +999,8 @@ def dragon_player_proximity(
         return (
             ((col - start_col) & 0x1F) < _DRAGON_BOX_WIDTH
             and ((row - start_row) & 0x1F) < _DRAGON_BOX_HEIGHT
+            # 0x54A76: when the box wraps, its own first row folds out of it.
+            and not (start_row > 0x16 and row == start_row)
         )
 
     if not inside(cell) or (previous_cell and inside(previous_cell)):

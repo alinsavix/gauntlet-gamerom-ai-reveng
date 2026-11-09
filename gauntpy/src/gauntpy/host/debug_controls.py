@@ -94,6 +94,22 @@ def debug_force_secret_room(state: GameState, player_index: int) -> bool:
 
 
 # ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
+def demo_skip_stick(state: GameState, player: int, raw: int) -> None:
+    """Hand the keyboard's stick to position 1 for as long as the demo runs.
+
+    A cabinet leaves the demo through the sticks at positions 1 and 2 (block 4 at
+    0x4474E); position 0's stick is ignored there.  A host with one keyboard has
+    only one stick, so it stands in for position 1 and the ROM's own path, lockout
+    included, does the rest.  The demo's heroes read recorded input, not this word.
+    """
+    if player in (1, 2):
+        return
+    state.player_input_raw[1] = (
+        0xFF0F | (raw & 0x00F0) if state.game_mode == int(GameMode.DEMO) else 0xFFFF
+    )
+
+
+# ROM: infrastructure | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart.
 def debug_skip_level(state: GameState) -> bool:
     """Enter the next rotation level's ordinary splash, preserving survivors."""
     if state.game_mode != int(GameMode.NORMAL):

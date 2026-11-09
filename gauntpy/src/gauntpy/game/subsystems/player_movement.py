@@ -206,7 +206,9 @@ def resolve_entered_cell(
     record. An occupied one is interacted with (0x424EC): -2 (a started
     teleport, 0x42570) keeps the pre-move words; a handled tile lets the
     record migrate (0x42588 -> 0x424F2); anything else refuses the step
-    (0x42556). Returns ``(rolled-back cell or None, refused)``.
+    (0x42556). The tile sees the hero where it stood: 0x42542 runs before the
+    commit at 0x424F2, and the transporter's sparkle reads those words.
+    Returns ``(rolled-back cell or None, refused)``.
     """
     from .player_items import TILE_TELEPORTED, player_tile_interact
 
@@ -215,13 +217,20 @@ def resolve_entered_cell(
     entered = _player_record_cell(state, player_index)
     if entered == player.mob_slot:                           # 0x424E6
         return None, False
+    new_h, new_v = state.mobs.hpos[source], state.mobs.vpos[source]
+    state.mobs.hpos[source] = old_h
+    state.mobs.vpos[source] = old_v
     handled = player_tile_interact(state, entered, player_index)
-    if handled != TILE_TELEPORTED and handled and migrate_player_record(
-        state, player_index,
-    ):
-        return None, False
-    if player.mob_slot != source:
-        return None, False
+    if handled and handled != TILE_TELEPORTED:
+        state.mobs.hpos[source] = new_h                      # 0x424F2
+        state.mobs.vpos[source] = new_v
+        if migrate_player_record(state, player_index):
+            from .shot_damage import dragon_player_proximity
+
+            dragon_player_proximity(state, entered, source)  # 0x42536
+            return None, False
+    if player.mob_slot != source:                            # an exit parked the hero
+        return None, not handled
     state.mobs.hpos[source] = old_h
     state.mobs.vpos[source] = old_v
     return source, handled != TILE_TELEPORTED
@@ -296,7 +305,6 @@ def _move_player_to_slot(state: GameState, player_index: int, slot: int) -> int:
         )
 
     state.player_tile_or_tport_dest[player_index] = slot
-    _track_thief_victim_move(state, player_index, player.mob_slot)
     return 1
 
 
@@ -446,14 +454,16 @@ def _player_fight_collision(
         hpos, vpos = placement_geometry(reward, slot)
         state.mobs.create(
             slot, _MAZEOBJ_BASE_PICTURE_TBL[reward],
-            hpos, vpos, reward, 0,
+            # State 0 is ROM direction 0 for the Death prize: six on gauntpy's compass.
+            hpos, vpos, reward, 6 if reward == int(MazeObjIds.MONST_DEATH) else 0,
         )
         dragon_player_proximity(state, slot)
         _fight_counts_as_activity(state)
         return 0
 
+    # 0x5227A dispatches on the type alone: on the ROM only the thief carries 0x0F.
     if (obj_type == int(MazeObjIds.PLAYERSTART)
-            and slot == state.thief_mob_slot):
+            and not any(p.mob_slot == slot for p in state.players)):
         if state.player_fighting_dir[player_index]:
             from .thief import thief_remove_and_drop_loot
 
@@ -567,9 +577,11 @@ def _player_fight_collision(
                 state, destination, int(MazeObjIds.MONST_SUPERSORC),
             )
             return -1
-        # 0x52806: nowhere to go, so it turns to face the hero who touched it.
+        # 0x52806: no new cell, so it faces the hero who touched it, by ORing the
+        # direction in (0x52830) over whatever the search left in the field.
         direction = calc_direction(state, slot, player.mob_slot)  # 0x52826
-        state.mobs.set_state(slot, (7 << 3) | ((direction - 2) & 0x07))
+        placed = (state.mobs.state(slot) + 2) & 0x07
+        state.mobs.set_state(slot, (7 << 3) | (((placed | direction) - 2) & 0x07))
         monster_update_anim_tile(
             state, slot, int(MazeObjIds.MONST_SUPERSORC),
         )
@@ -596,9 +608,10 @@ def _player_fight_collision(
     # fight.c indexes rhandpower by cabinet player slot, not character.
     random_bound = _HAND_RANDOM[player_index & 3]
     damage = _HAND_POWER[power_index] + state.getrandom(random_bound)
+    # The whole word takes the hit, so a killing blow borrows from the position, and
+    # the effect placed below reads what is left.
+    state.mobs.hpos[slot] = (state.mobs.hpos[slot] - damage) & 0xFFFF
     low = state.mobs.hpos[slot] & 0x0F
-    low = (low - damage) & 0x0F
-    state.mobs.hpos[slot] = (state.mobs.hpos[slot] & ~0x0F) | low
     base = {
         int(MazeObjIds.MONST_GRUNT): 4,
         int(MazeObjIds.MONST_AUX_GRUNT): 4,
@@ -657,6 +670,7 @@ def _push_movable_wall(
             tport_cycle_start(state, slot, player_index)
             state.mobs.unlink_and_clear(slot)
             return True
+        state.movable_wall_blocker = blocker
         return False
 
     state.mobs.hpos[slot] = new_h
@@ -785,8 +799,9 @@ def _player_probe_up(
     state: GameState, mob_slot: int, *, hpos: int, vpos: int,
 ) -> int:
     """Private probe_up at 0x425D0, including its row-one coordinate gate."""
-    if mob_slot >> 5 == 1 and (vpos & 0xFFFF) > _TOP_PLAYER_BOUNDARY_V:
-        return 0
+    # 0x425D0: rows 0 and 1 test the limit alone. Row zero's records are shots and effects.
+    if mob_slot >> 5 <= 1:
+        return 0 if (vpos & 0xFFFF) > _TOP_PLAYER_BOUNDARY_V else -1
     return _player_probe_vertical(
         state, mob_slot, (mob_slot >> 5) - 1, hpos=hpos, vpos=vpos,
     )
@@ -828,24 +843,19 @@ def _wall_collision_response(
     remaining axis (``finished``) and keeps the nudge only if the probe is
     clear or ``mob_collision_test`` passes the hero.
     """
-    from .mob_probes import (
-        _probe_candidate_anchor as _probe_candidate_anchor,
-        _wrapped_position_delta as _wrapped_position_delta,
-    )
-
-    if (
-        blocked_vertical
-        and result == 0
-        and cur_slot >> 5 in (1, _MAZE_ROWS - 1)
-    ):
-        # The private top/bottom coordinate gates put zero in D1 without
-        # probing slot zero. It is not a wall candidate for the response arms.
-        return None
+    # The private top/bottom gates put zero in D1 without probing, and these arms
+    # then read slot zero like any blocker: a border wall rounds the step.
     if not 0 <= result < len(state.mobs.picture):
         return None
     if state.mobs.picture[result] not in (_WALL_PICTURE, _MOVABLE_WALL_PICTURE):
         # A movable wall reaches this arm only after both pushes failed.
         return None
+    # The pushes leave what their ray march hit in D1 (0x5E2A2), and these arms
+    # go on to ask which side of the hero D1 lies on (0x42122 and kin).
+    side_cell = (
+        state.movable_wall_blocker
+        if state.mobs.picture[result] == _MOVABLE_WALL_PICTURE else result
+    )
 
     # ROM: helper | Python step-direction summary of a changed position word; the ROM keeps raw registers.
     def sign(new: int, old: int) -> int:
@@ -855,18 +865,25 @@ def _wall_collision_response(
 
     # ROM: part game:0x41C30 | Nudge acceptance: clear probe or mob_collision_test pass at 0x41D22-0x41D2A and siblings.
     def nudge_passes(slot: int) -> bool:
-        return slot == -1 or _player_fight_collision(
-            state, player_index, slot,
-        ) == -1                                   # 0x42598 mob_collision_test
+        if slot == -1:
+            return True
+        # A hero's record has type 0, which 0x52192 answers with zero (0x5286E). The
+        # IT tag and the shove are the core's own arms, and a nudge never reaches them.
+        if _player_index_at(state, slot, player_index) is not None:
+            return False
+        collision = _player_fight_collision(state, player_index, slot)
+        state.player_fight_contact |= collision == 1   # 0x52492: it counts here too
+        return collision == -1                    # 0x42598 mob_collision_test
 
-    wall_h, wall_v = _probe_candidate_anchor(state, result)
+    # 0x904024/0x904026 as the last probe left them: the top and bottom gates
+    # write neither, so those arms read a stale overlap.
     if blocked_vertical:
         # 0x42346 (up) / 0x42112 (down)
         new_v = (vpos + 0x80) & 0xFF7F if requested_axis > 0 else vpos & 0xFF7F
         rounded = (hpos, new_v, 0, sign(new_v, vpos), False)
-        if _wrapped_position_delta(wall_h, hpos) <= 0x540:
+        if state.collision_dist_H <= 0x540:
             return rounded
-        col_delta = ((result & 0x1F) - (cur_slot & 0x1F)) & 0x1F
+        col_delta = ((side_cell & 0x1F) - (cur_slot & 0x1F)) & 0x1F
         if col_delta == 0x1F and not delta & _JOY_LEFT:
             nudge = 1
         elif col_delta == 1 and not delta & _JOY_RIGHT:
@@ -888,12 +905,17 @@ def _wall_collision_response(
     # 0x41CD2 (right) / 0x41F08 (left)
     new_h = (hpos + 0x80) & 0xFF7F if requested_axis > 0 else hpos & 0xFF7F
     rounded = (new_h, vpos, sign(new_h, hpos), 0, False)
-    if _wrapped_position_delta(wall_v, vpos) <= 0x540:
+    if state.collision_dist_V <= 0x540:
         return rounded
-    row_delta = ((result >> 5) - (cur_slot >> 5)) & 0x1F
-    if row_delta == 1 and not delta & _JOY_DOWN:
+    # 0x41CE6/0x41F1A: the row test subtracts the whole doubled cells, each arm its
+    # own way round, so a wall across the column seam borrows from the row.
+    if requested_axis > 0:
+        row_delta, below, above = ((side_cell - cur_slot) * 2) & 0x7C0, 0x40, 0x7C0
+    else:
+        row_delta, below, above = ((cur_slot - side_cell) * 2) & 0x7C0, 0x7C0, 0x40
+    if row_delta == below and not delta & _JOY_DOWN:
         nudge_v = 1
-    elif row_delta == 0x1F and not delta & _JOY_UP:
+    elif row_delta == above and not delta & _JOY_UP:
         nudge_v = -1
     else:
         return rounded
@@ -1065,13 +1087,12 @@ def _shove_player(
         state, target_index, shove, 0, speed_px=1, core_only=True,
         track_thief=False,
     )
-    # The shoved hero's own core call ends in the same occupied-cell tail.
-    rolled_back, _ = resolve_entered_cell(state, target_index, origin)
-    _track_thief_victim_move(
-        state, target_index,
-        rolled_back if rolled_back is not None
-        else _player_record_cell(state, target_index),
-    )
+    # The shoved hero's own core call ends in the same occupied-cell tail, and it
+    # tells the thief only of a change of cell that stood (0x42526, 0x42576).
+    entered = _player_record_cell(state, target_index)
+    _, refused = resolve_entered_cell(state, target_index, origin)
+    if entered != target_slot and not refused:
+        _track_thief_victim_move(state, target_index, entered)
     return True
 
 
@@ -1113,6 +1134,7 @@ def player_try_move(
     # paths see zero and cannot trigger another squeeze.
     if not core_only:
         state.movement_type = (state.movement_type - 1) & 0xFFFF
+        state.player_fight_contact = False              # 0x4AA12
 
     up    = bool(delta & _JOY_UP)
     down  = bool(delta & _JOY_DOWN)
@@ -1120,10 +1142,9 @@ def player_try_move(
     right = bool(delta & _JOY_RIGHT)
 
     if not (up or down or left or right):
+        if not core_only:
+            state.player_fighting_dir[player_index] = 0   # 0x4AA3E: no contact this call
         return _NO_MOVE
-    direction = _direction_from_input(delta)
-    if direction < 8 and not core_only:
-        player.direction = (direction - 2) & 0x07
 
     # Current native position words. player_try_move_core keeps the doubled
     # active_mob_ids entry in D2 for every primary probe, adds the complete D6
@@ -1142,7 +1163,6 @@ def player_try_move(
     requested_dv = speed * (int(up) - int(down))
     dx = 0
     dv = 0
-    fight_contact = False
     collision_response = False
 
     # ROM: helper | Nested Python closure forwarding captured movement context to _resolve_probe; no independent ROM callable.
@@ -1181,8 +1201,9 @@ def player_try_move(
                 vertical=False,
             )
         if outcome is _PROBE_SQUEEZED:
+            _track_thief_victim_move(state, player_index, result)  # 0x42576
             return moved_dirs                           # 0x42560-0x42580
-        fight_contact |= outcome is _PROBE_FIGHTING
+        state.player_fight_contact |= outcome is _PROBE_FIGHTING
         if outcome is _PROBE_CLEAR:
             dx = requested_dx
             final_h = proposed_h
@@ -1242,8 +1263,9 @@ def player_try_move(
             )
             outcome = resolve(result, vertical=True)
         if outcome is _PROBE_SQUEEZED:
+            _track_thief_victim_move(state, player_index, result)  # 0x42576
             return moved_dirs                           # 0x42560-0x42580
-        fight_contact |= outcome is _PROBE_FIGHTING
+        state.player_fight_contact |= outcome is _PROBE_FIGHTING
         if outcome is _PROBE_CLEAR:
             dv = requested_dv
             final_v = proposed_v
@@ -1273,7 +1295,7 @@ def player_try_move(
                     final_h, final_v, response_dx, dv, _ = response
                     dx += response_dx
 
-    if not fight_contact and not core_only:
+    if not state.player_fight_contact and not core_only:
         state.player_fighting_dir[player_index] = 0
 
     if dx == 0 and dv == 0:
@@ -1285,10 +1307,11 @@ def player_try_move(
     state.mobs.hpos[slot] = final_h
     state.mobs.vpos[slot] = final_v
     destination = mob_cell_of(final_h, final_v)
-    migrate_player_record(state, player_index)
+    migrated = migrate_player_record(state, player_index)
     if track_thief:
         _track_thief_victim_move(state, player_index, destination)
-    from .shot_damage import dragon_player_proximity
+    if migrated:                                         # 0x42536; or after the tile below
+        from .shot_damage import dragon_player_proximity
 
-    dragon_player_proximity(state, destination, cur_slot)
+        dragon_player_proximity(state, destination, cur_slot)
     return moved_dirs

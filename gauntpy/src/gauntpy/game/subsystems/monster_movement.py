@@ -197,20 +197,21 @@ def _monster_move_engine(state: GameState, slot: int, obj_type: int, index: int,
     speed = _monster_speed(state, obj_type, frame_word)
     h, v, d6, clear, blocker = _probe_phase(state, slot, speed << POS_SHIFT)
     if blocker is not None:
-        _march_hit_player(state, slot, blocker)
+        _march_hit_player(state, slot, blocker, h, v)
         return
     _commit_move(state, slot, index, d6, h, v, clear, frame_word, acted)
 
 
 # ROM: part game:0x4119A | Extracts blocked-probe player contact and post-hit direction handling at 0x413B0.
-def _march_hit_player(state: GameState, slot: int, blocker: int) -> None:
+def _march_hit_player(state: GameState, slot: int, blocker: int, h: int, v: int) -> None:
     """0x4129A/0x413B0 -- a blocked probe that ran into a player is contact.
 
     The ROM branches out of the probe loop *before* it commits the heading or
     drops the moving flag (0x41348), so the creature neither moves nor leaves
     its attack state: this is the frame it lands a blow.  Afterwards it turns
     to face what it hit (0x413CC), unless the contact removed it -- a ghost
-    exploding on the player.
+    exploding on the player. ``h`` and ``v`` are the registers it turns from:
+    any step an earlier clear probe kept, which the record does not have yet.
     """
     from .monster_contact import monster_playerhit
 
@@ -221,7 +222,7 @@ def _march_hit_player(state: GameState, slot: int, blocker: int) -> None:
     if state.mobs.picture[slot] == 0:
         _iter_ptr_forget(state, slot)          # 0x413C4: it removed itself
         return
-    apply_direction_from_delta(state, slot, blocker)  # 0x413CC
+    apply_direction_from_delta(state, slot, blocker, h, v)  # 0x413CC
     obj_type = state.mobs.obj_type(slot)
     if state.mobs.hpos[slot] & _HPOS_FLAG_MOVING:     # 0x413D2
         monster_show_moving(state, slot, obj_type)
@@ -246,21 +247,24 @@ def _cell_player_index(state: GameState, cell: int) -> int | None:
     return None
 
 
-# ROM: direct game:0x41B7E | Represents the register-entry direction update from current and target MOB positions.
-def apply_direction_from_delta(state: GameState, slot: int, victim_cell: int) -> None:
+# ROM: direct game:0x41B7E | Represents the register-entry direction update from the D4/D5 position and target MOB positions.
+def apply_direction_from_delta(state: GameState, slot: int, victim_cell: int,
+                               h: int, v: int) -> None:
     """``apply_direction_from_delta`` (0x41B7E) -- turn towards what was hit.
 
-    Full position-word deltas, not the aim picker's high-byte units: an axis
-    closer than 0x400 (8 pixels) counts as aligned, the vertical test winning
-    when both are, and the signs then fold the up/up-right/right choice into
-    the other quadrants (``0x20 - d3`` for left, ``0x30 - d3`` for below).
+    ``h`` and ``v`` are the ROM's D4 and D5, the creature's position with its
+    kept steps, not the record's.  Full position-word deltas, not the aim
+    picker's high-byte units: an axis closer than 0x400 (8 pixels) counts as
+    aligned, the vertical test winning when both are, and the signs then fold
+    the up/up-right/right choice into the other quadrants (``0x20 - d3`` for
+    left, ``0x30 - d3`` for below).
     """
     victim = _cell_player_index(state, victim_cell)
     target_slot = (
         state.players[victim].mob_slot if victim is not None else victim_cell
     )
-    dh = (state.mobs.hpos[target_slot] - state.mobs.hpos[slot]) & 0xFFFF
-    dv = (state.mobs.vpos[target_slot] - state.mobs.vpos[slot]) & 0xFFFF
+    dh = (state.mobs.hpos[target_slot] - h) & 0xFFFF
+    dv = (state.mobs.vpos[target_slot] - v) & 0xFFFF
     rom_dir = 1                                             # 0x41B96
     if min(dh, 0x10000 - dh) < 0x400:
         rom_dir = 0
@@ -324,7 +328,7 @@ def _commit_move(state: GameState, slot: int, index: int, d6: int, h: int,
     if _cell_player_index(state, dest) is None:  # 0x413A2
         _move_tail(state, slot, index, frame_word, moved=False, acted=acted)
         return
-    _march_hit_player(state, slot, dest)         # 0x413B0
+    _march_hit_player(state, slot, dest, h, v)   # 0x413B0
 
 
 # ROM: part game:0x4119A | Extracts the moved/refused animation and blink tails at 0x4142E and 0x41454.
