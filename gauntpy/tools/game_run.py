@@ -61,8 +61,13 @@ def _sound_request_trampoline(state, sound_id: int) -> None:
 
 
 class Lockstep:
-    def __init__(self, seed: int = 0) -> None:
+    def __init__(self, seed: int = 0, settings: int | None = None, pricing: int | None = None) -> None:
         self.state = build_cold_boot_state(seed, persistence_policy=PersistencePolicy.ISOLATED)
+        # The operator's word (0x904A24) and pricing (0x9049E2), on both sides from boot.
+        if settings is not None:
+            self.state.game_settings = settings & 0xFFFF
+        if pricing is not None:
+            self.state.two_player_mode = pricing & 0xFFFF
         self.machine = rom_exec.RomMachine()
         self.frame = 0
         self.coins = 0
@@ -314,6 +319,8 @@ class Lockstep:
                 (f"dizzy{index}", machine.r16(0x905F48 + 2 * index), state.player_dizzy_timer[index] & 0xFFFF),
                 (f"hurt{index}", machine.r16(0x905F30 + 2 * index), player.hurt_cooldown & 0xFFFF),
                 (f"statetimer{index}", machine.r16(0x904A26 + 2 * index), player.state_timer & 0xFFFF),
+                (f"magic{index}", machine.r16(0x905F58 + 2 * index), state.debounce_shift_magic[index] & 0xFFFF),
+                (f"fire{index}", machine.r16(0x905F60 + 2 * index), state.debounce_shift_fire[index] & 0xFFFF),
                 (f"character{index}", machine.r16(0x9048E8 + 2 * index), int(player.character) & 0xFFFF),
             ]
             if player.mob_slot:      # gauntpy only loads these words with the hero, as they first matter
@@ -530,9 +537,9 @@ class Pilot:
 
 def run(
     frames: int, play: bool, seed: int, heroes: int = 0, warp: bool = False,
-    coins: int | None = None, rich: bool = False,
+    coins: int | None = None, rich: bool = False, settings: int | None = None, pricing: int | None = None,
 ) -> tuple[int, list[str]]:
-    lockstep = Lockstep(seed)
+    lockstep = Lockstep(seed, settings, pricing)
     try:
         return _fly(lockstep, frames, play, seed, heroes, warp, coins, rich)
     finally:
@@ -582,9 +589,13 @@ def main() -> int:
     parser.add_argument("--warp", action="store_true", help="send each exit to a random deep level")
     parser.add_argument("--coins", type=int, help="this many coins per hero per game, so heroes die")
     parser.add_argument("--rich", action="store_true", help="a score high enough for the high-score table")
+    parser.add_argument("--settings", type=lambda text: int(text, 0),
+                        help="operator settings word (0x904A24), as 0x6090 is by default")
+    parser.add_argument("--pricing", type=lambda text: int(text, 0), help="0 is free play, 1 paid (0x9049E2)")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
-    frame, found = run(args.frames, bool(args.play), args.seed, args.pilot, args.warp, args.coins, args.rich)
+    frame, found = run(args.frames, bool(args.play), args.seed, args.pilot, args.warp, args.coins, args.rich,
+                       args.settings, args.pricing)
     if found:
         print(f"first difference at frame {frame}:")
         print(*found[:14], sep="\n")

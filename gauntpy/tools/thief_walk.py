@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
-import os
 from collections import deque
 import copy
 from pathlib import Path
@@ -37,6 +36,7 @@ _TOOLS = Path(__file__).resolve().parent
 sys.path[:0] = [str(_TOOLS), str(_TOOLS.parent / "src")]
 
 import rom_exec  # noqa: E402
+from jobs import default_jobs  # noqa: E402
 from gauntpy.game.constants import GameMode, MazeObjIds, PlayerStatus  # noqa: E402
 from gauntpy.game.coords import native_v  # noqa: E402
 from gauntpy.game.maze import reset_and_load_level  # noqa: E402
@@ -360,7 +360,7 @@ def main() -> int:
     parser.add_argument("--maze", type=int, action="append")
     parser.add_argument("--scenario", choices=SCENARIOS, action="append")
     parser.add_argument("--show", action="store_true")
-    parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
+    parser.add_argument("--jobs", type=int, default=default_jobs(),
                         help="worker processes; every run happens once whatever the count")
     args = parser.parse_args()
     mazes = args.maze or [6, 7, 13, 15, 29, 43, 76, 84, 87, 101]

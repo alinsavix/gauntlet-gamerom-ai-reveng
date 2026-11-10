@@ -190,8 +190,10 @@ class GameState:
     # 0x9048B4, active-high directions another hero's shove cancelled for this
     # player's next player_try_move call; the wrapper folds and clears them.
     player_deferred_move_flags: list[int] = field(default_factory=lambda: [0] * NUM_PLAYERS)
-    debounce_shift_magic: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)  # 0x905F58
-    debounce_shift_fire: list[int] = field(default_factory=lambda: [0xFFFF] * NUM_PLAYERS)   # 0x905F60
+    # Boot's RAM clear leaves both at 0, so a button held through power-up is no press
+    # until it has been let go (the edge test is 0x1C, three frames up then two down).
+    debounce_shift_magic: list[int] = field(default_factory=lambda: [0] * NUM_PLAYERS)  # 0x905F58
+    debounce_shift_fire: list[int] = field(default_factory=lambda: [0] * NUM_PLAYERS)   # 0x905F60
 
     # =========================================================================
     # WP-5 · player movement and collision

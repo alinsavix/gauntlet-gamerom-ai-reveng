@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import copy
-import os
 from pathlib import Path
 import random
 import sys
@@ -38,6 +37,7 @@ _TOOLS = Path(__file__).resolve().parent
 sys.path[:0] = [str(_TOOLS), str(_TOOLS.parent / "src")]
 
 import rom_exec  # noqa: E402
+from jobs import default_jobs  # noqa: E402
 from gauntpy.game.constants import GameMode, MazeObjIds, PlayerStatus  # noqa: E402
 from gauntpy.game.coords import native_v  # noqa: E402
 from gauntpy.game.maze import maze_place_object, reset_and_load_level, set_cell_descriptor  # noqa: E402
@@ -53,7 +53,7 @@ from gauntpy.game.subsystems.shots import resolve_shot_hit  # noqa: E402
 from gauntpy.game.subsystems.shot_state import _shot_slot  # noqa: E402
 from gauntpy.game.subsystems.player_transport import scan_move_path_interactions  # noqa: E402
 
-_JOBS = os.cpu_count() or 1
+_JOBS = default_jobs()
 
 _NEIGHBOUR = {
     gin.JOY_RIGHT: (10 << 5) | 10, gin.JOY_LEFT: (10 << 5) | 8,

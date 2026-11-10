@@ -578,9 +578,10 @@ implementation specification.
    whole-codebase audit unless the user requests one or the work is an explicit
    audit batch.
 3. Run the smallest targeted tests and affected ROM contract generators during
-   iteration. Run the complete gauntpy suite once at the end; it runs on every core
+   iteration. Run the complete gauntpy suite once at the end; it runs in parallel
    through pytest-xdist (``-n 0`` runs it serially). ``tools/check_all.py`` runs every
-   ROM comparison at once, and ``--flights 8`` adds lockstep flights.
+   ROM comparison, and ``--flights 15`` adds lockstep flights. Both keep to the
+   ``GAUNTPY_JOBS`` budget (``tools/jobs.py``), a quarter of the CPUs by default.
 4. Record terse source/ROM findings while working. Update `doc/`, `book/`, and
    `ISSUES.md` once per completed batch instead of repeatedly during iteration.
    For the book, revise the affected explanation as a whole; do not append
@@ -604,7 +605,8 @@ implementation specification.
    to exits, items and monsters, and stops at the first difference. Every difference is
    a lead into the code that made it, and the frames after it are contaminated.
    `--coins 2 --rich` rations the coins, so heroes die, enter initials and play again.
-   Heroes also walk to keys, doors and movable walls.
+   Heroes also walk to keys, doors and movable walls. `--settings` and `--pricing` set the
+   operator's word and free play on both sides from boot.
 
 ## Implementation boundaries
 

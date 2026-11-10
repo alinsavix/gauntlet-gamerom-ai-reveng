@@ -366,13 +366,15 @@ assembled from the graphics ROMs at runtime, driven by the genuine `coincheck`
 ```bash
 cd gauntpy && uv run gauntpy        # headless loop-structure demo (no ROMs/deps)
 cd gauntpy && uv run pytest -q      # the test suite, one worker per core
-GEX_ROM_DIR=../ROMs uv run python tools/check_all.py --flights 8   # every ROM comparison
+GEX_ROM_DIR=../ROMs uv run python tools/check_all.py --flights 15  # every ROM comparison
 ```
 
 The suite runs in parallel through pytest-xdist; `-n 0` runs it in one process, which
-is the easier way to step through a failure. `tools/check_all.py` starts every ROM
-comparison tool at once and prints one line each. The slow ones share their cases
-between processes, so every case still runs, and the whole check takes a few minutes.
+is the easier way to step through a failure. `tools/check_all.py` runs every ROM
+comparison tool and prints one line each; the slow ones share their cases between
+processes, so every case still runs. Both stay within `GAUNTPY_JOBS` busy processes, a
+quarter of the logical CPUs unless you set it: a whole machine's worth of Unicorn runs
+can overheat a laptop. Raise it on a desktop with cooling to spare.
 
 The demo prints the loop's call trace for a normal frame, shows the dialog gate
 freezing exactly the sixteen gameplay calls, and shows `frame_overflow` setting

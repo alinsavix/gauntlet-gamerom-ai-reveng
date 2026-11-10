@@ -26,11 +26,22 @@ def run_frames(state: GameState, frames: int) -> None:
 
 
 def test_idle_shifts_in_ones():
-    """Nothing pressed means the register fills with 1s, not 0s."""
+    """Nothing pressed means the register fills with 1s, from boot's 0."""
     state = GameState()
     run_frames(state, 4)
+    assert state.debounce_shift_magic[0] == 0x000F
+    run_frames(state, 12)
     assert state.debounce_shift_magic[0] == 0xFFFF
     assert state.debounce_shift_fire[0] == 0xFFFF
+
+
+def test_a_button_held_from_boot_is_no_press_until_let_go():
+    """Boot leaves the register at 0, so the 0x1C edge needs a release first."""
+    state = GameState()
+    state.player_input_raw[0] = press(gin.JOY_MAGIC_BIT)
+    for _ in range(8):
+        gin.input_debounce(state)
+        assert (state.debounce_shift_magic[0] & 0x1F) != 0x1C
 
 
 def test_pressing_shifts_in_zeros():
@@ -173,11 +184,10 @@ def test_the_shift_matches_the_lsr_roxl_pair():
     swapping them would put Fire on the start button.
     """
     state = GameState()
-    # Both registers boot released (all ones), because the switches are active
-    # low and nothing is pressed.
+    # Both registers boot at 0, as one_time_init's RAM clear leaves them.
     magic = state.debounce_shift_magic[0]
     fire = state.debounce_shift_fire[0]
-    assert (magic, fire) == (gin.JOY_IDLE, gin.JOY_IDLE)
+    assert (magic, fire) == (0, 0)
 
     words = [0xFFFF, 0xFFFE, 0xFFFD, 0xFFFC, 0xFFFF, 0xAAAA, 0x5555]
     for word in words:

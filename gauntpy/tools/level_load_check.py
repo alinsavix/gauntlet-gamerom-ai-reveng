@@ -26,7 +26,6 @@ import argparse
 import collections
 import concurrent.futures
 import copy
-import os
 import random
 import sys
 from pathlib import Path
@@ -35,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import rom_exec  # noqa: E402
+from jobs import default_jobs  # noqa: E402
 
 from gauntpy.game.constants import MONSTER_TYPES, GameMode, PlayerStatus  # noqa: E402
 from gauntpy.game.maze import reset_and_load_level  # noqa: E402
@@ -647,7 +647,7 @@ def main() -> int:
     parser.add_argument("--level", type=int, action="append")
     parser.add_argument("--seed", type=lambda text: int(text, 0), action="append")
     parser.add_argument("--show", action="store_true")
-    parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
+    parser.add_argument("--jobs", type=int, default=default_jobs(),
                         help="worker processes; every case runs once whatever the count")
     args = parser.parse_args()
     kinds: collections.Counter[str] = collections.Counter()

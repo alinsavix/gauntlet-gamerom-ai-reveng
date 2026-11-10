@@ -14,7 +14,6 @@ from __future__ import annotations
 import concurrent.futures
 
 import copy
-import os
 from pathlib import Path
 import sys
 
@@ -22,6 +21,7 @@ _TOOLS = Path(__file__).resolve().parent
 sys.path[:0] = [str(_TOOLS), str(_TOOLS.parent / "src")]
 
 import rom_exec  # noqa: E402
+from jobs import default_jobs  # noqa: E402
 from gauntpy.game.constants import GameMode  # noqa: E402
 from gauntpy.game.maze import reset_and_load_level  # noqa: E402
 from gauntpy.game.state import GameState  # noqa: E402
@@ -257,7 +257,7 @@ def main() -> int:
     failures = 0
     # check_winner shares its cases between workers; the other four are quick.
     results = [
-        cases(jobs=os.cpu_count() or 1) if cases is check_winner_cases else cases()
+        cases(jobs=default_jobs()) if cases is check_winner_cases else cases()
         for _, cases in _GROUPS
     ]
     for (name, _), differences in zip(_GROUPS, results):

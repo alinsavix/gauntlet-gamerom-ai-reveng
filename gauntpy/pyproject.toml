@@ -56,7 +56,8 @@ gauntpy = ["data/*.csv"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-# pytest-xdist: one worker per core. ``-p no:xdist`` or ``-n 0`` runs serially.
+# pytest-xdist; tests/conftest.py makes "auto" the GAUNTPY_JOBS budget (a quarter of the
+# logical CPUs unless set). ``-n 0`` runs serially.
 addopts = "-n auto"
 
 [dependency-groups]

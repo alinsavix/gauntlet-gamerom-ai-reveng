@@ -276,6 +276,8 @@ def test_attract_does_not_capture_demo_or_selection():
     state.coin_counters = 1
     tick(state)
     assert not session.capture_level_start()
+    for _ in range(4):            # released first: the debounce boots at 0
+        tick(state)
     state.player_input_raw[0] = 0xFFFE
     _advance_to_capture(session, 300)
     assert state.players[0].active

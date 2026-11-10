@@ -569,7 +569,12 @@ def player_join_finalize(state: GameState, player_index: int) -> None:
     # opened" -1, a later one only a running clock.
     if state.level_players_active == 1 or state.idle_timer > 0:
         state.idle_timer = 0
-    player.status = PlayerStatus.ALIVE_HERE  # §4.4
+    # 0x48AC2-0x48AEE: the hero joins the level in play, unless its splash is still up
+    # past level 1 or the maze is a secret room; then they wait for the next one.
+    if (state.levelnum_current == 1 or not state.global_delay_timer) and state.mazenum_current < 0x73:
+        player.status = PlayerStatus.ALIVE_HERE
+    else:
+        player.status = PlayerStatus.ALIVE_NEXT
     state.player_walking[player_index] = 0
     player.state_timer = _STATE_TIMER_DISABLED             # 0x48972
     state.player_lowhealth_spoken[player_index] = 0        # 0x48980

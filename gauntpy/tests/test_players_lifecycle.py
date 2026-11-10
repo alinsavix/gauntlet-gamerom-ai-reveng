@@ -1201,6 +1201,23 @@ class TestPlayerDamageSampleUpdate:
 # 8. player_join helpers (§4.4)
 # =============================================================================
 
+class TestJoinFinalizeStatus:
+    """0x48AC2-0x48AEE: join the level in play, or wait for the next one."""
+
+    @pytest.mark.parametrize("level, delay, maze, status", [
+        (5, 0, 20, PlayerStatus.ALIVE_HERE),
+        (5, 90, 20, PlayerStatus.ALIVE_NEXT),     # past level 1, its splash still up
+        (1, 90, 20, PlayerStatus.ALIVE_HERE),     # level 1 ignores the splash
+        (5, 0, 0x73, PlayerStatus.ALIVE_NEXT),    # a secret room
+    ])
+    def test_the_status_it_gives(self, level, delay, maze, status):
+        state = _active_state()
+        state.levelnum_current, state.global_delay_timer, state.mazenum_current = level, delay, maze
+        state.players[1].status = PlayerStatus.SELECTING
+        player_lifecycle.player_join_finalize(state, 1)
+        assert state.players[1].status == int(status)
+
+
 class TestPlayerJoin:
 
     def test_join_without_maze_does_nothing(self):

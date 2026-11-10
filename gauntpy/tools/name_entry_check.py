@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import concurrent.futures
 import copy
-import os
 import random
 import struct
 import sys
@@ -24,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import rom_exec  # noqa: E402
+from jobs import default_jobs  # noqa: E402
 
 from gauntpy.game.constants import GameMode, PlayerStatus  # noqa: E402
 from gauntpy.game.state import GameState  # noqa: E402
@@ -191,7 +191,7 @@ def main() -> int:
     high = highscore_cases(rng)
     print(f"highscore_check: {len(high)} of 1200 differ")
     print(*high[:5], sep="\n")
-    editor, finished = editor_cases(rng, jobs=os.cpu_count() or 1)
+    editor, finished = editor_cases(rng, jobs=default_jobs())
     print(f"initials editor: {len(editor)} of 60 differ, {finished} ran to the end")
     print(*editor[:5], sep="\n")
     return 1 if high or editor else 0

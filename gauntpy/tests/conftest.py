@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 import faulthandler
+import os
 
 from _pytest.faulthandler import fault_handler_stderr_fd_key
 import pytest
+
+
+def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
+    """``-n auto``: the shared budget in tools/jobs.py, not every core (it gets hot)."""
+    text = os.environ.get("GAUNTPY_JOBS", "").strip()
+    if text.isdigit() and int(text) > 0:
+        return int(text)
+    return max(1, (os.cpu_count() or 1) // 4)
 
 
 @pytest.hookimpl(trylast=True)

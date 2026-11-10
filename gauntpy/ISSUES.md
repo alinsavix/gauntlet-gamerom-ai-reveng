@@ -41,6 +41,27 @@ None.
 
 ## Resolved issues
 
+### S-225 · operator settings and free play
+
+`tools/game_run.py` takes `--settings` and `--pricing`, and `tools/check_all.py --flights 15` flies difficulty 0 and
+7, the lowest and highest health per coin, reduced text with speech off, four coins to start, music and the secret
+name entry off, and free play.
+
+**The debounce boots at 0.** One_time_init's RAM clear leaves `debounce_shift_magic` and `debounce_shift_fire`
+(0x905F58/0x905F60) at 0, and the press edge is 0x1C, so a button held since power-up is no press until it is let
+go. gauntpy booted them at 0xFFFF, so in free play a Magic held from the first frame started a game the ROM ignored.
+The harness compares both words now.
+
+**A free-play join can wait for the next level.** `player_join_finalize` (0x48AC2-0x48AEE) gives status 1 only on
+level 1 or once the splash delay has run out, and only outside a secret room; otherwise the hero waits with status
+2. gauntpy always gave 1.
+
+**A budget for the checks.** Running every tool at once, each with a pool the size of the machine, kept well over
+a hundred processes busy and overheated a laptop. `tools/jobs.py` now sets one budget, `GAUNTPY_JOBS`, a quarter of
+the logical CPUs unless set. The suite's xdist workers (through `pytest_xdist_auto_num_workers` in `conftest.py`),
+each tool's own pool and `tools/check_all.py`'s total all stay inside it, and the runner hands its heavy tools a share
+in turn rather than starting everything together.
+
 ### S-224 · colour RAM, and checks that take minutes rather than half an hour
 
 `tools/game_run.py` now compares all four colour RAM banks each frame, and three faults came out at once.
