@@ -704,13 +704,20 @@ def _dragon_die(state: GameState, shooter_id: int) -> None:
 
 # ROM: direct game:0x54112 | Dragon hit entry with death and path-switch branches extracted; boundary mapping is not a fidelity certification.
 def dragon_shot_hit(state: GameState, target_slot: int, shooter_id: int) -> None:
-    """0x54112 -- apply a player shot only to an exposed, active dragon head."""
-    if target_slot < 0x400:
-        return
-    if state.dragon_state & (_ST_WAKING | _ST_TURNING):
-        return
+    """0x54112 -- apply a player shot only to an exposed, active dragon head.
+
+    A shot that misses the head, or finds it waking, turning or unexposed, just
+    bursts where it struck (0x54162-0x5416E).
+    """
     old_byte = _current_path_byte(state)
-    if not (old_byte & 1):
+    if (
+        target_slot < 0x400
+        or state.dragon_state & (_ST_WAKING | _ST_TURNING)
+        or not (old_byte & 1)
+    ):
+        from .shot_effects import shot_impact_spawn
+
+        shot_impact_spawn(state, target_slot, shooter_id)
         return
 
     _sound_play(state, _SOUND_DRAGON_HIT)
@@ -726,3 +733,7 @@ def dragon_shot_hit(state: GameState, target_slot: int, shooter_id: int) -> None
         state.mobs.hpos[primary] = (
             state.mobs.hpos[primary] & 0xFFF0
         ) | palette
+    # 0x5422E: a hit that does not kill bursts too, through the miss path's spawn.
+    from .shot_effects import shot_impact_spawn
+
+    shot_impact_spawn(state, target_slot, shooter_id)

@@ -44,6 +44,8 @@ MONSTERS = {int(t) for t in MONSTER_TYPES}
 _EXITS = {int(MazeObjIds.EXIT), int(MazeObjIds.EXITTO6)}
 _CLOSED = {int(MazeObjIds.DOOR_HORIZ), int(MazeObjIds.DOOR_VERT), int(MazeObjIds.WALL_MOVABLE)}
 _GENERATORS = range(0x1C, 0x2E)
+# Every maze the dragon lives in, from loading each one.
+_DRAGON_MAZES = (6, 13, 17, 28, 35, 39, 41, 50, 60, 67, 74, 78, 83, 84, 90, 96, 99, 103)
 _STEPS = ((-32, 0xFF7F), (32, 0xFFBF), (-1, 0xFFDF), (1, 0xFFEF))     # up, down, left, right
 _RTS = b"\x4e\x75"
 _VBLANK_RTE = 0x4049E
@@ -130,6 +132,13 @@ class Lockstep:
         if not state.level_next_treasure:
             state.level_next_treasure = 3
             self.machine.w16(0x904B80, 3)
+
+    def force_secret(self, player: int) -> None:
+        """Make a hero this level's secret-room winner, as debug_force_secret_room does, on both sides."""
+        self.state.secret_trick_id = 0          # 0x904065: no objective left to spoil it
+        self.state.secret_player = player       # 0x904063
+        self.machine.w8(0x904065, 0)
+        self.machine.w8(0x904063, player)
 
     def force_exit(self, player: int) -> None:
         """Walk a hero out on the spot, on both sides: some mazes hold a pilot for ever."""
@@ -271,6 +280,8 @@ class Lockstep:
             ("dialog", machine.r16(0x904A9E), state.dialog_timer & 0xFFFF),
             ("active", machine.r16(0x904928), state.level_players_active),
             ("scroll", (machine.r16(0x904008), machine.r16(0x90400A)), (state.scroll_x & 0xFFFF, state.scroll_y & 0xFFFF)),
+            ("popup timers", tuple(machine.r16(0x90493A + 2 * i) for i in range(4)),
+             tuple(t & 0xFFFF for t in state.score_display_timer)),
             ("transporter cycle", (machine.r16(0x904030), machine.r16(0x904032), machine.r16(0x904034)),
              (state.tport_cycle_pos & 0xFFFF, state.tport_cycle_dir & 0xFFFF, state.tport_cycle_divider & 0xFFFF)),
         ]
@@ -433,10 +444,14 @@ class Pilot:
     die, work the initials editor when they qualify, and come back from attract for another game.
     """
 
-    def __init__(self, rng: random.Random, heroes: int, coins: int | None = None) -> None:
+    def __init__(self, rng: random.Random, heroes: int, coins: int | None = None,
+                 dragon: bool = False, secret: bool = False) -> None:
         self.rng = rng
         self.heroes = heroes
         self.coins = coins
+        self.dragon = dragon          # warp only to dragon mazes, and hunt it
+        self.secret = secret          # win each ordinary level past 6's secret room
+        self.secret_level = -1
         self.paid = [0] * 4
         self.goal = ["exit"] * 4
         self.until = [0] * 4
@@ -459,7 +474,8 @@ class Pilot:
             kind = mobs.obj_type(cell)
             if (
                 (goal == "exit" and kind in _EXITS)
-                or (goal == "monster" and (kind in MONSTERS or kind in _GENERATORS))
+                or (goal == "monster" and (kind in MONSTERS or kind in _GENERATORS
+                                           or (self.dragon and kind == MazeObjIds.MONST_DRAGON)))
                 or (goal == "item" and 0x2E <= kind <= 0x3E)
                 or (goal == "key" and kind == MazeObjIds.KEY)
                 or (goal == "door" and kind in (MazeObjIds.DOOR_HORIZ, MazeObjIds.DOOR_VERT))
@@ -477,7 +493,9 @@ class Pilot:
             self.until[index] = frame + rng.randint(120, 600)
             # A hero with a key looks for a door, and one without looks for a key.
             lock = "door" if player.keysnum else "key"
-            self.goal[index] = rng.choices(("exit", "item", "monster", lock, "wall"), (5, 2, 1, 4, 1))[0]
+            # Hunting the dragon means mostly fighting.
+            weights = (2, 1, 8, 1, 0) if self.dragon else (5, 2, 1, 4, 1)
+            self.goal[index] = rng.choices(("exit", "item", "monster", lock, "wall"), weights)[0]
         self.still[index] = self.still[index] + 1 if cell == self.last_cell[index] else 0
         self.last_cell[index] = cell
         if self.still[index] > 40:                              # stuck on a corner
@@ -501,9 +519,18 @@ class Pilot:
         if state.levelnum_current != self.level:
             self.level = state.levelnum_current
             self.arrived = frame
-            self.target = (self.rng.randint(7, 400), self.rng.randint(5, 0x65))
+            if self.dragon:
+                self.target = (self.rng.randint(7, 400), self.rng.choice(_DRAGON_MAZES))
+            else:
+                self.target = (self.rng.randint(7, 400), self.rng.randint(5, 0x65))
         if state.mazenum_current >= 0x68:
             return
+        if self.secret and self.secret_level != self.level and state.levelnum_current >= 6:
+            here = [p.index for p in state.players
+                    if p.status == PlayerStatus.ALIVE_HERE and p.mob_slot >= 0x20]
+            if here:
+                lockstep.force_secret(here[0])
+                self.secret_level = self.level
         # Each hero's exit computes the next level again, so this holds to the last one.
         if any(player.exit_pending for player in state.players):
             lockstep.aim(*self.target)
@@ -546,24 +573,25 @@ class Pilot:
 def run(
     frames: int, play: bool, seed: int, heroes: int = 0, warp: bool = False,
     coins: int | None = None, rich: bool = False, settings: int | None = None, pricing: int | None = None,
+    dragon: bool = False, secret: bool = False,
 ) -> tuple[int, list[str]]:
     lockstep = Lockstep(seed, settings, pricing)
     try:
-        return _fly(lockstep, frames, play, seed, heroes, warp, coins, rich)
+        return _fly(lockstep, frames, play, seed, heroes, warp, coins, rich, dragon, secret)
     finally:
         lockstep.close()
 
 
 def _fly(
     lockstep: Lockstep, frames: int, play: bool, seed: int, heroes: int, warp: bool,
-    coins: int | None, rich: bool,
+    coins: int | None, rich: bool, dragon: bool = False, secret: bool = False,
 ) -> tuple[int, list[str]]:
     rng = random.Random(seed)
     found = lockstep.differences()
     if found:
         return 0, found
     if heroes:
-        pilot = Pilot(rng, heroes, coins)
+        pilot = Pilot(rng, heroes, coins, dragon, secret)
         for frame in range(1, frames + 1):
             if rich and frame == 100:
                 for index, player in enumerate(lockstep.state.players):
@@ -576,7 +604,7 @@ def _fly(
             found = lockstep.differences()
             if found:
                 return frame, found
-            if warp:
+            if warp or dragon or secret:
                 pilot.warp(lockstep, frame)
         return frames, []
     for frame, raw, coin in script(rng, frames, play):
@@ -600,10 +628,12 @@ def main() -> int:
     parser.add_argument("--settings", type=lambda text: int(text, 0),
                         help="operator settings word (0x904A24), as 0x6090 is by default")
     parser.add_argument("--pricing", type=lambda text: int(text, 0), help="0 is free play, 1 paid (0x9049E2)")
+    parser.add_argument("--dragon", action="store_true", help="warp only to dragon mazes, and fight it")
+    parser.add_argument("--secret", action="store_true", help="win the secret room on each level past 6")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
     frame, found = run(args.frames, bool(args.play), args.seed, args.pilot, args.warp, args.coins, args.rich,
-                       args.settings, args.pricing)
+                       args.settings, args.pricing, args.dragon, args.secret)
     if found:
         print(f"first difference at frame {frame}:")
         print(*found[:14], sep="\n")

@@ -625,3 +625,63 @@ class TestBlastCullWindow:
             hit = (state.mobs.hpos[slot] & 0xF) == 2
             assert hit == expected[slot], f"{slot:#x} culled/hit disagree"
         assert any(expected.values()) and not all(expected.values())
+
+
+class TestScanOrder:
+    """0x41532-0x4172C: the scan walks the monster band in the ROM's order.
+
+    Score pop-ups take the first free slot, so the order the targets are hit in
+    decides which pop-up lands where.
+    """
+
+    def _chain(self) -> tuple[GameState, list[int]]:
+        state = GameState()
+        for row in (4, 6, 8, 10, 12):
+            _place(state, pack_slot(row, 9), MazeObjIds.MONST_GHOST)
+        chain = list(state.mobs.iter_chain())
+        assert len(chain) == 5
+        return state, chain
+
+    def test_the_scan_starts_at_the_band_head_and_stops_before_the_marker(self):
+        from gauntpy.game.subsystems.potions import _potion_scan_order
+
+        state, chain = self._chain()
+        state.monster_iter_ptr = chain[3]
+        assert list(_potion_scan_order(state, chain[1])) == chain[1:3]
+
+    def test_the_scan_wraps_from_the_chain_end_to_its_head(self):
+        from gauntpy.game.subsystems.potions import _potion_scan_order
+
+        state, chain = self._chain()
+        state.monster_iter_ptr = chain[1]
+        assert list(_potion_scan_order(state, chain[3])) == chain[3:] + chain[:1]
+
+    def test_a_zero_start_is_the_chain_head(self):
+        from gauntpy.game.subsystems.potions import _potion_scan_order
+
+        state, chain = self._chain()
+        state.monster_iter_ptr = chain[2]
+        assert list(_potion_scan_order(state, 0)) == chain[:2]
+
+    def test_starting_on_the_marker_scans_the_whole_chain_once(self):
+        from gauntpy.game.subsystems.potions import _potion_scan_order
+
+        state, chain = self._chain()
+        state.monster_iter_ptr = chain[2]
+        assert list(_potion_scan_order(state, chain[2])) == chain[2:] + chain[:2]
+
+    def test_destroying_the_marker_hands_it_to_its_predecessor(self):
+        """0x416CA-0x416E6, then 0x4170E: the scan still covers the chain once.
+
+        Each entry's link is read before the entry is processed (0x41542), so
+        the kills do not cut the scan short either.
+        """
+        from gauntpy.game.subsystems.potions import _potion_scan_order
+
+        state, chain = self._chain()
+        state.monster_iter_ptr = chain[0]
+        seen = []
+        for slot in _potion_scan_order(state, chain[0]):
+            seen.append(slot)
+            state.mobs.unlink_and_clear(slot)
+        assert seen == chain

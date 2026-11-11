@@ -41,6 +41,27 @@ None.
 
 ## Resolved issues
 
+### S-227 · the dragon and secret rooms in lockstep
+
+`tools/game_run.py --dragon` warps only to the eighteen mazes the dragon lives in and sends the heroes after it;
+`--secret` makes a hero on each level past 6 the secret-room winner, as `debug_force_secret_room` does, on both sides,
+so the exit opens a challenge room. The harness now compares the four score pop-up timers (0x90493A) too.
+`tools/check_all.py --flights 17` flies one of each (seeds 311 and 316), and nine other dragon and secret flights of
+30,000 frames ran clean.
+
+They found three faults. **A shot at the dragon always bursts**: 0x54162-0x5416E spawns the shot's impact sparkle
+when it misses the head or finds it waking, turning or closed, and a hit that does not kill branches back to the same
+spawn at 0x5422E; gauntpy spawned neither. **Paying out a secret room draws nothing**: 0x4D86E-0x4D8A0 hands the
+stash back without redrawing the inventory, which gauntpy did, so its panel showed the returned keys and potions before
+the ROM's did. And **a potion scans the monster band in the ROM's order**, not the whole chain from its head: 0x41532
+starts at the band head the ordinary walk would use, wraps to the chain head at the end, and stops short of the
+band's far marker (0x904A60). When it destroys the marker itself, which it can only do when it starts there,
+0x416CA-0x416E6 hands the marker to its predecessor and 0x4170E takes that one last. Death's score pop-ups take the
+first free slot, so where the band wraps the maze's top and bottom rows, two Deaths' pop-ups landed in each other's
+slots. `test_a_potion_blast_matches_the_rom` runs 40 random blasts through 0x49034 under Unicorn and compares every
+target and pop-up; the head-first order fails five of them. Its layouts keep the hero's record in the chain: a scan
+that destroys the chain's last record spins on slot 0 for ever, which play cannot reach.
+
 ### S-226 · piloted games replayed on MAME
 
 `tools/mame_replay.py` flies a lockstep flight, then has MAME boot normally and take the harness ROM's RAM while

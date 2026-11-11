@@ -22,6 +22,8 @@ for monster rows.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from ..constants import GameMode, MazeObjIds
 from ..state import GameState
 from .display import ALPHA_PALETTE_INIT
@@ -244,11 +246,17 @@ def _apply_dragon_potion(state: GameState) -> None:
 
 # ROM: part game:0x40E6A | Extracted alternate monster-walk potion scan at 0x41532-0x41728, not a body of main_handle_potions.
 def potion_blast(state: GameState, player_index: int, *,
-                 shot_triggered: bool = False) -> None:
+                 shot_triggered: bool = False,
+                 start_slot: int | None = None) -> None:
     """Scan every on-screen monster/generator MOB and apply the effect (§4.6).
 
     ``shot_triggered`` sets bit 2 of the trigger flags for a potion detonated
     by a shot rather than drunk.
+
+    ``start_slot`` is the band head the monster walk would start from; the scan
+    then visits the chain in the ROM's order (see ``_potion_scan_order``), so
+    score pop-ups take their slots as the ROM's do.  Without it the whole chain
+    is scanned once from its head.
 
     A potion clears the *screen*, not the level: 0x41560-0x41584 culls each
     candidate against the camera-derived monster culling rectangle before the
@@ -266,8 +274,9 @@ def potion_blast(state: GameState, player_index: int, *,
 
     _update_cull_rect(state)
 
-    # Snapshot the chain: removal mutates it.
-    for slot in list(state.mobs.iter_chain()):
+    slots = (list(state.mobs.iter_chain()) if start_slot is None
+             else _potion_scan_order(state, start_slot))
+    for slot in slots:
         obj_type = state.mobs.obj_type(slot)
         if obj_type < _MATRIX_FIRST_TYPE or obj_type > _MATRIX_LAST_TYPE:
             continue
@@ -279,6 +288,53 @@ def potion_blast(state: GameState, player_index: int, *,
             state, slot, obj_type, trigger, player_index,
         )
     state.score_dirty[player_index] = 1            # 0x41734-0x41744, once the scan is over
+
+
+# ROM: part game:0x40E6A | Extracts the potion scan's walk order at 0x41532-0x4153C and 0x416F2-0x4172C.
+def _potion_scan_order(state: GameState, start_slot: int) -> Iterator[int]:
+    """The slots the potion scan visits, in order, as it visits them.
+
+    0x41532 starts at ``start_slot`` (the chain head when 0).  Each entry's
+    link is read before it is processed (0x41542), and a zero link wraps to
+    the head (0x416F6).  The scan stops when the next entry is
+    ``monster_iter_ptr`` (0x41702), which it does not process -- unless it
+    destroyed the marker itself on the way.  Then 0x416CA-0x416E6 makes the
+    marker's predecessor (the chain's tail for the head) the new marker, and
+    0x4170E lets the scan take that predecessor too before it stops.
+    """
+    mobs = state.mobs
+    slot = start_slot or mobs.depth_list_head
+    end = state.monster_iter_ptr
+    finish = True
+    for _ in range(2 * len(mobs.picture) + 2):     # cycle guard
+        if slot == 0:
+            return
+        nxt = mobs.next_slot(slot)
+        prev = mobs.prev_slot(slot)
+        yield slot
+        if slot == end and not mobs.picture[slot] and not mobs.link[slot]:
+            # 0x416CA: the marker was destroyed (0x416EC); its predecessor
+            # becomes the marker, 0 meaning the tail (0x9049DE).
+            end = prev or _chain_tail(state, slot)
+            finish = False
+        slot = nxt or mobs.depth_list_head
+        if slot != end:
+            continue
+        if finish:
+            return
+        # 0x4170E: one more entry, then stop at whatever follows it.
+        end = mobs.next_slot(slot) or mobs.depth_list_head
+        finish = True
+    raise RuntimeError("cycle detected in the potion scan")
+
+
+# ROM: helper | Python stand-in for the tail cache 0x9049DE, which gauntpy does not keep.
+def _chain_tail(state: GameState, removed: int) -> int:
+    """0x9049DE as it stood before ``removed`` (the head) was unlinked."""
+    tail = removed
+    for tail in state.mobs.iter_chain():
+        pass
+    return tail
 
 
 # ROM: part game:0x40E6A | Extracts per-target potion matrix, reveal, destruction and generator-demotion branches.

@@ -750,6 +750,62 @@ def test_a_transport_in_a_real_level_matches_the_rom(maze, centred):
     assert compared
 
 
+# --- potions --------------------------------------------------------------------
+
+@pytest.mark.parametrize("seed", range(40))
+def test_a_potion_blast_matches_the_rom(seed):
+    """0x49034 -> 0x41532: the scan's order, its culling and every outcome.
+
+    The order shows in which pop-up slot each Death's score lands, and some
+    layouts make the scan destroy its own end marker (0x416CA).
+    """
+    import random
+
+    from gauntpy.game.coords import encode_hpos
+    from gauntpy.game.subsystems.monsters import main_move_monsters
+
+    rng = random.Random(seed)
+    state = GameState(game_mode=GameMode.NORMAL)
+    hero = _cell(rng.randrange(2, 30), rng.randrange(2, 30))
+    # The hero's own record keeps the chain from emptying: a scan that destroys
+    # the last record there spins on slot 0 for ever (0x416F6).
+    _hero(state, 0, hero, character=rng.randrange(4))
+    state.level_players_active = 1
+    # Around the camera, which half the time straddles the maze's top and bottom
+    # rows: there the band wraps the chain, and the order differs from the chain's.
+    focus = _cell(rng.choice((0, 1, 30, 31)) if seed & 1 else rng.randrange(2, 30), rng.randrange(8, 24))
+    near = {_cell(((focus >> 5) + dr) & 0x1F, (focus & 0x1F) + dc)
+            for dr in range(-6, 7) for dc in range(-6, 7)}
+    cells = rng.sample(sorted(near - {hero} - set(range(64))), rng.randrange(1, 12))
+    for cell in cells:
+        obj_type = rng.choice([t for t in range(0x12, 0x2E) if t != int(MazeObjIds.MONST_IT)]
+                              + [int(MazeObjIds.MONST_DEATH)] * 12)    # Death leaves a pop-up
+        state.mobs.create(
+            cell, tile=1, hpos=encode_hpos((cell & 0x1F) * 16, palette=rng.randrange(1, 5)),
+            vpos=encode_vpos_at_y((cell >> 5) * 16), obj_type=obj_type, state=0,
+        )
+    state.scroll_x = (focus & 0x1F) * 16 - 0x68
+    state.scroll_y = (focus >> 5) * 16 - 0x74
+    state.playfield_color_base, state.playfield_color_latch = 0x1234, 0xFF00
+    state.potion_player = rng.choice((0, 4))
+    state.death_hits = rng.randrange(8)
+    machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
+    machine.w16(0x90401E, 0xFF00)
+    machine.w16(0x904020, 0x1234)
+    machine.w16(0x904022, state.potion_player)
+    machine.w16(0x904A5C, state.death_hits)
+    machine.w16(0x904928, 1)
+    machine.call(0x49034)
+    assert machine.halted
+
+    main_move_monsters(state)
+
+    for slot in [*cells, *range(0x11, 0x15)]:
+        assert (state.mobs.picture[slot], state.mobs.hpos[slot], state.mobs.obj_type(slot)) == (
+            machine.picture(slot), machine.hpos(slot), machine.r16(0x903800 + 2 * slot) >> 10,
+        ), hex(slot)
+
+
 # --- crash reports --------------------------------------------------------------
 
 def test_starting_unicorn_is_quiet_and_a_real_crash_is_not(tmp_path):

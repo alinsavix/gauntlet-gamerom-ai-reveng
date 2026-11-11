@@ -425,9 +425,8 @@ def _secret_room_payout(state: GameState, completed: bool) -> bool:
             player.potionsnum + state.players[0].keysnum
         ) & 0xFF
         player.supershot = (player.supershot + state.secret_saved_supershot) & 0xFF
-        from .player_lifecycle import player_inv_update
-
-        player_inv_update(state, winner)
+        # 0x4D86E-0x4D8A0 hands the stash back without redrawing the inventory: the
+        # panel keeps showing the room's keys and potions until something redraws it.
     state.secret_saved_keys = state.monster_spawn_probability_bonus
     state.secret_saved_potions = state.players[0].keysnum
     if not open_name_entry:

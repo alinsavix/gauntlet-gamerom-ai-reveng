@@ -470,6 +470,27 @@ class TestDamage:
         dragon_shot_hit(state, 0x400 + primary, 0)
         assert state.dragon_hits == 0
 
+    def test_a_rejected_shot_still_bursts(self):
+        """0x54162-0x5416E: a miss spawns the shot's impact sparkle."""
+        for setup in ("tile", "turning", "closed"):
+            state, primary = self._exposed_dragon()
+            target = primary if setup == "tile" else 0x400 + primary
+            if setup == "turning":
+                state.dragon_state = _ST_TURNING
+            if setup == "closed":
+                state.dragon_anim_ctr = 0
+            dragon_shot_hit(state, target, 0)
+            assert state.dragon_hits == 0
+            assert any(state.mobs.picture[0x0D:0x11]), setup
+
+    def test_a_hit_that_does_not_kill_bursts_too(self):
+        """0x5422E branches back into the miss path's impact spawn."""
+        state, primary = self._exposed_dragon()
+        state.rng = _FixedRNG(1)
+        dragon_shot_hit(state, 0x400 + primary, 0)
+        assert state.dragon_hits == 1
+        assert any(state.mobs.picture[0x0D:0x11])
+
     def test_ninth_exposed_hit_removes_all_four_segments(self):
         state, primary = self._exposed_dragon()
         state.rng = _FixedRNG(*([0] * 8))

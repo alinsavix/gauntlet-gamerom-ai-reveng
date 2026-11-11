@@ -46,6 +46,8 @@ _FLIGHTS = (
     ("--pilot", "2", "--coins", "2", "--rich", "--warp", "--seed", "205", "--settings", "0x0090"),
     ("--pilot", "3", "--warp", "--seed", "206", "--pricing", "0"),
     ("--pilot", "4", "--coins", "2", "--rich", "--warp", "--seed", "209", "--pricing", "0"),
+    ("--pilot", "3", "--dragon", "--seed", "311"),
+    ("--pilot", "4", "--secret", "--warp", "--seed", "316"),
 )
 
 
@@ -124,7 +126,8 @@ def _run_one(name: str, argv: list[str], out: Path, slots: int) -> tuple[str, in
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--flights", type=int, default=0,
-                        help=f"up to {len(_FLIGHTS)} lockstep flights; past 8 they vary the operator settings")
+                        help=f"up to {len(_FLIGHTS)} lockstep flights; past 8 they vary the operator settings, "
+                             "and the last two fight dragons and win secret rooms")
     parser.add_argument("--out", type=Path, default=_ROOT / "check_all_out")
     parser.add_argument("--jobs", type=int, default=default_jobs(),
                         help="processes kept busy at once (GAUNTPY_JOBS; a quarter of the CPUs by default)")

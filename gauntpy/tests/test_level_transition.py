@@ -827,6 +827,23 @@ class TestSecretRoomRoundTrip:
                 state.secret_saved_supershot) == (3, 0, 5)
         assert state.level_players_active == 1
 
+    def test_the_payout_hands_the_stash_back_without_redrawing_the_panel(self, monkeypatch):
+        """0x4D86E-0x4D8A0 adds the stash back and draws nothing."""
+        redraws = []
+        monkeypatch.setattr(player_lifecycle, "player_inv_update",
+                            lambda state, index: redraws.append(index))
+        state = GameState()
+        state.secret_player = 1
+        p = state.players[1]
+        p.status = int(PlayerStatus.ALIVE_NEXT)
+        state.monster_spawn_probability_bonus = 3     # the stashed keys
+        state.secret_saved_supershot = 5
+
+        secret_rooms._secret_room_payout(state, False)
+
+        assert (p.keysnum, p.supershot) == (3, 5)
+        assert redraws == []
+
     def test_completing_the_challenge_pays_and_returns_to_the_rotation(self):
         state = self._level_12(self._GREEDY_MAZE)
         p = state.players[0]
