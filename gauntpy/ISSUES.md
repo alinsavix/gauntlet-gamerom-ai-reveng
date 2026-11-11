@@ -41,6 +41,31 @@ None.
 
 ## Resolved issues
 
+### S-226 · piloted games replayed on MAME
+
+`tools/mame_replay.py` flies a lockstep flight, then has MAME boot normally and take the harness ROM's RAM while
+its main loop waits for VBLANK, leaving it its own stack, OS words and sound handshake. Each pass's input goes in
+through a read tap on the stick ports, keyed to the loop counter, and a warp's or score poke's RAM changes go in
+after the same pass. Each pass is sampled exactly where it ends, at its write of `frame_overflow`, and compared with
+the harness: the records, the seed and the overflow word. `--dump N` diffs all game RAM after a pass, and
+`--timing` lists every pass whose overflow differs.
+
+Three flights matched MAME pass for pass, through level loads, warps to level 305, deaths and initials, until a frame
+outlasted a field. Level setup is modelled; **the pass that enters a level overran every time too** (level 1's first
+hero, and each later level once its splash ends), and `_mark_level_entry_overrun` now models it, so overflow words
+and the generators they throttle match through those. What stops a replay now is a crowded frame: on level 305 a
+pass ran a third more ROM code than its neighbours, overran, and kept the generators still where gauntpy spawned.
+FIDELITY.md rule 110 accepts that, as it does the colour pulses VBLANK advances per field, not per pass. One lead is
+open: `ptr_maze_data` (0x904B88) holds 0x3E4B7 in the harness and 0x384B7 on MAME, the same offset in another
+Slapstic bank, and is read by the secret-room hint (0x4C086). No difference has followed from it yet.
+
+Modelling the entry overrun sent two standard flights down new paths, and they found two more faults. A good potion
+cures dizziness at 0x516E0, before the inventory check, which gauntpy never did. And the transporter routes
+(0x905C54/0x905D54) live in alpha rows 24-27's off-screen columns, so every alpha clear that reaches them, from
+`maze_show` (0x4526A) to the clear when a game ends, empties them. gauntpy mirrored the route grid there but not
+these, kept a level's routes into the next, and sent a thief through a transporter the ROM had forgotten.
+`alpha_memory` now mirrors them too, and the harness compares them.
+
 ### S-225 · operator settings and free play
 
 `tools/game_run.py` takes `--settings` and `--pricing`, and `tools/check_all.py --flights 15` flies difficulty 0 and

@@ -367,6 +367,7 @@ assembled from the graphics ROMs at runtime, driven by the genuine `coincheck`
 cd gauntpy && uv run gauntpy        # headless loop-structure demo (no ROMs/deps)
 cd gauntpy && uv run pytest -q      # the test suite, one worker per core
 GEX_ROM_DIR=../ROMs uv run python tools/check_all.py --flights 15  # every ROM comparison
+GEX_ROM_DIR=../ROMs uv run python tools/mame_replay.py --pilot 2 --seed 142 --frames 6000  # the same on MAME
 ```
 
 The suite runs in parallel through pytest-xdist; `-n 0` runs it in one process, which

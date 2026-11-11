@@ -348,6 +348,14 @@ class Lockstep:
             if bad:
                 at = bad[0]
                 out.append(f"route grid [{at:#x}]: ROM {grid[at]:#x} PY {state.path_direction_grid[at]:#x} ({len(bad)} bytes)")
+        # The transporter routes share alpha rows 24-27's off-screen columns (0x5107A).
+        for name, base, ours in (("transporter routes", 0x905C54, state.tport_route_forward),
+                                 ("transporter routes back", 0x905D54, state.tport_route_reverse)):
+            for index in range(1, len(ours)):
+                address = base + (index // 22) * 128 + (index % 22) * 2
+                if machine.r16(address) != ours[index] & 0xFFFF:
+                    out.append(f"{name} [{index}]: ROM {machine.r16(address):#x} PY {ours[index] & 0xFFFF:#x}")
+                    break
         alpha = _words(machine, 0x905000, 64 * 30)
         bad = [i for i in range(64 * 30) if i % 64 < 42 and alpha[i] != state.alpha_ram[i]]
         if bad:

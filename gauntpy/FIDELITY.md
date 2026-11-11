@@ -545,14 +545,18 @@ implementation specification.
      keep the old picture, so never refresh after a dispatch. Each site names
      its bank: `monster_update_anim_tile` is the idle bank alone, whatever
      flags the creature carries. See doc/04 §3.3.
-110. **`frame_overflow` is set only by level setup, on purpose.** The arcade
-     sets it whenever a frame outlasts a field, which depends on how long the
-     68000 took. gauntpy has no such timing, so nothing here can say which
+110. **`frame_overflow` is set only by level setup and level entry, on purpose.**
+     The arcade sets it whenever a frame outlasts a field, which depends on how
+     long the 68000 took. gauntpy has no such timing, so nothing here can say which
      frames would be late, and inventing a rule (a monster count, say) would
-     suppress spawning and defer sound at guessed moments. Level setup is the
-     exception because the MAME demo capture shows it (8, then 4/2/1/0). Crowded
-     frames therefore never throttle generators or sound here; that difference
-     is accepted, not an open bug.
+     suppress spawning and defer sound at guessed moments. Level setup and the
+     pass that puts heroes into a level's start are the exceptions, because MAME
+     shows both every time: the demo capture, and replays of piloted games
+     (``tools/mame_replay.py``), where setup lasts some 34 fields and entry two.
+     Crowded frames therefore never throttle generators or sound here, and a replay
+     parts from MAME at the first one (one in level 305 ran a third more ROM code
+     than its neighbours); that difference is accepted, not an open bug. So is the
+     VBLANK-driven colour pulsing, which counts fields, not passes.
 111. **The OS's operator statistics are not modelled, on purpose.** Nothing in the
      game reads the session histogram that `_player_dies` skips (OS API 0x19C,
      called only at 0x46AB8): it feeds the operator screens gauntpy does not have.

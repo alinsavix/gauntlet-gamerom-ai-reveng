@@ -451,6 +451,7 @@ def _handle_start_press(state: GameState, player_index: int) -> None:
     else:                                              # 0x4867E: a new game's level is loaded
         _enter_the_level(state, player_index)
         maze_show(state)                               # 0x4526A
+        _mark_level_entry_overrun(state)
         state.welcome_elapsed_frames = 0               # 0x48692
         # Nothing on this path adds pickups or schedules a thief.
         state.random_pickups_setup_done = True
@@ -503,6 +504,17 @@ def main_start_game(state: GameState) -> None:
     for i in range(NUM_PLAYERS):
         if _magic_press_edge(state, i) and _press_is_accepted(state, i):
             _handle_start_press(state, i)
+
+
+# ROM: part game:0x42A66 | Models the overrun a level's entry causes, as MAME shows; see FIDELITY.md rule 110.
+def _mark_level_entry_overrun(state: GameState) -> None:
+    """The pass that puts heroes into a level's start outlasts a field on the arcade.
+
+    Replays of piloted games on MAME (tools/mame_replay.py) show it at level 1's first
+    hero and at each later level's entry after its splash, every time. The semaphore makes
+    this tick's closing check set ``frame_overflow``, as level setup's does.
+    """
+    state.vblank_semaphore = 1
 
 
 # ROM: part game:0x4800C | The level handoff at 0x480B6-0x483FC: the demo's end, the next level's commit, and the splash countdown that places the heroes.
@@ -560,5 +572,6 @@ def _level_handoff(state: GameState) -> None:
                 state.level_start_pending = False
                 maze_show(state)                       # 0x4526A
                 _spawn_level_players(state, _exiting_or_here(state))
+                _mark_level_entry_overrun(state)
             elif state.game_mode == int(GameMode.TREAS_EXIT):
                 _finish_level_end(state, after_tally=True)

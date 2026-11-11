@@ -355,6 +355,14 @@ class TestShowLevelEndBonusScreenLoadsNextMaze:
         assert not state.level_start_pending
         assert spawned and spawned[0][1] == [0]
 
+    def test_the_pass_that_enters_a_level_overruns_as_on_mame(self, monkeypatch):
+        """tools/mame_replay.py shows the entry pass outlast a field, every time."""
+        monkeypatch.setattr(level_transitions, "_spawn_level_players", lambda state, survivors: None)
+        state = GameState(game_mode=GameMode.NORMAL, global_delay_timer=1, level_start_pending=True)
+        state.players[0].status = int(PlayerStatus.ALIVE_NEXT)
+        sess.main_start_game(state)
+        assert state.vblank_semaphore == 1     # tick's closing check makes frame_overflow 8
+
     def test_solo_exit_loads_next_level_and_respawns_survivor(self):
         from gauntpy.game import maze
 

@@ -677,7 +677,12 @@ def clear_alpha_visible(state: GameState) -> None:
 
 # ROM: direct game:0x4526A | Maze reveal boundary clearing alpha outside the information panel.
 def maze_show(state: GameState) -> None:
-    """Port maze_show 0x4526A: reveal the maze while preserving its info panel."""
+    """Port maze_show 0x4526A: reveal the maze while preserving its info panel.
+
+    Columns 42-63 are off screen, and the ROM keeps the thief's route grid
+    (0x905054) and the transporter routes (0x905C54/0x905D54) there, so this
+    clear empties them too: ``alpha_memory`` mirrors both.
+    """
     fill_alpha_rect(state, 0, 0, 29, ALPHA_ROWS, 0)
     fill_alpha_rect(state, 42, 0, ALPHA_COLUMNS - 42, ALPHA_ROWS, 0)
 

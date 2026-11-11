@@ -520,6 +520,8 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
         if state.mobs.picture[tile_mob_slot] == _POISONED_POTION_PICTURE:
             _poisoned(state, player_index)              # 0x51644-0x516C8; no redraw bit
         else:
+            # 0x516E0: a good potion cures the dizziness first, even one too many to carry.
+            state.player_dizzy_timer[player_index] = 0
             if player.keysnum + player.potionsnum >= 12:
                 _dialog(state, player_index, _DIALOG_INVENTORY_FULL)
                 if (

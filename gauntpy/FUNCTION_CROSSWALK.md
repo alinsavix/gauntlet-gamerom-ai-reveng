@@ -7,7 +7,7 @@ comments at Python definitions, not these generated lists.
 
 This inventory contains **591 documented ROM callable entries**
 (322 game and 269 OS)
-and **1034 named Python definitions** under `src/gauntpy`.
+and **1036 named Python definitions** under `src/gauntpy`.
 The ROM inputs are `../doc/generated/callable_contract_coverage.csv`
 (game) and `../doc/generated/os_all_function_contracts.csv` (OS).
 OS API veneer targets come from `os_callable_contracts.csv`.
@@ -46,9 +46,9 @@ The CSVs are the machine-readable views:
 | one-to-one | 79 | 79 |
 | one-to-many | 130 | 44 |
 | many-to-one | 9 | 22 |
-| many-to-many | 358 | 133 |
+| many-to-many | 359 | 133 |
 | adapted-or-partial | 10 | 10 |
-| python-only | 159 | 0 |
+| python-only | 160 | 0 |
 | infrastructure | 289 | 0 |
 | unresolved | 0 | 0 |
 | rom-only | 0 | 303 |
@@ -68,7 +68,7 @@ extracted helpers belongs in the next section instead.
 
 | Python definition | Relationship | ROM entry / name | Explanation |
 |---|---|---|---|
-| [`gauntpy.game.alpha_memory.write_alpha_word`](src/gauntpy/game/alpha_memory.py#L19) | one-to-one (direct) | `os:0x3586` `write_alpha_word` | Indexed raw-word alpha write matches the OS implementation contract and doc/02; additionally synchronizes the Python route-byte alias. API 0x021E targets this body and is not counted separately. |
+| [`gauntpy.game.alpha_memory.write_alpha_word`](src/gauntpy/game/alpha_memory.py#L34) | one-to-one (direct) | `os:0x3586` `write_alpha_word` | Indexed raw-word alpha write matches the OS implementation contract and doc/02; additionally synchronizes the Python route-byte alias. API 0x021E targets this body and is not counted separately. |
 | [`gauntpy.game.maze.load_attract_display_tilemap`](src/gauntpy/game/maze.py#L102) | one-to-one (direct) | `game:0x4438E` `load_attract_display_tilemap` | Attract tile stream and palette-run loader; missing-ROM escape and cache generation are Python additions. Not the full game_playfield_init at 0x44A82. |
 | [`gauntpy.game.maze.write_cyclic_wall_descriptor`](src/gauntpy/game/maze.py#L341) | one-to-one (direct) | `game:0x5F024` `wall_place_playfield_update` | Center-only cyclic-wall connectivity, descriptor selection and stamp; uses gex descriptors and a logical shadow, with missing-data exits. |
 | [`gauntpy.game.maze.maze_randomplace`](src/gauntpy/game/maze.py#L931) | one-to-one (direct) | `game:0x42E9A` `maze_randomplace` | Random starting cell, deterministic empty-cell walk and pickup creation, including the hidden-potion picture draw. |
@@ -438,14 +438,14 @@ mapped parts do not prove that every branch of the ROM is covered.
 | [`gauntpy.game.subsystems.player_items.door_open_start`](src/gauntpy/game/subsystems/player_items.py#L303) | many-to-one (merged) | `game:0x51E80` `door_open_start`; `game:0x51FAE` `door_scan_vertical_endpoints`; `game:0x5207C` `door_scan_horizontal_endpoints` | Door-front initializer includes both immediate vertical/horizontal endpoint scanners inline; main_open_doors remains an ordinary callee. |
 | [`gauntpy.game.subsystems.player_items._door_unlock`](src/gauntpy/game/subsystems/player_items.py#L363) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Extracted key-spending door arm at 0x51DAE-0x51DE4 plus touched-MOB removal tail; not a door_traverse ray-march entry. |
 | [`gauntpy.game.subsystems.player_items.player_tile_interact`](src/gauntpy/game/subsystems/player_items.py#L390) | many-to-many (direct) | `game:0x511AC` `player_tile_interact` | Tile-type pickup/door/transport/exit dispatch boundary, with several arms extracted into helpers; correspondence does not assert complete behavioral fidelity. |
-| [`gauntpy.game.subsystems.player_items._drop_trap_walls`](src/gauntpy/game/subsystems/player_items.py#L733) | one-to-many (adapter) | `game:0x5E7A6` `maze_place_object_types` | Delegates the trap-family replacement boundary to maze.maze_place_object_types. |
-| [`gauntpy.game.subsystems.player_items._take_tile`](src/gauntpy/game/subsystems/player_items.py#L741) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Shared taken-tile tail at 0x51E36-0x51E72: hero proximity, idle timer, then the record's removal. |
-| [`gauntpy.game.subsystems.player_items._tile_taken`](src/gauntpy/game/subsystems/player_items.py#L747) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Hero proximity and idle-timer half of the taken-tile tail, 0x51E36-0x51E5C. |
-| [`gauntpy.game.subsystems.player_items._tile_contact_progress`](src/gauntpy/game/subsystems/player_items.py#L756) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Shared trap/stun return-arm bookkeeping: clear escape/positive idle timers and notify the dragon; the dragon routine is a callee. |
-| [`gauntpy.game.subsystems.player_items._player_give_item`](src/gauntpy/game/subsystems/player_items.py#L766) | one-to-many (adapter) | `game:0x4C72A` `player_give_item_with_message` | Converts Python object types to the ROM item-index argument and delegates to _player_give_item_id. |
-| [`gauntpy.game.subsystems.player_items._player_give_item_id`](src/gauntpy/game/subsystems/player_items.py#L787) | one-to-many (direct) | `game:0x4C72A` `player_give_item_with_message` | Current defining power-grant body: owned-bit guard, power OR, one-shot latch and speech, with the box in score.powerup_box_draw; legacy players.player_give_item_with_message does not exist. |
-| [`gauntpy.game.subsystems.player_items._treasure_award`](src/gauntpy/game/subsystems/player_items.py#L817) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Shared treasure/bag award at 0x51A16-0x51AD8 and its escape-timer clear at 0x51882. |
-| [`gauntpy.game.subsystems.player_items._treasure_bonus_multiplier`](src/gauntpy/game/subsystems/player_items.py#L829) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Multiplayer bonus redistribution at 0x51A16-0x51AAE, before the ordinary score-award call. |
+| [`gauntpy.game.subsystems.player_items._drop_trap_walls`](src/gauntpy/game/subsystems/player_items.py#L735) | one-to-many (adapter) | `game:0x5E7A6` `maze_place_object_types` | Delegates the trap-family replacement boundary to maze.maze_place_object_types. |
+| [`gauntpy.game.subsystems.player_items._take_tile`](src/gauntpy/game/subsystems/player_items.py#L743) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Shared taken-tile tail at 0x51E36-0x51E72: hero proximity, idle timer, then the record's removal. |
+| [`gauntpy.game.subsystems.player_items._tile_taken`](src/gauntpy/game/subsystems/player_items.py#L749) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Hero proximity and idle-timer half of the taken-tile tail, 0x51E36-0x51E5C. |
+| [`gauntpy.game.subsystems.player_items._tile_contact_progress`](src/gauntpy/game/subsystems/player_items.py#L758) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Shared trap/stun return-arm bookkeeping: clear escape/positive idle timers and notify the dragon; the dragon routine is a callee. |
+| [`gauntpy.game.subsystems.player_items._player_give_item`](src/gauntpy/game/subsystems/player_items.py#L768) | one-to-many (adapter) | `game:0x4C72A` `player_give_item_with_message` | Converts Python object types to the ROM item-index argument and delegates to _player_give_item_id. |
+| [`gauntpy.game.subsystems.player_items._player_give_item_id`](src/gauntpy/game/subsystems/player_items.py#L789) | one-to-many (direct) | `game:0x4C72A` `player_give_item_with_message` | Current defining power-grant body: owned-bit guard, power OR, one-shot latch and speech, with the box in score.powerup_box_draw; legacy players.player_give_item_with_message does not exist. |
+| [`gauntpy.game.subsystems.player_items._treasure_award`](src/gauntpy/game/subsystems/player_items.py#L819) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Shared treasure/bag award at 0x51A16-0x51AD8 and its escape-timer clear at 0x51882. |
+| [`gauntpy.game.subsystems.player_items._treasure_bonus_multiplier`](src/gauntpy/game/subsystems/player_items.py#L831) | many-to-many (part) | `game:0x511AC` `player_tile_interact` | Multiplayer bonus redistribution at 0x51A16-0x51AAE, before the ordinary score-award call. |
 | [`gauntpy.game.subsystems.player_lifecycle._play_random_character_voice`](src/gauntpy/game/subsystems/player_lifecycle.py#L74) | many-to-many (part) | `game:0x466F6` `main_health_countdown`; `game:0x511AC` `player_tile_interact` | Extracted character-group random voice selection from health-zero death and poison pickup arms; ROM pointer/count tables are data. |
 | [`gauntpy.game.subsystems.player_lifecycle.setup_infopanel`](src/gauntpy/game/subsystems/player_lifecycle.py#L120) | one-to-many (direct) | `game:0x452D0` `setup_infopanel` | Whole-panel or selected-player HUD rebuild boundary; rendering subroutines remain delegated. |
 | [`gauntpy.game.subsystems.player_lifecycle.player_inv_update`](src/gauntpy/game/subsystems/player_lifecycle.py#L191) | one-to-many (adapter) | `game:0x45ACA` `player_inv_update` | Inventory-update entry delegates the actual key/potion/icon writes to score.write_player_inventory. |
@@ -565,8 +565,9 @@ mapped parts do not prove that every branch of the ROM is covered.
 | [`gauntpy.game.subsystems.session._reload_the_level`](src/gauntpy/game/subsystems/session.py#L393) | many-to-many (part) | `game:0x4800C` `main_start_game` | The reload both first-hero arms share: 0x4853C-0x48576 and 0x4861E-0x48656. |
 | [`gauntpy.game.subsystems.session._first_hero_reloads_the_level`](src/gauntpy/game/subsystems/session.py#L408) | many-to-many (part) | `game:0x4800C` `main_start_game` | The first hero of a level with the reload: a continue (0x48512-0x4859C) or free play (0x48612-0x48692). |
 | [`gauntpy.game.subsystems.session._handle_start_press`](src/gauntpy/game/subsystems/session.py#L424) | many-to-many (part) | `game:0x4800C` `main_start_game` | A Magic press once it counts, 0x484A8-0x486E2: every arm of the start, join and continue decision. |
-| [`gauntpy.game.subsystems.session.main_start_game`](src/gauntpy/game/subsystems/session.py#L461) | many-to-many (direct) | `game:0x4800C` `main_start_game` | Game start/join/transition boundary; extracted helpers and ROM-less join fallback do not create additional ROM entries. |
-| [`gauntpy.game.subsystems.session._level_handoff`](src/gauntpy/game/subsystems/session.py#L509) | many-to-many (part) | `game:0x4800C` `main_start_game` | The level handoff at 0x480B6-0x483FC: the demo's end, the next level's commit, and the splash countdown that places the heroes. |
+| [`gauntpy.game.subsystems.session.main_start_game`](src/gauntpy/game/subsystems/session.py#L462) | many-to-many (direct) | `game:0x4800C` `main_start_game` | Game start/join/transition boundary; extracted helpers and ROM-less join fallback do not create additional ROM entries. |
+| [`gauntpy.game.subsystems.session._mark_level_entry_overrun`](src/gauntpy/game/subsystems/session.py#L510) | many-to-many (part) | `game:0x42A66` `g2mainloop` | Models the overrun a level's entry causes, as MAME shows; see FIDELITY.md rule 110. |
+| [`gauntpy.game.subsystems.session._level_handoff`](src/gauntpy/game/subsystems/session.py#L521) | many-to-many (part) | `game:0x4800C` `main_start_game` | The level handoff at 0x480B6-0x483FC: the demo's end, the next level's commit, and the splash countdown that places the heroes. |
 | [`gauntpy.game.subsystems.shot_collision.shot_collision_candidate_core`](src/gauntpy/game/subsystems/shot_collision.py#L101) | one-to-many (direct) | `game:0x40A78` `shot_collision_candidate_core` | Represents the BSR candidate evaluator including wrapped/tagged cells and collision-distance outputs. |
 | [`gauntpy.game.subsystems.shot_collision._wrap_allowed`](src/gauntpy/game/subsystems/shot_collision.py#L178) | one-to-many (part) | `game:0x40A78` `shot_collision_candidate_core` | Extracts the vertical probe-wrap gate at 0x40A88-0x40A8A. |
 | [`gauntpy.game.subsystems.shot_collision.shot_mob_collision`](src/gauntpy/game/subsystems/shot_collision.py#L193) | many-to-many (direct) | `game:0x40906` `shot_mob_collision` | Projectile collision-probe entry; candidate evaluation and dragon adjustment are delegated. |
@@ -703,8 +704,9 @@ to change gameplay. Known extracted portions of specific entries use
 
 | Python definition | Relationship | ROM entry / name | Explanation |
 |---|---|---|---|
-| [`gauntpy.game.alpha_memory.fill_alpha_words`](src/gauntpy/game/alpha_memory.py#L31) | python-only (helper) | - | Python clipped-row bulk write plus route-byte shadow synchronization; not a separately identified OS fill or text routine. |
-| [`gauntpy.game.alpha_memory.write_path_grid_byte`](src/gauntpy/game/alpha_memory.py#L44) | python-only (helper) | - | Python byte/word alias-maintenance primitive, not the route-selection algorithms that call it. |
+| [`gauntpy.game.alpha_memory._publish_tport_route`](src/gauntpy/game/alpha_memory.py#L23) | python-only (helper) | - | Python alias maintenance: alpha writes in rows 24-27's off-screen columns reach the transporter route tables. |
+| [`gauntpy.game.alpha_memory.fill_alpha_words`](src/gauntpy/game/alpha_memory.py#L47) | python-only (helper) | - | Python clipped-row bulk write plus route-byte shadow synchronization; not a separately identified OS fill or text routine. |
+| [`gauntpy.game.alpha_memory.write_path_grid_byte`](src/gauntpy/game/alpha_memory.py#L63) | python-only (helper) | - | Python byte/word alias-maintenance primitive, not the route-selection algorithms that call it. |
 | [`gauntpy.game.constants.GameMode.is_attract`](src/gauntpy/game/constants.py#L108) | python-only (helper) | - | Python enum sign-test property for the shared attract-mode convention; no separately identified ROM callable. |
 | [`gauntpy.game.coords.pack_slot`](src/gauntpy/game/coords.py#L55) | python-only (helper) | - | Generic masked row/column packing for Python APIs; no separately identified ROM callable. |
 | [`gauntpy.game.coords.unpack_slot`](src/gauntpy/game/coords.py#L61) | python-only (helper) | - | Generic packed-slot field extraction for Python APIs. |
@@ -814,7 +816,7 @@ to change gameplay. Known extracted portions of specific entries use
 | [`gauntpy.game.subsystems.player_input._joystick_fire_held`](src/gauntpy/game/subsystems/player_input.py#L93) | python-only (helper) | - | Python input-interface helper combining replay selection with the active-low Fire predicate. |
 | [`gauntpy.game.subsystems.player_items._secret_trick_progress`](src/gauntpy/game/subsystems/player_items.py#L196) | python-only (helper) | - | Python delegation shim to the parameterized secret-task progress helper; no separate ROM progress callable. |
 | [`gauntpy.game.subsystems.player_items._secret_trick_set`](src/gauntpy/game/subsystems/player_items.py#L210) | python-only (helper) | - | Python delegation shim to the parameterized secret-task assignment helper; no separate ROM setter callable. |
-| [`gauntpy.game.subsystems.player_items._clear_floor_marker`](src/gauntpy/game/subsystems/player_items.py#L725) | python-only (helper) | - | Synchronizes Python logical floor descriptors with MOB deletion for consumed markers; not a separate ROM callable. |
+| [`gauntpy.game.subsystems.player_items._clear_floor_marker`](src/gauntpy/game/subsystems/player_items.py#L727) | python-only (helper) | - | Synchronizes Python logical floor descriptors with MOB deletion for consumed markers; not a separate ROM callable. |
 | [`gauntpy.game.subsystems.player_movement._player_speed`](src/gauntpy/game/subsystems/player_movement.py#L91) | python-only (helper) | - | State-free Python convenience exposing only base pixels per frame; omits the ROM frame-dependent boost and special-maze selection. |
 | [`gauntpy.game.subsystems.player_movement._pixel_to_slot`](src/gauntpy/game/subsystems/player_movement.py#L107) | python-only (helper) | - | Python sprite-origin/body-cell conversion used by compatibility collision logic; deliberately differs from native record-cell migration. |
 | [`gauntpy.game.subsystems.player_movement._direction_from_input`](src/gauntpy/game/subsystems/player_movement.py#L127) | python-only (helper) | - | Bridges Python active-high directions to the ROM direction-table representation; 0x580FC is a data table, not a routine. |
@@ -947,7 +949,7 @@ must preserve the intended simulation and observation boundaries.
 | [`gauntpy.game.subsystems.display.alpha_palette_words`](src/gauntpy/game/subsystems/display.py#L513) | infrastructure (infrastructure) | - | Host-renderer lookup of four colors from modeled alpha color RAM. |
 | [`gauntpy.game.subsystems.display.alpha_palette_rgba`](src/gauntpy/game/subsystems/display.py#L522) | infrastructure (infrastructure) | - | Host-renderer RGBA conversion of an alpha palette. |
 | [`gauntpy.game.subsystems.display.alpha_color_rgba`](src/gauntpy/game/subsystems/display.py#L527) | infrastructure (infrastructure) | - | Host-renderer pixel-color lookup; no ROM callable boundary. |
-| [`gauntpy.game.subsystems.display._irgb_rgba`](src/gauntpy/game/subsystems/display.py#L686) | infrastructure (infrastructure) | - | MAME-style host rasterizer IRGB-to-RGBA conversion; not game/OS ROM logic. |
+| [`gauntpy.game.subsystems.display._irgb_rgba`](src/gauntpy/game/subsystems/display.py#L691) | infrastructure (infrastructure) | - | MAME-style host rasterizer IRGB-to-RGBA conversion; not game/OS ROM logic. |
 | [`gauntpy.host.application._positive_level`](src/gauntpy/host/application.py#L69) | infrastructure (infrastructure) | - | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart. |
 | [`gauntpy.host.application._maze_number`](src/gauntpy/host/application.py#L77) | infrastructure (infrastructure) | - | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart. |
 | [`gauntpy.host.application._positive_scale`](src/gauntpy/host/application.py#L87) | infrastructure (infrastructure) | - | Host lifecycle, I/O or inspection infrastructure; no game/OS-ROM callable counterpart. |

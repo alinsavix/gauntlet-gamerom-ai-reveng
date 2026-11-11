@@ -959,6 +959,35 @@ class TestGameOverDwell:
         assert state.players[1].state_timer == 0xFFFF
 
 
+class TestMazeShowClearsTheOffscreenTables:
+
+    def test_routes_and_the_route_grid_go_with_the_alpha_columns(self):
+        """0x4526A clears columns 42-63, where the ROM keeps both."""
+        from gauntpy.game.subsystems.display import maze_show
+
+        state = _active_state()
+        state.tport_route_forward[2] = 0x300
+        state.tport_route_reverse[3] = 0x205
+        state.path_direction_grid[5] = 0x31
+        maze_show(state)
+        assert not any(state.tport_route_forward) and not any(state.tport_route_reverse)
+        assert not any(state.path_direction_grid)
+
+
+class TestGoodPotionCuresDizziness:
+
+    def test_picking_up_a_good_potion_clears_the_dizzy_timer(self):
+        """0x516E0 clears it before the inventory check."""
+        state = _active_state()
+        player = _make_player_active(state, 0, mob_slot=(10 << 5) | 10)
+        pot = (10 << 5) | 11
+        state.mobs.create(pot, tile=0x88FC, hpos=0, vpos=0, obj_type=int(MazeObjIds.POT_DESTRUCTABLE))
+        state.player_dizzy_timer[0] = 554
+        player_items.player_tile_interact(state, pot, 0)
+        assert state.player_dizzy_timer[0] == 0
+        assert player.potionsnum == 1
+
+
 class TestTrapSound:
 
     def test_a_distant_wall_still_sounds_the_trap(self):
