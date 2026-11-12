@@ -41,6 +41,43 @@ None.
 
 ## Resolved issues
 
+### S-228 · rare paths in lockstep, and panel redraws the ROM never makes
+
+`tools/game_run.py` (and `mame_replay.py`) take three more steering options. `--stall` brings each level's escape
+timer (0x9048C6) to a few frames from 0x5208, so its walls become exits (0x5E80C); `--powers` gives the heroes
+two to four permanent powers (the low byte of 0x9048E0) on each level; `--walls` warps only to the 26 mazes with a
+movable wall and sends the heroes into them. Without new options, a secret-room winner on a `--secret` flight now
+walks out through the ROM's own exit routine after a while, so won challenges reach the winner's name entry and the
+`XXX-XXX` secret code, and a hero entering initials sometimes steps back over one with the backspace glyph.
+`check_all.py --flights 20` flies all three. Between them the flights now reach the paths no flight had reached:
+walls turned to exits, the low-health warning's "all your powers will be lost" roll (0x48812-0x48850),
+movable-wall pushes in all four directions, and the backspace and dash characters (0x4A474, 0x4A4B6).
+
+They found one fault, in four places: **gauntpy redrew the inventory panel where the ROM does not**. The ROM
+calls `player_inv_update` (0x45ACA) from nine places, and gauntpy's port added four more: at an exit (0x52D88
+only clears reflect and transport), when invisibility, repulsiveness or invulnerability runs out (0x4A7FE-0x4A890
+only clear the bits), and on every power-up pickup (0x517BA-0x518B0 join the shared tail at 0x51626, past the keys
+arm's redraw). In ordinary play the panel was already current there, so nothing showed until a flight's powers
+were poked in without a redraw; each extra redraw then drew icons the ROM's panel did not have. All four are gone,
+and gauntpy's callers now match the ROM's nine.
+
+The pilot's new random draw for the secret-room wait shifted every flight's stream, so all twenty flew new courses,
+and three more faults turned up. **A new game forgets the last game's secret hint**: `start_attract_to_game` clears
+`secret_need_hint` at 0x44374, which gauntpy did not, so a dragon killed in one game made gauntpy show "TO ENTER
+SECRET ROOM" in the next where the ROM shows a gameplay tip, and draw a different random number for it. The
+harness now compares that word. **A new game keeps the treasure timer**: gauntpy zeroed it there (0x9049E8), but
+the ROM leaves a finished game's count for the next treasure room to reload. And **a reflected diagonal off a wall on
+row 1 counts row 0 as open**: the down-left and down-right corners (0x53B42, 0x53BEC) bound the cell above at 0x20,
+not 0, so they never read row 0's pictures, which are shot and effect records rather than maze. gauntpy read them,
+and a shot bouncing in the top corridor left the wall the other way. `rom_sweeps.py reflect` now sweeps a row-1 wall
+as well as a mid-maze one, 73,728 cases, and the old code got 576 of the new ones wrong.
+
+The MAME replays of dragon and secret flights stop on timing, not on game logic. Flight 311 matched 2,714
+passes, until a crowded pass on level 1 overran on MAME. A one-hero dragon flight (313) matched 1,540 passes,
+to level 90's entry, where the pass after the modelled entry overran too (`frame_overflow` 8 on MAME, 4 in the
+harness). A one-hero secret flight (317) matched 1,930 passes before a crowded overrun. FIDELITY.md rule 110
+leaves these unmodelled, so neither the dragon nor a secret room has been reached on MAME yet.
+
 ### S-227 · the dragon and secret rooms in lockstep
 
 `tools/game_run.py --dragon` warps only to the eighteen mazes the dragon lives in and sends the heroes after it;

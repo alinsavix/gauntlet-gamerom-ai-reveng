@@ -682,8 +682,9 @@ def player_tile_interact(state: GameState, tile_mob_slot: int,
             _secret_trick_set(state, player_index, _TRICK_NOUSEINVUL, 1)
         _sound_play(state, 0x26)                     # 0x5187A/0x51834/0x518A8
         state.escape_timer = 0                       # 0x51882: clr.w (a3)
+        # 0x51884 joins the shared tail at 0x51626, past the keys arm's redraw:
+        # a power-up never redraws the inventory panel itself.
         _take_tile(state, tile_mob_slot, player_index)
-        player_inv_update(state, player_index)
         return -1
 
     # ── Hidden pot ────────────────────────────────────────────────────────────

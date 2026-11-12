@@ -429,8 +429,10 @@ def _reflect_corner(state: GameState, target: int, shooter_id: int,
     side = (target & 0xFFE0) | ((target + col_step) & 0x1F)
     if mobs.picture[side] == 0x8000:
         direction ^= 2
+    # 0x539E0/0x53A94 stop below at 0x400; 0x53B42/0x53BEC stop above at 0x20, so
+    # a wall on row 1 counts row 0 -- the shot and effect records -- as open.
     above = target + (row_step << 5)
-    if not 0 <= above < 0x400 or mobs.picture[above] == 0x8000:
+    if not 0x20 <= above < 0x400 or mobs.picture[above] == 0x8000:
         direction ^= 6
 
     if direction != state.shot_direction[shooter_id]:

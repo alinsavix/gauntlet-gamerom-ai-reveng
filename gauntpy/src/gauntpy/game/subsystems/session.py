@@ -145,10 +145,12 @@ def start_attract_to_game(state: GameState) -> None:
     show_level_start_screen(state)      # 0x442AC
     state.global_delay_timer = 0               # 0x44366 global_delay_timer
     state.bonus_amount = 0
-    state.treasure_timer = 0
+    # The treasure timer (0x9049E8) is not cleared here: a game that ended in a
+    # treasure room leaves its count for the next room to reload.
     state.player_treascount = [0] * NUM_PLAYERS
     state.welcome_elapsed_frames = 0       # fresh session setup, 0x48692
     state.attract_timer = 0xFFFF        # 0x4436C: the attract machine stands down
+    state.secret_need_hint = 0          # 0x44374: a dragon killed last game hints no more
     from .. import maze
     from .exits import exit_scan_level
     if maze.reset_and_load_level(state, 1):   # level 1 = maze 0 (I-08 spawn target)

@@ -2126,6 +2126,20 @@ class TestReflection:
         assert state.reflect_count[0] == 0
         assert state.mobs.picture[1] == 0
 
+    def test_a_corner_on_row_1_counts_row_0_as_open(self):
+        """0x53BEC: the down-right corner treats any cell above row 1 as open,
+        whatever the shot and effect records in row 0 hold (flight 202)."""
+        state = _make_state()
+        state.shot_direction[2] = 3                 # down-right
+        state.reflect_count[2] = 3
+        state.player_shot_last_wall_pos[2] = 0x0F   # one row up: band D_ -> DR
+        state.mobs.picture[0x2E] = 0x135A           # the wall beside it
+        state.mobs.picture[0x2F] = 0x8000
+        state.mobs.picture[0x0F] = 0                # a record slot, not a cell
+        state.mobs.hpos[0x2F], state.mobs.vpos[0x2F] = 0x7800, 0xF000
+        state.mobs.hpos[3], state.mobs.vpos[3] = 0x760E, 0xF309
+        assert shot_reflect_calc(state, 0x2F, 2) == 5
+
     def test_a_wall_hit_is_remembered_for_the_next_bounce(self):
         state = _make_state()
         state.shot_direction[0] = 4

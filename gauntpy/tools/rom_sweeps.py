@@ -186,12 +186,15 @@ def routes(count: int = 4000) -> int:
     return bad
 
 
-def _reflect_pair(pair: tuple[int, int]) -> tuple[int, int, list[str]]:
-    """Every case of shot_reflect_calc for one direction and shooter."""
-    direction, shooter = pair
+def _reflect_pair(pair: tuple[int, int, int]) -> tuple[int, int, list[str]]:
+    """Every case of shot_reflect_calc for one direction and shooter, off a wall on one row.
+
+    Row 1 is the edge case: the cell above it is row 0, which holds records rather than maze.
+    """
+    direction, shooter, row = pair
     bad = cases = 0
     lines: list[str] = []
-    target = (12 << 5) | 12
+    target = (row << 5) | 12
     neighbours = {"up": target - 32, "down": target + 32, "left": target - 1, "right": target + 1}
     near_cell = (0, 1, -1, 32, -32, 33, -33, 31, -31, 2, -2, 64)
     for wall_mask in range(16):
@@ -213,7 +216,7 @@ def _reflect_pair(pair: tuple[int, int]) -> tuple[int, int, list[str]]:
                         slot = _shot_slot(shooter)
                         state.mobs.picture[slot] = 0x1000
                         state.mobs.hpos[slot] = 12 * 16 << 7
-                        state.mobs.vpos[slot] = 0xF900 if top else native_v(12 * 16) << 7
+                        state.mobs.vpos[slot] = 0xF900 if top else native_v(row * 16) << 7
                         machine = rom_exec.RomMachine.from_state(copy.deepcopy(state))
                         rom = machine.call(0x53818, raw_target, shooter, count=500_000) & 0xFFFF
                         ours = shot_reflect_calc(state, raw_target, shooter) & 0xFFFF
@@ -228,7 +231,7 @@ def _reflect_pair(pair: tuple[int, int]) -> tuple[int, int, list[str]]:
                         wrong = [f"{name} ROM {a:#x} PY {b:#x}" for name, a, b in pairs if a != b]
                         if wrong or not machine.halted:
                             bad += 1
-                            lines.append(f"  dir {direction} shooter {shooter} walls {wall_mask:#x} "
+                            lines.append(f"  row {row} dir {direction} shooter {shooter} walls {wall_mask:#x} "
                                          f"delta {delta} count {count} target {raw_target:#x} top {top}: "
                                          f"{wrong[:3]}")
     return bad, cases, lines
@@ -238,7 +241,7 @@ def reflect() -> int:
     """shot_reflect_calc (0x53818) for every direction, approach, corner and bounce state."""
     bad = cases = 0
     shown: list[str] = []
-    pairs = [(direction, shooter) for direction in range(8) for shooter in (0, 2)]
+    pairs = [(direction, shooter, row) for direction in range(8) for shooter in (0, 2) for row in (12, 1)]
     with concurrent.futures.ProcessPoolExecutor(_JOBS) as pool:
         for pair_bad, pair_cases, lines in pool.map(_reflect_pair, pairs):
             bad += pair_bad

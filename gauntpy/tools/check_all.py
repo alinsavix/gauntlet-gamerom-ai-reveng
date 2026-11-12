@@ -48,6 +48,9 @@ _FLIGHTS = (
     ("--pilot", "4", "--coins", "2", "--rich", "--warp", "--seed", "209", "--pricing", "0"),
     ("--pilot", "3", "--dragon", "--seed", "311"),
     ("--pilot", "4", "--secret", "--warp", "--seed", "316"),
+    ("--pilot", "2", "--secret", "--warp", "--coins", "2", "--seed", "403"),
+    ("--pilot", "2", "--stall", "--powers", "--coins", "2", "--seed", "401"),
+    ("--pilot", "3", "--walls", "--coins", "2", "--rich", "--seed", "402"),
 )
 
 
@@ -127,7 +130,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--flights", type=int, default=0,
                         help=f"up to {len(_FLIGHTS)} lockstep flights; past 8 they vary the operator settings, "
-                             "and the last two fight dragons and win secret rooms")
+                             "past 15 they fight dragons, win secret rooms, stall, carry powers and push walls")
     parser.add_argument("--out", type=Path, default=_ROOT / "check_all_out")
     parser.add_argument("--jobs", type=int, default=default_jobs(),
                         help="processes kept busy at once (GAUNTPY_JOBS; a quarter of the CPUs by default)")

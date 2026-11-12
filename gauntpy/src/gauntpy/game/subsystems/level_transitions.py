@@ -270,10 +270,9 @@ def player_exit_sequence(state: GameState, player_index: int,
     # 0x52D76: the hero leaves, unless that record is the exit it transported onto.
     if hero_slot and state.mobs.obj_type(hero_slot) != int(MazeObjIds.EXIT):
         state.mobs.unlink_and_clear(hero_slot)
-    player.powers &= 0xF3FF                        # 0x52D88
-    from .player_lifecycle import player_inv_update
-
-    player_inv_update(state, player_index)
+    # 0x52D88 drops reflect and transport without redrawing the panel: nothing in
+    # 0x52B40 calls player_inv_update, so the icons stay as they were last drawn.
+    player.powers &= 0xF3FF
     player.mob_slot = anim_slot                    # 0x52DA0
     player.anim_counter = 0                        # 0x52DAE
     # The dissolve starts by spinning the hero's facing down to 4 (0x4A672).

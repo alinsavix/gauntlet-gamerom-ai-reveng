@@ -402,6 +402,8 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
         flee; reflection is bit 10
       * the 0x905F40 countdown -> PlayerPower.INVULN (bit 13, 0x4A880)
 
+    Expiry only clears the bit: nothing here redraws the inventory panel.
+
     That last one also charges damage while it runs: one point every eighth
     frame, two when frame-counter bit 3 is clear (0x4A838-0x4A85E), floored at
     zero, raising the health redraw bit.
@@ -412,13 +414,11 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
         state.player_invis_timer[player_index] -= 1
         if state.player_invis_timer[player_index] == 0:
             player.powers &= ~int(PlayerPower.INVIS) & 0xFFFF        # 0x4A80E
-            player_inv_update(state, player_index)
 
     if state.player_repulse_timer[player_index]:                     # 0x4A81A
         state.player_repulse_timer[player_index] -= 1
         if state.player_repulse_timer[player_index] == 0:
             player.powers &= ~int(PlayerPower.REPULSE) & 0xFFFF      # 0x4A826
-            player_inv_update(state, player_index)
 
     if player.invuln_timer:                                            # 0x4A832
         if (state.frame_counter & 0x07) == 0:                        # 0x4A840
@@ -429,7 +429,6 @@ def _power_timers_tick(state: GameState, player_index: int) -> None:
         if player.invuln_timer == 0:
             player.powers &= ~int(PlayerPower.INVULN) & 0xFFFF       # 0x4A880
             state.health_dirty[player_index] = 1                     # 0x4A88C
-            player_inv_update(state, player_index)
 
     if state.player_dizzy_timer[player_index]:                       # 0x4A898
         state.player_dizzy_timer[player_index] -= 1                  # 0x4A89E

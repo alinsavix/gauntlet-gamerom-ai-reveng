@@ -199,6 +199,37 @@ class TestPlayerExitSequence:
         assert state.mobs.obj_type(exit_slot) == int(MazeObjIds.EXIT)
         assert state.mobs.picture[exit_slot] == 0x8001
 
+    def test_exit_drops_reflect_and_transport_without_redrawing_the_panel(self):
+        """0x52D88 clears 0x0C00, and nothing in 0x52B40 calls player_inv_update."""
+        state = GameState()
+        _active_player_with_mob(state, 0, pack_slot(10, 10))
+        _active_player_with_mob(state, 1, pack_slot(12, 12))
+        state.players[0].powers = 0x0C38
+        panel = list(state.alpha_ram)
+
+        ex.player_exit_sequence(state, 0, state.players[0].mob_slot, int(MazeObjIds.EXIT))
+
+        assert state.players[0].powers == 0x0038
+        assert state.alpha_ram == panel
+
+    def test_timed_powers_expire_without_redrawing_the_panel(self):
+        """0x4A7FE-0x4A890 only clear the bits (and mark health for invulnerability)."""
+        from gauntpy.game.subsystems.players import _power_timers_tick
+
+        state = GameState()
+        _active_player_with_mob(state, 0, pack_slot(10, 10))
+        player = state.players[0]
+        player.powers = 0x2338
+        state.player_invis_timer[0] = 1
+        state.player_repulse_timer[0] = 1
+        player.invuln_timer = 1
+        panel = list(state.alpha_ram)
+
+        _power_timers_tick(state, 0)
+
+        assert player.powers == 0x0038
+        assert state.alpha_ram == panel
+
     def test_exit_marks_player_exiting_plays_sound_and_removes_sprite(self):
         state = GameState()
         _active_player_with_mob(state, 0, pack_slot(10, 10))
@@ -637,6 +668,15 @@ def _firing_player(state: GameState, index: int, direction: int) -> int:
 class TestFrontEndFlow:
     """attract -> coin -> character select -> Magic start -> spawned in level 1,
     driven entirely through the real per-frame loop (`tick`)."""
+
+    def test_a_new_game_forgets_last_games_secret_hint(self):
+        """0x44374: a dragon killed in the last game does not hint in this one."""
+        state = GameState()
+        state.secret_need_hint = 1
+        state.treasure_timer = 970
+        sess.start_attract_to_game(state)
+        assert state.secret_need_hint == 0
+        assert state.treasure_timer == 970, "0x44204-0x4438C leaves the treasure timer"
 
     def test_start_attract_to_game_loads_level_1(self):
         """The attract->game transition sets NORMAL and (with ROMs) loads

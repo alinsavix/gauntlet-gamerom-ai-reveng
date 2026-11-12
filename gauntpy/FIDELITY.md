@@ -584,7 +584,7 @@ implementation specification.
 3. Run the smallest targeted tests and affected ROM contract generators during
    iteration. Run the complete gauntpy suite once at the end; it runs in parallel
    through pytest-xdist (``-n 0`` runs it serially). ``tools/check_all.py`` runs every
-   ROM comparison, and ``--flights 17`` adds lockstep flights. Both keep to the
+   ROM comparison, and ``--flights 20`` adds lockstep flights. Both keep to the
    ``GAUNTPY_JOBS`` budget (``tools/jobs.py``), a quarter of the CPUs by default.
 4. Record terse source/ROM findings while working. Update `doc/`, `book/`, and
    `ISSUES.md` once per completed batch instead of repeatedly during iteration.

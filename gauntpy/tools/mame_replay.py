@@ -77,7 +77,8 @@ def _rom_tables(machine) -> list[bytes]:
 def fly(args, stop: int | None = None):
     """The flight: its input per pass, and the harness ROM's digest after each pass."""
     lockstep = game_run.Lockstep(args.seed, args.settings, args.pricing)
-    pilot = game_run.Pilot(random.Random(args.seed), args.pilot, args.coins)
+    pilot = game_run.Pilot(random.Random(args.seed), args.pilot, args.coins, args.dragon, args.secret, args.stall,
+                           args.powers, deep=args.warp or args.dragon or args.secret or args.walls, walls=args.walls)
     image = _image(lockstep.machine)
     inputs, digests, overflows = [], [], []
     pokes: dict[int, list[tuple[int, int]]] = {}       # after pass N: (address, word)
@@ -98,7 +99,7 @@ def fly(args, stop: int | None = None):
             overflows.append((overflow, lockstep.state.levelnum_current, int(lockstep.state.game_mode)))
             digests.append(_digest(_rom_tables(lockstep.machine), lockstep.machine.r16(0x904BFC),
                                    0 if args.timing else overflow))
-            if args.warp:
+            if args.warp or args.dragon or args.secret or args.stall or args.powers or args.walls:
                 before = _words(lockstep.machine)
                 pilot.warp(lockstep, frame)
                 changed = _pokes(before, _words(lockstep.machine))
@@ -211,6 +212,11 @@ def main() -> int:
     parser.add_argument("--warp", action="store_true")
     parser.add_argument("--coins", type=int)
     parser.add_argument("--rich", action="store_true")
+    parser.add_argument("--dragon", action="store_true", help="warp only to dragon mazes, and fight it")
+    parser.add_argument("--secret", action="store_true", help="win the secret room on each level past 6")
+    parser.add_argument("--stall", action="store_true", help="let each level time out, so its walls become exits")
+    parser.add_argument("--powers", action="store_true", help="give the heroes permanent powers on each level")
+    parser.add_argument("--walls", action="store_true", help="warp only to mazes with movable walls, and push them")
     parser.add_argument("--settings", type=lambda text: int(text, 0))
     parser.add_argument("--pricing", type=lambda text: int(text, 0))
     parser.add_argument("--dump", type=int, help="print the game RAM that differs after this pass")

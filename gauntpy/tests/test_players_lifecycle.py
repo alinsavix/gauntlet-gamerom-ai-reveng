@@ -1713,7 +1713,9 @@ class TestHudHooks:
         assert (player.keysnum, player.potionsnum) == (5, 11)
         assert state.mobs.obj_type(slot) == int(MazeObjIds.KEY)
 
-    def test_power_up_pickup_refreshes_the_panel(self):
+    def test_power_up_pickup_leaves_the_panel_alone(self):
+        """0x517BA-0x518B0 join the shared tail at 0x51626, past the keys arm's
+        player_inv_update (0x51610): no power-up pickup redraws the inventory."""
         state = _active_state()
         _make_player_active(state, 0, health=175)
         slot = 45
@@ -1728,7 +1730,8 @@ class TestHudHooks:
 
         player_items.player_tile_interact(state, slot, 0)
 
-        assert state.alpha_ram[start] != 0xFFFF, "player_inv_update ran"
+        assert state.players[0].powers & 0x2000
+        assert state.alpha_ram[start] == 0xFFFF, "player_inv_update ran"
 
 
 class TestRedrawBitsOnEveryValueChange:
