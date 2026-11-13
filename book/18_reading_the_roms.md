@@ -270,6 +270,56 @@ the palette nibble that marks a hero, the random seed. Leave one out and
 the original disagrees for reasons that have nothing to do with the
 question.
 
+## Running the whole game twice
+
+The routine-level instrument has an ambitious relative. The same
+emulator library can run the entire original program from power-on,
+frame after frame, while the reconstruction runs beside it. Both receive
+identical stick and coin inputs from a scripted player that coins up,
+walks toward exits, fights, collects keys, dies, and enters initials.
+After every frame the two are compared: every MOB record, the random
+seed, the text layer, the colour memory, and the working-memory words
+the reconstruction claims to mirror. As with the demo comparison, the
+run stops at the first difference.
+
+This catches what a hand-built example rarely provokes. A potion used
+while two Deaths were on screen revealed that the reconstruction visited
+the monster chain in a different order from the original, and so put the
+two score pop-ups in each other's places. Nothing about the potion's
+effect was wrong; only the order was, and only the order's consequence
+was visible.
+
+Some differences make no visible mark for a long time. A flag records
+that a secret wall or a slain dragon has earned the player a hint
+between levels. The original clears it when a new game starts; the
+reconstruction did not. Nothing showed until the next game's first
+between-level screen, thousands of frames later, where the original
+printed an ordinary gameplay tip and the reconstruction the secret-room
+hint, drawing a different random number as it did so. Comparing that
+word directly would have stopped the run on the frame the new game
+began, next to its cause. That is why the comparison now extends to the
+working memory itself.
+
+Comparing memory first requires knowing what each variable is, and the
+original states that plainly. A 68000 instruction names its operand
+size: `move.w` writes two bytes, `clr.b` one, `move.l` four. An array's
+element size shows in how the index register is scaled before use.
+Reading those sizes from the instructions is more trustworthy than
+guessing them from the values a run happens to write: a word whose
+neighbour always stays zero is indistinguishable, by value, from a
+four-byte variable.
+
+The whole-game comparison has its own limits. It checks the
+reconstruction against the original program, not against the original
+machine. The emulator library executes instructions without the board's
+video timing, so a busy update that would outlast its video field on the
+cabinet costs nothing here. Replaying the same inputs in MAME, which
+does model that timing, agrees pass for pass until such an overrun;
+from there the generators, throttled by it, diverge. And a scripted
+player only checks the situations it reaches. Rare paths, such as walls
+turning into exits after a long stall, need deliberate steering before
+the comparison can say anything about them.
+
 Generated catalogs help at another boundary. They can check that a
 table has the bytes, length, pointers, and branch destinations claimed
 for it. For example, from the repository root:
@@ -469,6 +519,13 @@ we know which chain to take apart.
   `player_try_move` (`0x41BF0`) on prepared states; see
   [`rom_exec.py`](../gauntpy/tools/rom_exec.py) and its
   [tests](../gauntpy/tests/test_rom_execution.py).
+- The whole-game comparison is [`game_run.py`](../gauntpy/tools/game_run.py);
+  the memory it compares is listed in [`ram_map.py`](../gauntpy/tools/ram_map.py),
+  whose sizes [`ram_widths.py`](../gauntpy/tools/ram_widths.py) reads from the
+  instructions, and [`mame_replay.py`](../gauntpy/tools/mame_replay.py) replays
+  a run in MAME. The potion order is `0x41532-0x4172C`; the hint flag is
+  `0x90486E`, cleared at `0x44374`. The investigations are in the
+  [reconstruction's issue log](../gauntpy/ISSUES.md), S-222 to S-230.
 - Inspection setup: [radare2 loader](../doc/gauntlet_loader.r2);
   [generated reference guide](../doc/generated/README.md).
   The maze-boundary example follows the [catalog](../doc/06_maze_catalog.md),

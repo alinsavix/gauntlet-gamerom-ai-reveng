@@ -811,9 +811,9 @@ class GameState:
     # the reply to the diagnostic status query (command 0x07) -- §11.3.
     sound_queue_state: int = 0
     # 0x9049F2, idle timer counting down to the next status query (command
-    # 0x07); reloads to 0xF0 (240 frames) on a successful send -- §11.3. Initial
-    # value is not independently documented; matches the post-reset reload.
-    sound_idle_timer: int = 0xF0
+    # 0x07); reloads to 0xF0 (240 frames) on a successful send -- §11.3. Power-on
+    # leaves it 0, so the first pass polls and reloads it (0x42D64-0x42D96).
+    sound_idle_timer: int = 0
     # 0x9049F4, consecutive failed-status-send retry count; a full reset fires
     # above 0xB4 (180) -- §11.3.
     sound_retry_count: int = 0
@@ -828,7 +828,9 @@ class GameState:
     # WP-19 · EEPROM and configuration
     # =========================================================================
     game_settings: int = 0            # 0x904A24, EEPROM options word; bit layout in subsystems/eeprom.py
-    eeprom_write_timer: int = 0x8CA0  # 0x904012; 36,000 frames (~10 min at 60 Hz)
+    # 0x904012, longword: 36,000 frames (~10 min at 60 Hz) between EEPROM checks.
+    # One_time_init's RAM clear leaves it 0, so the first pass reloads it (0x43204).
+    eeprom_write_timer: int = 0
     eeprom_settings_cache: int = 0   # 0x904B94, last-written game_settings
     games_played_counter: int = 0    # 0x904B86, games ended since the last score reset
     # Compatibility host configuration; only host.eeprom interprets this path.

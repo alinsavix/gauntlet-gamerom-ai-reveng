@@ -13,21 +13,26 @@ ram_map = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(ram_map)
 
 
+def _fields():
+    return [(*field, 0, "same") for field in ram_map.FIELDS] + list(ram_map.CONVERTED)
+
+
 def _spans():
     state = GameState()
-    for owner, field, address, size, stride in ram_map.FIELDS:
+    for owner, field, address, size, stride, first, _ in _fields():
         if owner == "player":
             count = len(state.players)
         else:
             value = getattr(state, field)
             count = min(len(value), 64) if isinstance(value, list) else 1
-        for index in range(count):
+        for index in range(first, count):
             yield field, address + index * stride, size
 
 
 def test_every_field_is_real_state():
     state = GameState()
-    for owner, field, _, _, _ in ram_map.FIELDS:
+    for owner, field, _, _, _, _, encoding in _fields():
+        assert encoding in ("same", "x2"), field
         holder = state.players[0] if owner == "player" else state
         assert hasattr(holder, field), field
 
@@ -42,6 +47,6 @@ def test_every_field_lies_in_game_ram_and_none_overlap():
 
 
 def test_compared_and_excluded_fields_are_apart():
-    compared = {field for _, field, _, _, _ in ram_map.FIELDS}
+    compared = {field[1] for field in _fields()}
+    assert len(compared) == len(_fields()), "a field is listed twice"
     assert not compared & set(ram_map.UNCOMPARED)
-    assert not compared & set(ram_map.UNVERIFIED)

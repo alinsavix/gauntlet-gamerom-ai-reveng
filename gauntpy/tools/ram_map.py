@@ -1,13 +1,16 @@
-"""Game RAM that gauntpy's state mirrors word for word, for the lockstep harness to compare.
+"""Game RAM that gauntpy's state mirrors, for the lockstep harness to compare every frame.
 
-Each field below is one that state.py ties to a ROM address and that matched the ROM on every frame
-from frame 60 of six 30,000-frame calibration flights (dragon, secret rooms, stalls, powers, walls,
-warps, deaths and initials). owner "player" reads state.players[i].<field> for the four
-heroes; "state" reads state.<field>, element i of a list at address + i * stride. Values
-compare masked to size bytes.
+Each field is one that state.py ties to a ROM address. Its width and stride are the ROM code's own
+(``tools/ram_widths.py --check`` reads them from every instruction that touches the address), and
+it matched the ROM on every frame of six 30,000-frame flights once the first hero was placed
+(dragon, secret rooms, stalls, powers, walls, warps, deaths and initials).
 
-UNCOMPARED names the annotated fields left out and why; UNVERIFIED those that differ from the first
-compared frame because their width, encoding or note has not been worked out yet.
+``owner`` "player" reads ``state.players[i].<field>`` for the four heroes; "state" reads
+``state.<field>``, element ``i`` of a list at ``address + i * stride``. Values compare masked to
+``size`` bytes. CONVERTED fields hold the same thing in another encoding, starting at element
+``first``: ``x2`` is a slot the ROM keeps doubled.
+
+UNCOMPARED names every other annotated field and why it is left out, from the ROM code.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ FIELDS: tuple[tuple[str, str, int, int, int], ...] = (
     ('state', 'frame_counter', 0x904006, 2, 2),
     ('state', 'maze_stride', 0x90400e, 2, 2),
     ('state', 'maze_number', 0x904010, 2, 2),
+    ('state', 'eeprom_write_timer', 0x904012, 4, 4),
     ('state', 'treas_mazerand_adder', 0x904016, 2, 2),
     ('state', 'treas_mazerand_num', 0x904018, 2, 2),
     ('state', 'cyclic_wall_timer', 0x90401a, 2, 2),
@@ -36,7 +40,7 @@ FIELDS: tuple[tuple[str, str, int, int, int], ...] = (
     ('player', 'potionsnum', 0x904055, 1, 1),
     ('player', 'keysnum', 0x90405a, 1, 1),
     ('state', 'monster_spawn_probability_bonus', 0x90405f, 1, 1),
-    ('state', 'thief_pursuit_direction', 0x904060, 2, 2),
+    ('state', 'thief_pursuit_direction', 0x904060, 1, 1),
     ('state', 'secret_player', 0x904063, 1, 1),
     ('state', 'secret_trick_last', 0x904064, 1, 1),
     ('state', 'secret_trick_id', 0x904065, 1, 1),
@@ -92,6 +96,7 @@ FIELDS: tuple[tuple[str, str, int, int, int], ...] = (
     ('state', 'treasure_timer', 0x9049e8, 2, 2),
     ('state', 'sound_holdoff', 0x9049ee, 2, 2),
     ('state', 'sound_queue_state', 0x9049f0, 2, 2),
+    ('state', 'sound_idle_timer', 0x9049f2, 2, 2),
     ('state', 'sound_retry_count', 0x9049f4, 2, 2),
     ('state', 'player_hurt_palette_offset', 0x9049f6, 2, 2),
     ('state', 'exit_open_id', 0x904a0a, 2, 2),
@@ -160,28 +165,47 @@ FIELDS: tuple[tuple[str, str, int, int, int], ...] = (
     ('state', 'vblank_scroll_word', 0x905f6e, 2, 2),
 )
 
+# (owner, field, address, size, stride, first, encoding)
+CONVERTED: tuple[tuple[str, str, int, int, int, int, str], ...] = (
+    ('state', 'monster_iter_ptr', 0x904a60, 2, 2, 0, 'x2'),
+)
+
 UNCOMPARED: dict[str, str] = {
-    'pending_character': 'the same word as character (0x9048E8), compared there',
-    'vblank_semaphore': 'the harness drives VBLANK once a pass; the overrun model sets it only at level entry',
-    'playfield_color_latch': 'state.py notes 0x904020, the floor colour base; the latch is 0x90401E',
-    'secret_saved_keys': "state.py notes 0x90405A, player 0's keys; the stash address is unconfirmed",
-    'exit_anim_frame': "0x90489C holds the ROM's script pointer, gauntpy a frame index",
-    'wrap_h': 'a bit of level_flags_4, compared there',
-    'wrap_v': 'a bit of level_flags_4, compared there',
-    'level_start_pending': "gauntpy's flag beside global_delay_timer, compared there",
+    # Another word holds the same value, compared there.
+    'pending_character': 'the same word as character (0x9048E8)',
+    'wrap_h': 'a bit of level_flags_4',
+    'wrap_v': 'a bit of level_flags_4',
+    'level_start_pending': "gauntpy's flag beside global_delay_timer (0x904A4E)",
     'player_fighting_dir': "gauntpy's compass is two steps from the ROM's; the harness compares it converted",
+    'player_death_anim_frame': "0x9049A4 is the facing word, compared converted as each hero's facing",
+    'tport_route_forward': '22 words to a 128-byte alpha row; the harness compares those rows',
+    # The note names another word.
+    'playfield_color_latch': 'state.py notes 0x904020, the floor colour base; the latch is 0x90401E',
+    'secret_saved_keys': "state.py notes 0x90405A, player 0's keys",
+    'exit_slots': "0x904A06 holds the ROM's exit count; gauntpy keeps the list of exit cells",
+    'exit_anim_frame': "0x90489C holds the ROM's script pointer (a long), gauntpy a frame index",
+    'logo_color_index': "0x904A20 holds the ROM's table pointer (a long), gauntpy an index",
+    'logo_motion_index': "0x904A10 holds the ROM's table pointer (a long), gauntpy an index",
+    'player_tile_or_tport_dest': "the ROM writes it only in a transport (0x50600-0x50A86); gauntpy tracks the "
+                                 "hero's cell there every frame for its camera",
+    # gauntpy marks "none" where the ROM keeps an old value.
     'dialog_box_width': 'gauntpy zeroes the box geometry when a box closes, as its no-box mark',
     'dialog_box_column': 'gauntpy marks no box with -1',
-    'logo_motion_index': 'attract-logo state differs as attract starts: open',
-    'logo_cycle_timer': 'attract-logo state differs as attract starts: open',
-    'player_respawn_speech_timer': 'a hero who never coins in: the ROM boots it 0, gauntpy -1; a coin sets both to -1',
-    'tport_route_forward': '22 words to a 128-byte alpha row; the harness compares those rows',
+    'shot_owner_mob': "words 0-3 are the heroes' slots; for shots gauntpy marks a new or finished shot -1 and "
+                      "takes its cell on the first move (shots.py), where the ROM keeps the last owner",
+    # Set by the ROM only when first used; gauntpy boots them already set.
+    'reflect_count': 'each shot sets 4 (0x47BC8); gauntpy boots with 4 before any shot',
+    'shot_direction': 'gauntpy boots an unused channel at 8; the ROM at 0',
+    'attract_legend': 'only attract sets it, to 2 (0x447B0, 0x448DE); gauntpy boots with 2',
+    'exit_move_timer': 'only a level whose exits move sets it, to 0x12C (0x43B90); gauntpy boots with 0x12C',
+    'monster_generation_retry_timer': 'only the demo uses it (0x44A76, 0x492D4); gauntpy boots with 4',
+    'thief_tport_timer': 'gauntpy boots with -1; the ROM at 0 until a thief transports',
+    'highscore_rank': 'gauntpy boots with 10, its does-not-rank mark; the ROM at 0 until a game ends',
+    'secret_name_buffer': "gauntpy boots with 'A's; the ROM at 0 until a secret winner enters a name",
+    'damage_sample_timer': 'a hero who never joins: the ROM boots it 0, gauntpy 0x3C',
+    'player_respawn_speech_timer': 'a hero who never coins in: the ROM boots it 0, gauntpy -1; a coin sets both',
+    'last_coin_state': "0x9049EA holds the ROM's last coin-switch longword, gauntpy its own edge state",
+    # Timing the harness does not model.
+    'vblank_semaphore': 'the harness drives VBLANK once a pass; the overrun model sets it only at level entry',
+    'logo_cycle_timer': 'the attract logo starts its cycle a different frame (0xFFFF against 0): open',
 }
-
-UNVERIFIED: tuple[str, ...] = (
-    'eeprom_write_timer', 'reflect_count', 'shot_owner_mob', 'attract_legend',
-    'player_death_anim_frame', 'shot_direction', 'last_coin_state', 'sound_idle_timer',
-    'exit_slots', 'exit_move_timer', 'logo_color_index', 'highscore_rank',
-    'monster_iter_ptr', 'secret_name_buffer', 'damage_sample_timer', 'monster_generation_retry_timer',
-    'player_tile_or_tport_dest', 'thief_tport_timer',
-)

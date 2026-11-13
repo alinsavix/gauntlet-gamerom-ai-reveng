@@ -75,22 +75,31 @@ _RAM_FROM = 60
 _RAM_LO, _RAM_HI = 0x904000, 0x906000
 
 
+_ENCODE = {
+    "same": lambda value: value,
+    "x2": lambda value: value * 2,
+}
+
+
 def _ram_differences(machine, state) -> list[str]:
-    """Every word ram_map.FIELDS mirrors, read in one go, against gauntpy's state."""
+    """Every word ram_map mirrors, read in one go, against gauntpy's state."""
     ram = bytes(machine.cpu.mem_read(_RAM_LO, _RAM_HI - _RAM_LO))
     out: list[str] = []
-    for owner, field, address, size, stride in ram_map.FIELDS:
+    fields = [(*field, 0, "same") for field in ram_map.FIELDS] + list(ram_map.CONVERTED)
+    for owner, field, address, size, stride, first, encoding in fields:
         if owner == "player":
             ours = [getattr(player, field) for player in state.players]
         else:
             value = getattr(state, field)
             ours = list(value[:64]) if isinstance(value, list) else [value]
         mask = (1 << (8 * size)) - 1
-        for index, value in enumerate(ours):
+        encode = _ENCODE[encoding]
+        for index in range(first, len(ours)):
+            value = encode(int(ours[index])) & mask
             at = address - _RAM_LO + index * stride
             rom = int.from_bytes(ram[at:at + size], "big")
-            if rom != int(value) & mask:
-                out.append(f"ram {field}[{index}] {address + index * stride:#x}: ROM {rom:#x} PY {int(value) & mask:#x}")
+            if rom != value:
+                out.append(f"ram {field}[{index}] {address + index * stride:#x}: ROM {rom:#x} PY {value:#x}")
                 break
     return out
 
@@ -163,6 +172,8 @@ class Lockstep:
         maze_checknum(state)
         self.machine.w16(0x904B52, state.level_next)
         self.machine.w16(0x904B54, state.maze_next)
+        # A maze past 101 wraps and forces an EEPROM check next frame, on both sides.
+        self.machine.cpu.mem_write(0x904012, struct.pack(">I", state.eeprom_write_timer & 0xFFFFFFFF))
         # Level 6 seeds the treasure-room countdown (0x438E4), and a warp can jump over it.
         if not state.level_next_treasure:
             state.level_next_treasure = 3

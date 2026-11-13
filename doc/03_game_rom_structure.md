@@ -145,6 +145,11 @@ flowchart TD
     decay --> wait
 ```
 
+A pass that outlasts its field sets `frame_overflow` to 8 at 0x42B4E, which throttles the generators
+until it halves away. Level setup always does, and on MAME so does the pass that first places heroes in a
+level (level 1's first hero, and each later level once its splash ends). Crowded passes can overrun too;
+how often depends on the machine's timing.
+
 ### 2.1 Verified Main Loop Call Sequence (`g2mainloop`, 0x42A66)
 
 > **Correction from REPORT.md:** The main loop does NOT execute everything every frame. It has a two-level conditional structure.

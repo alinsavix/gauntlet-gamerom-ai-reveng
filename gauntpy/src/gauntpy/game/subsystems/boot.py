@@ -53,7 +53,7 @@ def _sound_system_reset(state: GameState) -> None:
     """Flush the sound ring and arm the recovery holdoff (§5 step 1, §11.3)."""
     state.sound_queue.clear()
     state.sound_holdoff = _SOUND_RESET_HOLDOFF
-    state.sound_idle_timer = 0xF0
+    state.sound_idle_timer = 0       # the RAM clear's value: the first pass polls and reloads
     state.sound_retry_count = 0
 
 

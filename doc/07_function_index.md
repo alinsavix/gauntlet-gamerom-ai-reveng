@@ -521,7 +521,7 @@ contracts.
 | 0x40528 | `main_cycle_tport_and_ffield` | Per-frame forcefield/transporter palette cycling |
 | 0x53398 | `forcefield_segments_setup` | Scan FORCEFIELDHUB (type 0x3F) tiles, encode segment/graphic state in `mob_state_link`, and build the forcefield segment table at 0x910780. Horizontal beams always wrap within their row; vertical beams never wrap |
 | 0x53346 | `check_forcefield_collision` | Forms the playfield word address `0x900000 + ((pos & 0x1F) << 8) + ((pos & 0x3E0) >> 3)` from the packed position argument, reads that word, and returns `D0.l` = 1 when its picture-type field `word & 0x7000` equals 0x3000, else 0 |
-| 0x52F26 | `maze_forcefield_setup` | Pack groups of four maze object types 7–9 into the spare-color byte table; clear the corresponding hidden marker MOBs and disable the level feature if none were present |
+| 0x52F26 | `maze_forcefield_setup` | Called from `maze_setupnew` only when the level flags have bit 0x800 (0x44C32-0x44C40). Pack groups of four maze object types 7–9 into the spare-color byte table, reset the cyclic phase and timer (0x52F96-0x52FA0); clear the corresponding hidden marker MOBs and disable the level feature if none were present |
 | 0x52FBE | `consume_forcefield_code` | Return code 1–3 for maze object types 7–9 and clear that marker's picture/position/link fields; return 0 for every other type |
 
 ### 6.1 Transporter / forcefield callable contracts

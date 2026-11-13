@@ -138,7 +138,7 @@ def test_periodic_write_skips_the_file_when_nothing_changed(tmp_path):
 
 def test_the_main_loop_actually_calls_it():
     state = GameState(game_mode=GameMode.NORMAL)
-    start_timer = state.eeprom_write_timer
+    state.eeprom_write_timer = start_timer = 100
 
     tick(state)
 
@@ -148,6 +148,14 @@ def test_the_main_loop_actually_calls_it():
 # ---------------------------------------------------------------------------
 # Timer shape (ROM 0x431F2-0x43204)
 # ---------------------------------------------------------------------------
+
+def test_power_on_leaves_it_zero_so_the_first_pass_reloads_it():
+    """One_time_init's RAM clear leaves 0x904012 at 0; the first pass reloads it (0x43204)."""
+    state = GameState(game_mode=GameMode.NORMAL)
+    assert state.eeprom_write_timer == 0
+    ee.eeprom_periodic_write(state)
+    assert state.eeprom_write_timer == ee.EEPROM_WRITE_INTERVAL
+
 
 def test_the_countdown_never_runs_negative(tmp_path):
     """``tst.l (a0) / beq / subq.l #1,(a0)`` -- the ROM decrements only while
@@ -166,6 +174,7 @@ def test_the_interval_is_a_full_ten_minutes_of_frames(tmp_path):
 
     save_path = str(tmp_path / "eeprom.json")
     state = _persisted_state(game_settings=0x0BAD, eeprom_save_path=save_path)
+    state.eeprom_write_timer = ee.EEPROM_WRITE_INTERVAL
     for _ in range(ee.EEPROM_WRITE_INTERVAL - 1):
         ee.eeprom_periodic_write(state)
     assert not (tmp_path / "eeprom.json").exists()

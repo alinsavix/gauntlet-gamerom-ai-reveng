@@ -465,7 +465,10 @@ The standard stack contracts are:
 - `shot_mob_collision(shot_mob_slot, shooter_id)` → target slot or `-1` in `D0.w`
 - `resolve_shot_hit(target, shooter_id)` → `D0.l`, zero survives and `-1` is consumed
 - `shot_onscreen_check(target, horizontal_limit, vertical_limit)` → `-1` in range, zero outside
-- `shot_reflect_calc(target, shooter_id)` → reflected direction in `D0.w`
+- `shot_reflect_calc(target, shooter_id)` → reflected direction in `D0.w`. A diagonal shot's corner
+  handlers test the cell beside the wall and the cell one row over; the down-left and down-right
+  handlers bound that row at 0x20 (0x53B42, 0x53BEC) and the up handlers at 0x400 (0x539E0, 0x53A94),
+  so a wall on row 1 counts row 0, the shot and effect records, as open without reading it.
 - `wall_crumble(packed_slot, damage)` → `-1` destroyed, zero remains
 - `dragon_shot_hit(target, shooter_id)` and `shot_impact_spawn(target, shooter)` → void
 
@@ -505,7 +508,8 @@ Processes all 4 player slots each frame. Four main sections:
      host-only presentation pass.
 
 Poison dizziness is part of that input step, not a speed reduction. Poison
-food/potions load 0x4B0 into the per-player word at 0x905F48. At
+food/potions load 0x4B0 into the per-player word at 0x905F48, and an ordinary
+potion clears it (0x516E0), before the inventory check. At
 0x4A892-0x4A8EA the loop decrements it, and while it remains nonzero in normal
 play replaces the active-low joystick direction nibble through the 4x16 byte
 table at 0x4A4FA. The row is `frame_counter & 0x30`; Fire and Magic bits are
@@ -855,7 +859,7 @@ The complete checked contracts and direct control-transfer sites are in
 
 > **Correction:** Player health is a **32-bit longword** at `0x904980` (stride 4, 4 players), not a 16-bit word as REPORT.md claimed (verified — e.g., the acid damage path reads/writes `0x904980 + player*4` as longwords).
 
-Health drain is handled by `main_health_countdown` (0x466F6). **Confidence: Verified** for the rate: it gates on `frame_counter & 0x3F` at 0x4670C and, for each active player, executes `subq.l #1,(a3,d0.w)` at 0x4675E — a flat **one point per player per 64 frames in every game mode**, with no character, power, or difficulty term. The former claim that the drain reads a per-class table was **Contradicted**; the table at 0x5813C is `forcefield_damage_table` and has a single consumer in §7.4. The routine also runs the low-health warning cadence: below 200 health, it increments `player_state_timer` (`0x904A26[player]`) modulo 0x8000 at 0x46BAC — once per frame, at a constant rate. A seven-word mask table at 0x576A8, selected by `health >> 5`, makes the heartbeat *sound* progressively more frequent as health falls (0x46BC0–0x46BE2); the health-number renderer uses the timer's low nibble for an 8-frames-dim/8-frames-normal pulse, whose cadence therefore does **not** change with health. At 200 health or above, the timer is reset to `0xFFFF` (disabled). The same RAM words are reused as death/name-entry countdowns when the player is no longer active; see §10.3.
+Health drain is handled by `main_health_countdown` (0x466F6). **Confidence: Verified** for the rate: it gates on `frame_counter & 0x3F` at 0x4670C and, for each active player, executes `subq.l #1,(a3,d0.w)` at 0x4675E — a flat **one point per player per 64 frames in every game mode**, with no character, power, or difficulty term. The former claim that the drain reads a per-class table was **Contradicted**; the table at 0x5813C is `forcefield_damage_table` and has a single consumer in §7.4. The routine also runs the low-health warning cadence: below 200 health, it increments `player_state_timer` (`0x904A26[player]`) modulo 0x8000 at 0x46BAC — once per frame, at a constant rate. A seven-word mask table at 0x576A8, selected by `health >> 5`, makes the heartbeat *sound* progressively more frequent as health falls (0x46BC0–0x46BE2); the health-number renderer uses the timer's low nibble for an 8-frames-dim/8-frames-normal pulse, whose cadence therefore does **not** change with health. At 200 health or above, the timer is reset to `0xFFFF` (disabled). The same RAM words are reused as death/name-entry countdowns when the player is no longer active; see §10.3. The spoken warning's one-shot latch (0x904ACA) and its spacing timer (0x904ACE) survive a death: `player_coindrop` resets the cadence word, the latch and the timer as the coin goes in (0x48972–0x4898E), `coincheck` does the same for a re-coin (0x42C46–0x42C54), and food at 200 health or more clears the latch alone (0x51D2C). Joining (0x48A36) does not repeat them.
 
 Low-health name/warning phrases call `sound_speech_play` and honor the speech
 disable setting. Poisoned food/potions and the death arm deliberately do not:
@@ -933,7 +937,9 @@ success does the wrapper call
 `player_join_finalize(uint16 player_index)` (0x48A36). The finalizer performs
 coin initialization when necessary, persists configuration through OS 0x1CC,
 sets the player's status/on-level state, plays the character join sound,
-redraws the HUD, and calls `speech_welcome`.
+redraws the HUD, and calls `speech_welcome`. The status is 1 (in the maze) only
+on level 1 or once the level splash's delay has run out, and only below maze 115
+(0x48AC2-0x48AEE); otherwise the hero waits with status 2 for the next level.
 
 When the cabinet is in DEMO or free-play mode and the chosen position is still
 empty, the finalizer first runs the full player-credit initialization
@@ -1157,7 +1163,17 @@ until a new entry event starts the positive 49-frame wake.
 The later `monsters_everything` call compares 0x90401E with 0x904020 and branches
 to the potion scan instead of running the ordinary monster update pass. It scans
 only the cull rectangle, so surviving targets do not also move or attack on the
-potion frame. IT is immune. Before the 28x16 table lookup, a phasing Super
+potion frame. It walks the depth chain in the ordinary pass's order: from the
+band head `main_move_monsters` pushed (0x41532; zero means the chain head), wrapping
+to the chain head at the end (0x416F6), and stopping short of the far-band marker
+0x904A60 (0x41702), which it does not scan. Each entry's link is read before the
+entry is processed (0x41542), so a kill cannot cut the walk short. When the scan
+destroys the marker itself, which it can only do when it starts there,
+0x416CA-0x416E6 hand the marker to its predecessor (the tail cache 0x9049DE when it
+was the head) and clear the flag word, and 0x4170E then takes that predecessor last.
+The order decides which pop-up slot each Death's score takes. A scan that destroys
+the last record in the chain spins on slot 0 for ever; play keeps a hero's record
+in the chain, so it cannot happen there. IT is immune. Before the 28x16 table lookup, a phasing Super
 Sorcerer has its movement/attack
 flags and high animation state cleared and receives visible Sorcerer art; an
 idle Acid puddle receives its first Acid frame, attack/stun flag, and cleared
@@ -1227,7 +1243,7 @@ Called when transitioning to a new level:
 10. If LFLAG4 `TrapsRandom` is set, draws `getrandom(3)` once and rotates every type-10/11/12 trap identity by that common offset modulo three.
 11. Scans all `mob_link` slots to repopulate transporter/exit tables and initialize the random-wall low/current/target cursors.
 12. Below maze 115 and above level 6, chooses one authored type-49/50 food uniformly, changes its picture to adaptive food `0x277B`, and normalizes its type to 49.
-13. Runs exit selection. LFLAG3 `WallsDeletable1` then draws one trap group and
+13. Below maze 115 (secret mazes branch from 0x43AEC straight to step 14), runs exit selection: ExitMoves or Exit1of (0x43B62) picks one exit, ExitMoves then loads `exit_move_timer` with 0x12C (0x43B90), and otherwise `exit_open_id` is cleared (0x43B9A). It is never cleared before the pick, so a pick that finds nothing keeps the previous level's id, and `exit_close_id` is never cleared anywhere. LFLAG3 `WallsDeletable1` then draws one trap group and
     calls `maze_place_object_types` for its type-10/11/12 trigger; `WallsDeletable2`
     removes the drawn group and the next cyclic group. Each call replaces both
     that trigger type and its corresponding type-7/8/9 wall family with floor,
@@ -1539,7 +1555,14 @@ than starting a session:
 | 0x447F8 | 1, 2 (blue, yellow) | joystick direction, LEGEND only | next legend page, or −1 when the last page has shown |
 
 Entering gameplay is a separate path that runs every frame regardless of mode.
-`start_attract_to_game` (0x44204) has exactly three callers: `coincheck` at
+`start_attract_to_game` (0x44204) clears the word at 0x904918 (0x44266),
+`global_delay_timer` (0x44366), `secret_need_hint` (0x44374) and
+`welcome_elapsed_frames` (0x4437A), and parks `attract_timer` at 0xFFFF
+(0x4436C). It does not touch `treasure_timer` (0x9049E8) or the per-hero
+treasure counts: a game that ended in a treasure room leaves its count for the
+next room to reload, and each hero's count clears as that hero spawns (0x48E86).
+
+It has exactly three callers: `coincheck` at
 0x42BE2 (a coin arriving while `game_mode` < 0 and either no player has health
 or the mode is DEMO), `main_start_game` at 0x484B8 (free play only, on a
 debounced **Magic** press edge), and `main_attract` at 0x448CE (attract timer
@@ -1715,7 +1738,7 @@ picture from table 0x5BA70.
 
 ### 7.4 Forcefield Color Cycling (`main_cycle_tport_and_ffield`, 0x40528)
 
-Part 1 (transporter): 2-bit sub-frame divider at `0x904034` ticks every 4th frame. Position counter at `0x904030` bounces 0→5→0 via direction word at `0x904032` (±1).
+Part 1 (transporter): 2-bit sub-frame divider at `0x904034` ticks every 4th frame. Position counter at `0x904030` bounces 0→5→0 via direction word at `0x904032` (±1). Power-on leaves the direction 0, so the cycle's first step only sets it (0x4055E) and the counter starts moving a step later.
 
 The resulting `tport_cycle_pos` selects one of the six 16-byte palette blocks
 at 0x5AFAE for the VBLANK color copy.  This is palette animation and is
@@ -1728,8 +1751,11 @@ VBLANK copies six words from the selected 16-byte record into palette entries
 
 The same VBLANK block pulses special-floor palettes on alternating fields.
 Playfield palette 1 (traps) moves by 0x1011 between 0x4044 and 0xA0AA;
-palette 2 (stun) moves by 0x1110 between 0x2220 and 0xEEE0. The selected
-floor-pattern color indices come from the byte tables at 0x405C8 and 0x405D8.
+palette 2 (stun) moves by 0x1110 between 0x2220 and 0xEEE0. The steps are word
+arithmetic with unsigned compares (0x403DE-0x40446): when a palette load has left
+a colour at 0, the stun pulse's first step down wraps it to 0xEEF0 rather than
+stopping at the floor. The selected floor-pattern color indices come from the
+byte tables at 0x405C8 and 0x405D8.
 
 Part 2 (forcefield): Step counter at `0x904049` cycles 0→7. Each step's duration = ROM table value + random(8). On even steps: reads one of 4 color words from ROM table at 0x405C0, writes to `forcefield_color` at `0x904046`. On odd steps: writes 0 (blink off). Game VBLANK copies that live word into the three selected playfield palettes at offset 0x40 (0x403B2–0x403C0), so a host renderer must re-palette the segment cells each frame rather than leaving the level-load raster cached.
 
@@ -1873,7 +1899,7 @@ Head rendering per phase boundary writes `mob_picture[dragon_seg_mob_ids[0]]` fr
 
 **Death.** The ninth hit (0x54232-0x5444A) starts the poof on the head, removes all four segment records, and drops a score bag and a hidden potion (`getrandom(6)` picks its picture) at offsets from the head chosen by facing. It then clears only `dragon_seg_mob_ids[0]` (0x5440A); the other three ids, the head words and `dragon_state` keep their values, which nothing reads once the first id is zero. It also sets `secret_need_hint` and a 2000-point special bonus, and completes the *Don't Get Hit* objective for the shooter unless already failed.
 
-**Damage rules** (`dragon_shot_hit`, 0x54112, called from `resolve_shot_hit`): hits only count when the fire bit is active (mouth open) and the dragon is not sleeping/turning; each hit plays sound 0x3A, increments `dragon_hits` (0x904880) — the 9th kills the dragon — and switches to a new random path (getrandom(5)), fast-forwarded to the first byte matching the current pose so the animation stays continuous. Before the impact tail, 0x541E8–0x5422A rewrites the primary segment's hpos palette nibble as `5 + (11-hits)/3`: hits 1–2 use palette 8, hits 3–5 palette 7, and hits 6–8 palette 6, visibly darkening the dragon in three bands.
+**Damage rules** (`dragon_shot_hit`, 0x54112, called from `resolve_shot_hit`): hits only count when the fire bit is active (mouth open) and the dragon is not sleeping/turning; each hit plays sound 0x3A, increments `dragon_hits` (0x904880) — the 9th kills the dragon — and switches to a new random path (getrandom(5)), fast-forwarded to the first byte matching the current pose so the animation stays continuous. Before the impact tail, 0x541E8–0x5422A rewrites the primary segment's hpos palette nibble as `5 + (11-hits)/3`: hits 1–2 use palette 8, hits 3–5 palette 7, and hits 6–8 palette 6, visibly darkening the dragon in three bands. Every shot that reaches the routine bursts: a miss, or a hit on a waking, turning or closed head, spawns the shot's impact sparkle through `shot_impact_spawn` (0x54162–0x5416E), and a hit that does not kill branches back to that spawn at 0x5422E.
 
 `dragon_shot_hitbox_adjust` (0x54B68) compares the shot against the separately
 tracked moving-head coordinates and adds `0x1000` to the doubled candidate index
@@ -2326,7 +2352,10 @@ Secret-room availability is paced by a pair of level counters:
   potions replace player 0's key byte at 0x90405A, and supershots use 0x905F6D.
   The entrant's indexed inventory is then cleared and
   `update_monster_spawn_bonus_from_score_per_coin` immediately adds into
-  0x90405F. Payout reads those same bytes after adding restored keys first.
+  0x90405F. Payout reads those same bytes after adding restored keys first,
+  and redraws nothing: 0x4D86E-0x4D8A0 add the stash back without calling
+  `player_inv_update`, so the panel shows the room's inventory until a later
+  pickup redraws it.
   This produces a shipped winner-zero quirk: its potion scratch is cleared with
   its keys, and the subsequently restored key total becomes the potion addend.
 - `secret_name_entry_update` (0x54FE8), selected only by status 0x20, edits
@@ -2738,6 +2767,16 @@ complete words at 0x57334 are written when bits 0–5 are set. In DEMO
 key/potion row (0x45AE4–0x45B76) and still refreshes the power icons from
 0x45B78, so a demo hero's collected potions never appear in its panel.
 
+Nine call sites redraw the inventory: `setup_infopanel` (0x45522), the potion
+drink (0x470BA), the key-pile and single-key arms (0x515E4, 0x51610), the
+ordinary potion (0x51786), the hidden pot (0x5197E), both door unlocks
+(0x51DC2, 0x51E0E) and the locked-treasure chest (0x5263E). Nothing else does: a
+power-up pickup (0x517BA–0x518B0 join the shared tail at 0x51626, past the keys
+arm's call), the expiry of invisibility, repulsiveness or invulnerability
+(0x4A7FE–0x4A890 only clear the bit, the last also marking health for redraw), an
+exit (0x52D88 clears reflect and transport) and a secret-room payout all leave
+the panel as it was last drawn.
+
 That row (alpha row `5p + 10`) also carries the player's status line. Each
 per-player rebuild fills the four rows with the player's text word, draws the
 name, labels, score, health and `player_inv_update`, sends status 4 to
@@ -2870,6 +2909,7 @@ Handles the treasure room countdown. When the player enters a treasure room:
   visible digit begins at column 36 by design
 - `setup_infopanel` clears the ordinary dungeon logo and level field from the
   first seven status-panel rows and writes `TIME:` at column 34,row 1
+- At 10 seconds the countdown clears its announcement delay (0x904BC0) and voice set (0x904BC2) at 0x4D336–0x4D33C; neither treasure-room nor secret-room setup touches them, so they hold their last values until then.
 - At 10 seconds on levels above 30, a 1-in-16 gate may choose one of four fake spoken countdowns. The pointer table at 0x5ABE0 selects a five-number sequence at 0x5AB90–0x5ABDF for displayed seconds 10–6; at 6 it follows with JUST KIDDING or FOOLED YOU from 0x5ABF0
 - Without a fake countdown, displayed second 6 has a 1-in-4 chance to play one of four warning lines from 0x5AC08, with a parallel 1/2-second suppression count from 0x5AC18
 - At 0, selects a timeout line from 0x5ABF8 (settings bit 11 forces ZERO; otherwise random among ZERO, BETTER LUCK NEXT TIME, ZERO, and LOOKS LIKE YOU LOSE)

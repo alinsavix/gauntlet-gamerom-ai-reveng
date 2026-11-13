@@ -91,6 +91,7 @@ def _checks(flights: int) -> list[tuple[str, list[str]]]:
         ("secret rooms", ["secret_check.py"]),
         ("thief", ["thief_walk.py"]),
         ("dragon", ["dragon_walk.py"]),
+        ("ram widths", ["ram_widths.py", "--check"]),
     ]
     checks += [(f"sweep {sweep}", ["rom_sweeps.py", sweep])
                for sweep in ("walk", "scan", "routes", "reflect", "exits", "shots")]

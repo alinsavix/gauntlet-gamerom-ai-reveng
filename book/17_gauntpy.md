@@ -12,7 +12,9 @@ with controls for looking behind the screen. It does not execute the
 It implements the documented operations in Python. That makes its state
 accessible, but also establishes a boundary around its evidence. Watching
 the reconstruction follow a trail demonstrates what this model does,
-not independently what the original ROM does.
+not independently what the original ROM does. [Chapter 18](18_reading_the_roms.md#running-the-whole-game-twice)
+describes how the model is checked, frame by frame, against the original
+program running beside it.
 
 We will start in an ordinary ROM maze, inspect the thief's preparations,
 and preserve a moment worth returning to. Only then will we replace the

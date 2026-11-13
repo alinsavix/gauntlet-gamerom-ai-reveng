@@ -87,8 +87,10 @@ obstacle.
 Eating food that leaves health at 200 or above clears the latch, as well
 as disabling the low-health display timer. Poisoned food passes through
 the same step, so poison that leaves a strong hero above 200 clears it
-too. Join and death initialization
-also clear warning state. Merely waiting at dangerously low health does
+too. A coin clears both the latch and the cooldown, whether it starts a
+hero or buys health for one already playing. A death does not: a hero who
+dies after the warning carries the latch until the next coin arrives.
+Merely waiting at dangerously low health does
 not clear the latch every thirty seconds. If food restores the Elf above
 the threshold and a fight soon knocks the Elf below it again, the latch
 may be clear while the old cooldown still prevents another announcement.

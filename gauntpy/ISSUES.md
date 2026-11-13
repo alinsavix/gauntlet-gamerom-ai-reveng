@@ -41,6 +41,33 @@ None.
 
 ## Resolved issues
 
+### S-230 · RAM widths from the ROM's own instructions
+
+S-229 inferred each field's width and stride from the values flights wrote, which cannot tell a word from a long
+when the word beside it stays zero; four fields came out 4 bytes wide that way and had to be narrowed by hand.
+`tools/ram_widths.py` now reads them from the code. For every verified site in
+`doc/generated/ram_linear_reconciliation.csv` it disassembles the instruction: a direct access gives its size, and
+a `movea`/`lea` of the address is followed to the register's uses, each giving a size at its displacement and, when
+indexed, a stride from how the index was scaled. `--check` compares `tools/ram_map.py` with that and is part of
+`check_all.py`; it found one wrong width (`thief_pursuit_direction` is a byte, 0x904060).
+
+With the widths settled, every field S-229 left unverified is explained from the ROM, and `ram_map.py` says why for
+each. Most are values the ROM sets only when first used and gauntpy boots already set (a new shot's four bounces at
+0x47BC8, the attract legend, the exit-move timer, the demo's generator retry timer); some are different encodings
+(the ROM keeps `monster_iter_ptr` doubled, and pointers at 0x904A10, 0x904A20 and 0x90489C where gauntpy keeps
+indexes); and some are notes in `state.py` naming the wrong word, which `doc/05_data_reference.md` already had right.
+`monster_iter_ptr` is compared doubled. Two counters, `eeprom_write_timer` and `sound_idle_timer`, ran a frame
+ahead in gauntpy for the whole game: the ROM's RAM clear leaves both at 0, so its first pass reloads them (0x43204,
+0x42D96), where gauntpy booted them already loaded. They now boot at 0 and match. The harness's level warp also
+mirrors the EEPROM check that `maze_checknum` forces past maze 101 onto the ROM side.
+
+`doc/` and the book had not followed S-224 to S-229. `doc/04` and `doc/05` now give the potion scan's order, the
+dragon's impact sparks, the nine inventory redraws and the places that make none, what `start_attract_to_game` clears
+and keeps, the exit pick a secret maze skips, the low-health latch's resets, the treasure countdown's ten-second
+clears, a good potion's cure for dizziness, the free-play join's wait, the transporter cycle's first step, the stun
+pulse's wrap, the reflection corners' row bound, the route tables' place in alpha RAM and the level-entry overrun.
+Chapter 14 no longer says a death clears the low-health warning, and Chapter 18 describes the whole-game comparison.
+
 ### S-229 · the harness compares game RAM, and what that found
 
 The lockstep harness compared what its checks named, so a word it did not name could drift for thousands of frames
