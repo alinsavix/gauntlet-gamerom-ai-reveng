@@ -784,7 +784,7 @@ def test_player_transition_saves_and_restores_the_hero_picture() -> None:
 
     _run_frames(state, 22)                       # counter 32 -> milestone 0x10
     assert state.mobs.picture[0x120] == 0x7A5, "and comes back"
-    assert state.player_tport_saved_picture[0] == 0
+    assert state.player_tport_saved_picture[0] == 0x7A5, "0x50B88 leaves it saved"
 
 
 def test_player_transition_cleans_up_past_the_last_milestone() -> None:

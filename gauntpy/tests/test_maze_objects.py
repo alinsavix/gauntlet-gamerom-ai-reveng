@@ -173,8 +173,8 @@ class TestTransporterAndForcefieldCycle:
         select_forcefield_delay_profile(state)
         assert state.forcefield_step_durations == [0x10, 0x10, 0x20, 0x20, 0x40, 0x40, 0x08, 0x40]
         assert not any(state.cyclic_wall_assignments)
-        assert state.cyclic_wall_phase == 0
-        assert state.cyclic_wall_timer == 0
+        # Only maze_forcefield_setup resets these, on a level with cyclic walls.
+        assert (state.cyclic_wall_phase, state.cyclic_wall_timer) == (2, 99)
 
 
 class TestTransporterSecretProgress:
@@ -555,17 +555,44 @@ class TestRandomWalls:
         assert state.random_wall_current == slots[0] - 1
 
     def test_timer_counts_while_the_incremental_scan_runs(self):
+        """0x5E43E-0x5E44E: the frame the timer runs out does no walking."""
         state, slots = self._state_with_walls()
         state.random_wall_timer = 2
-        state.rng = _FixedRNG(16, 0, 16, 0)
+        state.rng = _FixedRNG(16, 0, 16, 0)         # each toggle, then its floor texture
 
         main_walls_random_move(state)
         assert state.random_wall_timer == 1
         assert state.mobs.picture[slots[0]] == 0
 
         main_walls_random_move(state)
+        assert state.random_wall_timer == 0
+        assert state.mobs.picture[slots[1]] == 0x8000
+
+        main_walls_random_move(state)
         assert state.mobs.picture[slots[1]] == 0
         assert state.random_wall_timer == 0x78
+
+    def test_a_walk_that_finds_no_wall_pulls_the_target_back(self):
+        """0x5E490-0x5E4AC: a vanished wall shrinks the walk, and with none left
+        past the low mark the level's random walls stop."""
+        state, slots = self._state_with_walls()
+        state.mobs.set_obj_type(slots[1], int(MazeObjIds.TREASURE))
+        state.rng = _FixedRNG(0, 0)
+
+        main_walls_random_move(state)                # takes the first wall
+        assert state.random_wall_current == slots[0]
+        main_walls_random_move(state)                # nothing up to the target
+        assert state.random_wall_target == slots[0]
+        assert state.random_wall_timer == -1
+
+    def test_the_low_mark_follows_a_vanished_first_wall(self):
+        """0x5E4D8-0x5E4E2: the cycle's first wall, found above the mark, raises it."""
+        state, slots = self._state_with_walls()
+        state.mobs.set_obj_type(slots[0], int(MazeObjIds.TREASURE))
+        state.rng = _FixedRNG(0)
+
+        main_walls_random_move(state)
+        assert state.random_wall_low_mark == slots[1]
 
     def test_title_mode_does_not_advance_the_random_wall_cursor(self):
         state, slots = self._state_with_walls()

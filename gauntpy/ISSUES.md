@@ -41,6 +41,41 @@ None.
 
 ## Resolved issues
 
+### S-229 · the harness compares game RAM, and what that found
+
+The lockstep harness compared what its checks named, so a word it did not name could drift for thousands of frames
+and show only later (S-228's secret hint). It now also compares `tools/ram_map.py`: 144 fields that `state.py` ties
+to a ROM address, at the width and stride that held on every frame from frame 60 of six calibration flights
+(dragon, secret rooms, stalls, powers, walls, warps, deaths and initials). The rest of the annotated fields are listed
+there, each with why it is left out: a different encoding (gauntpy's compass, the exit script pointer), a wrong note
+(`playfield_color_latch` is 0x90401E, not 0x904020), a no-box or boot default, or not yet worked out (18 marked
+unverified). `test_ram_map.py` keeps the table to real fields inside game RAM with no overlaps.
+
+Calibrating found gauntpy changing RAM the ROM leaves alone, or changing it at another time:
+
+* **The secret objective is set as a maze loads**, by `maze_new_level_setup` (0x438AE from 0x48156 and 0x4820A),
+  not when the heroes spawn after the splash. gauntpy carried a secret room's challenge id and winner through it.
+* **The random walls walk as the ROM's do** (0x5E41A-0x5E534): the frame the timer runs out does no walking; a walk
+  that finds no wall before its target pulls the target back, or stops the level's random walls once at the low
+  mark; and a cycle's first wall above the low mark raises it. A maze with none leaves the cursor as it was.
+* **A cyclic-wall level resets its phase and timer**, through `maze_forcefield_setup` (0x52F96-0x52FA0, called only
+  when the level flags say so at 0x44C32); gauntpy reset them on every level.
+* **Nothing clears `exit_close_id`**: its one reference is 0x5288A's pointer load. gauntpy cleared it after an exit's
+  move and on every level load. **`exit_open_id` keeps its value through a level's exit pick** too; only 0x43B9A
+  clears it, where the exits stay put. **A secret maze skips the exit pick altogether** (0x43AEC branches to the
+  secret-maze setup at 0x43C20), so it keeps the last level's open exit; gauntpy picked and cleared there.
+* **A hero's treasure count is cleared as that hero spawns** (0x48E86), not for everyone at each load and game start.
+* **The low-health latch and speech timer survive a death**, and are reset by the coin (0x48972-0x4898E in
+  `player_coindrop`), not again when the hero joins.
+* **The treasure countdown's delay and voice set** are cleared at ten seconds (0x4D336), not when a treasure or secret
+  room is set up.
+* **A transport's saved picture stays saved** after 0x50B88 restores it.
+
+The comparison starts once the first hero is placed, since boot leaves some words at power-on values gauntpy's
+defaults do not share until then (`player_it`, for one, at 0x48C08). It also caught the harness: `--settings` set the operator word on both sides but not
+gauntpy's copy of the EEPROM cache (0x904B94), which the ROM's boot takes from it. The harness flights and checks
+all pass with the comparison on.
+
 ### S-228 · rare paths in lockstep, and panel redraws the ROM never makes
 
 `tools/game_run.py` (and `mame_replay.py`) take three more steering options. `--stall` brings each level's escape

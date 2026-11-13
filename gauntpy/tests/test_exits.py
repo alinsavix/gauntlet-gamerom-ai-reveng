@@ -856,7 +856,8 @@ class TestExitMoveAnimation:
             main_exit_move(state)
         assert state.exit_move_timer == _EXIT_MOVE_TIMER_RELOAD
         assert state.exit_anim_frame == 0
-        assert state.exit_close_id == 0
+        # 0x52A90-0x52AA4 repaint the vacated cell but leave its id behind.
+        assert state.exit_close_id != 0
 
     def test_period_between_moves_is_332_frames(self):
         """0x12C for the wait plus 0x20 for the animation (0x52A6E/0x52A74)."""

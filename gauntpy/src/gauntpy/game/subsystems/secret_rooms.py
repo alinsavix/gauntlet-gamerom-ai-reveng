@@ -287,8 +287,6 @@ def _enter_secret_room(state: GameState) -> bool:
     duration += state.getrandom(_CHALLENGE_TIMER_RANDOM_MINUTES[index]) * 60   # 0x44E5C
     state.treasure_timer = duration                              # 0x44E80
     state.secret_need_hint = 0                                   # 0x44E86
-    state.treasure_announcement_delay = 0
-    state.treasure_voice_set = 0
     return True
 
 

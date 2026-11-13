@@ -30,6 +30,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import ram_map  # noqa: E402
 import rom_exec  # noqa: E402
 from rom_exec import registers  # noqa: E402
 from gauntpy.game.constants import MONSTER_TYPES, GameMode, MazeObjIds, PlayerStatus  # noqa: E402
@@ -67,16 +68,45 @@ def _sound_request_trampoline(state, sound_id: int) -> None:
     _lockstep_sound_request(state, sound_id)  # noqa: F821 - runs with sound.py's globals
 
 
+# Boot leaves some words at the ROM's power-on values that gauntpy's defaults do not share,
+# until the first hero is placed (player_it, for one, at 0x48C08): the RAM comparison starts
+# there, and not before frame 60.
+_RAM_FROM = 60
+_RAM_LO, _RAM_HI = 0x904000, 0x906000
+
+
+def _ram_differences(machine, state) -> list[str]:
+    """Every word ram_map.FIELDS mirrors, read in one go, against gauntpy's state."""
+    ram = bytes(machine.cpu.mem_read(_RAM_LO, _RAM_HI - _RAM_LO))
+    out: list[str] = []
+    for owner, field, address, size, stride in ram_map.FIELDS:
+        if owner == "player":
+            ours = [getattr(player, field) for player in state.players]
+        else:
+            value = getattr(state, field)
+            ours = list(value[:64]) if isinstance(value, list) else [value]
+        mask = (1 << (8 * size)) - 1
+        for index, value in enumerate(ours):
+            at = address - _RAM_LO + index * stride
+            rom = int.from_bytes(ram[at:at + size], "big")
+            if rom != int(value) & mask:
+                out.append(f"ram {field}[{index}] {address + index * stride:#x}: ROM {rom:#x} PY {int(value) & mask:#x}")
+                break
+    return out
+
+
 class Lockstep:
     def __init__(self, seed: int = 0, settings: int | None = None, pricing: int | None = None) -> None:
         self.state = build_cold_boot_state(seed, persistence_policy=PersistencePolicy.ISOLATED)
         # The operator's word (0x904A24) and pricing (0x9049E2), on both sides from boot.
         if settings is not None:
             self.state.game_settings = settings & 0xFFFF
+            self.state.eeprom_settings_cache = settings & 0xFFFF    # 0x904B94, as boot copies it
         if pricing is not None:
             self.state.two_player_mode = pricing & 0xFFFF
         self.machine = rom_exec.RomMachine()
         self.frame = 0
+        self.ram_compared = False
         self.coins = 0
         self.rom_sounds: list[int] = []
         self.python_sounds: list[int] = []
@@ -403,6 +433,10 @@ class Lockstep:
         if bad:
             at = bad[0]
             out.append(f"playfield [{at:#x}]: ROM {playfield[at]:#x} PY {state.playfield_ram[at]:#x} ({len(bad)} words)")
+        if mode >= 0 and self.frame >= _RAM_FROM and state.level_players_active > 0:
+            self.ram_compared = True
+        if self.ram_compared:
+            out += _ram_differences(machine, state)
         return out
 
 

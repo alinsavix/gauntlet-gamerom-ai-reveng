@@ -1229,8 +1229,8 @@ def _advance_player_transition(state: GameState, player_index: int) -> None:
         from .player_transport import tport_player_move
         tport_player_move(state, player_index)
     elif step == _TRANSITION_RESTORE:
+        # 0x50B88 copies the saved picture back and leaves it saved.
         state.mobs.picture[player.mob_slot] = panel_saved[player_index]
-        panel_saved[player_index] = 0
     elif step > _TRANSITION_LAST:
         state.mobs.depth_remove(
             _TPORT_ANIM_SLOT + player_index - 1,

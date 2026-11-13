@@ -147,7 +147,6 @@ def start_attract_to_game(state: GameState) -> None:
     state.bonus_amount = 0
     # The treasure timer (0x9049E8) is not cleared here: a game that ended in a
     # treasure room leaves its count for the next room to reload.
-    state.player_treascount = [0] * NUM_PLAYERS
     state.welcome_elapsed_frames = 0       # fresh session setup, 0x48692
     state.attract_timer = 0xFFFF        # 0x4436C: the attract machine stands down
     state.secret_need_hint = 0          # 0x44374: a dragon killed last game hints no more
@@ -205,6 +204,8 @@ def player_coindrop(state: GameState, player_index: int) -> None:
     player.bonusmult = 1
     player.coin_count = 1                                       # 0x48962
     player.state_timer = 0xFFFF                                 # 0x4896C
+    state.player_lowhealth_spoken[player_index] = 0             # 0x48980
+    state.player_respawn_speech_timer[player_index] = -1        # 0x4898E
     player.status = PlayerStatus.SELECTING                      # 0x4899C
     state.pending_character[player_index] = int(player.character)
     setup_infopanel(state, player_index)                        # 0x489A8

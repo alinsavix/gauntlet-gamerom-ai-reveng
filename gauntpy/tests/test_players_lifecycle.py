@@ -756,15 +756,16 @@ class TestDyingStatusSequence:
         assert p.status == int(PlayerStatus.REMOVED)
         assert state.level_players_active == 0, "active count must decrement"
 
-    def test_death_rearms_the_low_health_warning(self):
-        """player_resetcounters/player_coindrop clear the latch and timer."""
+    def test_death_keeps_the_low_health_warning_latched(self):
+        """Only a coin (0x42C46), joining (0x48980) or food (0x51D2C) clear the
+        latch; player_resetcounters (0x433B4) never touches 0x904ACA or 0x904ACE."""
         state = _active_state()
-        p = _make_player_active(state, 0, health=0)
+        _make_player_active(state, 0, health=0)
         state.player_lowhealth_spoken[0] = 1
         state.player_respawn_speech_timer[0] = 500
         player_lifecycle.main_health_countdown(state)
-        assert state.player_lowhealth_spoken[0] == 0
-        assert state.player_respawn_speech_timer[0] == -1
+        assert state.player_lowhealth_spoken[0] == 1
+        assert state.player_respawn_speech_timer[0] >= 0
 
     def test_death_transition_plays_character_sfx(self):
         state = _active_state()
@@ -1500,7 +1501,8 @@ class TestSpeechWelcome:
 
         assert state.sound_log == []
 
-    def test_join_finalize_greets_and_rearms_the_low_health_warning(self):
+    def test_join_finalize_greets_and_leaves_the_low_health_warning(self):
+        """0x48A36 does not repeat player_coindrop's resets (0x48972-0x4898E)."""
         from gauntpy.game.subsystems.score import info_panel
 
         state = _active_state()
@@ -1510,14 +1512,25 @@ class TestSpeechWelcome:
         state.players[0].health = 700
         player_lifecycle.player_join_finalize(state, 0)
         assert state.players[0].status == int(PlayerStatus.ALIVE_HERE)
-        assert state.players[0].state_timer == 0xFFFF
-        assert state.player_lowhealth_spoken[0] == 0
-        assert state.player_respawn_speech_timer[0] == -1
+        assert state.player_lowhealth_spoken[0] == 1
+        assert state.player_respawn_speech_timer[0] == 900
         assert player_lifecycle._SPEECH_WELCOME_LEADIN in state.sound_log
         # setup_infopanel rebuilds the joining player's column at once.
         field = info_panel(state).players[0]
         assert field.score_drawn and field.health_drawn
         assert field.health == 700
+
+    def test_the_coin_rearms_the_low_health_warning(self):
+        """player_coindrop 0x48972-0x4898E, when the coin goes in."""
+        from gauntpy.game.subsystems.session import player_coindrop
+
+        state = _active_state()
+        state.player_lowhealth_spoken[0] = 1
+        state.player_respawn_speech_timer[0] = 900
+        player_coindrop(state, 0)
+        assert state.players[0].state_timer == 0xFFFF
+        assert state.player_lowhealth_spoken[0] == 0
+        assert state.player_respawn_speech_timer[0] == -1
 
     def test_join_finalize_plays_the_character_join_sound_before_welcome(self):
         state = _active_state()

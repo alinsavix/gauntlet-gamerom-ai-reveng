@@ -372,8 +372,8 @@ def show_level_start_screen(state: GameState) -> None:
 
             players = min(4, max(1, player_activecount(state)))       # 0x44F1A
             state.treasure_timer = _TREASURE_ROOM_DURATION[players - 1] + 1
-            state.treasure_announcement_delay = 0
-            state.treasure_voice_set = 0
+            # 0x44F32 sets only the timer: the countdown's delay and voice set
+            # are cleared when it reaches ten seconds (0x4D336-0x4D33C).
 
     from .player_lifecycle import setup_infopanel
 
@@ -485,8 +485,9 @@ def _load_next_level(
 
     A secret room takes the other spawn path (main_start_game 0x48232 ->
     0x482BC): only the winner goes in, and their inventory is stashed at the
-    door. Every other maze runs ``secret_new_level_setup`` first, so the level's
-    trick and the winner slot are refreshed before anybody is placed.
+    door. Every load runs ``secret_new_level_setup`` as part of
+    ``maze_new_level_setup`` (0x438AE, from 0x48156 and 0x4820A), so the level's
+    trick and the winner slot are refreshed through the splash, not at the spawn.
 
     Reloading needs the ROMs; if the maze cannot be decoded (no ROMs) the old
     maze is left intact and only the level counters have moved.
@@ -497,9 +498,11 @@ def _load_next_level(
     if not maze.reset_and_load_level(state, level, maze_number=state.mazenum_current):
         return False                                  # no ROMs: nothing to respawn into
 
-    # player_start_inner clears player_treascount on every spawn (0x48E86); the
-    # level total is cleared by load_level.
-    state.player_treascount = [0] * len(state.players)
+    from .secret_rooms import secret_new_level_setup
+
+    secret_new_level_setup(state)                    # 0x43916-0x4395C, inside 0x438AE
+    # player_treascount is not cleared here: player_start_inner clears each
+    # hero's own count as it spawns (0x48E86), so one who stays out keeps theirs.
     if not spawn_players:
         return True
 
@@ -511,10 +514,7 @@ def _load_next_level(
 def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
     """Run main_start_game's post-splash player placement on the loaded maze."""
     from .level_state import in_secret_room, player_activecount
-    from .secret_rooms import (
-        secret_new_level_setup as secret_new_level_setup,
-        secret_room_spawn as secret_room_spawn,
-    )
+    from .secret_rooms import secret_room_spawn
 
     from .player_lifecycle import player_start_inner, setup_infopanel
 
@@ -528,8 +528,6 @@ def _spawn_level_players(state: GameState, survivors: list[int]) -> None:
         thief_setup(state)                           # 0x4835E
         state.idle_timer = 0                         # 0x4836A
         return
-
-    secret_new_level_setup(state)                    # 0x43916-0x4395C
 
     for i in survivors:
         if player_start_inner(state, i) == -1:       # world spawn (I-08)

@@ -105,8 +105,8 @@ def select_forcefield_delay_profile(state: GameState) -> None:
     state.forcefield_segments_ready = False
     state.cyclic_wall_setup_ready = False
     state.cyclic_wall_assignments = [0] * len(state.cyclic_wall_assignments)
-    state.cyclic_wall_phase = 0
-    state.cyclic_wall_timer = 0
+    # The cyclic phase and timer are reset by maze_forcefield_setup (0x52F96-
+    # 0x52FA0), which runs only on a level with cyclic walls (0x44C32-0x44C40).
     state.random_wall_setup_ready = False
     state.tport_secret_pad_masks = [0] * len(state.tport_secret_pad_masks)
     state.tport_secret_event_keys = [-1] * len(state.tport_secret_event_keys)
@@ -629,10 +629,10 @@ def setup_random_walls(state: GameState) -> None:
         if state.mobs.obj_type(slot) == int(MazeObjIds.WALL_RANDOM)
     ]
     if not slots:
+        # 0x439CC-0x439DC; the cursor is set only when a wall exists (0x43ADE).
         state.random_wall_timer = -1
         state.random_wall_low_mark = 0
         state.random_wall_target = 0
-        state.random_wall_current = 0
         state.random_wall_setup_ready = True
         return
 
@@ -660,58 +660,67 @@ def main_walls_random_move(state: GameState) -> None:
     """
     if not state.random_wall_setup_ready:
         setup_random_walls(state)
-    if state.game_mode not in (GameMode.NORMAL, GameMode.DEMO):
+    if state.game_mode not in (GameMode.NORMAL, GameMode.DEMO):   # 0x5E41A-0x5E42A
         return
-    if state.random_wall_timer < 0:
+    if state.random_wall_timer < 0:                               # 0x5E432
         return
-
     if state.random_wall_timer > 0:
-        state.random_wall_timer -= 1
-        if (
-            state.random_wall_timer == 0
-            and state.random_wall_current == state.random_wall_target
-        ):
-            _restart_random_wall_cycle(state)
+        state.random_wall_timer -= 1                              # 0x5E436
+        if state.random_wall_timer == 0:
+            # 0x5E43E-0x5E44E: the frame the timer runs out only restarts a
+            # finished walk; an unfinished one waits for the next frame.
+            if state.random_wall_current == state.random_wall_target:
+                _restart_random_wall_cycle(state)
             return
 
-    if state.random_wall_current == state.random_wall_target:
+    current, target = state.random_wall_current, state.random_wall_target
+    if current == target:                                         # 0x5E450-0x5E45C
         return
 
-    start = state.random_wall_current + 1
-    target = state.random_wall_target
-    candidate = next(
-        (
-            slot
-            for slot in range(start, target + 1)
-            if state.mobs.obj_type(slot) == int(MazeObjIds.WALL_RANDOM)
-        ),
-        None,
-    )
-    if candidate is None:
-        state.random_wall_current = target
-        if state.random_wall_timer == 0:
-            _restart_random_wall_cycle(state)
-        return
+    # 0x5E480-0x5E48E: the type test comes before the bound, so the cell just
+    # past the target is looked at too.
+    slot = current
+    while True:
+        slot += 1
+        if slot < NUM_MOB_SLOTS and state.mobs.obj_type(slot) == int(MazeObjIds.WALL_RANDOM):
+            break
+        if slot > target:
+            # 0x5E490-0x5E4AC: nothing left before the target. It pulls back to
+            # where the walk stands, and once that is at the low mark the level's
+            # random walls stop for good.
+            if current <= target:
+                state.random_wall_target = current
+                if current <= state.random_wall_low_mark:
+                    state.random_wall_timer = -1
+                    return
+            _finish_random_wall_walk(state)
+            return
 
-    if state.getrandom(32) > 15:
-        state.mobs.picture[candidate] ^= 0x8000
-        if state.mobs.picture[candidate]:
+    if state.getrandom(32) > 15:                                  # 0x5E4AE-0x5E4D2
+        state.mobs.picture[slot] ^= 0x8000
+        if state.mobs.picture[slot]:
             from ..maze import set_cell_descriptor
 
-            set_cell_descriptor(
-                state, candidate, int(MazeObjIds.WALL_RANDOM),
-            )
+            set_cell_descriptor(state, slot, int(MazeObjIds.WALL_RANDOM))
         else:
             from ..maze import clear_cell_descriptor
 
-            clear_cell_descriptor(state, candidate)
+            clear_cell_descriptor(state, slot)
 
-    if candidate == target:
-        state.random_wall_current = target
-        if state.random_wall_timer == 0:
-            _restart_random_wall_cycle(state)
+    # 0x5E4D8-0x5E4E2: a cycle's first wall above the low mark raises it.
+    if state.random_wall_low_mark > current and slot > state.random_wall_low_mark:
+        state.random_wall_low_mark = slot
+    if slot == state.random_wall_target:                          # 0x5E4E4
+        _finish_random_wall_walk(state)
     else:
-        state.random_wall_current = candidate
+        state.random_wall_current = slot                          # 0x5E4EC
+
+
+# ROM: part game:0x5E41A | Extracted end-of-walk tail at 0x5E4F4-0x5E506: park on the target, restart if the timer is out.
+def _finish_random_wall_walk(state: GameState) -> None:
+    state.random_wall_current = state.random_wall_target
+    if state.random_wall_timer == 0:
+        _restart_random_wall_cycle(state)
 
 
 # ---------------------------------------------------------------------------

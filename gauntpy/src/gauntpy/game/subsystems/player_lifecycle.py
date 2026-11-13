@@ -543,7 +543,6 @@ def player_start_inner(state: GameState, player_index: int) -> int:
 
 
 # ROM: direct game:0x48A36 | Join finalization boundary, including active status, join sound, welcome and panel refresh.
-# ROM: part game:0x488CA | Reapplies the coin-drop low-health/speech-timer resets from 0x48972-0x4898E inline; player_coindrop is otherwise delegated.
 def player_join_finalize(state: GameState, player_index: int) -> None:
     """0x48A36 -- set active status, play join sound, redraw HUD (§4.4).
 
@@ -551,11 +550,9 @@ def player_join_finalize(state: GameState, player_index: int) -> None:
     sets status/on-level state, plays character join sound, redraws HUD,
     calls speech_welcome.
 
-    The coin-initialisation half is ``player_coindrop`` (0x488CA, WP-16), whose
-    per-player resets that belong to this file are re-applied here: the
-    low-health cadence timer takes its disabled sentinel (0x48972), the spoken
-    warning latch clears (0x48980) and the speech spacing timer goes negative
-    (0x4898E), so a joining hero starts able to be warned again.
+    The coin-initialisation half is ``player_coindrop`` (0x488CA, WP-16), which
+    also resets the low-health cadence timer, the spoken-warning latch and the
+    speech spacing timer (0x48972-0x4898E) when the coin goes in.
     """
     player = state.players[player_index]
     if (
@@ -576,9 +573,8 @@ def player_join_finalize(state: GameState, player_index: int) -> None:
     else:
         player.status = PlayerStatus.ALIVE_NEXT
     state.player_walking[player_index] = 0
-    player.state_timer = _STATE_TIMER_DISABLED             # 0x48972
-    state.player_lowhealth_spoken[player_index] = 0        # 0x48980
-    state.player_respawn_speech_timer[player_index] = -1    # 0x4898E
+    # The low-health resets (0x48972-0x4898E) belong to player_coindrop, at the
+    # coin; joining does not repeat them.
     _sound_play(
         state, _PLAYER_COIN_SOUND_IDS[player.character & 0x03],
     )                                                       # 0x48AB2-0x48ABC
@@ -664,8 +660,8 @@ def _player_dies(state: GameState, player_index: int) -> None:
     state.player_death_anim_frame[player_index] = _PORT_DIR_TO_ROM_DIR[
         player.direction & 0x07
     ]
-    state.player_lowhealth_spoken[player_index] = 0
-    state.player_respawn_speech_timer[player_index] = -1
+    # The low-health latch and its speech timer survive a death: a coin (0x42C46)
+    # or joining (0x48980) resets both, and food the latch alone (0x51D2C).
     _leave_death_drop(state, player_index, player.mob_slot)   # 0x467F2-0x46992
     # Inventory, powers, timers and status go; the character and the score
     # survive, so the ladder and the panel still have something to show.

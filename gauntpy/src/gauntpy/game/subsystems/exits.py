@@ -163,9 +163,12 @@ def exit_scan_level(state: GameState) -> None:
         return                                            # already scanned
 
     state.exit_slots = slots
-    state.exit_close_id = 0
-    state.exit_open_id = 0
+    # exit_close_id carries over: the ROM never clears it (its one reference is
+    # 0x5288A's pointer load). exit_open_id keeps its old value through the pick,
+    # too: only 0x43B9A clears it, on a level whose exits stay put.
     state.exit_anim_frame = 0
+    if state.mazenum_current >= 0x73:
+        return              # 0x43AEC: a secret maze branches to 0x43C20, past the exit pick
 
     maze_pick_one_exit(state)                             # 0x43B62-0x43B76
 
@@ -307,7 +310,8 @@ def _exit_move_animate(state: GameState) -> None:
         if state.exit_close_id:
             from ..maze import write_floor_descriptor
             write_floor_descriptor(state, state.exit_close_id)
-        state.exit_close_id = 0                           # vacated cell repainted
+        # 0x52A90-0x52AA4 repaint the vacated cell and leave exit_close_id
+        # pointing at it: nothing in the ROM clears it.
         return
 
     state.exit_anim_frame = (-state.exit_move_timer) >> 2  # 0x52AAC-0x52AB4
