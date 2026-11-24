@@ -144,7 +144,7 @@ def start_attract_to_game(state: GameState) -> None:
     maze_hide(state)                    # 0x442A6
     show_level_start_screen(state)      # 0x442AC
     state.global_delay_timer = 0               # 0x44366 global_delay_timer
-    state.bonus_amount = 0
+    state.bonus_amount = 0             # gauntpy's own tally holder, no ROM word; each bonus screen sets it
     # The treasure timer (0x9049E8) is not cleared here: a game that ended in a
     # treasure room leaves its count for the next room to reload.
     state.welcome_elapsed_frames = 0       # fresh session setup, 0x48692

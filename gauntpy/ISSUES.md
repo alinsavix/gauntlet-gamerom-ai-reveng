@@ -37,9 +37,35 @@ start).
 
 ## Open issues
 
-None.
+None of these is a known difference in play the harness can see; each is a limit on what has been checked.
+
+* **No measure of ROM coverage.** The flights reach what the pilot steers them to, and nothing yet records which
+  ROM routines and branches they never execute. That list would show where lockstep has not looked.
+* **MAME replays stop at the first unmodelled overrun** (FIDELITY.md rule 110), before any dragon or secret room
+  (S-228). A replay that starts from the harness's RAM later in a flight would reach them.
+* **Ten fields boot set in gauntpy and 0 in the ROM** until first used: `reflect_count` (4), `shot_direction` (8),
+  `attract_legend` (2), `exit_move_timer` (0x12C), `monster_generation_retry_timer` (4), `thief_tport_timer`
+  (-1), `highscore_rank` (10), `damage_sample_timer` (60), `player_respawn_speech_timer` (-1) and the secret name
+  buffer ('A's). No flight shows a difference from them; `tools/ram_map.py` leaves them uncompared (S-230).
+* **The attract logo's cycle starts on another frame** after a game ends (`logo_cycle_timer` 0xFFFF against 0).
+* **`ptr_maze_data` (0x904B88) is 0x3E4B7 in the harness and 0x384B7 on MAME**, the same offset in another
+  Slapstic bank (S-226). Nothing has followed from it.
+* **Crowded passes that overrun on the arcade are not modelled** (rule 110), on purpose, so generators and sound are
+  never throttled by them here.
+* **`tools/rom_xcheck_plugin.py` reports 596 of 605 `player_try_move` calls identical** (run with `-n 0`). The nine
+  others are the S-213 nine: seven tests whose RNG stub the harness cannot load, and two that move a hero without
+  moving its record to the matching slot, which the ROM re-files.
 
 ## Resolved issues
+
+### S-231 · loose ends, and the tracking files
+
+`check_all_out/` and the plugin's `rom_xcheck.txt` are ignored now. `start_attract_to_game`'s clear of
+`bonus_amount` is gauntpy's own bookkeeping, with no ROM word behind it, and every bonus screen sets it before
+showing it, so it stays, marked as such. The plugin rerun gives the counts above, and S-228's one unexplained run
+(flight 406 under the coverage probe) no longer differs with or without the probe's code hooks. The open items
+above were scattered through resolved entries and are gathered here. `GAUNTPY_HANDOFF.md`, `PLAN.md`'s status,
+`FIDELITY.md`'s workflow and `doc/08_known_issues.md` had not followed the lockstep work and now do.
 
 ### S-230 · RAM widths from the ROM's own instructions
 

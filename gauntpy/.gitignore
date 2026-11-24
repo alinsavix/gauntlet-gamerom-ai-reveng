@@ -11,3 +11,7 @@ dist/
 # Never commit ROM images or anything derived from them.
 ROMs/
 *.bin
+
+# Tool output: tools/check_all.py logs and the rom_xcheck pytest plugin report.
+check_all_out/
+rom_xcheck.txt

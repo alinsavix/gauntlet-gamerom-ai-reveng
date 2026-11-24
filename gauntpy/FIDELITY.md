@@ -575,6 +575,17 @@ implementation specification.
      reloads the level, a paid new game does not, and neither runs `thief_setup`. See
      `session._handle_start_press`, which follows 0x484A8-0x486E2 arm by arm.
 
+114. **A write needs a ROM writer.** Before gauntpy clears, reloads or redraws something, find the
+     instruction in the ROM that does it, at that point. Tidy-looking resets were the commonest drift the RAM
+     comparison found (S-228, S-229): an inventory redraw at an exit, a treasure count cleared at every level
+     load, a low-health latch cleared at a death. ``tools/ram_widths.py`` and the cross-reference scan in it show
+     every instruction that touches an address.
+
+115. **Widths and strides come from the instructions, not from values.** ``move.w`` writes two bytes and the
+     index scaling gives an array's stride; a run's values cannot tell a word from a long when the word beside
+     it stays zero. ``doc/05_data_reference.md`` records them, ``tools/ram_widths.py --check`` holds
+     ``tools/ram_map.py`` to the code, and a note in ``state.py`` is only a pointer to them.
+
 ## Investigation workflow
 
 1. Reproduce the reported behavior with the smallest deterministic scenario.
@@ -596,8 +607,9 @@ implementation specification.
 6. To ask what a routine does in one exact situation, run it:
    `tools/rom_exec.py` executes original routines under Unicorn on a `GameState`,
    `tests/test_rom_execution.py` pins the results, and
-   `tools/rom_xcheck_plugin.py` compares every `player_try_move` in the suite. Treat
-   a mismatch as a lead, since it runs a snapshot of RAM, not the machine.
+   `tools/rom_xcheck_plugin.py` compares every `player_try_move` in the suite (run it with
+   `-n 0`: parallel workers keep their records). Treat a mismatch as a lead, since it runs a
+   snapshot of RAM, not the machine.
    `tools/rom_sweeps.py` runs every object type through movement and the arrival scan.
 7. To see behaviour the attract demo does not show, poke it: `tools/demo_compare.py`
    and `tools/mame_demo_trace.lua` write the same RAM change at the same iteration in
@@ -610,7 +622,11 @@ implementation specification.
    a lead into the code that made it, and the frames after it are contaminated.
    `--coins 2 --rich` rations the coins, so heroes die, enter initials and play again.
    Heroes also walk to keys, doors and movable walls. `--settings` and `--pricing` set the
-   operator's word and free play on both sides from boot.
+   operator's word and free play on both sides from boot. `--dragon`, `--secret`, `--stall`,
+   `--powers` and `--walls` steer toward the dragon, secret rooms, walls turning to exits, carried
+   powers and movable walls. Besides the records, text, colour and playfield, every frame compares
+   the game RAM in `tools/ram_map.py` once the first hero is placed. `tools/mame_replay.py` replays a
+   flight on MAME, and `tools/check_all.py --flights 20` flies all twenty standing flights.
 
 ## Implementation boundaries
 

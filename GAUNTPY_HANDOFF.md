@@ -12,7 +12,7 @@ Repository root:
 
 `D:\Users\alinsa\Documents\SmartGit\gauntlet-gamerom-ai-reveng`
 
-Current implementation branch: `book_plus_emu`
+Current implementation branch: `book_combined`
 
 ## Read first, in order
 
@@ -210,6 +210,18 @@ Last known result: `700 passed`. A historical Windows-only
 Run the smallest relevant tests during iteration, then both full gauntpy modes
 before committing.
 
+Every ROM comparison, including twenty lockstep flights of the whole game:
+
+```powershell
+Set-Location gauntpy
+$env:GEX_ROM_DIR = (Resolve-Path ..\ROMs).Path
+python -X utf8 tools\check_all.py --flights 20
+```
+
+It takes about ten minutes. The suite, `check_all.py` and every tool keep to one process
+budget, `GAUNTPY_JOBS` (`tools/jobs.py`), a quarter of the logical CPUs unless set: more
+overheats the owner's laptop. `doc/`'s own consistency checks run with `make check` there.
+
 ## Required workflow for each bug
 
 1. Reproduce it with the smallest deterministic state or full-frame scenario.
@@ -242,11 +254,16 @@ before committing.
 
 ## Current state
 
-Latest completed commit:
+Latest completed commit: see `git log`; the November 2026 work is S-222 to S-231 in
+`gauntpy/ISSUES.md`, whose "Open issues" section lists what is left.
 
-`04802b4 gauntpy: fix post-death continue spawn`
+The ROM is now checked against gauntpy as a whole game: `tools/game_run.py` runs both in
+lockstep from a cold boot with a scripted pilot and compares records, text, colour, playfield
+and the game RAM listed in `tools/ram_map.py` every frame; `tools/ram_widths.py` reads that
+RAM's widths from the ROM's instructions; `tools/mame_replay.py` replays a flight on MAME.
+FIDELITY.md's workflow describes them.
 
-Recent work also completed:
+Work completed before that (September 2026):
 
 - RAM-driven alpha/playfield/MOB rendering.
 - Correct OS large-font mapping and variable-width glyphs.

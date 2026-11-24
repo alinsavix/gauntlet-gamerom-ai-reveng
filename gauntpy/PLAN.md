@@ -232,6 +232,11 @@ documented name that means something else.
 
 ## 5. Current status
 
+This section records the plan's starting point. The work packages below are done; the current status, open
+items and every finding since are in [ISSUES.md](ISSUES.md). As of November 2026 the suite has about 4,075 tests,
+and `tools/check_all.py --flights 20` runs the ROM and gauntpy in lockstep through twenty whole-game flights,
+comparing records, text, colour, playfield and game RAM every frame.
+
 **Landed (WP-0).** The skeleton is real code, not pseudocode: 71 tests pass.
 
 - Three coordinate systems and the packed MOB word layouts.

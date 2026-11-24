@@ -6,6 +6,23 @@ This is the authoritative prioritized backlog. Confidence labels describe the ev
 |---|---|---|---|
 | — | — | No active prioritized issue remains in this backlog. Unresolved findings raised by the 2026-08-11 full semantic audit are recorded in the repository-root `SOL_ISSUES.md`; promote one back into this table if it becomes testable from the supplied artifacts. | — |
 
+## Found in the 2026-11-10 to 2026-11-13 lockstep passes
+
+- **A secret-room payout leaves the panel stale:** 0x4D86E-0x4D8A0 add the stashed
+  keys, potions and supershots back without calling `player_inv_update`, so the panel
+  goes on showing the room's inventory until a later pickup or door redraws it.
+- **A diagonal shot off a wall on row 1 treats row 0 as open:** the down-left and
+  down-right reflection corners bound the cell one row up at 0x20 (0x53B42, 0x53BEC)
+  rather than 0, so they never read row 0, which holds the shot and effect records
+  rather than maze. A shot bouncing in the top corridor leaves such a wall the other way.
+- **A potion scan that destroys the chain's last record never ends:** with nothing left
+  in the depth chain, the scan's wrap reads slot 0 for ever (0x416F6). Play cannot reach
+  it, because a hero's own record is always in the chain while it drinks.
+- **Power-on leaves two timers at 0, so the first pass reloads them:**
+  `eeprom_write_timer` (0x43204) and `sound_idle_timer` (0x42D96). This is ordinary
+  behaviour, recorded because a model that boots them loaded runs a frame ahead for the
+  whole game.
+
 ## Found in the 2026-11-08 lockstep pass
 
 - **Monster shots read the supershot array out of bounds:** 0x4B002 indexes
