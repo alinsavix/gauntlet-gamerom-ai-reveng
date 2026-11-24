@@ -497,8 +497,8 @@ def main_attract(state: GameState) -> None:
 # ROM: part game:0x44562 | Extracted screen-expiry and legend/session rotation paths inside main_attract; 0x44860 is not an entry.
 def _attract_timer_expired(state: GameState, mode: int) -> None:
     """0x44860-0x4491A -- what happens when the screen timer runs out."""
-    state.logo_color_timer = 0                     # 0x44866 logo_cycle_timer
-    state.logo_cycle_timer = 0
+    state.logo_color_timer = 0                     # gauntpy's diagnostic count, no ROM word
+    state.logo_cycle_timer = 0xFFFF                # 0x44866: bit 15 stops the logo's colour cycle
 
     if mode == int(GameMode.LEGEND):               # 0x4486E
         if state.attract_legend == 0:

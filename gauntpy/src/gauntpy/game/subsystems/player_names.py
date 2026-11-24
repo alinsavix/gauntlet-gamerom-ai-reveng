@@ -315,7 +315,7 @@ def _name_entry_finish(state: GameState, player_index: int) -> None:
             player.score_per_coin,
             _name_entry_initials(player),
         )
-    player.highscore_rank = _HIGHSCORE_NO_RANK
+    # The rank stays: the next death's highscore_check (0x49D48) sets it again.
     player.status = int(PlayerStatus.REMOVED)                    # 0x4A0D8
     state.debounce_shift_magic[player_index] = 0             # 0x4A0F6
     state.debounce_shift_fire[player_index] = 0              # 0x4A0F2

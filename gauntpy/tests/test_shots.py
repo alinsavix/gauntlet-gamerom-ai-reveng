@@ -1288,6 +1288,8 @@ def _arm_player_shot(state: GameState, shooter_id: int = 0,
     state.mobs.hpos[slot] = ((x & 0x1FF) << 7) | (tier & 0x30)
     state.mobs.vpos[slot] = native_v(y & 0x1FF) << 7
     state.shot_direction[shooter_id] = 2      # heading right
+    if shooter_id < 4:
+        state.reflect_count[shooter_id] = 4   # a fresh shot's bounces (0x47BC8)
     return slot
 
 
@@ -1379,8 +1381,8 @@ class TestShotCollision:
         state = _make_state()
         cell = (10 << 5) | 10
         state.players[0].mob_slot = cell
-        state.reflect_count[0] = 3
         _arm_player_shot(state)
+        state.reflect_count[0] = 3
         _place_monster(state, cell, MazeObjIds.MONST_GHOST, health_nibble=4)
         state.mobs.hpos[cell] = (160 << 7) | 4
         state.mobs.vpos[cell] = native_v(160) << 7
@@ -1613,6 +1615,7 @@ class TestMainHandleShots:
         state.mobs.vpos[slot] = native_v(160) << 7
         state.shot_dx[slot] = 6
         state.shot_dy[slot] = 0
+        state.shot_direction[4] = 8              # armed by hand, so its direction is unset
         state.frame_counter = 1                  # (1 ^ 4) & 1 == 1: not eligible
         _centre_camera(state)
         main_handle_shots(state)
@@ -1706,11 +1709,13 @@ class TestMainHandleShots:
             state.frame_counter += 1
         assert state.mobs.depth_key[slot] == (10 << 5) | 11
 
-    def test_free_player_channels_rearm_the_reflect_counter(self):
+    def test_only_a_fire_press_rearms_the_reflect_counter(self):
+        """0x47BBE-0x47BC8 sit on the fire-press path: an idle free channel keeps its count."""
         state = _make_state()
         state.reflect_count[0] = 0
+        state.player_input_raw[0] = 0xFFFF            # nothing held (active low)
         main_handle_shots(state)
-        assert state.reflect_count[0] == 4
+        assert state.reflect_count[0] == 0
 
     def test_a_collision_resolves_and_clears_the_channel(self):
         state, slot = self._running_shot(character=Character.ELF)

@@ -137,7 +137,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904876 | 2 B | `current_player` | Index (0–3) of the player currently being processed by `main_move_players`; written each iteration of the per-player loop |
 | 0x904916 | 2 B | `frame_overflow` | Set to 8 when `vblank_semaphore` is already nonzero at the check after call 28, otherwise shifted right once. Nonzero forces generator spawn probability to 0 and defers the sound-queue dispatcher. Overruns that end inside a semaphore-clearing whole-maze routine (see 0x904002) do not set it. MAME demo capture: demo setup (one iteration of about 27 fields) leaves 8, decaying to 0 over the next four iterations. |
 | 0x904918 | 2 B | `game_mode` | Game mode (see Game Modes enum) |
-| 0x90491A | 2 B | `attract_legend` | Current legend screen number |
+| 0x90491A | 2 B | `attract_legend` | Current legend screen number; power-on leaves 0, and the legend's start loads 2 (0x447B0, 0x448DE) |
 | 0x90491C | 4 B | `level_flags` | Level-flags longword = maze header bytes 1–4 big-endian (byte 0 = `level_flags_1` at 0x90491C, byte 1 = `level_flags_2`, byte 2 = `level_flags_3`, byte 3 = `level_flags_4`; see §3.12 enums, verified reader-by-reader). This IS the variable historically called `ram.maze_pickup_config`. Assembled and per-level randomized by `maze_load_pickup_config` (0x436FE); LFLAG3 bit 6 (ExitMoves) is cleared by `maze_scan_objects` when only one exit exists |
 | 0x904920 | 2 B × 4 | `player_input_raw` | Per-player raw joystick input word |
 | 0x904928 | 2 B | `level_players_active` | Number of active players on a level |
@@ -185,7 +185,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904A10 | 4 B | `logo_scroll_ptr` | ROM scroll record pointer for title animation |
 | 0x904A14 | 2 B | `logo_scroll_timer` | Logo scroll animation timer |
 | 0x904A16 | 2 B | `logo_color_dir` | Color direction (+/- for pulsing) |
-| 0x904A18 | 2 B | `logo_cycle_timer` | Outer color cycle timer. Reset value from ROM at `0x5BA68`. |
+| 0x904A18 | 2 B | `logo_cycle_timer` | Outer color cycle timer. Reset value from ROM at `0x5BA68`. Bit 15 stops the cycle: every attract-screen expiry writes 0xFFFF (0x44866), and the title's logo setup reloads it. |
 | 0x904A1A | 2 B | `logo_bright_timer` | Inner brightness timer. Reset value from ROM at `0x5BA6A`. |
 | 0x904A1C | 2 B | `logo_bright_accum` | Brightness accumulator (via a3 pointer). Clamped between ROM min `0x5BA6C` and max `0x5BA6E`. |
 | 0x904A1E | 2 B | `logo_color_cur` | Current logo color value; written to color RAM at `0x910332`. |
@@ -202,7 +202,7 @@ callable and linear operand reports cover every ROM-encoded base/literal.
 | 0x904A2E | 2 B × 4 | `name_entry_scroll_velocity` | Signed per-player character-selection velocity/accumulator, clamped to ±0xA0 and fed to `name_entry_step_char` during ordinary or secret name entry |
 | 0x904A36 | 1 B × 4 | `name_entry_repeat_delay` | Per-player byte countdown that delays auto-repeat while the initials or secret-name joystick remains held. Both editors initialize it to 0xA0 (160 frames), then reload 8–13 as velocity accelerates; the former 2-byte element size overlapped the buffer at 0x904A3A |
 | 0x904A3A | 4 B × 4 | `player_initials_buf` | Four-byte per-player working record: byte 0 is the selected initials cursor/state and bytes 1–3 hold the three editable characters (initialized to 'A') |
-| 0x904A4A | 1 B × 4 | `player_highscore_rank` | Per-player rank returned by the high-score qualification API; 0–9 qualifies and values outside that range skip initials entry |
+| 0x904A4A | 1 B × 4 | `player_highscore_rank` | Per-player rank returned by the high-score qualification API; 0–9 qualifies and values outside that range skip initials entry. Written only by `highscore_check` (0x49D48) at each death; finishing initials (0x4A0A8) reads it and leaves it. |
 
 **`game_settings` (0x904A24) bit layout:**
 

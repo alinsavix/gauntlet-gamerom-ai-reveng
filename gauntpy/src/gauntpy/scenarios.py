@@ -186,6 +186,7 @@ def _close_combat_state() -> GameState:
         obj_type=MazeObjIds.MONST_SORC,
     )
     player.direction = 0
+    state.reflect_count[0] = 4          # as the fire press does (0x47BC8)
     player_create_shot(state, 0)
     return state
 

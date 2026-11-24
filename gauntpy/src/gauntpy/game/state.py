@@ -45,7 +45,7 @@ class Player:
     invuln_timer: int = 0
     supershot: int = 0                          # 0x905F68
     death_damage_counter: int = 0               # 0x904B3A
-    damage_sample_timer: int = 60               # 0x904AE6, signed word
+    damage_sample_timer: int = 0                # 0x904AE6, signed word; 60 at each spawn
     pending_damage: int = 0                     # 0x904AD6, word
     cumulative_damage: int = 0                  # 0x904ADE, saturates at 0x7D00
     damage_sample_count: int = 0                # 0x904AEE, word
@@ -56,7 +56,7 @@ class Player:
     #: 0x904A4A. ``rank_high_score`` returns 0-9 to qualify; 10 (and anything
     #: else outside 0-9) means "did not rank", which is what skips initials
     #: entry at 0x49D50/0x49D60.
-    highscore_rank: int = 10
+    highscore_rank: int = 0                     # 0x904A4A byte; highscore_check sets it at each death
     initials_cursor: int = 0                    # 0x904A3A byte 0
     #: 0x904A3B-0x904A3D, the three editable character codes ('A' by default).
     initials: list[int] = field(default_factory=lambda: [0x41, 0x41, 0x41])
@@ -241,7 +241,7 @@ class GameState:
     # player_lowhealth speaks only while this is negative and reloads it with
     # 0x708; main_health_countdown decrements it while it is >= 0 (0x467C2).
     player_respawn_speech_timer: list[int] = field(
-        default_factory=lambda: [-1] * NUM_PLAYERS
+        default_factory=lambda: [0] * NUM_PLAYERS       # the coin loads -1 (0x4898E)
     )
     # 0x904AC6, longword ``welcome_elapsed_frames``: frames elapsed in the
     # current start-game loop, incremented by main_start_game (0x48020).
@@ -337,7 +337,7 @@ class GameState:
     # 0x9048BE, ``reflect_count``: reflections left on each player's live shot.
     # Armed to 4 while the channel is free (0x47BC2) and predecremented by
     # shot_reflect_calc (0x53CC4); a shot bounces only while it is non-zero.
-    reflect_count: list[int] = field(default_factory=lambda: [4] * NUM_PLAYERS)
+    reflect_count: list[int] = field(default_factory=lambda: [0] * NUM_PLAYERS)   # each shot loads 4 (0x47BC8)
     # 0x9048A8, ``player_shot_last_wall_pos``: packed cell of each player
     # shot's most recent wall contact, used by shot_reflect_calc to pick the
     # bounce and by main_handle_shots (0x47ADE) to suppress a repeat.
@@ -406,7 +406,7 @@ class GameState:
     # ``handle_generate`` counts it down once per generator turn and only forces
     # a spawn attempt once it goes negative, then clamps it back to zero (0x492E2
     # -0x492EC) so every later turn attempts one.
-    monster_generation_retry_timer: int = 4
+    monster_generation_retry_timer: int = 0     # attract_demo_init loads 4 (0x44A76)
     # Monster culling rectangle (0x904A62/0x904A64): a creature outside it is
     # skipped for the whole frame; shooters need the tighter box as well (§3.3).
     monster_cull_h_origin: int = 0            # 0x904A62
@@ -502,7 +502,7 @@ class GameState:
     # 0x9049C4, one direction/state word per projectile channel.  Player
     # channels are 1-4, and their directions occupy indices 0-3.
     # Eight is the invalid/no-live-shot sentinel used by the dodge scan.
-    shot_direction: list[int] = field(default_factory=lambda: [8] * 12)
+    shot_direction: list[int] = field(default_factory=lambda: [0] * 12)   # each shot's creator sets it
 
     # =========================================================================
     # WP-11 · living maze (walls, doors, transporters, forcefields)
@@ -642,7 +642,7 @@ class GameState:
     # companions are 0x904BCC (the thief picture saved across the dissolve) and
     # 0x904BE0 (the slot the thief re-emerges in). WP-14 owns them because
     # loop 1b is their only reader; WP-10 arms them when a thief teleports.
-    thief_tport_timer: int = -1
+    thief_tport_timer: int = -1                 # the ROM boots 0 and parks -1 when a thief appears (0x4DFA2)
     thief_tport_saved_picture: int = 0
     thief_tport_dest: int = 0
     thief_level_setup_done: bool = False
@@ -664,7 +664,7 @@ class GameState:
     treasure_timer: int = 0
     # 0x904A08 exit_move_timer: moving-exit relocation countdown; reloads to 0x12C
     # (300 frames), verified by disassembly of main_exit_move (0x52A74).
-    exit_move_timer: int = 0x12C
+    exit_move_timer: int = 0                    # 0x43B90 loads 0x12C on a level whose exits move
     # 0x904878: secret room availability counter (counts down once per level)
     secret_possible_counter: int = 20
     # 0x90487A: secret room start value (for counter reload)
@@ -673,7 +673,7 @@ class GameState:
     secret_player: int = -1
     # 0x904AA4 dialog/name buffer reused by the secret-room contest flow.
     secret_name_buffer: list[int] = field(
-        default_factory=lambda: [ord("A")] + [ord(" ")] * 28
+        default_factory=lambda: [0] * 29                 # secret_getname fills it (0x54EC6)
     )
     secret_code: str = ""
     # 0x904870: maze number of previous secret room
@@ -770,7 +770,7 @@ class GameState:
     # start_attract_screen wraps it at 13 (0x4448E-0x4449E).
     attract_count: int = 0
     # 0x90491A, LEGEND sub-screen counter (initially 2, counting down; §6.4).
-    attract_legend: int = 2
+    attract_legend: int = 0                     # 0x447B0/0x448DE load 2 as the legend starts
     # 16-bit title intro selector/counter sampled before each TITLE setup (§14.3).
     title_intro_state: int = 0
     # Latched when TITLE starts, before title_intro_state advances. True selects

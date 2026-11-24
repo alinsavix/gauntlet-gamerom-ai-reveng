@@ -949,7 +949,7 @@ gauntpy.performance_workloads.prepare_workload_state,src/gauntpy/performance_wor
 gauntpy.performance_workloads.build_workload_state,src/gauntpy/performance_workloads.py,164,bridge/tool,infrastructure,,infrastructure,"Host benchmark/stress setup, not a ROM routine."
 gauntpy.performance_workloads._join_four_players,src/gauntpy/performance_workloads.py,205,bridge/tool,infrastructure,,infrastructure,"Host benchmark/stress setup, not a ROM routine."
 gauntpy.performance_workloads._fill_projectile_channels,src/gauntpy/performance_workloads.py,225,bridge/tool,infrastructure,,infrastructure,"Host benchmark/stress setup, not a ROM routine."
-gauntpy.performance_workloads.validate_runtime_invariants,src/gauntpy/performance_workloads.py,263,bridge/tool,infrastructure,,infrastructure,"Host benchmark/stress setup, not a ROM routine."
+gauntpy.performance_workloads.validate_runtime_invariants,src/gauntpy/performance_workloads.py,264,bridge/tool,infrastructure,,infrastructure,"Host benchmark/stress setup, not a ROM routine."
 gauntpy.render.alpha.draw_alpha_layer,src/gauntpy/render/alpha.py,20,render,infrastructure,,infrastructure,Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 gauntpy.render.compositor.render_frame,src/gauntpy/render/compositor.py,93,render,infrastructure,,infrastructure,Host rasterization/presentation infrastructure; not a game-side video-memory writer.
 gauntpy.render.compositor._draw_wrapped_viewport_box,src/gauntpy/render/compositor.py,148,render,infrastructure,,infrastructure,Host rasterization/presentation infrastructure; not a game-side video-memory writer.
@@ -1029,12 +1029,12 @@ gauntpy.scenarios._dragon_state,src/gauntpy/scenarios.py,112,bridge/tool,infrast
 gauntpy.scenarios._dragon_step,src/gauntpy/scenarios.py,148,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
 gauntpy.scenarios._demo_state,src/gauntpy/scenarios.py,156,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
 gauntpy.scenarios._close_combat_state,src/gauntpy/scenarios.py,165,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
-gauntpy.scenarios._shots_step,src/gauntpy/scenarios.py,194,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
-gauntpy.scenarios.digest_state,src/gauntpy/scenarios.py,254,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
-gauntpy.scenarios.run_scenario,src/gauntpy/scenarios.py,323,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
-gauntpy.scenarios.run_synthetic_scenario,src/gauntpy/scenarios.py,340,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
-gauntpy.scenarios._write_trace,src/gauntpy/scenarios.py,368,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
-gauntpy.scenarios.main,src/gauntpy/scenarios.py,379,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
+gauntpy.scenarios._shots_step,src/gauntpy/scenarios.py,195,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
+gauntpy.scenarios.digest_state,src/gauntpy/scenarios.py,255,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
+gauntpy.scenarios.run_scenario,src/gauntpy/scenarios.py,324,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
+gauntpy.scenarios.run_synthetic_scenario,src/gauntpy/scenarios.py,341,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
+gauntpy.scenarios._write_trace,src/gauntpy/scenarios.py,369,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
+gauntpy.scenarios.main,src/gauntpy/scenarios.py,380,bridge/tool,infrastructure,,infrastructure,"Host scenario/probe construction and trace tooling, not a ROM callable."
 gauntpy.secret_code_verifier.verify_secret_code,src/gauntpy/secret_code_verifier.py,11,bridge/tool,infrastructure,,infrastructure,Host verification of submitted codes; distinct from the game's code-generation routine.
 gauntpy.secret_code_verifier.main,src/gauntpy/secret_code_verifier.py,33,bridge/tool,infrastructure,,infrastructure,Host verification of submitted codes; distinct from the game's code-generation routine.
 gauntpy.sound_catalog._load_command_descriptions,src/gauntpy/sound_catalog.py,14,bridge/tool,infrastructure,,infrastructure,Host sound-board command metadata; outside the game/OS 68010 callable inventory.

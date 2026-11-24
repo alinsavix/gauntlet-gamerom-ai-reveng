@@ -280,6 +280,15 @@ class TestLegendPaging:
         assert state.attract_timer == _LOADED_TIMER[int(GameMode.LEGEND)]
         assert state.sound_log == [], "paging is not a screen change"
 
+    def test_a_screen_expiry_stops_the_logo_colour_cycle(self):
+        """0x44866 writes 0xFFFF: bit 15 holds main_logo_updcolors until a title restarts it."""
+        state = GameState()
+        _attract(state, int(GameMode.LEGEND))
+        state.attract_legend = 2
+        state.logo_cycle_timer = 5
+        _expire(state)
+        assert state.logo_cycle_timer == 0xFFFF
+
     def test_last_page_hands_back_to_scores(self):
         state = GameState()
         _attract(state, int(GameMode.LEGEND))

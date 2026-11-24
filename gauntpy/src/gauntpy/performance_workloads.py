@@ -229,6 +229,7 @@ def _fill_projectile_channels(state: GameState) -> None:
 
     for player_index, direction in enumerate((0, 2, 6, 4)):
         state.players[player_index].direction = direction
+        state.reflect_count[player_index] = 4      # as the fire press does (0x47BC8)
         player_create_shot(state, player_index)
 
     demons = [

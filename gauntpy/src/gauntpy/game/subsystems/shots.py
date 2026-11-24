@@ -259,8 +259,8 @@ def main_handle_shots(state: GameState) -> None:
     Per channel: the collision probe, the animation/lifetime counter and its
     picture, the off-screen window, the class-specific motion, and the depth
     re-key when the shot crosses into a new maze cell.  Its player-channel
-    input gate first arms the throw animation in ``players.py``; free channels
-    re-arm ``reflect_count`` (0x47BC2).
+    input gate first arms the throw animation in ``players.py``, where a fire press
+    re-arms ``reflect_count`` (0x47BC8).
     """
     # 0x47B72-0x47BF6 runs in this ROM routine, before main_move_players selects
     # that throw's picture.  Keep the state/picture policy in players.py.
@@ -277,7 +277,6 @@ def main_handle_shots(state: GameState) -> None:
         slot = _shot_slot(shooter_id)
         if state.mobs.picture[slot] == 0:
             if shooter_id < 4:
-                state.reflect_count[shooter_id] = 4
                 state.shot_owner_mob[shooter_id] = -1
             continue
 

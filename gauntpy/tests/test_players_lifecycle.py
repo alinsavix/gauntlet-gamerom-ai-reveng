@@ -75,6 +75,7 @@ def _make_player_active(state: GameState, player_index: int,
     p.character = character
     p.health = health
     p.mob_slot = mob_slot
+    state.player_respawn_speech_timer[player_index] = -1   # the coin's value (0x4898E)
     return p
 
 
@@ -713,6 +714,7 @@ class TestDyingStatusSequence:
         state = _active_state()
         player = state.players[player_index]
         player.status = int(PlayerStatus.DYING)
+        player.highscore_rank = 10               # highscore_check's GAME OVER: no rank
         player.state_timer = 0
         return state
 

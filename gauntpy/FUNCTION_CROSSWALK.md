@@ -1101,7 +1101,7 @@ must preserve the intended simulation and observation boundaries.
 | [`gauntpy.performance_workloads.build_workload_state`](src/gauntpy/performance_workloads.py#L164) | infrastructure (infrastructure) | - | Host benchmark/stress setup, not a ROM routine. |
 | [`gauntpy.performance_workloads._join_four_players`](src/gauntpy/performance_workloads.py#L205) | infrastructure (infrastructure) | - | Host benchmark/stress setup, not a ROM routine. |
 | [`gauntpy.performance_workloads._fill_projectile_channels`](src/gauntpy/performance_workloads.py#L225) | infrastructure (infrastructure) | - | Host benchmark/stress setup, not a ROM routine. |
-| [`gauntpy.performance_workloads.validate_runtime_invariants`](src/gauntpy/performance_workloads.py#L263) | infrastructure (infrastructure) | - | Host benchmark/stress setup, not a ROM routine. |
+| [`gauntpy.performance_workloads.validate_runtime_invariants`](src/gauntpy/performance_workloads.py#L264) | infrastructure (infrastructure) | - | Host benchmark/stress setup, not a ROM routine. |
 | [`gauntpy.render.alpha.draw_alpha_layer`](src/gauntpy/render/alpha.py#L20) | infrastructure (infrastructure) | - | Host rasterization/presentation infrastructure; not a game-side video-memory writer. |
 | [`gauntpy.render.compositor.render_frame`](src/gauntpy/render/compositor.py#L93) | infrastructure (infrastructure) | - | Host rasterization/presentation infrastructure; not a game-side video-memory writer. |
 | [`gauntpy.render.compositor._draw_wrapped_viewport_box`](src/gauntpy/render/compositor.py#L148) | infrastructure (infrastructure) | - | Host rasterization/presentation infrastructure; not a game-side video-memory writer. |
@@ -1181,12 +1181,12 @@ must preserve the intended simulation and observation boundaries.
 | [`gauntpy.scenarios._dragon_step`](src/gauntpy/scenarios.py#L148) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
 | [`gauntpy.scenarios._demo_state`](src/gauntpy/scenarios.py#L156) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
 | [`gauntpy.scenarios._close_combat_state`](src/gauntpy/scenarios.py#L165) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
-| [`gauntpy.scenarios._shots_step`](src/gauntpy/scenarios.py#L194) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
-| [`gauntpy.scenarios.digest_state`](src/gauntpy/scenarios.py#L254) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
-| [`gauntpy.scenarios.run_scenario`](src/gauntpy/scenarios.py#L323) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
-| [`gauntpy.scenarios.run_synthetic_scenario`](src/gauntpy/scenarios.py#L340) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
-| [`gauntpy.scenarios._write_trace`](src/gauntpy/scenarios.py#L368) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
-| [`gauntpy.scenarios.main`](src/gauntpy/scenarios.py#L379) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
+| [`gauntpy.scenarios._shots_step`](src/gauntpy/scenarios.py#L195) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
+| [`gauntpy.scenarios.digest_state`](src/gauntpy/scenarios.py#L255) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
+| [`gauntpy.scenarios.run_scenario`](src/gauntpy/scenarios.py#L324) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
+| [`gauntpy.scenarios.run_synthetic_scenario`](src/gauntpy/scenarios.py#L341) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
+| [`gauntpy.scenarios._write_trace`](src/gauntpy/scenarios.py#L369) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
+| [`gauntpy.scenarios.main`](src/gauntpy/scenarios.py#L380) | infrastructure (infrastructure) | - | Host scenario/probe construction and trace tooling, not a ROM callable. |
 | [`gauntpy.secret_code_verifier.verify_secret_code`](src/gauntpy/secret_code_verifier.py#L11) | infrastructure (infrastructure) | - | Host verification of submitted codes; distinct from the game's code-generation routine. |
 | [`gauntpy.secret_code_verifier.main`](src/gauntpy/secret_code_verifier.py#L33) | infrastructure (infrastructure) | - | Host verification of submitted codes; distinct from the game's code-generation routine. |
 | [`gauntpy.sound_catalog._load_command_descriptions`](src/gauntpy/sound_catalog.py#L14) | infrastructure (infrastructure) | - | Host sound-board command metadata; outside the game/OS 68010 callable inventory. |

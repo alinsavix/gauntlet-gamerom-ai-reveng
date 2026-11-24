@@ -43,11 +43,8 @@ None of these is a known difference in play the harness can see; each is a limit
   ROM routines and branches they never execute. That list would show where lockstep has not looked.
 * **MAME replays stop at the first unmodelled overrun** (FIDELITY.md rule 110), before any dragon or secret room
   (S-228). A replay that starts from the harness's RAM later in a flight would reach them.
-* **Ten fields boot set in gauntpy and 0 in the ROM** until first used: `reflect_count` (4), `shot_direction` (8),
-  `attract_legend` (2), `exit_move_timer` (0x12C), `monster_generation_retry_timer` (4), `thief_tport_timer`
-  (-1), `highscore_rank` (10), `damage_sample_timer` (60), `player_respawn_speech_timer` (-1) and the secret name
-  buffer ('A's). No flight shows a difference from them; `tools/ram_map.py` leaves them uncompared (S-230).
-* **The attract logo's cycle starts on another frame** after a game ends (`logo_cycle_timer` 0xFFFF against 0).
+* **`thief_tport_timer` boots at -1 in gauntpy and 0 in the ROM** until a thief first appears (0x4DFA2). gauntpy's
+  synthetic scenarios and thief tests rely on the -1, so it stays, uncompared (S-232).
 * **`ptr_maze_data` (0x904B88) is 0x3E4B7 in the harness and 0x384B7 on MAME**, the same offset in another
   Slapstic bank (S-226). Nothing has followed from it.
 * **Crowded passes that overrun on the arcade are not modelled** (rule 110), on purpose, so generators and sound are
@@ -57,6 +54,25 @@ None of these is a known difference in play the harness can see; each is a limit
   moving its record to the matching slot, which the ROM re-files.
 
 ## Resolved issues
+
+### S-232 · the ROM's boot values, and the logo's stop bit
+
+Nine of the ten fields S-230 found booting set in gauntpy now boot as one_time_init's RAM clear leaves them, at 0:
+`reflect_count`, `shot_direction`, `attract_legend`, `exit_move_timer`, `monster_generation_retry_timer`,
+`highscore_rank`, `damage_sample_timer`, `player_respawn_speech_timer` and the secret name buffer. The ROM sets each
+when it is first needed, and gauntpy already did the same at the same points, so play is unchanged. Two of gauntpy's
+own writes went with them, by rule 114: **a free player channel re-armed its bounce count every frame**, where the
+ROM loads 4 only on a fire press (0x47BBE-0x47BC8); and **finishing initials reset the rank to 10**, where
+0x4A07A-0x4A116 read it and leave it, since `highscore_check` (0x49D48) writes it afresh at every death. Tests
+and synthetic setups that leaned on the old values now do what the ROM's own path would have: a hand-armed shot
+gets its four bounces, an active hero has the coin's speech timer, and a GAME OVER dwell has rank 10.
+
+All but the name buffer join the RAM comparison. That buffer shares 0x904AA4 with the dialog text, which gauntpy
+keeps apart, and `thief_tport_timer` stays at -1 because the scenario builders and thief tests rely on it.
+
+**Every attract-screen expiry stops the logo's colour cycle**: 0x44866 writes 0xFFFF to `logo_cycle_timer`, whose
+bit 15 holds `main_logo_updcolors` until the title's setup reloads it. gauntpy wrote 0, which would have let the
+cycle take one more step; the title's reload kept it from showing. The counter is compared now too.
 
 ### S-231 · loose ends, and the tracking files
 
